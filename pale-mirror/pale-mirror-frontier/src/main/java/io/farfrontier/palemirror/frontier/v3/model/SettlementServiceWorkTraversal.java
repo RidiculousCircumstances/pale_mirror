@@ -10,7 +10,7 @@ import java.util.Set;
 public final class SettlementServiceWorkTraversal {
     private SettlementServiceWorkTraversal() { }
     public static Plan compileDecontamination(FrontierWorldState state, Settlement settlement, SubjectId workerId, ActorLocation worker,
-                                              InfectionCell target, SubjectId workId) {
+                                                 InfectionCell target, SubjectId workId, ResourceStorageAccess source) {
         Objects.requireNonNull(state, "service traversal state");
         Objects.requireNonNull(worker, "service traversal worker");
         Objects.requireNonNull(workerId, "service traversal worker id");
@@ -22,13 +22,10 @@ public final class SettlementServiceWorkTraversal {
         if (!settlement.equals(FrontierWorldStateSupport.settlement(state.bootstrap(), settlement.id())))
             throw new IllegalArgumentException("service traversal requires its exact settlement");
         SurfaceAnchor start = worker.supportingSurface();
-        SettlementStructure depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT)
-                .findFirst().orElseThrow(() -> new IllegalArgumentException("service settlement has no depot"));
-        SettlementDepotServicePort depotPort = SettlementDepotServicePort.forDepot(depot);
-        var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(),
-                List.of(new KnownPedestrianRouteKnowledge.Passage(depot,
-                        KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
-        for (SurfaceAnchor inputStation : depotPort.stations())
+        if (!Objects.requireNonNull(source).settlementId().equals(settlement.id()))
+            throw new IllegalArgumentException("service source belongs to another settlement");
+        var knowledge = ResourceStorageNavigation.forEndpoint(state, source.endpoint());
+        for (SurfaceAnchor inputStation : source.stations())
             for (SurfaceAnchor workStation : InfectionTreatmentWorksite.candidates(state.bootstrap(), target)) {
                 try {
                     var inputOrder = new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(
@@ -37,14 +34,30 @@ public final class SettlementServiceWorkTraversal {
                     var workOrder = new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(
                             workId, workerId, 2L, 1L, List.of(workStation), TraversalCapability.PEDESTRIAN,
                             io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION);
-                    return new Plan(inputStation, workStation, topology("input", workId, knowledge.path(start, inputOrder)),
-                            topology("work", workId, knowledge.path(inputStation, workOrder)));
+                    return new Plan(inputStation, workStation, topology("input", workId, knowledge.plannedPath(start, inputOrder)),
+                            topology("work", workId, knowledge.plannedPath(inputStation, workOrder)));
                 } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
-                    // Only an ordinary bounded route miss selects the next declared station.
+                    if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
+                        throw unavailable;
                 }
             }
 
-        throw new IllegalArgumentException("service work has no bounded known route to infection station: " + target);
+        throw new io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable(
+                "service work has no bounded known route to infection station: " + target);
+    }
+
+    /** Check the chosen pair of legs against current facts, never rediscover stations or routes. */
+    public static void requireSelected(FrontierWorldState state, SettlementServiceWork work) {
+        var source = ResourceStorageAccess.at(state, work.inputSource().containerId());
+        var actor = Objects.requireNonNull(state.actorLocations().get(work.workerId()), "service admission worker");
+        if (!source.settlementId().equals(work.settlementId()) || !source.stations().contains(work.inputStation())
+                || !(work.target() instanceof SettlementServiceTarget.Infection infection)
+                || !InfectionTreatmentWorksite.candidates(state.bootstrap(), infection.cell()).contains(work.workStation())
+                || !work.inputTraversal().linearCorridorSurfaces().getFirst().equals(actor.supportingSurface()))
+            throw new IllegalArgumentException("service admission has foreign source, target or departure geometry");
+        var knowledge = ResourceStorageNavigation.forEndpoint(state, source.endpoint());
+        knowledge.requireRoute(work.inputTraversal().linearCorridorSurfaces());
+        knowledge.requireRoute(work.workTraversal().linearCorridorSurfaces());
     }
 
     private static TraversalTopology topology(String leg, SubjectId workId, List<SurfaceAnchor> corridor) {

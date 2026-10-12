@@ -19,6 +19,22 @@ final class SettlementAssaultPayloadCodecs {
     private SettlementAssaultPayloadCodecs() { }
 
     static PayloadCodecs codecs() { return new PayloadCodecs(List.of(started(), advanced(), formationObserved(), marchIssueObserved(), transition(), strike(), resolved())); }
+    static PayloadCodecs equipmentVisitCodecs() { return new PayloadCodecs(List.of(equipmentVisitChanged())); }
+
+    private static PayloadCodec equipmentVisitChanged() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.defender_equipment_return_visit_changed"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            var value = (DefenderEquipmentReturnVisitChanged) payload;
+            return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                subject(output, value.assaultId()); DefenderEquipmentReturnVisitCodec.write(output, value.predecessor());
+                DefenderEquipmentReturnVisitCodec.write(output, value.selected());
+            });
+        }
+        @Override public FrontierPayload decode(byte[] bytes) {
+            return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new DefenderEquipmentReturnVisitChanged(subject(input),
+                    DefenderEquipmentReturnVisitCodec.read(input), DefenderEquipmentReturnVisitCodec.read(input)));
+        }
+    }; }
 
     static PayloadCodec started() { return new PayloadCodec() {
         @Override public String type() { return "frontier.settlement_assault_started"; }
@@ -167,6 +183,7 @@ final class SettlementAssaultPayloadCodecs {
         TacticalPlanStateCodec.write(output, assault.tacticalPlan());
         output.writeByte(assault.status().wireTag()); output.writeInt(assault.nextStrikeEpoch());
         output.writeBoolean(assault.outcome().isPresent()); if (assault.outcome().isPresent()) output.writeByte(assault.outcome().orElseThrow().wireTag());
+        DefenderEquipmentReturnVisitCodec.write(output, assault.equipmentReturnVisit());
     }
 
     static SettlementAssault read(DataInputStream input) throws IOException {
@@ -186,7 +203,7 @@ final class SettlementAssaultPayloadCodecs {
         Optional<SettlementAssaultOutcome> outcome = input.readBoolean() ? Optional.of(readOutcome(input)) : Optional.empty();
         return new SettlementAssault(id, task, hive, sighting, overseer, attackers, march,
                 SettlementDefenderUnit.forAssault(id, sighting.settlementId(), defenders), tacticalPlan,
-                FrontierWireTags.require(SettlementAssaultStatus.class, status), epoch, outcome);
+                FrontierWireTags.require(SettlementAssaultStatus.class, status), epoch, outcome, DefenderEquipmentReturnVisitCodec.read(input));
     }
 
     private static SettlementAssaultOutcome readOutcome(DataInputStream input) throws IOException {

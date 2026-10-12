@@ -37,12 +37,19 @@ final class FrontierV3ServicePointClearance {
             var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), List.of(
                     new KnownPedestrianRouteKnowledge.Passage(facility,
                             KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
-            List<SurfaceAnchor> surfaces = ServiceAreaDestinations.select(points, lease.actorId(),
+            List<SurfaceAnchor> surfaces;
+            try { surfaces = ServiceAreaDestinations.select(points, lease.actorId(),
                     observed.supportingSurface(), knowledge, ServiceDestinationClaims.excludedFor(state, lease.actorId()),
                     surface -> FrontierV3SemanticMovement.targetIsNavigable(level, body, surface)
                             && FrontierV3GoalNavigation.canReach(level, body, FrontierV3GoalNavigation.Goal.station(surface,
                                 new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds()))))
-                    .map(List::of).orElse(List.of());
+                    .map(List::of).orElse(List.of()); }
+            catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                FrontierV3GoalNavigation.stop(body, actuation);
+                FrontierV3PhysicalWaitTrace.actor(body, state, lease.actorId(),
+                        "service-clearance:" + unavailable.status() + ":" + unavailable.getMessage());
+                return true;
+            }
             if (surfaces.isEmpty()) {
                 FrontierV3GoalNavigation.stop(body, actuation);
                 FrontierV3PhysicalWaitTrace.actor(body, state, lease.actorId(), "service-clearance:no-safe-waiting-position");

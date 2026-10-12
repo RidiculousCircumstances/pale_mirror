@@ -12,7 +12,12 @@ import java.util.WeakHashMap;
 
 /** Bounded native avoidance within the current execution, never another task/body/cargo owner. */
 final class FrontierV3PedestrianCourtesy {
-    private record Target(FrontierV3ActorActuation authority, SurfaceAnchor station) { }
+    private record Target(FrontierV3ActorActuation authority, SurfaceAnchor station,
+                          FrontierV3CourtesyPassage.Claim passage, java.util.OptionalLong parkedAt,
+                          FrontierV3CourtesyPassage.Hold hold) {
+        Target parked(long atTick) { return new Target(authority, station, passage, java.util.OptionalLong.of(atTick), hold); }
+        Target holding(FrontierV3CourtesyPassage.Hold next) { return new Target(authority, station, passage, parkedAt, next); }
+    }
     private static final Map<Mob, Target> TARGETS = new WeakHashMap<>();
     private static final Map<Mob, Long> NEXT_QUERY = new WeakHashMap<>();
     private static final Map<Mob, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityCheckpoint.Wait> DEFERRED = new WeakHashMap<>();
@@ -106,6 +111,25 @@ final class FrontierV3PedestrianCourtesy {
         if (target != null && !target.authority().id().equals(actuation.id())) {
             cancel(body); target = null;
         }
+        if (target != null) {
+            var observation = target.passage().observe(level,
+                    target.parkedAt().isPresent() ? target.hold() : FrontierV3CourtesyPassage.Hold.empty());
+            var status = observation.status();
+            if (status != FrontierV3CourtesyPassage.Status.WAITING) {
+                cancel(body); NEXT_QUERY.remove(body);
+                if (status == FrontierV3CourtesyPassage.Status.CLEARED)
+                    io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info("PMV3_TRAFFIC_YIELD_COMPLETE actor={} target={} passage={}",
+                            actor.value(), target.station(), status);
+                else io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info("PMV3_TRAFFIC_YIELD_RELEASE actor={} target={} passage={}",
+                        actor.value(), target.station(), status);
+                return false;
+            }
+            if (target.parkedAt().isPresent()) {
+                target = target.holding(observation.hold()); TARGETS.put(body, target);
+                if (FrontierV3SemanticMovement.arrived(level, body, target.station())) return true;
+            }
+            // A pushed body returns through the same navigator without resetting missing-evidence wait.
+        }
         var request = FrontierV3PedestrianYieldRequests.forBody(level, body, actuation.id().body(), other -> canYield(state, other));
         if (target == null && request.isEmpty()) return false;
         if (target == null || !FrontierV3SemanticMovement.targetIsNavigable(level, body, target.station())) {
@@ -119,19 +143,30 @@ final class FrontierV3PedestrianCourtesy {
                     .flatMap(settlement -> SettlementServiceAccessPoints.forSettlement(state, settlement.id()).stream()).toList();
             var knowledge = PedestrianLocalDeparture.departure(state, start);
             var excluded = new HashSet<>(ServiceDestinationClaims.excludedFor(state, actor));
-            TARGETS.entrySet().removeIf(entry -> !entry.getValue().authority().current(entry.getKey()));
+            TARGETS.keySet().stream().filter(other -> !TARGETS.get(other).authority().current(other)).toList()
+                    .forEach(FrontierV3PedestrianCourtesy::cancel);
             TARGETS.forEach((other, reserved) -> { if (other != body) excluded.add(reserved.station()); });
             var scope = new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds());
             var passage = request.orElseThrow().passage();
             int[] queries = {0};
-            var destination = ServiceAreaDestinations.select(points, actor,
+            java.util.Optional<SurfaceAnchor> destination;
+            try { destination = ServiceAreaDestinations.select(points, actor,
                     start, knowledge, excluded,
                     station -> PedestrianLocalDeparture.publicPosition(state, station) && !passage.contains(station.support())
                             && FrontierV3SemanticMovement.targetIsNavigable(level, body, station)
                             && queries[0]++ < MAX_PHYSICAL_CANDIDATES
-                            && FrontierV3GoalNavigation.canReach(level, body, FrontierV3GoalNavigation.Goal.station(station, scope)));
+                            && FrontierV3GoalNavigation.canReach(level, body, FrontierV3GoalNavigation.Goal.station(station, scope))); }
+            catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                FrontierV3PhysicalWaitTrace.actor(body, state, actor,
+                        "courtesy:" + unavailable.status() + ":" + unavailable.getMessage());
+                return target != null;
+            }
             if (destination.isEmpty()) return false; // No invented route and no recursive displacement chain.
-            target = new Target(actuation, destination.orElseThrow());
+            var accepted = request.orElseThrow();
+            var obstruction = accepted.blockers().stream().filter(blocker -> FrontierV3PedestrianYieldRequests.matches(
+                    blocker, body.getUUID(), actuation.id().body(), body.getBoundingBox())).findFirst().orElseThrow();
+            target = new Target(actuation, destination.orElseThrow(), new FrontierV3CourtesyPassage.Claim(accepted, obstruction),
+                    java.util.OptionalLong.empty(), FrontierV3CourtesyPassage.Hold.empty());
             TARGETS.put(body, target);
             FrontierV3PedestrianYieldRequests.clear(body); // A yielding body cannot start a displacement chain.
             io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info(
@@ -145,8 +180,9 @@ final class FrontierV3PedestrianCourtesy {
         var result = FrontierV3GoalNavigation.pursueCourtesy(level, body,
                 FrontierV3GoalNavigation.Goal.routed(order, List.of(), state.bootstrap().bounds()), actuation);
         if (result.status() == FrontierV3GoalNavigation.Status.ARRIVED) {
-            cancel(body); NEXT_QUERY.remove(body);
-            io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info("PMV3_TRAFFIC_YIELD_COMPLETE actor={} target={}",
+            TARGETS.put(body, target.parkedAt().isPresent() ? target : target.parked(level.getGameTime()));
+            FrontierV3GoalNavigation.stopCourtesy(body, target.authority());
+            io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info("PMV3_TRAFFIC_YIELD_PARKED actor={} target={}",
                     actor.value(), target.station());
         } else if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED
                 || result.status() == FrontierV3GoalNavigation.Status.AMBIGUOUS) {
@@ -155,5 +191,13 @@ final class FrontierV3PedestrianCourtesy {
         }
         // Arrival is courtesy completion only, never evidence of ordinary work/meal arrival.
         return true;
+    }
+
+    static java.util.Optional<FrontierV3MinecraftGoalNavigation.Observation> observation(Mob body) {
+        var target = TARGETS.get(body);
+        if (target == null || !target.authority().current(body)) return java.util.Optional.empty();
+        return java.util.Optional.of(new FrontierV3MinecraftGoalNavigation.Observation(
+                target.parkedAt().isPresent() ? "COURTESY_PASSAGE_WAIT" : "COURTESY_CLEARING",
+                "requester=" + target.passage().request().requester(), List.of(target.station()), List.of()));
     }
 }

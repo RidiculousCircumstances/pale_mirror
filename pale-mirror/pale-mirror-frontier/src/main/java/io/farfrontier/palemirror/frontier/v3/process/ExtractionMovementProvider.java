@@ -27,7 +27,7 @@ public final class ExtractionMovementProvider implements ActorMovementProvider {
     }
     @Override public KnownPedestrianRouteKnowledge placementKnowledge(FrontierWorldState state, ActorMovement movement) {
         var job = work(state, movement);
-        return ShipmentEndpointComposition.knowledge(state, List.of(job.toolSource(), job.storageTarget()));
+        return ExtractionWorkTargets.knowledge(state, job);
     }
     @Override public List<SurfaceAnchor> route(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start) {
         return placementKnowledge(state, movement).plannedPath(start, movement.order());

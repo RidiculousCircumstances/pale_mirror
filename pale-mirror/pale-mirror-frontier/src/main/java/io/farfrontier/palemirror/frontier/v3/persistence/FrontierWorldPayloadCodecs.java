@@ -43,7 +43,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             SettlementEconomyPayloadCodecs.employmentTerminated(), MarketPayloadCodecs.opened(),
             MarketPayloadCodecs.quote(), MarketPayloadCodecs.accepted(), MarketPayloadCodecs.relationshipIncident(), MarketPayloadCodecs.workOrderCancelled(), MarketPayloadCodecs.expired(),
             MarketPayloadCodecs.cancelled(), new BakeryColdStepCodec(), new BakeryInputReallocatedCodec(), new BakeryStorageRetargetedCodec(),
-            new BakeryHotEffectPreparedCodec(), new BakeryHotEffectObservedCodec(), new BakeryHotDeliveryAbortedCodec(), new BakeryHotWorkTickCodec(),
+            new BakeryHotEffectPreparedCodec(), new BakeryHotEffectObservedCodec(), new BakeryHotDeliveryAbortedCodec(), new BakeryWorkChangedCodec(),
             new BakeryHotHandReleaseCodec(), new BakeryHotHandMaterializedCodec(), new BakeryHotBlockChangedCodec(),
             new BakerySceneReconciledCodec(), new BakeryStationSceneReconciledCodec())),
             ProductionWorkScenePayloadCodecs.codecs(), ProductionWorkScenePayloadCodecs.productionEvents()); }
@@ -54,7 +54,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             ResourceSitePayloadCodecs.harvestColdTraversalAdvanced(), ResourceSitePayloadCodecs.harvestColdGoalAdvanced(),
             ResourceSitePayloadCodecs.harvestColdGoalHeld(), ResourceSitePayloadCodecs.harvestReturned(),
             ResourceSitePayloadCodecs.harvestSegmentRenewed(), ResourceSitePayloadCodecs.harvestBlockedCellSkipped(), ResourceSitePayloadCodecs.harvestImmatureCellSkipped(),
-            ResourceSitePayloadCodecs.harvestTargetRetargeted(), ResourceSitePayloadCodecs.harvestRouteBlocked(), ResourceSitePayloadCodecs.harvestRouteCleared(), ResourceSitePayloadCodecs.harvestBatchPrepared(),
+            ResourceSitePayloadCodecs.harvestTargetRetargeted(), ResourceSitePayloadCodecs.harvestRouteBlocked(), ResourceSitePayloadCodecs.harvestBatchPrepared(),
             ResourceSitePayloadCodecs.harvestBatchDelivered(), ResourceSitePayloadCodecs.harvestStorageRetargeted(),
             ResourceSitePayloadCodecs.harvestHotTraversalAdvanced(),
             ResourceSitePayloadCodecs.harvestHotGoalArrived(),
@@ -74,9 +74,11 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             StrategicPlanPayloadCodecs.scoutPatrolStarted()))); }
     static PayloadCodecs infrastructureCodecs() { return new PayloadCodecs(List.of(RouteConstructionPayloadCodecs.started(),
             RouteConstructionPayloadCodecs.cutover(), RouteConstructionPayloadCodecs.materialLoaded(), RouteConstructionPayloadCodecs.assemblyStarted(),
-            RouteConstructionPayloadCodecs.assemblyAdvanced(), RouteMaintenancePayloadCodecs.started(), RouteMaintenancePayloadCodecs.materialLoaded(),
+            RouteConstructionPayloadCodecs.assemblyAdvanced(), RouteConstructionPayloadCodecs.approachPlanned(),
+            RouteMaintenancePayloadCodecs.approachPlanned(), RouteMaintenancePayloadCodecs.started(), RouteMaintenancePayloadCodecs.materialLoaded(),
             RouteMaintenancePayloadCodecs.assemblyStarted(), RouteMaintenancePayloadCodecs.assemblyAdvanced(), RouteMaintenancePayloadCodecs.closed(), RoutePatrolPayloadCodecs.started(),
-            RoutePatrolPayloadCodecs.formationAdvanced(), RoutePatrolPayloadCodecs.formationObserved(), RoutePatrolPayloadCodecs.obstruction(), RoutePatrolPayloadCodecs.failed(), RoutePatrolPayloadCodecs.blocked(),
+            RoutePatrolPayloadCodecs.spatialPlanned(), RoutePatrolPayloadCodecs.formationAdvanced(), RoutePatrolPayloadCodecs.formationObserved(),
+            RoutePatrolPayloadCodecs.obstruction(), RoutePatrolPayloadCodecs.failed(), RoutePatrolPayloadCodecs.blocked(),
             RoutePatrolPayloadCodecs.prepared(), RoutePatrolPayloadCodecs.handoff())); }
     static PayloadCodecs settlementServiceWorkCodecs() { return SettlementServiceWorkPayloadCodecs.codecs(); }
     static PayloadCodecs strategyCodecs() { return new PayloadCodecs(List.of(StrategicPlanPayloadCodecs.selected(),

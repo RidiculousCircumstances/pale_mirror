@@ -46,8 +46,8 @@ public final class ExpeditionSupplyAuthority {
             return state.inventory().fungibleResources();
         }
         var load = mission.supplies().orElseThrow();
-        var expected = ExpeditionSupplyPlanning.walkingLoad(state, mission, group, load.calculatedAtTick());
-        if (!expected.equals(Optional.of(load))) throw new IllegalArgumentException("supply declaration differs from actual roster, routes, stock or capacity");
+        if (load.revision() != 1) throw new IllegalArgumentException("initial supplies cannot substitute a later load generation");
+        ExpeditionSupplyPlanning.requireSelectedLoad(state, mission, group, load, state.inventory().fungibleResources());
         var resources = state.inventory().fungibleResources();
         for (var allocation : load.allocations()) resources = ExpeditionSupplyPlanning.reserve(resources, allocation,
                 mission.id(), mission.sender().settlementId(), load.foodKind());
@@ -55,22 +55,29 @@ public final class ExpeditionSupplyAuthority {
     }
     /** Read-only replacement calculation. Release old promises in a local ledger value, never publish it alone. */
     public static Optional<ExpeditionSupplyLoad> reconsider(FrontierWorldState state, TransportMission mission, long now) {
+        if (!mayReconsider(state, mission)) return Optional.empty();
+        var load = mission.supplies().orElseThrow();
+        var group = state.unitGroups().groups().get(mission.groupId());
+        return ExpeditionSupplyPlanning.walkingLoad(state, mission, group, now, Math.addExact(load.revision(), 1), released(state, load));
+    }
+    private static boolean mayReconsider(FrontierWorldState state, TransportMission mission) {
         var load = mission.supplies().orElseThrow();
         if (mission.stage() != TransportMission.Stage.LOADING || load.allocations().stream().anyMatch(a -> a.pending().isPresent())
                 || load.foodTargets().keySet().stream().anyMatch(actor -> state.actorMovements().containsKey(actor)
-                    || state.humanPopulation().meals().containsKey(actor))) return Optional.empty();
+                    || state.humanPopulation().meals().containsKey(actor))) return false;
         var group = state.unitGroups().groups().get(mission.groupId());
         if (group.members().stream().filter(member -> state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.ALIVE)
                 .anyMatch(member -> UnitGroupMissionPorts.require(group).execution(state, group, member).isEmpty()))
-            return Optional.empty();
-        return ExpeditionSupplyPlanning.walkingLoad(state, mission, group, now, Math.addExact(load.revision(), 1), released(state, load));
+            return false;
+        return true;
     }
     public static FrontierWorldState replanned(FrontierWorldState state, ExpeditionSupplyReplanned value, long now) {
         var mission = state.shipments().missions().get(value.missionId());
         if (mission == null || mission.supplies().isEmpty() || mission.supplies().orElseThrow().revision() != value.expectedRevision()
-                || value.replacement().calculatedAtTick() != now || !reconsider(state, mission, now).equals(Optional.of(value.replacement())))
+                || value.replacement().calculatedAtTick() != now || !mayReconsider(state, mission))
             throw new IllegalArgumentException("supply replanning has stale, unavailable or forged material assumptions");
         var resources = released(state, mission.supplies().orElseThrow());
+        ExpeditionSupplyPlanning.requireSelectedLoad(state, mission, state.unitGroups().groups().get(mission.groupId()), value.replacement(), resources);
         for (var allocation : value.replacement().allocations()) resources = ExpeditionSupplyPlanning.reserve(resources, allocation,
                 mission.id(), mission.sender().settlementId(), value.replacement().foodKind());
         return state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().withFungibleResources(resources))
@@ -130,6 +137,18 @@ public final class ExpeditionSupplyAuthority {
         if (!load.complete() || now < load.calculatedAtTick()) return false;
         var group = state.unitGroups().groups().get(mission.groupId());
         var fresh = ExpeditionSupplyPlanning.walkingForecast(state, mission, group, now, load.foodKind());
+        return sufficient(state, mission, fresh);
+    }
+    public static boolean loadedForDeparture(FrontierWorldState state, TransportMission mission, long now, ExpeditionJourneyProof proof) {
+        proof.require(state, mission);
+        if (mission.supplies().isEmpty()) return state.bootstrap().ruleset().schemaVersion() < 17;
+        var load = mission.supplies().orElseThrow();
+        if (!load.complete() || now < load.calculatedAtTick()) return false;
+        return sufficient(state, mission, ExpeditionSupplyPlanning.retainedForecast(state, mission,
+                state.unitGroups().groups().get(mission.groupId()), now, load.foodKind(), proof));
+    }
+    private static boolean sufficient(FrontierWorldState state, TransportMission mission, Optional<ExpeditionProvisioning.Plan> fresh) {
+        var load = mission.supplies().orElseThrow();
         return fresh.filter(plan -> plan.feasible() && plan.members().values().stream()
                 .allMatch(member -> member.existingFoodItems() >= member.carriedFoodItems())
                 && (plan.transport() == ExpeditionProvisioning.Transport.WALKING || mission.transportAssetId().isPresent()

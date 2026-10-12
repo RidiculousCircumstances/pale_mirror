@@ -5,9 +5,12 @@ import java.util.List;
 final class DepotShipmentEndpointPort implements ShipmentEndpointPort {
     @Override public ShipmentEndpoint.Kind kind() { return ShipmentEndpoint.Kind.SETTLEMENT_DEPOT; }
     private SettlementStructure facility(FrontierWorldState state, ShipmentEndpoint endpoint) {
+        return facility(state.bootstrap(), endpoint);
+    }
+    private SettlementStructure facility(FrontierBootstrap bootstrap, ShipmentEndpoint endpoint) {
         if (!(endpoint instanceof ShipmentEndpoint.Depot declared))
             throw new IllegalArgumentException("depot endpoint has a foreign nominal schema");
-        var home = FrontierWorldStateSupport.settlement(state.bootstrap(), declared.settlementId());
+        var home = FrontierWorldStateSupport.settlement(bootstrap, declared.settlementId());
         return home.structures().stream().filter(value -> value.id().equals(declared.facilityId()) && value.kind() == StructureKind.DEPOT)
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("shipment declared an unknown settlement depot"));
     }
@@ -27,7 +30,10 @@ final class DepotShipmentEndpointPort implements ShipmentEndpointPort {
         validate(state, endpoint); return SettlementDepotServicePort.forDepot(facility(state, endpoint)).exteriorApproach();
     }
     @Override public List<SurfaceAnchor> stations(FrontierWorldState state, ShipmentEndpoint endpoint) {
-        validate(state, endpoint); return SettlementDepotServicePort.forDepot(facility(state, endpoint)).stations();
+        validate(state, endpoint); return declaredStations(state.bootstrap(), endpoint);
+    }
+    @Override public List<SurfaceAnchor> declaredStations(FrontierBootstrap bootstrap, ShipmentEndpoint endpoint) {
+        return SettlementDepotServicePort.forDepot(facility(bootstrap, endpoint)).stations();
     }
     @Override public SurfaceAnchor interactionStation(FrontierWorldState state, ShipmentEndpoint endpoint) {
         validate(state, endpoint); return SettlementDepotServicePort.forDepot(facility(state, endpoint)).serviceSurface();

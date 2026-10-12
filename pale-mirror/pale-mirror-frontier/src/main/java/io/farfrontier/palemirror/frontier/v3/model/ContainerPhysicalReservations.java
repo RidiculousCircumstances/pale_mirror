@@ -9,25 +9,28 @@ final class ContainerPhysicalReservations {
     private static final ImmutableInputView<List<ContainerInboundCapacity.Demand>> DEMANDS = new ImmutableInputView<>();
     private record DemandKey(SubjectId owner, SubjectId container, String kind) { }
     private record Owners(ResourceSiteState sites, Map<SubjectId, ProductionJob> production, ShipmentState shipments,
-            io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState extraction) { }
+            io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState extraction,
+            Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> equipment) { }
     private static final List<Function<Owners, List<ContainerSlotClaim>>> PORTS = List.of(
             owners -> HarvestContainerReservations.claims(owners.sites()),
             owners -> ShipmentPhysicalAuthority.slotClaims(owners.shipments()),
             owners -> BakeryPhysicalAuthority.slotClaims(owners.production()),
-            owners -> ExtractionPhysicalAuthority.slotClaims(owners.extraction()));
+            owners -> ExtractionPhysicalAuthority.slotClaims(owners.extraction()),
+            owners -> EquipmentPhysicalAuthority.slotClaims(owners.equipment()));
     private static List<ContainerSlotClaim> claims(ExactInventory inventory, Owners owners) {
-        return CLAIMS.get(List.of(inventory.containers(), owners.sites(), owners.production(), owners.shipments(), owners.extraction()), () -> {
+        return CLAIMS.get(List.of(inventory.containers(), owners.sites(), owners.production(), owners.shipments(), owners.extraction(), owners.equipment()), () -> {
             var claims = PORTS.stream().flatMap(port -> port.apply(owners).stream()).toList();
             requireExclusive(inventory, claims);
             return claims;
         });
     }
     static List<ContainerSlotClaim> claims(FrontierWorldState state) {
-        return claims(state.inventory(), new Owners(state.resourceSites(), state.productionJobs(), state.shipments(), state.extractionSites()));
+        return claims(state.inventory(), new Owners(state.resourceSites(), state.productionJobs(), state.shipments(), state.extractionSites(), state.physicalIntents()));
     }
     static void validate(ExactInventory inventory, ResourceSiteState sites, Map<SubjectId, ProductionJob> jobs,
-                         ShipmentState shipments, io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState extraction) {
-        claims(inventory, new Owners(sites, jobs, shipments, extraction));
+                         ShipmentState shipments, io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState extraction,
+                         Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> equipment) {
+        claims(inventory, new Owners(sites, jobs, shipments, extraction, equipment));
     }
     private static void requireExclusive(ExactInventory inventory, List<ContainerSlotClaim> claims) {
         var held = new HashMap<InventoryCustody.ContainerSlot, ContainerSlotClaim.Owner>();
@@ -46,6 +49,10 @@ final class ContainerPhysicalReservations {
     static Set<Integer> slots(FrontierWorldState state, SubjectId container, Optional<SubjectId> completing) {
         return claims(state).stream().filter(claim -> claim.slot().containerId().equals(container)
                 && completing.filter(claim.owner().id()::equals).isEmpty())
+                .map(claim -> claim.slot().slot()).collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+    static Set<Integer> slotsExceptClaim(FrontierWorldState state, SubjectId container, ContainerSlotClaim.Owner current) {
+        return claims(state).stream().filter(claim -> claim.slot().containerId().equals(container) && !claim.owner().equals(current))
                 .map(claim -> claim.slot().slot()).collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
     static List<ContainerInboundCapacity.Demand> uncoveredDemands(FrontierWorldState state) {

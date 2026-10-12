@@ -6,7 +6,8 @@ import java.util.Objects;
 
 /** Pure read model for the first graybox human tactical functions. */
 public final class HumanTacticalFunctionProjection {
-    private static final String FIRST_GRAYBOX_WEAPON = "minecraft:iron_sword";
+    private static final java.util.Set<String> GRAYBOX_WEAPON_KINDS = java.util.Set.of("minecraft:iron_sword");
+    public static java.util.Set<String> grayboxWeaponKinds() { return GRAYBOX_WEAPON_KINDS; }
 
     private HumanTacticalFunctionProjection() { }
 
@@ -31,7 +32,7 @@ public final class HumanTacticalFunctionProjection {
 
     /** Shared first-graybox capability predicate; issue validation must not arm people with arbitrary depot stock. */
     public static boolean isGrayboxWeaponKind(String itemKind) {
-        return FIRST_GRAYBOX_WEAPON.equals(Objects.requireNonNull(itemKind, "weapon item kind"));
+        return GRAYBOX_WEAPON_KINDS.contains(Objects.requireNonNull(itemKind, "weapon item kind"));
     }
 
     private static HumanTacticalFunction defenceFunction(FrontierWorldState state, HumanAssignment assignment, ResidentProfile resident) {

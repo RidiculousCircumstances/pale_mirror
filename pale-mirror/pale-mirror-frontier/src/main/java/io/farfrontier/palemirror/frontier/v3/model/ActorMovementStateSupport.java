@@ -12,9 +12,9 @@ final class ActorMovementStateSupport {
     private ActorMovementStateSupport() { }
     static void validate(Map<SubjectId, ActorMovement> movements, Map<SubjectId, ActorLocation> actors,
                          HumanPopulation people, ExactInventory inventory, ActorExecutionState executions,
-                         ShipmentState shipments, UnitGroupState groups, ExtractionSiteState extractionSites) {
+                         ShipmentState shipments, UnitGroupState groups, ExtractionSiteState extractionSites, StrategicPlanState strategicPlans) {
         if (movements.size() > 4_096) throw new IllegalArgumentException("actor movement retention bound exceeded");
-        var references = new ActorMovementReferences(people, inventory, shipments, groups, extractionSites);
+        var references = new ActorMovementReferences(people, inventory, shipments, groups, extractionSites, strategicPlans);
         for (var id : executions.current(ActorActivityKind.SERVICE_EXIT).values()) {
             var movement = movements.get(id.actorId());
             if (movement == null || !movement.executionId().equals(id))

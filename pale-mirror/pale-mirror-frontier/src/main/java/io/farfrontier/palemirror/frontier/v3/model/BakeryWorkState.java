@@ -8,7 +8,7 @@ import java.util.Optional;
 /** Durable bakery phase and the exact custody-account identities used by one bread job. */
 public record BakeryWorkState(Phase phase, SubjectId stationId, SubjectId sourceAccountId, SubjectId sourceContainerId,
                               SubjectId actorAccountId, SubjectId stationAccountId,
-                              SubjectId destinationAccountId, int completedWorkTicks,
+                              SubjectId destinationAccountId, Optional<WorkProgress> labour,
                               Optional<BakeryPhysicalStep> pendingPhysicalStep,
                               Optional<BakeryWorkBlock> block) {
     public enum Phase {
@@ -31,18 +31,18 @@ public record BakeryWorkState(Phase phase, SubjectId stationId, SubjectId source
         Objects.requireNonNull(actorAccountId, "bakery actor account");
         Objects.requireNonNull(stationAccountId, "bakery station account");
         Objects.requireNonNull(destinationAccountId, "bakery destination account");
+        labour = Objects.requireNonNull(labour, "bakery labour");
         pendingPhysicalStep = Objects.requireNonNull(pendingPhysicalStep, "bakery pending physical effect");
         block = Objects.requireNonNull(block, "bakery local block");
         if (sourceAccountId.equals(actorAccountId) || sourceAccountId.equals(stationAccountId)
                 || actorAccountId.equals(stationAccountId) || actorAccountId.equals(destinationAccountId)
-                || stationAccountId.equals(destinationAccountId) || completedWorkTicks < 0
-                || completedWorkTicks > ProductionWorkProgress.REQUIRED_PROCESSING_TICKS
-                || phase != Phase.PROCESSING && completedWorkTicks != 0) {
+                || stationAccountId.equals(destinationAccountId)
+                || phase != Phase.PROCESSING && labour.isPresent()) {
             throw new IllegalArgumentException("bakery work must retain distinct custody accounts and a bounded station clock");
         }
         if (pendingPhysicalStep.isPresent() && (phase == Phase.DELIVERED
                 || pendingPhysicalStep.orElseThrow().phase() != phase
-                || phase == Phase.PROCESSING && completedWorkTicks != ProductionWorkProgress.REQUIRED_PROCESSING_TICKS))
+                || phase == Phase.PROCESSING && labour.filter(WorkProgress::complete).isEmpty()))
             throw new IllegalArgumentException("bakery pending effect must belong to its ready current phase");
         if (phase == Phase.DELIVERED && block.isPresent())
             throw new IllegalArgumentException("delivered bakery job cannot be blocked");
@@ -50,31 +50,37 @@ public record BakeryWorkState(Phase phase, SubjectId stationId, SubjectId source
 
     public BakeryWorkState(Phase phase, SubjectId stationId, SubjectId sourceAccountId, SubjectId sourceContainerId,
                            SubjectId actorAccountId, SubjectId stationAccountId,
-                           SubjectId destinationAccountId, int completedWorkTicks) {
+                           SubjectId destinationAccountId, Optional<WorkProgress> labour) {
         this(phase, stationId, sourceAccountId, sourceContainerId, actorAccountId, stationAccountId,
-                destinationAccountId, completedWorkTicks, Optional.empty(), Optional.empty());
+                destinationAccountId, labour, Optional.empty(), Optional.empty());
     }
 
-    public BakeryWorkState(Phase phase, SubjectId stationId, SubjectId sourceAccountId, SubjectId sourceContainerId,
-                           SubjectId actorAccountId, SubjectId stationAccountId,
-                           SubjectId destinationAccountId, int completedWorkTicks,
-                           Optional<BakeryPhysicalStep> pendingPhysicalStep) {
-        this(phase, stationId, sourceAccountId, sourceContainerId, actorAccountId, stationAccountId,
-                destinationAccountId, completedWorkTicks, pendingPhysicalStep, Optional.empty());
+    public boolean labourComplete() { return labour.filter(WorkProgress::complete).isPresent(); }
+
+    /** Read-only percentage; no invocation counter remains as work authority. */
+    public int labourPermille() {
+        return labour.map(value -> (int) (value.completedMilliWork() * 1_000L / value.requiredMilliWork())).orElse(0);
+    }
+
+    public BakeryWorkState withLabour(WorkProgress next) {
+        if (phase != Phase.PROCESSING || pendingPhysicalStep.isPresent())
+            throw new IllegalArgumentException("bakery labour cannot change across a physical recipe");
+        return new BakeryWorkState(phase, stationId, sourceAccountId, sourceContainerId, actorAccountId,
+                stationAccountId, destinationAccountId, Optional.of(next), pendingPhysicalStep, block);
     }
 
     public BakeryWorkState withBlock(Optional<BakeryWorkBlock> next) {
         if (phase == Phase.DELIVERED && next.isPresent())
             throw new IllegalArgumentException("delivered bakery job cannot be blocked");
         return new BakeryWorkState(phase, stationId, sourceAccountId, sourceContainerId, actorAccountId,
-                stationAccountId, destinationAccountId, completedWorkTicks, pendingPhysicalStep, next);
+                stationAccountId, destinationAccountId, labour, pendingPhysicalStep, next);
     }
 
     public BakeryWorkState withDestination(SubjectId account) {
         if (pendingPhysicalStep.isPresent() || phase == Phase.DELIVERED)
             throw new IllegalArgumentException("bakery destination cannot change across a pending or completed delivery");
         return new BakeryWorkState(phase, stationId, sourceAccountId, sourceContainerId, actorAccountId,
-                stationAccountId, account, completedWorkTicks, Optional.empty(),
+                stationAccountId, account, labour, Optional.empty(),
                 block.filter(value -> value.reason() != BakeryWorkBlock.Reason.DESTINATION_OCCUPIED));
     }
 
@@ -91,40 +97,33 @@ public record BakeryWorkState(Phase phase, SubjectId stationId, SubjectId source
                 || block.map(value -> value.reason() != BakeryWorkBlock.Reason.SOURCE_CHANGED).orElse(true))
             throw new IllegalArgumentException("bakery depot source can change only while awaiting input");
         return new BakeryWorkState(phase, stationId, Objects.requireNonNull(accountId, "replacement depot account"),
-                Objects.requireNonNull(containerId, "replacement source storage"), actorAccountId, stationAccountId, destinationAccountId, completedWorkTicks, pendingPhysicalStep, Optional.empty());
+                Objects.requireNonNull(containerId, "replacement source storage"), actorAccountId, stationAccountId, destinationAccountId, labour, pendingPhysicalStep, Optional.empty());
     }
 
     public BakeryWorkState preparePhysical(BakeryPhysicalStep step) {
         if (pendingPhysicalStep.isPresent() || block.isPresent() || step.phase() != phase)
             throw new IllegalArgumentException("bakery phase already has a physical effect intent");
         return new BakeryWorkState(phase, stationId, sourceAccountId, sourceContainerId, actorAccountId,
-                stationAccountId, destinationAccountId, completedWorkTicks, Optional.of(step), block);
+                stationAccountId, destinationAccountId, labour, Optional.of(step), block);
     }
 
     public BakeryWorkState withoutPhysical() {
         return new BakeryWorkState(phase, stationId, sourceAccountId, sourceContainerId, actorAccountId,
-                stationAccountId, destinationAccountId, completedWorkTicks, Optional.empty(), block);
+                stationAccountId, destinationAccountId, labour, Optional.empty(), block);
     }
 
     public BakeryWorkState advance(Phase next) {
         boolean legal = switch (phase) {
             case DEPOT_PICKUP -> next == Phase.STATION_LOAD;
             case STATION_LOAD -> next == Phase.PROCESSING;
-            case PROCESSING -> next == Phase.STATION_UNLOAD && completedWorkTicks == ProductionWorkProgress.REQUIRED_PROCESSING_TICKS;
+            case PROCESSING -> next == Phase.STATION_UNLOAD && labourComplete();
             case STATION_UNLOAD -> next == Phase.DEPOT_DELIVERY;
             case DEPOT_DELIVERY -> next == Phase.DELIVERED;
             case DELIVERED -> false;
         };
         if (!legal || pendingPhysicalStep.isPresent() || block.isPresent()) throw new IllegalArgumentException("bakery phase cannot skip a custody receipt or local block");
         return new BakeryWorkState(next, stationId, sourceAccountId, sourceContainerId, actorAccountId,
-                stationAccountId, destinationAccountId, 0);
+                stationAccountId, destinationAccountId, Optional.empty());
     }
 
-    public BakeryWorkState workTick() {
-        if (phase != Phase.PROCESSING || pendingPhysicalStep.isPresent() || block.isPresent()
-                || completedWorkTicks >= ProductionWorkProgress.REQUIRED_PROCESSING_TICKS)
-            throw new IllegalArgumentException("bakery work tick requires loaded station input and an open clock");
-        return new BakeryWorkState(phase, stationId, sourceAccountId, sourceContainerId, actorAccountId,
-                stationAccountId, destinationAccountId, completedWorkTicks + 1);
-    }
 }

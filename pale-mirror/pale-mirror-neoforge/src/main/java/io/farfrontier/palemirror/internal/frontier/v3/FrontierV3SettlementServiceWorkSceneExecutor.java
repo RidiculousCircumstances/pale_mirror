@@ -118,14 +118,21 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
         if (work.spatial().pending()) {
             SurfaceAnchor target = SettlementServiceJourneyKnowledge.target(work);
             if (!FrontierV3SemanticMovement.arrived(level, worker, target)) {
-                var retained = work.spatial().knownApproach(origin -> SettlementServiceJourneyKnowledge.checkpoint(state, work, origin).approach())
-                        .map(value -> value.path().subList(value.cursor(), value.path().size()));
+                Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin> approach;
+                try { approach = SettlementServiceJourneyKnowledge.approach(state, work); }
+                catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable pending) {
+                    FrontierV3GoalNavigation.stop(worker, actuation);
+                    FrontierV3PhysicalWaitTrace.actor(worker, state, work.workerId(),
+                            "service-approach:" + pending.status() + ":" + pending.getMessage());
+                    return;
+                }
+                var retained = approach.map(value -> value.path().subList(value.cursor(), value.path().size()));
                 if (retained.isPresent()) {
                     var hint = retained.orElseThrow();
                     FrontierV3GoalNavigation.pursue(level, worker, new FrontierV3GoalNavigation.Goal(List.of(target),
                             TraversalCapability.PEDESTRIAN, new FrontierV3NavigationScope.RetainedApproach(hint),
                             Optional.empty(), hint), actuation);
-                }
+                } else FrontierV3GoalNavigation.stop(worker, actuation);
                 return; // Unknown geometry retains the same exact input/target, without fabricated progress.
             }
             if (isTraversalPhase(work.phase())) {

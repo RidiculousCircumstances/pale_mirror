@@ -12,10 +12,11 @@ import static io.farfrontier.palemirror.frontier.v3.process.ProductionProcess.*;
 final class BakeryCompletionPlanning {
     private BakeryCompletionPlanning() { }
     static List<ProposedEvent> plan(FrontierWorldState state, ProductionJob job,
-                                                             ScheduledAction action) {
+                                                             ScheduledAction action, long currentTick) {
+        long now = Math.max(currentTick, action.dueAt().ticks());
         StrategicTask retainedTask = state.strategicPlans().tasks().get(job.taskId());
         if (retainedTask != null && retainedTask.status() == StrategicTaskStatus.BLOCKED) return List.of();
-        var step = BakeryProcess.planColdStep(state, job);
+        var step = BakeryProcess.planColdStep(state, job, now);
         if (step.isPresent() && step.orElseThrow().action() == BakeryColdStep.Action.FINALIZE)
             return List.of(new ProposedEvent(job.settlementId(), step.orElseThrow()));
         if (state.structureConditions().get(job.facilityId()) != StructureCondition.INTACT)
@@ -27,28 +28,36 @@ final class BakeryCompletionPlanning {
                     workshop(settlement(state, job.settlementId())), job, ProductionDiagnosticProducer.WORKER_UNAVAILABLE);
         var replacement = BakeryProcess.planInputReallocation(state, job);
         if (replacement.isPresent()) return List.of(new ProposedEvent(job.settlementId(), replacement.orElseThrow()),
-                reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), 20L))));
+                reschedule(action, complete(job, Math.addExact(now, 20L))));
         var storageReplacement = BakeryStorageReplacement.select(state, job);
         if (storageReplacement.isPresent()) return List.of(new ProposedEvent(job.settlementId(), storageReplacement.orElseThrow()),
-                reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), 1L))));
+                reschedule(action, complete(job, Math.addExact(now, 1L))));
         if (step.isEmpty()) {
             long interval = job.bakeryWork().orElseThrow().phase() != BakeryWorkState.Phase.DELIVERED
                     && ProductionOutputCapacity.depotDeliveryUnavailable(state, job)
                     ? state.bootstrap().ruleset().cadence().strategicReviewInterval() : 20L;
-            return List.of(reschedule(action, complete(job, Math.addExact(action.dueAt().ticks(), interval))));
+            return List.of(reschedule(action, complete(job, job.bakeryWork().orElseThrow().labour()
+                    .filter(work -> work.running() && work.activeUntilTick() > now)
+                    .map(WorkProgress::activeUntilTick).orElseGet(() -> Math.addExact(now, interval)))));
         }
-        long due = Math.addExact(action.dueAt().ticks(), ProductionWorkProgress.SIMULATION_TICKS_PER_WORK_UNIT);
+        long due = step.orElseThrow().labourChange().map(change -> change.next().running()
+                ? change.next().activeUntilTick() : Math.addExact(now, 1L))
+                .orElseGet(() -> workDue(job, now));
         if (step.orElseThrow().action() == BakeryColdStep.Action.FINALIZE)
             return List.of(new ProposedEvent(job.settlementId(), step.orElseThrow()));
         var events = new java.util.ArrayList<ProposedEvent>();
         events.add(new ProposedEvent(job.settlementId(), step.orElseThrow()));
         if (step.orElseThrow().action() == BakeryColdStep.Action.DELIVER)
-            events.addAll(GoodsParticipantWakeup.container(state, job.rights().destinationContainerId(), "bakery-delivery|" + job.id().value(), action.dueAt().ticks()));
+            events.addAll(GoodsParticipantWakeup.container(state, job.rights().destinationContainerId(), "bakery-delivery|" + job.id().value(), now));
         events.add(reschedule(action, complete(job, due)));
         FrontierWorldState successor = BakeryProcess.reduceColdStep(state, job.settlementId(), step.orElseThrow());
         events.addAll(stationReleaseWake(state, successor, job.id(),
-                action.id().value() + "|" + action.dueAt().ticks(), action.dueAt().ticks()));
+                action.id().value() + "|" + now, now));
         return List.copyOf(events);
+    }
+
+    private static long workDue(ProductionJob job, long now) {
+        return Math.addExact(now, ProductionWorkProgress.SIMULATION_TICKS_PER_WORK_UNIT);
     }
 
     /** Family-owned availability boundary shared by confirmed HOT and COLD receipts. */

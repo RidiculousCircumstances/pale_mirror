@@ -37,7 +37,14 @@ final class UnitGroupPayloadCodecs {
             return new TransportMissionStarted(sender, kind, mission, group, shipments);
         }), codec("frontier.transport_mission_advanced", (out, payload) -> {
             var value = (TransportMissionAdvanced) payload; UnitGroupStateCodec.id(out, value.missionId()); out.writeLong(value.expectedRevision()); TransportMissionCodec.stage(out, value.next());
-        }, in -> new TransportMissionAdvanced(UnitGroupStateCodec.id(in), in.readLong(), TransportMissionCodec.stage(in))),
+            out.writeBoolean(value.departure().isPresent());
+            if (value.departure().isPresent()) {
+                PedestrianRouteReceiptCodec.writeRoute(out, value.departure().orElseThrow().outward());
+                PedestrianRouteReceiptCodec.writeRoute(out, value.departure().orElseThrow().returning());
+            }
+        }, in -> new TransportMissionAdvanced(UnitGroupStateCodec.id(in), in.readLong(), TransportMissionCodec.stage(in),
+                in.readBoolean() ? Optional.of(new io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionJourneyProof(
+                        PedestrianRouteReceiptCodec.readRoute(in), PedestrianRouteReceiptCodec.readRoute(in))) : Optional.empty())),
                 codec("frontier.transport_mission_retired", (out, payload) -> {
                     var value = (TransportMissionRetired) payload; UnitGroupStateCodec.id(out, value.missionId()); out.writeLong(value.expectedRevision());
                 }, in -> new TransportMissionRetired(UnitGroupStateCodec.id(in), in.readLong()))));

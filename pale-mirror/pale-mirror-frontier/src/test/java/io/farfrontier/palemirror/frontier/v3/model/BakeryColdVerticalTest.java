@@ -20,6 +20,64 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BakeryColdVerticalTest {
+    @Test void pendingAdmissionRetainsARecoveryWaitAndAcceptedAccessReplaysWithoutAnyPlanner() throws Exception {
+        var state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
+                FrontierBootstrapper.create(new WorldId("frontier:bakery-admission-access"), 41L)), StrategicTaskStatus.PENDING);
+        var task = state.strategicPlans().tasks().values().iterator().next();
+        var action = ProductionProcess.start(task, 200L);
+        var codec = new FrontierWorldStateCodec();
+        var payloads = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs();
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        try (var ignored = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            calls.incrementAndGet();
+            return new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(
+                    io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING, List.of(), 0, 0, "pending bakery storage access");
+        })) {
+            assertTrue(BakeryBatchSelection.available(state, task.ownerId()).isPresent());
+            assertTrue(BakeryBatchSelection.admissibleStock(state, ProductionRights.publicService(task.ownerId())).isPresent());
+            assertEquals(0, calls.get(), "stock policy cannot invoke route planning");
+            var pending = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.observe(
+                    () -> ProductionProcess.planStart(state, action));
+            assertEquals(1, calls.get()); assertEquals(1, pending.requests().size());
+            assertEquals(1, pending.result().size());
+            assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class, pending.result().getFirst().payload());
+            var index = new io.farfrontier.palemirror.frontier.v3.process.PedestrianPlanningWakeIndex();
+            var registry = new io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessRegistry(
+                    io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.descriptors(), payloads);
+            try (var continuations = io.farfrontier.palemirror.frontier.v3.process.PedestrianPlanningContinuations.bind(index)) {
+                io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.restorePlanningWaits(registry, codec.decode(codec.encode(state)),
+                        new io.farfrontier.palemirror.frontier.v3.api.FrontierExecutionView(state.bootstrap().worldId(),
+                                io.farfrontier.palemirror.frontier.v3.api.Revision.ZERO, new SimInstant(200), List.of(action)));
+                assertEquals(1, index.waitingCount());
+            }
+        }
+        try (var ignored = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) ->
+                new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(
+                        io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH, List.of(), 0, 0, "blocked selected storage"))) {
+            var deferred = ProductionProcess.planStart(state, action);
+            assertEquals(1, deferred.size());
+            assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class, deferred.getFirst().payload());
+        }
+        var started = ProductionProcess.planStart(state, action).stream().map(ProposedEvent::payload)
+                .filter(ProductionStarted.class::isInstance).map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        assertEquals(started, payloads.decode(started.type(), payloads.encode(started)));
+        var active = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(), new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        try (var ignored = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            fail("accepted bakery admission cannot query or rank routes"); return null;
+        })) {
+            var admitted = ProductionProcess.reduceStarted(codec.decode(codec.encode(active)), task.ownerId(), started);
+            assertEquals(started.job(), admitted.productionJobs().get(started.job().id()));
+            assertEquals(active.actorLocations(), admitted.actorLocations());
+            assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceStarted(admitted, task.ownerId(), started));
+            assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceStarted(active, task.ownerId(),
+                    new ProductionStarted(started.job(), started.inputItemId())));
+            var endpoint = started.access().orElseThrow().routes().keySet().iterator().next();
+            var changed = active.recordPhysicalDelta(new PhysicalDelta(endpoint.support().offset(0, 1, 0), PhysicalDeltaKind.UNKNOWN_SCAR,
+                    Optional.empty(), Optional.empty(), "test:changed-bakery-admission"));
+            assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceStarted(changed, task.ownerId(), started));
+            assertEquals(admitted, codec.decode(codec.encode(admitted)));
+        }
+    }
     @Test void routeWaitsAndRecoveryNeverRediscoverACommittedBakeryMove() throws Exception {
         var state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
                 FrontierBootstrapper.create(new WorldId("frontier:bakery-cooperative-replay"), 41L)), StrategicTaskStatus.PENDING);
@@ -293,6 +351,7 @@ class BakeryColdVerticalTest {
         ProductionJob job = started.job();
         long due = 300L;
         for (int turn = 0; turn < 700; turn++, due += 20L) {
+            due = BakeryTestClock.due(state, job, due);
             ProductionJob current = state.productionJobs().get(job.id());
             if (current.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DEPOT_DELIVERY) break;
             assertFalse(SettlementCommitmentComposition.ADMISSION.facilityAvailable(state, job.facilityId()),
@@ -620,6 +679,7 @@ class BakeryColdVerticalTest {
         assertInstanceOf(ProductionInputHold.Materialized.class, job.inputHold());
         int count = 0;
         for (long due = 300L; state.productionJobs().containsKey(job.id()) && count < 700; due += 20L, count++) {
+            due = BakeryTestClock.due(state, job, due);
             BakeryColdStep step = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, due)).stream()
                     .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
                     .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
@@ -661,6 +721,7 @@ class BakeryColdVerticalTest {
         SubjectId wheat = job.consumedItemId(), bread = job.outputItemId();
         int pickups = 0, loads = 0, recipes = 0, unloads = 0, deliveries = 0;
         for (long due = 300L, steps = 0; state.productionJobs().containsKey(job.id()) && steps < 700; due += 20L, steps++) {
+            due = BakeryTestClock.due(state, job, due);
             List<ProposedEvent> planned = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, due));
             BakeryColdStep step = planned.stream().map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
                     .map(BakeryColdStep.class::cast).findFirst().orElseThrow(() -> new AssertionError("bakery COLD step stalled: " + planned));

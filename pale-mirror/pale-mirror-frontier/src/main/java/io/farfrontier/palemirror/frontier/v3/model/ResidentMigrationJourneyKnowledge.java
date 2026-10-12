@@ -14,16 +14,17 @@ public final class ResidentMigrationJourneyKnowledge {
                 List.of(new SurfaceAnchor(journey.nextColdPosition())), TraversalCapability.PEDESTRIAN,
                 MovementOrder.ArrivalPolicy.EXACT_STATION);
     }
-    public static StationApproachState checkpoint(FrontierWorldState state, ResidentMigrationJourney journey, SurfaceAnchor observed) {
-        long revision = Math.incrementExact(journey.routeRevision());
-        try {
-            var path = KnownPedestrianRouteKnowledge.forFrontier(state).path(observed, order(journey, revision));
-            return new StationApproachState(revision, Optional.of(new TraversalRejoin(path, 0)), Optional.empty());
-        } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
-            return new StationApproachState(revision, Optional.empty(), Optional.of(observed));
-        }
+    public static StationApproachState checkpoint(ResidentMigrationJourney journey, SurfaceAnchor observed) {
+        return journey.spatial().observedAt(observed);
     }
     public static Optional<TraversalRejoin> approach(FrontierWorldState state, ResidentMigrationJourney journey) {
-        return journey.spatial().knownApproach(origin -> checkpoint(state, journey, origin).approach());
+        try {
+            return StationApproachNavigation.plan(KnownPedestrianRouteKnowledge.forFrontier(state),
+                    journey.spatial(), order(journey, journey.routeRevision()));
+        } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+            if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
+                throw unavailable;
+            return Optional.empty();
+        }
     }
 }

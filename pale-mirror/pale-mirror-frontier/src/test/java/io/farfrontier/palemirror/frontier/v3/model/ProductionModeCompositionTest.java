@@ -21,8 +21,8 @@ class ProductionModeCompositionTest {
         assertEquals(fungible.actions(), exact.actions());
         assertEquals(1, fungible.actions().stream().filter(action -> action == BakeryColdStep.Action.PICKUP).count());
         assertEquals(1, fungible.actions().stream().filter(action -> action == BakeryColdStep.Action.LOAD).count());
-        assertEquals(ProductionWorkProgress.REQUIRED_PROCESSING_TICKS,
-                fungible.actions().stream().filter(action -> action == BakeryColdStep.Action.WORK_TICK).count());
+        assertEquals(2,
+                fungible.actions().stream().filter(action -> action == BakeryColdStep.Action.LABOUR).count());
         assertEquals(1, fungible.actions().stream().filter(action -> action == BakeryColdStep.Action.RECIPE).count());
         assertEquals(1, fungible.actions().stream().filter(action -> action == BakeryColdStep.Action.UNLOAD).count());
         assertEquals(1, fungible.actions().stream().filter(action -> action == BakeryColdStep.Action.DELIVER).count());
@@ -47,18 +47,16 @@ class ProductionModeCompositionTest {
         ProductionJob job = started.job();
         List<BakeryColdStep.Action> actions = new ArrayList<>();
         FrontierWorldStateCodec codec = new FrontierWorldStateCodec();
-        for (int turn = 0; state.productionJobs().containsKey(job.id()) && turn < 700; turn++) {
-            BakeryColdStep step = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 300L + turn * 20L))
+        long due = 300L;
+        for (int turn = 0; state.productionJobs().containsKey(job.id()) && turn < 700; turn++, due += 20) {
+            due = BakeryTestClock.due(state, job, due);
+            BakeryColdStep step = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, due))
                     .stream().map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
                     .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
             state = ProductionProcess.reduceBakeryColdStep(state, task.ownerId(), step);
             // Recovery must preserve each custody/recipe boundary, not repeatedly
             // serialize the whole 1024² world for every navigation or labor tick.
-            int workTicks = state.productionJobs().containsKey(job.id())
-                    ? state.productionJobs().get(job.id()).bakeryWork().orElseThrow().completedWorkTicks() : 0;
-            if (step.action() != BakeryColdStep.Action.MOVE && step.action() != BakeryColdStep.Action.WORK_TICK
-                    || step.action() == BakeryColdStep.Action.WORK_TICK
-                    && (workTicks == 1 || workTicks == ProductionWorkProgress.REQUIRED_PROCESSING_TICKS))
+            if (step.action() != BakeryColdStep.Action.MOVE)
                 state = codec.decode(codec.encode(state));
             if (step.action() != BakeryColdStep.Action.MOVE) actions.add(step.action());
             if (step.action() == BakeryColdStep.Action.RECIPE) {

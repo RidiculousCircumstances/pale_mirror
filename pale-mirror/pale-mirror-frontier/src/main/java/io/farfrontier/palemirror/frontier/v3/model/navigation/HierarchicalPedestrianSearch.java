@@ -19,10 +19,11 @@ public final class HierarchicalPedestrianSearch {
     private record Node(PedestrianRegion.Tile tile, int component) { }
     private record Candidate(Node node, int distance, int estimate) { }
     private record Edge(Node previous, SurfaceAnchor exit, SurfaceAnchor entrance) { }
-    private final PedestrianRouteGeometry geometry;
+    private PedestrianRouteGeometry geometry;
     private final PedestrianRegionCache regionCache;
     private final SurfaceAnchor start, target;
     private final Map<PedestrianRegion.Tile, PedestrianRegion> regions = new LinkedHashMap<>();
+    private final Map<PedestrianRegion.Tile, Object> dependencies = new LinkedHashMap<>();
     private final Map<Node, Integer> distance = new HashMap<>();
     private final Map<Node, Edge> previous = new HashMap<>();
     private final PriorityQueue<Candidate> queue = new PriorityQueue<>(Comparator
@@ -50,6 +51,23 @@ public final class HierarchicalPedestrianSearch {
     }
 
     public synchronized long workUnits() { return work; }
+    synchronized PedestrianRegionDependencies dependencies() {
+        return new PedestrianRegionDependencies(geometry.bounds(), geometry.regionalRevision()
+                .map(PedestrianGeometryRevision::scope).orElse(geometry), dependencies);
+    }
+
+    /** Rebase only untouched surveyed dependencies. Future expansion consumes the new immutable view. */
+    synchronized boolean rebase(PedestrianRouteGeometry current) {
+        if (!compatible(current)) return false;
+        geometry = current; return true;
+    }
+    synchronized boolean compatible(PedestrianRouteGeometry current) {
+        var oldRevision = geometry.regionalRevision(); var nextRevision = current.regionalRevision();
+        return geometry.bounds().equals(current.bounds()) && oldRevision.isPresent() && nextRevision.isPresent()
+                && oldRevision.orElseThrow().scope().equals(nextRevision.orElseThrow().scope())
+                && dependencies.entrySet().stream().allMatch(entry -> entry.getValue()
+                == nextRevision.orElseThrow().at(entry.getKey().x(), entry.getKey().z()));
+    }
 
     public synchronized PedestrianRouteResult advance(int budget) {
         if (budget < MIN_SLICE_WORK) throw new IllegalArgumentException("navigation slice cannot fit one bounded regional expansion");
@@ -98,6 +116,7 @@ public final class HierarchicalPedestrianSearch {
         PedestrianRegion prior = regions.get(tile);
         if (prior != null) return prior;
         PedestrianRegion built = regionCache.region(geometry, tile);
+        dependencies.put(tile, geometry.regionalRevision().map(revision -> revision.at(tile.x(), tile.z())).orElse(geometry.version()));
         work += PedestrianRegion.BUILD_WORK; unknown |= built.unknown(); regions.put(tile, built); return built;
     }
     private void expand(Candidate candidate) {

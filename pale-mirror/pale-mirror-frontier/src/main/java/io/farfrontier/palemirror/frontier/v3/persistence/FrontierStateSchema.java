@@ -4,9 +4,9 @@ import java.io.*;
 
 /** Sole header grammar for early installed-world selection and complete aggregate hydration. */
 final class FrontierStateSchema {
-    // Bakery and field movement WAL retain accepted geometry and exact execution authority;
+    // Field admission and retarget WAL retain selected geometry and execution authority;
     // historical disposable worlds cannot replay that changed event grammar.
-    static final int VERSION = 274;
+    static final int VERSION = 276;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

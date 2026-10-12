@@ -37,7 +37,7 @@ class ResourceSiteHarvestProgressTest {
         assertFalse(continued.returningForBatch());
         assertThrows(IllegalArgumentException.class, () -> reserved.afterFullBatchDelivery(
                 new InventoryCustody.ContainerSlot(base.outputSlot().containerId(), 2), Optional.empty()));
-        ResourceSiteHarvestStarted started = new ResourceSiteHarvestStarted(continued);
+        ResourceSiteHarvestStarted started = new ResourceSiteHarvestStarted(continued, Optional.empty(), Optional.empty());
         assertEquals(started, FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
         var capacityFinished = returning.afterFullBatchDelivery(Optional.empty(), Optional.empty());
@@ -48,7 +48,7 @@ class ResourceSiteHarvestProgressTest {
         assertFalse(capacityFinished.reservesOutputCapacity());
         assertThrows(IllegalArgumentException.class, () -> reserved.afterFullBatchDelivery(Optional.empty(), Optional.empty()),
                 "a pinned continuation cannot be silently abandoned");
-        var ended = new ResourceSiteHarvestStarted(capacityFinished);
+        var ended = new ResourceSiteHarvestStarted(capacityFinished, Optional.empty(), Optional.empty());
         assertEquals(ended, FrontierWorldRuntimeDefinition.payloadCodecs().decode(ended.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(ended)));
     }

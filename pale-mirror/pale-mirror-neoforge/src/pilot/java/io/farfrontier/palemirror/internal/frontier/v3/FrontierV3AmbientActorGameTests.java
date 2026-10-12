@@ -144,7 +144,7 @@ public final class FrontierV3AmbientActorGameTests {
             FrontierV3ActorBodyController.confirmPresent(level, runtime, body);
             FrontierV3CommandSubmission.submit(runtime, "ambient-unload-hot", resident.value(),
                     new AmbientBodyConfirmed(resident, lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, lease.handoffBody(), lease.handoffBody(),
-                            io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state(runtime), resident)));
+                            io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state(runtime), resident), java.util.Optional.empty()));
             body.setHealth(9.0F);
             helper.assertTrue(FrontierV3ActorBodyController.inspectCurrent(level, runtime, body),
                     "the common indexed observer must retain damage before departure");
@@ -632,7 +632,7 @@ public final class FrontierV3AmbientActorGameTests {
             FrontierV3ActorBodyController.confirmPresent(level, runtime, body);
             if (!prepared) FrontierV3CommandSubmission.submit(runtime, "reservation-carrier-hot", resident.value(),
                     new AmbientBodyConfirmed(resident, lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, lease.handoffBody(), lease.handoffBody(),
-                            io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state(runtime), resident)));
+                            io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state(runtime), resident), java.util.Optional.empty()));
             body.setHealth(7.0F);
             var pose = body.position();
             var metadata = body.getPersistentData().copy();

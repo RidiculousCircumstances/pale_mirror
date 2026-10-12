@@ -11,6 +11,13 @@ public final class MedicalEvacuationStateSupport {
 
     private MedicalEvacuationStateSupport() { }
 
+    /** A supply hold does not grant permission to consume an unavailable physical source. */
+    public static boolean supplyAvailable(FrontierWorldState state, SubjectId containerId) {
+        var surface = state.inventory().surfaces().get(containerId);
+        return surface != null && surface.status() == ContainerSurfaceStatus.ACTIVE
+                && !ReferenceContainerCustody.blocksCanonicalUse(state, containerId);
+    }
+
     public static void validate(FrontierBootstrap bootstrap, HumanPopulation population, java.util.Map<SubjectId, ActorLocation> actors,
                          java.util.Map<SubjectId, StructureCondition> structures, ExactInventory inventory,
                          java.util.Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, PhysicalIntent> intents) {
@@ -34,15 +41,17 @@ public final class MedicalEvacuationStateSupport {
                 ExactItemStack supply = inventory.items().get(operation.supplyItemId());
                 if (operation.requiresSupply() && !consumed && (supply == null || !FIRST_TREATMENT_SUPPLY.equals(supply.itemKind()) || supply.count() < 1
                         || !supply.economicOwnerId().equals(settlement.id()) || !(supply.custody() instanceof InventoryCustody.ContainerSlot slot)
-                        || !slot.containerId().equals(FrontierWorldState.depotId(settlement.id()))
-                        || inventory.surfaces().get(slot.containerId()) == null
-                        || inventory.surfaces().get(slot.containerId()).status() != ContainerSurfaceStatus.ACTIVE)) {
-                    throw new IllegalArgumentException("active medical operation needs one exact active local treatment supply");
+                        || !slot.containerId().equals(operation.supplyContainerId())
+                        || inventory.surfaces().get(slot.containerId()) == null)) {
+                    // Availability may become a local reconciliation hold after admission.
+                    // Admission and the physical consumption owner check that fence; retaining
+                    // an unavailable supply is not corruption of the entire world aggregate.
+                    throw new IllegalArgumentException("active medical operation needs one retained exact local treatment supply");
                 }
                 for (SubjectId member : operation.team().memberIds()) {
                     ResidentProfile medic = population.resident(member);
                     ActorLocation actor = actors.get(member);
-                    if (medic == null || medic.capability(HumanCapability.MEDICINE) <= 0
+                    if (medic == null || !medic.settlementId().equals(settlement.id()) || medic.capability(HumanCapability.MEDICINE) <= 0
                             || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE) {
                         throw new IllegalArgumentException("active medical operation needs living local medical workers");
                     }

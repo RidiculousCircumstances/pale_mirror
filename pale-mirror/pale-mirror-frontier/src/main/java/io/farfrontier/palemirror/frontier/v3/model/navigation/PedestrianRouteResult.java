@@ -7,7 +7,16 @@ import java.util.Objects;
 /** Search readiness is not arrival. Resource/permit/activity outcomes belong to their owners. */
 public record PedestrianRouteResult(Status status, List<SurfaceAnchor> route, long workUnits,
                                     int regions, String reason) {
-    public enum Status { PLANNING, FOUND, NO_PATH, UNKNOWN_GEOMETRY, SAFETY_LIMIT }
+    public enum Status {
+        PLANNING(1), FOUND(2), NO_PATH(3), UNKNOWN_GEOMETRY(4), SAFETY_LIMIT(5);
+        private final int wireTag;
+        Status(int wireTag) { this.wireTag = wireTag; }
+        public int wireTag() { return wireTag; }
+        public static Status requireWireTag(int tag) {
+            for (var value : values()) if (value.wireTag == tag) return value;
+            throw new IllegalArgumentException("unknown pedestrian calculation status");
+        }
+    }
     public PedestrianRouteResult {
         Objects.requireNonNull(status); Objects.requireNonNull(reason);
         route = List.copyOf(route);

@@ -622,7 +622,7 @@ class FrontierV3ServerRuntimeTest {
         AmbientActorLease lease = state.ambientLeases().get(actor);
         return new io.farfrontier.palemirror.frontier.v3.model.AmbientBodyConfirmed(actor, lease.revision(),
                 io.farfrontier.palemirror.frontier.v3.model.AmbientBodyConfirmed.Boundary.ADMISSION,
-                lease.handoffBody(), lease.handoffBody(), io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, actor));
+                lease.handoffBody(), lease.handoffBody(), io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, actor), java.util.Optional.empty());
     }
     private static void submitAmbient(FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime,
                                       WorldId world, FrontierPayload payload, String command) {

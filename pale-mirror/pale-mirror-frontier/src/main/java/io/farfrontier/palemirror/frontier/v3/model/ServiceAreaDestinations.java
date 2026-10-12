@@ -47,10 +47,12 @@ public final class ServiceAreaDestinations {
                 MovementOrder order = new MovementOrder(actorId, actorId, 0, 1L, List.of(candidate),
                         TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
                 try {
-                    List<SurfaceAnchor> route = knowledge.path(start, order);
+                    List<SurfaceAnchor> route = knowledge.plannedPath(start, order);
                     if (points.stream().allMatch(point -> point.boundary().allowsWaitingRoute(route)) && available.test(candidate))
                         return Optional.of(candidate);
                 } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                    if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
+                        throw unavailable;
                     // Unsupported/blocked/unknown columns cannot consume a native candidate probe.
                 }
             }

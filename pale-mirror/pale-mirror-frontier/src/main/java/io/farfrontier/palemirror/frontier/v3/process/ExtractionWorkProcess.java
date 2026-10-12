@@ -17,20 +17,29 @@ final class ExtractionWorkProcess {
             throw new IllegalArgumentException("mining review has a foreign schedule");
         long now = Math.max(tick, action.dueAt().ticks());
         var events = new ArrayList<ProposedEvent>();
-        var projected = ExtractionDevelopmentContinuation.append(state, site.id(), events, now);
+        FrontierWorldState projected;
+        try { projected = ExtractionDevelopmentContinuation.append(state, site.id(), events, now); }
+        catch (KnownPedestrianNavigation.RouteUnavailable pending) {
+            return List.of(nextReview(state, action, now));
+        }
         var provider = new ExtractionWorkAdmission(site.id());
         for (var resident : ResidentWorkComposition.SELECTION.eligible(state, site.settlementId(), ResidentWorkKind.EXTRACTION, HumanCapability.EXTRACTION, now)) {
-            var offer = ResidentWorkComposition.SELECTION.offer(projected, resident, now, provider);
+            Optional<ResidentWorkOffer<ExtractionWorkStarted>> offer;
+            try { offer = ResidentWorkComposition.SELECTION.offer(projected, resident, now, provider); }
+            catch (KnownPedestrianNavigation.RouteUnavailable pending) { break; }
             if (offer.isEmpty()) continue;
-            var start = new ExtractionWorkStarted(offer.orElseThrow().execution(), projected.extractionSites().nextWorkOrdinal());
+            var start = offer.orElseThrow().execution();
             projected = ExtractionWorkAdmission.start(projected, start, now);
             events.add(new ProposedEvent(start.work().id(), start));
             events.add(new ProposedEvent(start.work().id(), new ScheduleEffect.Created(
                     ExtractionContinuation.at(start.work().id(), Math.addExact(now, 1)))));
         }
-        var next = ExtractionContinuation.review(site.id(), Math.addExact(now, state.bootstrap().ruleset().extraction().reviewTicks()));
-        events.add(new ProposedEvent(site.id(), new ScheduleEffect.Rescheduled(action.id(), next)));
+        events.add(nextReview(state, action, now));
         return List.copyOf(events);
+    }
+    private static ProposedEvent nextReview(FrontierWorldState state, ScheduledAction action, long now) {
+        var next = ExtractionContinuation.review(action.subject(), Math.addExact(now, state.bootstrap().ruleset().extraction().reviewTicks()));
+        return new ProposedEvent(action.subject(), new ScheduleEffect.Rescheduled(action.id(), next));
     }
     static boolean held(FrontierWorldState state, ScheduledAction action) {
         var job = state.extractionSites().work().get(action.subject());
@@ -55,20 +64,32 @@ final class ExtractionWorkProcess {
         if (held(state, action)) throw new IllegalArgumentException("mining awaits its exact custody or continuation boundary");
         if (needsStorage(state, job)) {
             var interrupted = new ActorMovementInterruptionPlanner().assess(state, job.execution().actorId(), now);
-            if (!(interrupted instanceof ActivityInterruptionPlanner.Ready ready)
-                    || ExtractionStorageSelection.replacement(ready.following(), job).isEmpty()) return retry(state, job, now);
+            if (!(interrupted instanceof ActivityInterruptionPlanner.Ready ready)) return retry(state, job, now);
+            Optional<ExtractionWorkDecision.Storage> selected;
+            try { selected = ExtractionStorageSelection.replacement(ready.following(), job); }
+            catch (KnownPedestrianNavigation.RouteUnavailable pending) { return retry(state, job, now); }
+            if (selected.isEmpty()) return retry(state, job, now);
             var events = new ArrayList<>(ready.events());
-            events.addAll(advance(ready.following(), job, ExtractionWorkProgressed.Operation.SELECT_STORAGE, action, now));
+            events.addAll(advance(ready.following(), job, new ExtractionWorkProgressed(job.id(), job.revision(),
+                    ExtractionWorkProgressed.Operation.SELECT_STORAGE, Optional.of(selected.orElseThrow())), action, now));
             return List.copyOf(events);
         }
         if (!ExtractionWorkPolicy.requested(state, job)
                 && (job.phase() == ExtractionWork.Phase.TAKE_TOOL || job.phase() == ExtractionWork.Phase.EXTRACT))
             return advance(state, job, ExtractionWorkProgressed.Operation.END_WORK, action, now);
         if (job.phase() == ExtractionWork.Phase.SELECT_SOURCE) {
-            if (!ExtractionWorkPolicy.finished(state, job)
-                    && (!ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.execution().actorId(), now)
-                        || ExtractionWorkPolicy.nextTarget(state, job).isEmpty())) return retry(state, job, now);
-            return advance(state, job, ExtractionWorkProgressed.Operation.SELECT_SOURCE, action, now);
+            ExtractionWorkDecision decision;
+            if (ExtractionWorkPolicy.finished(state, job)) decision = new ExtractionWorkDecision.Finished(job.execution());
+            else {
+                if (!ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.execution().actorId(), now)) return retry(state, job, now);
+                Optional<ExtractionWorkDecision.Source> selected;
+                try { selected = ExtractionWorkPolicy.nextTarget(state, job); }
+                catch (KnownPedestrianNavigation.RouteUnavailable pending) { return retry(state, job, now); }
+                if (selected.isEmpty()) return retry(state, job, now);
+                decision = selected.orElseThrow();
+            }
+            return advance(state, job, new ExtractionWorkProgressed(job.id(), job.revision(),
+                    ExtractionWorkProgressed.Operation.SELECT_SOURCE, Optional.of(decision)), action, now);
         }
         if (!ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.execution().actorId(), now)) return retry(state, job, now);
         var site = ExtractionWorkAuthority.site(state, job); var order = job.movementOrder(site);
@@ -76,9 +97,13 @@ final class ExtractionWorkProcess {
             var movement = new ActorMovement(order, now, new ActorMovementContext.ExtractionLeg(job.id(), job.revision()), job.execution());
             try { ActorMovementProviders.require(movement).route(state, movement, state.actorLocations().get(order.actorId()).supportingSurface()); }
             catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
-                if (ExtractionWorkTargets.alternative(state, job).isEmpty()) return retry(state, job, now);
-                return List.of(new ProposedEvent(job.id(), new ExtractionWorkProgressed(job.id(), job.revision(),
-                        ExtractionWorkProgressed.Operation.SELECT_REACHABLE)), ExtractionContinuation.wake(job.id(), now));
+                if (unavailable.status() != PedestrianRouteResult.Status.NO_PATH) return retry(state, job, now);
+                Optional<ExtractionWorkDecision.Source> selected;
+                try { selected = ExtractionWorkTargets.alternative(state, job); }
+                catch (KnownPedestrianNavigation.RouteUnavailable pending) { return retry(state, job, now); }
+                if (selected.isEmpty()) return retry(state, job, now);
+                return advance(state, job, new ExtractionWorkProgressed(job.id(), job.revision(),
+                        ExtractionWorkProgressed.Operation.SELECT_REACHABLE, Optional.of(selected.orElseThrow())), action, now);
             }
             return List.of(new ProposedEvent(order.actorId(), new ActorMovementStarted(movement)),
                     new ProposedEvent(order.actorId(), new ScheduleEffect.Created(ActorMovementProcess.progress(movement, Math.addExact(now, 1)))),
@@ -116,13 +141,17 @@ final class ExtractionWorkProcess {
     private static List<ProposedEvent> advance(FrontierWorldState state, ExtractionWork job,
             ExtractionWorkProgressed.Operation operation, ScheduledAction action, long now) {
         var event = new ExtractionWorkProgressed(job.id(), job.revision(), operation);
+        return advance(state, job, event, action, now);
+    }
+    private static List<ProposedEvent> advance(FrontierWorldState state, ExtractionWork job,
+            ExtractionWorkProgressed event, ScheduledAction action, long now) {
         var preview = ExtractionColdWork.apply(state, job.id(), event, now);
         if (!preview.extractionSites().work().containsKey(job.id())) return List.of(new ProposedEvent(job.id(), event),
                 new ProposedEvent(job.id(), new ScheduleEffect.Cancelled(action.id())), ResidentActivityProcess.wakeAfterActivity(job.execution().actorId(), now));
         var events = new ArrayList<ProposedEvent>();
         events.add(new ProposedEvent(job.id(), event));
-        if (operation == ExtractionWorkProgressed.Operation.EXTRACT_BLOCK)
-            ExtractionDevelopmentContinuation.append(preview, job.siteId(), events, now);
+        if (event.operation() == ExtractionWorkProgressed.Operation.EXTRACT_BLOCK)
+            ExtractionDevelopmentContinuation.appendAfterObservation(preview, job.siteId(), events, now);
         if (events.stream().noneMatch(proposed -> proposed.subject().equals(job.id()) && proposed.payload() instanceof ScheduleEffect))
             events.add(ExtractionContinuation.wake(job.id(), now));
         return List.copyOf(events);

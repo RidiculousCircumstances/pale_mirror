@@ -16,6 +16,10 @@ public record StationApproachState(long revision, Optional<TraversalRejoin> appr
         return new StationApproachState(1L, Optional.empty(), Optional.empty());
     }
     public boolean pending() { return approach.isPresent() || waitingOrigin.isPresent(); }
+    /** An observed departure records facts only; its owner plans an approach in a separate transition. */
+    public StationApproachState observedAt(SurfaceAnchor observed) {
+        return new StationApproachState(Math.incrementExact(revision), Optional.empty(), Optional.of(observed));
+    }
     /** Read-only HOT hint refresh from the retained origin; never adopts a new canonical revision or credits work. */
     public Optional<TraversalRejoin> knownApproach(
             java.util.function.Function<SurfaceAnchor, Optional<TraversalRejoin>> knowledge) {

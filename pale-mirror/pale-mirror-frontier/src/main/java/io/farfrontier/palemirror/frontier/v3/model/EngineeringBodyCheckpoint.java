@@ -2,7 +2,6 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityBodyCheckpoint;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
-import io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin;
 import java.util.LinkedHashMap;
 
 /** Family-owned continuation composed atomically with the common physical departure. */
@@ -18,8 +17,7 @@ final class EngineeringBodyCheckpoint {
         var observed = request.observedPosition().supportingSurface();
         if (member.currentSurface().equals(observed)) return new ActorActivityBodyCheckpoint.Acknowledgement(request, update);
         var state = request.expectedState();
-        var path = EngineeringJourneyKnowledge.rejoin(state, owner, request.execution().actorId(), observed);
-        var next = owner.assembly().orElseThrow().checkpoint(request.execution().actorId(), new TraversalRejoin(path, 0));
+        var next = owner.assembly().orElseThrow().checkpoint(request.execution().actorId(), observed);
         switch (owner) {
             case RouteConstruction construction -> {
                 var projects = new LinkedHashMap<>(state.routeConstructions());

@@ -338,8 +338,15 @@ final class FrontierV3AmbientActorExecutor {
         long custodyEpoch = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, actorId).physicalEpoch();
         FrontierV3ActorCarrierComposition.Declaration declaration = carrierDeclaration(state, actorId, entityId, FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, custodyEpoch);
         var lease = state.ambientLeases().get(actorId);
-        var candidates = lease != null && lease.status() == AmbientLeaseStatus.PREPARED && canonicalBody.equals(lease.handoffBody())
-                ? AmbientPlacementPolicy.candidates(state, lease) : List.of(canonicalBody.supportingSurface());
+        List<io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor> candidates;
+        try {
+            candidates = lease != null && lease.status() == AmbientLeaseStatus.PREPARED && canonicalBody.equals(lease.handoffBody())
+                    ? AmbientPlacementPolicy.candidates(state, lease) : List.of(canonicalBody.supportingSurface());
+        } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
+            FrontierV3PhysicalWaitTrace.admission(level, actorId,
+                    "placement:" + unavailable.status() + ":" + unavailable.getMessage());
+            return Result.DEFERRED;
+        }
         var result = FrontierV3ActorBodyController.materialize(level, state,
                 new FrontierV3ActorBodyController.BirthRequest(FrontierV3ActorCarrierComposition.InventoryEntry.AMBIENT_BODY,
                         FrontierV3ActorOwnerBinding.body(declaration), candidates,

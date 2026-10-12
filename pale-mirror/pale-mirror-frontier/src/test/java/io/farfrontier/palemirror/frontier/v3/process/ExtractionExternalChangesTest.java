@@ -117,7 +117,8 @@ class ExtractionExternalChangesTest {
         var planned = new ExtractionWorkProcessModule().planCommand(state, command);
         assertInstanceOf(CommandPlan.Accepted.class, planned);
         var changed = event.apply(state, site.id()); var next = changed.extractionSites().work().get(job.id());
-        assertNotEquals(job.target(), next.target()); assertEquals(job.execution(), next.execution());
+        assertEquals(job.target(), next.target(), "geometry observation invalidates motion, not selection of a different source");
+        assertEquals(job.execution(), next.execution());
         assertEquals(before.actorLocations(), changed.actorLocations()); assertEquals(before.inventory(), changed.inventory());
         assertFalse(changed.actorMovements().containsKey(job.execution().actorId()));
         var events = ((CommandPlan.Accepted) planned).events();
@@ -130,8 +131,34 @@ class ExtractionExternalChangesTest {
             assertEquals(changed, event.apply(before, site.id()),
                     "the same retained geometry event must reduce identically before async planning and during replay");
         }
-        var knowledge = KnownPedestrianRouteKnowledge.forFrontier(changed);
-        knowledge.requireRoute(knowledge.plannedPath(changed.actorLocations().get(next.execution().actorId()).supportingSurface(), next.movementOrder(site)));
-        assertEquals(changed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(changed)));
+        var action = ExtractionContinuation.at(next.id(), admitted.tick());
+        try (var ignored = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) ->
+                new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(
+                        io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
+                        List.of(), 0, 0, "alternative extraction source pending"))) {
+            var pending = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.observe(
+                    () -> ExtractionWorkProcess.progress(changed, action, admitted.tick()));
+            assertEquals(1, pending.requests().size());
+            assertTrue(pending.result().stream().allMatch(value -> value.payload() instanceof ScheduleEffect.Rescheduled));
+        }
+        var selected = ExtractionWorkProcess.progress(changed, action, admitted.tick()).stream().map(ProposedEvent::payload)
+                .filter(ExtractionWorkProgressed.class::isInstance).map(ExtractionWorkProgressed.class::cast).findFirst().orElseThrow();
+        assertEquals(ExtractionWorkProgressed.Operation.SELECT_REACHABLE, selected.operation());
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(selected, codecs.decode(selected.type(), codecs.encode(selected)));
+        var beforeSelection = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(changed));
+        FrontierWorldState retargeted;
+        try (var ignored = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            fail("selected mining successor replay must not rediscover a route"); return null;
+        })) {
+            retargeted = ExtractionColdWork.apply(beforeSelection, next.id(), selected, admitted.tick());
+            var afterSelection = retargeted;
+            assertThrows(IllegalArgumentException.class, () -> ExtractionColdWork.apply(afterSelection, next.id(), selected, admitted.tick()));
+        }
+        var successor = retargeted.extractionSites().work().get(next.id());
+        assertNotEquals(next.target(), successor.target());
+        var knowledge = ExtractionWorkTargets.knowledge(retargeted, successor);
+        knowledge.requireRoute(knowledge.plannedPath(retargeted.actorLocations().get(next.execution().actorId()).supportingSurface(), successor.movementOrder(site)));
+        assertEquals(retargeted, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(retargeted)));
     }
 }

@@ -14,11 +14,6 @@ public final class HumanEquipmentStateSupport {
         return intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE || intent.kind() == PhysicalIntentKind.EQUIPMENT_RETURN;
     }
 
-    public static void validateIntent(FrontierWorldState state, PhysicalIntent intent) {
-        if (intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE) EquipmentIssueStateSupport.validateIntent(state, intent);
-        else if (intent.kind() == PhysicalIntentKind.EQUIPMENT_RETURN) EquipmentReturnStateSupport.validateIntent(state, intent);
-    }
-
     public static FrontierWorldState complete(FrontierWorldState state, PhysicalIntent intent, PhysicalEffectObservation evidence,
                                               Map<PhysicalIntentId, PhysicalIntent> nextIntents) {
         if (intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE) {

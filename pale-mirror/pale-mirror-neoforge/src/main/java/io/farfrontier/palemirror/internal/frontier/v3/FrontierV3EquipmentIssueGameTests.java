@@ -56,10 +56,10 @@ public final class FrontierV3EquipmentIssueGameTests {
         if (resident == null) throw new IllegalStateException("test Villager could not be created");
         BlockPosition assignedStation = new BlockPosition(41, 8, 0);
         resident.setPos(41.5D, 9.0D, 0.5D);
-        helper.assertTrue(FrontierV3EngineeringDepotServicePort.bodyAtAssignedStation(resident, assignedStation),
+        helper.assertTrue(FrontierV3EquipmentServicePort.bodyAtAssignedStation(resident, assignedStation),
                 "an exact HOT body at its compiled station may use the depot service");
         resident.setPos(43.5D, 9.0D, 0.5D);
-        helper.assertTrue(!FrontierV3EngineeringDepotServicePort.bodyAtAssignedStation(resident, assignedStation),
+        helper.assertTrue(!FrontierV3EquipmentServicePort.bodyAtAssignedStation(resident, assignedStation),
                 "a body beside an incidental chest-radius location may not substitute for its assigned station");
         helper.succeed();
     }

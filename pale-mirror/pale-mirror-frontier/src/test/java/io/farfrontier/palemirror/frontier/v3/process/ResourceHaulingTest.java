@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Product path: an owned drop admits the existing courier/claim and reserves receiving space once. */
 class ResourceHaulingTest {
-    @Test void groundStockUsesOrdinaryInternalShipmentAndRetainsItsReservationAcrossRecovery() {
+    @Test void groundStockUsesOrdinaryInternalShipmentAndRetainsItsReservationAcrossRecovery() throws Exception {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:ground-haul"), 20260918065L,
                 FrontierRulesets.installed("frontier-v3-quarry-graybox-r6")));
         var home = initial.bootstrap().settlements().getFirst(); var depot = initial.inventory().containers().get(FrontierWorldState.depotId(home.id()));
@@ -41,6 +41,18 @@ class ResourceHaulingTest {
         assertEquals(new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN), offer.shipment().itemOrder().actorSlot());
         assertFalse(ResourceSourceComposition.coldAvailable(dispatched, offer.shipment().sender()));
         var source = (ResourceSourceEndpoint.Ground) offer.shipment().sender();
+        var worker = state.humanPopulation().residents().get(offer.shipment().execution().actorId());
+        for (var status : List.of(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
+                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.UNKNOWN_GEOMETRY,
+                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.SAFETY_LIMIT)) {
+            try (var ignored = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, origin, target) ->
+                    new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(status, List.of(), 0, 0, "pickup wait"))) {
+                var wait = assertThrows(io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable.class,
+                        () -> InternalShipmentPlanning.prepare(state, worker, source, depot.storage().orElseThrow().endpoint(), lot.itemKind(), 8, 1201));
+                assertEquals(status, wait.status());
+                assertFalse(ResourceHaulingPolicy.available(state, worker, 1201));
+            }
+        }
         assertThrows(IllegalArgumentException.class, () -> InternalShipmentPlanning.prepare(state,
                 state.humanPopulation().residents().get(offer.shipment().execution().actorId()),
                 new ResourceSourceEndpoint.Ground(source.settlementId(), source.custody(), source.station(), source.epoch() + 1),

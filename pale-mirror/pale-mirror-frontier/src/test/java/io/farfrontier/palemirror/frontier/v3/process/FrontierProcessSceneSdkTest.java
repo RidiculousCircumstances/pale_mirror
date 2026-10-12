@@ -41,7 +41,7 @@ class FrontierProcessSceneSdkTest {
     }
 
     @Test
-    void newMovementGoalBlockCannotBeClearedByTheOldRoutePlanCommand() {
+    void fieldGoalRejectsRetiredCursorAndDuplicateRouteBlock() {
         HarvestDescriptor descriptor = new HarvestDescriptor();
         EngineContext engine = descriptor.acquireHot(descriptor.initial()).engine();
         ResourceSiteHarvestJob job = harvest(engine, new SubjectId("site:1-wheat-field"));
@@ -54,7 +54,7 @@ class FrontierProcessSceneSdkTest {
                 goal.layoutRevision(), ResourceSiteHarvestNavigationBlock.Reason.PATH_UNAVAILABLE);
         engine = submitBound(engine, new ResourceSiteHarvestRouteBlocked(job.siteId(), job.id(),
                 job.workerId(), block, lease.id(), action.id(), action.dueAt().ticks()), action);
-        assertRejectedBound(engine, new ResourceSiteHarvestRouteCleared(job.siteId(), job.id(),
+        assertRejectedBound(engine, new ResourceSiteHarvestRouteBlocked(job.siteId(), job.id(),
                 job.workerId(), block, lease.id(), action.id(), action.dueAt().ticks()), action);
         assertEquals(Optional.of(block), harvest(engine, job.siteId()).navigationBlock());
         assertEquals(EngineStatus.Kind.ACTIVE, engine.engine().status().kind());
@@ -311,7 +311,7 @@ class FrontierProcessSceneSdkTest {
             EngineContext engine = fork(context.engine()); ResourceSiteHarvestJob job = FrontierProcessSceneSdkTest.harvest(engine, context.site());
             SceneLease lease = activeHarvestLease(state(engine), job);
             ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state(engine), job);
-            List<SurfaceAnchor> path = ResourceSiteHarvestKnownNavigation.path(state(engine), job);
+            List<SurfaceAnchor> path = ResourceSiteHarvestKnownNavigation.plannedPath(state(engine), job);
             return context.with(bodyInspected(engine, job.workerId(), path.get(1).standingBody()));
         }
         @Override public HarvestContext releaseToCold(HarvestContext context) {
@@ -402,7 +402,8 @@ class FrontierProcessSceneSdkTest {
             engine = submit(engine, new AmbientLeasePrepared(lease));
             engine = bodyPresent(engine, context.resident());
             return context.with(submit(engine,
-                    new AmbientBodyConfirmed(context.resident(), lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, lease.handoffBody(), lease.handoffBody(), ActorBodyAuthority.current(state(engine), context.resident()))));
+                    new AmbientBodyConfirmed(context.resident(), lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION,
+                            lease.handoffBody(), lease.handoffBody(), ActorBodyAuthority.current(state(engine), context.resident()), java.util.Optional.empty())));
         }
         @Override public TransitContext hotCheckpoint(TransitContext context) {
             EngineContext engine = fork(context.engine()); ResidentMigrationJourney journey = migration(engine, context.resident());

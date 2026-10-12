@@ -9,6 +9,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 
 import java.util.List;
+import java.util.Optional;
 
 /** Canonical admission and reduction of presentation scopes; common body facts have their own owner. */
 public final class AmbientActorProcess {
@@ -165,7 +166,7 @@ public final class AmbientActorProcess {
             if (engineering.assembly().isEmpty()) return new AmbientGoal(AmbientGoalKind.ENGINEERING_ASSEMBLY,
                     state.actorLocations().get(actorId).supportingSurface().support());
             EngineeringWorkAssembly.Member member = engineering.assembly().orElseThrow().members().get(actorId);
-            BlockPosition target = member.arrived() ? member.currentPosition() : member.nextSurface().support();
+            BlockPosition target = member.ambientTarget().support();
             return new AmbientGoal(AmbientGoalKind.ENGINEERING_ASSEMBLY, target);
         }
         ResidentMigrationJourney journey = state.humanPopulation().migration(actorId);
@@ -183,6 +184,10 @@ public final class AmbientActorProcess {
             ResidentMeal meal = state.humanPopulation().meals().get(actorId);
             if (meal != null) return new AmbientGoal(AmbientGoalKind.MEAL,
                     ResidentMealProcess.goalSurface(state, meal).support());
+            var execution = state.actorExecutions().actors().get(actorId);
+            var stationary = execution == null ? Optional.<io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityAmbientTarget>empty()
+                    : execution.current().flatMap(id -> ActorExecutionComposition.CAPABILITIES.require(id.activityKind()).stationaryAmbientTarget(state, id));
+            if (stationary.isPresent()) return new AmbientGoal(stationary.orElseThrow().kind(), stationary.orElseThrow().station().support());
             ResidentActivityChoice choice = ResidentActivityCoordinator.assess(state, actorId, atTick);
             HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(actorId);
             ResourceSiteHarvestJob harvest = assignment.kind() == HumanAssignmentKind.FIELD_HARVEST

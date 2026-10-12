@@ -115,14 +115,20 @@ public final class RouteMaintenanceStateSupport {
     public static FrontierWorldState reduceAssemblyStarted(FrontierWorldState state, SubjectId subject, RouteMaintenanceAssemblyStarted started) {
         if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route maintenance assembly must be owned by the route network");
         RouteMaintenance maintenance = state.routeMaintenances().get(started.maintenanceId());
-        if (maintenance == null || (maintenance.assembly().isPresent() && !(maintenance.assembly().orElseThrow().purpose() == EngineeringJourneyPurpose.MUSTER_DEPOT
-                && maintenance.assembly().orElseThrow().complete() && started.assembly().purpose() == EngineeringJourneyPurpose.WORKSITE))) {
-            throw new IllegalArgumentException("route maintenance has no unassembled operation");
-        }
+        if (maintenance == null) throw new IllegalArgumentException("route maintenance has no unassembled operation");
+        EngineeringDepotService.requireSuccessor(state, maintenance, started.assembly());
         EngineeringWorksite.validate(state.bootstrap(), state.routeTopology(), maintenance.withAssembly(started.assembly()));
-        Map<SubjectId, RouteMaintenance> next = new LinkedHashMap<>(state.routeMaintenances()); next.put(maintenance.id(), maintenance.withAssembly(started.assembly()));
+        Map<SubjectId, RouteMaintenance> next = new LinkedHashMap<>(state.routeMaintenances());
+        next.put(maintenance.id(), maintenance.withAssembly(started.assembly()));
         return EngineeringExecutionAuthority.assembled(state, maintenance, started.assembly(), started.executions(), started.workExecutions(),
-                FrontierWorldStateUpdate.begin().routeMaintenances(next));
+                EngineeringJourneyKnowledge.successorUpdate(state, started.assembly()).routeMaintenances(next));
+    }
+    public static FrontierWorldState reduceApproachPlanned(FrontierWorldState state, SubjectId subject, RouteMaintenanceAssemblyApproachPlanned planned) {
+        if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("maintenance approach lacks route-network ownership");
+        var owner = state.routeMaintenances().get(planned.maintenanceId());
+        var assembly = EngineeringJourneyKnowledge.requireSelected(state, owner, planned.executions(), planned.selection());
+        var owners = new LinkedHashMap<>(state.routeMaintenances()); owners.put(owner.id(), owner.withAdvancedAssembly(assembly));
+        return state.withChanges(EngineeringJourneyKnowledge.approachUpdate(state, planned.selection().actorId(), assembly).routeMaintenances(owners));
     }
 
     public static FrontierWorldState reduceAssemblyAdvanced(FrontierWorldState state, SubjectId subject, RouteMaintenanceAssemblyAdvanced advanced) {
@@ -145,7 +151,7 @@ public final class RouteMaintenanceStateSupport {
         AmbientActorLease lease = ambient.get(moved);
         if (lease != null && lease.status() == AmbientLeaseStatus.HOT && lease.goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY) {
             EngineeringWorkAssembly.Member member = advanced.assembly().members().get(moved);
-            SurfaceAnchor target = member.arrived() ? member.currentSurface() : member.nextSurface();
+            SurfaceAnchor target = member.ambientTarget();
             ambient.put(moved, lease.withGoal(AmbientGoalKind.ENGINEERING_ASSEMBLY, target.standingBody()));
         }
         return EngineeringExecutionAuthority.assembled(state, maintenance, advanced.assembly(), advanced.executions(), advanced.workExecutions(),
@@ -155,11 +161,13 @@ public final class RouteMaintenanceStateSupport {
     public static FrontierWorldState reduceClosed(FrontierWorldState state, SubjectId subject, RouteMaintenanceClosed closed) {
         if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route maintenance close must be owned by the route network");
         RouteMaintenance maintenance = state.routeMaintenances().get(closed.maintenanceId());
-        if (maintenance == null || maintenance.status() != RouteMaintenanceStatus.READY || maintenance.team().memberIds().stream()
+        if (maintenance == null || maintenance.status() != RouteMaintenanceStatus.READY
+                || !EngineeringDepotService.clearedForCompletion(state, maintenance) || maintenance.team().memberIds().stream()
                 .anyMatch(member -> EngineeringToolCustody.holdsTool(state, member)) || state.physicalIntents().values().stream()
                 .anyMatch(intent -> intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_RETURN
+                        && intent.lifecycleOwner() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE
                         && intent.status() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED
-                        && intent.roles().require(PhysicalIntentSubjectRole.ROUTE_MAINTENANCE).equals(maintenance.id()))) {
+                        && intent.roles().require(PhysicalIntentSubjectRole.ENGINEERING_WORK_ORDER).equals(maintenance.id()))) {
             throw new IllegalArgumentException("route maintenance close requires a repaired and disarmed operation");
         }
         boolean retainedScene = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isEngineeringWorksite)

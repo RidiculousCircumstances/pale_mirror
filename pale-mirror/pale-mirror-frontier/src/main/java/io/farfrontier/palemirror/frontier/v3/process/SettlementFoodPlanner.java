@@ -51,7 +51,7 @@ final class SettlementFoodPlanner implements SettlementOperationPlanner {
         boolean workshop = settlement.structures().stream().anyMatch(structure -> structure.kind() == StructureKind.WORKSHOP
                 && state.structureConditions().get(structure.id()) == StructureCondition.INTACT);
         boolean reserveShort = SettlementFoodPolicy.reserveCoverageBread(state, settlement.id()) < SettlementFoodPolicy.reserveRequirement(state, settlement.id());
-        if (!workshop || BakeryBatchSelection.admissible(state, settlement.id()).isEmpty()) return Assessment.empty();
+        if (!workshop || BakeryBatchSelection.admissibleStock(state, ProductionRights.publicService(settlement.id())).isEmpty()) return Assessment.empty();
         var proposal = new StrategicOperationProposal(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD,
                 Optional.empty(), reserveShort ? Long.MAX_VALUE - 1L : FixedScalar.SCALE);
         var replaced = state.strategicPlans().tasks().values().stream()

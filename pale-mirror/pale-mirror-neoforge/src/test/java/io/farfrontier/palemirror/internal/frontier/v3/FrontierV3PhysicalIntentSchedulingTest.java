@@ -71,16 +71,20 @@ class FrontierV3PhysicalIntentSchedulingTest {
         }
         PhysicalPostcondition postcondition = kind == PhysicalIntentKind.EQUIPMENT_ISSUE
                 ? PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED : PhysicalPostcondition.EQUIPMENT_RETURNED_OBSERVED;
+        var request = new io.farfrontier.palemirror.frontier.v3.model.EquipmentServiceRequest(
+                new io.farfrontier.palemirror.frontier.v3.model.ServiceAccessDemand.Identity(
+                        io.farfrontier.palemirror.frontier.v3.model.ServiceAccessDemand.Kind.DEFENDER_EQUIPMENT,
+                        owner, new SubjectId("resident:" + suffix), new SubjectId("container:" + suffix)), 10L);
         if (kind == PhysicalIntentKind.EQUIPMENT_RETURN) {
             return new PhysicalIntent(new PhysicalIntentId("intent:equipment-" + suffix), kind, PhysicalIntentStatus.PREPARED, owner,
-                    io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.assaultEquipmentReturn(owner, new SubjectId("resident:" + suffix), new SubjectId("item:" + suffix)),
+                    io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.assaultEquipmentReturn(owner, new SubjectId("resident:" + suffix), new SubjectId("item:" + suffix), new SubjectId("container:" + suffix)),
                     new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0, postcondition,
-                    new PhysicalContainerSlot(new SubjectId("container:" + suffix), 0),
+                    new PhysicalContainerSlot(new SubjectId("container:" + suffix), 0), request,
                     io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
         }
         return new PhysicalIntent(new PhysicalIntentId("intent:equipment-" + suffix), kind, PhysicalIntentStatus.PREPARED, owner,
-                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.assaultEquipmentIssue(owner, new SubjectId("resident:" + suffix), new SubjectId("item:" + suffix)),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.assaultEquipmentIssue(owner, new SubjectId("resident:" + suffix), new SubjectId("item:" + suffix), new SubjectId("container:" + suffix)),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
-                postcondition, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
+                postcondition, request, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
     }
 }

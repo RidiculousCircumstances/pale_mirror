@@ -122,12 +122,16 @@ final class HumanPopulationPayloadCodecs {
         return new PayloadCodec() {
             @Override public String type() { return "frontier.resident_meal_started"; }
             @Override public byte[] encode(FrontierPayload payload) {
-                return FrontierWorldPayloadCodecs.encodeProduction(output ->
-                        HumanPopulationStateCodec.writeMeal(output, ((ResidentMealStarted) payload).meal()));
+                return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                    var started = (ResidentMealStarted) payload;
+                    HumanPopulationStateCodec.writeMeal(output, started.meal());
+                    PedestrianRouteReceiptCodec.write(output, started.clearingAccess());
+                });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
                 return FrontierWorldPayloadCodecs.decodeProduction(bytes,
-                        input -> new ResidentMealStarted(HumanPopulationStateCodec.readMeal(input)));
+                        input -> new ResidentMealStarted(HumanPopulationStateCodec.readMeal(input),
+                                PedestrianRouteReceiptCodec.read(input)));
             }
         };
     }
@@ -430,12 +434,13 @@ final class HumanPopulationPayloadCodecs {
                 return FrontierWorldPayloadCodecs.encodeProduction(out -> {
                     FrontierWorldPayloadCodecs.writeSubject(out, value.residentId()); out.writeLong(value.routeRevision());
                     FrontierWorldStateCodec.writeCount(out, value.nextRejoinCursor()); ActorExecutionStateCodec.writeId(out, value.executionId());
+                    TraversalRejoinCodec.write(out, java.util.Optional.of(value.approach()));
                 });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
                 return FrontierWorldPayloadCodecs.decodeProduction(bytes, in -> new ResidentMigrationRejoinAdvanced(
                         FrontierWorldPayloadCodecs.readSubject(in).value(), in.readLong(), FrontierWorldStateCodec.readCount(in),
-                        ActorExecutionStateCodec.readId(in)));
+                        ActorExecutionStateCodec.readId(in), TraversalRejoinCodec.read(in).orElseThrow()));
             }
         };
     }
@@ -510,15 +515,15 @@ final class HumanPopulationPayloadCodecs {
 
     private static void writeBirthJob(DataOutputStream output, ResidentBirthJob job) throws IOException {
         FrontierWorldPayloadCodecs.writeSubject(output, job.id()); FrontierWorldPayloadCodecs.writeSubject(output, job.settlementId());
-        FrontierWorldPayloadCodecs.writeSubject(output, job.householdId()); FrontierWorldPayloadCodecs.writeSubject(output, job.foodItemId());
+        FrontierWorldPayloadCodecs.writeSubject(output, job.householdId()); ColdResourceConsumptionCodec.write(output, job.food());
         FrontierWorldPayloadCodecs.writeString(output, job.foodCommitmentId().value()); writeProfile(output, job.resident());
         FrontierWorldPayloadCodecs.writePosition(output, job.position());
     }
 
     private static ResidentBirthJob readBirthJob(DataInputStream input) throws IOException {
         var id = FrontierWorldPayloadCodecs.readSubject(input); var settlement = FrontierWorldPayloadCodecs.readSubject(input);
-        var household = FrontierWorldPayloadCodecs.readSubject(input); var food = FrontierWorldPayloadCodecs.readSubject(input);
-        return new ResidentBirthJob(id.value(), settlement.value(), household.value(), food.value(),
+        var household = FrontierWorldPayloadCodecs.readSubject(input); var food = ColdResourceConsumptionCodec.read(input);
+        return new ResidentBirthJob(id.value(), settlement.value(), household.value(), food,
                 new io.farfrontier.palemirror.frontier.v3.api.SubjectId(FrontierWorldPayloadCodecs.readString(input)),
                 readProfile(input), FrontierWorldPayloadCodecs.readPosition(input));
     }

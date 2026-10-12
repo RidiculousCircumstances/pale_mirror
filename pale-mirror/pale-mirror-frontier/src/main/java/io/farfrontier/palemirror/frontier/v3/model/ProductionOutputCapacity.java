@@ -9,16 +9,34 @@ public final class ProductionOutputCapacity {
     private ProductionOutputCapacity() { }
     /** Admission only: later execution retains the selected destination in ProductionRights. */
     public static java.util.Optional<ProductionRights> selectDestination(FrontierWorldState state, ProductionRights rights, int quantity, SubjectId source) {
+        return selectDestination(state, rights, quantity, source, true);
+    }
+    /** Stock-policy assessment only; never proves access or authorizes production. */
+    public static java.util.Optional<ProductionRights> stockDestination(FrontierWorldState state, ProductionRights rights, int quantity, SubjectId source) {
+        return selectDestination(state, rights, quantity, source, false);
+    }
+    private static java.util.Optional<ProductionRights> selectDestination(FrontierWorldState state, ProductionRights rights, int quantity,
+            SubjectId source, boolean requireAccess) {
         var home = rights.employer().settlementId();
-        var origin = ResourceStorageAccess.at(state, rights.destinationContainerId()).endpoint().station();
         var homePlan = FrontierWorldStateSupport.settlement(state.bootstrap(), home);
         var workshop = homePlan.structures().stream().filter(value -> value.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
         var departure = SettlementWorkshopServicePort.forWorkshop(workshop).exteriorApproach();
-        return ResourceStorageSelection.candidates(state, home, "minecraft:bread", origin, java.util.Set.of(ResourceStorageRole.WAREHOUSE)).stream()
-                .filter(endpoint -> ResourceStorageNavigation.reachable(state, departure, endpoint))
-                .map(endpoint -> new ProductionRights(rights.mode(), rights.resourceOwner(), endpoint.containerId(), rights.employer()))
-                .filter(candidate -> source.equals(candidate.destinationContainerId()) ? canAdmitBreadBatch(state, candidate, quantity)
-                        : state.canReceiveFungible(candidate.destinationContainerId(), "minecraft:bread", quantity)).findFirst();
+        for (var endpoint : ResourceStorageSelection.candidates(state, home, "minecraft:bread", departure, java.util.Set.of(ResourceStorageRole.WAREHOUSE))) {
+            var candidate = new ProductionRights(rights.mode(), rights.resourceOwner(), endpoint.containerId(), rights.employer());
+            if (!canAdmitBatch(state, candidate, quantity, source)) continue;
+            if (requireAccess) try { ResourceStorageNavigation.plannedPath(state, departure, endpoint); }
+            catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH) throw unavailable;
+                continue;
+            }
+            return java.util.Optional.of(candidate);
+        }
+        return java.util.Optional.empty();
+    }
+    /** Input can free output capacity only in its own selected source storage. */
+    public static boolean canAdmitBatch(FrontierWorldState state, ProductionRights rights, int quantity, SubjectId source) {
+        return source.equals(rights.destinationContainerId()) ? canAdmitBreadBatch(state, rights, quantity)
+                : state.canReceiveFungible(rights.destinationContainerId(), "minecraft:bread", quantity);
     }
 
     /** The recipe owner declares its retained inbound demand after input has left storage. */

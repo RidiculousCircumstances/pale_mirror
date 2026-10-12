@@ -151,16 +151,25 @@ public final class FrontierSceneLeaseStateSupport {
     /** An unstarted lease has not transferred authority to a Minecraft body. */
     public static FrontierWorldState abortPrepared(FrontierWorldState state, SceneLeaseId leaseId) {
         SceneLease current = state.sceneLeases().get(leaseId);
-        if (current == null || current.status() != SceneLeaseStatus.PREPARED
-                && (current.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART || current.recoveryEvidence().isPresent())
-                && !unstartedConflict(state, current)) {
-            throw new IllegalArgumentException("only an unstarted scene lease can be aborted before materialization");
-        }
         // Cancelling process admission does not revoke an actor incarnation. It may already
         // be observed under another activity; only common body unload/death may retire it.
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases());
-        leases.put(leaseId, current.withStatus(SceneLeaseStatus.CLOSED));
+        leases.put(leaseId, preparedAbort(state, current));
         return copy(state, state.actorLocations(), leases, state.ambientLeases(), state.strategicPlans(), revokePreparedRecovery(state.fencedRecovery(), current));
+    }
+
+    /** Stages the same abort for an atomic death/owner update; does not construct a half-transition world. */
+    static SceneLease preparedAbort(FrontierWorldState state, SceneLease expected) {
+        if (!canAbortPrepared(state, expected) || !expected.equals(state.sceneLeases().get(expected.id())))
+            throw new IllegalArgumentException("only an exact unstarted scene lease can be aborted before materialization");
+        return expected.withStatus(SceneLeaseStatus.CLOSED);
+    }
+
+    /** Pure pre-effect cancellation assessment; no actor incarnation or pose is retired. */
+    public static boolean canAbortPrepared(FrontierWorldState state, SceneLease lease) {
+        return lease != null && (lease.status() == SceneLeaseStatus.PREPARED
+                || lease.status() == SceneLeaseStatus.UNKNOWN_AFTER_RESTART && lease.recoveryEvidence().isEmpty()
+                || unstartedConflict(state, lease));
     }
 
     /** A conflicted semantic scope cannot turn an unattempted body into a physical owner. */

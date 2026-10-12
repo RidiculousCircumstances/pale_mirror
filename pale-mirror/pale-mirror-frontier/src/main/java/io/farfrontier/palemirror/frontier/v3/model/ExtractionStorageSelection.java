@@ -1,14 +1,13 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
-import io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWork;
-import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
-import io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation;
+import io.farfrontier.palemirror.frontier.v3.model.extraction.*;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
 import java.util.*;
 
 /** Mining supplies its portion and retained execution; the warehouse selector owns placement policy. */
 public final class ExtractionStorageSelection {
     private ExtractionStorageSelection() { }
-    public static Optional<ShipmentEndpoint> replacement(FrontierWorldState state, ExtractionWork job) {
+    public static Optional<ExtractionWorkDecision.Storage> replacement(FrontierWorldState state, ExtractionWork job) {
         if (job.pending().isPresent() || job.phase() != ExtractionWork.Phase.STORE && job.phase() != ExtractionWork.Phase.RETURN_TOOL)
             return Optional.empty();
         String kind = job.phase() == ExtractionWork.Phase.STORE ? job.outputKind()
@@ -16,15 +15,33 @@ public final class ExtractionStorageSelection {
         int quantity = job.phase() == ExtractionWork.Phase.STORE ? ExtractionWorkAuthority.carried(state, job) : 1;
         if (quantity == 0) throw new IllegalArgumentException("empty mining cargo cannot request storage");
         var origin = state.actorLocations().get(job.execution().actorId()).supportingSurface();
-        return ResourceStorageSelection.destination(state, job.storageTarget().settlementId(), kind, quantity, origin,
-                Set.of(ResourceStorageRole.LOCAL_BUFFER, ResourceStorageRole.WAREHOUSE), Optional.empty(), endpoint -> {
+        for (var endpoint : ResourceStorageSelection.receivingCandidates(state, job.storageTarget().settlementId(), kind, quantity, origin,
+                Set.of(ResourceStorageRole.LOCAL_BUFFER, ResourceStorageRole.WAREHOUSE), Optional.empty())) {
+            if (endpoint.equals(job.storageTarget())) continue;
                     if (job.phase() == ExtractionWork.Phase.RETURN_TOOL
-                            && ContainerStorageAdmission.first(state, endpoint.containerId(), Optional.empty(), slot -> false).isEmpty()) return false;
-                    var order = new MovementOrder(job.id(), job.execution().actorId(), job.phase().wireTag(), job.revision(),
-                            List.of(endpoint.station()), TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-                    try { ShipmentEndpointComposition.knowledge(state, List.of(endpoint)).path(origin, order); return true; }
-                    catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return false; }
-                });
+                            && ContainerStorageAdmission.first(state, endpoint.containerId(), Optional.empty(), slot -> false).isEmpty()) continue;
+            try {
+                var route = ResourceStorageNavigation.plannedPath(state, origin, endpoint);
+                return Optional.of(new ExtractionWorkDecision.Storage(job.execution(), origin, endpoint,
+                        route.size() > 1 ? Optional.of(new PedestrianRouteReceipt(route)) : Optional.empty()));
+            } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                if (unavailable.status() != PedestrianRouteResult.Status.NO_PATH) throw unavailable;
+            }
+        }
+        return Optional.empty();
+    }
+    public static void requireReplacement(FrontierWorldState state, ExtractionWork job, ExtractionWorkDecision.Storage selected) {
+        String kind = job.phase() == ExtractionWork.Phase.STORE ? job.outputKind()
+                : Objects.requireNonNull(state.inventory().items().get(job.toolId()), "held mining tool").itemKind();
+        int quantity = job.phase() == ExtractionWork.Phase.STORE ? ExtractionWorkAuthority.carried(state, job) : 1;
+        if (!selected.execution().equals(job.execution()) || !selected.origin().equals(
+                state.actorLocations().get(job.execution().actorId()).supportingSurface())
+                || retainedAvailable(state, job) || job.storageTarget().equals(selected.destination())
+                || !ResourceStorageSelection.receivesAt(state, selected.destination(), job.storageTarget().settlementId(), kind, quantity,
+                    Set.of(ResourceStorageRole.WAREHOUSE, ResourceStorageRole.LOCAL_BUFFER), Optional.empty())
+                || !retainedAvailable(state, job.retargetStorage(selected.destination())))
+            throw new IllegalArgumentException("replacement mining storage has stale authority, departure or capacity");
+        ResourceStorageNavigation.requireAcceptedDestination(state, selected.origin(), selected.destination(), selected.route());
     }
     public static boolean retainedAvailable(FrontierWorldState state, ExtractionWork job) {
         var destination = job.storageTarget();

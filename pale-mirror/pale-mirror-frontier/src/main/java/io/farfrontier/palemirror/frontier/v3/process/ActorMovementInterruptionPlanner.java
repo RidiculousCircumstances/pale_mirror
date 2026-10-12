@@ -12,6 +12,18 @@ import java.util.Optional;
 
 /** Movement owner separates mandatory access clearance from the optional remainder of a journey. */
 final class ActorMovementInterruptionPlanner implements ActivityInterruptionPlanner {
+    @Override public boolean mayAttempt(FrontierWorldState state, SubjectId residentId, long atTick) {
+        ActorMovement movement = state.actorMovements().get(residentId);
+        if (movement == null) return true;
+        var body = checkpoint(state, movement, atTick);
+        if (body.isEmpty()) return false;
+        var retained = new ActorMovementInterrupted(residentId, movement.order().goalRevision(), atTick,
+                body.orElseThrow(), movement.executionId());
+        var choice = ResidentActivityCoordinator.assessMovementInterruptionEligibility(state, retained);
+        return (choice.kind() == ResidentActivityChoice.Kind.WORK || choice.kind() == ResidentActivityChoice.Kind.EAT)
+                && ActorMovementProviders.require(movement).permitsReplacement(choice.kind());
+    }
+
     @Override public Assessment assess(FrontierWorldState state, SubjectId residentId, long atTick) {
         ActorMovement movement = state.actorMovements().get(residentId);
         if (movement == null) return new Ready(residentId, state, state, List.of());

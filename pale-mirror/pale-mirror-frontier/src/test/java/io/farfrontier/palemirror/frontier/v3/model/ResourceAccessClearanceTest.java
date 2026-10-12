@@ -2,13 +2,57 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
-import io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation;
-import io.farfrontier.palemirror.frontier.v3.process.ServiceExitMovementProvider;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
+import io.farfrontier.palemirror.frontier.v3.process.*;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
+import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import org.junit.jupiter.api.Test;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResourceAccessClearanceTest {
+    @Test void confirmationCreatesOnlyAGoalAndMovementOwnsPendingPlanningAcrossRecovery() throws Exception {
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:clearance-planning"), 41));
+        var home = initial.bootstrap().settlements().getFirst();
+        var depot = FrontierWorldState.depotId(home.id());
+        var actor = home.residents().getFirst().id();
+        var point = SettlementDepotServicePort.forDepot(home.structures().stream()
+                .filter(s -> s.kind() == StructureKind.DEPOT).findFirst().orElseThrow());
+        var execution = initial.actorExecutions().next(actor, ActorActivityKind.PRESENCE, actor);
+        var state = ActorExecutionComposition.LIFECYCLE.prepareVacant(initial, execution)
+                .commit(initial, FrontierWorldStateUpdate.begin()).withActorBody(actor, point.serviceSurface().standingBody());
+        ActorMovement movement;
+        try (var binding = PedestrianRoutePlanning.bind((g, from, to) -> {
+            throw new AssertionError("resource confirmation cannot search routes");
+        })) {
+            movement = ResourceAccessClearance.select(state, depot, execution, 3L).orElseThrow();
+            assertEquals(execution, movement.executionId());
+            state = ActorMovementProcess.reduceStarted(state, actor, new ActorMovementStarted(movement));
+        }
+        var waits = new PedestrianPlanningWakeIndex();
+        try (var binding = PedestrianRoutePlanning.bind((g, from, to) ->
+                new PedestrianRouteResult(PedestrianRouteResult.Status.PLANNING,
+                    List.of(), 1, 1, "pending"));
+             var continuation = PedestrianPlanningContinuations.bind(waits)) {
+            var action = ActorMovementProcess.progress(movement, 4L);
+            var events = FrontierWorldRuntimeDefinition.planScheduled(state, action);
+            assertEquals(1, events.size());
+            var retry = assertInstanceOf(ScheduleEffect.Rescheduled.class,
+                    events.getFirst().payload());
+            assertEquals(1, waits.waitingCount());
+            assertEquals(movement, state.actorMovements().get(actor));
+            assertEquals(point.serviceSurface().standingBody(), state.actorLocations().get(actor).body());
+            waits.remove(action.id());
+            var codec = new FrontierWorldStateCodec();
+            var recovered = codec.decode(codec.encode(state));
+            FrontierWorldProcessCatalog.restorePlanningWaits(FrontierWorldRuntimeDefinition.processRegistry(), recovered,
+                    new FrontierExecutionView(initial.bootstrap().worldId(), new Revision(0), new SimInstant(4),
+                            List.of(retry.replacement())));
+            assertEquals(1, waits.waitingCount());
+            assertEquals(execution, recovered.actorMovements().get(actor).executionId());
+        }
+    }
     @Test void occupiedExitRetainsCallerMovementInsteadOfPretendingThatServiceSpaceWasCleared() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:clearance-obligation"), 41));
         var home = new SubjectId("settlement:1"); var depot = FrontierWorldState.depotId(home);

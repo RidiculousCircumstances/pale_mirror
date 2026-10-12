@@ -61,6 +61,7 @@ public final class StrategicPlanStateCodec {
             TacticalPlanStateCodec.write(output, assault.tacticalPlan());
             output.writeByte(assault.status().wireTag()); output.writeInt(assault.nextStrikeEpoch());
             output.writeBoolean(assault.outcome().isPresent()); if (assault.outcome().isPresent()) output.writeByte(assault.outcome().orElseThrow().wireTag());
+            DefenderEquipmentReturnVisitCodec.write(output, assault.equipmentReturnVisit());
         }
         writeCount(output, plans.decisionAuthorities().authorities().size());
         for (DecisionAuthority authority : plans.decisionAuthorities().authorities().values().stream().sorted(Comparator.comparing(DecisionAuthority::ownerId)).toList()) {
@@ -175,7 +176,7 @@ public final class StrategicPlanStateCodec {
             Optional<SettlementAssaultOutcome> outcome = input.readBoolean() ? Optional.of(readAssaultOutcome(input)) : Optional.empty();
             if (assaults.put(id, new SettlementAssault(id, task, hive, sighting, overseer, attackers, march,
                     SettlementDefenderUnit.forAssault(id, sighting.settlementId(), defenders), tacticalPlan,
-                    FrontierWireTags.require(SettlementAssaultStatus.class, status), epoch, outcome)) != null) {
+                    FrontierWireTags.require(SettlementAssaultStatus.class, status), epoch, outcome, DefenderEquipmentReturnVisitCodec.read(input))) != null) {
                 throw new IllegalArgumentException("invalid or duplicate settlement assault");
             }
         }

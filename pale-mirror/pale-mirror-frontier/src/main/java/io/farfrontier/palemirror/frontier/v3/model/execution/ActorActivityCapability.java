@@ -24,6 +24,10 @@ public interface ActorActivityCapability {
      * execution until their coordinated terminal settlement; scenes never own death outcomes. */
     default java.util.Optional<ActorActivityDeath> deathAcknowledgement() { return java.util.Optional.empty(); }
     void validateReference(FrontierWorldState state, ActorExecutionId execution);
+    /** Optional explicit idle/service presentation between legs; generic projection knows no family phase. */
+    default java.util.Optional<ActorActivityAmbientTarget> stationaryAmbientTarget(FrontierWorldState state, ActorExecutionId execution) {
+        return java.util.Optional.empty();
+    }
     /** Family-owned semantic permission. Presentation purpose alone never grants actuation. */
     boolean permitsAmbientMotion(FrontierWorldState state, ActorExecutionId execution, AmbientActorLease lease);
     ActorActivityCheckpoint checkpoint(FrontierWorldState state, ActorExecutionId execution);

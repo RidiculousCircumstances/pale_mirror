@@ -191,12 +191,8 @@ public final class BakeryProcess {
         }
     }
 
-    static Optional<BakeryColdStep> planColdStep(FrontierWorldState state, ProductionJob job) {
-        return planColdStep(state, job, true);
-    }
-
-    private static Optional<BakeryColdStep> planColdStep(FrontierWorldState state, ProductionJob job,
-                                                         boolean checkOutputCapacity) {
+    static Optional<BakeryColdStep> planColdStep(FrontierWorldState state, ProductionJob job, long tick) {
+        boolean checkOutputCapacity = true;
         BakeryWorkState work = job.bakeryWork().orElseThrow();
         if (work.phase() == BakeryWorkState.Phase.DELIVERED) {
             boolean openScene = state.sceneLeases().values().stream().anyMatch(lease ->
@@ -218,7 +214,15 @@ public final class BakeryProcess {
                 return Optional.empty();
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }
         }
-        if (coldBlocker(state, job, checkOutputCapacity).isPresent()) return Optional.empty();
+        if (coldBlocker(state, job, checkOutputCapacity).isPresent()) {
+            if (work.labour().filter(WorkProgress::running).isPresent()
+                    && work.pendingPhysicalStep().isEmpty()
+                    && ActorExecutionCoordinator.ambientAvailable(state, List.of(job.workerId()))
+                    && !ActorExecutionCoordinator.sceneOwns(state, job.workerId())
+                    && ActorExecutionCoordinator.coldAvailable(state, job.workerId()))
+                return Optional.of(labourStep(state, job, tick, false));
+            return Optional.empty();
+        }
         List<SurfaceAnchor> route;
         try { route = BakeryKnownNavigation.plannedPath(state, job); }
         catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }
@@ -228,7 +232,24 @@ public final class BakeryProcess {
             return Optional.of(coldStep(state, job, BakeryColdStep.Action.MOVE, route.get(1), route));
         }
         SurfaceAnchor current = state.actorLocations().get(job.workerId()).supportingSurface();
-        return Optional.of(coldStep(state, job, BakeryColdStepAdmission.stationAction(work), current, List.of()));
+        var action = BakeryColdStepAdmission.stationAction(work);
+        if (action == BakeryColdStep.Action.LABOUR) {
+            if (work.labour().filter(progress -> progress.running() && tick < progress.activeUntilTick()).isPresent())
+                return Optional.empty();
+            var prior = work.labour();
+            boolean run = prior.isEmpty() || prior.orElseThrow().completedAt(tick) < prior.orElseThrow().requiredMilliWork();
+            return Optional.of(labourStep(state, job, tick, run));
+        }
+        return Optional.of(coldStep(state, job, action, current, List.of()));
+    }
+
+    private static BakeryColdStep labourStep(FrontierWorldState state, ProductionJob job, long tick, boolean run) {
+        var work = job.bakeryWork().orElseThrow();
+        var execution = state.actorExecutions().current(
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION).get(job.workerId());
+        return new BakeryColdStep(job.id(), work.phase(), BakeryColdStep.Action.LABOUR,
+                state.actorLocations().get(job.workerId()).supportingSurface(), execution, Optional.empty(),
+                Optional.of(new BakeryLabourChange(work.labour(), BakeryLabour.next(state, job, tick, run))));
     }
 
     private static BakeryColdStep coldStep(FrontierWorldState state, ProductionJob job, BakeryColdStep.Action action,
@@ -252,7 +273,9 @@ public final class BakeryProcess {
         BakeryWorkState work = job.bakeryWork().orElseThrow();
         // Only an exact current COLD successor, checked above against navigation and
         // exclusive authority, can retire a physical route failure. Other blocks stay held.
-        if (work.block().filter(block -> !block.requiresPhysicalReconciliation()).isPresent()) {
+        if (work.block().filter(block -> !block.requiresPhysicalReconciliation()).isPresent()
+                && (step.action() != BakeryColdStep.Action.LABOUR
+                    || step.labourChange().orElseThrow().next().running())) {
             work = work.withBlock(Optional.empty());
             job = job.withBakeryWork(work);
             state = FrontierProductionWorkSceneSupport.replaceJob(state, job);
@@ -263,8 +286,11 @@ public final class BakeryProcess {
             actors.put(job.workerId(), actors.get(job.workerId()).withBody(BodyPosition.above(step.nextSurface())));
             return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
         }
-        if (step.action() == BakeryColdStep.Action.WORK_TICK)
-            return FrontierProductionWorkSceneSupport.replaceJob(state, job.withBakeryWork(work.workTick()));
+        if (step.action() == BakeryColdStep.Action.LABOUR) {
+            var change = step.labourChange().orElseThrow();
+            BakeryLabour.require(state, job, change);
+            return FrontierProductionWorkSceneSupport.replaceJob(state, job.withBakeryWork(work.withLabour(change.next())));
+        }
         ExactInventory inventory;
         if (step.action() == BakeryColdStep.Action.RECIPE) {
             ProductionStationSpec station = station(state, job);
@@ -348,7 +374,7 @@ public final class BakeryProcess {
         if (work.phase() != prepared.phase() || work.pendingPhysicalStep().isPresent()
                 || !lease.memberBody(state.actorLocations(), job.workerId()).equals(BakeryWorkGoal.current(state, job).station().standingBody())
                 || prepared.phase() == BakeryWorkState.Phase.PROCESSING
-                && work.completedWorkTicks() != ProductionWorkProgress.REQUIRED_PROCESSING_TICKS)
+                && !work.labourComplete())
             throw new IllegalArgumentException("bakery HOT effect is not at a ready current station");
         int requiredSlot = switch (prepared.phase()) {
             case DEPOT_PICKUP, STATION_UNLOAD -> -1;
@@ -406,18 +432,18 @@ public final class BakeryProcess {
                 job.withBakeryWork(work.withoutPhysical().withBlock(Optional.of(aborted.occupiedDestination()))));
     }
 
-    static FrontierWorldState hotWorkTick(FrontierWorldState state, SubjectId subject, BakeryHotWorkTick tick) {
-        ProductionJob job = state.productionJobs().get(tick.jobId());
+    static FrontierWorldState workChanged(FrontierWorldState state, SubjectId subject, BakeryWorkChanged changed) {
+        ProductionJob job = state.productionJobs().get(changed.jobId());
         if (job == null || !job.settlementId().equals(subject) || job.bakeryWork().isEmpty())
-            throw new IllegalArgumentException("bakery labor has no exact job");
-        BakeryWorkState work = job.bakeryWork().orElseThrow();
-        SceneLease lease = FrontierProductionWorkSceneSupport.requireHotLease(state, job, tick.leaseId());
-        if (work.phase() != BakeryWorkState.Phase.PROCESSING || work.pendingPhysicalStep().isPresent()
-                || tick.nextCompletedTicks() != work.completedWorkTicks() + 1
-                || !tick.observedWorker().equals(station(state, job).workerStation().standingBody())
-                || !lease.memberBody(state.actorLocations(), job.workerId()).equals(tick.observedWorker()))
-            throw new IllegalArgumentException("bakery labor was not observed at its retained station");
-        return FrontierProductionWorkSceneSupport.replaceJob(state, job.withBakeryWork(work.workTick()));
+            throw new IllegalArgumentException("bakery labour has no exact job");
+        state.actorExecutions().requireCurrent(changed.executionId());
+        SceneLease lease = FrontierProductionWorkSceneSupport.requireHotLease(state, job, changed.leaseId());
+        if (!changed.executionId().actorId().equals(job.workerId())
+                || !lease.memberBody(state.actorLocations(), job.workerId()).equals(changed.observedWorker()))
+            throw new IllegalArgumentException("bakery labour lost its observed exact worker");
+        BakeryLabour.require(state, job, changed.change());
+        return FrontierProductionWorkSceneSupport.replaceJob(state,
+                job.withBakeryWork(job.bakeryWork().orElseThrow().withLabour(changed.change().next())));
     }
 
     static FrontierWorldState releaseHotHand(FrontierWorldState state, SubjectId subject, BakeryHotHandRelease released) {

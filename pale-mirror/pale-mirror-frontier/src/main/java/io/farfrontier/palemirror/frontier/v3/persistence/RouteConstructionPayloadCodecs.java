@@ -15,6 +15,17 @@ import java.util.List;
 /** Payload encodings for candidate admission and explicit topology cutover. */
 final class RouteConstructionPayloadCodecs {
     private RouteConstructionPayloadCodecs() { }
+    static PayloadCodec approachPlanned() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.route_construction_assembly_approach_planned"; }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+            var value = (RouteConstructionAssemblyApproachPlanned) payload;
+            FrontierWorldPayloadCodecs.writeSubject(output, value.projectId()); ActorExecutionStateCodec.writeGroup(output, value.executions());
+            EngineeringApproachSelectionCodec.write(output, value.selection());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
+                new RouteConstructionAssemblyApproachPlanned(FrontierWorldPayloadCodecs.readSubject(input).value(),
+                        ActorExecutionStateCodec.readGroup(input), EngineeringApproachSelectionCodec.read(input))); }
+    }; }
     static PayloadCodec started() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_construction_started"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> { var value = (RouteConstructionStarted) payload; write(output, value.project());

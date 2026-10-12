@@ -41,6 +41,7 @@ public final class FrontierWorldProcessCodecs {
         result.put("ambient-actors", FrontierWorldPayloadCodecs.ambientCodecs());
         result.put("scene-lifecycle", FrontierWorldPayloadCodecs.sceneLifecycleCodecs());
         result.put("population", FrontierWorldPayloadCodecs.populationCodecs());
+        result.put("defender-equipment-return-visit", SettlementAssaultPayloadCodecs.equipmentVisitCodecs());
         result.put("actor-movement", ActorMovementPayloadCodecs.create());
         result.put("actor-execution", ActorExecutionPayloadCodecs.create());
         result.put("actor-body", ActorBodyPayloadCodecs.create());

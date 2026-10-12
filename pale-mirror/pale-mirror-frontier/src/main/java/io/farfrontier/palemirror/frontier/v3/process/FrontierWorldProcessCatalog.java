@@ -103,7 +103,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.production_started", "frontier.production_completed", "frontier.fungible_production_completed",
             "frontier.production_work_progressed", "frontier.production_work_traversal_advanced",
             "frontier.production_cold_work_advanced", "frontier.bakery_cold_step", "frontier.bakery_input_reallocated", "frontier.bakery_storage_retargeted",
-            "frontier.bakery_hot_effect_prepared", "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_delivery_aborted", "frontier.bakery_hot_work_tick",
+            "frontier.bakery_hot_effect_prepared", "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_delivery_aborted", "frontier.bakery_work_changed",
             "frontier.bakery_hot_hand_release", "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.bakery_scene_reconciled",
             "frontier.bakery_station_scene_reconciled", "frontier.production_work_traversal_blocked",
             "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff", "frontier.production_work_scene_preparation_aborted", "frontier.production_work_scene_finalized",
@@ -121,7 +121,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resource_site_harvest_segment_renewed", "frontier.resource_site_harvest_blocked_cell_skipped", "frontier.resource_site_harvest_immature_cell_skipped", "frontier.resource_site_harvest_work_changed",
             "frontier.resource_site_harvest_target_retargeted", "frontier.resource_site_harvest_route_blocked",
             "frontier.resource_site_harvest_storage_retargeted",
-            "frontier.resource_site_harvest_route_cleared", "frontier.resource_site_harvest_hot_traversal_advanced", "frontier.resource_site_harvest_hot_goal_arrived",
+            "frontier.resource_site_harvest_hot_traversal_advanced", "frontier.resource_site_harvest_hot_goal_arrived",
             "frontier.resource_site_harvest_batch_prepared", "frontier.resource_site_harvest_batch_delivered",
             "frontier.resource_site_harvest_scene_lease_prepared",
             "frontier.resource_site_harvest_scene_preparation_aborted",
@@ -145,10 +145,12 @@ public final class FrontierWorldProcessCatalog {
     private static final Set<String> INFRASTRUCTURE = types(
             "frontier.route_construction_started", "frontier.route_construction_material_loaded",
             "frontier.route_construction_assembly_started", "frontier.route_construction_assembly_advanced",
+            "frontier.route_construction_assembly_approach_planned",
             "frontier.route_maintenance_started", "frontier.route_maintenance_material_loaded",
             "frontier.route_maintenance_assembly_started", "frontier.route_maintenance_assembly_advanced",
+            "frontier.route_maintenance_assembly_approach_planned",
             "frontier.route_maintenance_closed",
-            "frontier.route_topology_cutover", "frontier.route_patrol_started", "frontier.route_patrol_formation_advanced", "frontier.route_patrol_formation_observed",
+            "frontier.route_topology_cutover", "frontier.route_patrol_started", "frontier.route_patrol_spatial_planned", "frontier.route_patrol_formation_advanced", "frontier.route_patrol_formation_observed",
             "frontier.route_patrol_obstruction_confirmed", "frontier.route_patrol_failed", "frontier.route_patrol_blocked",
             "frontier.route_patrol_scene_lease_prepared", "frontier.route_patrol_scene_lease_handoff");
     private static final Set<String> SETTLEMENT_SERVICE_WORK = types(
@@ -160,8 +162,10 @@ public final class FrontierWorldProcessCatalog {
             "frontier.strategic_task_planned", "frontier.strategic_task_transition");
     private static final Set<String> ALL_WORLD = union(PHYSICAL, REPLICA_CUSTODY, AMBIENT, SCENES, POPULATION, ACTOR_MOVEMENT, ACTOR_EXECUTION, ACTOR_BODY, ECONOMY, RESOURCE_SITES,
             HIVE, INFRASTRUCTURE, SETTLEMENT_SERVICE_WORK, STRATEGY, GoodsTradeProcessModule.TYPES, ShipmentProcessModule.TYPES,
-            UnitGroupProcessModule.TYPES, TransportMissionProcessModule.TYPES, UnitInventoryProcessModule.TYPES, ExpeditionSupplyProcessModule.TYPES, ExtractionWorkProcessModule.TYPES);
+            UnitGroupProcessModule.TYPES, TransportMissionProcessModule.TYPES, UnitInventoryProcessModule.TYPES, ExpeditionSupplyProcessModule.TYPES, ExtractionWorkProcessModule.TYPES,
+            DefenderEquipmentReturnVisitProcessModule.TYPES);
     private static final Map<String, FrontierWorldProcessModule> MODULES = Map.ofEntries(
+            Map.entry("defender-equipment-return-visit", new DefenderEquipmentReturnVisitProcessModule()),
             Map.entry("extraction", new ExtractionWorkProcessModule()),
             Map.entry("physical-observation", new FrontierPhysicalProcessModule()),
             Map.entry("replica-custody", new FrontierReplicaCustodyProcessModule()),
@@ -243,7 +247,7 @@ public final class FrontierWorldProcessCatalog {
                 }
             }),
             Map.entry("frontier.hive.infection.task", (state, action) -> HiveInfectionProcess.plan(state, action)),
-            Map.entry("frontier.settlement.production.task.start", (state, action) -> ProductionProcess.planStart(state, action)),
+            Map.entry("frontier.settlement.production.task.start", withPlanningRecovery((state, action) -> ProductionProcess.planStart(state, action))),
             Map.entry("frontier.settlement.production.task.complete", withPlanningRecovery(new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ProductionProcess.planCompletion(state, action);
@@ -264,7 +268,7 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("frontier.population.birth.review", (state, action) -> PopulationBirthProcess.planReview(state, action)),
             Map.entry("frontier.population.birth.complete", (state, action) -> PopulationBirthProcess.planCompletion(state, action)),
             Map.entry("frontier.population.migration.review", (state, action) -> PopulationMigrationProcess.planReview(state, action)),
-            Map.entry("frontier.population.migration.progress", (state, action) -> PopulationMigrationProcess.planProgress(state, action)),
+            Map.entry("frontier.population.migration.progress", withPlanningRecovery((state, action) -> PopulationMigrationProcess.planProgress(state, action))),
             Map.entry(DefenderEquipmentProcess.REVIEW_ACTION, (state, action) -> DefenderEquipmentProcess.plan(state, action)),
             Map.entry(DefenderEquipmentReturnProcess.REVIEW_ACTION, (state, action) -> DefenderEquipmentReturnProcess.plan(state, action)),
             Map.entry(ResidentNeedProcess.REVIEW, (state, action) -> ResidentNeedProcess.plan(state, action)),
@@ -340,7 +344,7 @@ public final class FrontierWorldProcessCatalog {
                     return ActorMovementProcess.held(state, action);
                 }
             })),
-            Map.entry("frontier.market.clear", (state, action) -> MarketClearingProcess.plan(state, action)),
+            Map.entry("frontier.market.clear", withPlanningRecovery((state, action) -> MarketClearingProcess.plan(state, action))),
             Map.entry("frontier.resource_site.growth", new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ResourceSiteProcess.planGrowth(state, action);
@@ -350,15 +354,15 @@ public final class FrontierWorldProcessCatalog {
                 }
             }),
             Map.entry("frontier.resource_site.prepare", (state, action) -> ResourceSiteProcess.planPreparation(state, action)),
-            Map.entry("frontier.resource_site.harvest", new ScheduledPlanner() {
+            Map.entry("frontier.resource_site.harvest", withPlanningRecovery(new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ResourceSiteHarvestProcess.plan(state, action);
                 }
                 @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
                     return false;
                 }
-            }),
-            Map.entry("frontier.resource_site.harvest.cold_progress", new ScheduledPlanner() {
+            })),
+            Map.entry("frontier.resource_site.harvest.cold_progress", withPlanningRecovery(new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ResourceSiteHarvestProcess.planColdProgress(state, action);
                 }
@@ -371,23 +375,23 @@ public final class FrontierWorldProcessCatalog {
                 @Override public Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) {
                     return ResourceSiteHarvestProcess.coldProgressWakeKeys(state, action);
                 }
-            }),
+            })),
             Map.entry("frontier.objective.resource_harvest", (state, action) -> StrategicObjectiveProcess.planResourceHarvestOpportunity(state, action)),
             Map.entry("frontier.structural_repair.scan", (state, action) -> StructuralRepairProcess.plan(state, action)),
-            Map.entry("frontier.route_construction.scan", (state, action) -> RouteConstructionProcess.plan(state, action)),
+            Map.entry("frontier.route_construction.scan", withPlanningRecovery((state, action) -> RouteConstructionProcess.plan(state, action))),
             Map.entry("frontier.route_construction.start", (state, action) -> RouteConstructionProcess.planStart(state, action)),
-            Map.entry("frontier.route_construction.assembly_progress", (state, action) -> RouteConstructionProcess.planAssemblyProgress(state, action)),
-            Map.entry("frontier.route_construction.progress", (state, action) -> RouteConstructionProcess.planProgress(state, action)),
-            Map.entry("frontier.route_construction.return_progress", (state, action) -> RouteConstructionProcess.planReturnProgress(state, action)),
-            Map.entry("frontier.route_maintenance.scan", (state, action) -> RouteMaintenanceProcess.plan(state, action)),
-            Map.entry("frontier.route_maintenance.assembly_progress", (state, action) -> RouteMaintenanceProcess.planAssemblyProgress(state, action)),
-            Map.entry("frontier.route_maintenance.progress", (state, action) -> RouteMaintenanceProcess.planProgress(state, action)),
-            Map.entry("frontier.route_maintenance.return_progress", (state, action) -> RouteMaintenanceProcess.planReturnProgress(state, action)),
+            Map.entry("frontier.route_construction.assembly_progress", withPlanningRecovery((state, action) -> RouteConstructionProcess.planAssemblyProgress(state, action))),
+            Map.entry("frontier.route_construction.progress", withPlanningRecovery((state, action) -> RouteConstructionProcess.planProgress(state, action))),
+            Map.entry("frontier.route_construction.return_progress", withPlanningRecovery((state, action) -> RouteConstructionProcess.planReturnProgress(state, action))),
+            Map.entry("frontier.route_maintenance.scan", withPlanningRecovery((state, action) -> RouteMaintenanceProcess.plan(state, action))),
+            Map.entry("frontier.route_maintenance.assembly_progress", withPlanningRecovery((state, action) -> RouteMaintenanceProcess.planAssemblyProgress(state, action))),
+            Map.entry("frontier.route_maintenance.progress", withPlanningRecovery((state, action) -> RouteMaintenanceProcess.planProgress(state, action))),
+            Map.entry("frontier.route_maintenance.return_progress", withPlanningRecovery((state, action) -> RouteMaintenanceProcess.planReturnProgress(state, action))),
             Map.entry("frontier.route_patrol.start", (state, action) -> RoutePatrolProcess.planStart(state, action)),
-            Map.entry("frontier.route_patrol.progress", (state, action) -> RoutePatrolProcess.planProgress(state, action)),
+            Map.entry("frontier.route_patrol.progress", withPlanningRecovery((state, action) -> RoutePatrolProcess.planProgress(state, action))),
             Map.entry("frontier.hive.scout.patrol", (state, action) -> HiveScoutPatrolProcess.plan(state, action)),
-            Map.entry("frontier.decontamination.scan", (state, action) -> SettlementServiceWorkProcess.planDecontamination(state, action)),
-            Map.entry("frontier.objective.review", policyReview(new ScheduledPlanner() {
+            Map.entry("frontier.decontamination.scan", withPlanningRecovery((state, action) -> SettlementServiceWorkProcess.planDecontamination(state, action))),
+            Map.entry("frontier.objective.review", policyReview(withPlanningRecovery(new ScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return StrategicObjectiveProcess.plan(state, action);
                 }
@@ -395,10 +399,10 @@ public final class FrontierWorldProcessCatalog {
                                                          io.farfrontier.palemirror.frontier.v3.api.SimInstant currentInstant) {
                     return StrategicObjectiveProcess.plan(state, action, currentInstant.ticks());
                 }
-            })),
-            Map.entry("frontier.objective.stock_reconsider", coalescedReview(atExecutionTime((state, action, instant) ->
-                    StrategicObjectiveProcess.planStockReconsideration(state, action, instant.ticks())))),
-            Map.entry("frontier.objective.reconsider", (state, action) -> StrategicObjectiveProcess.planReconsideration(state, action)),
+            }))),
+            Map.entry("frontier.objective.stock_reconsider", coalescedReview(withPlanningRecovery(atExecutionTime((state, action, instant) ->
+                    StrategicObjectiveProcess.planStockReconsideration(state, action, instant.ticks()))))),
+            Map.entry("frontier.objective.reconsider", withPlanningRecovery((state, action) -> StrategicObjectiveProcess.planReconsideration(state, action))),
             Map.entry("frontier.objective.assault", (state, action) -> StrategicObjectiveProcess.planAssaultOpportunity(state, action)),
             Map.entry("frontier.settlement_assault.start", (state, action) -> HiveSettlementAssaultProcess.planStart(state, action)),
             Map.entry("frontier.settlement_assault.progress", (state, action) -> HiveSettlementAssaultProcess.planProgress(state, action)),
@@ -427,7 +431,7 @@ public final class FrontierWorldProcessCatalog {
                         ACTOR_MOVEMENT, emissions("actor-movement"), union(ACTOR_MOVEMENT, types("frontier.actor_movement_cold_requested"))),
                 descriptor("actor-execution", Set.of(), Set.of(), ACTOR_EXECUTION, Set.of(), ACTOR_EXECUTION),
                 descriptor("actor-body", ACTOR_BODY, Set.of(), ACTOR_BODY, union(ACTOR_BODY,
-                        types("frontier.production_blocked",
+                        types("frontier.production_blocked", "frontier.physical_intent_transition",
                     "frontier.strategic_task_transition", "frontier.market_work_order_cancelled", "kernel.schedule_cancelled")), ACTOR_BODY),
                 descriptor("economy", economyCommands(), economySchedules(), ECONOMY, emissions("economy"), ECONOMY),
                 descriptor("resource-sites", resourceCommands(), resourceSchedules(), RESOURCE_SITES, emissions("resource-sites"), RESOURCE_SITES),
@@ -437,6 +441,7 @@ public final class FrontierWorldProcessCatalog {
                         emissions("settlement-service-work"), SETTLEMENT_SERVICE_WORK),
                 descriptor("strategy", strategyCommands(), strategySchedules(), STRATEGY, emissions("strategy"), STRATEGY),
                 GoodsTradeProcessModule.DESCRIPTOR, ShipmentProcessModule.DESCRIPTOR, UnitGroupProcessModule.DESCRIPTOR, ExtractionWorkProcessModule.DESCRIPTOR,
+                DefenderEquipmentReturnVisitProcessModule.DESCRIPTOR,
                 TransportMissionProcessModule.DESCRIPTOR, UnitInventoryProcessModule.DESCRIPTOR, ExpeditionSupplyProcessModule.DESCRIPTOR,
                 PedestrianPlanningProcessModule.DESCRIPTOR);
     }
@@ -615,6 +620,9 @@ public final class FrontierWorldProcessCatalog {
                 || previous.resourceSites() != next.resourceSites()
                 || previous.shipments() != next.shipments()
                 || previous.extractionSites() != next.extractionSites()
+                || previous.routeConstructions() != next.routeConstructions()
+                || previous.routeMaintenances() != next.routeMaintenances()
+                || previous.physicalIntents() != next.physicalIntents()
                 || previous.actorExecutions() != next.actorExecutions();
         boolean stockChanged = previous.inventory().fungibleResources() != next.inventory().fungibleResources();
         boolean surfaceChanged = previous.inventory().surfaces() != next.inventory().surfaces();
@@ -702,7 +710,7 @@ public final class FrontierWorldProcessCatalog {
     private static Set<String> economyCommands() { return types(
             "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_cold_work_advanced",
             "frontier.bakery_cold_step", "frontier.bakery_input_reallocated", "frontier.bakery_hot_effect_prepared",
-            "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_delivery_aborted", "frontier.bakery_hot_work_tick", "frontier.bakery_hot_hand_release",
+            "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_delivery_aborted", "frontier.bakery_work_changed", "frontier.bakery_hot_hand_release",
             "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.bakery_scene_reconciled",
             "frontier.bakery_station_scene_reconciled", "frontier.production_work_traversal_blocked",
             "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff"); }
@@ -720,7 +728,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resource_site_harvest_hand_projected",
             "frontier.resource_site_harvest_hand_release",
             "frontier.resource_site_harvest_segment_renewed", "frontier.resource_site_harvest_blocked_cell_skipped", "frontier.resource_site_harvest_immature_cell_skipped", "frontier.resource_site_harvest_work_changed",
-            "frontier.resource_site_harvest_target_retargeted", "frontier.resource_site_harvest_route_blocked", "frontier.resource_site_harvest_route_cleared",
+            "frontier.resource_site_harvest_target_retargeted", "frontier.resource_site_harvest_route_blocked",
             "frontier.resource_site_harvest_batch_prepared", "frontier.resource_site_harvest_batch_delivered",
             "frontier.resource_site_harvest_hot_traversal_advanced", "frontier.resource_site_harvest_hot_goal_arrived",
             "frontier.resource_site_harvest_scene_lease_prepared",
@@ -738,7 +746,7 @@ public final class FrontierWorldProcessCatalog {
     private static Set<String> infrastructureCommands() { return types(
             "frontier.route_construction_assembly_advanced", "frontier.route_maintenance_assembly_advanced",
             "frontier.route_patrol_scene_lease_prepared", "frontier.route_patrol_scene_lease_handoff", "frontier.route_patrol_formation_observed",
-            "frontier.route_patrol_blocked", "frontier.route_patrol_obstruction_confirmed"); }
+            "frontier.route_patrol_spatial_planned", "frontier.route_patrol_blocked", "frontier.route_patrol_obstruction_confirmed"); }
     private static Set<String> serviceWorkCommands() { return types(
             "frontier.settlement_service_work_scene_lease_prepared", "frontier.settlement_service_work_scene_lease_handoff",
             "frontier.settlement_service_work_traversal_advanced", "frontier.settlement_service_work_traversal_blocked",
@@ -780,7 +788,7 @@ public final class FrontierWorldProcessCatalog {
     private static Set<String> emissions(String processId) {
         return switch (processId) {
             case "kernel-schedule" -> KERNEL;
-            case "physical-observation" -> types(
+            case "physical-observation" -> union(DefenderEquipmentReturnVisitProcessModule.TYPES, types(
                     "frontier.container_player_edit_observed", "frontier.resource_storage_adopted", "frontier.resource_storage_declared", "frontier.resource_storage_policy_changed",
                     "frontier.ground_resource_destroyed", "frontier.ground_resource_player_withdrawal",
                     "kernel.reconsideration_requested",
@@ -805,7 +813,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.market_work_order_cancelled", "frontier.market_demand_expired", "frontier.market_demand_cancelled", "frontier.production_started",
                     "frontier.production_completed", "frontier.production_blocked", "frontier.settlement_infection_observed", "frontier.settlement_work_policy_changed", "frontier.strategic_objective_selected",
                     "frontier.strategic_task_planned", "frontier.strategic_task_transition", "frontier.scene_lease_transition",
-                    "frontier.production_work_scene_preparation_aborted", "frontier.production_work_scene_finalized");
+                    "frontier.production_work_scene_preparation_aborted", "frontier.production_work_scene_finalized"));
             case "replica-custody" -> union(REPLICA_CUSTODY, types("kernel.schedule_created"));
             case "ambient-actors" -> types(
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
@@ -839,7 +847,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.settlement_assault_march_issue_observed",
                     "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved",
                     "frontier.hive_mobilization_started", "frontier.hive_mobilization_departed");
-            case "population" -> types(
+            case "population" -> union(DefenderEquipmentReturnVisitProcessModule.TYPES, types(
                     "kernel.reconsideration_requested",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.actor_movement_interrupted", "frontier.actor_movement_started", "frontier.actor_execution_resumed",
@@ -858,7 +866,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.medical_treatment_started", "frontier.medical_treatment_transition",
                     "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff", "frontier.physical_delta_observed", "frontier.physical_deltas_observed",
                     "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged", "frontier.resource_deposited",
-                    "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition");
+                    "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition"));
             case "actor-movement" -> types("frontier.actor_movement_cold_advanced", "frontier.actor_movement_hot_observed", "frontier.actor_movement_interrupted",
                     "frontier.actor_movement_cold_route_started",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled");
@@ -870,7 +878,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.market_demand_cancelled", "frontier.production_started", "frontier.production_completed", "frontier.fungible_production_completed",
                     "frontier.production_work_progressed", "frontier.production_work_traversal_advanced", "frontier.production_cold_work_advanced",
                     "frontier.bakery_cold_step", "frontier.bakery_input_reallocated", "frontier.bakery_storage_retargeted", "frontier.bakery_hot_effect_prepared",
-                    "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_delivery_aborted", "frontier.bakery_hot_work_tick", "frontier.bakery_hot_hand_release",
+                    "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_delivery_aborted", "frontier.bakery_work_changed", "frontier.bakery_hot_hand_release",
                     "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.bakery_scene_reconciled",
                     "frontier.bakery_station_scene_reconciled", "frontier.production_work_traversal_blocked",
                     "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_lease_handoff",
@@ -888,7 +896,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.resource_site_harvest_progressed", "frontier.resource_site_harvest_work_acknowledged", "frontier.resource_site_harvest_cold_traversal_advanced", "frontier.resource_site_harvest_cold_goal_advanced",
                     "frontier.resource_site_harvest_cold_goal_held", "frontier.resource_site_harvest_returned",
                     "frontier.resource_site_harvest_segment_renewed", "frontier.resource_site_harvest_blocked_cell_skipped", "frontier.resource_site_harvest_immature_cell_skipped", "frontier.resource_site_harvest_work_changed",
-                    "frontier.resource_site_harvest_target_retargeted", "frontier.resource_site_harvest_route_blocked", "frontier.resource_site_harvest_route_cleared",
+                    "frontier.resource_site_harvest_target_retargeted", "frontier.resource_site_harvest_route_blocked",
                     "frontier.resource_site_harvest_storage_retargeted",
                     "frontier.resource_site_harvest_batch_prepared", "frontier.resource_site_harvest_batch_delivered",
                     "frontier.resource_site_harvest_scene_reconciled",
@@ -928,9 +936,11 @@ public final class FrontierWorldProcessCatalog {
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.route_construction_started", "frontier.route_construction_material_loaded", "frontier.route_topology_cutover",
                     "frontier.route_construction_assembly_started", "frontier.route_construction_assembly_advanced",
+            "frontier.route_construction_assembly_approach_planned",
                     "frontier.route_maintenance_started", "frontier.route_maintenance_material_loaded",
-                    "frontier.route_maintenance_assembly_started", "frontier.route_maintenance_assembly_advanced", "frontier.route_maintenance_closed",
-                    "frontier.route_patrol_started", "frontier.route_patrol_formation_advanced",
+                    "frontier.route_maintenance_assembly_started", "frontier.route_maintenance_assembly_advanced",
+            "frontier.route_maintenance_assembly_approach_planned", "frontier.route_maintenance_closed",
+                    "frontier.route_patrol_started", "frontier.route_patrol_spatial_planned", "frontier.route_patrol_formation_advanced",
                     "frontier.route_patrol_formation_observed", "frontier.route_patrol_obstruction_confirmed",
                     "frontier.route_patrol_failed", "frontier.route_patrol_blocked",
                     "frontier.route_patrol_scene_lease_prepared", "frontier.route_patrol_scene_lease_handoff",

@@ -21,6 +21,8 @@ final class ResourceSitePayloadCodecs {
                 FrontierWorldPayloadCodecs.writeSubject(out, value.workerId()); out.writeLong(value.expectedRevision());
                 FrontierWorldStateCodec.writeCustody(out, value.destination());
                 FrontierWorldPayloadCodecs.writeString(out, value.replacementIntent().value());
+                ActorExecutionStateCodec.writeId(out, value.executionId());
+                PedestrianRouteReceiptCodec.write(out, value.plannedRoute());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
@@ -30,7 +32,8 @@ final class ResourceSitePayloadCodecs {
                 var custody = FrontierWorldStateCodec.readCustody(in);
                 if (!(custody instanceof InventoryCustody.ContainerSlot slot)) throw new IllegalArgumentException("field storage replacement requires its declared container slot");
                 return new ResourceSiteHarvestStorageRetargeted(site, job, worker, revision, slot,
-                        new PhysicalIntentId(FrontierWorldPayloadCodecs.readString(in)));
+                        new PhysicalIntentId(FrontierWorldPayloadCodecs.readString(in)),
+                        ActorExecutionStateCodec.readId(in), PedestrianRouteReceiptCodec.read(in));
             });
         }
     }; }
@@ -103,7 +106,8 @@ final class ResourceSitePayloadCodecs {
         return new PayloadCodec() {
             @Override public String type() { return "frontier.resource_site_harvest_started"; }
             @Override public byte[] encode(FrontierPayload payload) {
-                ResourceSiteHarvestJob job = ((ResourceSiteHarvestStarted) payload).job();
+                var started = (ResourceSiteHarvestStarted) payload;
+                ResourceSiteHarvestJob job = started.job();
                 return FrontierWorldPayloadCodecs.encodeProduction(output -> {
                     FrontierWorldPayloadCodecs.writeSubject(output, job.id()); FrontierWorldPayloadCodecs.writeSubject(output, job.taskId());
                     FrontierWorldPayloadCodecs.writeSubject(output, job.siteId()); FrontierWorldPayloadCodecs.writeSubject(output, job.workerId());
@@ -132,6 +136,8 @@ final class ResourceSitePayloadCodecs {
                         output.writeInt(batch.deliveredYieldBefore());
                         PhysicalEffectObservationPayloadCodec.write(output, batch.receipt());
                     }
+                    PedestrianRouteReceiptCodec.write(output, started.fieldRoute());
+                    PedestrianRouteReceiptCodec.write(output, started.storageRoute());
                 });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
@@ -165,7 +171,8 @@ final class ResourceSitePayloadCodecs {
                     return new ResourceSiteHarvestStarted(new ResourceSiteHarvestJob(id, task, site, worker, actorAccount, depotAccount, output,
                             new InventoryCustody.ContainerSlot(depot, slot), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(intent),
                             new ResourceSiteHarvestProgress(total, completed, pending, selected, lastCompleted, workProgress, acceptance), delivered,
-                            returningForBatch, successorSlot, lastBatch, java.util.Optional.empty(), harvested, target, storageRevision));
+                            returningForBatch, successorSlot, lastBatch, java.util.Optional.empty(), harvested, target, storageRevision),
+                            PedestrianRouteReceiptCodec.read(input), PedestrianRouteReceiptCodec.read(input));
                 });
             }
         };
@@ -246,6 +253,11 @@ final class ResourceSitePayloadCodecs {
                     output.writeByte(held.reason().wireTag());
                     FrontierWorldPayloadCodecs.writeString(output, held.coldScheduleId().value());
                     output.writeLong(held.coldDueAt());
+                    output.writeLong(held.goalRevision());
+                    output.writeInt(held.origin().x()); output.writeInt(held.origin().y()); output.writeInt(held.origin().z());
+                    ActorExecutionStateCodec.writeId(output, held.executionId());
+                    output.writeByte(held.routeStatus().wireTag());
+                    FrontierWorldPayloadCodecs.writeString(output, held.routeDetail());
                 });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
@@ -257,7 +269,10 @@ final class ResourceSitePayloadCodecs {
                         SurfaceAnchor.at(input.readInt(), input.readInt(), input.readInt()),
                         ResourceSiteHarvestNavigationBlock.Reason.requireWireTag(input.readUnsignedByte()),
                         new io.farfrontier.palemirror.frontier.v3.api.ScheduleId(FrontierWorldPayloadCodecs.readString(input)),
-                        input.readLong()));
+                        input.readLong(), input.readLong(), SurfaceAnchor.at(input.readInt(), input.readInt(), input.readInt()),
+                        ActorExecutionStateCodec.readId(input),
+                        io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.requireWireTag(input.readUnsignedByte()),
+                        FrontierWorldPayloadCodecs.readString(input)));
             }
         };
     }
@@ -405,6 +420,8 @@ final class ResourceSitePayloadCodecs {
                     output.writeBoolean(value.hotLeaseId().isPresent());
                     if (value.hotLeaseId().isPresent())
                         FrontierWorldPayloadCodecs.writeString(output, value.hotLeaseId().orElseThrow().value());
+                    ActorExecutionStateCodec.writeId(output, value.executionId());
+                    PedestrianRouteReceiptCodec.write(output, value.plannedRoute());
                 });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
@@ -416,7 +433,8 @@ final class ResourceSitePayloadCodecs {
                         new io.farfrontier.palemirror.frontier.v3.api.ScheduleId(FrontierWorldPayloadCodecs.readString(input)),
                         input.readLong(), input.readBoolean()
                         ? java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(
-                                FrontierWorldPayloadCodecs.readString(input))) : java.util.Optional.empty()));
+                                FrontierWorldPayloadCodecs.readString(input))) : java.util.Optional.empty(),
+                        ActorExecutionStateCodec.readId(input), PedestrianRouteReceiptCodec.read(input)));
             }
         };
     }
@@ -437,32 +455,6 @@ final class ResourceSitePayloadCodecs {
             }
             @Override public FrontierPayload decode(byte[] bytes) {
                 return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResourceSiteHarvestRouteBlocked(
-                        FrontierWorldPayloadCodecs.readSubject(input).value(),
-                        FrontierWorldPayloadCodecs.readSubject(input).value(),
-                        FrontierWorldPayloadCodecs.readSubject(input).value(), readNavigationBlock(input),
-                        new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId(FrontierWorldPayloadCodecs.readString(input)),
-                        new io.farfrontier.palemirror.frontier.v3.api.ScheduleId(FrontierWorldPayloadCodecs.readString(input)),
-                        input.readLong()));
-            }
-        };
-    }
-    static PayloadCodec harvestRouteCleared() {
-        return new PayloadCodec() {
-            @Override public String type() { return "frontier.resource_site_harvest_route_cleared"; }
-            @Override public byte[] encode(FrontierPayload payload) {
-                ResourceSiteHarvestRouteCleared value = (ResourceSiteHarvestRouteCleared) payload;
-                return FrontierWorldPayloadCodecs.encodeProduction(output -> {
-                    FrontierWorldPayloadCodecs.writeSubject(output, value.siteId());
-                    FrontierWorldPayloadCodecs.writeSubject(output, value.jobId());
-                    FrontierWorldPayloadCodecs.writeSubject(output, value.workerId());
-                    writeNavigationBlock(output, value.expected());
-                    FrontierWorldPayloadCodecs.writeString(output, value.leaseId().value());
-                    FrontierWorldPayloadCodecs.writeString(output, value.coldScheduleId().value());
-                    output.writeLong(value.coldDueAt());
-                });
-            }
-            @Override public FrontierPayload decode(byte[] bytes) {
-                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResourceSiteHarvestRouteCleared(
                         FrontierWorldPayloadCodecs.readSubject(input).value(),
                         FrontierWorldPayloadCodecs.readSubject(input).value(),
                         FrontierWorldPayloadCodecs.readSubject(input).value(), readNavigationBlock(input),

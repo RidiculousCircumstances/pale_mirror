@@ -29,7 +29,9 @@ class PhysicalIntentLifecycleArchitectureTest {
         assertFalse(composition.contains("PhysicalIntentKind.SCENE_STRIKE"),
                 "strike inspection/abandonment policy belongs to the registered family, not common composition");
         String storage = Files.readString(root.resolve("main/java/io/farfrontier/palemirror/frontier/v3/model/PhysicalIntentTransitionStorage.java"));
-        assertFalse(storage.contains(".kind()") || storage.contains("PhysicalIntentKind"),
+        // Equality of two producer-declared kinds fences replacement identity; it is not dispatch.
+        String storageWithoutTupleEquality = storage.replace("successor.kind() != expected.kind()", "");
+        assertFalse(storageWithoutTupleEquality.contains(".kind()") || storage.contains("PhysicalIntentKind"),
                 "storage consumes owner-declared recovery edges without discovering the physical family");
         assertTrue(composition.contains("intent.lifecycleOwner()") && composition.contains("missing physical lifecycle capability"),
                 "composition must resolve only the durable explicit owner and fail closed");

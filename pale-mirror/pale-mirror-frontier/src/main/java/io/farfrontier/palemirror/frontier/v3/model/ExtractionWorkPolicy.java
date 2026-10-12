@@ -18,24 +18,14 @@ public final class ExtractionWorkPolicy {
         return deposit.cells().values().stream().anyMatch(cell -> cell.disposition() == ExtractionDeposit.Disposition.PRESENT);
     }
     /** Reservation by another miner is temporary unavailability, not depletion or completion. */
-    public static Optional<ExtractionTarget> nextTarget(FrontierWorldState state, ExtractionWork job) {
+    public static Optional<ExtractionWorkDecision.Source> nextTarget(FrontierWorldState state, ExtractionWork job) {
         if (!requested(state, job)) return Optional.empty();
         var deposit = state.extractionSites().deposits().get(job.siteId());
-        var start = state.actorLocations().get(job.execution().actorId()).supportingSurface();
-        var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state);
         var available = deposit.available(state.extractionSites().reservedCells(job.siteId())).stream()
                 .filter(cell -> cell.definition().coldOutput().size() == 1
                         && cell.definition().coldOutput().getFirst().itemKind().equals(job.outputKind()))
-                .filter(cell -> {
-                    var order = new MovementOrder(job.id(), job.execution().actorId(), ExtractionWork.Phase.EXTRACT.wireTag(),
-                            job.revision(), List.of(cell.workstation()), TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-                    // This policy is also replayed by the reducer: volatile planner readiness
-                    // must never select a different successor or turn waiting into completion.
-                    try { knowledge.path(start, order); return true; }
-                    catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return false; }
-                }).toList();
-        return ExtractionWorkTargets.spatialSelection(state, deposit, job.execution().actorId(), available,
-                AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION).map(cell -> ExtractionWorkEffects.target(deposit, cell));
+                .toList();
+        return ExtractionWorkTargets.plannedSelection(state, job, available, AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION);
     }
     public static boolean finished(FrontierWorldState state, ExtractionWork job) {
         var deposit = state.extractionSites().deposits().get(job.siteId());

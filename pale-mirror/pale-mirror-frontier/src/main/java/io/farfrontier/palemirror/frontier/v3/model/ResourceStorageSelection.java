@@ -13,6 +13,32 @@ public final class ResourceStorageSelection {
         }
     }
     private ResourceStorageSelection() { }
+    /** Checks a retained declaration without discovering or ranking another endpoint. */
+    public static boolean permits(ExactInventory inventory, SubjectId containerId, SubjectId owner,
+            String itemKind, Set<ResourceStorageRole> roles) {
+        Objects.requireNonNull(inventory); Objects.requireNonNull(containerId); Objects.requireNonNull(owner);
+        roles = Set.copyOf(Objects.requireNonNull(roles));
+        if (roles.isEmpty()) throw new IllegalArgumentException("storage request must declare its permitted tiers");
+        ContainerRecord record = inventory.containers().get(containerId);
+        if (record == null || !record.ownerId().equals(owner)) return false;
+        ResourceStoragePolicy policy = record.storage().orElse(null);
+        return policy != null && roles.contains(policy.role()) && policy.filter().accepts(itemKind);
+    }
+    /** Exact resources share warehouse policy/custody; slot numbering is not source selection. */
+    public static List<ExactItemStack> exactSources(FrontierWorldState state, SubjectId owner, String itemKind,
+            int minimum, SurfaceAnchor origin, Set<ResourceStorageRole> roles) {
+        if (minimum < 1 || minimum > 64) throw new IllegalArgumentException("exact source requires a bounded real count");
+        Map<SubjectId, List<ExactItemStack>> stored = new HashMap<>();
+        for (ExactItemStack item : state.inventory().items().values()) {
+            if (item.economicOwnerId().equals(owner) && item.itemKind().equals(itemKind) && item.count() >= minimum
+                    && item.custody() instanceof InventoryCustody.ContainerSlot slot) {
+                stored.computeIfAbsent(slot.containerId(), ignored -> new ArrayList<>()).add(item);
+            }
+        }
+        return candidates(state, owner, itemKind, origin, roles).stream()
+                .flatMap(endpoint -> stored.getOrDefault(endpoint.containerId(), List.of()).stream()
+                        .sorted(Comparator.comparing(ExactItemStack::id))).toList();
+    }
     /** Read-only stock scope uses the same declared ownership/filter/tier as admission. */
     public static Set<SubjectId> containers(FrontierWorldState state, SubjectId owner, String kind, Set<ResourceStorageRole> roles) {
         return declared(state, owner, kind, Set.copyOf(roles))
@@ -41,6 +67,16 @@ public final class ResourceStorageSelection {
     public static List<ShipmentEndpoint> receivingCandidates(FrontierWorldState state, SubjectId owner, String itemKind,
             int quantity, SurfaceAnchor origin, Set<ResourceStorageRole> roles, Optional<SubjectId> completing) {
         return receiving(state, owner, itemKind, quantity, origin, roles, completing).toList();
+    }
+    /** Validate one producer-declared receiver without enumerating or ranking alternative warehouses. */
+    public static boolean receivesAt(FrontierWorldState state, ShipmentEndpoint endpoint, SubjectId owner,
+            String itemKind, int quantity, Set<ResourceStorageRole> roles, Optional<SubjectId> completing) {
+        Objects.requireNonNull(endpoint); Objects.requireNonNull(completing);
+        if (quantity < 1 || quantity > 64) throw new IllegalArgumentException("receiving needs a bounded real portion");
+        if (!permits(state.inventory(), endpoint.containerId(), owner, itemKind, roles)) return false;
+        return state.inventory().containers().get(endpoint.containerId()).storage().orElseThrow().endpoint().equals(endpoint)
+                && !ReferenceContainerCustody.blocksCanonicalUse(state, endpoint.containerId())
+                && ContainerStorageAdmission.receive(state, endpoint.containerId(), itemKind, quantity, completing);
     }
     private static java.util.stream.Stream<ShipmentEndpoint> receiving(FrontierWorldState state, SubjectId owner, String itemKind,
             int quantity, SurfaceAnchor origin, Set<ResourceStorageRole> roles, Optional<SubjectId> completing) {

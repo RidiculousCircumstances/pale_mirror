@@ -72,34 +72,35 @@ final class ResourceSiteHarvestPlanning {
         boolean activate = task.status() == StrategicTaskStatus.PENDING;
         FrontierWorldState projected = activate ? state.withStrategicPlans(
                 state.strategicPlans().transitionTask(task.id(), StrategicTaskStatus.ACTIVE)) : state;
-        ResidentWorkProvider<ResourceSiteHarvestJob> provider = provider(task, site);
+        ResidentWorkProvider<ResourceSiteHarvestStarted> provider = provider(task, site);
         for (ResidentProfile farmer : candidates) {
             var offered = ResidentWorkComposition.SELECTION.offer(projected, farmer, atTick, provider);
             if (offered.isEmpty()) continue;
-            ResourceSiteHarvestJob job = offered.orElseThrow().execution();
+            ResourceSiteHarvestStarted started = offered.orElseThrow().execution();
+            ResourceSiteHarvestJob job = started.job();
             PhysicalIntent intent = intent(site, job);
             if (events.isEmpty() && activate) events.add(transition(task, StrategicTaskStatus.ACTIVE));
-            events.add(new ProposedEvent(site.id(), new ResourceSiteHarvestStarted(job)));
+            events.add(new ProposedEvent(site.id(), started));
             events.add(new ProposedEvent(site.id(), new PhysicalIntentPrepared(intent)));
             long due = Math.addExact(atTick, state.bootstrap().ruleset().resourceHarvestColdTravelTicksPerEdge());
             events.add(schedule(coldProgress(job, due)));
             // Validate subsequent offers against exactly the successor produced by admission.
             // This is immutable transaction planning, not a parallel reservation cache.
-            projected = admitStarted(projected, site.id(), new ResourceSiteHarvestStarted(job))
+            projected = admitStarted(projected, site.id(), started)
                     .preparePhysicalIntent(intent);
         }
         return List.copyOf(events);
     }
 
-    private static ResidentWorkProvider<ResourceSiteHarvestJob> provider(StrategicTask task, ResourceSite site) {
+    private static ResidentWorkProvider<ResourceSiteHarvestStarted> provider(StrategicTask task, ResourceSite site) {
         return new ResidentWorkProvider<>() {
             @Override public ResidentWorkKind kind() { return ResidentWorkKind.AGRICULTURE; }
             @Override public HumanCapability capability() { return HumanCapability.AGRICULTURE; }
-            @Override public java.util.Optional<ResidentWorkOffer<ResourceSiteHarvestJob>> discover(
+            @Override public java.util.Optional<ResidentWorkOffer<ResourceSiteHarvestStarted>> discover(
                     FrontierWorldState state, ResidentProfile resident, long atTick) {
-                return offer(state, task, site, resident, atTick).map(job -> new ResidentWorkOffer<>(
-                        kind(), resident.id(), job, List.of(new WorkReservationClaim.Cell(job.target()),
-                                new WorkReservationClaim.ContainerCapacity(job.outputSlot()))));
+                return offer(state, task, site, resident, atTick).map(started -> new ResidentWorkOffer<>(
+                        kind(), resident.id(), started, List.of(new WorkReservationClaim.Cell(started.job().target()),
+                                new WorkReservationClaim.ContainerCapacity(started.job().outputSlot()))));
             }
         };
     }
@@ -136,7 +137,7 @@ final class ResourceSiteHarvestPlanning {
         return false;
     }
 
-    private static java.util.Optional<ResourceSiteHarvestJob> offer(FrontierWorldState state, StrategicTask task,
+    private static java.util.Optional<ResourceSiteHarvestStarted> offer(FrontierWorldState state, StrategicTask task,
             ResourceSite site, ResidentProfile farmer, long tick) {
         if (!ProductionStockDemand.read(state, site.settlementId(), "minecraft:wheat").requested())
             return java.util.Optional.empty();
@@ -145,11 +146,24 @@ final class ResourceSiteHarvestPlanning {
             return java.util.Optional.empty();
         ActorLocation worker = state.actorLocations().get(farmer.id());
         if (worker == null) throw new IllegalArgumentException("resource-site harvest worker has no canonical body");
-        var storage = ResourceStorageSelection.newStackDestination(state, site.settlementId(), "minecraft:wheat", 64,
-                worker.supportingSurface(), java.util.Set.of(ResourceStorageRole.WAREHOUSE),
-                endpoint -> ResourceStorageNavigation.reachable(state, worker.supportingSurface(), endpoint));
-        if (storage.isEmpty()) return java.util.Optional.empty();
-        SubjectId depot = storage.orElseThrow().containerId();
+        ShipmentEndpoint storage = null;
+        java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt> storageRoute = java.util.Optional.empty();
+        for (var candidate : ResourceStorageSelection.receivingCandidates(state, site.settlementId(), "minecraft:wheat", 64,
+                worker.supportingSurface(), java.util.Set.of(ResourceStorageRole.WAREHOUSE), java.util.Optional.empty())) {
+            if (state.firstFreeContainerSlot(candidate.containerId()).isEmpty()) continue;
+            try {
+                var route = ResourceStorageNavigation.plannedPath(state, worker.supportingSurface(), candidate);
+                storage = candidate;
+                storageRoute = route.size() < 2 ? java.util.Optional.empty() : java.util.Optional.of(
+                        new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(route));
+                break;
+            } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                if (unavailable.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING)
+                    return java.util.Optional.empty();
+            }
+        }
+        if (storage == null) return java.util.Optional.empty();
+        SubjectId depot = storage.containerId();
         OptionalInt slot = state.firstFreeContainerSlot(depot);
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
         var field = state.resourceSites().cycle(site.id());
@@ -161,19 +175,28 @@ final class ResourceSiteHarvestPlanning {
         if (selected.isEmpty()) return java.util.Optional.empty();
         job = job.withProgress(job.progress().withSelectedCropSlot(selected.getAsInt())).bindTarget(field);
         var outcome = field.expectedWorkOutcome(field.layout().cells().get(selected.getAsInt()).id());
+        java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt> fieldRoute = java.util.Optional.empty();
         if (outcome != ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED
                 && outcome != ResourceFieldCycle.WorkOutcome.SKIPPED_IMMATURE) {
             FrontierWorldState admitted = state.withResourceSites(state.resourceSites().replace(lifecycle.harvesting(job)));
             try {
-                ResourceSiteHarvestKnownNavigation.plannedPath(admitted, job);
+                var route = ResourceSiteHarvestKnownNavigation.plannedPath(admitted, job);
+                fieldRoute = route.size() < 2 ? java.util.Optional.empty() : java.util.Optional.of(
+                        new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(route));
             } catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable unavailable) {
                 if (unavailable.planning()) return java.util.Optional.empty();
-                var alternate = ResourceSiteHarvestRetargeting.coldReachableWorkTarget(admitted, job);
+                java.util.Optional<ResourceSiteHarvestRetargeting.Selection> alternate;
+                try { alternate = ResourceSiteHarvestRetargeting.coldAlternative(admitted, job); }
+                catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable pending) {
+                    if (!pending.planning()) throw pending;
+                    return java.util.Optional.empty();
+                }
                 if (alternate.isEmpty()) return java.util.Optional.empty();
-                job = job.withProgress(job.progress().withSelectedCropSlot(alternate.getAsInt())).bindTarget(field);
+                job = job.withProgress(job.progress().withSelectedCropSlot(alternate.orElseThrow().slot())).bindTarget(field);
+                fieldRoute = alternate.orElseThrow().plannedRoute();
             }
         }
-        return java.util.Optional.of(job);
+        return java.util.Optional.of(new ResourceSiteHarvestStarted(job, fieldRoute, storageRoute));
     }
 
     private static boolean actionable(ResourceFieldCycle field, int index) {
@@ -293,6 +316,18 @@ final class ResourceSiteHarvestPlanning {
         // cadence turn. Preserve the action byte-for-byte until that owner closes it.
             return List.of(reschedule(action, action));
         }
+        if (!HarvestStorageReplacement.retainedAvailable(state, job)) {
+            // No replacement yet is not permission to continue against the lost endpoint.
+            // Keep the exact cargo/job and let its addressed calculation or storage change
+            // resume this same continuation; never park it on the old service queue.
+            var paused = new java.util.ArrayList<ProposedEvent>();
+            if (job.progress().work().filter(WorkProgress::running).isPresent()
+                    && !job.progress().hasPendingPhysicalWork())
+                paused.add(new ProposedEvent(job.siteId(), ResourceSiteHarvestWorkProcess.change(
+                        state, job, now, false, action, java.util.Optional.empty())));
+            paused.add(reschedule(action, coldProgress(job, nextDue)));
+            return List.copyOf(paused);
+        }
         ResourceFieldCycle currentField = state.resourceSites().cycle(job.siteId());
         if (job.navigationBlock().filter(block -> !block.reroutable()).isPresent()) {
             // Physical/support holds need exact clearance. A local HOT path failure
@@ -326,7 +361,7 @@ final class ResourceSiteHarvestPlanning {
         // one across unload/restart intervals, so elapsed zero-player time had no truthful
         // continuation.  Each step below advances one retained pedestrian edge or one exact
         // crop receipt; it still never touches an unloaded block or manufactures final output.
-        if (ResourceSiteHarvestGoal.actorAtDepot(state, job)) {
+        if (job.navigationBlock().isEmpty() && ResourceSiteHarvestGoal.actorAtDepot(state, job)) {
             if (!HarvestServiceAccess.available(state, job))
                 return List.of(reschedule(action, coldProgress(job, nextDue)));
             if (job.returningForBatch() && !batchDeliveryCapacityAvailable(state, job))
@@ -365,11 +400,18 @@ final class ResourceSiteHarvestPlanning {
         } catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable unavailable) {
             if (unavailable.planning()) return List.of(reschedule(action, coldProgress(job, nextDue)));
             if (goal.kind() == ResourceSiteHarvestGoal.Kind.WORK_CELL) {
-                var alternate = ResourceSiteHarvestRetargeting.coldReachableWorkTarget(state, job);
+                java.util.Optional<ResourceSiteHarvestRetargeting.Selection> alternate;
+                try { alternate = ResourceSiteHarvestRetargeting.coldAlternative(state, job); }
+                catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable pending) {
+                    if (!pending.planning()) throw pending;
+                    return List.of(reschedule(action, coldProgress(job, nextDue)));
+                }
                 if (alternate.isPresent()) {
                     var retargeted = new ResourceSiteHarvestTargetRetargeted(job.siteId(), job.id(), job.workerId(),
-                            goal.layoutRevision(), job.progress().nextCropSlotIndex(), alternate.getAsInt(),
-                            action.id(), action.dueAt().ticks(), java.util.Optional.empty());
+                            goal.layoutRevision(), job.progress().nextCropSlotIndex(), alternate.orElseThrow().slot(),
+                            action.id(), action.dueAt().ticks(), java.util.Optional.empty(),
+                            state.actorExecutions().current(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST)
+                                    .get(job.workerId()), alternate.orElseThrow().plannedRoute());
                     ResourceSiteHarvestRetargeting.reduceTargetRetargeted(state, job.siteId(), retargeted);
                     return List.of(new ProposedEvent(job.siteId(), retargeted),
                             reschedule(action, coldProgress(job, nextDue)));
@@ -380,7 +422,7 @@ final class ResourceSiteHarvestPlanning {
             if (job.navigationBlock().isPresent())
                 return List.of(reschedule(action, coldProgress(job, nextDue)));
             return coldGoalHold(state, job, action, nextDue, goal,
-                    ResourceSiteHarvestNavigationBlock.Reason.KNOWN_GEOMETRY_UNAVAILABLE);
+                    unavailable);
         }
         BodyPosition next = path.get(Math.min(1, path.size() - 1)).standingBody();
         if (goal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
@@ -400,10 +442,14 @@ final class ResourceSiteHarvestPlanning {
 
     private static List<ProposedEvent> coldGoalHold(FrontierWorldState state, ResourceSiteHarvestJob job,
                                                      ScheduledAction action, long nextDue, ResourceSiteHarvestGoal goal,
-                                                     ResourceSiteHarvestNavigationBlock.Reason reason) {
+                                                     ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable refusal) {
         ResourceSiteHarvestColdGoalHeld held = new ResourceSiteHarvestColdGoalHeld(
                 job.siteId(), job.id(), job.workerId(), goal.layoutRevision(), goal.nextWorkSlot(),
-                goal.kind(), goal.representative(), reason, action.id(), action.dueAt().ticks());
+                goal.kind(), goal.representative(), ResourceSiteHarvestNavigationBlock.Reason.KNOWN_GEOMETRY_UNAVAILABLE,
+                action.id(), action.dueAt().ticks(), goal.goalRevision(),
+                state.actorLocations().get(job.workerId()).supportingSurface(),
+                state.actorExecutions().current(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST)
+                        .get(job.workerId()), refusal.status(), refusal.getMessage());
         reduceColdGoalHeld(state, job.siteId(), held);
         return List.of(new ProposedEvent(job.siteId(), held), reschedule(action, coldProgress(job, nextDue)));
     }
@@ -453,11 +499,12 @@ final class ResourceSiteHarvestPlanning {
                     || state.actorMovements().containsKey(job.workerId())
                     || !ActorExecutionCoordinator.coldAvailable(state, job.workerId())
                     || pendingPlayerBreakAtNextCell(state, job)
-                    || loadedDepotCustodyBlocksDelivery(state, job)
-                    || serviceEntryHeld(state, job)
-                    || (ResourceSiteHarvestGoal.actorAtDepot(state, job) && job.returningForBatch()
-                        && !batchDeliveryCapacityAvailable(state, job))
-                    || job.navigationBlock().filter(block -> !block.reroutable()).isPresent());
+                    || HarvestStorageReplacement.retainedAvailable(state, job)
+                        && (loadedDepotCustodyBlocksDelivery(state, job)
+                            || serviceEntryHeld(state, job)
+                            || (ResourceSiteHarvestGoal.actorAtDepot(state, job) && job.returningForBatch()
+                                && !batchDeliveryCapacityAvailable(state, job))
+                            || job.navigationBlock().filter(block -> !block.reroutable()).isPresent()));
     }
 
     private static boolean serviceEntryHeld(FrontierWorldState state, ResourceSiteHarvestJob job) {
@@ -465,7 +512,7 @@ final class ResourceSiteHarvestPlanning {
                 || HarvestServiceAccess.available(state, job)) return false;
         if (ResourceSiteHarvestGoal.actorAtDepot(state, job)) return true;
         try {
-            var path = ResourceSiteHarvestKnownNavigation.path(state, job);
+            var path = ResourceSiteHarvestKnownNavigation.retainedPath(state, job);
             return !HarvestServiceAccess.mayAdvance(state, job, path.get(Math.min(1, path.size() - 1)));
         } catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable unavailable) {
             return false; // The planner must record the exact knowledge hold, not park it as a service wait.
@@ -526,7 +573,18 @@ final class ResourceSiteHarvestPlanning {
 
     static FrontierWorldState admitStarted(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestStarted started) {
         ResourceSiteHarvestJob job = started.job(); if (!subject.equals(job.siteId())) throw new IllegalArgumentException("resource-site harvest has a foreign event owner");
-        ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId()); validateJob(state, lifecycle, job);
+        ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
+        if (lifecycle.harvestJobs().containsKey(job.id()))
+            throw new IllegalArgumentException("field admission cannot duplicate its current execution");
+        validateJob(state, lifecycle, job);
+        var projected = state.withResourceSites(state.resourceSites().replace(lifecycle.harvesting(job)));
+        var cycle = state.resourceSites().cycle(job.siteId());
+        var outcome = cycle.expectedWorkOutcome(job.target().cellId());
+        if (outcome == ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED || outcome == ResourceFieldCycle.WorkOutcome.SKIPPED_IMMATURE) {
+            if (started.fieldRoute().isPresent()) throw new IllegalArgumentException("excluded field start cannot declare a work route");
+        } else ResourceSiteHarvestKnownNavigation.requireAcceptedDestination(projected, job, started.fieldRoute());
+        ResourceStorageNavigation.requireAcceptedDestination(state, state.actorLocations().get(job.workerId()).supportingSurface(),
+                ResourceStorageAccess.at(state, job.outputSlot().containerId()).endpoint(), started.storageRoute());
         ResourceSite descriptor = state.resourceSite(job.siteId());
         SettlementCommitmentComposition.ADMISSION.requireParticipants(state, new SettlementCommitmentAdmission.Request(
                 job.taskId(), descriptor.settlementId(), descriptor.facilityId(), List.of(job.workerId())));

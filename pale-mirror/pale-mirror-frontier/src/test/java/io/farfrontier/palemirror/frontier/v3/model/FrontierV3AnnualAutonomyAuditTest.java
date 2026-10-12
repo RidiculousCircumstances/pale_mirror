@@ -172,7 +172,7 @@ class FrontierV3AnnualAutonomyAuditTest {
             for (Settlement settlement : state.bootstrap().settlements()) {
                 SubjectId depot = FrontierWorldState.depotId(settlement.id());
                 int bread = state.inventory().items().values().stream().filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
-                        .filter(item -> SettlementProvisionProcess.BREAD.equals(item.itemKind())).mapToInt(ExactItemStack::count).sum();
+                        .filter(item -> SettlementFoodPolicy.BREAD.equals(item.itemKind())).mapToInt(ExactItemStack::count).sum();
                 int wheat = state.inventory().items().values().stream().filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
                         .filter(item -> "minecraft:wheat".equals(item.itemKind())).mapToInt(ExactItemStack::count).sum();
                 ResourceSiteLifecycle field = state.resourceSites().site(new SubjectId("site:" + settlement.id().value().substring("settlement:".length()) + "-wheat-field"));

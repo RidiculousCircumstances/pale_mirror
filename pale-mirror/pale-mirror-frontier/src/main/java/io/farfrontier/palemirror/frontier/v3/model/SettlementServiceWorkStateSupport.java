@@ -16,7 +16,7 @@ final class SettlementServiceWorkStateSupport {
 
     static void validate(FrontierBootstrap bootstrap, HumanPopulation population,
                          Map<SubjectId, ActorLocation> actorLocations,
-                         Map<InfectionCell, io.farfrontier.palemirror.frontier.v3.api.FixedRatio> infection,
+                         Map<InfectionCell, io.farfrontier.palemirror.frontier.v3.api.FixedRatio> infection, ExactInventory inventory,
                          Map<SubjectId, SettlementServiceWork> works,
                          Map<PhysicalIntentId, PhysicalIntent> intents) {
         if (works.size() > SettlementServiceWork.MAX_RETAINED) {
@@ -48,7 +48,7 @@ final class SettlementServiceWorkStateSupport {
                     || FrontierGrayboxPlan.intactStructureCell(bootstrap.terrain(), facility, cell.position()) == null)) {
                 throw new IllegalArgumentException("structural service work must retain one engineer and exact settlement structure cell");
             }
-            validateDepotSource(bootstrap, work);
+            validateSource(bootstrap, inventory, work);
             PhysicalIntent inputIssue = intents.get(work.inputIssueIntentId());
             PhysicalIntent endpoint = intents.get(work.endpointIntentId());
             if (inputIssue == null || inputIssue.kind() != PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE
@@ -79,14 +79,17 @@ final class SettlementServiceWorkStateSupport {
         }
     }
 
-    private static void validateDepotSource(FrontierBootstrap bootstrap, SettlementServiceWork work) {
-        Settlement settlement = FrontierWorldStateSupport.settlement(bootstrap, work.settlementId());
-        SettlementStructure depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("service work settlement has no depot"));
-        SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(depot);
-        if (!work.inputSource().containerId().equals(FrontierWorldState.depotId(work.settlementId()))
-                || !port.stations().contains(work.inputStation())) {
-            throw new IllegalArgumentException("service work source must be the settlement depot's declared service port");
-        }
+    private static void validateSource(FrontierBootstrap bootstrap, ExactInventory inventory, SettlementServiceWork work) {
+        var container = inventory.containers().get(work.inputSource().containerId());
+        var surface = inventory.surfaces().get(work.inputSource().containerId());
+        if (container == null || surface == null || !container.ownerId().equals(work.settlementId())
+                || container.storage().isEmpty()
+                || !container.storage().orElseThrow().endpoint().settlementId().equals(work.settlementId())
+                || !container.storage().orElseThrow().endpoint().containerId().equals(container.id())
+                || !ShipmentEndpointComposition.declaredStations(bootstrap, container.storage().orElseThrow().endpoint())
+                    .contains(work.inputStation())
+                || !io.farfrontier.palemirror.frontier.v3.model.geometry.BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN
+                    .contains(work.inputStation(), surface.position()))
+            throw new IllegalArgumentException("service work lost its declared owned storage or physical source reach");
     }
 }

@@ -31,14 +31,19 @@ final class ResourceHaulingPolicy {
         }
         return Optional.empty();
     }
-    static boolean available(FrontierWorldState state, ResidentProfile worker, long tick) { return offer(state, worker, tick).isPresent(); }
+    static boolean available(FrontierWorldState state, ResidentProfile worker, long tick) {
+        try { return offer(state, worker, tick).isPresent(); }
+        catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable pending) { return false; }
+    }
     static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, SimInstant instant) {
         if (!REVIEW.equals(action.kind()) || !review(action.subject(), action.dueAt().ticks()).equals(action))
             throw new IllegalArgumentException("resource hauling review has foreign identity");
         long now = Math.max(instant.ticks(), action.dueAt().ticks());
         var events = new ArrayList<ProposedEvent>(); var projected = state;
         for (var worker : ResidentWorkComposition.SELECTION.eligible(state, action.subject(), ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS, now)) {
-            var offer = offer(projected, worker, now);
+            Optional<InternalShipmentDispatched> offer;
+            try { offer = offer(projected, worker, now); }
+            catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable pending) { break; }
             if (offer.isEmpty()) continue;
             var dispatched = offer.orElseThrow(); projected = InternalShipmentStateSupport.dispatch(projected, action.subject(), dispatched);
             events.add(new ProposedEvent(action.subject(), dispatched));

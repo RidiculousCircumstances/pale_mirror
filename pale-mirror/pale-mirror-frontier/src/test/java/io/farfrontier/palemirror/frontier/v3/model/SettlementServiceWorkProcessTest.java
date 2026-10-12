@@ -27,6 +27,74 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Canonical admission regression for the first reusable settlement service-work form. */
 class SettlementServiceWorkProcessTest {
     @Test
+    void cooperativeWarehouseAdmissionDefersAndReplaysItsSelectedRoutesWithoutReranking() throws Exception {
+        var bootstrap = FrontierBootstrapper.create(new WorldId("frontier:service-warehouse-admission"), 211L);
+        var home = settlement(bootstrap, "settlement:9");
+        var state = taskState(bootstrap, home, treatmentCell(bootstrap, home));
+        var source = new SubjectId("container:service-warehouse");
+        var port = ResourceStorageAccess.at(state, FrontierWorldState.depotId(home.id()));
+        var station = ShipmentEndpointComposition.exteriorApproach(state, port.endpoint());
+        var endpoint = new ShipmentEndpoint.Storage(home.id(), source, station, Optional.empty(), station);
+        var record = new ContainerRecord(source, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
+                Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), -10, ResourceStorageRole.WAREHOUSE)));
+        state = new ResourceStorageDeclared(record, station.support().offset(1, 1, 0)).apply(state, home.id());
+        state = state.withInventory(state.inventory().withSurfaceStatus(source, ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(source, ContainerSurfaceStatus.ACTIVE)
+                .store(new ExactItemStack(new SubjectId("item:service-selected"), home.id(), DecontaminationPolicy.REAGENT, 1,
+                        new InventoryCustody.ContainerSlot(source, 3))));
+        var action = SettlementServiceWorkProcess.scan(1, 1_000L);
+        for (var status : List.of(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
+                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.UNKNOWN_GEOMETRY,
+                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.SAFETY_LIMIT)) {
+            var waits = new io.farfrontier.palemirror.frontier.v3.process.PedestrianPlanningWakeIndex();
+            var queries = new java.util.concurrent.atomic.AtomicInteger();
+            try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) -> {
+                queries.incrementAndGet();
+                return new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(status, List.of(), 1, 1, "service pending");
+            }); var continuation = io.farfrontier.palemirror.frontier.v3.process.PedestrianPlanningContinuations.bind(waits)) {
+                var events = FrontierWorldRuntimeDefinition.planScheduled(state, action);
+                assertEquals(1, events.size(), "pending calculation cannot block a task or acquire its medic/input");
+                var retry = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class, events.getFirst().payload());
+                assertEquals(action.id(), retry.action().id());
+                assertEquals(1, queries.get(), "first unready candidate stops the bounded admission scan");
+                assertTrue(state.serviceWorks().isEmpty());
+                if (status == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING) {
+                    assertEquals(1, waits.waitingCount()); waits.remove(action.id());
+                    var codec = new FrontierWorldStateCodec();
+                    io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.restorePlanningWaits(
+                            FrontierWorldRuntimeDefinition.processRegistry(), codec.decode(codec.encode(state)),
+                            new io.farfrontier.palemirror.frontier.v3.api.FrontierExecutionView(bootstrap.worldId(),
+                                    new io.farfrontier.palemirror.frontier.v3.api.Revision(0), action.dueAt(), List.of(retry.action())));
+                    assertEquals(1, waits.waitingCount());
+                }
+            }
+        }
+        var started = SettlementServiceWorkProcess.planDecontamination(state, action).stream().map(ProposedEvent::payload)
+                .filter(SettlementServiceWorkStarted.class::isInstance).map(SettlementServiceWorkStarted.class::cast).findFirst().orElseThrow();
+        assertEquals(source, started.work().inputSource().containerId());
+        var depot = FrontierWorldState.depotId(home.id());
+        var changed = state.withInventory(state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
+                .store(new ExactItemStack(new SubjectId("item:service-better-ranked"), home.id(), DecontaminationPolicy.REAGENT, 1,
+                        new InventoryCustody.ContainerSlot(depot, 1))));
+        var preferred = SettlementServiceWorkProcess.planDecontamination(changed, action).stream().map(ProposedEvent::payload)
+                .filter(SettlementServiceWorkStarted.class::isInstance).map(SettlementServiceWorkStarted.class::cast).findFirst().orElseThrow();
+        assertEquals(depot, preferred.work().inputSource().containerId());
+        changed = changed.withStrategicPlans(changed.strategicPlans().transitionTask(started.taskId(), StrategicTaskStatus.ACTIVE));
+        var codec = new FrontierWorldStateCodec();
+        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            throw new AssertionError("service admission replay cannot rediscover selected routes or source");
+        })) {
+            var admitted = SettlementServiceWorkProcess.reduceStarted(codec.decode(codec.encode(changed)), home.id(), started);
+            assertEquals(started.work(), admitted.serviceWorks().get(started.work().id()));
+            assertEquals(admitted, codec.decode(codec.encode(admitted)));
+            assertThrows(IllegalArgumentException.class, () -> SettlementServiceWorkProcess.reduceStarted(admitted, home.id(), started));
+            var damaged = changed.recordPhysicalDelta(new PhysicalDelta(station.support().offset(0, 1, 0), PhysicalDeltaKind.UNKNOWN_SCAR,
+                    Optional.empty(), Optional.empty(), "test:service-selected-source-blocked"));
+            assertThrows(IllegalArgumentException.class, () -> SettlementServiceWorkProcess.reduceStarted(damaged, home.id(), started));
+        }
+    }
+    @Test
     void decontaminationAdmissionAtomicallyRetainsMedicStationsInputAndEndpoint() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:service-work"), 211L);
         Settlement settlement = settlement(bootstrap, "settlement:9");
@@ -261,7 +329,7 @@ class SettlementServiceWorkProcessTest {
     }
 
     @Test
-    void offStationDepartureRetainsWorkAndRejoinsAfterSnapshotWithoutRestoringOldPose() {
+    void offStationDepartureRetainsWorkAndRejoinsAfterSnapshotWithoutRestoringOldPose() throws Exception {
         ReadyEndpoint fixture = readyEndpoint(217L);
         var work = fixture.work().withPhase(SettlementServiceWorkPhase.WORKING, 7);
         var state = fixture.state().withChanges(FrontierWorldStateUpdate.begin().serviceWorks(Map.of(work.id(), work)));
@@ -281,19 +349,24 @@ class SettlementServiceWorkProcessTest {
         state = state.releaseSceneLease(lease.id(), List.of(new SceneMemberPosition(work.workerId(), location.body(), location.condition().health())));
         assertEquals(origin.support(), FrontierSettlementServiceWorkSceneSupport.candidate(state, work).orElseThrow().handoffPosition(),
                 "scope return cannot require physical absence or a fabricated old cursor pose");
-        var reopened = SettlementServiceJourneyKnowledge.atScopeAdmission(state, work);
+        FrontierWorldState reopened, departed;
+        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            throw new AssertionError("service body/scope departure cannot calculate an approach");
+        })) {
+            reopened = SettlementServiceJourneyKnowledge.atScopeAdmission(state, work);
+            departed = ModeledActorBodyFacts.unloaded(state, work.workerId());
+        }
         assertEquals(state.actorLocations(), reopened.actorLocations());
         assertEquals(state.fencedRecovery(), reopened.fencedRecovery());
-        assertEquals(work.workStation(), reopened.serviceWorks().get(work.id()).spatial().approach().orElseThrow().target());
-        var departed = ModeledActorBodyFacts.unloaded(state, work.workerId());
+        assertEquals(origin, reopened.serviceWorks().get(work.id()).spatial().waitingOrigin().orElseThrow());
         var retained = departed.serviceWorks().get(work.id());
         assertEquals(work.inputTraversal(), retained.inputTraversal());
         assertEquals(work.workTraversal(), retained.workTraversal());
         assertEquals(7, retained.completedWorkTicks());
         assertEquals(fixture.state().inventory(), departed.inventory());
         assertEquals(fixture.state().physicalIntents(), departed.physicalIntents());
-        assertEquals(origin, retained.spatial().approach().orElseThrow().current());
-        assertEquals(work.workStation(), retained.spatial().approach().orElseThrow().target());
+        assertEquals(origin, retained.spatial().waitingOrigin().orElseThrow());
+        assertEquals(work.workStation(), SettlementServiceJourneyKnowledge.approach(departed, retained).orElseThrow().target());
 
         var restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(departed));
         assertEquals(departed, restored);
@@ -383,8 +456,8 @@ class SettlementServiceWorkProcessTest {
         assertEquals(restored.actorLocations(), confirmed.actorLocations(), "resource settlement cannot restore station pose");
         assertEquals(new InventoryCustody.Actor(work.workerId()), confirmed.inventory().items().get(work.inputItemId()).custody());
         assertEquals(SettlementServiceWorkPhase.APPROACH_WORK, confirmed.serviceWorks().get(work.id()).phase());
-        assertEquals(path.get(1), confirmed.serviceWorks().get(work.id()).spatial().approach().orElseThrow().current());
-        assertEquals(path.get(1), confirmed.serviceWorks().get(work.id()).spatial().approach().orElseThrow().target());
+        assertEquals(path.get(1), confirmed.serviceWorks().get(work.id()).spatial().waitingOrigin().orElseThrow());
+        assertEquals(path.get(1), SettlementServiceJourneyKnowledge.target(confirmed.serviceWorks().get(work.id())));
         assertEquals(confirmed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(confirmed)));
         assertThrows(IllegalArgumentException.class, () -> transition(confirmed, work.settlementId(), intent,
                 io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)));

@@ -89,7 +89,8 @@ public final class TransportMissionProcess {
         var group = state.unitGroups().groups().get(mission.groupId());
         var shipments = mission.shipmentIds().stream().map(id -> state.shipments().shipments().get(id)).toList();
         boolean ready = switch (value.next()) {
-            case OUTBOUND -> io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(state, mission, now)
+            case OUTBOUND -> value.departure().map(proof -> io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(state, mission, now, proof))
+                    .orElse(mission.supplies().isEmpty() && state.bootstrap().ruleset().schemaVersion() < 17)
                     && (mission.supplies().isEmpty() || ExpeditionSupplyProcess.assembled(state, mission))
                     && shipments.stream().allMatch(s -> s.status() == Shipment.Status.CARRYING && s.pendingPhysicalStep().isEmpty() && s.reception().isEmpty());
             case UNLOADING -> group.phase() == UnitGroup.Phase.AT_GOAL && group.goalOrdinal() == 1;
@@ -112,6 +113,14 @@ public final class TransportMissionProcess {
                 .shipments(abort ? state.shipments().abortLoadingMission(mission) : state.shipments().advanceMission(mission, value.next())));
     }
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, long currentTick) {
+        try { return planReady(state, action, currentTick); }
+        catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable pending) {
+            long now = Math.max(currentTick, action.dueAt().ticks());
+            return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Rescheduled(action.id(), progress(action.subject(),
+                    now + state.bootstrap().ruleset().cadence().transportReviewInterval()))));
+        }
+    }
+    private static List<ProposedEvent> planReady(FrontierWorldState state, ScheduledAction action, long currentTick) {
         var mission = state.shipments().missions().get(action.subject()); long now = Math.max(currentTick, action.dueAt().ticks());
         if (mission == null)
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
@@ -186,8 +195,16 @@ public final class TransportMissionProcess {
             for (var member : group.members()) if (state.actorLocations().get(member.actorId()).kind() == ActorKind.RESIDENT)
                 events.add(ResidentActivityProcess.wakeAfterActivity(member.actorId(), now));
         }
+        Optional<io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionJourneyProof> departure = Optional.empty();
+        if (next == TransportMission.Stage.OUTBOUND) {
+            try { departure = Optional.of(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionJourneyProof.select(state, mission)); }
+            catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable pending) {
+                return List.of(new ProposedEvent(mission.id(), new ScheduleEffect.Rescheduled(action.id(), progress(mission.id(),
+                        now + state.bootstrap().ruleset().cadence().transportReviewInterval()))));
+            }
+        }
+        var transition = next == null ? null : new TransportMissionAdvanced(mission.id(), mission.revision(), next, departure);
         if (next != null) {
-            var transition = new TransportMissionAdvanced(mission.id(), mission.revision(), next);
             events.add(new ProposedEvent(mission.id(), transition));
             if (next == TransportMission.Stage.UNLOADING) for (var id : mission.shipmentIds()) events.add(ShipmentProcess.wake(id, now));
         }
@@ -195,7 +212,7 @@ public final class TransportMissionProcess {
                 || next == null && (mission.stage() == TransportMission.Stage.OUTBOUND || mission.stage() == TransportMission.Stage.RETURNING)
                     && group.phase() != UnitGroup.Phase.TRAVELLING) {
             long ordinal = (next == TransportMission.Stage.RETURNING || mission.stage() == TransportMission.Stage.RETURNING) ? 2 : 1;
-            var planningState = next != null ? advance(state, mission.id(), new TransportMissionAdvanced(mission.id(), mission.revision(), next), now) : state;
+            var planningState = next != null ? advance(state, mission.id(), transition, now) : state;
             UnitGroupProcess.start(planningState, group, ordinal).ifPresent(value -> {
                 events.add(new ProposedEvent(group.id(), value)); events.add(UnitGroupProcess.wake(group.id(), now));
             });

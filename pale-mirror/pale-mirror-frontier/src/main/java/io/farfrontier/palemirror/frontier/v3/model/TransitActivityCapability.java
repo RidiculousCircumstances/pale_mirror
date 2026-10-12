@@ -19,7 +19,7 @@ final class TransitActivityCapability implements ActorActivityCapability {
             var start = request.observedPosition().supportingSurface();
             if (journey.currentPosition().equals(start.support()))
                 return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin());
-            var replacement = journey.withSpatial(ResidentMigrationJourneyKnowledge.checkpoint(request.expectedState(), journey, start));
+            var replacement = journey.withSpatial(ResidentMigrationJourneyKnowledge.checkpoint(journey, start));
             return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin()
                     .humanPopulation(request.expectedState().humanPopulation().replaceMigration(journey, replacement)));
         };

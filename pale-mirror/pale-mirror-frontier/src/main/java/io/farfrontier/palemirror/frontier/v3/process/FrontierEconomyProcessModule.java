@@ -185,11 +185,14 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                 return new CommandPlan.Accepted(List.copyOf(events));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
-        if (command.payload() instanceof BakeryHotWorkTick tick) {
+        if (command.payload() instanceof BakeryWorkChanged changed) {
+            if (!command.actor().equals(io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR)
+                    || changed.change().atTick() != command.submittedAt().ticks())
+                return FrontierWorldCommandPlanner.rejected("bakery labour requires a current physical observation");
             try {
-                ProductionJob job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(tick.jobId()));
-                ProductionProcess.reduceBakeryHotWorkTick(state, job.settlementId(), tick);
-                return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), tick)));
+                ProductionJob job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(changed.jobId()));
+                ProductionProcess.reduceBakeryWorkChanged(state, job.settlementId(), changed);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), changed)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
         if (command.payload() instanceof BakeryStationSceneReconciled receipt) {
@@ -233,7 +236,8 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                 return FrontierWorldCommandPlanner.rejected("bakery block witness requires the physical executor");
             try {
                 ProductionJob job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(changed.jobId()));
-                ProductionProcess.reduceBakeryHotBlockChanged(state, job.settlementId(), changed);
+                ProductionProcess.reduceBakeryHotBlockChanged(
+                        BakeryLabour.pauseJob(state, job, command.submittedAt().ticks()), job.settlementId(), changed);
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), changed)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
@@ -259,18 +263,30 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
             case ProductionWorkProgressed progressed -> ProductionProcess.reduceWorkProgressed(state, event.subject(), progressed);
             case ProductionWorkTraversalAdvanced advanced -> ProductionProcess.reduceWorkTraversalAdvanced(state, event.subject(), advanced);
             case ProductionColdWorkAdvanced advanced -> ProductionProcess.reduceColdWorkAdvanced(state, event.subject(), advanced);
-            case BakeryColdStep step -> ProductionProcess.reduceBakeryColdStep(state, event.subject(), step);
+            case BakeryColdStep step -> {
+                if (step.labourChange().isPresent() && step.labourChange().orElseThrow().atTick() != event.instant().ticks())
+                    throw new IllegalArgumentException("bakery labour event has a foreign simulation instant");
+                yield ProductionProcess.reduceBakeryColdStep(state, event.subject(), step);
+            }
             case BakeryInputReallocated reallocated -> ProductionProcess.reduceBakeryInputReallocated(state, event.subject(), reallocated);
             case BakeryStorageRetargeted retargeted -> BakeryStorageReplacement.apply(state, event.subject(), retargeted);
             case BakeryHotEffectPrepared prepared -> ProductionProcess.reduceBakeryHotEffectPrepared(state, event.subject(), prepared);
             case BakeryHotDeliveryAborted aborted -> ProductionProcess.reduceBakeryHotDeliveryAborted(state, event.subject(), aborted);
             case BakeryHotEffectObserved observed -> ProductionProcess.reduceBakeryHotEffectObserved(state, event.subject(), observed);
-            case BakeryHotWorkTick tick -> ProductionProcess.reduceBakeryHotWorkTick(state, event.subject(), tick);
+            case BakeryWorkChanged changed -> {
+                if (changed.change().atTick() != event.instant().ticks())
+                    throw new IllegalArgumentException("bakery labour observation has a foreign simulation instant");
+                yield ProductionProcess.reduceBakeryWorkChanged(state, event.subject(), changed);
+            }
             case BakeryHotHandRelease released -> ProductionProcess.reduceBakeryHotHandRelease(state, event.subject(), released);
             case BakerySceneReconciled receipt -> BakerySceneReconciliation.reduce(state, event.subject(), receipt);
             case BakeryStationSceneReconciled receipt -> BakerySceneReconciliation.reduce(state, event.subject(), receipt);
             case BakeryHotHandMaterialized observed -> ProductionProcess.reduceBakeryHotHandMaterialized(state, event.subject(), observed);
-            case BakeryHotBlockChanged changed -> ProductionProcess.reduceBakeryHotBlockChanged(state, event.subject(), changed);
+            case BakeryHotBlockChanged changed -> {
+                var job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(changed.jobId()));
+                yield ProductionProcess.reduceBakeryHotBlockChanged(
+                        BakeryLabour.pauseJob(state, job, event.instant().ticks()), event.subject(), changed);
+            }
             case ProductionWorkTraversalBlocked blocked -> ProductionProcess.reduceWorkTraversalBlocked(state, event.subject(), blocked);
             case ProductionWorkSceneLeasePrepared prepared -> reduceWorkScenePrepared(state, event.subject(), event, prepared);
             case ProductionWorkSceneLeaseHandoff handoff -> reduceWorkSceneHandoff(state, event.subject(), event, handoff);
@@ -329,13 +345,16 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
         if (!subject.equals(FrontierProductionWorkSceneSupport.owner(state, FrontierSceneBehaviors.productionWork(prepared.lease()))) || !prepared.lease().handoffInstant().equals(event.instant()))
             throw new IllegalArgumentException("production-work scene preparation does not match its retained hand-off");
         var job = FrontierProductionWorkSceneSupport.require(state, FrontierSceneBehaviors.productionWork(prepared.lease()));
-        return ProductionJourneyKnowledge.atScopeAdmission(state, job).prepareSceneLease(prepared.lease());
+        state = BakeryLabour.pauseJob(state, job, event.instant().ticks());
+        return ProductionJourneyKnowledge.atScopeAdmission(state, state.productionJobs().get(job.id())).prepareSceneLease(prepared.lease());
     }
     private static FrontierWorldState reduceWorkSceneHandoff(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
                                                               FrontierEvent event, ProductionWorkSceneLeaseHandoff handoff) {
         if (!subject.equals(FrontierProductionWorkSceneSupport.owner(state, FrontierSceneBehaviors.productionWork(handoff.lease()))) || !handoff.lease().handoffInstant().equals(event.instant()))
             throw new IllegalArgumentException("production-work scene hand-off does not match its retained worker");
         FrontierWorldState rebased = ProductionProcess.rebaseForAmbientHandoff(state, subject, handoff);
+        var job = FrontierProductionWorkSceneSupport.require(rebased, FrontierSceneBehaviors.productionWork(handoff.lease()));
+        rebased = BakeryLabour.pauseJob(rebased, job, event.instant().ticks());
         return rebased.handoffAmbientScene(new SceneLeaseHandoff(handoff.lease(), handoff.ambientMembers()));
     }
 }

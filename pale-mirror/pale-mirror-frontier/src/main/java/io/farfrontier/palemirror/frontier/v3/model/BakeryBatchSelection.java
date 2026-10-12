@@ -35,7 +35,15 @@ public record BakeryBatchSelection(Optional<ExactItemStack> exactInput,
     }
 
     public static Optional<BakeryBatchSelection> available(FrontierWorldState state, SubjectId settlementId) {
-        return select(state, ProductionRights.publicService(settlementId), (source, quantity) -> true);
+        return select(state, ProductionRights.publicService(settlementId), (source, quantity) -> true, false);
+    }
+
+    /** Strategic demand and staffing use stock facts, not executable route admission. */
+    public static Optional<BakeryBatchSelection> admissibleStock(FrontierWorldState state, ProductionRights rights) {
+        if (rights.mode() == ProductionRights.Mode.PUBLIC_PRODUCTION
+                && !ProductionStockDemand.read(state, rights.resourceOwner().id(), SettlementFoodPolicy.BREAD).requested())
+            return Optional.empty();
+        return select(state, rights, (source, quantity) -> ProductionOutputCapacity.stockDestination(state, rights, quantity, source).isPresent(), false);
     }
 
     public static Optional<BakeryBatchSelection> admissible(FrontierWorldState state, SubjectId settlementId) {
@@ -46,20 +54,26 @@ public record BakeryBatchSelection(Optional<ExactItemStack> exactInput,
         if (rights.mode() == ProductionRights.Mode.PUBLIC_PRODUCTION
                 && !ProductionStockDemand.read(state, rights.resourceOwner().id(), SettlementFoodPolicy.BREAD).requested())
             return Optional.empty();
-        return select(state, rights, (source, quantity) -> ProductionOutputCapacity.selectDestination(state, rights, quantity, source).isPresent());
+        return select(state, rights, (source, quantity) -> ProductionOutputCapacity.selectDestination(state, rights, quantity, source).isPresent(), true);
     }
 
     private static Optional<BakeryBatchSelection> select(FrontierWorldState state, ProductionRights rights,
-                                                         java.util.function.BiPredicate<SubjectId, Integer> capacity) {
-        var origin = ResourceStorageAccess.at(state, rights.destinationContainerId()).endpoint().station();
+                                                         java.util.function.BiPredicate<SubjectId, Integer> capacity, boolean requireAccess) {
+        var home = FrontierWorldStateSupport.settlement(state.bootstrap(), rights.employer().settlementId());
+        var workshop = home.structures().stream().filter(value -> value.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
+        var origin = SettlementWorkshopServicePort.forWorkshop(workshop).exteriorApproach();
         for (var storage : ResourceStorageSelection.candidates(state, rights.employer().settlementId(), "minecraft:wheat",
                 origin, java.util.Set.of(ResourceStorageRole.WAREHOUSE))) {
-            var home = FrontierWorldStateSupport.settlement(state.bootstrap(), rights.employer().settlementId());
-            var workshop = home.structures().stream().filter(value -> value.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
-            if (!ResourceStorageNavigation.reachable(state,
-                    SettlementWorkshopServicePort.forWorkshop(workshop).exteriorApproach(), storage)) continue;
             var choice = selectAt(state, rights, storage.containerId(), capacity);
-            if (choice.isPresent()) return choice;
+            if (choice.isEmpty()) continue;
+            if (requireAccess) {
+                try { ResourceStorageNavigation.plannedPath(state, origin, storage); }
+                catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                    if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH) throw unavailable;
+                    continue;
+                }
+            }
+            return choice;
         }
         return Optional.empty();
     }

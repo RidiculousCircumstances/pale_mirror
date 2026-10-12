@@ -51,6 +51,20 @@ public final class ActorMovementProcess {
         return ActorMovementProjection.bodyAt(state, actorId, atTick);
     }
 
+    /** The declared owner retires a settled/cancelled goal atomically with its references.
+     * Common movement alone checkpoints a COLD interval or the current observed HOT body. */
+    public static FrontierWorldState retireOwned(FrontierWorldState state, ActorMovement expected, long tick, FrontierWorldStateUpdate ownedUpdate) {
+        var actorId = expected.order().actorId();
+        if (!expected.equals(state.actorMovements().get(actorId)) || tick < expected.issuedAtTick())
+            throw new IllegalArgumentException("movement retirement has a stale exact goal or clock");
+        state.actorExecutions().requireCurrent(expected.executionId());
+        ActorMovementProviders.require(expected).validate(state, expected);
+        var movements = new LinkedHashMap<>(state.actorMovements()); movements.remove(actorId);
+        var actors = new LinkedHashMap<>(state.actorLocations());
+        actors.put(actorId, actors.get(actorId).withBody(bodyAt(state, actorId, tick)));
+        return state.withChanges(ownedUpdate.actorMovements(movements).actorLocations(actors));
+    }
+
     public static boolean held(FrontierWorldState state, ScheduledAction action) {
         if (!PROGRESS.equals(action.kind())) return false;
         ActorMovement movement = state.actorMovements().get(action.subject());

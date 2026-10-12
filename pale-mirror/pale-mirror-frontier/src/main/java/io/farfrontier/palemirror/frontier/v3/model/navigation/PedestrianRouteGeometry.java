@@ -7,6 +7,8 @@ import io.farfrontier.palemirror.frontier.v3.model.WorldBounds;
 public interface PedestrianRouteGeometry {
     /** Derived immutable-world version only: a cache/cancellation token, never execution authority. */
     default Object version() { return this; }
+    /** Explicit compatible scope and per-region revisions; absent providers invalidate conservatively. */
+    default java.util.Optional<PedestrianGeometryRevision> regionalRevision() { return java.util.Optional.empty(); }
     WorldBounds bounds();
     SurfaceAnchor supportAt(int x, int z);
     boolean blocked(SurfaceAnchor surface);

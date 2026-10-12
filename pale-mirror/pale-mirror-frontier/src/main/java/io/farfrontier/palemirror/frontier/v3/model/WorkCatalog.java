@@ -30,6 +30,7 @@ public record WorkCatalog(List<Definition> definitions, int baseSpeedPermille,
     }
     public static WorkCatalog initial() {
         return new WorkCatalog(List.of(
+                new Definition("minecraft:bread", WorkOperation.PRODUCE, HumanCapability.INDUSTRY, 1_600),
                 new Definition("minecraft:wheat", WorkOperation.HARVEST, HumanCapability.AGRICULTURE, 200),
                 new Definition("minecraft:wheat", WorkOperation.SOW, HumanCapability.AGRICULTURE, 100),
                 new Definition("minecraft:wheat", WorkOperation.TILL_AND_SOW, HumanCapability.AGRICULTURE, 300)),

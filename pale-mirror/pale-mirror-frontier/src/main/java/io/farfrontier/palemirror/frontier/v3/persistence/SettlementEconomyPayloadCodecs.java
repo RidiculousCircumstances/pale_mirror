@@ -11,6 +11,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Map;
+import java.util.Optional;
 
 import static io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldPayloadCodecs.*;
 
@@ -87,13 +88,18 @@ final class SettlementEconomyPayloadCodecs {
     } private static final class ProductionStartedCodec implements PayloadCodec {
         @Override public String type() { return "frontier.production_started"; } @Override public byte[] encode(FrontierPayload payload) {
             ProductionStarted started = (ProductionStarted) payload;
-            return encodeProduction(output -> { writeJob(output, started.job()); writeSubject(output, started.inputItemId()); writeProductionInputHold(output, started.job().inputHold()); });
+            return encodeProduction(output -> {
+                writeJob(output, started.job()); writeSubject(output, started.inputItemId()); writeProductionInputHold(output, started.job().inputHold());
+                output.writeBoolean(started.access().isPresent());
+                if (started.access().isPresent()) PedestrianAccessReceiptCodec.write(output, started.access().orElseThrow());
+            });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return decodeProduction(bytes, input -> {
                 ProductionJob job = readJob(input); SubjectIdHolder item = readSubject(input);
                 job = job.withInputHold(readProductionInputHold(input, job.consumedItemId()));
-                return new ProductionStarted(job, item.value());
+                var access = input.readBoolean() ? Optional.of(PedestrianAccessReceiptCodec.read(input)) : Optional.<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianAccessReceipt>empty();
+                return new ProductionStarted(job, item.value(), access);
             });
         }
     } private static final class ProductionCompletedCodec implements PayloadCodec {

@@ -506,12 +506,16 @@ public final class StrategicPlanState {
 
     private StrategicPlanState compactFor(int newObjectives, int newTasks, List<SubjectId> protectedTaskIds) {
         if (objectives.size() + newObjectives <= MAX_OBJECTIVES && tasks.size() + newTasks <= MAX_TASKS) return this;
+        var protectedReturns = new java.util.LinkedHashSet<>(protectedTaskIds);
+        settlementAssaults.values().stream().filter(assault -> assault.equipmentReturnVisit().isPresent())
+                .forEach(assault -> protectedReturns.add(assault.taskId()));
+        var protectedReferences = List.copyOf(protectedReturns);
         Map<SubjectId, StrategicObjective> retainedObjectives = new LinkedHashMap<>(objectives);
         Map<SubjectId, StrategicTask> retainedTasks = new LinkedHashMap<>(tasks);
         while (retainedObjectives.size() + newObjectives > MAX_OBJECTIVES || retainedTasks.size() + newTasks > MAX_TASKS) {
             RetentionIndex retention = RetentionIndex.forTasks(retainedTasks, retainedObjectives);
             StrategicObjective discard = retainedObjectives.values().stream().filter(value -> value.status() != StrategicObjectiveStatus.ACTIVE)
-                    .filter(value -> retention.removable(value.id(), protectedTaskIds))
+                    .filter(value -> retention.removable(value.id(), protectedReferences))
                     .sorted(java.util.Comparator.comparingInt(StrategicObjective::decisionOrdinal).thenComparing(StrategicObjective::id)).findFirst()
                     .orElseThrow(() -> new IllegalStateException("strategic plan retention capacity exhausted by active work"));
             retainedObjectives.remove(discard.id());

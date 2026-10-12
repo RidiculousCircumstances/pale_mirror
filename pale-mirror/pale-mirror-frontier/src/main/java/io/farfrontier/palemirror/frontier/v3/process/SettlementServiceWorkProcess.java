@@ -47,7 +47,14 @@ public final class SettlementServiceWorkProcess {
         }
         Optional<StrategicTask> task = pendingTask(state);
         if (task.isEmpty()) return List.of(next);
-        Optional<Candidate> candidate = candidate(state, task.orElseThrow(), ordinal);
+        Optional<Candidate> candidate;
+        try { candidate = candidate(state, task.orElseThrow(), ordinal); }
+        catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable pending) {
+            if (pending.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
+                throw pending;
+            return List.of(new ProposedEvent(SYSTEM, new ScheduleEffect.Created(scan(ordinal,
+                    Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().decontaminationScanInterval())))));
+        }
         if (candidate.isEmpty()) {
             return List.of(new ProposedEvent(task.orElseThrow().ownerId(), new StrategicTaskTransition(task.orElseThrow().id(), StrategicTaskStatus.BLOCKED)), next);
         }
@@ -69,11 +76,24 @@ public final class SettlementServiceWorkProcess {
                 || !task.ownerId().equals(work.settlementId()) || !task.infectionTarget().equals(Optional.of(infection.cell()))) {
             throw new IllegalArgumentException("service-work start has no exact active decontamination task");
         }
-        Candidate expected = candidate(state, task, ordinal(work.id())).orElseThrow(() ->
-                new IllegalArgumentException("service-work start no longer has one deterministic exact candidate"));
-        if (!expected.work().equals(work) || !expected.inputIssue().equals(started.inputIssueIntent()) || !expected.endpoint().equals(started.endpointIntent())) {
-            throw new IllegalArgumentException("service-work start differs from its deterministic admission plan");
-        }
+        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), work.settlementId());
+        SettlementStructure facility = settlement.structures().stream().filter(value -> value.id().equals(work.facilityId()))
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("service work lost its declared facility"));
+        ResidentProfile worker = state.humanPopulation().resident(work.workerId());
+        ExactItemStack material = state.inventory().items().get(work.inputItemId());
+        SettlementWorkforce.requireAvailable(state, work.settlementId(), List.of(work.workerId()));
+        if (facility.kind() != StructureKind.INFIRMARY || state.structureConditions().get(facility.id()) != StructureCondition.INTACT
+                || worker.capability(HumanCapability.MEDICINE) <= 0 || !state.infection().containsKey(infection.cell())
+                || !nearby(state.bootstrap().ruleset(), facility, infection.cell()) || material == null
+                || !material.itemKind().equals(DecontaminationPolicy.REAGENT) || !material.custody().equals(work.inputSource())
+                || !activeWarehouseMaterial(state, settlement, material)
+                || work.inputTraversalCursor() != 0 || work.workTraversalCursor() != 0 || work.completedWorkTicks() != 0
+                || !work.spatial().equals(StationApproachState.initial())
+                || work.phase() != (work.inputTraversal().linearCorridorSurfaces().size() == 1
+                    ? SettlementServiceWorkPhase.INPUT_ISSUE_PENDING : SettlementServiceWorkPhase.PREPARED)
+                || !inputIssue(work).equals(started.inputIssueIntent()) || !endpoint(work, infection.cell()).equals(started.endpointIntent()))
+            throw new IllegalArgumentException("service-work admission lost its declared worker, facility, source or exact initial boundaries");
+        SettlementServiceWorkTraversal.requireSelected(state, work);
         if (state.serviceWorks().containsKey(work.id()) || state.physicalIntents().containsKey(work.inputIssueIntentId())
                 || state.physicalIntents().containsKey(work.endpointIntentId())) {
             throw new IllegalArgumentException("service-work start reuses a durable identity");
@@ -188,35 +208,51 @@ public final class SettlementServiceWorkProcess {
         Optional<SettlementStructure> facility = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.INFIRMARY)
                 .filter(structure -> state.structureConditions().get(structure.id()) == StructureCondition.INTACT).min(Comparator.comparing(SettlementStructure::id));
         Optional<ResidentProfile> worker = FrontierWorldStateSupport.availableFieldResident(state, settlement.id(), HumanCapability.MEDICINE);
-        Optional<ExactItemStack> material = state.inventory().items().values().stream().filter(item -> item.itemKind().equals(DecontaminationPolicy.REAGENT))
-                .filter(item -> activeDepotMaterial(state, settlement, item)).sorted(Comparator.comparing(ExactItemStack::id)).findFirst();
-        if (facility.isEmpty() || worker.isEmpty() || material.isEmpty() || !state.infection().containsKey(cell)
+        if (facility.isEmpty() || worker.isEmpty() || !state.infection().containsKey(cell)
                 || !nearby(state.bootstrap().ruleset(), facility.orElseThrow(), cell)) return Optional.empty();
         SubjectId workId = new SubjectId("service:decontamination-" + ordinal);
-        SettlementServiceWorkTraversal.Plan traversal;
-        try {
-            traversal = SettlementServiceWorkTraversal.compileDecontamination(state, settlement,
-                    worker.orElseThrow().id(), state.actorLocations().get(worker.orElseThrow().id()), cell, workId);
-        } catch (IllegalArgumentException unavailable) { return Optional.empty(); }
-        InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) material.orElseThrow().custody();
-        PhysicalIntentId inputIssueId = new PhysicalIntentId("intent:service-input-issue-" + ordinal);
-        PhysicalIntentId endpointId = new PhysicalIntentId("intent:service-decontamination-" + ordinal);
-        SettlementServiceWork work = new SettlementServiceWork(workId, task.id(), SettlementServiceWorkKind.DECONTAMINATION, settlement.id(), worker.orElseThrow().id(),
-                facility.orElseThrow().id(), source, traversal.inputStation(), traversal.workStation(), material.orElseThrow().id(),
-                new SettlementServiceTarget.Infection(cell), inputIssueId, endpointId, traversal.inputTraversal(), 0, traversal.workTraversal(), 0,
-                traversal.inputTraversal().linearCorridorSurfaces().size() == 1
-                        ? SettlementServiceWorkPhase.INPUT_ISSUE_PENDING : SettlementServiceWorkPhase.PREPARED, 0);
-        PhysicalIntent inputIssue = new PhysicalIntent(inputIssueId, PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE, PhysicalIntentStatus.PREPARED,
-                work.id(), PhysicalIntentRoleBinding.serviceInputIssue(work.id(), work.workerId(), work.inputItemId()), fixed(work.inputStation().support()), 0,
-                PhysicalPostcondition.SETTLEMENT_SERVICE_INPUT_ISSUED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_WORK);
-        PhysicalIntent endpoint = new PhysicalIntent(endpointId, PhysicalIntentKind.DECONTAMINATION, PhysicalIntentStatus.PREPARED,
-                work.id(), PhysicalIntentRoleBinding.serviceDecontamination(work.id(), work.workerId(), work.inputItemId()), fixed(cell.originAtY(0)), 0,
-                PhysicalPostcondition.DECONTAMINATION_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_DECONTAMINATION);
-        return Optional.of(new Candidate(task, settlement, work, inputIssue, endpoint));
+        var actor = state.actorLocations().get(worker.orElseThrow().id());
+        for (var material : ResourceStorageSelection.exactSources(state, settlement.id(), DecontaminationPolicy.REAGENT,
+                1, actor.supportingSurface(), java.util.Set.of(ResourceStorageRole.WAREHOUSE))) {
+            InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) material.custody();
+            SettlementServiceWorkTraversal.Plan traversal;
+            try {
+                traversal = SettlementServiceWorkTraversal.compileDecontamination(state, settlement,
+                        worker.orElseThrow().id(), actor, cell, workId, ResourceStorageAccess.at(state, source.containerId()));
+            } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
+                    throw unavailable;
+                continue;
+            }
+            PhysicalIntentId inputIssueId = new PhysicalIntentId("intent:service-input-issue-" + ordinal);
+            PhysicalIntentId endpointId = new PhysicalIntentId("intent:service-decontamination-" + ordinal);
+            SettlementServiceWork work = new SettlementServiceWork(workId, task.id(), SettlementServiceWorkKind.DECONTAMINATION, settlement.id(), worker.orElseThrow().id(),
+                    facility.orElseThrow().id(), source, traversal.inputStation(), traversal.workStation(), material.id(),
+                    new SettlementServiceTarget.Infection(cell), inputIssueId, endpointId, traversal.inputTraversal(), 0, traversal.workTraversal(), 0,
+                    traversal.inputTraversal().linearCorridorSurfaces().size() == 1
+                            ? SettlementServiceWorkPhase.INPUT_ISSUE_PENDING : SettlementServiceWorkPhase.PREPARED, 0);
+            return Optional.of(new Candidate(task, settlement, work, inputIssue(work), endpoint(work, cell)));
+        }
+        return Optional.empty();
     }
 
-    private static boolean activeDepotMaterial(FrontierWorldState state, Settlement settlement, ExactItemStack item) {
-        if (!(item.custody() instanceof InventoryCustody.ContainerSlot slot) || !slot.containerId().equals(FrontierWorldState.depotId(settlement.id()))) return false;
+    private static PhysicalIntent inputIssue(SettlementServiceWork work) {
+        return new PhysicalIntent(work.inputIssueIntentId(), PhysicalIntentKind.SETTLEMENT_SERVICE_INPUT_ISSUE, PhysicalIntentStatus.PREPARED,
+                work.id(), PhysicalIntentRoleBinding.serviceInputIssue(work.id(), work.workerId(), work.inputItemId()), fixed(work.inputStation().support()), 0,
+                PhysicalPostcondition.SETTLEMENT_SERVICE_INPUT_ISSUED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_WORK);
+    }
+
+    private static PhysicalIntent endpoint(SettlementServiceWork work, InfectionCell cell) {
+        return new PhysicalIntent(work.endpointIntentId(), PhysicalIntentKind.DECONTAMINATION, PhysicalIntentStatus.PREPARED,
+                work.id(), PhysicalIntentRoleBinding.serviceDecontamination(work.id(), work.workerId(), work.inputItemId()), fixed(cell.originAtY(0)), 0,
+                PhysicalPostcondition.DECONTAMINATION_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_DECONTAMINATION);
+    }
+
+    private static boolean activeWarehouseMaterial(FrontierWorldState state, Settlement settlement, ExactItemStack item) {
+        if (!item.economicOwnerId().equals(settlement.id()) || !(item.custody() instanceof InventoryCustody.ContainerSlot slot)
+                || !ResourceStorageSelection.permits(state.inventory(), slot.containerId(), settlement.id(), item.itemKind(),
+                    java.util.Set.of(ResourceStorageRole.WAREHOUSE))
+                || ReferenceContainerCustody.blocksCanonicalUse(state, slot.containerId())) return false;
         ContainerSurface surface = state.inventory().surfaces().get(slot.containerId());
         return surface != null && surface.status() == ContainerSurfaceStatus.ACTIVE;
     }
@@ -229,13 +265,6 @@ public final class SettlementServiceWorkProcess {
 
     private static FixedPosition fixed(BlockPosition position) {
         return new FixedPosition(FixedScalar.whole(position.x()), FixedScalar.whole(position.y()), FixedScalar.whole(position.z()));
-    }
-
-    private static int ordinal(SubjectId workId) {
-        String prefix = "service:decontamination-";
-        if (!workId.value().startsWith(prefix)) throw new IllegalArgumentException("service work id has no deterministic decontamination ordinal");
-        try { return Integer.parseInt(workId.value().substring(prefix.length())); }
-        catch (NumberFormatException invalid) { throw new IllegalArgumentException("service work id has invalid decontamination ordinal", invalid); }
     }
 
     private record Candidate(StrategicTask task, Settlement settlement, SettlementServiceWork work,

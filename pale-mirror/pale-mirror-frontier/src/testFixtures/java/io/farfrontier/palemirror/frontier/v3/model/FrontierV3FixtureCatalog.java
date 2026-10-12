@@ -251,7 +251,7 @@ public final class FrontierV3FixtureCatalog {
         FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base = FrontierWorldRuntimeDefinition.configuration(worldId, seed);
         FrontierWorldState state = base.initialState(); Settlement settlement = state.bootstrap().settlements().getFirst(); SubjectId depot = FrontierWorldState.depotId(settlement.id());
         SubjectId bread = new SubjectId("item:provision-fixture-bread"); int rations = settlement.residents().size();
-        ExactItemStack stack = new ExactItemStack(bread, settlement.id(), SettlementProvisionProcess.BREAD, 64, new InventoryCustody.ContainerSlot(depot, 1));
+        ExactItemStack stack = new ExactItemStack(bread, settlement.id(), SettlementFoodPolicy.BREAD, 64, new InventoryCustody.ContainerSlot(depot, 1));
         List<SubjectId> recipients = state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(settlement.id()))
                 .map(ResidentProfile::id).sorted().toList();
         HumanPopulation population = state.humanPopulation();
@@ -348,7 +348,7 @@ public final class FrontierV3FixtureCatalog {
             if (current.productionJobs().size() == 1 && current.productionJobs().values().iterator().next()
                     .bakeryWork().filter(work -> freshJob ? work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
                             : work.phase() == BakeryWorkState.Phase.PROCESSING
-                            && work.completedWorkTicks() == 7).isPresent()) {
+                            && work.labour().filter(progress -> progress.running() && !progress.complete()).isPresent()).isPresent()) {
                 var boundary = engine.checkpoint();
                 return configured(worldId, current, boundary.instant(), boundary.schedules());
             }

@@ -66,10 +66,7 @@ public record RouteMaintenance(SubjectId id, SubjectId settlementId, BlockPositi
     }
 
     RouteMaintenance withAssembly(EngineeringWorkAssembly nextAssembly) {
-        if (assembly.isPresent() && !(assembly.orElseThrow().purpose() == EngineeringJourneyPurpose.MUSTER_DEPOT
-                && assembly.orElseThrow().complete() && nextAssembly.purpose() == EngineeringJourneyPurpose.WORKSITE)) {
-            throw new IllegalArgumentException("route maintenance assembly is already declared");
-        }
+        nextAssembly.requirePredecessor(assembly);
         return new RouteMaintenance(id, settlementId, repairCell, semanticPart, status, cargoId, team,
                 Optional.of(Objects.requireNonNull(nextAssembly, "route maintenance assembly")));
     }

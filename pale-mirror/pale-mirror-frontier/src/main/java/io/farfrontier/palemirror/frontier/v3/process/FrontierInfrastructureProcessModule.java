@@ -43,7 +43,7 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
                         FrontierInfrastructureProcessModule::reduceEngineeringTransition),
                 FrontierInfrastructureProcessModule::engineeringRecoveryAsset,
                 retirementAccount(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE),
-                PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery(), PhysicalIntentRecoveryDiagnosticProducer.ENGINEERING_WORKSITE);
+                EngineeringEquipmentProcess::mayCompact, PhysicalIntentRecoveryDiagnosticProducer.ENGINEERING_WORKSITE);
     }
 
     private static PhysicalIntentRetirementAccount retirementAccount(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner owner) {
@@ -102,8 +102,7 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
                 commitment = new PhysicalIntentRetirementAccount.Exact<>(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.SOURCE_ITEM));
             }
             case EQUIPMENT_ISSUE, EQUIPMENT_RETURN -> {
-                if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE) EquipmentIssueStateSupport.validateIntent(state, intent);
-                else EquipmentReturnStateSupport.validateIntent(state, intent);
+                EquipmentServiceBoundary.validateContinuation(state, intent);
                 carrier = new PhysicalIntentRetirementAccount.Exact<>(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ENGINEERING_WORKER));
                 commitment = new PhysicalIntentRetirementAccount.Exact<>(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.EQUIPMENT));
             }
@@ -180,11 +179,13 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
                 case ROUTE_MAINTENANCE -> new CommandPlan.Accepted(RouteMaintenanceProcess.planTransition(state, intent, transition, now));
                 case ROUTE_MAINTENANCE_MATERIAL_LOADING -> new CommandPlan.Accepted(RouteMaintenanceProcess.planMaterialLoadingTransition(state, intent, transition, now));
                 case EQUIPMENT_ISSUE -> {
-                    if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING) EquipmentIssueStateSupport.validateIntent(state, intent);
+                    if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING) EquipmentServiceBoundary.requireMayBegin(state, intent);
+                    else EquipmentServiceBoundary.validateContinuation(state, intent);
                     yield new CommandPlan.Accepted(withEngineeringContinuation(state, intent, transition, now, false));
                 }
                 case EQUIPMENT_RETURN -> {
-                    if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING) EquipmentReturnStateSupport.validateIntent(state, intent);
+                    if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING) EquipmentServiceBoundary.requireMayBegin(state, intent);
+                    else EquipmentServiceBoundary.validateContinuation(state, intent);
                     yield new CommandPlan.Accepted(withEngineeringContinuation(state, intent, transition, now, true));
                 }
                 default -> throw new IllegalArgumentException("engineering capability received undeclared kind");
@@ -232,11 +233,13 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
                 if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("engineering transition lacks route-network ownership");
             }
             case EQUIPMENT_ISSUE -> {
-                if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING) EquipmentIssueStateSupport.validateIntent(state, intent);
+                if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING) EquipmentServiceBoundary.requireMayBegin(state, intent);
+                else EquipmentServiceBoundary.validateContinuation(state, intent);
                 if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("equipment issue transition lacks settlement ownership");
             }
             case EQUIPMENT_RETURN -> {
-                if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING) EquipmentReturnStateSupport.validateIntent(state, intent);
+                if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING) EquipmentServiceBoundary.requireMayBegin(state, intent);
+                else EquipmentServiceBoundary.validateContinuation(state, intent);
                 if (!subject.equals(intent.causeSubjectId())) throw new IllegalArgumentException("equipment return transition lacks settlement ownership");
             }
             default -> throw new IllegalArgumentException("engineering capability received undeclared kind");
@@ -321,6 +324,14 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
                     FrontierSceneBehaviors.routePatrol(handoff.lease())), handoff))); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
+        if (command.payload() instanceof RoutePatrolSpatialPlanned planned) {
+            var patrol = state.strategicPlans().routePatrols().get(planned.taskId());
+            if (patrol == null) return FrontierWorldCommandPlanner.rejected("unknown patrol approach owner");
+            try {
+                RoutePatrolProcess.reduceSpatialPlanned(state, patrol.settlementId(), planned);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(patrol.settlementId(), planned)));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
         if (command.payload() instanceof RoutePatrolFormationObserved observed) return planPatrolFormation(state, observed);
         if (command.payload() instanceof RoutePatrolBlocked blocked) return planPatrolBlocked(state, blocked);
         if (command.payload() instanceof RoutePatrolObstructionConfirmed confirmed) return planPatrolObstruction(state, confirmed, command.submittedAt().ticks());
@@ -347,13 +358,16 @@ final class FrontierInfrastructureProcessModule implements FrontierWorldProcessM
             case RouteConstructionMaterialLoaded loaded -> RouteConstructionStateSupport.reduceMaterialLoaded(state, event.subject(), loaded);
             case RouteConstructionAssemblyStarted started -> RouteConstructionStateSupport.reduceAssemblyStarted(state, event.subject(), started);
             case RouteConstructionAssemblyAdvanced advanced -> RouteConstructionStateSupport.reduceAssemblyAdvanced(state, event.subject(), advanced);
+            case RouteConstructionAssemblyApproachPlanned planned -> RouteConstructionStateSupport.reduceApproachPlanned(state, event.subject(), planned);
             case RouteTopologyCutover cutover -> RouteConstructionStateSupport.reduceCutover(state, event.subject(), cutover);
             case RouteMaintenanceStarted started -> RouteMaintenanceStateSupport.reduceStarted(state, event.subject(), started);
             case RouteMaintenanceMaterialLoaded loaded -> RouteMaintenanceStateSupport.reduceMaterialLoaded(state, event.subject(), loaded);
             case RouteMaintenanceAssemblyStarted started -> RouteMaintenanceStateSupport.reduceAssemblyStarted(state, event.subject(), started);
             case RouteMaintenanceAssemblyAdvanced advanced -> RouteMaintenanceStateSupport.reduceAssemblyAdvanced(state, event.subject(), advanced);
+            case RouteMaintenanceAssemblyApproachPlanned planned -> RouteMaintenanceStateSupport.reduceApproachPlanned(state, event.subject(), planned);
             case RouteMaintenanceClosed closed -> RouteMaintenanceStateSupport.reduceClosed(state, event.subject(), closed);
             case RoutePatrolStarted started -> RoutePatrolProcess.reduceStarted(state, event.subject(), started);
+            case RoutePatrolSpatialPlanned planned -> RoutePatrolProcess.reduceSpatialPlanned(state, event.subject(), planned);
             case RoutePatrolFormationAdvanced advanced -> reducePatrolFormationAdvanced(state, event.subject(), advanced);
             case RoutePatrolObstructionConfirmed confirmed -> RoutePatrolProcess.reduceObstruction(state, event.subject(), confirmed);
             case RoutePatrolFailed failed -> RoutePatrolProcess.reduceFailed(state, event.subject(), failed);

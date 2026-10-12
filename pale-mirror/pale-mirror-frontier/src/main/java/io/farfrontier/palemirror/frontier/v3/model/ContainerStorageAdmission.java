@@ -49,4 +49,11 @@ final class ContainerStorageAdmission {
         }
         return OptionalInt.empty();
     }
+    /** Existing exact-effect inspection excludes its slot claim, not a fabricated recipe demand or new-effect fence. */
+    static boolean availableForClaim(FrontierWorldState state, InventoryCustody.ContainerSlot slot,
+            ContainerSlotClaim.Owner current, Predicate<InventoryCustody.ContainerSlot> held) {
+        return state.inventory().availableSlots(slot.containerId(), ContainerPhysicalReservations.slotsExceptClaim(state, slot.containerId(), current),
+                inbound(state, slot.containerId(), Optional.empty())).contains(slot.slot())
+                && ReferenceContainerCustody.expectedFungibleSlot(state, slot.containerId(), slot.slot()).isEmpty() && !held.test(slot);
+    }
 }

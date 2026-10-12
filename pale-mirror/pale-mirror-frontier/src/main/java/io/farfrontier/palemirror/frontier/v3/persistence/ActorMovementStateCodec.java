@@ -37,18 +37,14 @@ final class ActorMovementStateCodec {
         for (ActorMovement movement : movements.values().stream()
                 .sorted(Comparator.comparing(value -> value.order().actorId())).toList()) {
             MovementOrder order = movement.order();
-            FrontierWorldStateCodec.writeString(output, order.ownerId().value());
-            FrontierWorldStateCodec.writeString(output, order.actorId().value());
-            output.writeLong(order.goalOrdinal());
-            output.writeLong(order.goalRevision());
-            output.writeByte(FrontierWireTags.tag(order.capability()));
-            output.writeByte(FrontierWireTags.tag(order.arrivalPolicy()));
-            FrontierWorldStateCodec.writeCount(output, order.legalStations().size());
-            for (SurfaceAnchor station : order.legalStations())
-                FrontierWorldStateCodec.writePosition(output, station.support());
+            MovementOrderCodec.write(output, order);
             output.writeLong(movement.issuedAtTick());
             ActorExecutionStateCodec.writeId(output, movement.executionId());
             switch (movement.context()) {
+                case ActorMovementContext.DefenderEquipmentReturn leg -> {
+                    output.writeByte(8); FrontierWorldStateCodec.writeString(output, leg.assaultId().value());
+                    FrontierWorldStateCodec.writeString(output, leg.transferId().value());
+                }
                 case ActorMovementContext.ExtractionLeg leg -> {
                     output.writeByte(7); FrontierWorldStateCodec.writeString(output, leg.jobId().value());
                     output.writeLong(leg.jobRevision());
@@ -99,20 +95,13 @@ final class ActorMovementStateCodec {
         if (count > 4_096) throw new IllegalArgumentException("actor movement count exceeds retention bound");
         Map<SubjectId, ActorMovement> movements = new LinkedHashMap<>();
         for (int index = 0; index < count; index++) {
-            SubjectId owner = new SubjectId(FrontierWorldStateCodec.readString(input));
-            SubjectId actor = new SubjectId(FrontierWorldStateCodec.readString(input));
-            long ordinal = input.readLong(), revision = input.readLong();
-            TraversalCapability capability = FrontierWireTags.require(TraversalCapability.class, input.readUnsignedByte());
-            MovementOrder.ArrivalPolicy policy = FrontierWireTags.require(MovementOrder.ArrivalPolicy.class, input.readUnsignedByte());
-            int stationsCount = FrontierWorldStateCodec.readCount(input);
-            if (stationsCount < 1 || stationsCount > 8) throw new IllegalArgumentException("actor movement station count is invalid");
-            List<SurfaceAnchor> stations = new ArrayList<>(stationsCount);
-            for (int station = 0; station < stationsCount; station++)
-                stations.add(new SurfaceAnchor(FrontierWorldStateCodec.readPosition(input)));
-            MovementOrder order = new MovementOrder(owner, actor, ordinal, revision, stations, capability, policy);
+            MovementOrder order = MovementOrderCodec.read(input);
+            SubjectId actor = order.actorId();
             long issuedAt = input.readLong();
             var executionId = ActorExecutionStateCodec.readId(input);
             ActorMovementContext context = switch (input.readUnsignedByte()) {
+                case 8 -> new ActorMovementContext.DefenderEquipmentReturn(new SubjectId(FrontierWorldStateCodec.readString(input)),
+                        new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(FrontierWorldStateCodec.readString(input)));
                 case 7 -> new ActorMovementContext.ExtractionLeg(new SubjectId(FrontierWorldStateCodec.readString(input)), input.readLong());
                 case 0 -> new ActorMovementContext.ServiceExit(readPoint(input));
                 case 1 -> new ActorMovementContext.ShipmentLeg(

@@ -413,25 +413,6 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(blocked.siteId(), blocked)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
-        if (command.payload() instanceof ResourceSiteHarvestRouteCleared cleared) {
-            try {
-                // Historical route-clear events remain replayable, but a new semantic
-                // movement block may no longer be cleared by a path-plan assertion.
-                // Only HOT goal arrival retains the physical body and lifts that block.
-                if (cleared.expected().reason()
-                            != ResourceSiteHarvestNavigationBlock.Reason.CONTINUATION_UNAVAILABLE)
-                    throw new IllegalArgumentException("field movement goal clears only on observed HOT arrival");
-                ScheduledAction binding = command.scheduleBinding().map(
-                        io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding::action).orElseThrow(
-                        () -> new IllegalArgumentException("HOT farmer route clearance has no continuation binding"));
-                if (!binding.kind().equals(ResourceSiteHarvestProcess.COLD_PROGRESS_KIND)
-                        || !binding.subject().equals(cleared.siteId()) || !binding.id().equals(cleared.coldScheduleId())
-                        || binding.dueAt().ticks() != cleared.coldDueAt())
-                    throw new IllegalArgumentException("HOT farmer route clearance has a foreign continuation");
-                ResourceSiteHarvestProcess.reduceRouteCleared(state, cleared.siteId(), cleared);
-                return new CommandPlan.Accepted(List.of(new ProposedEvent(cleared.siteId(), cleared)));
-            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
-        }
         if (command.payload() instanceof ResourceSiteHarvestBatchDelivered delivered) {
             try {
                 ResourceSitePhysicalIntentStateSupport.deliverHarvestBatch(state, delivered);
@@ -527,7 +508,6 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
             case ResourceSiteHarvestImmatureCellSkipped skipped -> ResourceSiteHarvestProcess.reduceCellSkipped(state, event.subject(), skipped);
             case ResourceSiteHarvestTargetRetargeted retargeted -> ResourceSiteHarvestRetargeting.reduceTargetRetargeted(state, event.subject(), retargeted);
             case ResourceSiteHarvestRouteBlocked blocked -> ResourceSiteHarvestProcess.reduceRouteBlocked(state, event.subject(), blocked);
-            case ResourceSiteHarvestRouteCleared cleared -> ResourceSiteHarvestProcess.reduceRouteCleared(state, event.subject(), cleared);
             case ResourceSiteHarvestBatchDelivered delivered -> {
                 if (!event.subject().equals(delivered.receipt().siteId()))
                     throw new IllegalArgumentException("field batch receipt has a foreign event owner");

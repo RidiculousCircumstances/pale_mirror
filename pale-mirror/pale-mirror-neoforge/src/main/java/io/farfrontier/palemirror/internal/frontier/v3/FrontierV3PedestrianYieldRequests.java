@@ -17,12 +17,13 @@ final class FrontierV3PedestrianYieldRequests {
     private static final int MAX_RETAINED_TICKS = 100; // Stale-evidence safety bound, not a retry cadence.
     record Blocker(ActorBodyId body, java.util.UUID entity, AABB observedBounds) { }
     record Request(java.util.UUID requester, WeakReference<Mob> source,
-                   FrontierV3GoalNavigation.ProviderPermission permission, List<Blocker> blockers,
+                   FrontierV3GoalNavigation.ProviderPermission permission, FrontierV3MinecraftGoalNavigation.Demand demand, List<Blocker> blockers,
                    List<BlockPosition> passage, long refreshedAt) {
         Request { blockers = List.copyOf(blockers); passage = List.copyOf(passage); }
         boolean current(ServerLevel level) {
             Mob actor = source.get();
-            return actor != null && actor.level() == level && permission.current(actor)
+            return actor != null && actor.level() == level && actor.isAlive() && !actor.isRemoved() && permission.current(actor)
+                    && FrontierV3MinecraftGoalNavigation.hasDemand(actor, demand)
                     && level.getGameTime() - refreshedAt <= MAX_RETAINED_TICKS;
         }
     }
@@ -30,7 +31,7 @@ final class FrontierV3PedestrianYieldRequests {
     private FrontierV3PedestrianYieldRequests() { }
 
     static void request(ServerLevel level, Mob requester, FrontierV3GoalNavigation.ProviderPermission permission,
-                        FrontierV3PedestrianTraffic.Query evidence) {
+                        FrontierV3PedestrianTraffic.Query evidence, FrontierV3MinecraftGoalNavigation.Demand demand) {
         if (!permission.current(requester) || FrontierV3PedestrianCourtesy.active(requester)) return;
         prune();
         List<Blocker> blockers = evidence.blockers().stream().map(observed -> {
@@ -42,7 +43,7 @@ final class FrontierV3PedestrianYieldRequests {
         if (blockers.isEmpty()) { REQUESTS.remove(requester); return; }
         if (!REQUESTS.containsKey(requester) && REQUESTS.size() >= MAX_REQUESTS) return;
         REQUESTS.put(requester, new Request(requester.getUUID(), new WeakReference<>(requester), permission,
-                blockers, evidence.passage(), level.getGameTime()));
+                demand, blockers, evidence.passage(), level.getGameTime()));
     }
 
     /** The participant's own activity decides whether it can yield under its own exact permission. */

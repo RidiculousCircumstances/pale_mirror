@@ -164,7 +164,7 @@ public final class ResidentMealProcess {
                 assignment.ownerId(), portable ? ResidentMeal.Phase.CONSUME : ResidentMeal.Phase.MOVE, now,
                 Optional.empty(), Optional.empty(), Optional.empty(),
                 state.actorExecutions().next(residentId, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, claimId));
-        ResidentMealStarted started = new ResidentMealStarted(meal);
+        ResidentMealStarted started = new ResidentMealStarted(meal, source.clearingAccess());
         // A broken ownership/binding invariant must remain visible. Ordinary absence was
         // handled above; silently mapping every reducer failure to "no food" hid bugs.
         reduceStarted(state, residentId, started);
@@ -180,14 +180,17 @@ public final class ResidentMealProcess {
                 || !resident.settlementId().equals(meal.settlementId())
                 || state.humanPopulation().meals().containsKey(subject)
                 || state.actorMovements().containsKey(subject)
-                || !meal.portable() && (!ResidentMealServiceAccess.mayStart(state, meal.depotId(), subject)
-                    || !ServiceAccessCoordinator.mealClearingSurface(state, subject, meal.depotId()).equals(Optional.of(meal.clearingSurface())))
+                || !meal.portable() && !ResidentMealServiceAccess.mayStart(state, meal.depotId(), subject)
                 || state.humanPopulation().migration(subject) != null
                 || state.actorLocations().get(subject).condition().status() != ActorLifeStatus.ALIVE
                 || !HumanAssignmentProjection.compile(state).assignment(subject).ownerId()
                     .equals(meal.retainedWorkOwner())
-                || ResidentActivityCoordinator.assess(state, subject, meal.startedAtTick()).kind()
-                    != ResidentActivityChoice.Kind.EAT
+                || ResidentActivityCoordinator.choose(state.humanPopulation().schedule(resident.settlementId()),
+                    meal.startedAtTick(), state.humanPopulation().nutrition(subject),
+                    HumanAssignmentProjection.compile(state).assignment(subject), Optional.empty(),
+                    state.bootstrap().ruleset().residentLife(), ResidentWorkYield.assess(state,
+                        HumanAssignmentProjection.compile(state).assignment(subject)).ready(),
+                    resident.characteristics().effectiveMetabolismPermille(meal.startedAtTick())).kind() != ResidentActivityChoice.Kind.EAT
                 || meal.phase() != (meal.portable() ? ResidentMeal.Phase.CONSUME : ResidentMeal.Phase.MOVE)
                 || meal.waitReason().isPresent()
                 || state.humanPopulation().nutrition(subject).accrueThrough(meal.startedAtTick(),
@@ -196,15 +199,12 @@ public final class ResidentMealProcess {
             throw new IllegalArgumentException("meal start requires one hungry safely yielded living resident");
         if (!meal.portable() && ReferenceContainerCustody.blocksCanonicalUse(state, meal.depotId()))
             throw new IllegalArgumentException("meal source depot is unavailable");
-        var opportunity = ResidentMealOpportunity.find(state, subject, meal.startedAtTick()).orElseThrow(
-                () -> new IllegalArgumentException("meal has no executable registered portion"));
-        if (!opportunity.portion().equals(meal.portion()) || !opportunity.foodSource().equals(meal.source())
-                || !opportunity.clearingSurface().equals(meal.clearingSurface()))
-            throw new IllegalArgumentException("meal portion differs from current nutritional demand and stock");
-        var selected = opportunity.selection();
-        if (!selected.accountId().equals(meal.sourceAccountId())
-                || !selected.lotQuantities().equals(meal.portion().lotQuantities())
-                || !meal.portable() && state.inventory().fungibleResources().accounts().containsKey(meal.actorAccountId()))
+        ResidentMealOpportunity.requireSelected(state, meal);
+        if (!meal.portable()) ServiceAccessCoordinator.requireMealClearance(state, subject, meal.depotId(),
+                new ServiceClearanceTargets.Selection(meal.clearingSurface(), started.clearingAccess().orElseThrow()));
+        else if (!meal.clearingSurface().equals(state.actorLocations().get(subject).supportingSurface()))
+            throw new IllegalArgumentException("personal meal moved its retained consumption station");
+        if (!meal.portable() && state.inventory().fungibleResources().accounts().containsKey(meal.actorAccountId()))
             throw new IllegalArgumentException("meal start cannot replace its selected source or actor hand");
         ClaimAllocation claim = new ClaimAllocation(meal.claimId(), meal.residentId(),
                 meal.settlementId(), meal.portion().itemKind(), meal.portion().quantity(),

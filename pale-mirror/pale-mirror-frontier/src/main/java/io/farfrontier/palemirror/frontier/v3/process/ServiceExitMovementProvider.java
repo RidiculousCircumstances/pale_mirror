@@ -51,7 +51,7 @@ public final class ServiceExitMovementProvider implements ActorMovementProvider 
     @Override public List<SurfaceAnchor> route(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start) {
         validate(state, movement);
         var exit = exit(movement);
-        return KnownServiceExitNavigation.pathFrom(state, exit.settlementId(), exit.depotId(), movement.order(), start);
+        return KnownServiceExitNavigation.plannedPathFrom(state, exit.settlementId(), exit.depotId(), movement.order(), start);
     }
     @Override public List<SurfaceAnchor> coldSegment(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
         validate(state, movement);

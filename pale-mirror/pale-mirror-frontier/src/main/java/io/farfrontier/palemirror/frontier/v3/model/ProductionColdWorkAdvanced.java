@@ -10,11 +10,13 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 /** One COLD-owned exact worker route/work transition before the deferred physical output receipt. */
 public record ProductionColdWorkAdvanced(SubjectId jobId, int nextCursor, ProductionWorkProgress next,
         ActorExecutionId execution, BodyPosition expectedBody, int expectedCursor,
-        ProductionWorkProgress expectedProgress, long spatialRevision) implements FrontierPayload {
+        ProductionWorkProgress expectedProgress, long spatialRevision,
+        java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin> approach) implements FrontierPayload {
     public ProductionColdWorkAdvanced {
         Objects.requireNonNull(jobId, "production cold work job");
         Objects.requireNonNull(next, "production cold work progress");
         Objects.requireNonNull(execution); Objects.requireNonNull(expectedBody); Objects.requireNonNull(expectedProgress);
+        Objects.requireNonNull(approach, "production selected approach");
         if (nextCursor < 0 || expectedCursor < 0 || spatialRevision < 1
                 || execution.activityKind() != ActorActivityKind.PRODUCTION || !execution.activityOwnerId().equals(jobId))
             throw new IllegalArgumentException("production cold work has invalid cursor or foreign execution");

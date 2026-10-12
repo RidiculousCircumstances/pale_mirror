@@ -43,18 +43,19 @@ public final class MedicalTreatmentProcess {
                         && !state.actorMovements().containsKey(resident.id()))
                 .min(Comparator.comparingInt((ResidentProfile resident) -> resident.capability(HumanCapability.MEDICINE))
                         .reversed().thenComparing(ResidentProfile::id));
-        Optional<ExactItemStack> supply = state.inventory().items().values().stream()
-                .filter(item -> MedicalEvacuationStateSupport.FIRST_TREATMENT_SUPPLY.equals(item.itemKind()) && item.count() >= 1)
-                .filter(item -> item.economicOwnerId().equals(settlementId) && item.custody() instanceof InventoryCustody.ContainerSlot slot
-                        && slot.containerId().equals(FrontierWorldState.depotId(settlementId)))
-                .filter(item -> state.inventory().surfaces().get(FrontierWorldState.depotId(settlementId)).status() == ContainerSurfaceStatus.ACTIVE)
-                .min(Comparator.comparing(ExactItemStack::id));
         Optional<SettlementStructure> infirmary = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.INFIRMARY)
                 .filter(structure -> state.structureConditions().get(structure.id()) != StructureCondition.DESTROYED).min(Comparator.comparing(SettlementStructure::id));
+        if (patient.isEmpty() || medic.isEmpty() || infirmary.isEmpty()) return List.of();
+        Optional<ExactItemStack> supply = ResourceStorageSelection.exactSources(state, settlementId,
+                MedicalEvacuationStateSupport.FIRST_TREATMENT_SUPPLY, 1, new SurfaceAnchor(infirmary.orElseThrow().anchor()),
+                java.util.Set.of(ResourceStorageRole.WAREHOUSE)).stream()
+                .filter(item -> MedicalEvacuationStateSupport.supplyAvailable(state,
+                        ((InventoryCustody.ContainerSlot) item.custody()).containerId())).findFirst();
         if (patient.isEmpty() || medic.isEmpty() || supply.isEmpty() || infirmary.isEmpty()) return List.of();
         SubjectId id = new SubjectId("medical:" + settlementId.value().substring("settlement:".length()) + "-" + ordinal);
         MedicalEvacuationOperation operation = new MedicalEvacuationOperation(id, settlementId, patient.orElseThrow().id(), infirmary.orElseThrow().id(),
                 MedicalEvacuationTeam.forOperation(id, settlementId, List.of(medic.orElseThrow().id())), supply.orElseThrow().id(),
+                ((InventoryCustody.ContainerSlot) supply.orElseThrow().custody()).containerId(),
                 new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:" + id.value().replace(':', '-') + "-consume"), MedicalEvacuationStatus.PREPARED, -1L);
         PhysicalIntent intent = new PhysicalIntent(operation.consumptionIntentId(), PhysicalIntentKind.EXACT_ITEM_CONSUMPTION, PhysicalIntentStatus.PREPARED,
                 id, PhysicalIntentRoleBinding.medicalTreatmentConsumption(id, operation.supplyItemId()), new FixedPosition(FixedScalar.whole(infirmary.orElseThrow().anchor().x()),
@@ -90,13 +91,120 @@ public final class MedicalTreatmentProcess {
                 yield List.of(physical, new ProposedEvent(operation.settlementId(),
                         new MedicalTreatmentTransition(operation.id(), MedicalEvacuationStatus.UNKNOWN_AFTER_RESTART, MedicalExecutionAuthority.current(state, operation))));
             }
-            default -> List.of(physical);
+            case CONFLICTED -> {
+                if (intent.status() != PhysicalIntentStatus.PREPARED
+                        || operation.status() != MedicalEvacuationStatus.PREPARED && operation.status() != MedicalEvacuationStatus.BLOCKED)
+                    throw new IllegalArgumentException("only unbegun medical consumption can be cancelled without an effect receipt");
+                if (operation.active()) requireCancellableSource(state, operation);
+                yield operation.active() ? List.of(physical, new ProposedEvent(operation.settlementId(),
+                        new MedicalTreatmentTransition(operation.id(), MedicalEvacuationStatus.BLOCKED,
+                                MedicalExecutionAuthority.current(state, operation)))) : List.of(physical);
+            }
+            case PREPARED -> throw new IllegalArgumentException("medical consumption cannot transition back to prepared");
         };
+    }
+
+    static boolean hasSupplyCommitment(FrontierWorldState state, SubjectId item) {
+        return state.humanPopulation().medicalOperations().values().stream().anyMatch(operation -> {
+            if (!operation.supplyItemId().equals(item)) return false;
+            var intent = state.physicalIntents().get(operation.consumptionIntentId());
+            if (intent != null) MedicalPhysicalAuthority.requireIntent(operation, intent);
+            return operation.active() || intent != null && intent.status() != PhysicalIntentStatus.CONFIRMED;
+        });
+    }
+
+    static List<ProposedEvent> retirePreEffectForDeath(FrontierWorldState before, FrontierWorldState after, SubjectId actor,
+                                                      io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command) {
+        var execution = before.actorExecutions().current(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEDICAL_TREATMENT).get(actor);
+        if (execution == null) return List.of();
+        var operation = after.humanPopulation().medicalOperations().get(execution.activityOwnerId());
+        if (operation == null || operation.status() != MedicalEvacuationStatus.BLOCKED
+                || !MedicalExecutionAuthority.participants(operation).contains(actor))
+            throw new IllegalArgumentException("medical death follow-up lost its declared blocked care owner");
+        var intent = after.physicalIntents().get(operation.consumptionIntentId());
+        if (intent == null) throw new IllegalArgumentException("medical death follow-up lost its exact stock intent");
+        MedicalPhysicalAuthority.requireIntent(operation, intent);
+        if (intent.status() != PhysicalIntentStatus.PREPARED) return List.of();
+        var transition = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFLICTED, Optional.empty());
+        var plan = FrontierWorldProcessCatalog.physicalLifecycles().planTransition(after, command, intent, transition);
+        if (!(plan instanceof io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Accepted accepted))
+            throw new IllegalArgumentException("medical casualty cannot retire its exact unbegun stock effect: " + plan);
+        return accepted.events();
+    }
+
+    static List<ProposedEvent> planSupplyDeparture(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command,
+                                                  SubjectId item, ProposedEvent observation) {
+        var events = new java.util.ArrayList<ProposedEvent>();
+        for (var operation : state.humanPopulation().medicalOperations().values().stream()
+                .filter(value -> value.supplyItemId().equals(item)).sorted(Comparator.comparing(MedicalEvacuationOperation::id)).toList()) {
+            var intent = state.physicalIntents().get(operation.consumptionIntentId());
+            if (intent == null) {
+                if (operation.active()) throw new IllegalArgumentException("active medical stock commitment lost its declared consumption intent");
+                continue;
+            }
+            MedicalPhysicalAuthority.requireIntent(operation, intent);
+            if (intent.status() == PhysicalIntentStatus.CONFIRMED || intent.status() == PhysicalIntentStatus.CONFLICTED) continue;
+            requireCancellableSource(state, operation);
+            var transition = new PhysicalIntentTransition(intent.id(), PhysicalIntentStatus.CONFLICTED, Optional.empty());
+            var plan = FrontierWorldProcessCatalog.physicalLifecycles().planTransition(state, command, intent, transition);
+            if (!(plan instanceof io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Accepted accepted))
+                throw new IllegalArgumentException("medical source departure cannot retire its exact prepared effect: " + plan);
+            events.addAll(accepted.events());
+        }
+        events.add(observation); // The exact owner/effect are retired before its input disappears.
+        return List.copyOf(events);
+    }
+
+    static FrontierWorldState observeSupplyDeparture(FrontierWorldState state, SubjectId item,
+                                                      InventoryCustody source, ExactInventory inventory) {
+        for (var operation : state.humanPopulation().medicalOperations().values().stream()
+                .filter(value -> value.supplyItemId().equals(item)).sorted(Comparator.comparing(MedicalEvacuationOperation::id)).toList()) {
+            var intent = state.physicalIntents().get(operation.consumptionIntentId());
+            if (operation.active() || intent != null && intent.status() != PhysicalIntentStatus.CONFLICTED
+                    && intent.status() != PhysicalIntentStatus.CONFIRMED)
+                throw new IllegalArgumentException("medical source departure lacks the preceding exact owner/effect retirement");
+            if (intent != null && intent.status() == PhysicalIntentStatus.CONFLICTED)
+                state = FrontierWorldProcessCatalog.physicalLifecycles().compactCancelledBeforeEffect(state, intent);
+        }
+        return state.withInventory(inventory);
+    }
+
+    static boolean mayCompactConsumption(FrontierWorldState state, PhysicalIntent intent) {
+        if (PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery().mayCompact(state, intent)) return true;
+        var operation = state.humanPopulation().medicalOperations().get(intent.causeSubjectId());
+        return intent.status() == PhysicalIntentStatus.CONFLICTED && operation != null
+                && operation.status() == MedicalEvacuationStatus.BLOCKED
+                && PhysicalIntentResolvedRetentionPolicy.cancelledBeforeEffect().mayCompact(state, intent);
+    }
+
+    private static void requireCancellableSource(FrontierWorldState state, MedicalEvacuationOperation operation) {
+        if (MedicalPhysicalAuthority.pendingForContainer(state, operation.supplyContainerId()))
+            throw new IllegalArgumentException("medical source has an unresolved physical effect or presentation boundary");
+        var intent = state.physicalIntents().get(operation.consumptionIntentId());
+        if (intent == null || intent.status() != PhysicalIntentStatus.PREPARED)
+            throw new IllegalArgumentException("medical source cancellation requires its exact unbegun effect");
+    }
+
+    private static FrontierWorldState quiesceBeforeBlock(FrontierWorldState state, MedicalEvacuationOperation operation) {
+        var scenes = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isMedicalTreatment)
+                .filter(lease -> FrontierSceneBehaviors.medicalTreatment(lease).operationId().equals(operation.id()))
+                .filter(lease -> lease.status() != SceneLeaseStatus.CLOSED).toList();
+        if (scenes.size() > 1) throw new IllegalArgumentException("medical cancellation has competing presentation scopes");
+        if (scenes.isEmpty()) return state;
+        var lease = scenes.getFirst();
+        if (operation.status() == MedicalEvacuationStatus.PREPARED && FrontierSceneLeaseStateSupport.canAbortPrepared(state, lease))
+            return FrontierSceneLeaseStateSupport.abortPrepared(state, lease.id());
+        return lease.status() == SceneLeaseStatus.HOT ? state.transitionSceneLease(lease.id(), SceneLeaseStatus.DRAINING) : state;
     }
 
     public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, MedicalTreatmentStarted started) {
         MedicalEvacuationOperation operation = started.operation();
         if (!subject.equals(operation.settlementId())) throw new IllegalArgumentException("medical treatment start lacks settlement owner");
+        if (operation.status() != MedicalEvacuationStatus.PREPARED
+                || !ResourceStorageSelection.permits(state.inventory(), operation.supplyContainerId(), operation.settlementId(),
+                    MedicalEvacuationStateSupport.FIRST_TREATMENT_SUPPLY, java.util.Set.of(ResourceStorageRole.WAREHOUSE))
+                || !MedicalEvacuationStateSupport.supplyAvailable(state, operation.supplyContainerId()))
+            throw new IllegalArgumentException("medical treatment admission has no eligible selected warehouse supply");
         MedicalEvacuationStateSupport.validate(state.bootstrap(), state.humanPopulation().startMedicalOperation(operation), state.actorLocations(),
                 state.structureConditions(), state.inventory(), state.physicalIntents());
         return ActorExecutionComposition.LIFECYCLE.prepareVacantGroup(state, started.executions()).commit(state,
@@ -116,8 +224,13 @@ public final class MedicalTreatmentProcess {
             throw new IllegalArgumentException("medical treatment lifecycle transition is invalid");
         }
         var population = state.humanPopulation().transitionMedicalOperation(operation.id(), transition.status(), atTick);
-        return state.withChanges(FrontierWorldStateUpdate.begin().humanPopulation(population).actorExecutions(
+        if (transition.status() == MedicalEvacuationStatus.BLOCKED)
+            state = quiesceBeforeBlock(state, operation);
+        var reduced = state.withChanges(FrontierWorldStateUpdate.begin().humanPopulation(population).actorExecutions(
                 population.medicalOperations().get(operation.id()).active() ? state.actorExecutions() : MedicalExecutionAuthority.retired(state, operation)));
+        var intent = reduced.physicalIntents().get(operation.consumptionIntentId());
+        return intent != null && intent.status() == PhysicalIntentStatus.CONFLICTED && mayCompactConsumption(reduced, intent)
+                ? FrontierWorldProcessCatalog.physicalLifecycles().compactCancelledBeforeEffect(reduced, intent) : reduced;
     }
 
     public static MedicalEvacuationOperation operationForIntent(FrontierWorldState state, PhysicalIntent intent) {

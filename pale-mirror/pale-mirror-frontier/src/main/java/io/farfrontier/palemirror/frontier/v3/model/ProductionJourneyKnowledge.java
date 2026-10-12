@@ -26,15 +26,20 @@ public final class ProductionJourneyKnowledge {
         return KnownPedestrianRouteKnowledge.forSettlement(state, job.settlementId(), List.of(
                 new KnownPedestrianRouteKnowledge.Passage(workshop, KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS)));
     }
-    public static StationApproachState checkpoint(FrontierWorldState state, ProductionJob job, SurfaceAnchor observed) {
-        var order = new MovementOrder(job.id(), job.workerId(), 1L, Math.incrementExact(job.spatial().revision()),
+    public static StationApproachState checkpoint(ProductionJob job, SurfaceAnchor observed) {
+        return job.spatial().observedAt(observed);
+    }
+    public static MovementOrder order(ProductionJob job) {
+        return new MovementOrder(job.id(), job.workerId(), 1L, job.spatial().revision(),
                 List.of(target(job)), TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
+    }
+    public static Optional<TraversalRejoin> approach(FrontierWorldState state, ProductionJob job) {
         try {
-            var path = view(state, job).path(observed, order);
-            return new StationApproachState(order.goalRevision(), Optional.of(new TraversalRejoin(path, 0)), Optional.empty());
+            return StationApproachNavigation.plan(view(state, job), job.spatial(), order(job));
         } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
-            // Unknown/damaged support is a retained non-advancing owner obligation, not body corruption.
-            return new StationApproachState(order.goalRevision(), Optional.empty(), Optional.of(observed));
+            if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
+                throw unavailable;
+            return Optional.empty();
         }
     }
     /** Scope is presentation only: its return may occur while the same physical body is still held. */
@@ -49,7 +54,7 @@ public final class ProductionJourneyKnowledge {
         var retained = job.spatial().current(job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()));
         if (retained.equals(actor.supportingSurface())) return state;
         var jobs = new LinkedHashMap<>(state.productionJobs());
-        jobs.put(job.id(), job.withSpatial(checkpoint(state, job, actor.supportingSurface())));
+        jobs.put(job.id(), job.withSpatial(checkpoint(job, actor.supportingSurface())));
         return state.withChanges(FrontierWorldStateUpdate.begin().productionJobs(jobs));
     }
 
@@ -66,7 +71,7 @@ public final class ProductionJourneyKnowledge {
         if (current.equals(request.observedPosition().supportingSurface()))
             return new ActorActivityBodyCheckpoint.Acknowledgement(request, update);
         var jobs = new LinkedHashMap<>(state.productionJobs());
-        jobs.put(job.id(), job.withSpatial(checkpoint(state, job, request.observedPosition().supportingSurface())));
+        jobs.put(job.id(), job.withSpatial(checkpoint(job, request.observedPosition().supportingSurface())));
         return new ActorActivityBodyCheckpoint.Acknowledgement(request, update.productionJobs(jobs));
     }
 }

@@ -10,6 +10,46 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Selection only: no claim of physical writes, chest persistence or native recovery. */
 class FrontierV3ExactItemConsumptionSelectionTest {
+    @Test void physicalTargetUsesTheRetainedWarehouseAndCurrentExactSlotAfterRecovery() {
+        var state = state();
+        var home = state.bootstrap().settlements().getFirst();
+        var depot = FrontierWorldState.depotId(home.id());
+        var container = new SubjectId("container:medical-consumption-warehouse");
+        var position = home.anchor().offset(7, 0, 7);
+        var station = new SurfaceAnchor(position.offset(-1, -1, 0));
+        var endpoint = new ShipmentEndpoint.Storage(home.id(), container, station, java.util.Optional.empty(), station);
+        var policy = new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 5, ResourceStorageRole.WAREHOUSE);
+        state = new ResourceStorageDeclared(new ContainerRecord(container, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE,
+                java.util.Optional.empty(), java.util.Optional.of(policy)), position).apply(state, home.id());
+        var supply = new SubjectId("item:medical-warehouse-remedy");
+        state = state.withInventory(state.inventory().withSurfaceStatus(container, ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(container, ContainerSurfaceStatus.ACTIVE).withSurfaceStatus(depot, ContainerSurfaceStatus.CONFLICT)
+                .store(new ExactItemStack(supply, home.id(), MedicalEvacuationStateSupport.FIRST_TREATMENT_SUPPLY,
+                        3, new InventoryCustody.ContainerSlot(container, 19))));
+        var population = state.humanPopulation();
+        var patient = home.residents().stream().map(Resident::id)
+                .filter(id -> population.resident(id).capability(HumanCapability.MEDICINE) < 50).findFirst().orElseThrow();
+        state = state.withHumanPopulation(population.transitionHealth(patient, ResidentHealthStatus.EXPOSED, 100)
+                .transitionHealth(patient, ResidentHealthStatus.INFECTED, 200));
+        var events = io.farfrontier.palemirror.frontier.v3.process.MedicalTreatmentProcess.planStart(state, home.id(), 1);
+        var started = events.stream().map(ProposedEvent::payload).filter(MedicalTreatmentStarted.class::isInstance)
+                .map(MedicalTreatmentStarted.class::cast).findFirst().orElseThrow();
+        var intent = events.stream().map(ProposedEvent::payload).filter(PhysicalIntentPrepared.class::isInstance)
+                .map(PhysicalIntentPrepared.class::cast).findFirst().orElseThrow().intent();
+        state = io.farfrontier.palemirror.frontier.v3.process.MedicalTreatmentProcess.reduceStarted(state, home.id(), started);
+        state = io.farfrontier.palemirror.frontier.v3.process.PhysicalIntentLifecycleFixture.prepare(state, home.id(), intent);
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        var target = FrontierV3ExactItemConsumptionExecutor.target(codec.decode(codec.encode(state)), intent);
+        assertNotNull(target);
+        assertEquals(container, target.containerId());
+        assertEquals(new net.minecraft.core.BlockPos(position.x(), position.y(), position.z()), target.chestPosition());
+        assertEquals(19, target.slot());
+        assertEquals(1, target.count());
+        assertEquals(3, target.item().count(), "a one-unit dose does not consume the whole exact stack");
+        var conflicted = state.withInventory(state.inventory().withSurfaceStatus(container, ContainerSurfaceStatus.CONFLICT));
+        assertNull(FrontierV3ExactItemConsumptionExecutor.target(conflicted, intent));
+    }
+
     @Test void unresolvedHeadCannotStarveIndependentPreparedConsumption() {
         PhysicalIntent first = growth("a");
         first = first.withRecoveryUnknown(PhysicalIntentRecoveryDiagnosticProducer.HIVE_GROWTH.stamp(first));

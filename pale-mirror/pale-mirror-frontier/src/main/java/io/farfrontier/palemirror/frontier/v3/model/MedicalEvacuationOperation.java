@@ -15,7 +15,7 @@ import java.util.Objects;
  */
 public record MedicalEvacuationOperation(SubjectId id, SubjectId settlementId, SubjectId patientId,
                                          SubjectId infirmaryId, MedicalEvacuationTeam team,
-                                         SubjectId supplyItemId, PhysicalIntentId consumptionIntentId,
+                                         SubjectId supplyItemId, SubjectId supplyContainerId, PhysicalIntentId consumptionIntentId,
                                          MedicalEvacuationStatus status, long terminalAtTick) {
     /** A bounded recent receipt tail; live/unknown work is never compacted. */
     public static final int RETAINED_COMPLETED = 64;
@@ -28,6 +28,7 @@ public record MedicalEvacuationOperation(SubjectId id, SubjectId settlementId, S
         Objects.requireNonNull(infirmaryId, "medical operation infirmary");
         Objects.requireNonNull(team, "medical operation team");
         Objects.requireNonNull(supplyItemId, "medical operation supply");
+        Objects.requireNonNull(supplyContainerId, "medical operation selected supply container");
         Objects.requireNonNull(consumptionIntentId, "medical operation consumption intent");
         Objects.requireNonNull(status, "medical operation status");
         if (!id.value().startsWith("medical:") || !team.ownerId().equals(id) || !team.settlementId().equals(settlementId)
@@ -50,7 +51,7 @@ public record MedicalEvacuationOperation(SubjectId id, SubjectId settlementId, S
     public boolean compactable() { return status == MedicalEvacuationStatus.COMPLETED || status == MedicalEvacuationStatus.BLOCKED; }
 
     public MedicalEvacuationOperation withStatus(MedicalEvacuationStatus next, long atTick) {
-        return new MedicalEvacuationOperation(id, settlementId, patientId, infirmaryId, team, supplyItemId, consumptionIntentId, next,
+        return new MedicalEvacuationOperation(id, settlementId, patientId, infirmaryId, team, supplyItemId, supplyContainerId, consumptionIntentId, next,
                 next == MedicalEvacuationStatus.COMPLETED || next == MedicalEvacuationStatus.BLOCKED ? atTick : -1L);
     }
 }

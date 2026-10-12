@@ -47,6 +47,7 @@ final class PhysicalIntentPayloadCodec {
         output.writeByte(PhysicalIntentLifecycleOwner.CODEC_VERSION); FrontierWorldPayloadCodecs.writeString(output, intent.lifecycleOwner().stableId());
         output.writeBoolean(intent.diagnostic().isPresent());
         if (intent.diagnostic().isPresent()) writeDiagnostic(output, intent.diagnostic().orElseThrow());
+        EquipmentServiceRequestCodec.write(output, intent.equipmentServiceRequest());
     }
 
     static PhysicalIntent read(DataInputStream input) throws IOException {
@@ -70,9 +71,10 @@ final class PhysicalIntentPayloadCodec {
         }
         PhysicalIntentLifecycleOwner lifecycleOwner = PhysicalIntentLifecycleOwner.fromWire(input.readUnsignedByte(), FrontierWorldPayloadCodecs.readString(input));
         Optional<DiagnosticTuple> diagnostic = input.readBoolean() ? Optional.of(readDiagnostic(input)) : Optional.empty();
+        var serviceRequest = EquipmentServiceRequestCodec.read(input);
         return new PhysicalIntent(id, FrontierWireTags.require(PhysicalIntentKind.class, kind), FrontierWireTags.require(PhysicalIntentStatus.class, status),
                 cause.value(), PhysicalIntentRoleBinding.decode(schema, roles, scene), origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target, semanticTarget,
-                lifecycleOwner, diagnostic);
+                lifecycleOwner, diagnostic, serviceRequest);
     }
     private static void writeDiagnostic(DataOutputStream output, DiagnosticTuple diagnostic) throws IOException {
         output.writeShort(diagnostic.reason().wireTag()); output.writeByte(diagnostic.category().wireTag());

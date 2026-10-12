@@ -21,9 +21,11 @@ class PatrolTravelTest {
     void unevenNonFlatRejoinRetainsOneInspectionEdgeUntilBothMembersReachTheirCheckpoints() {
         var leaderRoute = topology("rejoin-leader", List.of(new BlockPosition(0, 64, 0), new BlockPosition(1, 65, 0), new BlockPosition(2, 65, 0)));
         var scoutRoute = topology("rejoin-scout", List.of(new BlockPosition(-1, 64, 0), new BlockPosition(0, 64, 0), new BlockPosition(1, 65, 0)));
-        var leader = new PatrolTravel.Member(leaderRoute, 0).withRejoin(new io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin(
+        var leader = new PatrolTravel.Member(leaderRoute, 0).observedAt(new SurfaceAnchor(new BlockPosition(1, 65, 0)))
+                .withPlannedApproach(new io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin(
                 List.of(new SurfaceAnchor(new BlockPosition(1, 65, 0))), 0));
-        var scout = new PatrolTravel.Member(scoutRoute, 0).withRejoin(new io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin(
+        var scout = new PatrolTravel.Member(scoutRoute, 0).observedAt(new SurfaceAnchor(new BlockPosition(-2, 64, 0)))
+                .withPlannedApproach(new io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin(
                 List.of(new SurfaceAnchor(new BlockPosition(-2, 64, 0)), new SurfaceAnchor(new BlockPosition(-1, 64, 0)),
                         new SurfaceAnchor(new BlockPosition(0, 64, 0))), 0));
         var travel = new PatrolTravel(LEADER, leaderRoute, Map.of(LEADER, leader, SCOUT, scout));

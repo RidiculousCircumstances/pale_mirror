@@ -35,40 +35,27 @@ public final class KnownServiceExitNavigation {
                 start, knowledge, excluded);
     }
 
-    public static List<SurfaceAnchor> path(FrontierWorldState state, SubjectId settlementId,
-                                           SubjectId depotId, MovementOrder order) {
-        ActorLocation actor = state.actorLocations().get(order.actorId());
-        if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
-            throw new IllegalArgumentException("service exit has no living actor body");
-        return pathFrom(state, settlementId, depotId, order, actor.supportingSurface());
-    }
-
     /** Any supported exit clears access; neither parking nor return-to-work is part of service. */
-    public static List<SurfaceAnchor> clearancePathFrom(FrontierWorldState state, SubjectId settlementId,
-            SubjectId depotId, SubjectId ownerId, SubjectId actorId, int phase, long generation, SurfaceAnchor start) {
-        return clearancePathFrom(state, settlementId, depotId, ownerId, actorId, phase, generation, start, false, false);
-    }
-
     public static List<SurfaceAnchor> plannedClearancePathFrom(FrontierWorldState state, SubjectId settlementId,
             SubjectId depotId, SubjectId ownerId, SubjectId actorId, int phase, long generation, SurfaceAnchor start) {
-        return clearancePathFrom(state, settlementId, depotId, ownerId, actorId, phase, generation, start, true, false);
+        return clearancePathFrom(state, settlementId, depotId, ownerId, actorId, phase, generation, start, false);
     }
 
     public static List<SurfaceAnchor> retainedClearancePathFrom(FrontierWorldState state, SubjectId settlementId,
             SubjectId depotId, SubjectId ownerId, SubjectId actorId, int phase, long generation, SurfaceAnchor start) {
-        return clearancePathFrom(state, settlementId, depotId, ownerId, actorId, phase, generation, start, true, true);
+        return clearancePathFrom(state, settlementId, depotId, ownerId, actorId, phase, generation, start, true);
     }
 
     private static List<SurfaceAnchor> clearancePathFrom(FrontierWorldState state, SubjectId settlementId,
             SubjectId depotId, SubjectId ownerId, SubjectId actorId, int phase, long generation, SurfaceAnchor start,
-            boolean deferred, boolean retainedOnly) {
+            boolean retainedOnly) {
         var stations = exitStations(state, settlementId, depotId, actorId, start);
         for (int offset = 0; offset < stations.size(); offset += MovementOrder.MAX_LEGAL_STATIONS) {
             var batch = stations.subList(offset, Math.min(stations.size(), offset + MovementOrder.MAX_LEGAL_STATIONS));
             var order = new MovementOrder(ownerId, actorId, phase, generation, batch,
                     TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
             try {
-                var route = pathFrom(state, settlementId, depotId, order, start, deferred, retainedOnly);
+                var route = pathFrom(state, settlementId, depotId, order, start, retainedOnly);
                 var boundary = ServiceAccessCoordinator.boundary(state, depotId);
                 for (int index = 0; index < route.size(); index++) {
                     if (boundary.cleared(route.get(index).standingBody()))
@@ -86,19 +73,18 @@ public final class KnownServiceExitNavigation {
                 "no reachable supported service exit");
     }
 
-    public static List<SurfaceAnchor> pathFrom(FrontierWorldState state, SubjectId settlementId,
-                                               SubjectId depotId, MovementOrder order,
-                                               SurfaceAnchor start) {
-        return pathFrom(state, settlementId, depotId, order, start, false, false);
-    }
-
     public static List<SurfaceAnchor> plannedPathFrom(FrontierWorldState state, SubjectId settlementId,
             SubjectId depotId, MovementOrder order, SurfaceAnchor start) {
-        return pathFrom(state, settlementId, depotId, order, start, true, false);
+        return pathFrom(state, settlementId, depotId, order, start, false);
+    }
+
+    public static List<SurfaceAnchor> retainedPathFrom(FrontierWorldState state, SubjectId settlementId,
+            SubjectId depotId, MovementOrder order, SurfaceAnchor start) {
+        return pathFrom(state, settlementId, depotId, order, start, true);
     }
 
     private static List<SurfaceAnchor> pathFrom(FrontierWorldState state, SubjectId settlementId,
-            SubjectId depotId, MovementOrder order, SurfaceAnchor start, boolean deferred, boolean retainedOnly) {
+            SubjectId depotId, MovementOrder order, SurfaceAnchor start, boolean retainedOnly) {
         Objects.requireNonNull(state, "service exit state");
         Objects.requireNonNull(order, "service exit movement order");
         Objects.requireNonNull(start, "service exit start");
@@ -120,6 +106,6 @@ public final class KnownServiceExitNavigation {
         if (order.legalStations().contains(start)) return List.of(start);
         var knowledge = ServiceBoundaryComposition.knowledge(state, point.identity());
         return retainedOnly ? knowledge.retainedPath(start, order)
-                : deferred ? knowledge.plannedPath(start, order) : knowledge.path(start, order);
+                : knowledge.plannedPath(start, order);
     }
 }

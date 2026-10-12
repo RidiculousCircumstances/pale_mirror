@@ -49,7 +49,16 @@ class UnitGroupTransportTest {
         assertEquals(loadedAt + 1, engine.checkpoint().schedules().stream()
                 .filter(action -> action.subject().equals(missionId)).findFirst().orElseThrow().dueAt().ticks());
         var waits = new PedestrianPlanningWakeIndex();
-        try (var planner = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(planner);
+        boolean[] replaying = {false};
+        try (var planner = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(new PedestrianRoutePlanner() {
+            @Override public PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor origin, SurfaceAnchor target) {
+                assertFalse(replaying[0], "departure replay must validate retained geometry, not request a route");
+                return planner.query(geometry, origin, target);
+            }
+            @Override public Optional<PedestrianRouteResult> peek(PedestrianRouteGeometry geometry, SurfaceAnchor origin, SurfaceAnchor target) {
+                return planner.peek(geometry, origin, target);
+            }
+        });
                 var waitBinding = PedestrianPlanningContinuations.bind(waits)) {
             // Binding an empty asynchronous planner invalidates the synchronous fixture's
             // route cache. The current provisioning contract requires both trip estimates
@@ -64,6 +73,13 @@ class UnitGroupTransportTest {
                     TransportMissionProcess.progress(missionId, loadedAt + 1), loadedAt + 1);
             assertTrue(departure.stream().anyMatch(event -> event.payload() instanceof TransportMissionAdvanced advanced
                     && advanced.next() == TransportMission.Stage.OUTBOUND), () -> "actual departure plan: " + departure);
+            var accepted = departure.stream().map(ProposedEvent::payload).filter(TransportMissionAdvanced.class::isInstance)
+                    .map(TransportMissionAdvanced.class::cast).findFirst().orElseThrow();
+            var payloads = FrontierWorldRuntimeDefinition.payloadCodecs();
+            var decoded = (TransportMissionAdvanced) payloads.decode(accepted.type(), payloads.encode(accepted));
+            assertEquals(accepted, decoded); assertTrue(decoded.departure().isPresent());
+            var image = new FrontierWorldStateCodec();
+            var beforeDeparture = image.encode(engine.canonicalState().state());
             var result = engine.advanceTo(new SimInstant(loadedAt + 2), new WorkBudget(128, 1024));
             assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
             var state = engine.canonicalState().state(); var group = state.unitGroups().groups().get(groupId);
@@ -128,6 +144,19 @@ class UnitGroupTransportTest {
             assertInstanceOf(CommandResult.Rejected.class, engine.submit(new FrontierCommand(FrontierCommand.SCHEMA_VERSION,
                     staleId, after.worldId(), after.revision(), after.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR,
                     CauseChain.root(staleId), notification, Optional.of(new EngineScheduleBinding(after.revision(), expected)))));
+            // Hydration deliberately starts a fresh geometry epoch. Check replay after
+            // the queue-wake exercise, without invalidating its currently warmed search.
+            var recovered = image.decode(beforeDeparture);
+            replaying[0] = true;
+            var admitted = TransportMissionProcess.advance(recovered, missionId, decoded, loadedAt + 1);
+            assertEquals(TransportMission.Stage.OUTBOUND, admitted.shipments().missions().get(missionId).stage());
+            assertEquals(recovered.inventory(), admitted.inventory()); assertEquals(recovered.actorLocations(), admitted.actorLocations());
+            assertThrows(IllegalArgumentException.class, () -> TransportMissionProcess.advance(recovered, missionId,
+                    new TransportMissionAdvanced(missionId, decoded.expectedRevision(), TransportMission.Stage.OUTBOUND), loadedAt + 1));
+            var proof = decoded.departure().orElseThrow();
+            var forged = new io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionJourneyProof(proof.returning(), proof.outward());
+            assertThrows(IllegalArgumentException.class, () -> TransportMissionProcess.advance(recovered, missionId,
+                    new TransportMissionAdvanced(missionId, decoded.expectedRevision(), TransportMission.Stage.OUTBOUND, Optional.of(forged)), loadedAt + 1));
         }
     }
     @Test void formationDeliveryPaymentReturnAndRetirementSurviveAnInFlightCheckpoint() {

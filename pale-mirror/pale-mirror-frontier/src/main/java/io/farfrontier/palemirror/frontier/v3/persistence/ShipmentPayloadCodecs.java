@@ -12,7 +12,13 @@ final class ShipmentPayloadCodecs {
                 codec("frontier.shipment_storage_retargeted", (out, p) -> {
                     var value = (ShipmentStorageRetargeted) p; out.writeUTF(value.shipmentId().value()); out.writeLong(value.expectedRevision());
                     ShipmentStateCodec.endpoint(out, value.destination());
-                }, in -> new ShipmentStorageRetargeted(new SubjectId(in.readUTF()), in.readLong(), ShipmentStateCodec.endpoint(in))),
+                    ActorExecutionStateCodec.writeId(out, value.execution());
+                    FrontierWorldStateCodec.writePosition(out, value.origin().support()); PedestrianRouteReceiptCodec.write(out, value.route());
+                }, in -> {
+                    var id = new SubjectId(in.readUTF()); long revision = in.readLong(); var destination = ShipmentStateCodec.endpoint(in);
+                    return new ShipmentStorageRetargeted(id, revision, ActorExecutionStateCodec.readId(in),
+                            new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)), destination, PedestrianRouteReceiptCodec.read(in));
+                }),
                 codec("frontier.internal_shipment_dispatched", (out, p) -> {
                     var v = (InternalShipmentDispatched) p; ShipmentStateCodec.writeShipment(out, v.shipment());
                     out.writeUTF(v.claim().id().value()); out.writeUTF(v.claim().claimantId().value()); out.writeUTF(v.claim().economicOwnerId().value());

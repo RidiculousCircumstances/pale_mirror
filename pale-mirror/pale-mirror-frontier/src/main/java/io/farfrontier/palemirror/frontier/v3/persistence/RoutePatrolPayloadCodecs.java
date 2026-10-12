@@ -25,6 +25,28 @@ import java.util.UUID;
 final class RoutePatrolPayloadCodecs {
     private static final int LEASE_MARKER = 0xffe0;
     private RoutePatrolPayloadCodecs() { }
+    static PayloadCodec spatialPlanned() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.route_patrol_spatial_planned"; }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+            var selected = (RoutePatrolSpatialPlanned) payload; subject(output, selected.taskId());
+            PatrolFormationStepCodec.write(output, selected.predecessor()); output.writeByte(selected.approaches().size());
+            for (var actor : selected.approaches().keySet().stream().sorted().toList()) {
+                subject(output, actor); TraversalRejoinCodec.write(output, Optional.of(selected.approaches().get(actor)));
+            }
+            ActorExecutionStateCodec.writeGroup(output, selected.executions());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> {
+            var task = subject(input); var predecessor = PatrolFormationStepCodec.read(input);
+            int count = input.readUnsignedByte();
+            if (count < 1 || count > PatrolTravel.MAX_MEMBERS) throw new IOException("invalid selected patrol approach count");
+            var approaches = new LinkedHashMap<SubjectId, io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin>();
+            for (int index = 0; index < count; index++) {
+                var actor = subject(input); var path = TraversalRejoinCodec.read(input).orElseThrow();
+                if (approaches.putIfAbsent(actor, path) != null) throw new IOException("duplicate selected patrol member");
+            }
+            return new RoutePatrolSpatialPlanned(task, predecessor, approaches, ActorExecutionStateCodec.readGroup(input));
+        }); }
+    }; }
     static PayloadCodec started() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_patrol_started"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {

@@ -23,7 +23,9 @@ final class MedicalTreatmentPayloadCodecs {
                 FrontierWorldPayloadCodecs.writeSubject(output, operation.team().id()); FrontierWorldPayloadCodecs.writeSubject(output, operation.team().leaderId());
                 FrontierWorldStateCodec.writeCount(output, operation.team().memberIds().size());
                 for (SubjectId member : operation.team().memberIds()) FrontierWorldPayloadCodecs.writeSubject(output, member);
-                FrontierWorldPayloadCodecs.writeSubject(output, operation.supplyItemId()); FrontierWorldPayloadCodecs.writeString(output, operation.consumptionIntentId().value());
+                FrontierWorldPayloadCodecs.writeSubject(output, operation.supplyItemId());
+                FrontierWorldPayloadCodecs.writeSubject(output, operation.supplyContainerId());
+                FrontierWorldPayloadCodecs.writeString(output, operation.consumptionIntentId().value());
                 output.writeByte(operation.status().wireTag());
                 ActorExecutionStateCodec.writeGroup(output, ((MedicalTreatmentStarted) payload).executions());
             }); }
@@ -33,11 +35,13 @@ final class MedicalTreatmentPayloadCodecs {
                 SubjectId teamId = FrontierWorldPayloadCodecs.readSubject(input).value(); SubjectId leader = FrontierWorldPayloadCodecs.readSubject(input).value();
                 List<SubjectId> members = new ArrayList<>();
                 for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) members.add(FrontierWorldPayloadCodecs.readSubject(input).value());
-                SubjectId supply = FrontierWorldPayloadCodecs.readSubject(input).value(); PhysicalIntentId intent = new PhysicalIntentId(FrontierWorldPayloadCodecs.readString(input));
+                SubjectId supply = FrontierWorldPayloadCodecs.readSubject(input).value();
+                SubjectId supplyContainer = FrontierWorldPayloadCodecs.readSubject(input).value();
+                PhysicalIntentId intent = new PhysicalIntentId(FrontierWorldPayloadCodecs.readString(input));
                 int status = input.readUnsignedByte();
                 if (status >= MedicalEvacuationStatus.values().length) throw new IllegalArgumentException("unknown medical treatment status");
                 MedicalEvacuationTeam team = new MedicalEvacuationTeam(teamId, id, settlement, leader, members);
-                return new MedicalTreatmentStarted(new MedicalEvacuationOperation(id, settlement, patient, infirmary, team, supply, intent,
+                return new MedicalTreatmentStarted(new MedicalEvacuationOperation(id, settlement, patient, infirmary, team, supply, supplyContainer, intent,
                         FrontierWireTags.require(MedicalEvacuationStatus.class, status), -1L), ActorExecutionStateCodec.readGroup(input));
             }); }
         };

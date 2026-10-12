@@ -17,9 +17,9 @@ public final class AmbientBodyConfirmationProcess {
             throw new IllegalArgumentException("scope acknowledgement lacks its independently inspected body or lease epoch");
         FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), evidence.observedBody().supportingSurface().support());
         if (evidence.boundary() == AmbientBodyConfirmed.Boundary.ADMISSION) {
-            if (lease.status() != AmbientLeaseStatus.PREPARED || !lease.handoffBody().equals(evidence.previousBody())
-                    || !AmbientPlacementPolicy.candidates(state, lease).contains(evidence.observedBody().supportingSurface()))
+            if (lease.status() != AmbientLeaseStatus.PREPARED || !lease.handoffBody().equals(evidence.previousBody()))
                 throw new IllegalArgumentException("body admission is outside its declared prepared placement zone");
+            AmbientPlacementPolicy.requireSelected(state, lease, evidence.observedBody().supportingSurface(), evidence.placementRoute());
         } else if (lease.status() != AmbientLeaseStatus.HOT || !serviceOccupancyChanged(state, evidence.actorId(),
                 evidence.previousBody(), evidence.observedBody())) {
             throw new IllegalArgumentException("body checkpoint is not a current HOT service occupancy change");

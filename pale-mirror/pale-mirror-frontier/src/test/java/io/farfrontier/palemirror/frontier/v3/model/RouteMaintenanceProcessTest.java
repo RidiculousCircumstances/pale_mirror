@@ -140,6 +140,12 @@ class RouteMaintenanceProcessTest {
                 "parallel repairs retain disjoint exact people rather than cloning a crew");
 
         FrontierWorldState retained = RouteMaintenanceStateSupport.reduceStarted(oneRetained, FrontierRouteNetwork.OWNER, second);
+        ExactInventory activeStores = retained.inventory();
+        for (SubjectId home : retained.routeMaintenances().values().stream().map(RouteMaintenance::settlementId).distinct().toList()) {
+            SubjectId depot = FrontierWorldState.depotId(home);
+            activeStores = activeStores.withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE);
+        }
+        retained = retained.withInventory(activeStores);
         List<SubjectId> ordered = retained.routeMaintenances().keySet().stream().sorted().toList();
         RouteMaintenanceAssemblyStarted firstTurn = RouteMaintenanceProcess.plan(retained, RouteMaintenanceProcess.scan(3, 300L)).stream()
                 .map(ProposedEvent::payload).filter(RouteMaintenanceAssemblyStarted.class::isInstance).map(RouteMaintenanceAssemblyStarted.class::cast)
@@ -258,7 +264,7 @@ class RouteMaintenanceProcessTest {
         FrontierWorldState terminalWithoutTool = admitted.withChanges(FrontierWorldStateUpdate.begin()
                 .routeMaintenances(Map.of(ready.id(), ready)).physicalDeltas(Map.of()));
 
-        assertEquals("DEPOT_SURFACE_INACTIVE", EngineeringEquipmentProcess.returnReadiness(terminalWithoutTool, ready).reason());
+        assertEquals("NO_EXACT_TEAM_TOOL", EngineeringEquipmentProcess.returnReadiness(terminalWithoutTool, ready).reason());
         assertTrue(EngineeringEquipmentProcess.returnOne(terminalWithoutTool, ready).isEmpty(),
                 "a terminal maintenance must not fabricate a return intent before its exact depot surface is observed");
 
@@ -271,18 +277,17 @@ class RouteMaintenanceProcessTest {
                 .filter(item -> item.economicOwnerId().equals(settlement) && EngineeringToolCustody.isTool(item.itemKind())).findFirst().orElseThrow();
         FrontierWorldState terminalWithTool = activeDepot.withInventory(activeDepot.inventory()
                 .moveObservedItem(tool.id(), tool.custody(), new InventoryCustody.Actor(engineer)));
-        assertEquals("TOOL_HOLDER_NOT_AT_DEPOT_SERVICE_PORT", EngineeringEquipmentProcess.returnReadiness(terminalWithTool, ready).reason());
-        SettlementDepotServicePort port = EngineeringDepotService.port(terminalWithTool, ready);
-        java.util.Map<SubjectId, EngineeringWorkAssembly.Member> members = new java.util.LinkedHashMap<>();
-        java.util.Map<SubjectId, ActorLocation> positions = new java.util.LinkedHashMap<>(terminalWithTool.actorLocations());
-        for (int index = 0; index < ready.team().memberIds().size(); index++) {
-            SubjectId member = ready.team().memberIds().get(index); BlockPosition station = port.stations().get(index).support();
-            members.put(member, new EngineeringWorkAssembly.Member(List.of(station), 0));
-            positions.put(member, new ActorLocation(BodyPosition.above(new SurfaceAnchor(station)), positions.get(member).condition(), positions.get(member).kind()));
+        assertEquals("NO_SELECTED_RETURN_VISIT", EngineeringEquipmentProcess.returnReadiness(terminalWithTool, ready).reason());
+        var selected = EngineeringDepotService.compile(terminalWithTool, ready, EngineeringJourneyPurpose.RETURN_DEPOT,
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_RETURN, 200L);
+        FrontierWorldState atServicePort = RouteMaintenanceStateSupport.reduceAssemblyStarted(terminalWithTool, FrontierRouteNetwork.OWNER,
+                EngineeringExecutionEvents.maintenanceAssemblyStarted(terminalWithTool, ready.id(), selected));
+        while (!atServicePort.routeMaintenances().get(ready.id()).assembly().orElseThrow().complete()) {
+            var journey = atServicePort.routeMaintenances().get(ready.id()).assembly().orElseThrow();
+            atServicePort = RouteMaintenanceStateSupport.reduceAssemblyAdvanced(atServicePort, FrontierRouteNetwork.OWNER,
+                    EngineeringExecutionEvents.maintenanceAssemblyAdvanced(atServicePort, ready.id(), journey.advance(journey.nextSafeAdvance().orElseThrow())));
         }
-        RouteMaintenance returned = ready.withAssembly(new EngineeringWorkAssembly(EngineeringJourneyPurpose.RETURN_DEPOT, members));
-        FrontierWorldState atServicePort = terminalWithTool.withChanges(FrontierWorldStateUpdate.begin()
-                .actorLocations(positions).routeMaintenances(Map.of(returned.id(), returned)));
+        RouteMaintenance returned = atServicePort.routeMaintenances().get(ready.id());
         var readiness = EngineeringEquipmentProcess.returnReadiness(atServicePort, returned);
 
         assertEquals("READY", readiness.reason());

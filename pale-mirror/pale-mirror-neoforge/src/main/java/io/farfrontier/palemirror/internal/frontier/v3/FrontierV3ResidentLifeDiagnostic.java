@@ -141,16 +141,16 @@ final class FrontierV3ResidentLifeDiagnostic {
                 + ",\"depotBread\":" + bread + ",\"depotBreadClaimed\":" + claimed + "}";
     }
 
-    /** Operator-only point query; never run a route search in the due-queue predicate. */
+    /** Operator-only retained evidence; a diagnostic must not initialize a route search. */
     private static String movementKnownRoute(FrontierWorldState state, ActorMovement movement) {
         if (movement == null) return "none";
         if (movement.coldTravel().isPresent()) return "retained";
         if (!(movement.context() instanceof ActorMovementContext.ServiceExit exit)) return "other_context";
         try {
-            return "available:" + KnownServiceExitNavigation.path(state, exit.settlementId(),
-                    exit.depotId(), movement.order()).size();
+            return "available:" + KnownServiceExitNavigation.retainedPathFrom(state, exit.settlementId(),
+                    exit.depotId(), movement.order(), state.actorLocations().get(movement.order().actorId()).supportingSurface()).size();
         } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
-            return "unavailable:" + unavailable.getMessage();
+            return unavailable.status() + ":" + unavailable.getMessage();
         }
     }
 

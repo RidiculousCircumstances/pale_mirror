@@ -71,6 +71,20 @@ final class FrontierV3BakeryWorkSceneExecutor {
         }));
         if (!actuation.current(worker)) return;
         var supportedExit = FrontierV3SupportedBodyCapture.observe(level, worker);
+        var labour = job.bakeryWork().orElseThrow().labour();
+        if (labour.filter(WorkProgress::running).isPresent()
+                && !FrontierV3SemanticMovement.arrived(level, worker, goal.station())) {
+            if (supportedExit.isEmpty()) return; // No fabricated physical pose or work boundary.
+            if (!lease.memberBody(state.actorLocations(), job.workerId()).equals(supportedExit.orElseThrow())) {
+                FrontierV3ActorBodyController.inspectCurrent(level, runtime, worker);
+                return;
+            }
+            long tick = runtime.canonicalState().orElseThrow().instant().ticks();
+            FrontierV3CommandSubmission.submit(runtime, "bakery-labour-paused", job.id().value(),
+                    new BakeryWorkChanged(job.id(), lease.id(), execution, supportedExit.orElseThrow(),
+                            new BakeryLabourChange(labour, BakeryLabour.next(state, job, tick, false))));
+            return;
+        }
         if (supportedExit.isPresent() && BakeryWorkGoal.deliveryAccessCleared(state, job, supportedExit.orElseThrow())) {
             FrontierV3GoalNavigation.stop(worker, actuation);
             if (!state.actorLocations().get(job.workerId()).body().equals(supportedExit.orElseThrow()))
@@ -128,14 +142,18 @@ final class FrontierV3BakeryWorkSceneExecutor {
                 return;
             }
             BakeryWorkState work = job.bakeryWork().orElseThrow();
-            if (work.phase() == BakeryWorkState.Phase.PROCESSING
-                    && work.completedWorkTicks() < ProductionWorkProgress.REQUIRED_PROCESSING_TICKS) {
-                if (level.getGameTime() % 20L == 0L) {
-                    FrontierV3ControlledMobMotion.showStationWorkGesture(level, worker);
-                    FrontierV3CommandSubmission.submit(runtime, "bakery-station-labor", lease.id().value(),
-                            new BakeryHotWorkTick(job.id(), lease.id(), goal.station().standingBody(),
-                                    work.completedWorkTicks() + 1));
+            if (work.phase() == BakeryWorkState.Phase.PROCESSING && !work.labourComplete()) {
+                long tick = runtime.canonicalState().orElseThrow().instant().ticks();
+                var prior = work.labour();
+                if (prior.filter(progress -> progress.running() && tick < progress.activeUntilTick()).isPresent()) {
+                    // Vanilla bounds the swing animation; no per-frame custom broadcast or work credit.
+                    worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+                    return;
                 }
+                boolean run = prior.isEmpty() || prior.orElseThrow().completedAt(tick) < prior.orElseThrow().requiredMilliWork();
+                FrontierV3CommandSubmission.submit(runtime, "bakery-station-labour", job.id().value(),
+                        new BakeryWorkChanged(job.id(), lease.id(), execution, goal.station().standingBody(),
+                                new BakeryLabourChange(prior, BakeryLabour.next(state, job, tick, run))));
                 return;
             }
             if (worker instanceof Villager baker)

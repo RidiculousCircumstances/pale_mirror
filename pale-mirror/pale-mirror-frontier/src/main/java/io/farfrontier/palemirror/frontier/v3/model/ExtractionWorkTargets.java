@@ -1,9 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.model.extraction.*;
-import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
-import io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation;
-import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
 import java.util.*;
 
 /** Area selection owns neither route policy nor depletion. Only proved reachable alternatives qualify. */
@@ -40,44 +38,69 @@ public final class ExtractionWorkTargets {
                 .sorted(Comparator.comparing(ExtractionWork::id)).toList()) {
             if (original.phase() != ExtractionWork.Phase.EXTRACT || original.pending().isPresent()
                     || !state.actorExecutions().actors().get(original.execution().actorId()).current().equals(Optional.of(original.execution()))) continue;
-            var start = state.actorLocations().get(original.execution().actorId()).supportingSurface();
+            var movement = state.actorMovements().get(original.execution().actorId());
+            if (movement == null || !(movement.context() instanceof ActorMovementContext.ExtractionLeg leg)
+                    || !leg.jobId().equals(original.id())) continue;
+            if (!movement.executionId().equals(original.execution()) || leg.jobRevision() != original.revision()
+                    || !movement.order().equals(original.movementOrder(ExtractionWorkAuthority.site(state, original))))
+                throw new IllegalArgumentException("mining geometry invalidation has a stale retained move");
+            var knowledge = knowledge(state, original);
             try {
-                // A retained geometry event must select the same successor on
-                // replay, independently of the runtime planner's readiness.
-                KnownPedestrianRouteKnowledge.forFrontier(state).path(start,
-                        original.movementOrder(ExtractionWorkAuthority.site(state, original)));
+                // Only invalidate exact retained geometry. An observation must not discover
+                // a replacement task or synchronously prove whether a detour exists.
+                knowledge.requireRoute(original.movementOrder(ExtractionWorkAuthority.site(state, original)).legalStations());
+                movement.coldTravel().ifPresent(travel -> knowledge.requireRoute(travel.route()));
                 continue;
-            } catch (KnownPedestrianNavigation.RouteUnavailable blocked) {
-                var next = alternative(state, original);
-                if (next.isEmpty()) continue; // No invented route, arrival or destructive effect.
+            } catch (IllegalArgumentException changed) {
                 state = withdrawTargetRoute(state, original);
-                state = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replaceWork(
-                        original, original.transition(ExtractionWork.Phase.EXTRACT, next))));
             }
         }
         return state;
     }
-    public static Optional<ExtractionTarget> alternative(FrontierWorldState state, ExtractionWork job) {
+    public static Optional<ExtractionWorkDecision.Source> alternative(FrontierWorldState state, ExtractionWork job) {
         if (job.phase() != ExtractionWork.Phase.EXTRACT || job.pending().isPresent()) return Optional.empty();
         var deposit = state.extractionSites().deposits().get(job.siteId());
-        var cells = deposit.site().layout().cells();
-        long current = job.target().orElseThrow().key().cell();
-        int previous = -1;
-        for (int i = 0; i < cells.size(); i++) if (cells.get(i).id() == current) previous = i;
         var available = deposit.available(state.extractionSites().reservedCells(job.siteId())).stream()
                 .filter(cell -> cell.definition().coldOutput().size() == 1
                         && cell.definition().coldOutput().getFirst().itemKind().equals(job.outputKind()))
-                .map(ExtractionLayout.Cell::id).collect(java.util.stream.Collectors.toSet());
+                .toList();
+        return plannedSelection(state, job, available, AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION);
+    }
+    public static Optional<ExtractionWorkDecision.Source> plannedSelection(FrontierWorldState state, ExtractionWork job,
+            List<ExtractionLayout.Cell> available, AreaWorkSelection.SpatialPolicy policy) {
+        var deposit = state.extractionSites().deposits().get(job.siteId());
         var start = state.actorLocations().get(job.execution().actorId()).supportingSurface();
-        var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state);
-        var selected = AreaWorkSelection.reachableAfter(cells.size(), previous, index -> {
-            var cell = cells.get(index);
-            if (!available.contains(cell.id())) return false;
-            var order = new MovementOrder(job.id(), job.execution().actorId(), job.phase().wireTag(), job.revision(),
-                    List.of(cell.workstation()), TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-            try { knowledge.path(start, order); return true; }
-            catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return false; }
-        });
-        return selected.isEmpty() ? Optional.empty() : Optional.of(ExtractionWorkEffects.target(deposit, cells.get(selected.getAsInt())));
+        var knowledge = knowledge(state, job);
+        var cells = new ArrayList<>(available);
+        while (!cells.isEmpty()) {
+            var cell = spatialSelection(state, deposit, job.execution().actorId(), cells, policy).orElseThrow();
+            cells.remove(cell);
+            try {
+                var route = knowledge.plannedBetween(start, cell.workstation());
+                return Optional.of(new ExtractionWorkDecision.Source(job.execution(), start, ExtractionWorkEffects.target(deposit, cell),
+                        route.size() > 1 ? Optional.of(new PedestrianRouteReceipt(route)) : Optional.empty()));
+            } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                if (unavailable.status() != PedestrianRouteResult.Status.NO_PATH) throw unavailable;
+            }
+        }
+        return Optional.empty();
+    }
+    public static void requireSelection(FrontierWorldState state, ExtractionWork job, ExtractionWorkDecision.Source selected) {
+        var deposit = state.extractionSites().deposits().get(job.siteId());
+        var cell = deposit.available(state.extractionSites().reservedCells(job.siteId())).stream()
+                .filter(value -> ExtractionWorkEffects.target(deposit, value).equals(selected.target())).findFirst().orElseThrow(
+                        () -> new IllegalArgumentException("selected mining source is removed, reserved or stale"));
+        if (!job.execution().equals(selected.execution()) || !selected.origin().equals(
+                state.actorLocations().get(job.execution().actorId()).supportingSurface())
+                || !ExtractionWorkPolicy.matchingOutput(cell, job))
+            throw new IllegalArgumentException("selected mining source has a foreign execution, departure or output");
+        var route = selected.route().map(PedestrianRouteReceipt::route).orElseGet(() -> List.of(selected.origin()));
+        if (!route.getFirst().equals(selected.origin()) || !route.getLast().equals(cell.workstation()))
+            throw new IllegalArgumentException("selected mining source has a foreign route");
+        knowledge(state, job).requireRoute(route);
+    }
+    public static KnownPedestrianRouteKnowledge knowledge(FrontierWorldState state, ExtractionWork job) {
+        return ResourceStorageNavigation.forJourney(state, ExtractionWorkAuthority.site(state, job).settlementId(),
+                List.of(job.toolSource(), job.storageTarget()));
     }
 }

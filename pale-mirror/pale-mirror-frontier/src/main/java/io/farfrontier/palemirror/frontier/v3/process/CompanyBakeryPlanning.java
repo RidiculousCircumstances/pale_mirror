@@ -18,7 +18,7 @@ final class CompanyBakeryPlanning implements SettlementOperationPlanner {
     static Optional<Company> requestingCompany(FrontierWorldState state, SubjectId home) {
         return state.companies().companies().values().stream().filter(company -> company.settlementId().equals(home)
                 && company.purpose() == CompanyPurpose.WORKS).sorted(Comparator.comparing(Company::id)).filter(company -> {
-                    var batch = BakeryBatchSelection.admissible(state, rights(company));
+                    var batch = BakeryBatchSelection.admissibleStock(state, rights(company));
                     var employment = state.companies().employmentContracts().values().stream()
                             .filter(contract -> contract.employer().id().equals(company.id()) && contract.status() == EmploymentContractStatus.ACTIVE)
                             .sorted(Comparator.comparing(EmploymentContract::id)).findFirst();
@@ -41,7 +41,9 @@ final class CompanyBakeryPlanning implements SettlementOperationPlanner {
         if (company.isEmpty() || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT)
             return List.of(new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), StrategicTaskStatus.BLOCKED)));
         var rights = rights(company.orElseThrow());
-        var batch = BakeryBatchSelection.admissible(state, rights).orElseThrow();
+        var selectedBatch = BakeryBatchSelection.admissible(state, rights);
+        if (selectedBatch.isEmpty()) return retry(state, task, action);
+        var batch = selectedBatch.orElseThrow();
         if (!SettlementCommitmentComposition.ADMISSION.facilityAvailable(state, workshop.id())
                 || ReferenceContainerCustody.blocksCanonicalUse(state, batch.sourceContainer(state))
                 || batch.fungibleInput().filter(input -> !FungibleResourceCustodySupport.canReserve(state, input)).isPresent())
@@ -56,7 +58,8 @@ final class CompanyBakeryPlanning implements SettlementOperationPlanner {
         if (job.isEmpty()) return retry(state, task, action);
         ProductionJob selected = job.orElseThrow();
         return List.of(new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE)),
-                new ProposedEvent(task.ownerId(), new ProductionStarted(selected, selected.consumedItemId())),
+                new ProposedEvent(task.ownerId(), new ProductionStarted(selected, selected.consumedItemId(),
+                        Optional.of(BakeryAdmissionNavigation.propose(state, selected)))),
                 new ProposedEvent(selected.id(), new ScheduleEffect.Created(ProductionProcess.complete(selected, action.dueAt().ticks() + 100L))));
     }
 

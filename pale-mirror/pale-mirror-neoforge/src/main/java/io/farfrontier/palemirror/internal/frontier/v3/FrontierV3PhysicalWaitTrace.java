@@ -11,7 +11,16 @@ import java.util.WeakHashMap;
 /** Change-only diagnostic witnesses; no admission, navigation or recovery authority. */
 final class FrontierV3PhysicalWaitTrace {
     private static final Map<Entity, String> WAITS = new WeakHashMap<>();
+    private static final Map<net.minecraft.server.level.ServerLevel, Map<SubjectId, String>> ADMISSIONS = new WeakHashMap<>();
     private FrontierV3PhysicalWaitTrace() { }
+
+    static void admission(net.minecraft.server.level.ServerLevel level, SubjectId actor, String gate) {
+        var waits = ADMISSIONS.computeIfAbsent(level, unused -> new java.util.LinkedHashMap<>());
+        if (gate.equals(waits.get(actor))) return;
+        if (waits.size() >= 256 && !waits.containsKey(actor)) waits.remove(waits.keySet().iterator().next());
+        waits.put(actor, gate);
+        PaleMirrorMod.LOGGER.warn("PMV3_PHYSICAL_WAIT subject={} reason={}", actor, gate);
+    }
 
     static void actor(Entity body, FrontierWorldState state, SubjectId actor, String gate) {
         if (body == null) return;

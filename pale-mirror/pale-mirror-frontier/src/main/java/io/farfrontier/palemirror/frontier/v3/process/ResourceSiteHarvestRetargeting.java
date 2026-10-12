@@ -6,36 +6,41 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 
 import java.util.List;
-import java.util.OptionalInt;
+import java.util.Optional;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt;
 
 /** Shared HOT/COLD selection boundary for a route-inaccessible area-work target. */
 public final class ResourceSiteHarvestRetargeting {
     private ResourceSiteHarvestRetargeting() { }
 
-    /** Pure COLD alternative search; a failed target remains in the outstanding CellId pool. */
-    public static OptionalInt coldReachableWorkTarget(FrontierWorldState state, ResourceSiteHarvestJob job) {
-        return coldReachableWorkTarget(state, job, true);
+    /** Producer-selected destination evidence; an absent leg means the actor is already there. */
+    public record Selection(int slot, Optional<PedestrianRouteReceipt> plannedRoute) {
+        public Selection { if (slot < 0) throw new IllegalArgumentException("negative alternate field slot");
+            java.util.Objects.requireNonNull(plannedRoute); }
     }
-    private static OptionalInt coldReachableWorkTarget(FrontierWorldState state, ResourceSiteHarvestJob job, boolean deferred) {
+
+    /** A failed target remains outstanding. Pending calculations propagate, never mean no alternative. */
+    public static Optional<Selection> coldAlternative(FrontierWorldState state, ResourceSiteHarvestJob job) {
         ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
-        try { return cycle.reachableWorkSlotAfter(job.progress().nextCropSlotIndex(), index -> {
-            if (!lifecycle.targetAvailable(index, job.id())) return false;
+        var selected = new java.util.ArrayList<Selection>(1);
+        cycle.reachableWorkSlotAfter(job.progress().nextCropSlotIndex(), index -> {
+            if (!lifecycle.targetAvailable(index, job.id())
+                    || state.resourceSites().hasPendingCellMutation(job.siteId(), cycle.layout().cells().get(index).id())) return false;
             ResourceSiteHarvestJob candidate = job.retargetTo(index).bindTarget(cycle);
             FrontierWorldState projected = state.withResourceSites(state.resourceSites().replace(
                     lifecycle.retargetHarvestCell(job, index, cycle)));
             try {
-                if (deferred) ResourceSiteHarvestKnownNavigation.plannedPath(projected, candidate);
-                else ResourceSiteHarvestKnownNavigation.path(projected, candidate);
+                var route = ResourceSiteHarvestKnownNavigation.plannedPath(projected, candidate);
+                selected.add(new Selection(index, route.size() < 2 ? Optional.empty()
+                        : Optional.of(new PedestrianRouteReceipt(route))));
                 return true;
             } catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable unavailable) {
                 if (unavailable.planning()) throw unavailable; // Await this candidate; never fan out a field-sized search batch.
                 return false;
             }
-        }); } catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable unavailable) {
-            if (!unavailable.planning()) throw unavailable;
-            return OptionalInt.empty();
-        }
+        });
+        return selected.stream().findFirst();
     }
 
     public static FrontierWorldState reduceTargetRetargeted(FrontierWorldState state, SubjectId subject,
@@ -57,26 +62,23 @@ public final class ResourceSiteHarvestRetargeting {
         ResourceFieldLayout.CellId target = cycle.layout().cells().get(retargeted.toSlot()).id();
         ResourceFieldCycle.CellState condition = cycle.cell(target);
         if (!lifecycle.targetAvailable(retargeted.toSlot(), job.id()) || condition.accounted() || condition.workAccessBlocked()
-                || condition.crop() == ResourceFieldCycle.Crop.OBSTRUCTED
+                || condition.crop() == ResourceFieldCycle.Crop.OBSTRUCTED || condition.crop() == ResourceFieldCycle.Crop.GROWING
                 || state.resourceSites().hasPendingCellMutation(subject, target))
             throw new IllegalArgumentException("area work retarget has no eligible alternate cell");
         ResourceSiteHarvestPlanning.requireContinuationBinding(job, new ScheduledAction(retargeted.coldScheduleId(),
                 new SimInstant(retargeted.coldDueAt()), 0, subject, ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, 1));
+        state.actorExecutions().requireCurrent(retargeted.executionId());
+        var redirected = lifecycle.retargetHarvestCell(job, retargeted.toSlot(), cycle);
+        var projected = state.withResourceSites(state.resourceSites().replace(redirected));
         if (retargeted.hotLeaseId().isPresent()) {
             FrontierResourceSiteHarvestSceneSupport.requireHotLease(state, job, retargeted.hotLeaseId().orElseThrow());
         } else {
-            boolean currentUnavailable = false;
-            try {
-                ResourceSiteHarvestKnownNavigation.path(state, job);
-            } catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable unavailable) {
-                currentUnavailable = true;
-            }
             if (!ActorExecutionCoordinator.coldAvailable(state, job.workerId())
-                    || !currentUnavailable
-                    || !coldReachableWorkTarget(state, job, false).equals(OptionalInt.of(retargeted.toSlot())))
+                    || FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job))
                 throw new IllegalArgumentException("COLD area work retarget lacks an exact known alternative");
+            ResourceSiteHarvestKnownNavigation.requireAcceptedDestination(projected,
+                    redirected.harvestJob(job.id()).orElseThrow(), retargeted.plannedRoute());
         }
-        return state.withResourceSites(state.resourceSites().replace(
-                lifecycle.retargetHarvestCell(job, retargeted.toSlot(), cycle)));
+        return projected;
     }
 }

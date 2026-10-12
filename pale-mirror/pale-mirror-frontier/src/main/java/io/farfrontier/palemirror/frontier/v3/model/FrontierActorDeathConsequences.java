@@ -20,15 +20,15 @@ public final class FrontierActorDeathConsequences implements ActorDeathConsequen
             participantScope = scene;
             // Stage quiescence, but do not build a half-transition aggregate. Family
             // consequences and the physical death commit with it against this same basis.
-            var next = switch (scene.status()) {
-                case HOT -> SceneLeaseStatus.DRAINING;
-                case PREPARED -> SceneLeaseStatus.CONFLICT;
-                default -> scene.status();
+            var stopped = switch (FrontierSceneBehaviors.participantDeathDisposition(state, scene)) {
+                case ABORT_UNBEGUN_SCOPE -> FrontierSceneLeaseStateSupport.preparedAbort(state, scene);
+                case DRAIN_SCOPE -> scene.withStatus(SceneLeaseStatus.DRAINING);
+                case CONFLICT_SCOPE -> scene.withStatus(SceneLeaseStatus.CONFLICT);
+                case RETAIN_SCOPE -> scene;
             };
-            if (next != scene.status()) {
-                var stopped = scene.withStatus(next);
+            if (stopped.status() != scene.status()) {
                 leases.put(scene.id(), stopped);
-                stoppedPlans = FrontierSceneBehaviors.transitionPlans(state, scene, next);
+                stoppedPlans = FrontierSceneBehaviors.transitionPlans(state, scene, stopped.status());
             }
         }
         var changes = FrontierWorldStateUpdate.begin();

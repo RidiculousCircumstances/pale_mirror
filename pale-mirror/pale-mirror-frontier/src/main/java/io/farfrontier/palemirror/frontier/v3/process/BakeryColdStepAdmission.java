@@ -28,10 +28,16 @@ final class BakeryColdStepAdmission {
             if (!ActorExecutionCoordinator.coldAvailable(state, job.workerId()))
                 throw new IllegalArgumentException("bakery clearance lacks exclusive COLD authority");
         } else {
-            if (BakeryProcess.coldBlocker(state, job, false).isPresent())
+            boolean pause = step.action() == BakeryColdStep.Action.LABOUR
+                    && !step.labourChange().orElseThrow().next().running();
+            if (pause && (!ActorExecutionCoordinator.coldAvailable(state, job.workerId())
+                    || ActorExecutionCoordinator.sceneOwns(state, job.workerId())
+                    || !ActorExecutionCoordinator.ambientAvailable(state, java.util.List.of(job.workerId()))))
+                throw new IllegalArgumentException("bakery labour pause lacks exclusive COLD authority");
+            if (!pause && BakeryProcess.coldBlocker(state, job, false).isPresent())
                 throw new IllegalArgumentException("bakery step is held by current custody or service access");
             boolean atGoal = actor.supportingSurface().equals(BakeryWorkGoal.current(state, job).station());
-            if ((step.action() == BakeryColdStep.Action.MOVE) == atGoal)
+            if (!pause && (step.action() == BakeryColdStep.Action.MOVE) == atGoal)
                 throw new IllegalArgumentException("bakery movement/work is not at its phase boundary");
             if (step.action() != BakeryColdStep.Action.MOVE
                     && (step.action() != stationAction(work) || !step.nextSurface().equals(actor.supportingSurface())))
@@ -50,8 +56,8 @@ final class BakeryColdStepAdmission {
         return switch (work.phase()) {
             case DEPOT_PICKUP -> BakeryColdStep.Action.PICKUP;
             case STATION_LOAD -> BakeryColdStep.Action.LOAD;
-            case PROCESSING -> work.completedWorkTicks() < ProductionWorkProgress.REQUIRED_PROCESSING_TICKS
-                    ? BakeryColdStep.Action.WORK_TICK : BakeryColdStep.Action.RECIPE;
+            case PROCESSING -> !work.labourComplete()
+                    ? BakeryColdStep.Action.LABOUR : BakeryColdStep.Action.RECIPE;
             case STATION_UNLOAD -> BakeryColdStep.Action.UNLOAD;
             case DEPOT_DELIVERY -> BakeryColdStep.Action.DELIVER;
             case DELIVERED -> throw new IllegalArgumentException("delivered bakery has no station action");

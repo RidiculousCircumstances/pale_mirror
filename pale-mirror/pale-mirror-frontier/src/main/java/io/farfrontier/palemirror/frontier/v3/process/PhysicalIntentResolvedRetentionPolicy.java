@@ -21,4 +21,16 @@ interface PhysicalIntentResolvedRetentionPolicy {
     }
 
     static PhysicalIntentResolvedRetentionPolicy none() { return (state, intent) -> false; }
+
+    /** Explicit opt-in to a typed common proof; a generic conflict or diagnostic string is not cancellation. */
+    static PhysicalIntentResolvedRetentionPolicy cancelledBeforeEffect() {
+        return (state, intent) -> {
+            var id = FencedRecoveryPhysicalIntentSupport.bindingId(intent);
+            var tombstone = state.fencedRecovery().tombstones().get(id);
+            return intent.status() == PhysicalIntentStatus.CONFLICTED && intent.postconditionObservationId().isEmpty()
+                    && !state.fencedRecovery().current().containsKey(id) && tombstone != null
+                    && tombstone.ownerId().equals(intent.causeSubjectId())
+                    && tombstone.disposition() == io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryDisposition.CANCELLED_BEFORE_EFFECT;
+        };
+    }
 }

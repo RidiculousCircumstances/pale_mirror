@@ -78,11 +78,9 @@ public final class HumanPopulationStateSupport {
                 || journey.status() != ResidentMigrationStatus.EN_ROUTE || !coldAvailable(state, advanced.residentId())
                 || actor == null || !actor.supportingSurface().support().equals(journey.currentPosition()))
             throw new IllegalArgumentException("migration rejoin lacks its exact COLD pose, revision or ownership");
-        var approach = ResidentMigrationJourneyKnowledge.approach(state, journey).orElseThrow(
-                () -> new IllegalArgumentException("migration rejoin still lacks known geometry"));
-        if (!KnownPedestrianRouteKnowledge.forFrontier(state).traversable(
-                approach.path().subList(approach.cursor(), approach.path().size())))
-            throw new IllegalArgumentException("migration rejoin has a known blocked edge");
+        var approach = advanced.approach();
+        StationApproachNavigation.requireSelected(KnownPedestrianRouteKnowledge.forFrontier(state), journey.spatial(),
+                ResidentMigrationJourneyKnowledge.order(journey, journey.routeRevision()), approach);
         var replacement = journey.advanceRejoin(approach, advanced.nextRejoinCursor());
         var actors = new LinkedHashMap<>(state.actorLocations());
         actors.put(advanced.residentId(), actor.withBody(BodyPosition.aboveSupportCell(replacement.currentPosition())));

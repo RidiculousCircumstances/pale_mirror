@@ -193,7 +193,7 @@ class AutonomousGoodsTradeTest {
         assertTrue(state.companies().goodsTrade().contracts().isEmpty());
     }
 
-    @Test void ownAccountCompanyUsesTheSameBakerStationWithoutResidentWagesOrPublicInvoice() {
+    @Test void ownAccountCompanyUsesTheSameBakerStationWithoutResidentWagesOrPublicInvoice() throws Exception {
         var state = companyFixture();
         // Finite owned fixture stock isolates the production integration; procurement has its own connected check above.
         var publicWheat = new SubjectId("lot:bootstrap-1-wheat");
@@ -208,6 +208,17 @@ class AutonomousGoodsTradeTest {
         var task = planned.stream().map(ProposedEvent::payload).filter(StrategicTaskPlanned.class::isInstance)
                 .map(StrategicTaskPlanned.class::cast).findFirst().orElseThrow().task();
         state = apply(state, planned, 200, "strategy");
+        for (var unavailable : List.of(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
+                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)) {
+            try (var ignored = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) ->
+                    new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(unavailable, List.of(), 0, 0, "company storage access unavailable"))) {
+                var deferred = ProductionProcess.planStart(state, ProductionProcess.start(task, 201));
+                assertEquals(1, deferred.size());
+                assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class, deferred.getFirst().payload());
+                assertTrue(state.productionJobs().isEmpty());
+                assertEquals(64, state.inventory().fungibleResources().totalQuantity(COMPANY, "minecraft:wheat"));
+            }
+        }
         var startedEvents = ProductionProcess.planStart(state, ProductionProcess.start(task, 201));
         var started = startedEvents.stream().map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
                 .map(ProductionStarted.class::cast).findFirst().orElseThrow();

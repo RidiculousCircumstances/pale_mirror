@@ -7,6 +7,10 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierExecutionView;
+import io.farfrontier.palemirror.frontier.v3.api.Revision;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration;
 import io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
@@ -87,7 +91,7 @@ class PopulationMigrationProcessTest {
     }
 
     @Test
-    void closingPresentationMidTransitRetainsObservedBodyAndDoesNotGrantColdOrArrival() {
+    void closingPresentationMidTransitRetainsObservedBodyAndDoesNotGrantColdOrArrival() throws Exception {
         var initial = displaced();
         var started = payload(PopulationMigrationProcess.planReview(initial, PopulationMigrationProcess.review(1, 100L)), ResidentMigrationStarted.class);
         var state = HumanPopulationStateSupport.startMigration(initial, started.journey());
@@ -114,14 +118,20 @@ class PopulationMigrationProcessTest {
         assertEquals(journey, closed.humanPopulation().migration(actor));
         assertEquals(body, ActorBodyAuthority.current(closed, actor));
         assertFalse(ActorExecutionCoordinator.coldAvailable(closed, actor));
-        var unloaded = ActorBodyAuthority.unloaded(closed,
+        FrontierWorldState unloaded;
+        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            throw new AssertionError("transit body departure cannot calculate a route");
+        })) {
+        unloaded = ActorBodyAuthority.unloaded(closed,
                 new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyUnloaded(body, observed,
                         origin.condition().health(), observed, origin.condition().health(), Optional.of(journey.executionId())));
+        }
         var rebased = unloaded.humanPopulation().migration(actor);
         assertEquals(observed, unloaded.actorLocations().get(actor).body());
         assertEquals(journey.route(), rebased.route(), "the retained strategic corridor is not rewritten");
         assertEquals(journey.routeIndex(), rebased.routeIndex(), "departure does not award semantic arrival");
-        assertEquals(journey.nextColdPosition(), rebased.rejoin().orElseThrow().target().support());
+        assertEquals(observed.supportingSurface(), rebased.spatial().waitingOrigin().orElseThrow());
+        assertTrue(rebased.rejoin().isEmpty());
         assertEquals(journey.routeRevision() + 1, rebased.routeRevision());
         assertSame(closed.actorExecutions(), unloaded.actorExecutions());
         assertEquals(closed.inventory(), unloaded.inventory());
@@ -134,10 +144,47 @@ class PopulationMigrationProcessTest {
         assertEquals(unloaded, codec.decode(codec.encode(unloaded)));
         var review = PopulationMigrationProcess.planReview(initial, PopulationMigrationProcess.review(1, 100L));
         var due = scheduled(review, "frontier.population.migration.progress");
+        for (var status : List.of(PedestrianRouteResult.Status.PLANNING,
+                PedestrianRouteResult.Status.UNKNOWN_GEOMETRY, PedestrianRouteResult.Status.SAFETY_LIMIT)) {
+            var queries = new java.util.concurrent.atomic.AtomicInteger();
+            var waits = new PedestrianPlanningWakeIndex();
+            try (var binding = PedestrianRoutePlanning.bind((geometry, from, to) -> {
+                queries.incrementAndGet();
+                return new PedestrianRouteResult(status, List.of(), 1, 1, "pending transit approach");
+            }); var continuation = PedestrianPlanningContinuations.bind(waits)) {
+                var events = FrontierWorldRuntimeDefinition.planScheduled(unloaded, due);
+                assertEquals(1, events.size(), status + " cannot become movement, arrival or route blockage");
+                var retry = assertInstanceOf(ScheduleEffect.Created.class, events.getFirst().payload());
+                assertEquals(due.id(), retry.action().id());
+                assertEquals(1, queries.get());
+                assertEquals(rebased, unloaded.humanPopulation().migration(actor));
+                if (status == PedestrianRouteResult.Status.PLANNING) {
+                    assertEquals(1, waits.waitingCount());
+                    waits.remove(due.id());
+                    FrontierWorldProcessCatalog.restorePlanningWaits(FrontierWorldRuntimeDefinition.processRegistry(),
+                            codec.decode(codec.encode(unloaded)), new FrontierExecutionView(unloaded.bootstrap().worldId(),
+                                    new Revision(0), due.dueAt(), List.of(retry.action())));
+                    assertEquals(1, waits.waitingCount(), "restart restores this transit's pending calculation");
+                }
+            }
+        }
         var coldEvents = PopulationMigrationProcess.planProgress(unloaded, due);
         var rejoin = payload(coldEvents, ResidentMigrationRejoinAdvanced.class);
         assertEquals(rejoin, roundTrip(rejoin));
-        var continued = HumanPopulationStateSupport.advanceMigrationRejoin(unloaded, rejoin);
+        FrontierWorldState continued;
+        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            throw new AssertionError("transit WAL replay cannot query an approach planner");
+        })) {
+            var recovered = codec.decode(codec.encode(unloaded));
+            continued = HumanPopulationStateSupport.advanceMigrationRejoin(recovered, rejoin);
+            var reversed = new io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin(rejoin.approach().path().reversed(), 0);
+            var foreign = new ResidentMigrationRejoinAdvanced(actor, rejoin.routeRevision(), rejoin.nextRejoinCursor(),
+                    rejoin.executionId(), reversed);
+            assertThrows(IllegalArgumentException.class, () -> HumanPopulationStateSupport.advanceMigrationRejoin(recovered, foreign));
+        }
+        var bytes = FrontierWorldRuntimeDefinition.payloadCodecs().encode(rejoin);
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldRuntimeDefinition.payloadCodecs().decode(rejoin.type(),
+                java.util.Arrays.copyOf(bytes, bytes.length - 1)));
         assertEquals(journey.nextRouteIndex(), continued.humanPopulation().migration(actor).routeIndex());
         assertTrue(continued.humanPopulation().migration(actor).rejoin().isEmpty());
         assertEquals(journey.nextColdPosition(), continued.actorLocations().get(actor).supportingSurface().support());

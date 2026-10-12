@@ -17,16 +17,26 @@ public final class ResidentWorkSelection {
     public <T> Optional<ResidentWorkOffer<T>> offer(FrontierWorldState state, ResidentProfile resident,
                                                           long atTick, ResidentWorkProvider<T> provider) {
         if (atTick < 0) throw new IllegalArgumentException("work selection needs canonical time");
-        if (!resident.equals(state.humanPopulation().resident(resident.id()))
-                || !SettlementWorkPolicy.permissions(state, resident.settlementId()).permits(provider.kind(), resident.id())
-                || resident.capability(provider.capability()) <= 0
-                || !SettlementWorkforce.availableForNewAssignment(state, resident)
-                || !HumanAssignmentProjection.compile(state).idle(resident.id())
+        if (!admissible(state, resident, provider.kind(), provider.capability(), atTick)
                 || !ResidentActivityCoordinator.mayStartOrdinaryWork(state, resident.id(), atTick)
-                || !ActorExecutionCoordinator.ordinaryWorkAdmission(state, resident.id()).permitted()
                 || !preferred(state, resident, provider.kind(), atTick))
             return Optional.empty();
         return discover(state, resident, atTick, provider);
+    }
+
+    /** Current admission facts, not a second ranking of a producer's accepted offer.
+     * Event reducers use this boundary without invoking any opportunity/planning port. */
+    public boolean admissible(FrontierWorldState state, ResidentProfile resident,
+                              ResidentWorkKind kind, HumanCapability capability, long atTick) {
+        if (atTick < 0) throw new IllegalArgumentException("work admission needs canonical time");
+        return resident.equals(state.humanPopulation().resident(resident.id()))
+                && SettlementWorkPolicy.permissions(state, resident.settlementId()).permits(kind, resident.id())
+                && resident.capability(capability) > 0
+                && SettlementWorkforce.availableForNewAssignment(state, resident)
+                && HumanAssignmentProjection.compile(state).idle(resident.id())
+                && ResidentActivityPreferences.work(state.humanPopulation().schedule(resident.settlementId()), atTick)
+                    .outranks(ResidentActivityPreferences.Priority.IDLE)
+                && ActorExecutionCoordinator.ordinaryWorkAdmission(state, resident.id()).permitted();
     }
 
     private static <T> Optional<ResidentWorkOffer<T>> discover(FrontierWorldState state, ResidentProfile resident,

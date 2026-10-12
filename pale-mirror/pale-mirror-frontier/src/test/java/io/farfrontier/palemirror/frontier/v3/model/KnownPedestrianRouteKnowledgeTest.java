@@ -21,6 +21,62 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KnownPedestrianRouteKnowledgeTest {
+    @Test void realStorageProviderPreservesUnrelatedPlanningButRecoveryStartsANewKnowledgeEpoch() throws Exception {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:regional-provider"), 91L));
+        var home = state.bootstrap().settlements().getFirst();
+        var ground = KnownPedestrianGround.forFrontier(state);
+        var start = ground.at(home.anchor().x() + 22, home.anchor().z() + 22);
+        var end = ground.at(start.x() + 1, start.z());
+        var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state);
+        var target = ground.at(home.anchor().x() + 100, home.anchor().z() + 100);
+        var id = new SubjectId("container:regional-warehouse");
+        var endpoint = new ShipmentEndpoint.Storage(home.id(), id, target, Optional.empty(), target);
+        var record = new ContainerRecord(id, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
+                Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+        var changed = new ResourceStorageDeclared(record, target.support().offset(0, 1, 0)).apply(state, home.id());
+        try (var planner = new io.farfrontier.palemirror.frontier.v3.model.navigation.CooperativePedestrianPlanner();
+                var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind(planner)) {
+            var pending = assertThrows(KnownPedestrianNavigation.RouteUnavailable.class, () -> knowledge.plannedBetween(start, end));
+            assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING, pending.status());
+            for (int turn = 0; turn < 16 && planner.pendingCount() > 0; turn++)
+                planner.advance(io.farfrontier.palemirror.frontier.v3.model.navigation.HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            var route = knowledge.plannedBetween(start, end); long work = planner.workUnits();
+            var refreshed = KnownPedestrianRouteKnowledge.forFrontier(changed);
+            assertEquals(route, refreshed.plannedBetween(start, end));
+            assertEquals(work, planner.workUnits(), "declaring a remote chest cannot redo this region search");
+            // Hydration starts a new knowledge epoch. Retained route evidence still validates,
+            // but an unrelated restored geometry may not borrow a previous live cache.
+            var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+            var recovered = KnownPedestrianRouteKnowledge.forFrontier(codec.decode(codec.encode(changed)));
+            assertTrue(recovered.planningEvidence(start, end).isEmpty()); recovered.requireRoute(route);
+        }
+    }
+    @Test void fieldOverlayChangesOnlyItsObstructedRegionsWithoutSharingItsPermissionWithAnotherView() throws Exception {
+        var state = ResourceSiteHarvestProcessTest.ready(ResourceSiteHarvestProcessTest.initial());
+        var site = state.resourceSite(new SubjectId("site:1-wheat-field"));
+        var access = ResourceStorageAccess.at(state, FrontierWorldState.depotId(site.settlementId()));
+        var start = SettlementServiceAccessPoints.depotPort(state, site.settlementId()).exteriorApproach();
+        var cycle = state.resourceSites().cycle(site.id()); var cell = cycle.layout().cells().getFirst();
+        var changedCycle = cycle.cropObstructed(cell.id());
+        var changed = state.withResourceSites(state.resourceSites().replace(state.resourceSites().site(site.id()), changedCycle));
+        var geometry = new java.util.concurrent.atomic.AtomicReference<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry>();
+        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((view, from, to) -> {
+            geometry.set(view);
+            return new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(
+                    io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.FOUND, List.of(from), 0, 1, "geometry-only fixture");
+        })) {
+            KnownPedestrianRouteKnowledge.forField(state, site, cycle, access, start).plannedBetween(start, start);
+            var prior = geometry.get().regionalRevision().orElseThrow();
+            KnownPedestrianRouteKnowledge.forField(changed, site, changedCycle, access, start).plannedBetween(start, start);
+            var current = geometry.get().regionalRevision().orElseThrow();
+            var affected = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region.at(cell.soil().support());
+            assertEquals(prior.scope(), current.scope());
+            org.junit.jupiter.api.Assertions.assertNotSame(prior.at(affected.x(), affected.z()), current.at(affected.x(), affected.z()));
+            org.junit.jupiter.api.Assertions.assertSame(prior.at(affected.x() + 10, affected.z()), current.at(affected.x() + 10, affected.z()));
+            KnownPedestrianRouteKnowledge.forFrontier(changed).plannedBetween(start, start);
+            org.junit.jupiter.api.Assertions.assertNotEquals(current.scope(), geometry.get().regionalRevision().orElseThrow().scope());
+        }
+    }
     @Test void storageLifecycleInvalidatesRoutesOnlyWhenItsPhysicalFootprintChanges() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:storage-geometry"), 91L));
         var home = state.bootstrap().settlements().getFirst();
@@ -81,7 +137,7 @@ class KnownPedestrianRouteKnowledgeTest {
         org.junit.jupiter.api.Assertions.assertNotSame(rebuilt,
                 KnownPedestrianRouteKnowledge.forField(state, site, cycle, access, start));
     }
-    @Test void clearwaterPrivateStationCanBeExitedButCannotBecomeACourtesyRestingPosition() {
+    @Test void clearwaterPrivateStationCanBeExitedButCannotBecomeACourtesyRestingPosition() throws Exception {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:courtesy-private-station"), 20260918065L));
         var start = SurfaceAnchor.at(136, 64, 14);
@@ -91,6 +147,21 @@ class KnownPedestrianRouteKnowledgeTest {
         var exit = PedestrianLocalDeparture.exitToPublic(state, new SubjectId("resident:7-12"), start);
         assertEquals(start, exit.getFirst());
         assertTrue(exit.size() > 1 && PedestrianLocalDeparture.publicPosition(state, exit.getLast()));
+        for (var status : List.of(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
+                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.UNKNOWN_GEOMETRY,
+                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.SAFETY_LIMIT)) {
+            var queries = new java.util.concurrent.atomic.AtomicInteger();
+            try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) -> {
+                queries.incrementAndGet();
+                return new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(status, List.of(), 1, 1, "private exit pending");
+            })) {
+                var pending = org.junit.jupiter.api.Assertions.assertThrows(
+                        io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable.class,
+                        () -> PedestrianLocalDeparture.exitToPublic(state, new SubjectId("resident:7-12"), start));
+                assertEquals(status, pending.status(), "pending private departure cannot become a route miss");
+                assertEquals(1, queries.get());
+            }
+        }
     }
     @Test void courtesyEscapesTheCurrentFacilityWithoutOpeningUnrelatedWorkStations() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:courtesy-geometry"), 91L));
@@ -234,12 +305,12 @@ class KnownPedestrianRouteKnowledgeTest {
         var port = SettlementServiceAccessPoints.depotPort(state, settlement.id());
         var resident = settlement.residents().getFirst().id();
         state = state.withActorBody(resident, port.serviceSurface().standingBody());
-        var first = KnownServiceExitNavigation.clearancePathFrom(state, settlement.id(), FrontierWorldState.depotId(settlement.id()),
+        var first = KnownServiceExitNavigation.plannedClearancePathFrom(state, settlement.id(), FrontierWorldState.depotId(settlement.id()),
                 resident, resident, 0, 1L, port.serviceSurface());
         var blocked = first.getLast();
         state = state.recordPhysicalDelta(new PhysicalDelta(blocked.support().offset(0, 1, 0),
                 PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:preferred-exit-blocked"));
-        var alternate = KnownServiceExitNavigation.clearancePathFrom(state, settlement.id(), FrontierWorldState.depotId(settlement.id()),
+        var alternate = KnownServiceExitNavigation.plannedClearancePathFrom(state, settlement.id(), FrontierWorldState.depotId(settlement.id()),
                 resident, resident, 0, 1L, port.serviceSurface());
         assertTrue(!alternate.getLast().equals(blocked));
         assertTrue(port.accessBoundary().cleared(alternate.getLast().standingBody()));
@@ -288,7 +359,8 @@ class KnownPedestrianRouteKnowledgeTest {
         MovementOrder order = new MovementOrder(actorId, actorId, 0L, 1L, List.of(home),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         SubjectId depotId = FrontierWorldState.depotId(settlement.id());
-        List<SurfaceAnchor> baseline = KnownServiceExitNavigation.path(atService, settlement.id(), depotId, order);
+        List<SurfaceAnchor> baseline = KnownServiceExitNavigation.plannedPathFrom(atService, settlement.id(), depotId, order,
+                atService.actorLocations().get(actorId).supportingSurface());
         assertTrue(baseline.size() > 2);
 
         var actors = new LinkedHashMap<>(atService.actorLocations());
@@ -299,7 +371,8 @@ class KnownPedestrianRouteKnowledgeTest {
             index = index + 1 < baseline.size() - 1 ? index + 1 : 1;
         }
         FrontierWorldState crowded = atService.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
-        assertEquals(baseline, KnownServiceExitNavigation.path(crowded, settlement.id(), depotId, order));
+        assertEquals(baseline, KnownServiceExitNavigation.plannedPathFrom(crowded, settlement.id(), depotId, order,
+                crowded.actorLocations().get(actorId).supportingSurface()));
         assertEquals(baseline, KnownPedestrianRouteKnowledge.path(crowded, settlement.id(),
                 port.serviceSurface(), order, List.of(new KnownPedestrianRouteKnowledge.Passage(depot,
                         KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS))));
@@ -323,7 +396,8 @@ class KnownPedestrianRouteKnowledgeTest {
                 home.support(), PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(),
                 "test:known-pedestrian-hard-block"));
         assertThrows(KnownPedestrianNavigation.RouteUnavailable.class,
-                () -> KnownServiceExitNavigation.path(physicallyBlocked, settlement.id(), depotId, order));
+                () -> KnownServiceExitNavigation.plannedPathFrom(physicallyBlocked, settlement.id(), depotId, order,
+                    physicallyBlocked.actorLocations().get(actorId).supportingSurface()));
     }
 
     @Test void facilityPassageMustNameTheExactDeclaredFacility() {

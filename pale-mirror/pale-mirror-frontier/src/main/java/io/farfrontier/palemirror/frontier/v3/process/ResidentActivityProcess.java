@@ -40,6 +40,17 @@ public final class ResidentActivityProcess {
 
     /** Evaluate actual admission once when due/woken, never turn an unchanged refusal into WAL work. */
     public static ResidentActivityAdmission admission(FrontierWorldState state, ScheduledAction action) {
+        try { return currentAdmission(state, action); }
+        catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
+            if (unavailable.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
+                throw unavailable;
+            // Admission may only request the real owner plan. That plan records any
+            // cooperative wait under its exact continuation; queue polling cannot park it as absence.
+            return new ResidentActivityAdmission.Ready();
+        }
+    }
+
+    private static ResidentActivityAdmission currentAdmission(FrontierWorldState state, ScheduledAction action) {
         if (!REVIEW.equals(action.kind())) return new ResidentActivityAdmission.Ready();
         SubjectId residentId = action.subject();
         ResidentProfile resident = state.humanPopulation().resident(residentId);
@@ -50,8 +61,7 @@ public final class ResidentActivityProcess {
         if (state.humanPopulation().meals().containsKey(residentId))
             return waiting(state, residentId, ResidentActivityAdmission.Reason.RETAINED_MEAL);
         if (state.actorMovements().containsKey(residentId))
-            return interruption(state, residentId, now,
-                    ResidentActivityExecutionComposition.INTERRUPTION) instanceof ActivityInterruptionPlanner.Ready
+            return ResidentActivityExecutionComposition.INTERRUPTION.mayAttempt(state, residentId, now)
                     ? new ResidentActivityAdmission.Ready()
                     : waiting(state, residentId, ResidentActivityAdmission.Reason.MOVEMENT_HANDOFF);
         ResidentNutrition nutrition = state.humanPopulation().nutrition(residentId).accrueThrough(now,
@@ -60,7 +70,7 @@ public final class ResidentActivityProcess {
             return new ResidentActivityAdmission.Ready();
         // An idle obstruction can leave even when food admission is currently blocked.
         // Parking that resident under FOOD_STOCK/MEAL_CLEARANCE would keep the buffer full forever.
-        if (ResidentServiceTurnover.select(state, residentId, now).isPresent())
+        if (ResidentServiceTurnover.mayPlan(state, residentId, now))
             return new ResidentActivityAdmission.Ready();
         var source = ResidentMealOpportunity.candidateAdmission(state, residentId, now);
         if (source.pending().isPresent()) return waiting(state, residentId, switch (source.pending().orElseThrow()) {
@@ -74,7 +84,9 @@ public final class ResidentActivityProcess {
         if (ResidentActivityCoordinator.assessEligibility(state, residentId, now).pending()
                 .filter(wait -> wait == ResidentActivityChoice.Wait.SAFE_CHECKPOINT).isPresent())
             return waiting(state, residentId, ResidentActivityAdmission.Reason.WORK_CHECKPOINT);
-        return ResidentMealOpportunity.find(state, residentId, now).isPresent()
+        return source.candidate().filter(candidate -> candidate.foodSource() instanceof ResidentFoodSource.Personal
+                || ServiceAccessCoordinator.mayPlanMealClearance(state, residentId,
+                    ((ResidentFoodSource.Storage) candidate.foodSource()).containerId())).isPresent()
                 ? new ResidentActivityAdmission.Ready()
                 : waiting(state, residentId, ResidentActivityAdmission.Reason.MEAL_CLEARANCE);
     }
@@ -137,6 +149,20 @@ public final class ResidentActivityProcess {
     /** Composition supplies the owner interruption port; selection never examines a service route. */
     static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, long currentTick,
                                    ActivityInterruptionPlanner interruptions) {
+        try { return planReady(state, action, currentTick, interruptions); }
+        catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
+            if (unavailable.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
+                throw unavailable;
+            // Cooperative calculation does not authorize a work/food/ownership transition.
+            long now = Math.max(Math.max(action.dueAt().ticks(), currentTick),
+                    state.humanPopulation().nutrition(action.subject()).lastEvaluatedTick());
+            return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Rescheduled(action.id(),
+                    review(action.subject(), Math.addExact(now, PENDING_RETRY_TICKS)))));
+        }
+    }
+
+    private static List<ProposedEvent> planReady(FrontierWorldState state, ScheduledAction action, long currentTick,
+                                                ActivityInterruptionPlanner interruptions) {
         if (!action.kind().equals(REVIEW) || !action.equals(review(action.subject(), action.dueAt().ticks())))
             throw new IllegalArgumentException("activity review has a foreign scheduled identity");
         ResidentProfile resident = state.humanPopulation().resident(action.subject());
@@ -217,6 +243,8 @@ public final class ResidentActivityProcess {
 
     private static ActivityInterruptionPlanner.Assessment interruption(FrontierWorldState state,
             SubjectId residentId, long now, ActivityInterruptionPlanner planner) {
+        if (!planner.mayAttempt(state, residentId, now))
+            return new ActivityInterruptionPlanner.Waiting(ActivityInterruptionPlanner.Reason.AUTHORITY_HANDOFF);
         var assessment = planner.assess(state, residentId, now);
         if (!(assessment instanceof ActivityInterruptionPlanner.Ready ready)) return assessment;
         ready.validate(state, residentId);

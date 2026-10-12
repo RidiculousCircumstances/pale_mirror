@@ -48,6 +48,24 @@ final class FrontierV3PedestrianTraffic {
         return blocked(level, actor, path, 2);
     }
 
+    /** No new path search: only the requester's actual body and remaining accepted native path. */
+    static java.util.Optional<Boolean> needsPassage(Mob requester, Path acceptedPath, AABB formerObstruction) {
+        return needsPassage(requester.getBoundingBox(), requester.position(), requester.getBbWidth(),
+                acceptedPath, formerObstruction);
+    }
+
+    static java.util.Optional<Boolean> needsPassage(AABB body, net.minecraft.world.phys.Vec3 position, float width,
+                                                   Path path, AABB formerObstruction) {
+        if (body.intersects(formerObstruction)) return java.util.Optional.of(true);
+        if (path == null) return java.util.Optional.empty();
+        if (path.getNodeCount() > FrontierV3PhysicalPathPolicy.MAX_PATH_NODES) return java.util.Optional.empty();
+        // The last node remains a centring destination until the exact demand is finished.
+        for (int index = Math.min(path.getNextNodeIndex(), Math.max(0, path.getNodeCount() - 1)); index < path.getNodeCount(); index++)
+            if (nativeNodeBodyAt(body, position, width, path.getNode(index).asBlockPos()).intersects(formerObstruction))
+                return java.util.Optional.of(true);
+        return java.util.Optional.of(false);
+    }
+
     private static boolean blocked(ServerLevel level, Mob actor, Path path, int nodes) {
         if (path == null || path.isDone()) return false;
         int end = Math.min(path.getNodeCount(), path.getNextNodeIndex() + nodes);
@@ -147,8 +165,11 @@ final class FrontierV3PedestrianTraffic {
 
     /** Matches Path#getEntityPosAtNode; station centring is a separate final operation. */
     private static AABB nativeNodeBodyAt(Mob actor, BlockPos feet) {
-        double offset = (int) (actor.getBbWidth() + 1.0F) * 0.5D;
-        return actor.getBoundingBox().move(feet.getX() + offset - actor.getX(),
-                feet.getY() - actor.getY(), feet.getZ() + offset - actor.getZ());
+        return nativeNodeBodyAt(actor.getBoundingBox(), actor.position(), actor.getBbWidth(), feet);
+    }
+
+    private static AABB nativeNodeBodyAt(AABB bounds, net.minecraft.world.phys.Vec3 position, float width, BlockPos feet) {
+        double offset = (int) (width + 1.0F) * 0.5D;
+        return bounds.move(feet.getX() + offset - position.x(), feet.getY() - position.y(), feet.getZ() + offset - position.z());
     }
 }

@@ -27,7 +27,7 @@ public final class ResidentMealKnownNavigation {
 
     public static List<SurfaceAnchor> clearancePathFrom(FrontierWorldState state, ResidentMeal meal, SurfaceAnchor start) {
         if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS)
-            return KnownServiceExitNavigation.clearancePathFrom(state, meal.settlementId(), meal.depotId(),
+            return KnownServiceExitNavigation.plannedClearancePathFrom(state, meal.settlementId(), meal.depotId(),
                     meal.residentId(), meal.residentId(), FrontierWireTags.tag(meal.phase()), 1L, start);
         List<SurfaceAnchor> destinations = List.of(meal.clearingSurface());
         List<SurfaceAnchor> route = null;
@@ -38,9 +38,11 @@ public final class ResidentMealKnownNavigation {
                     FrontierWireTags.tag(meal.phase()), 1L, batch, TraversalCapability.PEDESTRIAN,
                     MovementOrder.ArrivalPolicy.EXACT_STATION);
             try {
-                route = KnownServiceExitNavigation.pathFrom(state, meal.settlementId(), meal.depotId(), order, start);
+                route = KnownServiceExitNavigation.plannedPathFrom(state, meal.settlementId(), meal.depotId(), order, start);
                 break;
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
+                    throw unavailable;
                 // Exhaust this bounded region, not just one preferred exit.
             }
         }
@@ -178,6 +180,6 @@ public final class ResidentMealKnownNavigation {
                 FrontierWireTags.tag(meal.phase()), 1L,
                 List.of(port.interactionStation(state)),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-        return ShipmentEndpointComposition.knowledge(state, List.of(port.endpoint())).path(start, order);
+        return ShipmentEndpointComposition.knowledge(state, List.of(port.endpoint())).plannedPath(start, order);
     }
 }

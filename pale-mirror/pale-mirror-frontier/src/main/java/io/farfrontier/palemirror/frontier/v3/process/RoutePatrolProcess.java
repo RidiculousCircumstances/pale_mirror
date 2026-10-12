@@ -8,6 +8,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -55,6 +57,21 @@ public final class RoutePatrolProcess {
         StrategicTask task = task(state, patrol.taskId(), StrategicTaskStatus.ACTIVE);
         RoutePatrol current = patrol;
         List<ProposedEvent> events = new ArrayList<>();
+        if (PatrolSpatialContinuation.planningRequired(patrol)) {
+            try {
+                var selected = PatrolSpatialContinuation.plan(state, patrol);
+                current = PatrolSpatialContinuation.adopt(state, patrol, selected);
+                events.add(new ProposedEvent(patrol.settlementId(), selected));
+            } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                if (unavailable.status() != PedestrianRouteResult.Status.NO_PATH)
+                    return List.of(schedule(progress(patrol, Math.addExact(action.dueAt().ticks(),
+                            state.bootstrap().ruleset().cadence().routePatrolStepInterval()))));
+                events.add(new ProposedEvent(patrol.settlementId(), RoutePatrolDiagnosticProducer.NO_OPEN_RETAINED_EDGE.create(
+                        patrol.taskId(), RoutePatrolExecutionAuthority.current(state, patrol))));
+                events.add(transition(task, StrategicTaskStatus.BLOCKED));
+                return List.copyOf(events);
+            }
+        }
         // A COLD turn records a bounded sequence of the same one-cell formation receipts that
         // HOT supplies through observed arrivals.  This is not a formation teleport: every
         // reducer validates and persists its predecessor body before moving one named resident.
@@ -125,6 +142,15 @@ public final class RoutePatrolProcess {
                 patrol.taskId(), patrol.memberIds());
         return ActorExecutionComposition.LIFECYCLE.prepareVacantGroup(state, started.executions()).commit(state,
                 FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans().startPatrol(patrol)));
+    }
+
+    public static FrontierWorldState reduceSpatialPlanned(FrontierWorldState state, SubjectId subject, RoutePatrolSpatialPlanned planned) {
+        var patrol = state.strategicPlans().routePatrols().get(planned.taskId());
+        if (patrol == null || !patrol.active() || !patrol.settlementId().equals(subject))
+            throw new IllegalArgumentException("patrol approach selection has a foreign or retired owner");
+        requireCurrentPlan(state, patrol);
+        var next = PatrolSpatialContinuation.adopt(state, patrol, planned);
+        return state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans().replacePatrol(next)));
     }
 
     /** COLD counterpart of one observed HOT formation edge: update every named body atomically. */

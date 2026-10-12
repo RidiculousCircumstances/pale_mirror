@@ -87,9 +87,22 @@ public final class ResidentActivityCoordinator {
         return assess(state, residentId, canonicalTick, true);
     }
 
+    /** A safe movement checkpoint permits considering food, not acquiring food or retiring its route. */
+    public static ResidentActivityChoice assessMovementInterruptionEligibility(FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementInterrupted checkpoint) {
+        var candidate = ResidentMealOpportunity.candidateForMovementInterruption(state, checkpoint);
+        return assess(state, checkpoint.actorId(), checkpoint.atTick(), true, Optional.of(candidate.isPresent()));
+    }
+
     private static ResidentActivityChoice assess(FrontierWorldState state,
             io.farfrontier.palemirror.frontier.v3.api.SubjectId residentId, long canonicalTick,
             boolean eligibilityOnly) {
+        return assess(state, residentId, canonicalTick, eligibilityOnly, Optional.empty());
+    }
+
+    private static ResidentActivityChoice assess(FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId residentId, long canonicalTick,
+            boolean eligibilityOnly, Optional<Boolean> checkpointFoodCandidate) {
         Objects.requireNonNull(state, "activity state");
         ResidentProfile resident = state.humanPopulation().resident(residentId);
         if (resident == null) throw new IllegalArgumentException("activity has no exact resident");
@@ -106,7 +119,8 @@ public final class ResidentActivityCoordinator {
                         state.bootstrap().ruleset().residentLife(),
                         resident.characteristics().effectiveMetabolismPermille(assessedAt)).satietyUnits()
                     >= state.bootstrap().ruleset().residentLife().eatBelowUnits()
-                || (eligibilityOnly ? ResidentMealOpportunity.candidate(state, residentId, assessedAt).isPresent()
+                || checkpointFoodCandidate.orElseGet(() -> eligibilityOnly
+                    ? ResidentMealOpportunity.candidate(state, residentId, assessedAt).isPresent()
                     : ResidentMealOpportunity.find(state, residentId, assessedAt).isPresent())) return choice;
         // No executable meal exists. An available work assignment outranks idle in either window;
         // the activity wake still retries food independently without losing the assignment.

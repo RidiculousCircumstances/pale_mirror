@@ -47,7 +47,8 @@ public final class MarketClearingProcess {
         }
         // Capacity may disappear between objective selection and market clearing. Keep the
         // pending demand rather than accepting work that cannot return its output.
-        if (BakeryBatchSelection.admissible(state, demand.buyerId()).isEmpty()) return retry(state, demand, action, now);
+        if (BakeryBatchSelection.admissibleStock(state, ProductionRights.publicService(demand.buyerId())).isEmpty())
+            return retry(state, demand, action, now);
         List<ProposedEvent> start = ProductionProcess.planStart(state, ProductionProcess.start(task, now));
         ProductionStarted started = start.stream().map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
                 .map(ProductionStarted.class::cast).findFirst().orElse(null);
@@ -105,7 +106,7 @@ public final class MarketClearingProcess {
         if (existing.isEmpty()) planned.add(new ProposedEvent(company.id(), new MarketQuotePublished(quote)));
         planned.add(new ProposedEvent(demand.buyerId(), new MarketWorkOrderAccepted(order)));
         for (var event : start) planned.add(event.payload() instanceof ProductionStarted production
-                ? new ProposedEvent(event.subject(), new ProductionStarted(job, production.inputItemId())) : event);
+                ? new ProposedEvent(event.subject(), new ProductionStarted(job, production.inputItemId(), production.access())) : event);
         return List.copyOf(planned);
     }
 

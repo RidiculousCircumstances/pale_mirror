@@ -89,13 +89,17 @@ public final class RouteMaintenanceProcess {
                 || intent.kind() == PhysicalIntentKind.ROUTE_MAINTENANCE_MATERIAL_LOADING)
                 && intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ROUTE_MAINTENANCE).equals(maintenance.id())
                 && (intent.status() == PhysicalIntentStatus.PREPARED || intent.status() == PhysicalIntentStatus.RUNNING))) return retryOnly(retry);
-        if (!EngineeringToolCustody.ready(state, maintenance.team())) {
-            if (!EngineeringDepotService.atStations(state, maintenance, EngineeringJourneyPurpose.MUSTER_DEPOT)) {
-                return admitDepotJourney(state, maintenance, EngineeringJourneyPurpose.MUSTER_DEPOT, action, retry);
-            }
-            return EngineeringEquipmentProcess.issueOne(state, maintenance).map(intent -> withRetry(List.of(new ProposedEvent(maintenance.settlementId(),
-                    new PhysicalIntentPrepared(intent))), retry)).orElseGet(() -> retryOnly(retry));
+        var visitProgress = EngineeringDepotService.progress(state, maintenance);
+        if (visitProgress != EngineeringDepotService.VisitProgress.NONE && visitProgress != EngineeringDepotService.VisitProgress.CLEARED) {
+            if (visitProgress == EngineeringDepotService.VisitProgress.CLEAR_REQUIRED)
+                return admitDepotJourney(state, maintenance, EngineeringJourneyPurpose.MUSTER_DEPOT, PhysicalIntentKind.EQUIPMENT_ISSUE, action, retry);
+            if (visitProgress == EngineeringDepotService.VisitProgress.TRANSFER_READY)
+                return EngineeringEquipmentProcess.issueOne(state, maintenance).map(intent -> withRetry(List.of(new ProposedEvent(maintenance.settlementId(),
+                        new PhysicalIntentPrepared(intent))), retry)).orElseGet(() -> retryOnly(retry));
+            return retryOnly(retry);
         }
+        if (!EngineeringToolCustody.ready(state, maintenance.team()))
+            return admitDepotJourney(state, maintenance, EngineeringJourneyPurpose.MUSTER_DEPOT, PhysicalIntentKind.EQUIPMENT_ISSUE, action, retry);
         if (maintenance.assembly().isEmpty() || maintenance.assembly().orElseThrow().purpose() == EngineeringJourneyPurpose.MUSTER_DEPOT) {
             return admitAssembly(state, maintenance, action, retry);
         }
@@ -119,6 +123,10 @@ public final class RouteMaintenanceProcess {
                 .anyMatch(lease -> FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(maintenance.id())
                         && lease.status() != SceneLeaseStatus.CLOSED);
         if (retainedHotOrRecovery) return List.of(next);
+        var selectedApproach = EngineeringJourneyKnowledge.selectApproach(state, maintenance);
+        if (selectedApproach.isPresent()) return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
+                new RouteMaintenanceAssemblyApproachPlanned(maintenance.id(), EngineeringExecutionAuthority.assemblyCurrent(state, maintenance),
+                        selectedApproach.orElseThrow())), next);
         SubjectId advancing = assembly.safeAdvances().stream()
                 .filter(member -> ActorExecutionCoordinator.coldAvailable(state, member))
                 .filter(member -> io.farfrontier.palemirror.frontier.v3.model.EngineeringJourneyKnowledge.openEdge(state, maintenance, member))
@@ -150,7 +158,7 @@ public final class RouteMaintenanceProcess {
     }
 
     private static List<ProposedEvent> admitAssembly(FrontierWorldState state, RouteMaintenance maintenance, ScheduledAction action, Optional<ProposedEvent> retry) {
-        if (!ActorExecutionCoordinator.coldAvailable(state, maintenance.team().memberIds())) return retryOnly(retry);
+        if (!EngineeringExecutionAuthority.mayStartJourney(state, maintenance)) return retryOnly(retry);
         EngineeringWorkAssembly assembly;
         try { assembly = EngineeringWorksite.compile(state, maintenance); }
         catch (IllegalArgumentException unavailable) { return retryOnly(retry); }
@@ -160,13 +168,11 @@ public final class RouteMaintenanceProcess {
     }
 
     private static List<ProposedEvent> admitDepotJourney(FrontierWorldState state, RouteMaintenance maintenance,
-                                                           EngineeringJourneyPurpose purpose, ScheduledAction action, Optional<ProposedEvent> retry) {
-        EngineeringWorkAssembly current = maintenance.assembly().orElse(null);
-        if (current != null) return retryOnly(retry);
-        if (!ActorExecutionCoordinator.coldAvailable(state, maintenance.team().memberIds())) return retryOnly(retry);
+                                                           EngineeringJourneyPurpose purpose, PhysicalIntentKind operation, ScheduledAction action, Optional<ProposedEvent> retry) {
+        if (!EngineeringExecutionAuthority.mayStartJourney(state, maintenance)) return retryOnly(retry);
         EngineeringWorkAssembly journey;
-        try { journey = EngineeringDepotService.compile(state, maintenance, purpose); }
-        catch (IllegalArgumentException unavailable) { return retryOnly(retry); }
+        try { journey = EngineeringDepotService.compile(state, maintenance, purpose, operation, action.dueAt().ticks()); }
+        catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) { return retryOnly(retry); }
         return withRetry(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceAssemblyStarted(state, maintenance.id(), journey)),
                 new ProposedEvent(SYSTEM, new ScheduleEffect.Created(assemblyProgress(maintenance.id(), action.dueAt().ticks()
                         + state.bootstrap().ruleset().cadence().migrationStepInterval())))), retry);
@@ -303,14 +309,19 @@ public final class RouteMaintenanceProcess {
 
     private static List<ProposedEvent> planReady(FrontierWorldState state, RouteMaintenance completed,
                                                    ScheduledAction action, Optional<ProposedEvent> retry) {
-        if (!EngineeringEquipmentProcess.returnedOrLost(state, completed)) {
-            if (!EngineeringExecutionAuthority.crewLiving(state, completed)) return retryOnly(retry);
-            if (!EngineeringDepotService.atStations(state, completed, EngineeringJourneyPurpose.RETURN_DEPOT)) {
-                return admitDepotJourney(state, completed, EngineeringJourneyPurpose.RETURN_DEPOT, action, retry);
-            }
-            return EngineeringEquipmentProcess.returnOne(state, completed).map(intent -> withRetry(List.of(new ProposedEvent(completed.settlementId(),
-                    new PhysicalIntentPrepared(intent))), retry)).orElseGet(() -> retryOnly(retry));
+        if (!EngineeringExecutionAuthority.crewLiving(state, completed)) return retryOnly(retry);
+        var visitProgress = EngineeringDepotService.progress(state, completed);
+        if (visitProgress != EngineeringDepotService.VisitProgress.NONE && visitProgress != EngineeringDepotService.VisitProgress.CLEARED) {
+            if (visitProgress == EngineeringDepotService.VisitProgress.CLEAR_REQUIRED)
+                return admitDepotJourney(state, completed, EngineeringJourneyPurpose.RETURN_DEPOT, PhysicalIntentKind.EQUIPMENT_RETURN, action, retry);
+            if (visitProgress == EngineeringDepotService.VisitProgress.TRANSFER_READY)
+                return EngineeringEquipmentProcess.returnOne(state, completed).map(intent -> withRetry(List.of(new ProposedEvent(completed.settlementId(),
+                        new PhysicalIntentPrepared(intent))), retry)).orElseGet(() -> retryOnly(retry));
+            return retryOnly(retry);
         }
+        if (!EngineeringEquipmentProcess.returnedOrLost(state, completed))
+            return admitDepotJourney(state, completed, EngineeringJourneyPurpose.RETURN_DEPOT, PhysicalIntentKind.EQUIPMENT_RETURN, action, retry);
+
         boolean retainedScene = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isEngineeringWorksite)
                 .anyMatch(lease -> FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(completed.id())
                         && lease.status() != SceneLeaseStatus.CLOSED);

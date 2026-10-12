@@ -47,7 +47,7 @@ class FrontierV3FixtureCatalogTest {
         assertEquals(1, state.productionJobs().size());
         var job = state.productionJobs().values().iterator().next();
         assertEquals(BakeryWorkState.Phase.PROCESSING, job.bakeryWork().orElseThrow().phase());
-        assertEquals(7, job.bakeryWork().orElseThrow().completedWorkTicks());
+        assertTrue(job.bakeryWork().orElseThrow().labour().orElseThrow().running());
         assertEquals(new SubjectId("job:production-" + job.taskId().value().substring("task:".length())), job.id());
         assertTrue(SettlementWorkPolicy.permissions(state, job.settlementId())
                 .permits(ResidentWorkKind.BAKING, job.workerId()));
@@ -65,7 +65,7 @@ class FrontierV3FixtureCatalogTest {
         assertEquals(1, state.productionJobs().size());
         var job = state.productionJobs().values().iterator().next();
         assertEquals(BakeryWorkState.Phase.PROCESSING, job.bakeryWork().orElseThrow().phase());
-        assertEquals(7, job.bakeryWork().orElseThrow().completedWorkTicks());
+        assertTrue(job.bakeryWork().orElseThrow().labour().orElseThrow().running());
         var held = assertInstanceOf(ProductionInputHold.FungibleCold.class, job.inputHold());
         assertEquals(java.util.Map.of(new SubjectId("lot:production-two-field-first"), 32,
                 new SubjectId("lot:production-two-field-second"), 32), held.inputLots());

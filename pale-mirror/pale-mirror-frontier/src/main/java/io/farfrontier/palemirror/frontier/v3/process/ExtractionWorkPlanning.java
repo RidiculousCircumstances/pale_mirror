@@ -21,16 +21,17 @@ final class ExtractionWorkPlanning {
     }
     static boolean availableWork(FrontierWorldState state, ResidentProfile resident, long atTick) {
         if (!demanded(state, resident.settlementId())) return false;
-        return state.extractionSites().deposits().values().stream()
-                .filter(deposit -> deposit.site().settlementId().equals(resident.settlementId()))
-                .anyMatch(deposit -> deposit.available(state.extractionSites().reservedCells(deposit.site().id())).stream().anyMatch(cell ->
-                        cell.definition().coldOutput().stream().allMatch(output ->
-                                ResourceStorageSelection.destination(state, resident.settlementId(), output.itemKind(), output.quantity(),
-                                        state.actorLocations().get(resident.id()).supportingSurface(),
-                                        Set.of(ResourceStorageRole.WAREHOUSE, ResourceStorageRole.LOCAL_BUFFER), Optional.empty(),
-                                        endpoint -> ResourceStorageNavigation.reachable(state, cell.workstation(), endpoint)).isPresent()))
-                        && ExtractionToolSelection.select(state, resident).isPresent()
-                        );
+        try {
+            for (var deposit : state.extractionSites().deposits().values().stream()
+                    .filter(value -> value.site().settlementId().equals(resident.settlementId()))
+                    .sorted(Comparator.comparing(value -> value.site().id())).toList())
+                if (ExtractionWorkAdmission.opportunity(state, resident, deposit.site().id()).isPresent()) return true;
+        } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable pending) {
+            // A read-only availability port grants nothing. An observed exact route wait
+            // wakes its caller; pending/unknown calculation is never absence/depletion.
+            return false;
+        }
+        return false;
     }
     static boolean demanded(FrontierWorldState state, SubjectId home) {
         return state.bootstrap().ruleset().extraction().enabled() && state.bootstrap().ruleset().extraction().source().coldOutput().stream()

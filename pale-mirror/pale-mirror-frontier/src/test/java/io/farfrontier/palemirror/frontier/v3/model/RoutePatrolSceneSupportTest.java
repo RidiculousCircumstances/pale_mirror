@@ -42,7 +42,7 @@ class RoutePatrolSceneSupportTest {
     }
 
     @Test
-    void savedMidEdgeDepartureRetainsTheOriginalAssemblyAndColumnThroughRecovery() {
+    void savedMidEdgeDepartureRetainsTheOriginalAssemblyAndColumnThroughRecovery() throws Exception {
         for (boolean marching : List.of(false, true)) {
             var state = patrolState(new WorldId("frontier:patrol-rejoin-" + marching));
             var patrol = state.strategicPlans().routePatrols().values().iterator().next();
@@ -62,7 +62,11 @@ class RoutePatrolSceneSupportTest {
             state = ModeledActorBodyFacts.inspected(state, displaced, nextBodies.get(displaced));
             var beforeDeparture = state;
             var stale = new RoutePatrolFormationAdvanced(patrol.taskId(), PatrolFormationStep.capture(patrol), RoutePatrolExecutionAuthority.current(state, patrol));
-            state = ModeledActorBodyFacts.unloaded(state, displaced);
+            try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, start, goal) -> {
+                throw new AssertionError("patrol departure must record observed facts without any route query");
+            })) {
+                state = ModeledActorBodyFacts.unloaded(state, displaced);
+            }
             var retained = state.strategicPlans().routePatrols().get(patrol.taskId());
             assertEquals(original.inspectionRoute(), retained.inspectionRoute());
             assertEquals(original.unit(), retained.unit());
@@ -72,8 +76,8 @@ class RoutePatrolSceneSupportTest {
             assertEquals(beforeDeparture.inventory(), state.inventory());
             assertEquals(nextBodies.get(displaced), state.actorLocations().get(displaced).body());
             assertEquals(state.actorLocations().get(displaced).body(), FrontierRoutePatrolSceneSupport.bodies(retained).get(displaced));
-            if (marching) assertTrue(retained.travel().members().values().stream().allMatch(member -> member.rejoin().isPresent()));
-            else assertTrue(retained.assembly().members().get(displaced).rejoin().isPresent());
+            if (marching) assertTrue(retained.travel().members().values().stream().allMatch(member -> member.spatial().pending()));
+            else assertTrue(retained.assembly().members().get(displaced).spatial().waitingOrigin().isPresent());
             var held = state;
             var currentReceipt = new RoutePatrolFormationAdvanced(retained.taskId(), PatrolFormationStep.capture(retained),
                     RoutePatrolExecutionAuthority.current(held, retained));
@@ -90,22 +94,89 @@ class RoutePatrolSceneSupportTest {
             assertEquals(retained, state.strategicPlans().routePatrols().get(patrol.taskId()));
             assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.RoutePatrolProcess
                     .reduceFormationAdvanced(recovered, retained.settlementId(), stale), "same execution cannot bless a stale spatial predecessor");
-            var expected = retained.advanceFormation();
+            if (marching) {
+                var progress = new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction(
+                        new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:route-patrol-progress-" + retained.taskId().value().replace(':', '-')),
+                        new SimInstant(1), 100, retained.taskId(), "frontier.route_patrol.progress", 1);
+                for (var status : List.of(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
+                        io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.UNKNOWN_GEOMETRY,
+                        io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.SAFETY_LIMIT)) {
+                    var queries = new java.util.concurrent.atomic.AtomicInteger();
+                    var waits = new io.farfrontier.palemirror.frontier.v3.process.PedestrianPlanningWakeIndex();
+                    try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, start, goal) -> {
+                        queries.incrementAndGet();
+                        return new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(status, List.of(), 0, 0, "test:patrol-pending");
+                    }); var continuation = io.farfrontier.palemirror.frontier.v3.process.PedestrianPlanningContinuations.bind(waits)) {
+                        var pending = FrontierWorldRuntimeDefinition.planScheduled(recovered, progress);
+                        assertEquals(1, pending.size());
+                        var retry = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class,
+                                pending.getFirst().payload());
+                        assertEquals(retained.taskId(), retry.action().subject());
+                        assertEquals("frontier.route_patrol.progress", retry.action().kind());
+                        assertEquals(1, queries.get(), "pending selection cannot fall back to a synchronous search");
+                        if (status == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING) {
+                            assertEquals(1, waits.waitingCount());
+                            waits.remove(progress.id());
+                            io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.restorePlanningWaits(
+                                    FrontierWorldRuntimeDefinition.processRegistry(), recovered,
+                                    new io.farfrontier.palemirror.frontier.v3.api.FrontierExecutionView(recovered.bootstrap().worldId(),
+                                            new io.farfrontier.palemirror.frontier.v3.api.Revision(0), progress.dueAt(), List.of(retry.action())));
+                            assertEquals(1, waits.waitingCount(), "patrol recovery must restore the exact calculation dependency");
+                        }
+                    }
+                }
+            }
+            var planned = PatrolSpatialContinuation.plan(state, retained);
+            var beforeSelection = state;
             var payloads = FrontierWorldRuntimeDefinition.payloadCodecs();
-            assertEquals(currentReceipt, payloads.decode(currentReceipt.type(), payloads.encode(currentReceipt)));
+            assertEquals(planned, payloads.decode(planned.type(), payloads.encode(planned)));
+            var reversed = new java.util.LinkedHashMap<>(planned.approaches());
+            var selectedActor = reversed.keySet().stream().filter(actor -> reversed.get(actor).path().size() > 1).findFirst();
+            if (selectedActor.isPresent()) {
+                var actor = selectedActor.orElseThrow();
+                var route = reversed.get(actor);
+                reversed.put(actor, new io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin(route.path().reversed(), 0));
+                var forged = new RoutePatrolSpatialPlanned(planned.taskId(), planned.predecessor(), reversed, planned.executions());
+                assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.RoutePatrolProcess
+                        .reduceSpatialPlanned(beforeSelection, retained.settlementId(), forged));
+            }
+            try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, start, goal) -> {
+                throw new AssertionError("patrol selection replay may not calculate paths");
+            })) {
+                var commandId = new CommandId("command:patrol-selected-approach");
+                var command = new FrontierCommand(FrontierCommand.LEGACY_SCHEMA_VERSION, commandId, state.bootstrap().worldId(),
+                        new io.farfrontier.palemirror.frontier.v3.api.Revision(0), new SimInstant(1),
+                        FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), planned);
+                var accepted = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Accepted.class,
+                        FrontierWorldRuntimeDefinition.planCommand(state, command));
+                assertEquals(planned, accepted.events().getFirst().payload(), "the registered HOT command retains exactly the producer proof");
+                state = io.farfrontier.palemirror.frontier.v3.process.RoutePatrolProcess.reduceSpatialPlanned(state, retained.settlementId(),
+                        (RoutePatrolSpatialPlanned) payloads.decode(planned.type(), payloads.encode(planned)));
+            }
+            assertEquals(beforeSelection.actorLocations(), state.actorLocations(), "adoption cannot move any member");
+            assertEquals(beforeSelection.actorExecutions(), state.actorExecutions());
+            assertEquals(beforeSelection.inventory(), state.inventory());
+            var selectedPatrol = state.strategicPlans().routePatrols().get(retained.taskId());
+            var selectedState = state;
+            assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.RoutePatrolProcess
+                    .reduceSpatialPlanned(selectedState, retained.settlementId(), planned), "duplicate selection must fail before progress");
+            var selectedReceipt = new RoutePatrolFormationAdvanced(retained.taskId(), PatrolFormationStep.capture(selectedPatrol),
+                    RoutePatrolExecutionAuthority.current(state, selectedPatrol));
+            var expected = selectedPatrol.advanceFormation();
+            assertEquals(selectedReceipt, payloads.decode(selectedReceipt.type(), payloads.encode(selectedReceipt)));
             var target = FrontierRoutePatrolSceneSupport.bodies(expected).get(displaced).supportingSurface().support().offset(0, 1, 0);
             var blocked = state.recordPhysicalDelta(new PhysicalDelta(target, PhysicalDeltaKind.UNKNOWN_SCAR,
                     Optional.empty(), Optional.empty(), "player:patrol-approach-block"));
             assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.RoutePatrolProcess
-                    .reduceFormationAdvanced(blocked, retained.settlementId(), currentReceipt), "known physical closure cannot be crossed in COLD");
-            state = io.farfrontier.palemirror.frontier.v3.process.RoutePatrolProcess.reduceFormationAdvanced(state, retained.settlementId(), currentReceipt);
+                    .reduceFormationAdvanced(blocked, retained.settlementId(), selectedReceipt), "known physical closure cannot be crossed in COLD");
+            state = io.farfrontier.palemirror.frontier.v3.process.RoutePatrolProcess.reduceFormationAdvanced(state, retained.settlementId(), selectedReceipt);
             assertEquals(expected, state.strategicPlans().routePatrols().get(retained.taskId()));
             var afterAdvance = state;
             expected.memberIds().forEach(actor -> assertEquals(FrontierRoutePatrolSceneSupport.bodies(expected).get(actor),
                     afterAdvance.actorLocations().get(actor).body()));
             var advanced = state;
             assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.RoutePatrolProcess
-                    .reduceFormationAdvanced(advanced, retained.settlementId(), currentReceipt), "duplicate approach receipt cannot advance a second edge");
+                    .reduceFormationAdvanced(advanced, retained.settlementId(), selectedReceipt), "duplicate approach receipt cannot advance a second edge");
         }
     }
 

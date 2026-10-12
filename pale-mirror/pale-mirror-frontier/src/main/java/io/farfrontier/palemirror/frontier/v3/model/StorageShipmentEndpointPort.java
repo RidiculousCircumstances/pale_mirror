@@ -36,7 +36,12 @@ final class StorageShipmentEndpointPort implements ShipmentEndpointPort {
         validate(state, endpoint); return ((ShipmentEndpoint.Storage) endpoint).exteriorApproach();
     }
     @Override public List<SurfaceAnchor> stations(FrontierWorldState state, ShipmentEndpoint endpoint) {
-        validate(state, endpoint); return List.of(endpoint.station());
+        validate(state, endpoint); return declaredStations(state.bootstrap(), endpoint);
+    }
+    @Override public List<SurfaceAnchor> declaredStations(FrontierBootstrap bootstrap, ShipmentEndpoint endpoint) {
+        if (!(endpoint instanceof ShipmentEndpoint.Storage))
+            throw new IllegalArgumentException("storage endpoint has a foreign nominal schema");
+        return List.of(endpoint.station());
     }
     @Override public SurfaceAnchor interactionStation(FrontierWorldState state, ShipmentEndpoint endpoint) {
         validate(state, endpoint); return endpoint.station();

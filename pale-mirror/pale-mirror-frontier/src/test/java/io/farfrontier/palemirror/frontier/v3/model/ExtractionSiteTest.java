@@ -81,7 +81,9 @@ class ExtractionSiteTest {
         var waiting = withdrawn.withChanges(FrontierWorldStateUpdate.begin().extractionSites(
                 withdrawn.extractionSites().replaceWork(running, selecting)));
         var stoppedSelection = ExtractionColdWork.apply(waiting, selecting.id(), new ExtractionWorkProgressed(
-                selecting.id(), selecting.revision(), ExtractionWorkProgressed.Operation.SELECT_SOURCE), engine.executionView().instant().ticks());
+                selecting.id(), selecting.revision(), ExtractionWorkProgressed.Operation.SELECT_SOURCE,
+                Optional.of(new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWorkDecision.Finished(selecting.execution()))),
+                engine.executionView().instant().ticks());
         assertEquals(ExtractionWork.Phase.STORE, stoppedSelection.extractionSites().work().get(selecting.id()).phase());
         assertEquals(waiting.inventory(), stoppedSelection.inventory(), "frontier waiting must also drain its retained cargo on withdrawal");
         assertThrows(IllegalArgumentException.class, () -> ExtractionColdWork.apply(drained, stop.jobId(), stop, 0));

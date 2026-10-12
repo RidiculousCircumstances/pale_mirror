@@ -165,6 +165,8 @@ final class FrontierV3MedicalTreatmentSceneExecutor {
         var state = runtime.decodedState().orElse(null);
         if (state == null || !FrontierMedicalTreatmentSceneSupport.permitsCurrentConsumptionIntent(state, intent)) return Optional.empty();
         var operation = state.humanPopulation().medicalOperations().get(intent.causeSubjectId());
+        if (!io.farfrontier.palemirror.frontier.v3.model.MedicalPhysicalAuthority.mayBegin(state, intent)
+                || FrontierV3ContainerEffectFence.pending(level, state, operation.supplyContainerId())) return Optional.empty();
         var group = MedicalExecutionAuthority.current(state, operation);
         var lease = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isMedicalTreatment)
                 .filter(scope -> scope.status() == SceneLeaseStatus.HOT

@@ -72,10 +72,12 @@ class ResourceStorageTest {
         var state = initial(); var site = state.extractionSites().deposits().values().iterator().next().site();
         var target = ResourceStorageSelection.candidates(state, site.settlementId(), "minecraft:cobblestone",
                 site.layout().storagePort(), Set.of(ResourceStorageRole.WAREHOUSE)).getFirst();
-        assertTrue(ResourceStorageNavigation.reachable(state, target.station(), target));
+        assertEquals(List.of(target.station()), ResourceStorageNavigation.plannedPath(state, target.station(), target));
         var blocked = state.recordPhysicalDelta(new PhysicalDelta(target.station().support().offset(0, 1, 0),
                 PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:blocked-storage-access"));
-        assertFalse(ResourceStorageNavigation.reachable(blocked, target.station(), target));
+        var refusal = assertThrows(io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable.class,
+                () -> ResourceStorageNavigation.plannedPath(blocked, target.station(), target));
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH, refusal.status());
         assertEquals(state.actorExecutions(), blocked.actorExecutions());
         assertEquals(state.inventory().fungibleResources(), blocked.inventory().fungibleResources());
     }

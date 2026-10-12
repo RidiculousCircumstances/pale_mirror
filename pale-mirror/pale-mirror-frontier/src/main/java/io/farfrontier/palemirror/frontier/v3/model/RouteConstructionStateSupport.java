@@ -239,6 +239,7 @@ public final class RouteConstructionStateSupport {
 
     public static boolean readyToCutover(FrontierWorldState state, RouteConstruction project) {
         return project.status() == RouteConstructionStatus.READY
+                && EngineeringDepotService.clearedForCompletion(state, project)
                 && project.engineeringTeam().stream().flatMap(team -> team.memberIds().stream())
                 .noneMatch(member -> EngineeringToolCustody.holdsTool(state, member))
                 && state.physicalIntents().values().stream().noneMatch(intent -> ownsIntent(intent, project.id())
@@ -285,15 +286,20 @@ public final class RouteConstructionStateSupport {
     public static FrontierWorldState reduceAssemblyStarted(FrontierWorldState state, SubjectId subject, RouteConstructionAssemblyStarted started) {
         if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("route construction assembly must be owned by the route network");
         RouteConstruction project = state.routeConstructions().get(started.projectId());
-        if (project == null || (project.assembly().isPresent() && !(project.assembly().orElseThrow().purpose() == EngineeringJourneyPurpose.MUSTER_DEPOT
-                && project.assembly().orElseThrow().complete() && started.assembly().purpose() == EngineeringJourneyPurpose.WORKSITE))) {
-            throw new IllegalArgumentException("route construction assembly has no unassembled project");
-        }
+        if (project == null) throw new IllegalArgumentException("route construction assembly has no unassembled project");
+        EngineeringDepotService.requireSuccessor(state, project, started.assembly());
         EngineeringWorksite.validate(state.bootstrap(), state.routeTopology(), project.withAssembly(started.assembly()));
         Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions());
         projects.put(project.id(), project.withAssembly(started.assembly()));
         return EngineeringExecutionAuthority.assembled(state, project, started.assembly(), started.executions(), started.workExecutions(),
-                FrontierWorldStateUpdate.begin().routeConstructions(projects));
+                EngineeringJourneyKnowledge.successorUpdate(state, started.assembly()).routeConstructions(projects));
+    }
+    public static FrontierWorldState reduceApproachPlanned(FrontierWorldState state, SubjectId subject, RouteConstructionAssemblyApproachPlanned planned) {
+        if (!subject.equals(FrontierRouteNetwork.OWNER)) throw new IllegalArgumentException("construction approach lacks route-network ownership");
+        var owner = state.routeConstructions().get(planned.projectId());
+        var assembly = EngineeringJourneyKnowledge.requireSelected(state, owner, planned.executions(), planned.selection());
+        var owners = new LinkedHashMap<>(state.routeConstructions()); owners.put(owner.id(), owner.withAdvancedAssembly(assembly));
+        return state.withChanges(EngineeringJourneyKnowledge.approachUpdate(state, planned.selection().actorId(), assembly).routeConstructions(owners));
     }
 
     public static FrontierWorldState reduceAssemblyAdvanced(FrontierWorldState state, SubjectId subject, RouteConstructionAssemblyAdvanced advanced) {
@@ -317,7 +323,7 @@ public final class RouteConstructionStateSupport {
         AmbientActorLease lease = ambient.get(moved);
         if (lease != null && lease.status() == AmbientLeaseStatus.HOT && lease.goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY) {
             EngineeringWorkAssembly.Member member = advanced.assembly().members().get(moved);
-            SurfaceAnchor target = member.arrived() ? member.currentSurface() : member.nextSurface();
+            SurfaceAnchor target = member.ambientTarget();
             ambient.put(moved, lease.withGoal(AmbientGoalKind.ENGINEERING_ASSEMBLY, target.standingBody()));
         }
         return EngineeringExecutionAuthority.assembled(state, project, advanced.assembly(), advanced.executions(), advanced.workExecutions(),

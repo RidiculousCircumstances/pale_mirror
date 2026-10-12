@@ -9,6 +9,8 @@ final class ExpeditionSupplyLoadCodec {
     private ExpeditionSupplyLoadCodec() { }
     static void write(DataOutputStream out, ExpeditionSupplyLoad load) throws IOException {
         out.writeUTF(load.foodKind()); out.writeLong(load.forecastDurationTicks()); out.writeLong(load.calculatedAtTick()); out.writeLong(load.revision());
+        PedestrianRouteReceiptCodec.writeRoute(out, load.journey().outward());
+        PedestrianRouteReceiptCodec.writeRoute(out, load.journey().returning());
         out.writeByte(load.foodTargets().size());
         for (var entry : new TreeMap<>(load.foodTargets()).entrySet()) {
             UnitGroupStateCodec.id(out, entry.getKey()); out.writeInt(entry.getValue());
@@ -28,7 +30,9 @@ final class ExpeditionSupplyLoadCodec {
     }
     static ExpeditionSupplyLoad read(DataInputStream in) throws IOException {
         String kind = in.readUTF(); long duration = in.readLong(), tick = in.readLong(), revision = in.readLong();
-        int count = in.readUnsignedByte(); if (count < 1 || count > 32) throw new IllegalArgumentException("invalid supply roster size");
+        var journey = new io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionJourneyProof(
+                PedestrianRouteReceiptCodec.readRoute(in), PedestrianRouteReceiptCodec.readRoute(in));
+        int count = in.readUnsignedByte(); if (count > 32) throw new IllegalArgumentException("invalid supply roster size");
         var targets = new LinkedHashMap<SubjectId, Integer>();
         var assembly = new LinkedHashMap<SubjectId, io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor>();
         for (int i = 0; i < count; i++) {
@@ -43,6 +47,6 @@ final class ExpeditionSupplyLoadCodec {
                 UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in),
                 ActorItemSlotCodec.read(in), ShipmentStateCodec.lots(in), ExpeditionSupplyLoad.Outcome.fromWireTag(in.readUnsignedByte()),
                 in.readBoolean() ? Optional.of(ActorItemTransferStepCodec.read(in)) : Optional.empty()));
-        return new ExpeditionSupplyLoad(kind, duration, tick, targets, assembly, allocations, revision);
+        return new ExpeditionSupplyLoad(kind, duration, tick, targets, assembly, allocations, revision, journey);
     }
 }

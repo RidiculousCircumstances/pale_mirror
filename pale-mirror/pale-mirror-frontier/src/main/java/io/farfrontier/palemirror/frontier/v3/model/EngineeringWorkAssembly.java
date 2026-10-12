@@ -14,9 +14,23 @@ import io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin;
  *
  * <p>This is a movement record, not a scene and not a second crew roster. It retains the
  * same people already owned by {@link EngineeringRecoveryTeam}. HOT observes the same
- * checkpoints as COLD; departure retains an approach from the actual saved body position.</p>
+ * checkpoints as COLD; departure stores the actual body position before a separate
+ * cooperative selection retains its approach.</p>
  */
-public record EngineeringWorkAssembly(EngineeringJourneyPurpose purpose, Map<SubjectId, Member> members) {
+public record EngineeringWorkAssembly(EngineeringJourneyPurpose purpose, Map<SubjectId, Member> members,
+                                      Optional<EngineeringEquipmentVisit> equipmentVisit) {
+    public EngineeringWorkAssembly(EngineeringJourneyPurpose purpose, Map<SubjectId, Member> members) {
+        this(purpose, members, Optional.empty());
+    }
+    /** Structural phase closure; the owning event validator proves stock, authority and selected geometry. */
+    void requirePredecessor(Optional<EngineeringWorkAssembly> previous) {
+        if (previous.isEmpty()) return;
+        var prior = previous.orElseThrow();
+        var visit = prior.equipmentVisit().orElseThrow(() -> new IllegalArgumentException("worksite cannot be replaced by a service successor"));
+        boolean clearance = equipmentVisit.map(EngineeringEquipmentVisit::clearing).orElse(false);
+        if (clearance ? visit.clearing() || purpose != prior.purpose() : !visit.clearing() || !prior.complete())
+            throw new IllegalArgumentException("engineering successor lacks its service/clearance predecessor");
+    }
     public EngineeringWorkAssembly {
         purpose = Objects.requireNonNull(purpose, "engineering journey purpose");
         Objects.requireNonNull(members, "engineering assembly members");
@@ -32,6 +46,20 @@ public record EngineeringWorkAssembly(EngineeringJourneyPurpose purpose, Map<Sub
             throw new IllegalArgumentException("engineering assembly must retain distinct exact member positions");
         }
         members = Map.copyOf(copy);
+        Objects.requireNonNull(equipmentVisit, "declared engineering equipment visit");
+        if ((purpose == EngineeringJourneyPurpose.WORKSITE) != equipmentVisit.isEmpty())
+            throw new IllegalArgumentException("engineering service journey requires its exact selected visit");
+        if (equipmentVisit.isPresent()) {
+            var visit = equipmentVisit.orElseThrow();
+            var visitor = members.get(visit.actorId());
+            if (visitor == null || members.entrySet().stream().anyMatch(entry -> !entry.getKey().equals(visit.actorId())
+                    && entry.getValue().corridor().size() != 1)
+                    || purpose == EngineeringJourneyPurpose.MUSTER_DEPOT && visit.operation() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE
+                    || purpose == EngineeringJourneyPurpose.RETURN_DEPOT && visit.operation() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_RETURN
+                    || !visit.clearing() && !visit.access().stations().contains(new SurfaceAnchor(visitor.destination()))
+                    || visit.clearing() && !visit.access().accessBoundary().cleared(new SurfaceAnchor(visitor.destination()).standingBody()))
+                throw new IllegalArgumentException("engineering visit changes its sole visitor, purpose or declared service/exit target");
+        }
     }
 
     public boolean complete() { return members.values().stream().allMatch(Member::arrived); }
@@ -57,7 +85,7 @@ public record EngineeringWorkAssembly(EngineeringJourneyPurpose purpose, Map<Sub
         java.util.LinkedHashSet<SubjectId> movable = new java.util.LinkedHashSet<>();
         members.keySet().stream().sorted().forEach(actor -> {
             Member member = members.get(actor);
-            if (!member.arrived() && members.entrySet().stream().noneMatch(entry -> !entry.getKey().equals(actor)
+            if (member.canAdvance() && members.entrySet().stream().noneMatch(entry -> !entry.getKey().equals(actor)
                     && entry.getValue().currentPosition().equals(member.nextSurface().support()))) {
                 movable.add(actor);
             }
@@ -72,19 +100,30 @@ public record EngineeringWorkAssembly(EngineeringJourneyPurpose purpose, Map<Sub
         if (current == null || current.arrived() || !safeAdvances().contains(actor)) throw new IllegalArgumentException("engineering assembly actor cannot safely advance");
         Map<SubjectId, Member> next = new LinkedHashMap<>(members);
         next.put(actor, current.advanceOne());
-        return new EngineeringWorkAssembly(purpose, next);
+        return new EngineeringWorkAssembly(purpose, next, equipmentVisit);
     }
 
     /** Departure changes only the exact member's spatial continuation, never its semantic route. */
-    public EngineeringWorkAssembly checkpoint(SubjectId actor, TraversalRejoin approach) {
+    public EngineeringWorkAssembly checkpoint(SubjectId actor, SurfaceAnchor observed) {
         Member current = members.get(actor);
         if (current == null) throw new IllegalArgumentException("engineering checkpoint has no exact member");
         Map<SubjectId, Member> next = new LinkedHashMap<>(members);
-        next.put(actor, current.withRejoin(approach));
-        return new EngineeringWorkAssembly(purpose, next);
+        next.put(actor, current.observedAt(observed));
+        return new EngineeringWorkAssembly(purpose, next, equipmentVisit);
     }
 
-    public record Member(List<BlockPosition> corridor, int cursor, long routeRevision, Optional<TraversalRejoin> rejoin) {
+    public EngineeringWorkAssembly withApproach(SubjectId actor, TraversalRejoin selected) {
+        var current = members.get(actor);
+        if (current == null) throw new IllegalArgumentException("engineering approach has no exact member");
+        var next = new LinkedHashMap<>(members);
+        next.put(actor, current.withApproach(selected));
+        return new EngineeringWorkAssembly(purpose, next, equipmentVisit);
+    }
+
+    public record Member(List<BlockPosition> corridor, int cursor, StationApproachState spatial) {
+        public Member(List<BlockPosition> corridor, int cursor, long revision, Optional<TraversalRejoin> rejoin) {
+            this(corridor, cursor, new StationApproachState(revision, rejoin, Optional.empty()));
+        }
         public Member(List<BlockPosition> corridor, int cursor) { this(corridor, cursor, 1L, Optional.empty()); }
         public Member {
             corridor = List.copyOf(Objects.requireNonNull(corridor, "engineering assembly corridor"));
@@ -98,30 +137,37 @@ public record EngineeringWorkAssembly(EngineeringJourneyPurpose purpose, Map<Sub
                     throw new IllegalArgumentException("engineering assembly corridor must use adjacent supports with grade at most one");
                 }
             }
-            if (routeRevision < 1) throw new IllegalArgumentException("engineering route requires a positive revision");
-            Objects.requireNonNull(rejoin, "engineering rejoin");
-            if (rejoin.isPresent() && !rejoin.orElseThrow().target().equals(new SurfaceAnchor(
+            Objects.requireNonNull(spatial, "engineering spatial continuation");
+            if (spatial.approach().isPresent() && !spatial.approach().orElseThrow().target().equals(new SurfaceAnchor(
                     corridor.get(Math.min(cursor + 1, corridor.size() - 1)))))
                 throw new IllegalArgumentException("engineering rejoin changes its next semantic checkpoint");
         }
-        public SurfaceAnchor currentSurface() { return rejoin.map(TraversalRejoin::current).orElseGet(() -> new SurfaceAnchor(corridor.get(cursor))); }
+        public SurfaceAnchor currentSurface() { return spatial.current(new SurfaceAnchor(corridor.get(cursor))); }
+        public long routeRevision() { return spatial.revision(); }
+        public Optional<TraversalRejoin> rejoin() { return spatial.approach(); }
+        public boolean canAdvance() { return !arrived() && spatial.waitingOrigin().isEmpty(); }
+        public SurfaceAnchor ambientTarget() { return canAdvance() ? nextSurface() : currentSurface(); }
         public BlockPosition currentPosition() { return currentSurface().support(); }
         public SurfaceAnchor nextSurface() {
-            if (arrived()) throw new IllegalArgumentException("arrived engineer has no next step");
-            return rejoin.map(value -> value.path().get(value.nextCursor(1))).orElseGet(() -> new SurfaceAnchor(corridor.get(cursor + 1)));
+            if (!canAdvance()) throw new IllegalArgumentException("engineering member lacks a selected next step");
+            return rejoin().map(value -> value.path().get(value.nextCursor(1))).orElseGet(() -> new SurfaceAnchor(corridor.get(cursor + 1)));
         }
         public BlockPosition destination() { return corridor.getLast(); }
-        public boolean arrived() { return cursor == corridor.size() - 1 && rejoin.isEmpty(); }
-        public Member withRejoin(TraversalRejoin approach) {
-            return new Member(corridor, cursor, Math.incrementExact(routeRevision), Optional.of(approach));
+        public boolean arrived() { return cursor == corridor.size() - 1 && !spatial.pending(); }
+        public Member observedAt(SurfaceAnchor observed) { return new Member(corridor, cursor, spatial.observedAt(observed)); }
+        public Member withApproach(TraversalRejoin selected) {
+            if (spatial.waitingOrigin().isEmpty() || selected.cursor() != 0
+                    || !selected.current().equals(spatial.waitingOrigin().orElseThrow()))
+                throw new IllegalArgumentException("selected engineering approach lacks its exact retained origin");
+            return new Member(corridor, cursor, new StationApproachState(spatial.revision(), Optional.of(selected), Optional.empty()));
         }
         public Member advanceOne() {
-            if (arrived()) throw new IllegalArgumentException("complete engineering member cannot advance");
-            if (rejoin.isEmpty()) return new Member(corridor, cursor + 1, routeRevision, Optional.empty());
-            var approach = rejoin.orElseThrow();
+            if (!canAdvance()) throw new IllegalArgumentException("engineering member cannot advance without its selected approach");
+            if (rejoin().isEmpty()) return new Member(corridor, cursor + 1, routeRevision(), Optional.empty());
+            var approach = rejoin().orElseThrow();
             var advanced = approach.arrived() ? approach : approach.advance(approach.nextCursor(1), 1);
-            return advanced.arrived() ? new Member(corridor, Math.min(cursor + 1, corridor.size() - 1), routeRevision, Optional.empty())
-                    : new Member(corridor, cursor, routeRevision, Optional.of(advanced));
+            return advanced.arrived() ? new Member(corridor, Math.min(cursor + 1, corridor.size() - 1), routeRevision(), Optional.empty())
+                    : new Member(corridor, cursor, routeRevision(), Optional.of(advanced));
         }
     }
 }

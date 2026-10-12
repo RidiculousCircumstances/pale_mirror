@@ -11,6 +11,17 @@ import java.util.Map;
 /** Stable codecs for the one owner of retained-route repair. */
 final class RouteMaintenancePayloadCodecs {
     private RouteMaintenancePayloadCodecs() { }
+    static PayloadCodec approachPlanned() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.route_maintenance_assembly_approach_planned"; }
+        @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+            var value = (RouteMaintenanceAssemblyApproachPlanned) payload;
+            FrontierWorldPayloadCodecs.writeSubject(output, value.maintenanceId()); ActorExecutionStateCodec.writeGroup(output, value.executions());
+            EngineeringApproachSelectionCodec.write(output, value.selection());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
+                new RouteMaintenanceAssemblyApproachPlanned(FrontierWorldPayloadCodecs.readSubject(input).value(),
+                        ActorExecutionStateCodec.readGroup(input), EngineeringApproachSelectionCodec.read(input))); }
+    }; }
     static PayloadCodec started() { return new PayloadCodec() {
         @Override public String type() { return "frontier.route_maintenance_started"; }
         @Override public byte[] encode(FrontierPayload payload) { return FrontierWorldPayloadCodecs.encodeProduction(output -> {

@@ -7,6 +7,41 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ServiceAccessCapabilitiesTest {
+    @Test void temporaryFootprintIndexMatchesDeclaredGeometryAndTracksDamageWithoutCachingActors() {
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:temporary-footprint-index"), 91L));
+        var points = ServiceBoundaryComposition.geometries(initial);
+        for (var point : points) {
+            var samples = new java.util.HashSet<SurfaceAnchor>(point.boundary().occupiedSurfaces());
+            samples.addAll(point.waitingSurfaces()); samples.addAll(point.egressSurfaces());
+            for (var surface : samples) {
+                var expected = ServiceBoundaryComposition.declarations(initial).values().stream()
+                        .sorted(java.util.Comparator.comparing(ServiceBoundaryProvider.Declaration::pointId))
+                        .filter(value -> ServiceAreaDestinations.temporary(
+                                ServiceBoundaryComposition.geometry(initial, value.identity()), surface)).findFirst();
+                assertEquals(expected, ServiceBoundaryComposition.turnoverPoint(initial, surface));
+            }
+        }
+        var home = initial.bootstrap().settlements().getFirst();
+        var actor = home.residents().getFirst().id();
+        var point = SettlementServiceAccessPoints.forSettlement(initial, home.id()).getFirst();
+        var waiting = point.waitingSurfaces().getFirst();
+        var occupied = initial.withActorBody(actor, waiting.standingBody());
+        assertSame(points, ServiceBoundaryComposition.geometries(occupied), "bodies are not geometry dependencies");
+        assertTrue(ServiceAccessCoordinator.turnoverPoint(occupied, actor).isPresent());
+        var farAway = occupied.withActorBody(actor, new SurfaceAnchor(home.anchor().offset(40, 0, 40)).standingBody());
+        assertTrue(ServiceAccessCoordinator.turnoverPoint(farAway, actor).isEmpty(), "lookup reads the current actor body");
+        var changed = initial.recordPhysicalDelta(new PhysicalDelta(waiting.support().offset(0, 1, 0),
+                PhysicalDeltaKind.UNKNOWN_SCAR, java.util.Optional.empty(), java.util.Optional.empty(), "test obstacle"));
+        assertNotSame(points, ServiceBoundaryComposition.geometries(changed));
+        assertTrue(ServiceBoundaryComposition.turnoverPoint(changed, waiting).isEmpty(),
+                "an obstructed old waiting surface cannot remain in the derived index");
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        var recovered = codec.decode(codec.encode(changed));
+        assertTrue(ServiceBoundaryComposition.turnoverPoint(recovered, waiting).isEmpty());
+        assertEquals(ServiceBoundaryComposition.geometries(changed), ServiceBoundaryComposition.geometries(recovered));
+    }
+
     @Test void foreignVisitorWakesTheActualPointIncludingAfterItsExitContextIsRemoved() {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:foreign-service-wake"), 20260918065L));
@@ -61,7 +96,8 @@ class ServiceAccessCapabilitiesTest {
         var changed = state.withActorBody(resident, state.actorLocations().get(resident).body().offset(1, 0, 0));
         assertEquals(new ServiceAccessCapabilities(List.of(new ResidentMealServiceAccess(),
                 new ProductionServiceAccess(), new HarvestServiceAccess(), new ShipmentServiceAccess(),
-                new ExpeditionSupplyServiceAccess(), new ExtractionServiceAccess())).evaluate(changed, point),
+                new ExpeditionSupplyServiceAccess(), new ExtractionServiceAccess(), new EngineeringEquipmentServiceAccess(),
+                new EquipmentTransferServiceAccess(ServiceAccessDemand.Kind.DEFENDER_EQUIPMENT))).evaluate(changed, point),
                 ServiceAccessCapabilities.current(changed, point));
         assertSame(ServiceAccessCapabilities.current(changed, point), ServiceAccessCapabilities.current(changed, point));
         var depot = state.bootstrap().settlements().getFirst().structures().stream()
@@ -79,7 +115,8 @@ class ServiceAccessCapabilitiesTest {
             }
         };
         var counted = new ServiceAccessCapabilities(List.of(new ResidentMealServiceAccess(), new HarvestServiceAccess(),
-                new ShipmentServiceAccess(), new ExpeditionSupplyServiceAccess(), new ExtractionServiceAccess(), production));
+                new ShipmentServiceAccess(), new ExpeditionSupplyServiceAccess(), new ExtractionServiceAccess(), new EngineeringEquipmentServiceAccess(),
+                new EquipmentTransferServiceAccess(ServiceAccessDemand.Kind.DEFENDER_EQUIPMENT), production));
         counted.indexed(state, point); counted.indexed(state, point);
         assertEquals(1, calls.get(), "family demand scans occur once per immutable state and queried point");
         counted.indexed(changed, point);
@@ -117,10 +154,8 @@ class ServiceAccessCapabilitiesTest {
     }
 
     private static ServiceAccessCapabilities registry(List<ServiceAccessDemand> demands) {
-        return new ServiceAccessCapabilities(List.of(provider(ServiceAccessDemand.Kind.MEAL, List.of()),
-                provider(ServiceAccessDemand.Kind.FIELD_HARVEST, List.of()), provider(ServiceAccessDemand.Kind.COURIER, List.of()),
-                provider(ServiceAccessDemand.Kind.EXPEDITION_SUPPLY, List.of()), provider(ServiceAccessDemand.Kind.EXTRACTION, List.of()),
-                provider(ServiceAccessDemand.Kind.PRODUCTION, demands)));
+        return new ServiceAccessCapabilities(java.util.Arrays.stream(ServiceAccessDemand.Kind.values())
+                .map(kind -> provider(kind, kind == ServiceAccessDemand.Kind.PRODUCTION ? demands : List.of())).toList());
     }
 
     private static ServiceAccessCapability provider(ServiceAccessDemand.Kind kind, List<ServiceAccessDemand> demands) {

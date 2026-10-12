@@ -63,6 +63,9 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
         state.humanPopulation().residentIds().stream().sorted().forEach(id -> values.put(id, HumanAssignment.idle(id)));
         state.productionJobs().values().stream().sorted(Comparator.comparing(ProductionJob::id))
                 .forEach(job -> claim(values, job.workerId(), HumanAssignmentKind.PRODUCTION, job.id()));
+        state.strategicPlans().settlementAssaults().values().stream().sorted(Comparator.comparing(SettlementAssault::id))
+                .flatMap(parent -> parent.equipmentReturnVisit().stream()).filter(visit -> visit.execution().isPresent())
+                .forEach(visit -> claim(values, visit.actorId(), HumanAssignmentKind.EQUIPMENT_SERVICE, visit.ownerId()));
         state.extractionSites().work().values().stream().filter(job -> !job.terminal()).sorted(Comparator.comparing(
                 io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWork::id))
                 .forEach(job -> claim(values, job.execution().actorId(), HumanAssignmentKind.EXTRACTION, job.id()));

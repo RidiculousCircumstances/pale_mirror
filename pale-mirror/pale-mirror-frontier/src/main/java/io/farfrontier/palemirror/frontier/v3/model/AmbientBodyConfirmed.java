@@ -7,7 +7,8 @@ import java.util.Objects;
 /** Projection admission/occupancy acknowledgement of an independently inspected body. */
 public record AmbientBodyConfirmed(SubjectId actorId, long leaseRevision, Boundary boundary,
                                    BodyPosition previousBody, BodyPosition observedBody,
-                                   io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId bodyId) implements FrontierPayload {
+                                   io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId bodyId,
+                                   java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt> placementRoute) implements FrontierPayload {
     public enum Boundary {
         ADMISSION(0), SERVICE_OCCUPANCY(1);
         private final int tag;
@@ -25,6 +26,9 @@ public record AmbientBodyConfirmed(SubjectId actorId, long leaseRevision, Bounda
         Objects.requireNonNull(actorId); Objects.requireNonNull(boundary);
         Objects.requireNonNull(previousBody); Objects.requireNonNull(observedBody);
         Objects.requireNonNull(bodyId);
+        Objects.requireNonNull(placementRoute);
+        if (boundary == Boundary.SERVICE_OCCUPANCY && placementRoute.isPresent())
+            throw new IllegalArgumentException("service occupancy is an observation, not placement authority");
         if (!bodyId.actorId().equals(actorId)) throw new IllegalArgumentException("ambient acknowledgement has a foreign physical actor");
         if (leaseRevision < 1) throw new IllegalArgumentException("body confirmation needs an exact lease revision");
     }

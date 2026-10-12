@@ -19,7 +19,11 @@ public final class KnownPedestrianRouteKnowledge {
     private static Set<BlockPosition> cachedStaticOccupancy = Set.of();
     private record ViewKey(SubjectId settlementId, List<Passage> passages) { }
     private static Object viewBootstrap, viewOrgans, viewDeltas, viewTopology, viewSites, viewStorageGeometry;
-    private static Object geometryVersion = new Object();
+    private enum FrontierViewKey { FRONTIER }
+    private record FieldScope(SubjectId site, ShipmentEndpoint storage) { }
+    private record RefinedScope(Object view, SurfaceAnchor departure) { }
+    private record TaskExclusionScope(Object view, Set<SurfaceAnchor> excluded) { }
+    private record WitnessedScope(Object view, SurfaceAnchor departure) { }
     private static final java.util.Map<ViewKey, KnownPedestrianRouteKnowledge> VIEWS = new java.util.LinkedHashMap<>();
     private static KnownPedestrianRouteKnowledge frontierView;
     private record FieldView(ResourceSite site, ResourceStorageAccess port, ResourceFieldCycle cycle,
@@ -29,6 +33,8 @@ public final class KnownPedestrianRouteKnowledge {
     private final FrontierBootstrap bootstrap;
     private final Set<BlockPosition> hard;
     private final BoundedPedestrianApproach.SurveyedSurface surveyed;
+    private final Object scopeKey;
+    private final java.util.Map<TerrainColumn, SurfaceAnchor> overlay;
     private final io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry geometry;
     private final java.util.Map<SurfaceAnchor, io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry> departures = new java.util.LinkedHashMap<>();
     private record JourneyKey(List<SettlementPassage> passages) { }
@@ -75,17 +81,20 @@ public final class KnownPedestrianRouteKnowledge {
             if (hard == null) hard = authorized;
             else hard.retainAll(authorized);
         }
-        var result = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard, KnownPedestrianGround.forFrontier(state));
+        var result = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard, KnownPedestrianGround.forFrontier(state), key, java.util.Map.of());
         if (JOURNEYS.size() >= 32) JOURNEYS.clear();
         JOURNEYS.put(key, result); return result;
     }
 
     private KnownPedestrianRouteKnowledge(FrontierBootstrap bootstrap, Set<BlockPosition> hard,
-                                         BoundedPedestrianApproach.SurveyedSurface surveyed) {
+            BoundedPedestrianApproach.SurveyedSurface surveyed, Object scopeKey,
+            java.util.Map<TerrainColumn, SurfaceAnchor> overlay) {
         this.bootstrap = bootstrap;
         this.hard = Set.copyOf(hard);
         this.surveyed = surveyed;
-        this.geometry = KnownPedestrianNavigation.geometry(bootstrap, this.hard, surveyed, geometryVersion);
+        this.scopeKey = Objects.requireNonNull(scopeKey); this.overlay = java.util.Map.copyOf(overlay);
+        var revision = KnownPedestrianGeometryScopes.revision(scopeKey, this.hard, this.overlay);
+        this.geometry = KnownPedestrianNavigation.geometry(bootstrap, this.hard, surveyed, revision, Optional.of(revision));
     }
 
     public static List<SurfaceAnchor> path(FrontierWorldState state, SubjectId settlementId,
@@ -106,7 +115,7 @@ public final class KnownPedestrianRouteKnowledge {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), settlementId);
         Set<BlockPosition> hard = occupied(state, settlement, passages);
         KnownPedestrianRouteKnowledge result = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard,
-                KnownPedestrianGround.forFrontier(state));
+                KnownPedestrianGround.forFrontier(state), key, java.util.Map.of());
         if (VIEWS.size() >= 64) VIEWS.clear();
         VIEWS.put(key, result);
         return result;
@@ -122,7 +131,8 @@ public final class KnownPedestrianRouteKnowledge {
             hard.addAll(KnownSiteGeometry.forState(state).obstacles());
             hard.addAll(state.physicalDeltas().keySet());
             declaredStorageObstacles(state, hard);
-            frontierView = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard, KnownPedestrianGround.forFrontier(state));
+            frontierView = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard, KnownPedestrianGround.forFrontier(state),
+                    FrontierViewKey.FRONTIER, java.util.Map.of());
         }
         return frontierView;
     }
@@ -135,7 +145,16 @@ public final class KnownPedestrianRouteKnowledge {
                 || viewSites != sites || viewStorageGeometry != storage) {
             VIEWS.clear();
             FIELDS.clear();
-            geometryVersion = new Object();
+            var obstacles = new HashSet<BlockPosition>(sites.obstacles());
+            obstacles.addAll(storage); obstacles.addAll(state.physicalDeltas().keySet());
+            obstacles.addAll(FrontierGrayboxPlan.intactOrganOccupancy(List.copyOf(state.hiveColony().addedOrgans().values())));
+            var supports = new java.util.LinkedHashMap<TerrainColumn, SurfaceAnchor>();
+            for (var position : FrontierRouteNetwork.footprint(state.bootstrap(), state.routeTopology()).surfaceCells()) {
+                var column = new TerrainColumn(position.x(), position.z()); var current = supports.get(column);
+                if (current == null || current.y() < position.y()) supports.put(column, new SurfaceAnchor(position));
+            }
+            supports.putAll(sites.supports());
+            KnownPedestrianGeometryScopes.refresh(state.bootstrap(), obstacles, supports);
             JOURNEYS.clear();
             frontierView = null;
             viewBootstrap = state.bootstrap(); viewOrgans = state.hiveColony().addedOrgans();
@@ -154,6 +173,9 @@ public final class KnownPedestrianRouteKnowledge {
     public List<SurfaceAnchor> retainedPath(SurfaceAnchor start, MovementOrder order) {
         return KnownPedestrianNavigation.retainedRoute(geometryFrom(start), start, order);
     }
+    public List<SurfaceAnchor> plannedBetween(SurfaceAnchor start, SurfaceAnchor target) {
+        return KnownPedestrianNavigation.plannedBetween(geometryFrom(start), start, target);
+    }
     /** Geometry-only admission, without inventing an actor assignment or movement authority. */
     public boolean reachable(SurfaceAnchor start, SurfaceAnchor target) {
         try {
@@ -165,21 +187,38 @@ public final class KnownPedestrianRouteKnowledge {
     /** Connected known supports inside the existing one-cell local collision latitude.
      * No task goal, route clock, arrival or physical actor position is changed. */
     public List<SurfaceAnchor> localPlacement(SurfaceAnchor origin) {
+        return List.copyOf(localPlacementRoutes(origin).keySet());
+    }
+    /** Bounded local access proofs; this small placement envelope is not a world route search. */
+    public java.util.Map<SurfaceAnchor, List<SurfaceAnchor>> localPlacementRoutes(SurfaceAnchor origin) {
         var geometry = geometryFrom(origin);
         var scope = LocalNavigationEnvelope.around(origin.standingBody(), origin.standingBody());
         var queue = new java.util.ArrayDeque<SurfaceAnchor>();
-        var seen = new java.util.LinkedHashSet<SurfaceAnchor>();
-        queue.add(origin); seen.add(origin);
+        var routes = new java.util.LinkedHashMap<SurfaceAnchor, List<SurfaceAnchor>>();
+        queue.add(origin); routes.put(origin, List.of(origin));
         while (!queue.isEmpty()) {
             var current = queue.removeFirst();
             for (int[] offset : List.of(new int[]{0, -1}, new int[]{-1, 0}, new int[]{1, 0}, new int[]{0, 1})) {
                 var next = geometry.supportAt(current.x() + offset[0], current.z() + offset[1]);
                 if (next != null && scope.contains(next.support()) && geometry.bounds().contains(next.support())
-                        && !geometry.blocked(next) && Math.abs((long) next.y() - current.y()) <= 1 && seen.add(next))
+                        && !geometry.blocked(next) && Math.abs((long) next.y() - current.y()) <= 1 && !routes.containsKey(next)) {
+                    var route = new java.util.ArrayList<>(routes.get(current)); route.add(next);
+                    routes.put(next, List.copyOf(route));
                     queue.addLast(next);
+                }
             }
         }
-        return List.copyOf(seen);
+        return java.util.Collections.unmodifiableMap(routes);
+    }
+    /** Projection may leave an unavailable retained birth cell; this does not authorize HOT locomotion. */
+    public void requireLocalPlacementRoute(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt receipt) {
+        var route = receipt.route(); var origin = route.getFirst();
+        var scope = LocalNavigationEnvelope.around(origin.standingBody(), origin.standingBody());
+        if (route.stream().anyMatch(surface -> !scope.contains(surface.support())))
+            throw new IllegalArgumentException("placement access leaves its bounded local envelope");
+        // The retained origin is historical projection knowledge, not a claim that its
+        // current body volume is clear. Every proposed actual placement/connecting cell is clear.
+        KnownPedestrianNavigation.requireRoute(geometryFrom(origin), route.subList(1, route.size()));
     }
     public List<SurfaceAnchor> plannedPath(SurfaceAnchor start, MovementOrder order, List<SurfaceAnchor> hint) {
         return KnownPedestrianNavigation.plannedRoute(geometryFrom(start), start, order, hint);
@@ -193,6 +232,12 @@ public final class KnownPedestrianRouteKnowledge {
         KnownPedestrianNavigation.requireRoute(geometryFrom(route.getFirst()), route);
     }
 
+    /** Verify selected area access through the same retained-departure geometry as its producer. */
+    public void requireAccess(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianAccessReceipt access,
+            SurfaceAnchor origin, Set<SurfaceAnchor> destinations) {
+        access.require(geometryFrom(origin), origin, destinations);
+    }
+
     /** The exact retained departure may refine its one column; it cannot invent remote terrain. */
     private synchronized io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry geometryFrom(SurfaceAnchor start) {
         var known = surveyed.at(start.x(), start.z());
@@ -202,9 +247,15 @@ public final class KnownPedestrianRouteKnowledge {
             throw new KnownPedestrianNavigation.RouteUnavailable("retained departure is not on compatible known support: " + start);
         var previous = departures.get(start);
         if (previous != null) return previous;
+        var refinedOverlay = new java.util.LinkedHashMap<>(overlay);
+        refinedOverlay.put(new TerrainColumn(start.x(), start.z()), start);
+        var revision = KnownPedestrianGeometryScopes.revision(new RefinedScope(scopeKey, start), hard, refinedOverlay);
         var refined = new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry() {
             @Override public WorldBounds bounds() { return geometry.bounds(); }
-            @Override public Object version() { return geometry.version(); }
+            @Override public Object version() { return revision; }
+            @Override public Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision> regionalRevision() {
+                return Optional.of(revision);
+            }
             @Override public SurfaceAnchor supportAt(int x, int z) { return x == start.x() && z == start.z() ? start : surveyed.at(x, z); }
             @Override public boolean blocked(SurfaceAnchor surface) { return geometry.blocked(surface); }
         };
@@ -277,7 +328,9 @@ public final class KnownPedestrianRouteKnowledge {
                 hard.addAll(site.irrigationSlots());
                 hard.addAll(obstructions);
                 var knowledge = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard,
-                        ResourceSiteHarvestKnownGeometry.surveyedSupports(state, site));
+                        ResourceSiteHarvestKnownGeometry.surveyedSupports(state, site), new FieldScope(site.id(), port.endpoint()),
+                        site.cropSlots().stream().collect(java.util.stream.Collectors.toMap(
+                                crop -> new TerrainColumn(crop.x(), crop.z()), crop -> new SurfaceAnchor(crop.offset(0, -1, 0)))));
                 cached = new FieldView(site, port, cycle, obstructions, knowledge, new java.util.LinkedHashMap<>());
             }
             if (FIELDS.size() >= 64 && !FIELDS.containsKey(site.id())) FIELDS.clear();
@@ -296,7 +349,8 @@ public final class KnownPedestrianRouteKnowledge {
             if (departure != null) return departure;
             var hard = new HashSet<>(knowledge.hard);
             clear(hard, witnessedStart);
-            departure = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard, knowledge.surveyed);
+            departure = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard, knowledge.surveyed,
+                    new WitnessedScope(knowledge.scopeKey, witnessedStart), knowledge.overlay);
             if (cached.witnessedDepartures().size() >= 32)
                 cached.witnessedDepartures().remove(cached.witnessedDepartures().keySet().iterator().next());
             cached.witnessedDepartures().put(witnessedStart, departure);
@@ -326,6 +380,17 @@ public final class KnownPedestrianRouteKnowledge {
         Objects.requireNonNull(start, "pedestrian route start");
         Objects.requireNonNull(order, "pedestrian route order");
         return KnownPedestrianNavigation.route(geometryFrom(start), start, order);
+    }
+
+    /** Explicit task exclusions for bounded alternative selection, not caller-owned terrain rules. */
+    public KnownPedestrianRouteKnowledge withTaskExclusions(Set<SurfaceAnchor> excluded) {
+        excluded = Set.copyOf(Objects.requireNonNull(excluded, "excluded task surfaces"));
+        if (excluded.size() > io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin.MAX_SURFACES)
+            throw new IllegalArgumentException("task surface exclusions exceed the bounded path profile");
+        if (excluded.isEmpty()) return this;
+        var constrained = new HashSet<>(hard);
+        excluded.forEach(surface -> constrained.add(surface.support()));
+        return new KnownPedestrianRouteKnowledge(bootstrap, constrained, surveyed, new TaskExclusionScope(scopeKey, excluded), overlay);
     }
 
     /** Explicit task exclusions for bounded alternative selection, not caller-owned terrain rules. */

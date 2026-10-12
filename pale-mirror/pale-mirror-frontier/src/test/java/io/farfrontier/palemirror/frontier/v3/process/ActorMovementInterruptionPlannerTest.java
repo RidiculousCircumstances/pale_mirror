@@ -13,6 +13,40 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ActorMovementInterruptionPlannerTest {
+    @Test void queueInterruptionEligibilityDoesNotSearchOrAuthorizeFoodWhileMovementIsRetained() throws Exception {
+        var state = fixture(false);
+        var actor = new SubjectId("resident:1-1");
+        var action = ResidentActivityProcess.review(actor, 24_000L);
+        var movement = state.actorMovements().get(actor);
+        var planner = new ActorMovementInterruptionPlanner();
+        var snapshot = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        var before = snapshot.encode(state);
+        try (var binding = PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            throw new AssertionError("queue admission cannot initialize movement or food routes");
+        })) {
+            assertTrue(planner.mayAttempt(state, actor, 24_000L));
+            assertFalse(FrontierWorldRuntimeDefinition.scheduledHeld(state, action));
+            assertTrue(ResidentMealOpportunity.candidate(state, actor, 24_000L).isEmpty(),
+                    "an interruption hint cannot make ordinary food admission bypass its retained movement");
+            assertSame(movement, state.actorMovements().get(actor));
+            assertArrayEquals(before, snapshot.encode(state));
+            var event = new ActorMovementInterrupted(actor, movement.order().goalRevision() + 1,
+                    24_000L, state.actorLocations().get(actor).body(), movement.executionId());
+            assertThrows(IllegalArgumentException.class,
+                    () -> ResidentMealOpportunity.candidateForMovementInterruption(state, event));
+            var restored = snapshot.decode(before);
+            assertTrue(planner.mayAttempt(restored, actor, 24_000L), "admission is reconstructed from canonical facts");
+        }
+        assertFalse(planner.mayAttempt(state, actor, 23_899L), "an old wake cannot replace newer movement");
+        assertFalse(planner.mayAttempt(fixture(true), actor, 24_000L), "mandatory service clearance remains exact");
+        var resources = state.inventory().fungibleResources();
+        var account = ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(
+                state.humanPopulation().resident(actor).settlementId()));
+        var empty = resources.destroy(account, Map.of(new SubjectId("lot:interruption-bread"), 64), Map.of());
+        var noFood = state.withInventory(state.inventory().withFungibleResources(empty));
+        assertFalse(planner.mayAttempt(noFood, actor, 24_000L), "hunger without food must not churn interruption plans");
+    }
+
     @Test void interruptionAcknowledgementRequiresItsDeclaredResidentAndExactBasis() {
         var state = fixture(false); var actor = new SubjectId("resident:1-1");
         var ready = new ActorMovementInterruptionPlanner().assess(state, actor, 24_000L);

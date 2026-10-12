@@ -14,7 +14,8 @@ public final class ExtractionAreaPlanning {
     }
     /** Staffing asks whether known work exists; it cannot require the staff it has not assigned yet. */
     public static boolean hasKnownExtension(FrontierWorldState state, SubjectId siteId) {
-        return proposal(state, siteId, false).isPresent();
+        try { return proposal(state, siteId, false).isPresent(); }
+        catch (KnownPedestrianNavigation.RouteUnavailable pending) { return false; }
     }
     private static Optional<ExtractionAreaExtended> proposal(FrontierWorldState state, SubjectId siteId, boolean requireStaff) {
         var deposit = Objects.requireNonNull(state.extractionSites().deposits().get(siteId), "declared excavation site");
@@ -23,18 +24,19 @@ public final class ExtractionAreaPlanning {
                 || requireStaff && SettlementWorkPolicy.permissions(state, deposit.site().settlementId()).workers(ResidentWorkKind.EXTRACTION).isEmpty()
                 || ExtractionDevelopment.proposal(state, siteId).isPresent()) return Optional.empty();
         var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state);
+        var access = new LinkedHashMap<SurfaceAnchor, Optional<PedestrianRouteReceipt>>();
         java.util.function.Predicate<SurfaceAnchor> reachable = surface -> {
             try {
-                knowledge.path(layout.storagePort(), new MovementOrder(siteId, siteId, 0, deposit.development().revision(),
-                        List.of(surface), TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION));
+                var route = knowledge.plannedBetween(layout.storagePort(), surface);
+                access.put(surface, route.size() > 1 ? Optional.of(new PedestrianRouteReceipt(route)) : Optional.empty());
                 return true;
-            } catch (KnownPedestrianNavigation.RouteUnavailable blocked) { return false; }
+            } catch (KnownPedestrianNavigation.RouteUnavailable blocked) {
+                if (blocked.status() != PedestrianRouteResult.Status.NO_PATH) throw blocked;
+                return false;
+            }
         };
         if (deposit.available(Set.of()).stream().anyMatch(cell -> reachable.test(cell.workstation()))) return Optional.empty();
-        int clearanceBound = rules.surfaceCut().map(cut -> cut.topY() - layout.storagePort().y()
-                + rules.terraces().orElseThrow().maximumDepth()).orElse(2);
-        int count = Math.min(rules.developmentBatchCells() / clearanceBound,
-                (ExtractionLayout.MAX_CELLS - layout.cells().size()) / clearanceBound);
+        int count = columnLimit(rules, layout);
         if (count < 1) return Optional.empty();
         var ground = ExtractionGroundKnowledge.forState(state);
         var columns = rules.terraces().map(terraces -> AdjacentExcavationPlanner.propose(layout.accessSurfaces(), ground,
@@ -47,7 +49,14 @@ public final class ExtractionAreaPlanning {
         var reachableCuts = columns.stream().filter(column -> BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN.contains(
                 column.station(), column.floor().support().offset(0, column.clearance().size(), 0))
                 && BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN.contains(column.station(), column.floor().support().offset(0, 1, 0))).toList();
-        return reachableCuts.isEmpty() ? Optional.empty() : Optional.of(new ExtractionAreaExtended(siteId, deposit.development().revision(), reachableCuts));
+        return reachableCuts.isEmpty() ? Optional.empty() : Optional.of(new ExtractionAreaExtended(siteId, deposit.development().revision(), reachableCuts,
+                PedestrianAccessReceipt.selected(layout.storagePort(), access, reachableCuts.stream().map(AdjacentExcavationPlanner.Column::station)
+                        .collect(java.util.stream.Collectors.toSet()))));
+    }
+    private static int columnLimit(ExtractionRules rules, ExtractionLayout layout) {
+        int clearanceBound = rules.surfaceCut().map(cut -> cut.topY() - layout.storagePort().y()
+                + rules.terraces().orElseThrow().maximumDepth()).orElse(2);
+        return Math.min(rules.developmentBatchCells() / clearanceBound, (ExtractionLayout.MAX_CELLS - layout.cells().size()) / clearanceBound);
     }
     private static boolean declarationHeld(FrontierWorldState state, SubjectId siteId, BlockPosition position) {
         var region = new ExtractionRegion(siteId, Math.floorDiv(position.x(), 16), Math.floorDiv(position.z(), 16));
@@ -60,10 +69,26 @@ public final class ExtractionAreaPlanning {
     }
     /** Planning view only; the event reducer also updates physical region obligations at its actual revision. */
     public static FrontierWorldState preview(FrontierWorldState state, SubjectId subject, ExtractionAreaExtended event) {
-        if (!subject.equals(event.siteId()) || !proposal(state, subject).equals(Optional.of(event)))
-            throw new IllegalArgumentException("stale, foreign, protected or unavailable excavation plan");
         var prior = state.extractionSites().deposits().get(subject);
-        var next = prior.extend(event.expectedRevision(), extend(prior.site().layout(), state.bootstrap().ruleset().extraction(), event));
+        var rules = state.bootstrap().ruleset().extraction();
+        if (!subject.equals(event.siteId()) || prior == null || prior.development().revision() != event.expectedRevision()
+                || rules.geology().isEmpty() || rules.developmentBatchCells() < 2
+                || SettlementWorkPolicy.permissions(state, prior.site().settlementId()).workers(ResidentWorkKind.EXTRACTION).isEmpty())
+            throw new IllegalArgumentException("stale, foreign, protected or unavailable excavation plan");
+        var layout = prior.site().layout(); var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state);
+        var selection = rules.terraces().map(terraces -> terraces.selection(layout.storagePort().y(),
+                rules.surfaceCut().map(cut -> OptionalInt.of(cut.topY())).orElseGet(OptionalInt::empty), layout.accessSurfaces(),
+                surface -> !knowledge.geometry().blocked(surface))).orElseGet(AdjacentExcavationPlanner::adjacentSelection);
+        AdjacentExcavationPlanner.requireSelection(layout.accessSurfaces(), event.columns(), ExtractionGroundKnowledge.forState(state),
+                floor -> !declarationHeld(state, subject, floor.support()), rules.source().before()::equals,
+                block -> rules.definitionFor(block).isPresent(), columnLimit(rules, layout), selection);
+        if (event.columns().stream().anyMatch(column -> !BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN.contains(
+                column.station(), column.floor().support().offset(0, column.clearance().size(), 0))
+                || !BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN.contains(column.station(), column.floor().support().offset(0, 1, 0))))
+            throw new IllegalArgumentException("selected excavation exceeds its declared block reach");
+        knowledge.requireAccess(event.access(), layout.storagePort(), event.columns().stream()
+                .map(AdjacentExcavationPlanner.Column::station).collect(java.util.stream.Collectors.toSet()));
+        var next = prior.extend(event.expectedRevision(), extend(layout, rules, event));
         return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().extend(prior, next)));
     }
     public static FrontierWorldState apply(FrontierWorldState state, SubjectId subject, ExtractionAreaExtended event, long canonicalRevision) {

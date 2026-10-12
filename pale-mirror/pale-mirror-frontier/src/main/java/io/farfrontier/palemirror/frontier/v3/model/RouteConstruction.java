@@ -85,10 +85,7 @@ public record RouteConstruction(SubjectId id, SubjectId settlementId, List<Block
     }
 
     RouteConstruction withAssembly(EngineeringWorkAssembly nextAssembly) {
-        if (assembly.isPresent() && !(assembly.orElseThrow().purpose() == EngineeringJourneyPurpose.MUSTER_DEPOT
-                && assembly.orElseThrow().complete() && nextAssembly.purpose() == EngineeringJourneyPurpose.WORKSITE)) {
-            throw new IllegalArgumentException("route construction assembly is already declared");
-        }
+        nextAssembly.requirePredecessor(assembly);
         return new RouteConstruction(id, settlementId, waypoints, workCells, confirmedCells, status, cargoId, team,
                 Optional.of(Objects.requireNonNull(nextAssembly, "route construction assembly")));
     }

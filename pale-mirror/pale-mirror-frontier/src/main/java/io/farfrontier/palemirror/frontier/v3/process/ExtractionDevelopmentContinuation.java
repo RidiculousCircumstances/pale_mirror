@@ -8,6 +8,14 @@ import java.util.*;
 /** One family-owned continuation after either HOT/COLD depletion or external clearance. */
 final class ExtractionDevelopmentContinuation {
     private ExtractionDevelopmentContinuation() { }
+    static FrontierWorldState appendAfterObservation(FrontierWorldState state, SubjectId site, List<ProposedEvent> events, long tick) {
+        try { return append(state, site, events, tick); }
+        catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable pending) {
+            // Valid depletion/player observations commit independently of a future plan.
+            // The existing exact site review retains the opportunity and its calculation wait.
+            return state;
+        }
+    }
     static FrontierWorldState append(FrontierWorldState state, SubjectId site, List<ProposedEvent> events, long tick) {
         if (!ExtractionWorkPlanning.demanded(state, state.extractionSites().deposits().get(site).site().settlementId())) return state;
         var opening = ExtractionDevelopment.proposal(state, site);

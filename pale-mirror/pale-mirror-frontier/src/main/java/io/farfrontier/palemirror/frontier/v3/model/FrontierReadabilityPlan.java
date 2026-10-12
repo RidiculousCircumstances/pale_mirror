@@ -406,11 +406,10 @@ public final class FrontierReadabilityPlan {
                         case PATH_UNAVAILABLE -> "NO SAFE PATH";
                         case PATH_STALLED -> "FARMER STALLED";
                         case TARGET_CHUNK_UNLOADED -> "TARGET NOT LOADED";
-                        case CONTINUATION_UNAVAILABLE -> "NO SAFE ROUTE TO NEXT WORK GOAL";
                         case OFF_CONTRACT -> "FARMER OUTSIDE SAFE ROUTE";
                         case UNSUPPORTED_CAPABILITY -> "NO PEDESTRIAN NAVIGATOR";
                         case SEARCH_BUDGET_EXHAUSTED -> "LOCAL PATH BUDGET EXCEEDED";
-                        case KNOWN_GEOMETRY_UNAVAILABLE -> "AWAITING OBSERVED ROUTE";
+                        case KNOWN_GEOMETRY_UNAVAILABLE -> "KNOWN ROUTE UNAVAILABLE · RECONSIDERING";
                     }).orElseGet(() -> {
                         if (lifecycle.harvestJobs().values().stream().anyMatch(job -> !job.progress().complete()))
                             return "HARVEST IN PROGRESS · WORKERS " + lifecycle.harvestJobs().size();
@@ -581,8 +580,8 @@ public final class FrontierReadabilityPlan {
                 ? "BAKER PAUSED · STORAGE FULL" : switch (work.phase()) {
             case DEPOT_PICKUP -> "BAKER · WHEAT PICKUP";
             case STATION_LOAD -> "BAKER · STATION INPUT";
-            case PROCESSING -> "BAKING · " + work.completedWorkTicks() + " / "
-                    + ProductionWorkProgress.REQUIRED_PROCESSING_TICKS;
+            case PROCESSING -> work.labourComplete() ? "BAKING · WORK COMPLETE"
+                    : work.labour().filter(WorkProgress::running).isPresent() ? "BAKING · WORKING" : "BAKING · PAUSED";
             case STATION_UNLOAD -> "BAKER · BREAD READY";
             case DEPOT_DELIVERY -> "BAKER · BREAD DELIVERY";
             case DELIVERED -> "BAKER · BREAD STORED";

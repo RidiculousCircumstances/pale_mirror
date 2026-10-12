@@ -1,146 +1,110 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole;
-
-import io.farfrontier.palemirror.frontier.v3.api.FixedPosition;
-import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalContainerSlot;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
-import io.farfrontier.palemirror.frontier.v3.api.PhysicalPostcondition;
-import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
-import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
-import io.farfrontier.palemirror.frontier.v3.model.EngineeringRecoveryTeam;
-import io.farfrontier.palemirror.frontier.v3.model.EngineeringDepotService;
-import io.farfrontier.palemirror.frontier.v3.model.EngineeringJourneyPurpose;
-import io.farfrontier.palemirror.frontier.v3.model.EngineeringToolCustody;
-import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
-import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
-import io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkOrder;
-
-import java.util.Comparator;
+import io.farfrontier.palemirror.frontier.v3.api.*;
+import io.farfrontier.palemirror.frontier.v3.model.*;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
-/** One bounded exact-tool issue or return for one retained engineering/recovery owner. */
+/** One exact selected equipment transfer. Storage selection and walking belong to the retained visit. */
 public final class EngineeringEquipmentProcess {
     private EngineeringEquipmentProcess() { }
 
-    public static Optional<PhysicalIntent> issueOne(FrontierWorldState state, EngineeringWorkOrder project) {
-        if (project.engineeringTeam().isEmpty() || !project.building() || !EngineeringDepotService.atStations(state, project, EngineeringJourneyPurpose.MUSTER_DEPOT)
-                || pending(state, project.id(), PhysicalIntentKind.EQUIPMENT_ISSUE)) {
-            return Optional.empty();
+    /** The retained service visit still needs its receipt to acknowledge the clearance successor. */
+    public static boolean mayCompact(FrontierWorldState state, PhysicalIntent intent) {
+        if ((intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE || intent.kind() == PhysicalIntentKind.EQUIPMENT_RETURN)
+                && intent.status() == PhysicalIntentStatus.CONFIRMED) {
+            var declaration = EquipmentServiceBoundary.capability(intent);
+            var visit = EngineeringWorkOrderSupport.find(state, declaration.ownerId(intent))
+                    .flatMap(EngineeringWorkOrder::assembly).flatMap(EngineeringWorkAssembly::equipmentVisit).orElse(null);
+            if (visit != null && !visit.clearing() && visit.operation() == intent.kind()
+                    && visit.actorId().equals(declaration.actorId(intent))
+                    && visit.itemId().equals(intent.roles().require(PhysicalIntentSubjectRole.EQUIPMENT))
+                    && visit.access().containerId().equals(EquipmentPhysicalAuthority.container(intent))) {
+                var owner = EngineeringWorkOrderSupport.require(state, declaration.ownerId(intent));
+                if (intent.id().equals(visit.transferId(owner.id(), EngineeringExecutionAuthority.assemblyCurrent(state, owner)
+                        .requireMember(visit.actorId()).generation()))) return false;
+            }
         }
-        SubjectId depot = FrontierWorldState.depotId(project.settlementId());
-        if (state.inventory().surfaces().get(depot) == null || state.inventory().surfaces().get(depot).status() != ContainerSurfaceStatus.ACTIVE) return Optional.empty();
-        EngineeringRecoveryTeam team = project.engineeringTeam().orElseThrow();
-        SubjectId resident = team.memberIds().stream().filter(member -> !EngineeringToolCustody.holdsTool(state, member)).findFirst().orElse(null);
-        if (resident == null || state.actorLocations().get(resident) == null
-                || state.actorLocations().get(resident).condition().status() != io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.ALIVE) return Optional.empty();
-        ExactItemStack item = state.inventory().items().values().stream()
-                .filter(value -> value.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
-                .filter(value -> value.economicOwnerId().equals(project.settlementId()) && EngineeringToolCustody.isTool(value.itemKind()))
-                .filter(value -> !reservedForIssue(state, value.id()))
-                .min(Comparator.comparing(ExactItemStack::id)).orElse(null);
-        if (item == null) return Optional.empty();
-        String suffix = project.id().value().replace(':', '-') + "-" + resident.value().replace(':', '-')
-                + "-" + item.id().value().replace(':', '-');
-        var anchor = settlement(state, project).anchor();
-        return Optional.of(new PhysicalIntent(new PhysicalIntentId("intent:engineering-tool-issue-" + suffix), PhysicalIntentKind.EQUIPMENT_ISSUE,
-                PhysicalIntentStatus.PREPARED, project.settlementId(), PhysicalIntentRoleBinding.engineeringEquipmentIssue(project.id(), resident, item.id()),
-                new FixedPosition(FixedScalar.whole(anchor.x()), FixedScalar.whole(anchor.y()), FixedScalar.whole(anchor.z())), 0,
-                PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE));
+        return EquipmentItemDeparture.mayCompact(state, intent);
     }
 
-    public static Optional<PhysicalIntent> returnOne(FrontierWorldState state, EngineeringWorkOrder project) {
-        ReturnReadiness readiness = returnReadiness(state, project);
+    public static Optional<PhysicalIntent> issueOne(FrontierWorldState state, EngineeringWorkOrder owner) {
+        var visit = owner.assembly().flatMap(EngineeringWorkAssembly::equipmentVisit).orElse(null);
+        if (visit == null || visit.operation() != PhysicalIntentKind.EQUIPMENT_ISSUE || visit.clearing()
+                || !owner.building() || pending(state, owner.id(), PhysicalIntentKind.EQUIPMENT_ISSUE)
+                || !EngineeringDepotService.available(state, owner, visit)
+                || !EngineeringDepotService.atStations(state, owner, EngineeringJourneyPurpose.MUSTER_DEPOT)) return Optional.empty();
+        var position = state.inventory().surfaces().get(visit.access().containerId()).position();
+        return Optional.of(new PhysicalIntent(visit.transferId(owner.id(), EngineeringExecutionAuthority.assemblyCurrent(state, owner)
+                .requireMember(visit.actorId()).generation()),
+                PhysicalIntentKind.EQUIPMENT_ISSUE, PhysicalIntentStatus.PREPARED, owner.settlementId(),
+                PhysicalIntentRoleBinding.engineeringEquipmentIssue(owner.id(), visit.actorId(), visit.itemId(), visit.access().containerId()),
+                fixed(position), 0, PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED,
+                new EquipmentServiceRequest(EngineeringEquipmentServiceAccess.identity(owner, visit), visit.requestedAtTick()),
+                PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE));
+    }
+
+    public static Optional<PhysicalIntent> returnOne(FrontierWorldState state, EngineeringWorkOrder owner) {
+        ReturnReadiness readiness = returnReadiness(state, owner);
         if (!readiness.ready()) return Optional.empty();
-        SubjectId actorId = readiness.actorId().orElseThrow();
-        ExactItemStack item = state.inventory().items().get(readiness.itemId().orElseThrow());
-        PhysicalContainerSlot targetSlot = readiness.targetSlot().orElseThrow();
-        String suffix = project.id().value().replace(':', '-') + "-" + actorId.value().replace(':', '-')
-                + "-" + item.id().value().replace(':', '-');
-        var anchor = settlement(state, project).anchor();
-        return Optional.of(new PhysicalIntent(new PhysicalIntentId("intent:engineering-tool-return-" + suffix), PhysicalIntentKind.EQUIPMENT_RETURN,
-                PhysicalIntentStatus.PREPARED, project.settlementId(), PhysicalIntentRoleBinding.engineeringEquipmentReturn(project.id(), actorId, item.id()),
-                new FixedPosition(FixedScalar.whole(anchor.x()), FixedScalar.whole(anchor.y()), FixedScalar.whole(anchor.z())), 0,
-                PhysicalPostcondition.EQUIPMENT_RETURNED_OBSERVED, targetSlot, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE));
+        var actor = readiness.actorId().orElseThrow();
+        var item = readiness.itemId().orElseThrow();
+        var slot = readiness.targetSlot().orElseThrow();
+        var position = state.inventory().surfaces().get(slot.containerId()).position();
+        var visit = owner.assembly().orElseThrow().equipmentVisit().orElseThrow();
+        return Optional.of(new PhysicalIntent(visit.transferId(owner.id(), EngineeringExecutionAuthority.assemblyCurrent(state, owner)
+                .requireMember(actor).generation()),
+                PhysicalIntentKind.EQUIPMENT_RETURN, PhysicalIntentStatus.PREPARED, owner.settlementId(),
+                PhysicalIntentRoleBinding.engineeringEquipmentReturn(owner.id(), actor, item, slot.containerId()), fixed(position), 0,
+                PhysicalPostcondition.EQUIPMENT_RETURNED_OBSERVED, slot,
+                new EquipmentServiceRequest(EngineeringEquipmentServiceAccess.identity(owner, visit), visit.requestedAtTick()),
+                PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE));
     }
 
-    /**
-     * One pure explanation of the terminal tool-return boundary.  This is deliberately shared
-     * by the planner and operator diagnostics: a diagnostic must never make up a reason that the
-     * next canonical scan would not use.
-     */
-    public static ReturnReadiness returnReadiness(FrontierWorldState state, EngineeringWorkOrder project) {
-        SubjectId depot = FrontierWorldState.depotId(project.settlementId());
-        if (project.engineeringTeam().isEmpty()) return ReturnReadiness.unready("NO_ENGINEERING_TEAM", depot);
-        if (!project.readyForToolReturn()) return ReturnReadiness.unready("NOT_READY_FOR_RETURN", depot);
-        if (pending(state, project.id(), PhysicalIntentKind.EQUIPMENT_RETURN)) return ReturnReadiness.unready("RETURN_INTENT_PENDING", depot);
-        if (state.inventory().surfaces().get(depot) == null || state.inventory().surfaces().get(depot).status() != ContainerSurfaceStatus.ACTIVE) {
-            return ReturnReadiness.unready("DEPOT_SURFACE_INACTIVE", depot);
-        }
-        EngineeringRecoveryTeam team = project.engineeringTeam().orElseThrow();
-        ExactItemStack item = team.memberIds().stream().flatMap(member -> state.inventory().actorItems(member).stream())
-                .filter(value -> value.economicOwnerId().equals(project.settlementId()) && EngineeringToolCustody.isTool(value.itemKind()))
-                .min(Comparator.comparing(ExactItemStack::id)).orElse(null);
-        if (item == null || !(item.custody() instanceof InventoryCustody.Actor actor)) {
-            return ReturnReadiness.unready("NO_EXACT_TEAM_TOOL", depot);
-        }
-        if (state.actorLocations().get(actor.actorId()) == null
-                || state.actorLocations().get(actor.actorId()).condition().status() != io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.ALIVE) {
-            return ReturnReadiness.unready("TOOL_HOLDER_UNAVAILABLE", depot);
-        }
-        int slot = state.inventory().firstFreeSlot(depot).orElse(-1);
-        if (slot < 0) return ReturnReadiness.unready("DEPOT_FULL", depot);
-        if (!EngineeringDepotService.atStations(state, project, EngineeringJourneyPurpose.RETURN_DEPOT)) {
-            return ReturnReadiness.unready("TOOL_HOLDER_NOT_AT_DEPOT_SERVICE_PORT", depot);
-        }
-        return new ReturnReadiness("READY", depot, Optional.of(actor.actorId()), Optional.of(item.id()),
-                Optional.of(new PhysicalContainerSlot(depot, slot)));
+    /** Same retained facts for admission and diagnosis; this never reranks storage or free slots. */
+    public static ReturnReadiness returnReadiness(FrontierWorldState state, EngineeringWorkOrder owner) {
+        var visit = owner.assembly().flatMap(EngineeringWorkAssembly::equipmentVisit).orElse(null);
+        var container = visit == null ? Optional.<SubjectId>empty() : Optional.of(visit.access().containerId());
+        if (owner.engineeringTeam().isEmpty()) return ReturnReadiness.unready("NO_ENGINEERING_TEAM", container);
+        if (!owner.readyForToolReturn()) return ReturnReadiness.unready("NOT_READY_FOR_RETURN", container);
+        if (pending(state, owner.id(), PhysicalIntentKind.EQUIPMENT_RETURN)) return ReturnReadiness.unready("RETURN_INTENT_PENDING", container);
+        if (returnedOrLost(state, owner)) return ReturnReadiness.unready("NO_EXACT_TEAM_TOOL", container);
+        if (visit == null || visit.operation() != PhysicalIntentKind.EQUIPMENT_RETURN)
+            return ReturnReadiness.unready("NO_SELECTED_RETURN_VISIT", container);
+        if (visit.clearing()) return ReturnReadiness.unready("CLEARING_SERVICE_ACCESS", container);
+        if (!EngineeringDepotService.available(state, owner, visit)) return ReturnReadiness.unready("SELECTED_RETURN_UNAVAILABLE", container);
+        if (!EngineeringDepotService.atStations(state, owner, EngineeringJourneyPurpose.RETURN_DEPOT))
+            return ReturnReadiness.unready("TOOL_HOLDER_NOT_AT_STORAGE_SERVICE_PORT", container);
+        return new ReturnReadiness("READY", container, Optional.of(visit.actorId()), Optional.of(visit.itemId()), visit.returnSlot());
     }
 
-    /** Bounded, immutable facts explaining whether one exact return intent can be prepared. */
-    public record ReturnReadiness(String reason, SubjectId depotId, Optional<SubjectId> actorId,
+    public record ReturnReadiness(String reason, Optional<SubjectId> containerId, Optional<SubjectId> actorId,
                                   Optional<SubjectId> itemId, Optional<PhysicalContainerSlot> targetSlot) {
         public ReturnReadiness {
             if (reason == null || reason.isBlank()) throw new IllegalArgumentException("return readiness reason is required");
-            java.util.Objects.requireNonNull(depotId, "return readiness depot");
-            actorId = Optional.ofNullable(actorId).orElseThrow(() -> new IllegalArgumentException("return readiness actor optional is required"));
-            itemId = Optional.ofNullable(itemId).orElseThrow(() -> new IllegalArgumentException("return readiness item optional is required"));
-            targetSlot = Optional.ofNullable(targetSlot).orElseThrow(() -> new IllegalArgumentException("return readiness slot optional is required"));
-            if (reason.equals("READY") != (actorId.isPresent() && itemId.isPresent() && targetSlot.isPresent())) {
-                throw new IllegalArgumentException("return readiness must retain all exact intent subjects iff ready");
-            }
+            Objects.requireNonNull(containerId); Objects.requireNonNull(actorId); Objects.requireNonNull(itemId); Objects.requireNonNull(targetSlot);
+            boolean ready = reason.equals("READY");
+            if (ready != (actorId.isPresent() && itemId.isPresent() && targetSlot.isPresent())
+                    || ready && (containerId.isEmpty() || !targetSlot.orElseThrow().containerId().equals(containerId.orElseThrow())))
+                throw new IllegalArgumentException("return readiness must retain all exact selected subjects iff ready");
         }
-
-        static ReturnReadiness unready(String reason, SubjectId depotId) {
-            return new ReturnReadiness(reason, depotId, Optional.empty(), Optional.empty(), Optional.empty());
+        static ReturnReadiness unready(String reason, Optional<SubjectId> containerId) {
+            return new ReturnReadiness(reason, containerId, Optional.empty(), Optional.empty(), Optional.empty());
         }
-
         public boolean ready() { return reason.equals("READY"); }
     }
 
-    public static boolean pending(FrontierWorldState state, SubjectId projectId, PhysicalIntentKind kind) {
+    public static boolean pending(FrontierWorldState state, SubjectId ownerId, PhysicalIntentKind kind) {
         return state.physicalIntents().values().stream().anyMatch(intent -> intent.kind() == kind && intent.status() != PhysicalIntentStatus.CONFIRMED
-                && intent.roles().require(PhysicalIntentSubjectRole.ENGINEERING_WORK_ORDER).equals(projectId));
+                && intent.lifecycleOwner() == PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE
+                && intent.roles().require(PhysicalIntentSubjectRole.ENGINEERING_WORK_ORDER).equals(ownerId));
     }
-
-    public static boolean returnedOrLost(FrontierWorldState state, EngineeringWorkOrder project) {
-        return project.engineeringTeam().stream().flatMap(team -> team.memberIds().stream()).noneMatch(member -> EngineeringToolCustody.holdsTool(state, member))
-                && !pending(state, project.id(), PhysicalIntentKind.EQUIPMENT_RETURN);
+    public static boolean returnedOrLost(FrontierWorldState state, EngineeringWorkOrder owner) {
+        return owner.engineeringTeam().stream().flatMap(team -> team.memberIds().stream()).noneMatch(member -> EngineeringToolCustody.holdsTool(state, member))
+                && !pending(state, owner.id(), PhysicalIntentKind.EQUIPMENT_RETURN);
     }
-
-    private static boolean reservedForIssue(FrontierWorldState state, SubjectId itemId) {
-        return state.physicalIntents().values().stream().anyMatch(intent -> intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE
-                && intent.status() != PhysicalIntentStatus.CONFIRMED && intent.roles().require(PhysicalIntentSubjectRole.EQUIPMENT).equals(itemId));
-    }
-
-    private static io.farfrontier.palemirror.frontier.v3.model.Settlement settlement(FrontierWorldState state, EngineeringWorkOrder project) {
-        return io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateSupport.settlement(state.bootstrap(), project.settlementId());
+    private static FixedPosition fixed(BlockPosition position) {
+        return new FixedPosition(FixedScalar.whole(position.x()), FixedScalar.whole(position.y()), FixedScalar.whole(position.z()));
     }
 }

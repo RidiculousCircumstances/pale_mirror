@@ -29,12 +29,21 @@ final class FrontierV3AmbientHotAdmission {
                 || !FrontierV3AmbientActorExecutor.owned(admittedBody, actorId, current.actorLocations().get(actorId).kind())) return;
         var supported = FrontierV3BodyObservation.capture(admittedBody).supportedBody();
         if (supported.isEmpty()) return;
+        java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt> placementRoute;
+        try {
+            placementRoute = io.farfrontier.palemirror.frontier.v3.model.AmbientPlacementPolicy.selectedRoute(
+                    current, lease, supported.orElseThrow().supportingSurface());
+        } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
+            FrontierV3PhysicalWaitTrace.actor(admittedBody, current, actorId,
+                    "placement-ack:" + unavailable.status() + ":" + unavailable.getMessage());
+            return;
+        }
         var bodyId = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(current, actorId);
         if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, admittedBody)) return;
         if (!FrontierV3ReferenceContainerCustodyExecutor.confirmAdmittedAttachment(level, runtime, actorId)) return;
         var result = FrontierV3AmbientActorExecutor.submit(runtime, "ambient-hot-body-confirmed", actorId.value(),
                 new AmbientBodyConfirmed(actorId, lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION,
-                        lease.handoffBody(), supported.orElseThrow(), bodyId));
+                        lease.handoffBody(), supported.orElseThrow(), bodyId, placementRoute));
         FrontierV3DiagnosticTrace.record(level.getServer(), "ambient-admission:" + actorId.value(),
                 "ambient_body_admitted", actorId, result);
         current = runtime.decodedState().orElse(null);

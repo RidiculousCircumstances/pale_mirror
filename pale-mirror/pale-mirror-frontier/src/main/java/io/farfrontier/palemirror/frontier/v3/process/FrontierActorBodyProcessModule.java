@@ -35,7 +35,7 @@ final class FrontierActorBodyProcessModule implements FrontierWorldProcessModule
                 var afterDeath = ActorBodyAuthority.died(state, died, deaths, command.submittedAt().ticks());
                 var events = new java.util.ArrayList<ProposedEvent>();
                 events.add(new ProposedEvent(died.body().actorId(), died));
-                events.addAll(followUps.plan(state, afterDeath, died.body().actorId()));
+                events.addAll(followUps.plan(state, afterDeath, died.body().actorId(), command));
                 return new CommandPlan.Accepted(List.copyOf(events));
             } catch (IllegalArgumentException invalid) {
                 return FrontierWorldCommandPlanner.rejected(invalid.getMessage());

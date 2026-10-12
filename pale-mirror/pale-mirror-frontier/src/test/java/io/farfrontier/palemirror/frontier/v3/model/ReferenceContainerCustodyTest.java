@@ -121,5 +121,11 @@ class ReferenceContainerCustodyTest {
         FrontierWorldState unresolved = baseline.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody));
         assertTrue(ReferenceContainerCustody.hasLiveCustody(unresolved, depot), "the retained epoch locally blocks cold reuse");
         assertFalse(ReferenceContainerCustody.hasOperationalCustody(unresolved, depot), "unresolved recovery cannot write the chest");
+        assertTrue(ReferenceContainerCustody.blocksCanonicalUse(unresolved, depot),
+                "uncertain physical custody must also exclude the old stock/capacity from canonical admission");
+        assertFalse(ResourceStorageSelection.containers(unresolved, new SubjectId("settlement:1"), "minecraft:bread",
+                java.util.Set.of(ResourceStorageRole.WAREHOUSE)).contains(depot));
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        assertTrue(ReferenceContainerCustody.blocksCanonicalUse(codec.decode(codec.encode(unresolved)), depot));
     }
 }

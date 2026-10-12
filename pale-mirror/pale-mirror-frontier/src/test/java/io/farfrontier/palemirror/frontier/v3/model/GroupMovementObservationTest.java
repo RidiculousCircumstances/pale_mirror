@@ -121,18 +121,36 @@ class GroupMovementObservationTest {
         assertTrue(candidates.size() > 1, "an occupied road cell must not be the only declared birth surface");
         var alternative = candidates.get(1);
         assertTrue(LocalNavigationEnvelope.around(origin.standingBody(), origin.standingBody()).contains(alternative.support()));
+        var prepared = state;
         state = ModeledActorBodyFacts.present(state, first);
         state = ModeledActorBodyFacts.present(state, second);
         var inspected = ModeledActorBodyFacts.inspected(state, second, alternative.standingBody());
         var admitted = io.farfrontier.palemirror.frontier.v3.process.AmbientBodyConfirmationProcess.reduce(inspected,
                 new AmbientBodyConfirmed(second, lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION,
-                        origin.standingBody(), alternative.standingBody(), ActorBodyAuthority.current(inspected, second)));
+                        origin.standingBody(), alternative.standingBody(), ActorBodyAuthority.current(inspected, second),
+                        AmbientPlacementPolicy.selectedRoute(state, lease, alternative)));
         assertEquals(AmbientLeaseStatus.HOT, admitted.ambientLeases().get(second).status());
         assertEquals(state.actorMovements(), admitted.actorMovements(), "birth grants no route progress or arrival");
         assertEquals(state.shipments(), admitted.shipments(), "birth cannot deliver, sell or release cargo");
         assertEquals(state.inventory(), admitted.inventory());
         var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(admitted));
         assertEquals(admitted, recovered);
+        var blocked = prepared.recordPhysicalDelta(new PhysicalDelta(origin.support().offset(0, 1, 0),
+                PhysicalDeltaKind.UNKNOWN_SCAR, java.util.Optional.empty(), java.util.Optional.empty(), "test:blocked-retained-birth"));
+        var placementProof = AmbientPlacementPolicy.selectedRoute(blocked, lease, alternative);
+        var movement = blocked.actorMovements().get(second);
+        var knowledge = io.farfrontier.palemirror.frontier.v3.process.ActorMovementProviders.require(movement).placementKnowledge(blocked, movement);
+        assertThrows(IllegalArgumentException.class,
+                () -> knowledge.requireRoute(placementProof.orElseThrow().route()), "an unavailable birth origin cannot authorize walking");
+        blocked = ModeledActorBodyFacts.present(blocked, first);
+        blocked = ModeledActorBodyFacts.present(blocked, second);
+        blocked = ModeledActorBodyFacts.inspected(blocked, second, alternative.standingBody());
+        var placed = io.farfrontier.palemirror.frontier.v3.process.AmbientBodyConfirmationProcess.reduce(blocked,
+                new AmbientBodyConfirmed(second, lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION,
+                        origin.standingBody(), alternative.standingBody(), ActorBodyAuthority.current(blocked, second), placementProof));
+        assertEquals(AmbientLeaseStatus.HOT, placed.ambientLeases().get(second).status());
+        assertEquals(blocked.actorMovements(), placed.actorMovements(), "safe adjacent projection is not route progress");
+        assertEquals(blocked.inventory(), placed.inventory());
         assertTrue(GroupTravelCohesion.assessCurrent(recovered, group, second,
                 actor -> actor.equals(second) ? alternative.standingBody() : origin.standingBody(), MovementPermission.allow()).allowed());
         var foreign = origin.support().offset(8, 0, 0);
@@ -140,7 +158,7 @@ class GroupMovementObservationTest {
         assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.AmbientBodyConfirmationProcess.reduce(
                 finalState.withActorBody(second, BodyPosition.above(new SurfaceAnchor(foreign))),
                 new AmbientBodyConfirmed(second, lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION,
-                        origin.standingBody(), BodyPosition.above(new SurfaceAnchor(foreign)), ActorBodyAuthority.current(finalState, second))),
+                        origin.standingBody(), BodyPosition.above(new SurfaceAnchor(foreign)), ActorBodyAuthority.current(finalState, second), java.util.Optional.empty())),
                 "local placement never authorizes a remote birth");
     }
 }

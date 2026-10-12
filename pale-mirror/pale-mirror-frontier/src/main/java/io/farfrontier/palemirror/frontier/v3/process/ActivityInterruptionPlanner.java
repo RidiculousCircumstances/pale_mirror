@@ -9,6 +9,8 @@ import java.util.Objects;
 
 /** Activity selection depends on this port, never on a movement or profession's private phases. */
 public interface ActivityInterruptionPlanner {
+    /** Read-only admission hint; it must not build successor worlds, publish events or query routes. */
+    boolean mayAttempt(FrontierWorldState state, SubjectId residentId, long atTick);
     Assessment assess(FrontierWorldState state, SubjectId residentId, long atTick);
 
     sealed interface Assessment permits Ready, Waiting { }

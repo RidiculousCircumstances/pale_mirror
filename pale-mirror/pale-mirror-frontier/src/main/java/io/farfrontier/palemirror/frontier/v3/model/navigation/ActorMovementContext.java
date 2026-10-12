@@ -9,14 +9,28 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 /** Producer-declared provider context; a bare ID never selects navigation behavior. */
 public sealed interface ActorMovementContext permits ActorMovementContext.ServiceExit, ActorMovementContext.ShipmentLeg, ActorMovementContext.GroupLeg,
         ActorMovementContext.ExpeditionSupply, ActorMovementContext.ExpeditionAssembly, ActorMovementContext.ExpeditionReplenishment,
-        ActorMovementContext.ResourceAccessExit, ActorMovementContext.ExtractionLeg {
-    enum Provider { SERVICE_EXIT, SHIPMENT, GROUP, EXPEDITION_SUPPLY, EXTRACTION }
+        ActorMovementContext.ResourceAccessExit, ActorMovementContext.ExtractionLeg, ActorMovementContext.DefenderEquipmentReturn {
+    enum Provider { SERVICE_EXIT, SHIPMENT, GROUP, EXPEDITION_SUPPLY, EXTRACTION, DEFENDER_EQUIPMENT_RETURN }
     Provider provider();
     /** This exact nominal context owns reference closure, not the generic movement aggregate. */
     void validateReferences(ActorMovementReferences references, ActorMovement movement);
     /** Explicit caller-owned goal delegation; the registered provider validates its retained relationship. */
     java.util.Optional<SubjectId> delegatedGoalOwner();
     default java.util.Optional<SubjectId> clearancePoint() { return java.util.Optional.empty(); }
+    record DefenderEquipmentReturn(SubjectId assaultId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId transferId)
+            implements ActorMovementContext {
+        public DefenderEquipmentReturn { Objects.requireNonNull(assaultId); Objects.requireNonNull(transferId); }
+        @Override public Provider provider() { return Provider.DEFENDER_EQUIPMENT_RETURN; }
+        @Override public java.util.Optional<SubjectId> delegatedGoalOwner() { return java.util.Optional.of(assaultId); }
+        @Override public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
+            var parent = refs.strategicPlans().settlementAssaults().get(assaultId);
+            var visit = parent == null ? null : parent.equipmentReturnVisit().orElse(null);
+            if (visit == null || !visit.transferId().equals(transferId)
+                    || !visit.execution().equals(java.util.Optional.of(movement.executionId()))
+                    || !visit.order().equals(java.util.Optional.of(movement.order())))
+                throw new IllegalArgumentException("equipment movement lost its exact selected visit/activity/goal");
+        }
+    }
     /** An atomic resource interaction has finished; only its access footprint is being cleared.
      * The caller's exact UAE remains responsible, without restarting or finishing its job. */
     record ResourceAccessExit(ServicePointId point, SubjectId executionOwnerId) implements ActorMovementContext {

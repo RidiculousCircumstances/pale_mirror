@@ -40,9 +40,9 @@ class FrontierV3PhysicalExecutorsTest {
 
         assertTrue(fungible >= 0 && container >= 0 && fungible < container,
                 "the actual physical composition must recover an ordinary saved HOT split before stale canonical audit can fence it");
-        assertTrue(diagnostics.stream().filter(value -> value.id().equals("container-surfaces")).findFirst().orElseThrow()
-                        .dependencies().containsAll(List.of("production-transformation", "fungible-resource-observation")),
-                "the generic audit must declare both durable recovery predecessors rather than inherit declaration order");
+        assertTrue(dependsOn(diagnostics, "container-surfaces", "production-transformation")
+                        && dependsOn(diagnostics, "container-surfaces", "fungible-resource-observation"),
+                "both recovery predecessors must be connected by graph edges, including a declared intermediate removal observer");
     }
 
     @Test
@@ -81,6 +81,18 @@ class FrontierV3PhysicalExecutorsTest {
                 "unchanged unloaded chests keep the ordinary bounded release path");
     }
 
+
+    private static boolean dependsOn(List<FrontierV3PhysicalExecutorRegistry.Diagnostic> graph, String root, String required) {
+        var waiting = new java.util.ArrayDeque<String>(); waiting.add(root);
+        var visited = new java.util.HashSet<String>();
+        while (!waiting.isEmpty()) {
+            var id = waiting.removeFirst();
+            if (!visited.add(id)) continue;
+            if (id.equals(required)) return true;
+            waiting.addAll(graph.stream().filter(value -> value.id().equals(id)).findFirst().orElseThrow().dependencies());
+        }
+        return false;
+    }
 
     private static FungibleResourceLedger ledger(SubjectId container, SubjectId account, SubjectId lot, long epoch) {
         ResourceLot resourceLot = new ResourceLot(lot, new SubjectId("settlement:one"), "minecraft:wheat", 64, "test", List.of());

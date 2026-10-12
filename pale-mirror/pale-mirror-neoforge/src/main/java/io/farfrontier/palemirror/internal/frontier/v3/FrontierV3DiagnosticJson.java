@@ -747,6 +747,9 @@ final class FrontierV3DiagnosticJson {
         java.util.Set<SubjectId> birthIds = births.stream().map(ResidentBirthJob::id).collect(java.util.stream.Collectors.toSet());
         String birthEntries = births.stream().map(job -> "{\"id\":\"" + quote(job.id().value()) + "\",\"food\":\""
                         + quote(job.foodItemId().value()) + "\",\"commitment\":\"" + quote(job.foodCommitmentId().value())
+                        + "\",\"foodContainer\":\"" + quote(job.food().containerId().value())
+                        + "\",\"foodRepresentation\":\"" + (job.food() instanceof io.farfrontier.palemirror.frontier.v3.model.ColdResourceConsumption.Exact
+                            ? "EXACT_STACK" : "FUNGIBLE_LOTS")
                         + "\",\"resident\":\"" + quote(job.resident().id().value()) + "\"}")
                 .collect(java.util.stream.Collectors.joining(",", "[", "]"));
         java.util.Set<SubjectId> subjects = new java.util.HashSet<>(taskIds);

@@ -81,7 +81,8 @@ class FrontierWorldStateTest {
         for (int[] offset : List.of(new int[] { 12, 0 }, new int[] { -12, 0 }, new int[] { 0, 12 }, new int[] { 0, -12 })) {
             InfectionCell candidate = InfectionCell.at(infirmary.anchor().offset(offset[0], 0, offset[1]));
             try { plan = SettlementServiceWorkTraversal.compileDecontamination(baseline,
-                    FrontierWorldStateSupport.settlement(baseline.bootstrap(), new SubjectId("settlement:1")), medic.id(), medicLocation, candidate, workId); cell = candidate; break; }
+                    FrontierWorldStateSupport.settlement(baseline.bootstrap(), new SubjectId("settlement:1")), medic.id(), medicLocation, candidate, workId,
+                    ResourceStorageAccess.at(baseline, FrontierWorldState.depotId(new SubjectId("settlement:1")))); cell = candidate; break; }
             catch (IllegalArgumentException unavailable) { /* Try the next finite test fixture candidate. */ }
         }
         if (cell == null || plan == null) throw new AssertionError("test fixture has no bounded service-work corridor");
@@ -152,9 +153,9 @@ class FrontierWorldStateTest {
                 new SubjectId("settlement:1"), medic.id(), facility, work.inputSource(), plan.inputStation(), plan.workStation(), new SubjectId("item:service-reagent-2"),
                 new SettlementServiceTarget.Infection(selectedCell), new PhysicalIntentId("intent:service-input-issue-2"), new PhysicalIntentId("intent:service-decontamination-2"),
                 SettlementServiceWorkTraversal.compileDecontamination(baseline, FrontierWorldStateSupport.settlement(baseline.bootstrap(), new SubjectId("settlement:1")), medic.id(), medicLocation, selectedCell,
-                        new SubjectId("service:decontamination-2")).inputTraversal(), 0,
+                        new SubjectId("service:decontamination-2"), ResourceStorageAccess.at(baseline, work.inputSource().containerId())).inputTraversal(), 0,
                 SettlementServiceWorkTraversal.compileDecontamination(baseline, FrontierWorldStateSupport.settlement(baseline.bootstrap(), new SubjectId("settlement:1")), medic.id(), medicLocation, selectedCell,
-                        new SubjectId("service:decontamination-2")).workTraversal(), 0,
+                        new SubjectId("service:decontamination-2"), ResourceStorageAccess.at(baseline, work.inputSource().containerId())).workTraversal(), 0,
                 SettlementServiceWorkPhase.PREPARED, 0);
         assertThrows(IllegalArgumentException.class, () -> state.withChanges(FrontierWorldStateUpdate.begin()
                 .serviceWorks(Map.of(work.id(), work, duplicateWorker.id(), duplicateWorker))));

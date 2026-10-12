@@ -134,6 +134,14 @@ public record FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
         binding.require(FencedRecoveryPhase.PREPARED);
         return retire(binding, FencedRecoveryDisposition.REJECT_STALE, "canonical-composition");
     }
+    public static final String CANCELLED_BEFORE_EFFECT = "cancelled-before-effect";
+    /** A distinct durable fact: the physical attempt was never begun. */
+    public FencedRecoveryState cancelBeforeEffect(SubjectId bindingId, long epoch) {
+        FencedRecoveryBinding binding = requireCurrent(bindingId, epoch);
+        if (binding.phase() != FencedRecoveryPhase.PREPARED)
+            throw new IllegalArgumentException("pre-effect cancellation requires an unbegun physical binding");
+        return retire(binding, FencedRecoveryDisposition.CANCELLED_BEFORE_EFFECT, CANCELLED_BEFORE_EFFECT);
+    }
     /** Terminal local owner disposition; it never becomes restart ambiguity or a new claim. */
     public FencedRecoveryState conflict(SubjectId bindingId, long epoch, String reason) {
         Objects.requireNonNull(reason, "recovery conflict reason");

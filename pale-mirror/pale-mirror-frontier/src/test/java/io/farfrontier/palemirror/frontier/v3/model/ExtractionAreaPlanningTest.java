@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.extraction.*;
 import io.farfrontier.palemirror.frontier.v3.model.geometry.*;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
@@ -24,10 +25,24 @@ class ExtractionAreaPlanningTest {
         for (long cell : next.cells().keySet()) next = next.extracted(cell, 1, "fixture:prior-work-" + cell);
         return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(next)));
     }
-    @Test void admissionDiscoversOutsideOriginalPoolWithoutChangingOldHistoryOrCreditingWork() {
+    @Test void admissionDiscoversOutsideOriginalPoolWithoutChangingOldHistoryOrCreditingWork() throws Exception {
         var before = exhausted(); var old = deposit(before); var id = old.site().id();
         var event = ExtractionAreaPlanning.proposal(before, id).orElseThrow();
-        var after = ExtractionAreaPlanning.apply(before, id, event, 1000); var next = deposit(after);
+        FrontierWorldState after;
+        var codec = new FrontierWorldStateCodec();
+        try (var ignored = PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            fail("excavation plan replay cannot re-propose or query reachability"); return null;
+        })) {
+            after = ExtractionAreaPlanning.apply(codec.decode(codec.encode(before)), id, event, 1000);
+            assertEquals(after, ExtractionAreaPlanning.apply(before, id, event, 1000));
+            var missing = new LinkedHashMap<>(event.access().routes()); missing.remove(missing.keySet().iterator().next());
+            assertThrows(IllegalArgumentException.class, () -> new ExtractionAreaExtended(id, event.expectedRevision(), event.columns(),
+                    new PedestrianAccessReceipt(event.access().origin(), missing)));
+            assertThrows(RuntimeException.class, () -> FrontierWorldRuntimeDefinition.payloadCodecs().decode(event.type(),
+                    Arrays.copyOf(FrontierWorldRuntimeDefinition.payloadCodecs().encode(event),
+                            FrontierWorldRuntimeDefinition.payloadCodecs().encode(event).length - 1)));
+        }
+        var next = deposit(after);
         assertEquals(512, old.cells().size()); assertEquals(528, next.cells().size());
         assertEquals(old.cells(), next.cells().entrySet().stream().filter(entry -> old.cells().containsKey(entry.getKey()))
                 .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
@@ -41,7 +56,7 @@ class ExtractionAreaPlanningTest {
             var knowledge = KnownPedestrianRouteKnowledge.forFrontier(after);
             assertFalse(knowledge.geometry().blocked(cell.workstation()));
         }
-        var codec = new FrontierWorldStateCodec(); assertEquals(after, codec.decode(codec.encode(after)));
+        assertEquals(after, codec.decode(codec.encode(after)));
         var payloads = FrontierWorldRuntimeDefinition.payloadCodecs(); assertEquals(event, payloads.decode(event.type(), payloads.encode(event)));
         assertThrows(IllegalArgumentException.class, () -> ExtractionAreaPlanning.apply(after, id, event, 1001));
         assertThrows(IllegalArgumentException.class, () -> ExtractionAreaPlanning.apply(before, new SubjectId("extraction:foreign"), event, 1001));

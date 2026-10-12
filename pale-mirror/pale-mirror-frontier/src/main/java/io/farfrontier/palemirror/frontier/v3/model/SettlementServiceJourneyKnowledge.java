@@ -30,21 +30,23 @@ public final class SettlementServiceJourneyKnowledge {
         return route.get(Math.min(cursor + 1, route.size() - 1));
     }
     public static KnownPedestrianRouteKnowledge view(FrontierWorldState state, SettlementServiceWork work) {
-        var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), work.settlementId());
-        var depot = settlement.structures().stream().filter(value -> value.kind() == StructureKind.DEPOT)
-                .findFirst().orElseThrow(() -> new IllegalArgumentException("service approach lost its depot"));
-        return KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(),
-                List.of(new KnownPedestrianRouteKnowledge.Passage(depot,
-                        KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
+        return ResourceStorageNavigation.forEndpoint(state,
+                ResourceStorageAccess.at(state, work.inputSource().containerId()).endpoint());
     }
-    public static StationApproachState checkpoint(FrontierWorldState state, SettlementServiceWork work, SurfaceAnchor observed) {
-        var order = new MovementOrder(work.id(), work.workerId(), 1L, Math.incrementExact(work.spatial().revision()),
+    public static MovementOrder order(SettlementServiceWork work) {
+        return new MovementOrder(work.id(), work.workerId(), 1L, work.spatial().revision(),
                 List.of(target(work)), TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
+    }
+    public static StationApproachState checkpoint(SettlementServiceWork work, SurfaceAnchor observed) {
+        return work.spatial().observedAt(observed);
+    }
+    public static Optional<TraversalRejoin> approach(FrontierWorldState state, SettlementServiceWork work) {
         try {
-            var path = view(state, work).path(observed, order);
-            return new StationApproachState(order.goalRevision(), Optional.of(new TraversalRejoin(path, 0)), Optional.empty());
+            return StationApproachNavigation.plan(view(state, work), work.spatial(), order(work));
         } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
-            return new StationApproachState(order.goalRevision(), Optional.empty(), Optional.of(observed));
+            if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
+                throw unavailable;
+            return Optional.empty();
         }
     }
     /** Reopening presentation can precede body unload; preserve its independently inspected pose. */
@@ -55,7 +57,7 @@ public final class SettlementServiceJourneyKnowledge {
             throw new IllegalArgumentException("service scope admission lost its living worker");
         if (FrontierSettlementServiceWorkSceneSupport.currentSurface(work).equals(actor.supportingSurface())) return state;
         var works = new LinkedHashMap<>(state.serviceWorks());
-        works.put(work.id(), work.withSpatial(checkpoint(state, work, actor.supportingSurface())));
+        works.put(work.id(), work.withSpatial(checkpoint(work, actor.supportingSurface())));
         return state.withChanges(FrontierWorldStateUpdate.begin().serviceWorks(works));
     }
 
@@ -71,7 +73,7 @@ public final class SettlementServiceJourneyKnowledge {
         if (FrontierSettlementServiceWorkSceneSupport.currentSurface(work).equals(request.observedPosition().supportingSurface()))
             return new ActorActivityBodyCheckpoint.Acknowledgement(request, update);
         var works = new LinkedHashMap<>(state.serviceWorks());
-        works.put(work.id(), work.withSpatial(checkpoint(state, work, request.observedPosition().supportingSurface())));
+        works.put(work.id(), work.withSpatial(checkpoint(work, request.observedPosition().supportingSurface())));
         return new ActorActivityBodyCheckpoint.Acknowledgement(request, update.serviceWorks(works));
     }
 }

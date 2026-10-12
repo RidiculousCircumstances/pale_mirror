@@ -187,7 +187,8 @@ final class FrontierV3MinecraftGoalNavigation {
         }
         if (path == null) {
             if (traffic != null) {
-                FrontierV3PedestrianYieldRequests.request(level, actor, permission, traffic);
+                FrontierV3PedestrianYieldRequests.request(level, actor, permission, traffic,
+                        new Demand(legalStations, scope, order));
                 return retry(level, actor, legalStations, scope, order, permission, level.getGameTime(),
                         "traffic-blocked[" + FrontierV3PedestrianYieldRequests.explanation(level, traffic) + "]",
                         FrontierV3GoalNavigation.BlockReason.TRAFFIC_BLOCKED);
@@ -287,12 +288,42 @@ final class FrontierV3MinecraftGoalNavigation {
         return control != null && control.permission().current(actor);
     }
 
+    /** Exact currently requested native leg, including failed legs awaiting a traffic retry. */
+    record Demand(List<SurfaceAnchor> stations, FrontierV3NavigationScope scope, Optional<MovementOrder> order) {
+        Demand {
+            stations = List.copyOf(stations); Objects.requireNonNull(scope); Objects.requireNonNull(order);
+            if (stations.isEmpty()) throw new IllegalArgumentException("navigation demand has no station");
+        }
+        boolean matches(List<SurfaceAnchor> currentStations, FrontierV3NavigationScope currentScope, Optional<MovementOrder> currentOrder) {
+            return stations.equals(currentStations) && scope.equals(currentScope) && order.equals(currentOrder);
+        }
+    }
+
+    static boolean hasDemand(Mob actor, Demand demand) {
+        var control = ACTIVE.get(actor);
+        if (control != null) return control.permission().current(actor)
+                && demand.matches(control.legalStations(), control.scope(), control.order());
+        var failure = FAILURES.get(actor);
+        return failure != null && failure.permission().current(actor)
+                && demand.matches(failure.legalStations(), failure.scope(), failure.order());
+    }
+
+    static Path acceptedPath(Mob actor, Demand demand) {
+        var control = ACTIVE.get(actor);
+        if (control == null || !control.permission().current(actor)
+                || !demand.matches(control.legalStations(), control.scope(), control.order())) return null;
+        Path path = actor.getNavigation().getPath();
+        return path == control.progressPath() ? path : null;
+    }
+
     record Observation(String status, String reason, List<SurfaceAnchor> targets,
                        List<io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId> blockers) {
         static Observation idle() { return new Observation("IDLE", "", List.of(), List.of()); }
     }
 
     static Observation observation(Mob actor) {
+        var courtesy = FrontierV3PedestrianCourtesy.observation(actor);
+        if (courtesy.isPresent()) return courtesy.orElseThrow();
         var control = ACTIVE.get(actor);
         if (control != null && control.permission().current(actor))
             return new Observation("MOVING", control.permission().pace().map(pace -> "pace-blocks-per-tick="

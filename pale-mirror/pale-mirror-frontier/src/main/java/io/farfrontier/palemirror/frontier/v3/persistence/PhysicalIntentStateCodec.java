@@ -53,6 +53,7 @@ final class PhysicalIntentStateCodec {
             output.writeByte(PhysicalIntentLifecycleOwner.CODEC_VERSION); FrontierWorldStateCodec.writeString(output, intent.lifecycleOwner().stableId());
             output.writeBoolean(intent.diagnostic().isPresent());
             if (intent.diagnostic().isPresent()) writeDiagnostic(output, intent.diagnostic().orElseThrow());
+            EquipmentServiceRequestCodec.write(output, intent.equipmentServiceRequest());
         }
     }
 
@@ -75,8 +76,9 @@ final class PhysicalIntentStateCodec {
             Optional<PhysicalDeltaSemanticTarget> semanticTarget = input.readBoolean() ? Optional.of(PhysicalDeltaPayloadCodecs.readTarget(input)) : Optional.empty();
             PhysicalIntentLifecycleOwner lifecycleOwner = PhysicalIntentLifecycleOwner.fromWire(input.readUnsignedByte(), FrontierWorldStateCodec.readString(input));
             Optional<DiagnosticTuple> diagnostic = input.readBoolean() ? Optional.of(readDiagnostic(input)) : Optional.empty();
+            var serviceRequest = EquipmentServiceRequestCodec.read(input);
             PhysicalIntent intent = new PhysicalIntent(id, FrontierWireTags.require(PhysicalIntentKind.class, kind), FrontierWireTags.require(PhysicalIntentStatus.class, status), cause,
-                    PhysicalIntentRoleBinding.decode(schema, roles, scene), origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target, semanticTarget, lifecycleOwner, diagnostic);
+                    PhysicalIntentRoleBinding.decode(schema, roles, scene), origin, radius, FrontierWireTags.require(PhysicalPostcondition.class, postcondition), observation, target, semanticTarget, lifecycleOwner, diagnostic, serviceRequest);
             if (status >= PhysicalIntentStatus.values().length || intents.put(id, intent) != null) {
                 throw new IllegalArgumentException("invalid or duplicate physical intent");
             }

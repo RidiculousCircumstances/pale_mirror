@@ -88,6 +88,7 @@ final class FencedRecoveryStateCodec {
             case 5 -> FencedRecoveryDisposition.REPAIR;
             case 6 -> FencedRecoveryDisposition.ABANDON;
             case 7 -> FencedRecoveryDisposition.REJECT_STALE;
+            case 8 -> FencedRecoveryDisposition.CANCELLED_BEFORE_EFFECT;
             default -> throw new IllegalArgumentException("unknown fenced recovery disposition");
         };
     }

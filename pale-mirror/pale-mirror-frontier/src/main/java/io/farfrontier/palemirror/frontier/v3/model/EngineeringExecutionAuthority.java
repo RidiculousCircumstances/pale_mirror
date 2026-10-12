@@ -45,6 +45,21 @@ public final class EngineeringExecutionAuthority {
         group.requireDeclaration(ActorActivityKind.ENGINEERING_ASSEMBLY, owner.id(), owner.engineeringTeam().orElseThrow().memberIds());
         return group;
     }
+    /** A same-owner journey may retarget its live body; recovery and scene custody cannot yield implicitly. */
+    public static boolean mayStartJourney(FrontierWorldState state, EngineeringWorkOrder owner) {
+        assemblyCurrent(state, owner);
+        if (!crewLiving(state, owner)) return false;
+        for (var actor : owner.engineeringTeam().orElseThrow().memberIds()) {
+            if (ActorExecutionCoordinator.sceneOwns(state, actor)) return false;
+            var lease = state.ambientLeases().get(actor);
+            if (lease == null || lease.status() == AmbientLeaseStatus.CLOSED) continue;
+            var target = owner.assembly().map(assembly -> assembly.members().get(actor).ambientTarget().standingBody())
+                    .orElseGet(() -> state.actorLocations().get(actor).body());
+            if (lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY
+                    || !lease.goalBody().equals(target)) return false;
+        }
+        return true;
+    }
     public static Optional<ActorExecutionGroup> terminalDeclaration(FrontierWorldState state, EngineeringWorkOrder owner) {
         return owner.engineeringTeam().map(team -> current(state, owner));
     }
@@ -146,8 +161,9 @@ public final class EngineeringExecutionAuthority {
                 var owner = require(EngineeringWorkOrderSupport.registry(state.routeConstructions(), state.routeMaintenances()), id);
                 if (owner.assembly().isEmpty()) return lease.goalBody().equals(state.actorLocations().get(id.actorId()).body());
                 var member = owner.assembly().orElseThrow().members().get(id.actorId());
-                var target = member.arrived() ? member.currentSurface() : member.nextSurface();
-                return lease.goalBody().supportingSurface().equals(target);
+                var target = member.ambientTarget();
+                return lease.goalBody().supportingSurface().equals(target)
+                        && EngineeringEquipmentServiceAccess.mayAdvance(state, owner, id.actorId(), target);
             }
             @Override public ActorActivityKind kind() { return kind; }
             @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { }

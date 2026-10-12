@@ -178,7 +178,7 @@ class ResourceSiteColdHarvestReceiptTest {
         assertFalse(pending.state().inventory().items().containsKey(beforeReturn.outputItemId()),
                 "the last crop cannot issue output before the retained return path is walked");
         BodyPosition penultimateBody = pending.state().actorLocations().get(beforeReturn.workerId()).body();
-        assertEquals(ResourceSiteHarvestKnownNavigation.path(pending.state(), beforeReturn).getFirst().standingBody(),
+        assertEquals(ResourceSiteHarvestKnownNavigation.plannedPath(pending.state(), beforeReturn).getFirst().standingBody(),
                 penultimateBody, "the last COLD step starts at the retained actual body, not a route cursor");
         SubjectId depot = FrontierWorldState.depotId(new SubjectId("settlement:1"));
         PhysicalReplicaRecord depotRecord = PhysicalReplicaRecord.expected(depot,
@@ -197,6 +197,18 @@ class ResourceSiteColdHarvestReceiptTest {
         assertEquals(List.of(new ScheduleEffect.Rescheduled(pending.action().id(), pending.action())),
                 ResourceSiteHarvestProcess.planColdProgress(withPhysicalDepot, pending.action()).stream()
                         .map(ProposedEvent::payload).toList());
+        var scope = ReferenceContainerCustody.scopeId(depot);
+        var missing = ReplicaCustodyDiagnosticProducer.unresolved(scope, 1L, 7L, 2L, PhysicalCustodyUnresolvedReason.PROVIDER_LOST);
+        var lostDepot = heldDepot.unresolved(scope, 1L, 7L, 2L, PhysicalCustodyUnresolvedReason.PROVIDER_LOST, missing.diagnostic());
+        var withLostDepot = pending.state().withChanges(FrontierWorldStateUpdate.begin().replicaCustody(lostDepot));
+        assertTrue(ReferenceContainerCustody.hasLiveCustody(withLostDepot, depot),
+                "the lost source retains its unresolved physical epoch; replacement cannot erase it");
+        assertFalse(ResourceSiteHarvestProcess.coldProgressHeld(withLostDepot, pending.action()),
+                "the lost endpoint's custody wait cannot prevent replacement planning");
+        var waitingForStorage = ResourceSiteHarvestProcess.planColdProgress(withLostDepot, pending.action());
+        assertTrue(waitingForStorage.stream().allMatch(event -> event.payload() instanceof ScheduleEffect.Rescheduled),
+                "without another eligible warehouse the exact returned cargo must wait, not move or disappear");
+        assertEquals(pending.state().inventory(), withLostDepot.inventory());
         // An occupied service entrance retains this same action without a
         // one-tick durable retry. The meal's eventual exit can then be admitted
         // ahead of the farmer instead of being starved by its waiting job.
@@ -612,7 +624,7 @@ class ResourceSiteColdHarvestReceiptTest {
         while (true) {
             ResourceSiteHarvestJob current = (ResourceSiteHarvestJob) state.resourceSites().site(site).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
             if (current.progress().complete() && !ResourceSiteHarvestGoal.actorAtDepot(state, current)
-                    && ResourceSiteHarvestKnownNavigation.path(state, current).size() == 2) break;
+                    && ResourceSiteHarvestKnownNavigation.plannedPath(state, current).size() == 2) break;
             List<ProposedEvent> planned = ResourceSiteHarvestProcess.planColdProgress(state, action);
             assertFalse(ResourceSiteHarvestProcess.coldProgressHeld(state, action),
                     "isolated harvest fixture must not wait for an activity process it never executes");

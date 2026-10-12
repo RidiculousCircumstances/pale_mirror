@@ -20,7 +20,6 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestImmatureCe
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestNavigationBlock;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestRouteBlocked;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestTargetRetargeted;
-import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestRouteCleared;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestHotGoalArrived;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestGoal;
 import io.farfrontier.palemirror.frontier.v3.model.ServiceAccessCoordinator;
@@ -396,36 +395,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         }
         if (job.navigationBlock().isPresent()) {
             var blocked = job.navigationBlock().orElseThrow();
-            var goal = blocked.target();
-            if (blocked.reason() == ResourceSiteHarvestNavigationBlock.Reason.CONTINUATION_UNAVAILABLE) {
-                FrontierV3GoalNavigation.stop(worker, actuation);
-                if (state.resourceSites().harvestMutationPending(job)) return;
-                var cycle = state.resourceSites().cycle(job.siteId());
-                var prefix = ResourceSiteHarvestProcess.blockedPrefix(cycle, job.progress().nextCropSlotIndex());
-                if (ResourceSiteHarvestProcess.blockedPrefixMeetsPendingPlayerBreak(
-                        state, job, prefix)) return;
-                if (!prefix.isEmpty()
-                        && goal.equals(ResourceSiteHarvestProcess.blockedPrefixContinuationGoal(state, job, prefix).representative())) {
-                    try {
-                        ResourceSiteHarvestProcess.blockedPrefixContinuation(state, job.siteId(), job, prefix);
-                    } catch (ResourceSiteHarvestProcess.ContinuationUnavailable stillUnavailable) {
-                        return;
-                    }
-                }
-                var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job);
-                if (binding.isEmpty()) return;
-                var action = binding.orElseThrow();
-                var cleared = new ResourceSiteHarvestRouteCleared(job.siteId(), job.id(), job.workerId(), blocked,
-                        lease.id(), action.id(), action.dueAt().ticks());
-                ResourceSiteHarvestProcess.reduceRouteCleared(state, job.siteId(), cleared);
-                var accepted = submitBound(runtime, "resource-site-harvest-continuation-cleared", lease.id().value(), cleared, action);
-                FrontierV3DiagnosticTrace.recordScene(level.getServer(), "resource_site_harvest_goal_cleared", lease, accepted);
-                return;
-            }
             if (state.resourceSites().harvestMutationPending(job)) return;
-            if ((blocked.reason() == ResourceSiteHarvestNavigationBlock.Reason.PATH_UNAVAILABLE
-                    || blocked.reason() == ResourceSiteHarvestNavigationBlock.Reason.PATH_STALLED)
-                    && tryRetargetWorkTarget(level, runtime, state, lease, job, worker)) return;
+            if (blocked.reroutable() && tryRetargetWorkTarget(level, runtime, state, lease, job, worker)) return;
             ResourceSiteHarvestGoal currentGoal = ResourceSiteHarvestGoal.current(state, job);
             var outcome = FrontierV3GoalNavigation.pursue(level, worker,
                     hotGoal(state, job, currentGoal), actuation);
@@ -643,9 +614,12 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         var binding = FrontierV3TraversalScheduleGate.binding(runtime.executionView().orElseThrow(), job);
         if (binding.isEmpty()) return false;
         var action = binding.orElseThrow();
+        var execution = state.actorExecutions().current(
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST).get(job.workerId());
+        if (execution == null || !execution.activityOwnerId().equals(job.id())) return false;
         var retargeted = new ResourceSiteHarvestTargetRetargeted(job.siteId(), job.id(), job.workerId(),
                 cycle.layout().revision(), job.progress().nextCropSlotIndex(), alternate.getAsInt(),
-                action.id(), action.dueAt().ticks(), Optional.of(lease.id()));
+                action.id(), action.dueAt().ticks(), Optional.of(lease.id()), execution, Optional.empty());
         ResourceSiteHarvestRetargeting.reduceTargetRetargeted(state, job.siteId(), retargeted);
         var accepted = submitBound(runtime, "resource-site-harvest-target-retargeted", lease.id().value(),
                 retargeted, action);
@@ -659,7 +633,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         // authorize a different loaded-world path to this unchanged semantic goal.
         try {
             return FrontierV3GoalNavigation.Goal.routed(goal.movementOrder(),
-                    io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestKnownNavigation.path(state, job),
+                    io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestKnownNavigation.plannedPath(state, job),
                     state.bootstrap().bounds());
         } catch (io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable gap) {
             return FrontierV3GoalNavigation.Goal.routed(goal.movementOrder(), java.util.List.of(), state.bootstrap().bounds());

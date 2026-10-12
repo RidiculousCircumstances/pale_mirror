@@ -105,7 +105,8 @@ public final class FrontierV3ProductionWorkGameTests {
                             runtime.canonicalState().orElseThrow().instant())));
             FrontierV3CommandSubmission.submit(runtime, "production-release-fence-ambient-hot", suffix,
                     new AmbientBodyConfirmed(job.workerId(), state(runtime).ambientLeases().get(job.workerId()).revision(),
-                            AmbientBodyConfirmed.Boundary.ADMISSION, observed, observed, io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state(runtime), job.workerId())));
+                            AmbientBodyConfirmed.Boundary.ADMISSION, observed, observed,
+                            io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state(runtime), job.workerId()), java.util.Optional.empty()));
             SceneLease lease = SceneLease.forCause(leaseId, world, new ProductionWorkSceneCause(job.id()), observed.supportingSurface().support(),
                     runtime.canonicalState().orElseThrow().instant(), runtime.canonicalState().orElseThrow().revision().value(), SceneLeaseStatus.PREPARED,
                     List.of(member), java.util.Set.of(job.workerId()), Optional.empty());

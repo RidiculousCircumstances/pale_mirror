@@ -20,7 +20,7 @@ final class FrontierV3DiagnosticEngineeringJson {
         java.util.List<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> cells = io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan.routeConstructionCells(state, project);
         String next = project.confirmedCells() == cells.size() ? "null" : FrontierV3DiagnosticJson.position(cells.get(project.confirmedCells()));
         String team = project.team().map(value -> team(state, value)).orElse(",\"teamPresent\":false,\"teamFullyEquipped\":false,\"teamMembers\":[]");
-        String assembly = project.assembly().map(value -> assembly(state, value.members(), value.purpose(), value.complete())).orElse(",\"assemblyPresent\":false");
+        String assembly = project.assembly().map(value -> assembly(state, value)).orElse(",\"assemblyPresent\":false");
         long pendingProjectIntents = pendingIntents(state, project.id(), true);
         long pendingOtherIntents = pendingIntents(state, project.id(), false);
         return FrontierV3DiagnosticJson.base("route_construction", id, checkpoint) + ",\"status\":\"ok\",\"project\":\"" + FrontierV3DiagnosticJson.quote(project.id().value())
@@ -36,7 +36,7 @@ final class FrontierV3DiagnosticEngineeringJson {
         if (maintenance == null) return FrontierV3DiagnosticJson.unavailable("route_maintenance", id, checkpoint, "not_found");
         String members = maintenance.team().memberIds().stream().sorted().map(actorId -> engineeringTeamMember(state, actorId)).reduce((left, right) -> left + "," + right).orElse("");
         boolean fullyEquipped = io.farfrontier.palemirror.frontier.v3.model.EngineeringToolCustody.ready(state, maintenance.team());
-        String assembly = maintenance.assembly().map(value -> assembly(state, value.members(), value.purpose(), value.complete())).orElse(",\"assemblyPresent\":false");
+        String assembly = maintenance.assembly().map(value -> assembly(state, value)).orElse(",\"assemblyPresent\":false");
         EngineeringAdmissionDiagnostic admission = maintenanceAssemblyAdmission(state, maintenance, fullyEquipped);
         var toolReturn = EngineeringEquipmentProcess.returnReadiness(state, maintenance);
         String toolReturnActor = toolReturn.actorId().map(SubjectId::value).orElse("");
@@ -48,7 +48,7 @@ final class FrontierV3DiagnosticEngineeringJson {
                 + "\",\"cargoPresent\":" + maintenance.cargoId().isPresent() + ",\"teamPresent\":true,\"teamFullyEquipped\":" + fullyEquipped
                 + ",\"assemblyAdmission\":\"" + FrontierV3DiagnosticJson.quote(admission.reason()) + "\",\"assemblyAdmissionDetail\":\"" + FrontierV3DiagnosticJson.quote(admission.detail()) + "\",\"teamMembers\":[" + members
                 + "],\"pendingMaintenanceIntents\":" + pendingIntents(state, maintenance.id(), true) + ",\"toolReturnRequired\":" + !EngineeringEquipmentProcess.returnedOrLost(state, maintenance)
-                + ",\"toolReturnReadiness\":\"" + FrontierV3DiagnosticJson.quote(toolReturn.reason()) + "\",\"toolReturnDepot\":\"" + FrontierV3DiagnosticJson.quote(toolReturn.depotId().value())
+                + ",\"toolReturnReadiness\":\"" + FrontierV3DiagnosticJson.quote(toolReturn.reason()) + "\",\"toolReturnContainer\":\"" + FrontierV3DiagnosticJson.quote(toolReturn.containerId().map(SubjectId::value).orElse(""))
                 + "\",\"toolReturnActor\":\"" + FrontierV3DiagnosticJson.quote(toolReturnActor) + "\",\"toolReturnItem\":\"" + FrontierV3DiagnosticJson.quote(toolReturnItem)
                 + "\",\"toolReturnSlot\":\"" + FrontierV3DiagnosticJson.quote(toolReturnSlot) + "\"" + assembly + "}";
     }
@@ -59,10 +59,18 @@ final class FrontierV3DiagnosticEngineeringJson {
         return ",\"teamPresent\":true,\"teamFullyEquipped\":" + fullyEquipped + ",\"teamMembers\":[" + members + "]";
     }
 
-    private static String assembly(FrontierWorldState state, java.util.Map<SubjectId, io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkAssembly.Member> members, Object purpose, boolean complete) {
+    private static String assembly(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkAssembly assembly) {
+        var members = assembly.members();
         String rendered = members.entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).map(entry -> engineeringAssemblyMember(state, entry.getKey(), entry.getValue())).reduce((left, right) -> left + "," + right).orElse("");
         int cursorTotal = members.values().stream().mapToInt(io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkAssembly.Member::cursor).sum();
-        return ",\"assemblyPresent\":true,\"assemblyPurpose\":\"" + purpose + "\",\"assemblyComplete\":" + complete + ",\"assemblyCursorTotal\":" + cursorTotal + ",\"assemblyMembers\":[" + rendered + "]";
+        String visit = assembly.equipmentVisit().map(value -> "{\"actor\":\"" + FrontierV3DiagnosticJson.quote(value.actorId().value())
+                + "\",\"item\":\"" + FrontierV3DiagnosticJson.quote(value.itemId().value())
+                + "\",\"container\":\"" + FrontierV3DiagnosticJson.quote(value.access().containerId().value())
+                + "\",\"operation\":\"" + value.operation() + "\",\"phase\":\"" + value.phase()
+                + "\",\"target\":" + FrontierV3DiagnosticJson.position(members.get(value.actorId()).destination())
+                + ",\"returnSlot\":" + value.returnSlot().map(slot -> Integer.toString(slot.slot())).orElse("null") + "}").orElse("null");
+        return ",\"assemblyPresent\":true,\"assemblyPurpose\":\"" + assembly.purpose() + "\",\"assemblyComplete\":" + assembly.complete()
+                + ",\"assemblyCursorTotal\":" + cursorTotal + ",\"assemblyMembers\":[" + rendered + "],\"equipmentVisit\":" + visit;
     }
 
     private static long pendingIntents(FrontierWorldState state, SubjectId owner, boolean containsOwner) {
@@ -99,9 +107,10 @@ final class FrontierV3DiagnosticEngineeringJson {
 
     private static String engineeringAssemblyMember(FrontierWorldState state, SubjectId actorId, io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkAssembly.Member member) {
         var lease = state.ambientLeases().get(actorId);
-        String next = member.arrived() ? "null" : FrontierV3DiagnosticJson.position(member.nextSurface().support());
+        String next = !member.canAdvance() ? "null" : FrontierV3DiagnosticJson.position(member.nextSurface().support());
         return "{\"actor\":\"" + FrontierV3DiagnosticJson.quote(actorId.value()) + "\",\"cursor\":" + member.cursor() + ",\"length\":" + member.corridor().size() + ",\"arrived\":" + member.arrived()
                 + ",\"routeRevision\":" + member.routeRevision() + ",\"approachCursor\":" + member.rejoin().map(value -> value.cursor()).orElse(-1)
+                + ",\"waitingForApproach\":" + member.spatial().waitingOrigin().isPresent()
                 + ",\"retainedPosition\":" + FrontierV3DiagnosticJson.position(member.currentPosition())
                 + ",\"actualBody\":" + FrontierV3DiagnosticJson.position(state.actorLocations().get(actorId).body())
                 + ",\"next\":" + next + ",\"ambientLease\":\"" + FrontierV3DiagnosticJson.quote(lease == null ? "NONE" : lease.status().name()) + "\",\"ambientGoal\":\"" + FrontierV3DiagnosticJson.quote(lease == null ? "NONE" : lease.goal().name())

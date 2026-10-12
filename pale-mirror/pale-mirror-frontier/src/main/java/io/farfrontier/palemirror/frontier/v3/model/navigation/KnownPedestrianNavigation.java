@@ -45,9 +45,16 @@ public final class KnownPedestrianNavigation {
     }
     public static PedestrianRouteGeometry geometry(FrontierBootstrap bootstrap, Set<BlockPosition> occupied,
                                                     BoundedPedestrianApproach.SurveyedSurface surveyed, Object version) {
+        return geometry(bootstrap, occupied, surveyed, version, java.util.Optional.empty());
+    }
+    public static PedestrianRouteGeometry geometry(FrontierBootstrap bootstrap, Set<BlockPosition> occupied,
+            BoundedPedestrianApproach.SurveyedSurface surveyed, Object version,
+            java.util.Optional<PedestrianGeometryRevision> regionalRevision) {
         var hard = Set.copyOf(occupied);
+        Objects.requireNonNull(regionalRevision);
         return new PedestrianRouteGeometry() {
             @Override public Object version() { return version; }
+            @Override public java.util.Optional<PedestrianGeometryRevision> regionalRevision() { return regionalRevision; }
             @Override public io.farfrontier.palemirror.frontier.v3.model.WorldBounds bounds() { return bootstrap.bounds(); }
             @Override public SurfaceAnchor supportAt(int x, int z) { return surveyed.at(x, z); }
             @Override public boolean blocked(SurfaceAnchor surface) { return KnownPedestrianNavigation.blocked(surface, hard); }
@@ -62,6 +69,21 @@ public final class KnownPedestrianNavigation {
     /** Admission may wait for runtime-owned work; readiness never grants arrival or authority. */
     public static List<SurfaceAnchor> plannedRoute(PedestrianRouteGeometry geometry, SurfaceAnchor start, MovementOrder order) {
         return route(geometry, start, order, true);
+    }
+
+    /** Geometry-only admission: no fictitious actor/order is needed to request a supported leg. */
+    public static List<SurfaceAnchor> plannedBetween(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
+        if (!geometry.bounds().contains(start.support()) || geometry.blocked(start)
+                || !geometry.bounds().contains(target.support()) || geometry.blocked(target))
+            throw new RouteUnavailable("known endpoints have no clear support/body column");
+        var result = PedestrianRoutePlanning.query(geometry, start, target);
+        if (result.status() == PedestrianRouteResult.Status.PLANNING)
+            PedestrianRoutePlanning.await(PedestrianRouteRequest.of(geometry, start, target));
+        if (result.status() != PedestrianRouteResult.Status.FOUND)
+            throw new RouteUnavailable(result.status(), result.reason());
+        if (result.route().isEmpty() || !result.route().getFirst().equals(start) || !result.route().getLast().equals(target))
+            throw new IllegalArgumentException("planner returned a route with foreign endpoints");
+        return result.route();
     }
 
     /** Read-only diagnostics can use retained search evidence, never enqueue or finish a calculation. */

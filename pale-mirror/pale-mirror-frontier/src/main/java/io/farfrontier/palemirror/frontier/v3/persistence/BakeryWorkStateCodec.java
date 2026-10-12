@@ -29,7 +29,7 @@ final class BakeryWorkStateCodec {
         writeString(output, value.actorAccountId().value());
         writeString(output, value.stationAccountId().value());
         writeString(output, value.destinationAccountId().value());
-        output.writeByte(value.completedWorkTicks());
+        WorkStateCodec.writeProgress(output, value.labour());
         output.writeBoolean(value.pendingPhysicalStep().isPresent());
         if (value.pendingPhysicalStep().isPresent()) {
             BakeryPhysicalStep step = value.pendingPhysicalStep().orElseThrow();
@@ -50,13 +50,13 @@ final class BakeryWorkStateCodec {
         SubjectId actor = new SubjectId(readString(input));
         SubjectId stationAccount = new SubjectId(readString(input));
         SubjectId destination = new SubjectId(readString(input));
-        int completed = input.readUnsignedByte();
+        var labour = WorkStateCodec.readProgress(input);
         Optional<BakeryPhysicalStep> pending = input.readBoolean()
                 ? Optional.of(new BakeryPhysicalStep(BakeryWorkState.Phase.fromWireTag(input.readUnsignedByte()),
                 new SceneLeaseId(readString(input)), input.readByte())) : Optional.empty();
         Optional<BakeryWorkBlock> block = input.readBoolean() ? Optional.of(readBlock(input)) : Optional.empty();
         return Optional.of(new BakeryWorkState(phase, station, source, sourceContainer, actor, stationAccount,
-                destination, completed, pending, block));
+                destination, labour, pending, block));
     }
 
     static void writeBlock(DataOutputStream output, BakeryWorkBlock block) throws IOException {

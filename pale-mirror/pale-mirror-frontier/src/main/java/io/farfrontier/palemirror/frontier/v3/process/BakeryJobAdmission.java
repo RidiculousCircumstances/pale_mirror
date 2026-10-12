@@ -12,7 +12,7 @@ final class BakeryJobAdmission {
     static SettlementStaffingPort.Demand staffingDemand(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules) {
         var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), home);
         boolean intact = state.structureConditions().get(ProductionProcess.workshop(settlement).id()) == StructureCondition.INTACT;
-        boolean input = intact && BakeryBatchSelection.admissible(state, ProductionRights.publicService(home)).isPresent();
+        boolean input = intact && BakeryBatchSelection.admissibleStock(state, ProductionRights.publicService(home)).isPresent();
         var retained = state.productionJobs().values().stream().filter(job -> job.settlementId().equals(home))
                 .map(ProductionJob::workerId).collect(java.util.stream.Collectors.toSet());
         int reserve = intact ? rules.minimumLocalStaff() : 0;
@@ -23,6 +23,10 @@ final class BakeryJobAdmission {
 
     /** Family-owned probe for executable public or own-account production; no speculative job is retained. */
     static boolean availableWork(FrontierWorldState state, ResidentProfile resident, long atTick) {
+        try { return availableOpportunity(state, resident, atTick); }
+        catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable pending) { return false; }
+    }
+    private static boolean availableOpportunity(FrontierWorldState state, ResidentProfile resident, long atTick) {
         var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), resident.settlementId());
         var workshop = ProductionProcess.workshop(settlement);
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT
@@ -154,7 +158,7 @@ final class BakeryJobAdmission {
         return new BakeryWorkState(BakeryWorkState.Phase.DEPOT_PICKUP, station.id(), sourceAccount, sourceContainer,
                 new SubjectId("custody:" + suffix + "-baker-hand"), new SubjectId("custody:" + suffix + "-station"),
                 FungibleResourceCustodySupport.accountAtContainer(state, destinationContainer).map(CustodyAccount::id)
-                        .orElseGet(() -> ReferenceContainerCustody.scopeId(destinationContainer)), 0);
+                        .orElseGet(() -> ReferenceContainerCustody.scopeId(destinationContainer)), Optional.empty());
     }
 
     static FrontierWorldState admitStarted(FrontierWorldState state, SubjectId subject, ProductionStarted started) {
@@ -168,7 +172,9 @@ final class BakeryJobAdmission {
         // successful depot-slot wheat-to-bread path through a forged event.
         if (job.bakeryWork().isEmpty())
             throw new IllegalArgumentException("bread production start requires declared bakery station work");
-        if (!ProductionOutputCapacity.canAdmitBreadBatch(state, job.rights(), job.outputCount()))
+        BakeryAdmissionNavigation.require(state, job, started.access().orElseThrow(
+                () -> new IllegalArgumentException("bread production start lacks selected source/output access")));
+        if (!ProductionOutputCapacity.canAdmitBatch(state, job.rights(), job.outputCount(), BakeryStorage.source(job)))
             throw new IllegalArgumentException("production start has no capacity for its retained output");
         SettlementStructure workshop = ProductionProcess.workshop(settlement);
         if (!workshop.id().equals(job.facilityId()) || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) throw new IllegalArgumentException("production start facility is unavailable");

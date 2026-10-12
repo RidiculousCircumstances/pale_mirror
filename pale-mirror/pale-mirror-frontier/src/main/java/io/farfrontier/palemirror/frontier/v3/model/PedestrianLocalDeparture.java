@@ -38,7 +38,6 @@ public final class PedestrianLocalDeparture {
             io.farfrontier.palemirror.frontier.v3.api.SubjectId actor, SurfaceAnchor start) {
         if (publicPosition(state, start)) return List.of(start);
         var knowledge = departure(state, start);
-        List<SurfaceAnchor> best = null;
         for (var exit : exits(state, start)) {
             var target = FrontierTraversalPlan.facilityPort(exit.passage().facility()).orElseThrow()
                     .exteriorApproach().getFirst();
@@ -47,15 +46,15 @@ public final class PedestrianLocalDeparture {
                     List.of(target), TraversalCapability.PEDESTRIAN,
                     io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION);
             try {
-                var route = knowledge.path(start, order);
-                if (best == null || route.size() < best.size()) best = route;
+                return knowledge.plannedPath(start, order);
             } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
-                // An actual blocked exit stays blocked; no fabricated station or terrain.
+                if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
+                    throw unavailable;
+                // Only a proved route miss can move to another declared exit.
             }
         }
-        if (best == null) throw new io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable(
+        throw new io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable(
                 "actual facility position has no declared public exit");
-        return best;
     }
 
     private static List<KnownPedestrianRouteKnowledge.SettlementPassage> exits(FrontierWorldState state, SurfaceAnchor start) {

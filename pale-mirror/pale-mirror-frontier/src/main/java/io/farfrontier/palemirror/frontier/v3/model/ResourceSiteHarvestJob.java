@@ -49,10 +49,7 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
                     || !batchSuccessorSlot.orElseThrow().containerId().equals(outputSlot.containerId())
                     || batchSuccessorSlot.orElseThrow().equals(outputSlot))
                 || lastConfirmedBatch.isPresent() && !matchesLastBatch(lastConfirmedBatch.orElseThrow(), id,
-                    siteId, workerId, actorAccountId, deliveredYieldQuantity)
-                || navigationBlock.isPresent()
-                    && navigationBlock.orElseThrow().reason() == ResourceSiteHarvestNavigationBlock.Reason.CONTINUATION_UNAVAILABLE
-                        && (progress.hasPendingCrop() || progress.complete() || returningForBatch))
+                    siteId, workerId, actorAccountId, deliveredYieldQuantity))
             throw new IllegalArgumentException("field job has invalid progress, custody or semantic goal state");
     }
 
@@ -232,8 +229,7 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
                     && (returningForBatch || progress.complete() || goal.nextWorkSlot() != progress.nextCropSlotIndex())
                 || goal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
                     && ((!returningForBatch && !progress.complete()) || goal.nextWorkSlot() != progress.totalCropSlots())
-                || navigationBlock.filter(block -> block.reason() == ResourceSiteHarvestNavigationBlock.Reason.CONTINUATION_UNAVAILABLE
-                    || block.layoutRevision() != goal.layoutRevision()
+                || navigationBlock.filter(block -> block.layoutRevision() != goal.layoutRevision()
                     || !block.target().equals(goal.representative())).isPresent())
             throw new IllegalArgumentException("field goal arrival has a foreign or blocked job");
         return navigationBlock.isEmpty() ? this
@@ -244,9 +240,7 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
      * hold neither cancels that physical obligation nor authorizes a different target. */
     public ResourceSiteHarvestJob withNavigationBlock(ResourceSiteHarvestNavigationBlock block) {
         Objects.requireNonNull(block, "farmer navigation block");
-        if (navigationBlock.isPresent()
-                || block.reason() == ResourceSiteHarvestNavigationBlock.Reason.CONTINUATION_UNAVAILABLE
-                    && (progress.hasPendingCrop() || progress.complete() || returningForBatch))
+        if (navigationBlock.isPresent())
             throw new IllegalArgumentException("farmer has no exact unblocked next movement goal: job=" + id.value()
                     + ";worker=" + workerId.value() + ";cell=" + target.cellId()
                     + ";pendingCrop=" + progress.hasPendingCrop() + ";existingBlock=" + navigationBlock

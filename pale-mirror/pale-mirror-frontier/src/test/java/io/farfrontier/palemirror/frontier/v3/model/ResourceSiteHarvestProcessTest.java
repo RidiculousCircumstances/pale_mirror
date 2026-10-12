@@ -33,68 +33,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Goal-navigation regression and shared fixture; obsolete route-cursor tests are archived. */
 class ResourceSiteHarvestProcessTest {
-    @Test void acceptedAlternativeColdRouteReplaysWithoutRediscoveringThePreferredNextSupport() throws Exception {
-        var fixture = coldHarvestAfterSteps(125L, 0);
-        var state = fixture.state(); var job = fixture.job();
-        var usual = ResourceSiteHarvestKnownNavigation.path(state, job);
-        var start = usual.getFirst();
-        var knowledge = KnownPedestrianRouteKnowledge.forField(state, state.resourceSite(job.siteId()),
-                state.resourceSites().cycle(job.siteId()), ResourceSiteHarvestGoal.depotPort(state, job), start);
-        SurfaceAnchor alternative = null;
-        for (int[] delta : List.of(new int[]{1, 0}, new int[]{-1, 0}, new int[]{0, 1}, new int[]{0, -1})) {
-            var candidate = KnownPedestrianGround.forFrontier(state).at(start.x() + delta[0], start.z() + delta[1]);
-            if (candidate == null || candidate.equals(usual.get(1))) continue;
-            try {
-                new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(List.of(start, candidate));
-                knowledge.requireRoute(List.of(start, candidate));
-                alternative = candidate; break;
-            } catch (IllegalArgumentException unavailable) { /* Try another actual supported neighbour. */ }
-        }
-        assertNotNull(alternative, "fixture needs two legal first edges to the same work goal");
-        var route = new java.util.ArrayList<SurfaceAnchor>();
-        route.add(start); route.add(alternative); route.addAll(usual);
-        knowledge.requireRoute(route);
-        var acceptedPath = List.copyOf(route);
-        var action = ResourceSiteHarvestProcess.coldProgress(job, 22_301L);
-        ResourceSiteHarvestColdGoalAdvanced accepted;
-        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) ->
-                new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(
-                        io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.FOUND,
-                        acceptedPath, 0, 0, "isolated legal alternative"))) {
-            accepted = ResourceSiteHarvestProcess.planColdProgress(state, action).stream().map(ProposedEvent::payload)
-                    .filter(ResourceSiteHarvestColdGoalAdvanced.class::isInstance)
-                    .map(ResourceSiteHarvestColdGoalAdvanced.class::cast).findFirst().orElseThrow();
-        }
-        assertNotEquals(usual.get(1).standingBody(), accepted.nextBody());
-        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
-        assertEquals(accepted, codecs.decode(accepted.type(), codecs.encode(accepted)));
-        var codec = new FrontierWorldStateCodec();
-        var recovered = codec.decode(codec.encode(state));
-        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) -> {
-            fail("replay must validate accepted geometry without invoking a planner"); return null;
-        })) {
-            var advanced = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(recovered, fixture.site(), accepted);
-            assertEquals(accepted.nextBody(), advanced.actorLocations().get(job.workerId()).body());
-            assertEquals(recovered.inventory(), advanced.inventory());
-            assertEquals(recovered.resourceSites(), advanced.resourceSites(), "movement cannot harvest a cell");
-            assertThrows(IllegalArgumentException.class, () ->
-                    ResourceSiteHarvestProcess.reduceColdGoalAdvanced(advanced, fixture.site(), accepted));
-            var id = accepted.executionId();
-            var stale = new ResourceSiteHarvestColdGoalAdvanced(job.id(), job.workerId(), accepted.layoutRevision(),
-                    accepted.nextWorkSlot(), accepted.kind(), accepted.nextBody(), action.id(), action.dueAt().ticks(),
-                    accepted.goalRevision(), new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
-                            id.actorId(), id.activityKind(), id.activityOwnerId(), id.generation() + 1), accepted.plannedRoute());
-            assertThrows(IllegalArgumentException.class, () ->
-                    ResourceSiteHarvestProcess.reduceColdGoalAdvanced(recovered, fixture.site(), stale));
-            var truncated = new ResourceSiteHarvestColdGoalAdvanced(job.id(), job.workerId(), accepted.layoutRevision(),
-                    accepted.nextWorkSlot(), accepted.kind(), accepted.nextBody(), action.id(), action.dueAt().ticks(),
-                    accepted.goalRevision(), id, Optional.of(new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(
-                            acceptedPath.subList(0, 2))));
-            assertThrows(IllegalArgumentException.class, () ->
-                    ResourceSiteHarvestProcess.reduceColdGoalAdvanced(recovered, fixture.site(), truncated));
-        }
-    }
-
     @Test void fieldRuntimeRouteAdmissionUsesCooperativePlanningWithoutSurveyingTheWorldSynchronously() throws Exception {
         var fixture = coldHarvestAfterSteps(125L, 0);
         try (var planner = new io.farfrontier.palemirror.frontier.v3.model.navigation.CooperativePedestrianPlanner();
@@ -116,7 +54,7 @@ class ResourceSiteHarvestProcessTest {
                     Optional.of(new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(route)));
         }
     }
-    @Test void unavailableWarehouseIsReplacedWithoutLosingTheCarriedHarvestAndOldAuthorityCannotResume() {
+    @Test void unavailableWarehouseIsReplacedWithoutLosingTheCarriedHarvestAndOldAuthorityCannotResume() throws Exception {
         var fixture = coldHarvestWithCargo(125L); var state = fixture.state(); var job = fixture.job();
         var home = state.resourceSite(job.siteId()).settlementId(); var oldContainer = job.outputSlot().containerId();
         var port = SettlementServiceAccessPoints.depotPort(state, home);
@@ -135,12 +73,43 @@ class ResourceSiteHarvestProcessTest {
         var conflict = ReplicaCustodyDiagnosticProducer.conflict(oldContainer, 1L, 2L, "missing", replica.provenance());
         state = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody.conflict(oldContainer, 1L, 2L,
                 conflict.fingerprint(), conflict.provenance(), conflict.diagnostic())));
+        var replacementPredecessor = state;
+        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) ->
+                new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(
+                        io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
+                        List.of(), 0, 0, "replacement route still planning"))) {
+            var pending = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.observe(
+                    () -> HarvestStorageReplacement.select(replacementPredecessor, job));
+            assertTrue(pending.result().isEmpty());
+            assertEquals(1, pending.requests().size());
+            var continuation = ResourceSiteHarvestProcess.coldProgress(job, 22_301L);
+            assertFalse(ResourceSiteHarvestProcess.coldProgressHeld(replacementPredecessor, continuation),
+                    "the old service queue must not park an owner that needs to replace its endpoint");
+            var waiting = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.observe(
+                    () -> ResourceSiteHarvestProcess.planColdProgress(replacementPredecessor, continuation));
+            assertFalse(waiting.requests().isEmpty());
+            assertTrue(waiting.result().stream().noneMatch(event -> event.payload() instanceof ResourceSiteHarvestColdGoalAdvanced
+                    || event.payload() instanceof ResourceSiteHarvestReturned || event.payload() instanceof ResourceSiteHarvestColdGoalHeld
+                    || event.payload() instanceof ResourceSiteHarvestTargetRetargeted),
+                    "an unresolved warehouse replacement cannot move, deliver or claim failure against the old endpoint");
+        }
         var beforeResources = state.inventory().fungibleResources();
         var replacement = HarvestStorageReplacement.select(state, job).orElseThrow();
         assertEquals(target, replacement.destination().containerId());
         assertEquals(replacement, FrontierWorldRuntimeDefinition.payloadCodecs().decode(replacement.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(replacement)));
-        state = HarvestStorageReplacement.apply(state, job.siteId(), replacement);
+        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            fail("storage replacement replay cannot rediscover the selected route"); return null;
+        })) {
+            var codec = new FrontierWorldStateCodec();
+            state = HarvestStorageReplacement.apply(codec.decode(codec.encode(state)), job.siteId(), replacement);
+            var id = replacement.executionId();
+            var stale = new ResourceSiteHarvestStorageRetargeted(replacement.siteId(), replacement.jobId(), replacement.workerId(),
+                    replacement.expectedRevision(), replacement.destination(), replacement.replacementIntent(),
+                    new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
+                            id.actorId(), id.activityKind(), id.activityOwnerId(), id.generation() + 1), replacement.plannedRoute());
+            assertThrows(IllegalArgumentException.class, () -> HarvestStorageReplacement.apply(replacementPredecessor, job.siteId(), stale));
+        }
         assertEquals(beforeResources, state.inventory().fungibleResources(), "replanning cannot alter any stock/title/claim");
         var redirected = state.resourceSites().site(job.siteId()).harvestJob(job.id()).orElseThrow();
         assertEquals(job.workerId(), redirected.workerId()); assertEquals(job.progress(), redirected.progress());
@@ -161,7 +130,7 @@ class ResourceSiteHarvestProcessTest {
                 + state.resourceSites().site(job.siteId()).harvestJob(job.id()) + " body=" + state.actorLocations().get(job.workerId()).body() + " due=" + due);
         assertTrue(state.inventory().fungibleResources().unclaimedQuantity(ReferenceContainerCustody.scopeId(target), home, "minecraft:wheat") > 0);
     }
-    @Test void personalPocketFoodSurvivesHarvestAdmissionAndRecovery() {
+    @Test void personalPocketFoodSurvivesHarvestAdmissionAndRecovery() throws Exception {
         FrontierWorldState state = ready(initial(126L));
         SubjectId settlement = new SubjectId("settlement:1"), site = new SubjectId("site:1-wheat-field");
         ResidentProfile farmer = FrontierWorldStateSupport.availableWorkResident(state, settlement,
@@ -179,13 +148,48 @@ class ResourceSiteHarvestProcessTest {
         state = pendingHarvest(state, site, settlement);
         var task = state.strategicPlans().tasks().values().stream()
                 .filter(value -> value.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
-        var events = ResourceSiteHarvestProcess.plan(state, ResourceSiteHarvestProcess.start(task, 27_085L));
+        var action = ResourceSiteHarvestProcess.start(task, 27_085L);
+        var pendingPredecessor = state;
+        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) ->
+                new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(
+                        io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
+                        List.of(), 0, 0, "storage admission still planning"))) {
+            var observation = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.observe(
+                    () -> ResourceSiteHarvestProcess.plan(pendingPredecessor, action));
+            assertFalse(observation.requests().isEmpty());
+            assertTrue(observation.result().stream().allMatch(event -> event.payload() instanceof ScheduleEffect.Rescheduled),
+                    "pending storage calculation cannot admit a worker, cancel its task or create a no-path hold");
+            var index = new io.farfrontier.palemirror.frontier.v3.process.PedestrianPlanningWakeIndex();
+            var registry = new io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessRegistry(
+                    FrontierWorldProcessCatalog.descriptors(), FrontierWorldRuntimeDefinition.payloadCodecs());
+            try (var continuations = io.farfrontier.palemirror.frontier.v3.process.PedestrianPlanningContinuations.bind(index)) {
+                FrontierWorldProcessCatalog.restorePlanningWaits(registry, pendingPredecessor,
+                        new io.farfrontier.palemirror.frontier.v3.api.FrontierExecutionView(pendingPredecessor.bootstrap().worldId(),
+                                Revision.ZERO, new SimInstant(27_084L), List.of(action)));
+                assertEquals(1, index.waitingCount(), "restart reconstructs the exact field admission calculation wait");
+            }
+        }
+        var events = ResourceSiteHarvestProcess.plan(state, action);
         var start = events.stream().map(ProposedEvent::payload).filter(ResourceSiteHarvestStarted.class::isInstance)
                 .map(ResourceSiteHarvestStarted.class::cast).filter(value -> value.job().workerId().equals(farmer.id()))
                 .findFirst().orElseThrow();
         state = StrategicObjectiveProcess.reduceTaskTransition(state, settlement,
                 new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
-        state = ResourceSiteHarvestProcess.reduceStarted(state, site, start);
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(start, codecs.decode(start.type(), codecs.encode(start)));
+        var activePredecessor = state;
+        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            fail("accepted field admission replay cannot invoke route planning"); return null;
+        })) {
+            var snapshot = new FrontierWorldStateCodec();
+            state = ResourceSiteHarvestProcess.reduceStarted(snapshot.decode(snapshot.encode(state)), site, start);
+            assertEquals(activePredecessor.actorLocations(), state.actorLocations(), "admission is not movement");
+            var admitted = state;
+            assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.reduceStarted(admitted, site, start));
+            assertTrue(start.fieldRoute().isPresent(), "fixture must start away from the chosen crop");
+            var omittedRoute = new ResourceSiteHarvestStarted(start.job(), Optional.empty(), start.storageRoute());
+            assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.reduceStarted(activePredecessor, site, omittedRoute));
+        }
         assertEquals(resources.accounts().get(pocket), state.inventory().fungibleResources().accounts().get(pocket));
         var codec = new FrontierWorldStateCodec(state.bootstrap());
         assertEquals(state, codec.decode(codec.encode(state)));
@@ -623,7 +627,7 @@ class ResourceSiteHarvestProcessTest {
                                 .transitionSceneLease(lease.id(), SceneLeaseStatus.CONFLICT), command),
                 "CONFLICT cannot turn an attempted body into an unstarted one");
     }
-    @Test void releasedHotPathFailureResumesOnlyThroughTheNextKnownColdStep() {
+    @Test void releasedHotPathFailureResumesOnlyThroughTheNextKnownColdStep() throws Exception {
         ColdHarvest start = coldHarvestAfterSteps(125L, 0);
         ResourceSiteHarvestJob job = start.job();
         ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(start.state(), job);
@@ -649,6 +653,20 @@ class ResourceSiteHarvestProcessTest {
         FrontierWorldState targetBlocked = held.recordPhysicalDelta(new PhysicalDelta(
                 goal.representative().support().offset(0, 2, 0), PhysicalDeltaKind.UNKNOWN_SCAR,
                 Optional.empty(), Optional.empty(), "test:farmer-target-head-block"));
+        var queries = new java.util.concurrent.atomic.AtomicInteger();
+        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            queries.incrementAndGet();
+            return new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(
+                    io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
+                    List.of(), 0, 0, "isolated alternate still planning");
+        })) {
+            var pending = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.observe(
+                    () -> ResourceSiteHarvestProcess.planColdProgress(targetBlocked, due));
+            assertEquals(1, queries.get(), "alternatives cannot fan out searches while the first candidate is unresolved");
+            assertFalse(pending.requests().isEmpty());
+            assertTrue(pending.result().stream().allMatch(event -> event.payload() instanceof ScheduleEffect.Rescheduled),
+                    "pending alternative calculation cannot credit movement, retarget or manufacture a negative goal hold");
+        }
         var alternative = ResourceSiteHarvestProcess.planColdProgress(targetBlocked, due).stream()
                 .map(ProposedEvent::payload).filter(ResourceSiteHarvestTargetRetargeted.class::isInstance)
                 .map(ResourceSiteHarvestTargetRetargeted.class::cast).findFirst().orElseThrow();
@@ -659,6 +677,30 @@ class ResourceSiteHarvestProcessTest {
         assertTrue(alternateJob.navigationBlock().isEmpty());
         assertNotEquals(job.progress().nextCropSlotIndex(), alternateJob.progress().nextCropSlotIndex());
         assertEquals(0, alternateJob.progress().completedCropSlots());
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(alternative, codecs.decode(alternative.type(), codecs.encode(alternative)));
+        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            fail("accepted field retarget cannot query or rank routes during replay"); return null;
+        })) {
+            var codec = new FrontierWorldStateCodec();
+            // The old destination is reachable again; that cannot invalidate a still-legal
+            // selected alternative or force replay to rediscover the former refusal.
+            var recovered = codec.decode(codec.encode(held));
+            var redirected = ResourceSiteHarvestRetargeting.reduceTargetRetargeted(recovered, start.site(), alternative);
+            assertEquals(recovered.actorLocations(), redirected.actorLocations(), "selection is not movement");
+            assertEquals(recovered.inventory(), redirected.inventory(), "selection is not harvest or cargo loss");
+            assertFalse(redirected.resourceSites().cycle(start.site()).cell(
+                    recovered.resourceSites().cycle(start.site()).layout().cells().get(alternative.fromSlot()).id()).accounted());
+            assertThrows(IllegalArgumentException.class, () ->
+                    ResourceSiteHarvestRetargeting.reduceTargetRetargeted(redirected, start.site(), alternative));
+            var id = alternative.executionId();
+            var stale = new ResourceSiteHarvestTargetRetargeted(alternative.siteId(), alternative.jobId(), alternative.workerId(),
+                    alternative.layoutRevision(), alternative.fromSlot(), alternative.toSlot(), alternative.coldScheduleId(),
+                    alternative.coldDueAt(), Optional.empty(), new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
+                            id.actorId(), id.activityKind(), id.activityOwnerId(), id.generation() + 1), alternative.plannedRoute());
+            assertThrows(IllegalArgumentException.class, () ->
+                    ResourceSiteHarvestRetargeting.reduceTargetRetargeted(recovered, start.site(), stale));
+        }
 
         FrontierWorldState walled = held;
         for (BlockPosition neighbour : List.of(before.supportingSurface().support().offset(1, 1, 0),
@@ -750,7 +792,9 @@ class ResourceSiteHarvestProcessTest {
         int to = field.reachableWorkSlotAfter(from, index -> true).orElseThrow();
         ScheduledAction due = ResourceSiteHarvestProcess.coldProgress(job, 22_301L);
         var event = new ResourceSiteHarvestTargetRetargeted(hot.site(), job.id(), job.workerId(),
-                field.layout().revision(), from, to, due.id(), due.dueAt().ticks(), Optional.of(hot.lease().id()));
+                field.layout().revision(), from, to, due.id(), due.dueAt().ticks(), Optional.of(hot.lease().id()),
+                hot.state().actorExecutions().current(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST)
+                        .get(job.workerId()), Optional.empty());
         FrontierWorldState redirected = ResourceSiteHarvestRetargeting.reduceTargetRetargeted(
                 hot.state(), hot.site(), event);
         ResourceSiteHarvestJob active = (ResourceSiteHarvestJob) redirected.resourceSites().site(hot.site())
@@ -892,7 +936,7 @@ class ResourceSiteHarvestProcessTest {
         HotHarvest hot = hotHarvestAfterColdSteps(0);
         ResourceSiteHarvestJob job = hot.job();
         ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(hot.state(), job);
-        BodyPosition next = ResourceSiteHarvestKnownNavigation.path(hot.state(), job).get(1).standingBody();
+        BodyPosition next = ResourceSiteHarvestKnownNavigation.plannedPath(hot.state(), job).get(1).standingBody();
         FrontierWorldState observed = ModeledActorBodyFacts.inspected(withBoundPersonalFood(hot.state(),
                 job.workerId(), hot.lease().members().getFirst().entityId()), job.workerId(), next);
         assertEquals(job.progress(), ((ResourceSiteHarvestJob) observed.resourceSites().site(hot.site())
@@ -903,7 +947,7 @@ class ResourceSiteHarvestProcessTest {
                         draining.actorLocations().get(job.workerId()).condition().health())));
         assertEquals(next, released.actorLocations().get(job.workerId()).body());
         assertEquals(observed.inventory(), released.inventory(), "an empty work hand leaves bound personal pockets untouched");
-        assertEquals(next.supportingSurface(), ResourceSiteHarvestKnownNavigation.path(released, job).getFirst());
+        assertEquals(next.supportingSurface(), ResourceSiteHarvestKnownNavigation.plannedPath(released, job).getFirst());
         assertEquals(released, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(released)));
     }
     private static FrontierWorldState withBoundPersonalFood(FrontierWorldState state, SubjectId actor, java.util.UUID body) {

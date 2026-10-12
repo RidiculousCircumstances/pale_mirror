@@ -32,7 +32,9 @@ public final class ExactItemConsumptionStateSupport {
     private static Claim medicalTreatmentClaim(FrontierWorldState state, PhysicalIntent intent) {
         MedicalEvacuationOperation medical = state.humanPopulation().medicalOperations().get(intent.roles().require(PhysicalIntentSubjectRole.MEDICAL_TREATMENT_OPERATION));
         if (medical == null || !medical.consumptionIntentId().equals(intent.id()) || !intent.causeSubjectId().equals(medical.id())) throw new IllegalArgumentException("exact consumption does not bind its medical treatment");
-        Claim claim = ownedActiveClaim(state, medical.supplyItemId(), FrontierWorldState.depotId(medical.settlementId())::equals, "settlement depot", 1);
+        if (!MedicalEvacuationStateSupport.supplyAvailable(state, medical.supplyContainerId()))
+            throw new IllegalArgumentException("medical supply has unavailable physical custody");
+        Claim claim = ownedActiveClaim(state, medical.supplyItemId(), medical.supplyContainerId()::equals, "selected medical warehouse", 1);
         if (!claim.ownerId().equals(medical.settlementId()) || !MedicalEvacuationStateSupport.FIRST_TREATMENT_SUPPLY.equals(claim.item().itemKind())) throw new IllegalArgumentException("medical treatment has no exact local supply");
         return claim;
     }

@@ -66,13 +66,15 @@ public final class PedestrianRoutePlanning {
         private Object version;
         @Override public synchronized java.util.Optional<PedestrianRouteResult> peek(
                 PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
-            if (version != geometry.version()) return java.util.Optional.empty();
+            if (geometry.regionalRevision().isEmpty() && version != geometry.version()) return java.util.Optional.empty();
             var results = views.get(geometry);
             return results == null ? java.util.Optional.empty()
                     : java.util.Optional.ofNullable(results.get(new Endpoints(start, target)));
         }
         @Override public synchronized PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
-            if (version != geometry.version()) { views.clear(); regions.clear(); version = geometry.version(); }
+            if (geometry.regionalRevision().isEmpty() && version != geometry.version()) {
+                views.keySet().removeIf(view -> view.regionalRevision().isEmpty()); version = geometry.version();
+            }
             var results = views.get(geometry);
             if (results == null) {
                 if (views.size() >= 32) views.clear();

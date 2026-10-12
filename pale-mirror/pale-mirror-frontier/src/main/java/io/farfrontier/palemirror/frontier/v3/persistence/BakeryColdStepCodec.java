@@ -22,6 +22,8 @@ final class BakeryColdStepCodec implements PayloadCodec {
             output.writeInt(step.nextSurface().z());
             ActorExecutionStateCodec.writeId(output, step.executionId());
             PedestrianRouteReceiptCodec.write(output, step.plannedRoute());
+            output.writeBoolean(step.labourChange().isPresent());
+            if (step.labourChange().isPresent()) BakeryLabourChangeCodec.write(output, step.labourChange().orElseThrow());
         });
     }
 
@@ -31,6 +33,7 @@ final class BakeryColdStepCodec implements PayloadCodec {
                 BakeryWorkState.Phase.fromWireTag(input.readUnsignedByte()),
                 BakeryColdStep.Action.fromWireTag(input.readUnsignedByte()),
                 new SurfaceAnchor(new BlockPosition(input.readInt(), input.readInt(), input.readInt())),
-                ActorExecutionStateCodec.readId(input), PedestrianRouteReceiptCodec.read(input)));
+                ActorExecutionStateCodec.readId(input), PedestrianRouteReceiptCodec.read(input),
+                input.readBoolean() ? java.util.Optional.of(BakeryLabourChangeCodec.read(input)) : java.util.Optional.empty()));
     }
 }

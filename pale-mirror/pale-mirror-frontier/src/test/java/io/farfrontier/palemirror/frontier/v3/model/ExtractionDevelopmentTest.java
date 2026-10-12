@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.extraction.*;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
@@ -23,19 +24,30 @@ class ExtractionDevelopmentTest {
             deposit = deposit.extracted(cell, 1, "effect:first-front-" + cell);
         return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(deposit)));
     }
-    @Test void finiteBodyExistsBeforeOpeningAndRecoveryRetainsExactAdmissionWithoutStockOrRegeneration() {
+    @Test void finiteBodyExistsBeforeOpeningAndRecoveryRetainsExactAdmissionWithoutStockOrRegeneration() throws Exception {
         var initial = initial(); var original = deposit(initial); var site = original.site().id();
         assertEquals(512, original.cells().size()); assertEquals(8, original.development().openedCells().size());
         assertTrue(original.cells().values().stream().allMatch(cell -> cell.knownBlock().kind().equals("minecraft:stone")));
         assertTrue(ExtractionDevelopment.proposal(initial, site).isEmpty(), "a live front is not exhausted by reservation");
         var before = clearFirstFront(initial); var opening = ExtractionDevelopment.proposal(before, site).orElseThrow();
         assertEquals(8, opening.cells().size());
-        var after = ExtractionDevelopment.apply(before, site, opening);
+        FrontierWorldState after;
+        var codec = new FrontierWorldStateCodec();
+        try (var ignored = PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            fail("front opening replay cannot rediscover reachability or rank cells"); return null;
+        })) {
+            after = ExtractionDevelopment.apply(codec.decode(codec.encode(before)), site, opening);
+            assertEquals(after, ExtractionDevelopment.apply(before, site, opening));
+            var missing = new LinkedHashMap<>(opening.access().routes()); missing.remove(missing.keySet().iterator().next());
+            assertThrows(IllegalArgumentException.class, () -> ExtractionDevelopment.apply(before, site,
+                    new ExtractionFrontierOpened(site, opening.expectedRevision(), opening.cells(),
+                            new PedestrianAccessReceipt(opening.access().origin(), missing))));
+        }
         assertEquals(before.inventory(), after.inventory()); assertEquals(before.actorLocations(), after.actorLocations());
         assertEquals(deposit(before).cells(), deposit(after).cells()); assertEquals(original.site(), deposit(after).site());
         assertEquals(16, deposit(after).development().openedCells().size());
         assertEquals(2, deposit(after).development().revision());
-        var codec = new FrontierWorldStateCodec(); assertEquals(after, codec.decode(codec.encode(after)));
+        assertEquals(after, codec.decode(codec.encode(after)));
         var payloads = FrontierWorldRuntimeDefinition.payloadCodecs(); assertEquals(opening, payloads.decode(opening.type(), payloads.encode(opening)));
         assertThrows(IllegalArgumentException.class, () -> ExtractionDevelopment.apply(after, site, opening));
         assertThrows(IllegalArgumentException.class, () -> ExtractionDevelopment.apply(before, new SubjectId("extraction:foreign"), opening));

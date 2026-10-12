@@ -95,7 +95,9 @@ public final class ReferenceContainerCustody {
         if (surface.location() instanceof ContainerLocation.Mobile mobile
                 && state.actorLocations().get(mobile.actorId()).condition().status() != ActorLifeStatus.ALIVE)
             return true; // Cargo disposition, not a free replacement animal, must close this owner.
-        return hasConflict(state, containerId);
+        PhysicalCustodyLease lease = state.replicaCustody().custodyByScope().get(scopeId(containerId));
+        return hasConflict(state, containerId) || lease != null && lease.objectId().equals(containerId)
+                && lease.providerId().equals(PROVIDER_ID) && lease.status() == PhysicalCustodyLeaseStatus.UNRESOLVED;
     }
 
     /** A body's attached storage declares its own non-replayable projection fence. */

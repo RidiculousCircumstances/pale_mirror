@@ -181,14 +181,15 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         EngineeringExecutionAuthority.validateReferences(routeConstructions, routeMaintenances, actorExecutions);
         SettlementServiceExecutionAuthority.validateReferences(serviceWorks, actorExecutions);
         MedicalExecutionAuthority.validateReferences(humanPopulation, actorExecutions);
-        ActorMovementStateSupport.validate(actorMovements, actorLocations, humanPopulation, inventory, actorExecutions, shipments, unitGroups, extractionSites);
+        ActorMovementStateSupport.validate(actorMovements, actorLocations, humanPopulation, inventory, actorExecutions, shipments, unitGroups, extractionSites, strategicPlans);
+        DefenderEquipmentReturnVisitReferences.validate(strategicPlans, inventory, actorLocations, physicalIntents, actorExecutions);
         ResidentMealExecutionAuthority.validate(humanPopulation, actorExecutions);
         TransitActivityCapability.validateReferences(humanPopulation, actorExecutions);
         HarvestActivityCapability.validateReferences(resourceSites, actorExecutions);
         ProductionActivityCapability.validateReferences(productionJobs, actorExecutions);
         if (!actorLocations.keySet().containsAll(actorExecutions.actors().keySet())) throw new IllegalArgumentException("execution names unknown actor");
         if (!fullValidationDeferred()) {
-            ContainerPhysicalReservations.validate(inventory, resourceSites, productionJobs, shipments, extractionSites);
+            ContainerPhysicalReservations.validate(inventory, resourceSites, productionJobs, shipments, extractionSites, physicalIntents);
             ActorBodyAuthority.validate(actorLocations, fencedRecovery);
             validateFullState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs,
                 serviceWorks, physicalIntents, physicalObservations, sceneLeases, hiveColony,
@@ -383,7 +384,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                         held.claimId(), true, held.authorityEpoch());
             }
         }
-        SettlementServiceWorkStateSupport.validate(bootstrap, humanPopulation, actorLocations, infection, serviceWorks, physicalIntents);
+        SettlementServiceWorkStateSupport.validate(bootstrap, humanPopulation, actorLocations, infection, inventory, serviceWorks, physicalIntents);
         FrontierSettlementAssaultSupport.validate(bootstrap, hiveColony, humanPopulation, actorLocations, strategicPlans);
         if (physicalIntents.size() > MAX_PHYSICAL_INTENTS) throw new IllegalArgumentException("physical intent retention limit exceeded");
         Set<SubjectId> fieldSubjects = ResourceSitePhysicalIntentStateSupport.nonterminalSubjects(resourceSites);
@@ -406,7 +407,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                     && !RouteMaintenanceStateSupport.ownsMaintenance(routeMaintenances, intent.causeSubjectId()) && !fieldSubjects.contains(intent.causeSubjectId())) {
                 throw new IllegalArgumentException("physical intent cause must be a canonical subject");
             }
-            for (SubjectId subject : intent.roles().namedRoles().values()) {
+            for (var subjectEntry : intent.roles().namedRoles().entrySet()) {
+                SubjectId subject = subjectEntry.getValue();
                 if (intent.status() == PhysicalIntentStatus.CONFIRMED || intent.status() == PhysicalIntentStatus.UNKNOWN_AFTER_RESTART || preparedConflictCustody) continue;
                 RouteConstruction routeConstruction = routeConstructions.get(intent.causeSubjectId());
                 boolean hiveNutrientSubject = HiveNutrientTransferStateSupport.ownsIntentSubject(hiveColony, intent, subject);
@@ -419,7 +421,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                         && inventory.fungibleResources().accounts().containsKey(subject)
                         || subject.equals(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.RESOURCE_CONTAINER))
                         && inventory.containers().containsKey(subject));
-                if (!productionResourceSubject && !hiveNutrientSubject && !expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) &&
+                boolean declaredResourceContainer = subjectEntry.getKey() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.RESOURCE_CONTAINER
+                        && inventory.containers().containsKey(subject);
+                if (!declaredResourceContainer && !productionResourceSubject && !hiveNutrientSubject && !expectedActors.contains(subject) && !inventory.cargo().containsKey(subject) &&
                         !expectedStructures.contains(subject) && !expectedSettlements.contains(subject)
                         && !inventory.items().containsKey(subject)
                         && !hiveColony.growthJobs().containsKey(subject) && !humanPopulation.birthJobs().containsKey(subject) && !productionJobs.containsKey(subject)
@@ -667,6 +671,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     }
     public boolean containerSlotAvailableForOutput(InventoryCustody.ContainerSlot slot, SubjectId owner) {
         return ContainerStorageAdmission.available(this, slot, Optional.of(owner), this::productionHoldReserves);
+    }
+    public boolean containerSlotAvailableForClaim(InventoryCustody.ContainerSlot slot, ContainerSlotClaim.Owner owner) {
+        return ContainerStorageAdmission.availableForClaim(this, slot, owner, this::productionHoldReserves);
     }
     public java.util.OptionalInt firstFreeContainerSlot(SubjectId containerId) {
         return ContainerStorageAdmission.first(this, containerId, Optional.empty(), this::productionHoldReserves);

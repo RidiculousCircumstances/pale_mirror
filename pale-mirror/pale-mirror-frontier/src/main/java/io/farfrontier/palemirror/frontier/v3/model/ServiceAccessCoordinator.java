@@ -141,11 +141,29 @@ public final class ServiceAccessCoordinator {
      * retained by the meal. Another resident's current body is never chosen as an exit.
      */
     public static Optional<SurfaceAnchor> mealClearingSurface(FrontierWorldState state, SubjectId residentId, SubjectId containerId) {
+        return mealClearingSelection(state, residentId, containerId).map(ServiceClearanceTargets.Selection::surface);
+    }
+
+    public static Optional<ServiceClearanceTargets.Selection> mealClearingSelection(FrontierWorldState state,
+            SubjectId residentId, SubjectId containerId) {
         Objects.requireNonNull(state.humanPopulation().resident(residentId), "service resident");
         var point = ServiceBoundaryComposition.declaration(state, containerId).identity();
         java.util.Set<SurfaceAnchor> excluded = ServiceDestinationClaims.excludedFor(state, residentId);
-        return ServiceClearanceTargets.select(ServiceBoundaryComposition.geometry(state, point),
+        return ServiceClearanceTargets.plannedSelection(ServiceBoundaryComposition.geometry(state, point),
                 residentId, ServiceBoundaryComposition.knowledge(state, point), excluded);
+    }
+
+    public static boolean mayPlanMealClearance(FrontierWorldState state, SubjectId residentId, SubjectId containerId) {
+        var point = ServiceBoundaryComposition.declaration(state, containerId).identity();
+        return ServiceClearanceTargets.mayPlan(ServiceBoundaryComposition.geometry(state, point),
+                ServiceBoundaryComposition.knowledge(state, point), ServiceDestinationClaims.excludedFor(state, residentId));
+    }
+
+    public static void requireMealClearance(FrontierWorldState state, SubjectId residentId, SubjectId containerId,
+            ServiceClearanceTargets.Selection selected) {
+        var point = ServiceBoundaryComposition.declaration(state, containerId).identity();
+        ServiceClearanceTargets.requireSelected(ServiceBoundaryComposition.geometry(state, point),
+                ServiceBoundaryComposition.knowledge(state, point), ServiceDestinationClaims.excludedFor(state, residentId), selected);
     }
 
 }

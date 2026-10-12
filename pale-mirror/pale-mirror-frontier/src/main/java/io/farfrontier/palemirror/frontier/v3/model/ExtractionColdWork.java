@@ -12,6 +12,8 @@ public final class ExtractionColdWork {
         if (!subject.equals(job.id()) || job.terminal() || job.revision() != event.expectedRevision() || job.pending().isPresent()
                 || state.actorMovements().containsKey(job.execution().actorId())) throw new IllegalArgumentException("stale mining work operation");
         state.actorExecutions().requireCurrent(job.execution());
+        if (event.decision().filter(value -> !value.execution().equals(job.execution())).isPresent())
+            throw new IllegalArgumentException("mining selected successor has stale execution authority");
         var site = ExtractionWorkAuthority.site(state, job);
         if (event.operation() == ExtractionWorkProgressed.Operation.END_WORK) {
             if (ExtractionWorkPolicy.requested(state, job)
@@ -34,26 +36,37 @@ public final class ExtractionColdWork {
         if (event.operation() == ExtractionWorkProgressed.Operation.SELECT_STORAGE) {
             if (ExtractionStorageSelection.retainedAvailable(state, job))
                 throw new IllegalArgumentException("available retained storage cannot be silently replaced");
-            var destination = ExtractionStorageSelection.replacement(state, job).orElseThrow(
-                    () -> new IllegalArgumentException("no eligible replacement storage"));
+            var selected = (ExtractionWorkDecision.Storage) event.decision().orElseThrow();
+            ExtractionStorageSelection.requireReplacement(state, job, selected);
             return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replaceWork(
-                    job, job.retargetStorage(destination))));
+                    job, job.retargetStorage(selected.destination()))));
         }
         if (event.operation() == ExtractionWorkProgressed.Operation.SELECT_SOURCE) {
             if (job.phase() != ExtractionWork.Phase.SELECT_SOURCE)
                 throw new IllegalArgumentException("next mining source requires its retained selection boundary");
-            var target = ExtractionWorkPolicy.nextTarget(state, job);
-            if (target.isEmpty() && !ExtractionWorkPolicy.finished(state, job))
-                throw new IllegalArgumentException("temporarily unavailable mining frontier is not completion");
+            var decision = event.decision().orElseThrow();
+            Optional<ExtractionTarget> target;
+            if (decision instanceof ExtractionWorkDecision.Source selected) {
+                if (!ExtractionWorkPolicy.requested(state, job))
+                    throw new IllegalArgumentException("mining selected source has a withdrawn mandate");
+                ExtractionWorkTargets.requireSelection(state, job, selected);
+                target = Optional.of(selected.target());
+            } else {
+                if (!ExtractionWorkPolicy.finished(state, job))
+                    throw new IllegalArgumentException("temporarily unavailable mining frontier is not completion");
+                target = Optional.empty();
+            }
             return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replaceWork(
                     job, job.transition(target.isPresent() ? ExtractionWork.Phase.EXTRACT
                             : ExtractionWorkAuthority.carried(state, job) > 0 ? ExtractionWork.Phase.STORE : ExtractionWork.Phase.RETURN_TOOL, target))));
         }
         if (event.operation() == ExtractionWorkProgressed.Operation.SELECT_REACHABLE) {
-            var target = ExtractionWorkTargets.alternative(state, job).orElseThrow(
-                    () -> new IllegalArgumentException("no reachable alternative extraction cell"));
+            if (job.phase() != ExtractionWork.Phase.EXTRACT)
+                throw new IllegalArgumentException("alternative mining source lacks its working phase");
+            var selected = (ExtractionWorkDecision.Source) event.decision().orElseThrow();
+            ExtractionWorkTargets.requireSelection(state, job, selected);
             return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replaceWork(
-                    job, job.transition(ExtractionWork.Phase.EXTRACT, Optional.of(target)))));
+                    job, job.transition(ExtractionWork.Phase.EXTRACT, Optional.of(selected.target())))));
         }
         if (!job.movementOrder(site).arrivedAt(state.actorLocations().get(job.execution().actorId()).supportingSurface()))
             throw new IllegalArgumentException("mining operation lacks its exact worker station");

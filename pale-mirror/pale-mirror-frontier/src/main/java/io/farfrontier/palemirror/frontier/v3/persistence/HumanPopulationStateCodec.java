@@ -28,7 +28,7 @@ final class HumanPopulationStateCodec {
         FrontierWorldStateCodec.writeCount(output, population.birthJobs().size());
         for (ResidentBirthJob job : population.birthJobs().values().stream().sorted(Comparator.comparing(ResidentBirthJob::id)).toList()) {
             FrontierWorldStateCodec.writeString(output, job.id().value()); FrontierWorldStateCodec.writeString(output, job.settlementId().value());
-            FrontierWorldStateCodec.writeString(output, job.householdId().value()); FrontierWorldStateCodec.writeString(output, job.foodItemId().value());
+            FrontierWorldStateCodec.writeString(output, job.householdId().value()); ColdResourceConsumptionCodec.write(output, job.food());
             FrontierWorldStateCodec.writeString(output, job.foodCommitmentId().value()); writeProfile(output, job.resident()); FrontierWorldStateCodec.writePosition(output, job.position());
         }
         FrontierWorldStateCodec.writeCount(output, population.health().size());
@@ -83,7 +83,9 @@ final class HumanPopulationStateCodec {
             FrontierWorldStateCodec.writeString(output, operation.team().id().value()); FrontierWorldStateCodec.writeString(output, operation.team().leaderId().value());
             FrontierWorldStateCodec.writeCount(output, operation.team().memberIds().size());
             for (SubjectId member : operation.team().memberIds()) FrontierWorldStateCodec.writeString(output, member.value());
-            FrontierWorldStateCodec.writeString(output, operation.supplyItemId().value()); FrontierWorldStateCodec.writeString(output, operation.consumptionIntentId().value());
+            FrontierWorldStateCodec.writeString(output, operation.supplyItemId().value());
+            FrontierWorldStateCodec.writeString(output, operation.supplyContainerId().value());
+            FrontierWorldStateCodec.writeString(output, operation.consumptionIntentId().value());
             output.writeByte(operation.status().wireTag()); output.writeLong(operation.terminalAtTick());
         }
         FrontierWorldStateCodec.writeCount(output, population.schedules().size());
@@ -134,7 +136,7 @@ final class HumanPopulationStateCodec {
         Map<SubjectId, ResidentBirthJob> birthJobs = new LinkedHashMap<>();
         for (int index = 0, count = FrontierWorldStateCodec.readCount(input); index < count; index++) {
             SubjectId id = new SubjectId(FrontierWorldStateCodec.readString(input)); SubjectId settlement = new SubjectId(FrontierWorldStateCodec.readString(input));
-            SubjectId household = new SubjectId(FrontierWorldStateCodec.readString(input)); SubjectId food = new SubjectId(FrontierWorldStateCodec.readString(input));
+            SubjectId household = new SubjectId(FrontierWorldStateCodec.readString(input)); ColdResourceConsumption food = ColdResourceConsumptionCodec.read(input);
             ResidentBirthJob job = new ResidentBirthJob(id, settlement, household, food, new SubjectId(FrontierWorldStateCodec.readString(input)),
                     readProfile(input, hasCapabilityProfile), FrontierWorldStateCodec.readPosition(input));
             if (birthJobs.put(id, job) != null) throw new IllegalArgumentException("duplicate resident birth job");
@@ -227,12 +229,13 @@ final class HumanPopulationStateCodec {
                 java.util.List<SubjectId> members = new java.util.ArrayList<>();
                 for (int member = 0, memberCount = FrontierWorldStateCodec.readCount(input); member < memberCount; member++) members.add(new SubjectId(FrontierWorldStateCodec.readString(input)));
                 SubjectId supply = new SubjectId(FrontierWorldStateCodec.readString(input));
+                SubjectId supplyContainer = new SubjectId(FrontierWorldStateCodec.readString(input));
                 PhysicalIntentId intent = new PhysicalIntentId(FrontierWorldStateCodec.readString(input)); int status = input.readUnsignedByte();
                 if (status >= MedicalEvacuationStatus.values().length) throw new IllegalArgumentException("unknown medical operation status");
                 MedicalEvacuationTeam team = new MedicalEvacuationTeam(teamId, id, settlement, leader, members);
                 MedicalEvacuationStatus medicalStatus = FrontierWireTags.require(MedicalEvacuationStatus.class, status);
                 long terminalAtTick = hasMedicalTerminalTick ? input.readLong() : medicalStatus == MedicalEvacuationStatus.COMPLETED ? 0L : -1L;
-                MedicalEvacuationOperation operation = new MedicalEvacuationOperation(id, settlement, patient, infirmary, team, supply, intent,
+                MedicalEvacuationOperation operation = new MedicalEvacuationOperation(id, settlement, patient, infirmary, team, supply, supplyContainer, intent,
                         medicalStatus, terminalAtTick);
                 if (medicalOperations.put(id, operation) != null) throw new IllegalArgumentException("duplicate medical operation id");
             }

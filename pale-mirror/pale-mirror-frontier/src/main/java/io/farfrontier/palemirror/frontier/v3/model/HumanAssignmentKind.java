@@ -13,5 +13,6 @@ public enum HumanAssignmentKind {
     SETTLEMENT_SERVICE,
     MEDICAL_EVACUATION,
     TRANSIT,
-    EXTRACTION
+    EXTRACTION,
+    EQUIPMENT_SERVICE
 }

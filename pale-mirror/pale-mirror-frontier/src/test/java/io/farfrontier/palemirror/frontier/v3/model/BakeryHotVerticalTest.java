@@ -432,9 +432,14 @@ class BakeryHotVerticalTest {
                 new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(machine, station.inputSlot())),
                 "minecraft:wheat", 64))));
         assertEquals(BakeryWorkState.Phase.PROCESSING, state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
-        for (int count = 1; count <= ProductionWorkProgress.REQUIRED_PROCESSING_TICKS; count++)
-            state = ProductionProcess.reduceBakeryHotWorkTick(state, task.ownerId(),
-                    new BakeryHotWorkTick(job.id(), leaseId, station.workerStation().standingBody(), count));
+        var execution = state.actorExecutions().current(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION).get(job.workerId());
+        var startedLabour = new BakeryLabourChange(Optional.empty(), BakeryLabour.next(state, state.productionJobs().get(job.id()), 300L, true));
+        state = ProductionProcess.reduceBakeryWorkChanged(state, task.ownerId(),
+                new BakeryWorkChanged(job.id(), leaseId, execution, station.workerStation().standingBody(), startedLabour));
+        var completedLabour = new BakeryLabourChange(Optional.of(startedLabour.next()),
+                BakeryLabour.next(state, state.productionJobs().get(job.id()), startedLabour.next().activeUntilTick(), false));
+        state = ProductionProcess.reduceBakeryWorkChanged(state, task.ownerId(),
+                new BakeryWorkChanged(job.id(), leaseId, execution, station.workerStation().standingBody(), completedLabour));
         assertStationConflictCanReleaseHungryBaker(state, job.id(), leaseId);
         state = ProductionProcess.reduceBakeryHotEffectPrepared(state, task.ownerId(),
                 new BakeryHotEffectPrepared(job.id(), leaseId, BakeryWorkState.Phase.PROCESSING, station.outputSlot()));
@@ -659,14 +664,15 @@ class BakeryHotVerticalTest {
                 .filter(task -> task.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
         var start = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.plan(concurrent,
                 io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.start(fieldTask, 6_100L));
-        var field = start.stream().map(ProposedEvent::payload).filter(ResourceSiteHarvestStarted.class::isInstance)
-                .map(ResourceSiteHarvestStarted.class::cast).findFirst().orElseThrow().job();
+        var fieldStart = start.stream().map(ProposedEvent::payload).filter(ResourceSiteHarvestStarted.class::isInstance)
+                .map(ResourceSiteHarvestStarted.class::cast).findFirst().orElseThrow();
+        var field = fieldStart.job();
         assertNotEquals(address, field.outputSlot(), "new field admission must choose another exact slot");
         concurrent = StrategicObjectiveProcess.reduceTaskTransition(concurrent, job.settlementId(),
                 start.stream().map(ProposedEvent::payload).filter(StrategicTaskTransition.class::isInstance)
                         .map(StrategicTaskTransition.class::cast).findFirst().orElseThrow());
         concurrent = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceStarted(concurrent, siteId,
-                new ResourceSiteHarvestStarted(field));
+                fieldStart);
         var deliveredLayout = new java.util.ArrayList<FungiblePhysicalObservation.Stack>();
         for (var value : concurrent.inventory().fungibleResources().bindings().values()) {
             if (value.accountId().equals(ReferenceContainerCustody.scopeId(depot)))

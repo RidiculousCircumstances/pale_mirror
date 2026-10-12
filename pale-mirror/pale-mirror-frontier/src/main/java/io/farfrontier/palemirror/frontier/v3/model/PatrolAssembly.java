@@ -40,12 +40,14 @@ public record PatrolAssembly(Map<SubjectId, Member> members) {
     }
 
     public boolean complete() { return members.values().stream().allMatch(Member::arrived); }
+    public boolean planningRequired() { return members.values().stream().anyMatch(member -> member.spatial().waitingOrigin().isPresent()); }
     public Map<SubjectId, BodyPosition> bodies() {
         Map<SubjectId, BodyPosition> result = new LinkedHashMap<>();
         members.forEach((actor, member) -> result.put(actor, member.currentBody()));
         return Map.copyOf(result);
     }
     public List<SubjectId> safeAdvances() {
+        if (planningRequired()) return List.of();
         List<SubjectId> safe = new ArrayList<>();
         members.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
             Member member = entry.getValue();
@@ -98,8 +100,8 @@ public record PatrolAssembly(Map<SubjectId, Member> members) {
     }
 
     /** One resident's immutable ingress topology and cursor. */
-    public record Member(TraversalTopology topology, int cursor, long routeRevision, Optional<TraversalRejoin> rejoin) {
-        public Member(TraversalTopology topology, int cursor) { this(topology, cursor, 1L, Optional.empty()); }
+    public record Member(TraversalTopology topology, int cursor, StationApproachState spatial) {
+        public Member(TraversalTopology topology, int cursor) { this(topology, cursor, StationApproachState.initial()); }
         public Member {
             topology = Objects.requireNonNull(topology, "patrol assembly topology");
             if (topology.edges().stream().anyMatch(edge -> edge.kind() != TraversalKind.PEDESTRIAN
@@ -110,40 +112,48 @@ public record PatrolAssembly(Map<SubjectId, Member> members) {
             if (cursor < 0 || cursor >= topology.linearCorridorSurfaces().size()) {
                 throw new IllegalArgumentException("patrol assembly cursor is outside topology");
             }
-            if (routeRevision < 1L) throw new IllegalArgumentException("patrol assembly spatial revision is not positive");
-            rejoin = Objects.requireNonNull(rejoin, "patrol assembly rejoin");
+            spatial = Objects.requireNonNull(spatial, "patrol assembly spatial state");
             var surfaces = topology.linearCorridorSurfaces();
             var target = surfaces.get(Math.min(cursor + 1, surfaces.size() - 1));
-            if (rejoin.isPresent() && !rejoin.orElseThrow().target().equals(target))
+            if (spatial.approach().isPresent() && !spatial.approach().orElseThrow().target().equals(target))
                 throw new IllegalArgumentException("patrol assembly rejoin changes its retained checkpoint");
         }
         public List<SurfaceAnchor> corridor() { return topology.linearCorridorSurfaces(); }
-        public SurfaceAnchor currentSurface() { return rejoin.map(TraversalRejoin::current).orElse(corridor().get(cursor)); }
+        public long routeRevision() { return spatial.revision(); }
+        public Optional<TraversalRejoin> rejoin() { return spatial.approach(); }
+        public SurfaceAnchor currentSurface() { return spatial.current(corridor().get(cursor)); }
         public SurfaceAnchor checkpointSurface() { return corridor().get(Math.min(cursor + 1, corridor().size() - 1)); }
         public BodyPosition currentBody() { return currentSurface().standingBody(); }
         public BodyPosition destinationBody() { return BodyPosition.above(corridor().getLast()); }
-        public boolean arrived() { return rejoin.isEmpty() && cursor == corridor().size() - 1; }
+        public boolean arrived() { return !spatial.pending() && cursor == corridor().size() - 1; }
         public boolean openRetainedEdge() { return cursor == corridor().size() - 1
                 || topology.edgeAfterCursor(cursor).traversableBy(TraversalCapability.PEDESTRIAN); }
-        public Member withRejoin(TraversalRejoin approach) { return new Member(topology, cursor, Math.incrementExact(routeRevision), Optional.of(approach)); }
+        public Member observedAt(SurfaceAnchor actual) { return new Member(topology, cursor, spatial.observedAt(actual)); }
+        public Member withPlannedApproach(TraversalRejoin approach) {
+            if (spatial.waitingOrigin().isEmpty()) throw new IllegalArgumentException("patrol approach requires its retained waiting origin");
+            return new Member(topology, cursor, new StationApproachState(routeRevision(), Optional.of(approach), Optional.empty()));
+        }
         public BodyPosition nextBody() {
             if (arrived()) throw new IllegalStateException("arrived patrol assembly member has no next body");
-            if (rejoin.isPresent()) {
-                var path = rejoin.orElseThrow();
+            if (spatial.waitingOrigin().isPresent()) throw new IllegalArgumentException("patrol assembly is waiting for its selected route");
+            if (rejoin().isPresent()) {
+                var path = rejoin().orElseThrow();
                 return path.path().get(path.nextCursor(1)).standingBody();
             }
             return BodyPosition.above(corridor().get(cursor + 1));
         }
         public Member advanceOne() {
-            if (arrived() || !openRetainedEdge()) {
+            if (arrived() || !openRetainedEdge() || spatial.waitingOrigin().isPresent()) {
                 throw new IllegalArgumentException("patrol assembly cannot advance unavailable retained edge");
             }
-            if (rejoin.isPresent()) {
-                var approach = rejoin.orElseThrow();
+            if (rejoin().isPresent()) {
+                var approach = rejoin().orElseThrow();
                 var next = approach.advance(approach.nextCursor(1), 1);
-                if (!next.arrived()) return new Member(topology, cursor, routeRevision, Optional.of(next));
+                if (!next.arrived()) return new Member(topology, cursor,
+                        new StationApproachState(routeRevision(), Optional.of(next), Optional.empty()));
             }
-            return new Member(topology, Math.min(cursor + 1, corridor().size() - 1), routeRevision, Optional.empty());
+            return new Member(topology, Math.min(cursor + 1, corridor().size() - 1),
+                    new StationApproachState(routeRevision(), Optional.empty(), Optional.empty()));
         }
     }
 }

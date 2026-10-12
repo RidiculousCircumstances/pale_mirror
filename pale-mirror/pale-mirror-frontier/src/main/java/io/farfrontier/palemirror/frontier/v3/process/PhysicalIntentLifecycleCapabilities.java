@@ -157,6 +157,10 @@ final class PhysicalIntentLifecycleCapabilities {
         FrontierWorldState fenced = reduced.withChanges(FrontierWorldStateUpdate.begin().fencedRecovery(
                 FencedRecoveryPhysicalIntentSupport.transition(state.fencedRecovery(), intent, transition.status(), capability.recoveryAsset(intent))));
         if (retires(transition)) capability.retirementAccount().verifyReduced(state, fenced, intent, transition);
+        var terminal = fenced.physicalIntents().get(intent.id());
+        if (terminal != null && terminal.status() == PhysicalIntentStatus.CONFLICTED
+                && capability.resolvedRetentionPolicy().mayCompact(fenced, terminal))
+            return compactCancelledBeforeEffect(fenced, terminal);
         return fenced;
     }
 
@@ -217,12 +221,13 @@ final class PhysicalIntentLifecycleCapabilities {
             if (existing.lifecycleOwner() != capability.owner()) continue;
             if (declaration.unresolved(existing)) unresolved++; else resolved++;
         }
-        if (unresolved >= declaration.maxUnresolved()) {
+        java.util.Set<PhysicalIntentId> compactable = compactableResolvedIds(state, capability);
+        long cancelled = compactable.stream().map(state.physicalIntents()::get).filter(declaration::unresolved).count();
+        if (unresolved - cancelled >= declaration.maxUnresolved()) {
             throw new IllegalArgumentException("physical lifecycle unresolved work is saturated: " + capability.owner().stableId());
         }
-        java.util.Set<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId> compactable = compactableResolvedIds(state, capability);
         if (resolved >= declaration.maxResolvedRetention()
-                && resolved - compactable.size() >= declaration.maxResolvedRetention()) {
+                && resolved - (compactable.size() - cancelled) >= declaration.maxResolvedRetention()) {
             throw new IllegalArgumentException("physical lifecycle resolved history requires owner-declared compaction: "
                     + capability.owner().stableId());
         }
@@ -236,6 +241,26 @@ final class PhysicalIntentLifecycleCapabilities {
         }
     }
 
+    /** A registered owner may forget only a proven pre-effect cancellation, never an ambiguous effect. */
+    FrontierWorldState compactCancelledBeforeEffect(FrontierWorldState state, PhysicalIntent intent) {
+        requireCancelledBeforeEffect(state, intent);
+        var intents = new java.util.LinkedHashMap<>(state.physicalIntents());
+        intents.remove(intent.id());
+        return state.withChanges(FrontierWorldStateUpdate.begin().physicalIntents(intents));
+    }
+
+    private void requireCancelledBeforeEffect(FrontierWorldState state, PhysicalIntent intent) {
+        var capability = capability(intent);
+        var id = FencedRecoveryPhysicalIntentSupport.bindingId(intent);
+        var tombstone = state.fencedRecovery().tombstones().get(id);
+        if (!intent.equals(state.physicalIntents().get(intent.id())) || intent.status() != PhysicalIntentStatus.CONFLICTED
+                || intent.postconditionObservationId().isPresent() || !capability.resolvedRetentionPolicy().mayCompact(state, intent)
+                || state.fencedRecovery().current().containsKey(id) || tombstone == null
+                || tombstone.disposition() != io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryDisposition.CANCELLED_BEFORE_EFFECT
+                || !tombstone.ownerId().equals(intent.causeSubjectId()) || tombstone.asset() != capability.recoveryAsset(intent))
+            throw new IllegalArgumentException("source departure lacks a settled owner-declared pre-effect cancellation");
+    }
+
     private FrontierWorldState compactResolvedForPreparation(FrontierWorldState state, PhysicalIntentLifecycleCapability capability) {
         java.util.Set<PhysicalIntentId> resolvedIds = compactableResolvedIds(state, capability);
         if (resolvedIds.isEmpty()) return state;
@@ -243,6 +268,11 @@ final class PhysicalIntentLifecycleCapabilities {
         Map<PhysicalObservationId, PhysicalEffectObservation> observations = new java.util.LinkedHashMap<>(state.physicalObservations());
         for (PhysicalIntentId id : resolvedIds) {
             PhysicalIntent intent = intents.get(id);
+            if (intent != null && intent.status() == PhysicalIntentStatus.CONFLICTED) {
+                requireCancelledBeforeEffect(state, intent);
+                intents.remove(id);
+                continue;
+            }
             if (intent == null || intent.status() != PhysicalIntentStatus.CONFIRMED) {
                 throw new IllegalArgumentException("owner-selected terminal intent is not confirmed: " + id.value());
             }

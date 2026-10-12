@@ -57,7 +57,7 @@ final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
                 case ExtractionSourceChanged changed -> {
                     id = changed.target().key().owner();
                     var preview = ExtractionExternalChanges.apply(state, id, changed, command.expectedRevision().next().value());
-                    preview = ExtractionDevelopmentContinuation.append(preview, id, events, command.submittedAt().ticks());
+                    preview = ExtractionDevelopmentContinuation.appendAfterObservation(preview, id, events, command.submittedAt().ticks());
                     changedContinuations(state, preview, events, command.submittedAt().ticks());
                     for (var job : state.extractionSites().work().values()) {
                         if (!preview.extractionSites().work().containsKey(job.id())) {
@@ -77,7 +77,7 @@ final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
                     id = observed.jobId();
                     var preview = ExtractionPhysicalStateSupport.observed(state, id, observed, command.expectedRevision().next().value());
                     var original = state.extractionSites().work().get(id);
-                    preview = ExtractionDevelopmentContinuation.append(preview, original.siteId(), events, command.submittedAt().ticks());
+                    preview = ExtractionDevelopmentContinuation.appendAfterObservation(preview, original.siteId(), events, command.submittedAt().ticks());
                     if (preview.extractionSites().work().containsKey(id)) {
                         if (events.stream().noneMatch(proposed -> proposed.subject().equals(observed.jobId()) && proposed.payload() instanceof ScheduleEffect))
                             events.add(ExtractionContinuation.wake(id, command.submittedAt().ticks()));
@@ -101,8 +101,9 @@ final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
             List<ProposedEvent> events, long tick) {
         for (var job : before.extractionSites().work().values().stream()
                 .sorted(Comparator.comparing(io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWork::id)).toList()) {
-            if (job.equals(after.extractionSites().work().get(job.id()))) continue;
             var movement = before.actorMovements().get(job.execution().actorId());
+            if (job.equals(after.extractionSites().work().get(job.id()))
+                    && Objects.equals(movement, after.actorMovements().get(job.execution().actorId()))) continue;
             if (movement != null && !after.actorMovements().containsKey(job.execution().actorId()))
                 events.add(new ProposedEvent(job.execution().actorId(), new ScheduleEffect.Cancelled(
                         ActorMovementProcess.progress(movement, Math.addExact(movement.issuedAtTick(), 1)).id())));

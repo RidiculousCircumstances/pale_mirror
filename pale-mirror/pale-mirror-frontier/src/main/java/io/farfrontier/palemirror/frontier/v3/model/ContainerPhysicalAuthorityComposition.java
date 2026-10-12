@@ -9,6 +9,8 @@ public final class ContainerPhysicalAuthorityComposition {
     private static final List<BiPredicate<FrontierWorldState, SubjectId>> OWNERS = List.of(
             BakeryPhysicalAuthority::pendingForContainer, ResidentMealPhysicalAuthority::pendingForContainer,
             ShipmentPhysicalAuthority::pendingForContainer, ExtractionPhysicalAuthority::pendingForContainer,
+            MedicalPhysicalAuthority::pendingForContainer,
+            EquipmentPhysicalAuthority::pendingForContainer,
             io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority::pendingForContainer);
     private ContainerPhysicalAuthorityComposition() { }
     public static boolean pending(FrontierWorldState state, SubjectId container) {

@@ -11,6 +11,31 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPlanningWakeIndexTest {
+    @Test void regionalRebaseWakesOnlyTheExactOldAddressThenTheSelectedSuccessorWithoutLosingWork() {
+        var revision = PedestrianGeometryRevision.initial(); var next = revision.changed(java.util.Set.of(new PedestrianGeometryRevision.Region(12, 0)));
+        java.util.function.Function<PedestrianGeometryRevision, PedestrianRouteGeometry> geometry = current -> new PedestrianRouteGeometry() {
+            public Object version() { return current; }
+            public java.util.Optional<PedestrianGeometryRevision> regionalRevision() { return java.util.Optional.of(current); }
+            public WorldBounds bounds() { return new WorldBounds(0, 0, 512, 16); }
+            public SurfaceAnchor supportAt(int x, int z) { return SurfaceAnchor.at(x, 63, z); }
+            public boolean blocked(SurfaceAnchor surface) { return current == next && surface.x() == 192; }
+        };
+        var old = geometry.apply(revision); var current = geometry.apply(next);
+        var start = SurfaceAnchor.at(1, 63, 1); var target = SurfaceAnchor.at(480, 63, 1);
+        var index = new PedestrianPlanningWakeIndex(); var owner = action("regional", 6_000); var other = action("unrelated", 6_000);
+        var oldAddress = PedestrianRouteRequest.of(old, start, target); var newAddress = PedestrianRouteRequest.of(current, start, target);
+        try (var planner = new CooperativePedestrianPlanner()) {
+            planner.query(old, start, target); planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            index.replace(owner, List.of(oldAddress)); index.replace(other, List.of(request(3)));
+            assertEquals(PedestrianRouteResult.Status.PLANNING, planner.query(current, start, target).status());
+            index.changed(planner.drainChanges()); assertEquals(List.of(owner), index.ready(view(20, owner, other)));
+            index.replace(owner, List.of(newAddress)); assertTrue(index.ready(view(20, owner, other)).isEmpty());
+            for (int turn = 0; turn < 1_024 && planner.pendingCount() > 0; turn++)
+                planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            assertEquals(0, planner.pendingCount()); assertEquals(PedestrianRouteResult.Status.NO_PATH, planner.query(current, start, target).status());
+            index.changed(planner.drainChanges()); assertEquals(List.of(owner), index.ready(view(20, owner, other)));
+        }
+    }
     @Test void emptyWaitsDoNotReadTheQueueAndIndexedLookupFencesTheExactGeneration() {
         var index = new PedestrianPlanningWakeIndex();
         var owner = action("indexed", 6000);

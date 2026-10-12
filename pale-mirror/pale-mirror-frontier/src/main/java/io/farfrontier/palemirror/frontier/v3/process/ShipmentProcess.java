@@ -74,9 +74,11 @@ public final class ShipmentProcess {
         if (needsStorage(state, shipment)) {
             var interrupted = new ActorMovementInterruptionPlanner().assess(state, shipment.execution().actorId(), now);
             if (!(interrupted instanceof ActivityInterruptionPlanner.Ready ready)) return retry(state, shipment, now);
-            var replacement = ShipmentStorageRetargeted.eligible(ready.following(), shipment);
+            java.util.Optional<ShipmentStorageRetargeted> replacement;
+            try { replacement = ShipmentStorageRetargeted.eligible(ready.following(), shipment); }
+            catch (KnownPedestrianNavigation.RouteUnavailable pending) { return retry(state, shipment, now); }
             if (replacement.isEmpty()) return retry(state, shipment, now);
-            var retarget = new ShipmentStorageRetargeted(shipment.id(), shipment.revision(), replacement.orElseThrow());
+            var retarget = replacement.orElseThrow();
             retarget.apply(ready.following(), shipment.id());
             var events = new java.util.ArrayList<>(ready.events()); events.add(new ProposedEvent(shipment.id(), retarget));
             events.add(wake(shipment.id(), now)); return List.copyOf(events);

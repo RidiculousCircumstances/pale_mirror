@@ -1,0 +1,15 @@
+package io.farfrontier.palemirror.frontier.v3.model.navigation;
+
+import io.farfrontier.palemirror.frontier.v3.model.WorldBounds;
+import java.util.Map;
+
+/** All surveyed regions, including negative/unknown search branches, not merely the found path. */
+record PedestrianRegionDependencies(WorldBounds bounds, Object scope, Map<PedestrianRegion.Tile, Object> revisions) {
+    PedestrianRegionDependencies { revisions = Map.copyOf(revisions); }
+    boolean matches(PedestrianRouteGeometry geometry) {
+        var current = geometry.regionalRevision();
+        return bounds.equals(geometry.bounds()) && current.isPresent() && current.orElseThrow().scope().equals(scope)
+                && revisions.entrySet().stream().allMatch(entry -> entry.getValue()
+                == current.orElseThrow().at(entry.getKey().x(), entry.getKey().z()));
+    }
+}

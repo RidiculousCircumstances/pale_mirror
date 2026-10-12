@@ -114,7 +114,7 @@ class AmbientActorProcessTest {
         assertInstanceOf(io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted.class,
                 engine.submit(command(worldId, engine.checkpoint(), new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:ambient-hot"),
                         new AmbientBodyConfirmed(resident, lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION,
-                                lease.handoffBody(), lease.handoffBody(), ActorBodyAuthority.current(new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()), resident)))));
+                                lease.handoffBody(), lease.handoffBody(), ActorBodyAuthority.current(new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()), resident), java.util.Optional.empty()))));
         ModeledActorBodyFacts.inspected(engine, resident, new BodyPosition(65, 64, 64));
         var inspected = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         AmbientLeaseReleased release = new AmbientLeaseReleased(resident, new BodyPosition(65, 64, 64),
@@ -139,7 +139,7 @@ class AmbientActorProcessTest {
         submitAccepted(engine, worldId, "prepare", new AmbientLeasePrepared(lease));
         ModeledActorBodyFacts.present(engine, resident);
         submitAccepted(engine, worldId, "hot", new AmbientBodyConfirmed(resident, lease.revision(),
-                AmbientBodyConfirmed.Boundary.ADMISSION, lease.handoffBody(), lease.handoffBody(), ActorBodyAuthority.current(new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()), resident)));
+                AmbientBodyConfirmed.Boundary.ADMISSION, lease.handoffBody(), lease.handoffBody(), ActorBodyAuthority.current(new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()), resident), java.util.Optional.empty()));
         submitAccepted(engine, worldId, "unknown", new AmbientLeaseTransition(resident, AmbientLeaseStatus.UNKNOWN_AFTER_RESTART));
         AmbientLeaseRestartAbsenceObserved absence = new AmbientLeaseRestartAbsenceObserved(resident, lease.handoffBody());
         submitAccepted(engine, worldId, "absence", absence);

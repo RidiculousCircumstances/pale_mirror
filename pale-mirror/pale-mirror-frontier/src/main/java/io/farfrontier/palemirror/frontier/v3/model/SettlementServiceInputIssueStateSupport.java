@@ -121,7 +121,7 @@ public final class SettlementServiceInputIssueStateSupport {
         ActorLocation worker = state.actorLocations().get(work.workerId());
         if (issued.phase().active() && worker != null && worker.condition().status() == ActorLifeStatus.ALIVE
                 && !worker.supportingSurface().equals(FrontierSettlementServiceWorkSceneSupport.semanticSurface(issued)))
-            issued = issued.withSpatial(SettlementServiceJourneyKnowledge.checkpoint(state, issued, worker.supportingSurface()));
+            issued = issued.withSpatial(SettlementServiceJourneyKnowledge.checkpoint(issued, worker.supportingSurface()));
         works.put(work.id(), issued);
         return state.withChanges(FrontierWorldStateUpdate.begin()
                 .inventory(state.inventory().moveObservedItem(work.inputItemId(), work.inputSource(), new InventoryCustody.Actor(work.workerId())))

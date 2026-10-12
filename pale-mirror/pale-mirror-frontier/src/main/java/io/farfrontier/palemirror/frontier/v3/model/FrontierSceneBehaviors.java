@@ -105,6 +105,9 @@ public final class FrontierSceneBehaviors {
     public static void validatePrepared(FrontierWorldState state, SceneLease lease) {
         behavior(lease).validatePrepared(state, lease);
     }
+    public static SceneParticipantDeathDisposition participantDeathDisposition(FrontierWorldState state, SceneLease lease) {
+        return behavior(lease).participantDeathDisposition(state, lease);
+    }
     static Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,
                                           Map<SubjectId, StructureCondition> structures,
                                           Map<SubjectId, RouteConstruction> constructions, Map<SubjectId, RouteMaintenance> maintenances,
@@ -182,6 +185,7 @@ public final class FrontierSceneBehaviors {
         SubjectId owner(FrontierWorldState state, SceneLease lease);
         Set<SubjectId> resourceHandAccounts(FrontierWorldState state, SceneLease lease);
         void validatePrepared(FrontierWorldState state, SceneLease lease);
+        SceneParticipantDeathDisposition participantDeathDisposition(FrontierWorldState state, SceneLease lease);
         Set<SubjectId> expectedMembers(FrontierBootstrap bootstrap, HumanPopulation population, Map<SubjectId, ActorLocation> actors,
                                        Map<SubjectId, StructureCondition> structures,
                                        Map<SubjectId, RouteConstruction> constructions, Map<SubjectId, RouteMaintenance> maintenances,
@@ -197,6 +201,9 @@ public final class FrontierSceneBehaviors {
 
 
     private static final class SettlementAssaultBehavior implements SceneBehavior<SettlementAssaultSceneCause> {
+        @Override public SceneParticipantDeathDisposition participantDeathDisposition(FrontierWorldState state, SceneLease lease) {
+            return SceneParticipantDeathDisposition.coordinated(lease);
+        }
         @Override public Set<SubjectId> resourceHandAccounts(FrontierWorldState state, SceneLease lease) { return Set.of(); }
         @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
             FrontierSettlementAssaultSceneSupport.require(state, cause(lease));
@@ -277,6 +284,9 @@ public final class FrontierSceneBehaviors {
     }
 
     private static final class EngineeringWorksiteBehavior implements SceneBehavior<EngineeringWorkSceneCause> {
+        @Override public SceneParticipantDeathDisposition participantDeathDisposition(FrontierWorldState state, SceneLease lease) {
+            return SceneParticipantDeathDisposition.coordinated(lease);
+        }
         @Override public Set<SubjectId> resourceHandAccounts(FrontierWorldState state, SceneLease lease) { return Set.of(); }
         @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
             EngineeringWorkSceneCause cause = cause(lease);
@@ -336,6 +346,19 @@ public final class FrontierSceneBehaviors {
 
     /** The care owner itself, rather than a synthetic medic mob, owns every treatment scene. */
     private static final class MedicalTreatmentBehavior implements SceneBehavior<MedicalTreatmentSceneCause> {
+        @Override public SceneParticipantDeathDisposition participantDeathDisposition(FrontierWorldState state, SceneLease lease) {
+            var operation = FrontierMedicalTreatmentSceneSupport.require(state, cause(lease));
+            if (lease.status() == SceneLeaseStatus.PREPARED) {
+                var intent = state.physicalIntents().get(operation.consumptionIntentId());
+                if (operation.status() != MedicalEvacuationStatus.PREPARED || intent == null
+                        || intent.status() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED)
+                    throw new IllegalArgumentException("medical assembly death lost its exact unbegun treatment");
+                MedicalPhysicalAuthority.requireIntent(operation, intent);
+                return SceneParticipantDeathDisposition.ABORT_UNBEGUN_SCOPE;
+            }
+            return lease.status() == SceneLeaseStatus.CONFLICT ? SceneParticipantDeathDisposition.DRAIN_SCOPE
+                    : SceneParticipantDeathDisposition.coordinated(lease);
+        }
         @Override public Set<SubjectId> resourceHandAccounts(FrontierWorldState state, SceneLease lease) { return Set.of(); }
         @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
             return switch (FrontierMedicalTreatmentSceneSupport.require(state, cause(lease)).status()) {
@@ -395,6 +418,9 @@ public final class FrontierSceneBehaviors {
 
     /** One named agricultural worker, not an ambient Villager or synthetic field animation. */
     private static final class ResourceSiteHarvestBehavior implements SceneBehavior<ResourceSiteHarvestSceneCause> {
+        @Override public SceneParticipantDeathDisposition participantDeathDisposition(FrontierWorldState state, SceneLease lease) {
+            return SceneParticipantDeathDisposition.coordinated(lease);
+        }
         @Override public Set<SubjectId> resourceHandAccounts(FrontierWorldState state, SceneLease lease) {
             if (FrontierResourceSiteHarvestSceneSupport.isTerminalReceiptRelease(state, cause(lease))) return Set.of();
             return Set.of(FrontierResourceSiteHarvestSceneSupport.require(state, cause(lease)).actorAccountId());
@@ -487,6 +513,9 @@ public final class FrontierSceneBehaviors {
 
     /** One named industrial worker, never an ambient Villager substituted at the workshop. */
     private static final class ProductionWorkBehavior implements SceneBehavior<ProductionWorkSceneCause> {
+        @Override public SceneParticipantDeathDisposition participantDeathDisposition(FrontierWorldState state, SceneLease lease) {
+            return SceneParticipantDeathDisposition.coordinated(lease);
+        }
         @Override public Set<SubjectId> resourceHandAccounts(FrontierWorldState state, SceneLease lease) {
             return FrontierProductionWorkSceneSupport.require(state, cause(lease)).bakeryWork()
                     .map(work -> Set.of(work.actorAccountId())).orElseGet(Set::of);
@@ -543,6 +572,9 @@ public final class FrontierSceneBehaviors {
 
     /** One named resident and one retained field/workshop station, never an ambient substitute. */
     private static final class SettlementServiceWorkBehavior implements SceneBehavior<SettlementServiceWorkSceneCause> {
+        @Override public SceneParticipantDeathDisposition participantDeathDisposition(FrontierWorldState state, SceneLease lease) {
+            return SceneParticipantDeathDisposition.coordinated(lease);
+        }
         @Override public Set<SubjectId> resourceHandAccounts(FrontierWorldState state, SceneLease lease) { return Set.of(); }
         @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
             return switch (FrontierSettlementServiceWorkSceneSupport.require(state, cause(lease)).phase()) {
@@ -614,6 +646,9 @@ public final class FrontierSceneBehaviors {
 
     /** Class-D route patrol: generic guard motion never substitutes for this retained formation. */
     private static final class RoutePatrolBehavior implements SceneBehavior<RoutePatrolSceneCause> {
+        @Override public SceneParticipantDeathDisposition participantDeathDisposition(FrontierWorldState state, SceneLease lease) {
+            return SceneParticipantDeathDisposition.coordinated(lease);
+        }
         @Override public Set<SubjectId> resourceHandAccounts(FrontierWorldState state, SceneLease lease) { return Set.of(); }
         @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
             return FrontierRoutePatrolSceneSupport.require(state, cause(lease)).active()

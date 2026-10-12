@@ -36,11 +36,12 @@ final class ProductionWorkScenePayloadCodecs {
                 ProductionWorkProgressStateCodec.write(output, advanced.next()); ActorExecutionStateCodec.writeId(output, advanced.execution());
                 FrontierWorldPayloadCodecs.writeBody(output, advanced.expectedBody()); output.writeShort(advanced.expectedCursor());
                 ProductionWorkProgressStateCodec.write(output, advanced.expectedProgress()); output.writeLong(advanced.spatialRevision());
+                TraversalRejoinCodec.write(output, advanced.approach());
             }); }
         @Override public FrontierPayload decode(byte[] bytes) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, input ->
                 new ProductionColdWorkAdvanced(FrontierWorldPayloadCodecs.readSubject(input).value(), input.readUnsignedShort(),
                         ProductionWorkProgressStateCodec.read(input), ActorExecutionStateCodec.readId(input), FrontierWorldPayloadCodecs.readBody(input),
-                        input.readUnsignedShort(), ProductionWorkProgressStateCodec.read(input), input.readLong())); }
+                        input.readUnsignedShort(), ProductionWorkProgressStateCodec.read(input), input.readLong(), TraversalRejoinCodec.read(input))); }
     }
     private static final class Progressed implements PayloadCodec {
         @Override public String type() { return "frontier.production_work_progressed"; }

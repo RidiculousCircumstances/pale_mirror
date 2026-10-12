@@ -38,7 +38,7 @@ class ExpeditionServiceWaitTest {
         var boundary = ServiceAccessCoordinator.boundary(state, mission.sender().containerId());
         state = state.withActorBody(blocker, mission.sender().station().standingBody());
         var execution = state.actorExecutions().next(blocker, ActorActivityKind.SERVICE_EXIT, blocker);
-        var exit = KnownServiceExitNavigation.clearancePathFrom(state, mission.sender().settlementId(),
+        var exit = KnownServiceExitNavigation.plannedClearancePathFrom(state, mission.sender().settlementId(),
                 mission.sender().containerId(), blocker, blocker, 0, 1,
                 state.actorLocations().get(blocker).supportingSurface()).getLast();
         assertTrue(boundary.cleared(exit.standingBody()));

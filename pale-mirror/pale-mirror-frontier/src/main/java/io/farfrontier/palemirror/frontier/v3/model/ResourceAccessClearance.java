@@ -17,20 +17,9 @@ public final class ResourceAccessClearance {
             throw new IllegalArgumentException("resource clearance lacks its current exclusive caller body");
         var point = ServiceBoundaryComposition.declaration(state, pointId);
         if (point.boundary().cleared(body.body())) return Optional.empty();
-        var targets = KnownServiceExitNavigation.exitStations(state, point.settlementId(), pointId, execution.actorId(), body.supportingSurface());
-        for (var target : targets) {
-            var order = new MovementOrder(execution.activityOwnerId(), execution.actorId(), 0, tick + 1,
-                    List.of(target), TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-            try {
-                KnownServiceExitNavigation.pathFrom(state, point.settlementId(), pointId, order, body.supportingSurface());
-                return Optional.of(new ActorMovement(order, tick, new ActorMovementContext.ResourceAccessExit(
-                        point.identity(), execution.activityOwnerId()), execution));
-            } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
-                // Another bounded supported exit may still be reachable.
-            }
-        }
-        // Blocked is not cleared. Retain a goal and caller authority so the common
-        // navigator can wait/replan/request courtesy when the obstruction changes.
+        // A confirmed resource effect needs an owned clearance goal, not a new search
+        // at the confirmation boundary. The movement producer/nav owner selects the reachable
+        // leg later; blocked/unfinished planning cannot undo the resource receipt.
         var supported = KnownServiceExitNavigation.supportedExitStations(state, point.settlementId(), pointId, body.supportingSurface());
         if (supported.isEmpty()) throw new IllegalStateException("declared service point has no supported clearance region: " + pointId);
         var order = new MovementOrder(execution.activityOwnerId(), execution.actorId(), 0, tick + 1,

@@ -262,7 +262,9 @@ class HumanPopulationProcessTest {
         ResidentProfile newborn = new ResidentProfile(new SubjectId("resident:1-housing-blocked"), parent.householdId(), settlement.id(),
                 ResidentRole.FARMER, "Test Resident", 0L, parent.skills());
         ResidentBirthJob permit = new ResidentBirthJob(new SubjectId("job:resident-birth-housing-blocked"), settlement.id(), parent.householdId(),
-                new SubjectId("item:bootstrap-1-wheat"), new SubjectId("commitment:resident-birth-housing-blocked"), newborn, settlement.anchor());
+                new ColdResourceConsumption.Exact(settlement.id(), FrontierWorldState.depotId(settlement.id()), "minecraft:bread",
+                        new SubjectId("item:housing-blocked-bread"), 1),
+                new SubjectId("commitment:resident-birth-housing-blocked"), newborn, settlement.anchor());
         assertThrows(IllegalArgumentException.class, () -> destroyed.startResidentBirth(permit));
 
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(state).boards().get(housing.id());

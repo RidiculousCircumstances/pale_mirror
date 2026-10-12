@@ -17,6 +17,36 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ActorMovementProcessTest {
+    @Test void serviceTurnoverQueueReadinessLeavesDestinationSearchToItsOwner() throws Exception {
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:turnover-readiness"), 421L));
+        var home = initial.bootstrap().settlements().getFirst();
+        var actor = home.residents().getFirst().id();
+        var point = SettlementServiceAccessPoints.forSettlement(initial, home.id()).getFirst();
+        var state = initial.withActorBody(actor, point.waitingSurfaces().getFirst().standingBody());
+        try (var binding = PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            throw new AssertionError("queue readiness cannot choose a parking route");
+        })) {
+            assertTrue(ResidentServiceTurnover.mayPlan(state, actor, 1L));
+            assertFalse(FrontierWorldRuntimeDefinition.scheduledHeld(state, ResidentActivityProcess.review(actor, 24_000L)));
+            assertTrue(state.actorMovements().isEmpty());
+        }
+        var queries = new java.util.concurrent.atomic.AtomicInteger();
+        try (var binding = PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            queries.incrementAndGet();
+            return new PedestrianRouteResult(PedestrianRouteResult.Status.PLANNING, List.of(), 1, 1, "pending turnover");
+        })) {
+            assertThrows(KnownPedestrianNavigation.RouteUnavailable.class,
+                    () -> ResidentServiceTurnover.select(state, actor, 1L));
+            assertEquals(1, queries.get());
+            var events = ResidentActivityProcess.plan(state, ResidentActivityProcess.review(actor, 1L));
+            assertEquals(1, events.size());
+            assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
+                    events.getFirst().payload());
+            assertTrue(state.actorMovements().isEmpty());
+        }
+    }
+
     @Test void visitorClearsTheActualForeignServicePointWithoutChangingResidence() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:visitor-turnover"), 421L));
         var home = state.bootstrap().settlements().getFirst();

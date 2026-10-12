@@ -151,6 +151,18 @@ final class FrontierV3RoutePatrolSceneExecutor {
                 block(level, runtime, state, lease, retained, RoutePatrolDiagnosticProducer.MISSING_OWNED_BODY); return;
             }
         }
+        if (PatrolSpatialContinuation.planningRequired(retained)) {
+            try {
+                var planned = PatrolSpatialContinuation.plan(state, retained);
+                FrontierV3DiagnosticTrace.recordScene(level.getServer(), "route_patrol_spatial_planned", lease,
+                        submit(runtime, "route-patrol-spatial", lease.id().value(), planned));
+            } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                if (unavailable.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
+                    block(level, runtime, state, lease, retained, RoutePatrolDiagnosticProducer.NO_OPEN_RETAINED_EDGE);
+                else FrontierV3PhysicalWaitTrace.admission(level, retained.taskId(), "patrol-approach-" + unavailable.status());
+            }
+            return;
+        }
         RoutePatrol formation;
         try {
             formation = retained.advanceFormation();

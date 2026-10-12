@@ -14,12 +14,14 @@ public final class ActivityExecutionCapabilities {
     private static final ActivityExecutionCapabilities CURRENT = new ActivityExecutionCapabilities(List.of(
             registration(HumanAssignmentKind.IDLE, (state, assignment) -> new ActivityExecutionCheckpoint(
                     state, assignment, ResidentWorkYield.Status.READY)),
-            registration(HumanAssignmentKind.PRODUCTION, FrontierProductionWorkSceneSupport::executionCheckpoint),
+            registration(HumanAssignmentKind.PRODUCTION, FrontierProductionWorkSceneSupport::executionCheckpoint,
+                    BakeryLabour::pause, BakeryLabour::workStatsChanged, (state, assignment) -> false),
             registration(HumanAssignmentKind.FIELD_HARVEST, FrontierResourceSiteHarvestSceneSupport::executionCheckpoint,
                     ResourceSiteHarvestLabour::pause, ResourceSiteHarvestLabour::workStatsChanged,
                     FrontierResourceSiteHarvestSceneSupport::waitingForServiceResource),
             delegated(HumanAssignmentKind.COURIER, ActorActivityKind.COURIER),
             new ExtractionAssignmentCapability(),
+            delegated(HumanAssignmentKind.EQUIPMENT_SERVICE, ActorActivityKind.EQUIPMENT_SERVICE),
             new GroupAssignmentCapability(),
             delegated(HumanAssignmentKind.ROUTE_PATROL, ActorActivityKind.ROUTE_PATROL),
             delegated(HumanAssignmentKind.SETTLEMENT_DEFENCE, ActorActivityKind.SETTLEMENT_ASSAULT),

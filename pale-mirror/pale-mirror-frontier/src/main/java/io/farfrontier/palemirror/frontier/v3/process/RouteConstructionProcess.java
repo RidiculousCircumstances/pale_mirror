@@ -119,12 +119,18 @@ public final class RouteConstructionProcess {
     private static List<ProposedEvent> planBuilding(FrontierWorldState state, RouteConstruction current,
                                                      ScheduledAction action, Optional<ProposedEvent> retry) {
         if (!EngineeringExecutionAuthority.crewLiving(state, current)) return retryOnly(retry);
-        if (current.team().isPresent() && !EngineeringToolCustody.ready(state, current.team().orElseThrow())) {
-            if (!EngineeringDepotService.atStations(state, current, EngineeringJourneyPurpose.MUSTER_DEPOT)) {
-                return admitDepotJourney(state, current, EngineeringJourneyPurpose.MUSTER_DEPOT, action, retry);
+        if (current.team().isPresent()) {
+            var visitProgress = EngineeringDepotService.progress(state, current);
+            if (visitProgress != EngineeringDepotService.VisitProgress.NONE && visitProgress != EngineeringDepotService.VisitProgress.CLEARED) {
+                if (visitProgress == EngineeringDepotService.VisitProgress.CLEAR_REQUIRED)
+                    return admitDepotJourney(state, current, EngineeringJourneyPurpose.MUSTER_DEPOT, PhysicalIntentKind.EQUIPMENT_ISSUE, action, retry);
+                if (visitProgress == EngineeringDepotService.VisitProgress.TRANSFER_READY)
+                    return EngineeringEquipmentProcess.issueOne(state, current).map(intent -> withRetry(List.of(new ProposedEvent(current.settlementId(),
+                            new PhysicalIntentPrepared(intent))), retry)).orElseGet(() -> retryOnly(retry));
+                return retryOnly(retry);
             }
-            return EngineeringEquipmentProcess.issueOne(state, current).map(intent -> withRetry(List.of(new ProposedEvent(current.settlementId(),
-                    new PhysicalIntentPrepared(intent))), retry)).orElseGet(() -> retryOnly(retry));
+            if (!EngineeringToolCustody.ready(state, current.team().orElseThrow()))
+                return admitDepotJourney(state, current, EngineeringJourneyPurpose.MUSTER_DEPOT, PhysicalIntentKind.EQUIPMENT_ISSUE, action, retry);
         }
         if (current.team().isPresent() && (current.assembly().isEmpty()
                 || current.assembly().orElseThrow().purpose() == EngineeringJourneyPurpose.MUSTER_DEPOT)) {
@@ -164,11 +170,8 @@ public final class RouteConstructionProcess {
                 .anyMatch(lease -> FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(project.id())
                         && lease.status() != SceneLeaseStatus.CLOSED);
         if (retainedHotOrRecovery) return retryOnly(retry);
-        // A COLD cursor is born only after every predecessor ambient body has been durably
-        // drained.  Compiling from an old COLD location while a loaded body is still governed
-        // by WORK/PATROL would create two positions for one person.  The next scan retries
-        // after ordinary HOT drain, which records the body's actual final floor first.
-        if (!ActorExecutionCoordinator.coldAvailable(state, project.team().orElseThrow().memberIds())) return retryOnly(retry);
+        // Exact same-owner HOT continuation retains the body; recovery or a scene must settle first.
+        if (!EngineeringExecutionAuthority.mayStartJourney(state, project)) return retryOnly(retry);
         return withRetry(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
                 io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.constructionAssemblyStarted(state, project.id(), EngineeringWorksite.compile(state, project))),
                 new ProposedEvent(SYSTEM, new ScheduleEffect.Created(assemblyProgress(project.id(), nextAssemblyDue(state, action.dueAt().ticks()))))), retry);
@@ -193,6 +196,10 @@ public final class RouteConstructionProcess {
                 .anyMatch(lease -> FrontierSceneBehaviors.engineeringWorksite(lease).projectId().equals(project.id())
                         && lease.status() != SceneLeaseStatus.CLOSED);
         if (retainedHotOrRecovery) return List.of(next);
+        var selectedApproach = EngineeringJourneyKnowledge.selectApproach(state, project);
+        if (selectedApproach.isPresent()) return List.of(new ProposedEvent(FrontierRouteNetwork.OWNER,
+                new RouteConstructionAssemblyApproachPlanned(project.id(), EngineeringExecutionAuthority.assemblyCurrent(state, project),
+                        selectedApproach.orElseThrow())), next);
         SubjectId advancing = assembly.safeAdvances().stream()
                 .filter(member -> ActorExecutionCoordinator.coldAvailable(state, member))
                 .filter(member -> io.farfrontier.palemirror.frontier.v3.model.EngineeringJourneyKnowledge.openEdge(state, project, member))
@@ -228,13 +235,11 @@ public final class RouteConstructionProcess {
     }
 
     private static List<ProposedEvent> admitDepotJourney(FrontierWorldState state, RouteConstruction project,
-                                                           EngineeringJourneyPurpose purpose, ScheduledAction action, Optional<ProposedEvent> retry) {
-        EngineeringWorkAssembly current = project.assembly().orElse(null);
-        if (current != null) return retryOnly(retry);
-        if (!ActorExecutionCoordinator.coldAvailable(state, project.team().orElseThrow().memberIds())) return retryOnly(retry);
+                                                           EngineeringJourneyPurpose purpose, PhysicalIntentKind operation, ScheduledAction action, Optional<ProposedEvent> retry) {
+        if (!EngineeringExecutionAuthority.mayStartJourney(state, project)) return retryOnly(retry);
         EngineeringWorkAssembly journey;
-        try { journey = EngineeringDepotService.compile(state, project, purpose); }
-        catch (IllegalArgumentException unavailable) { return retryOnly(retry); }
+        try { journey = EngineeringDepotService.compile(state, project, purpose, operation, action.dueAt().ticks()); }
+        catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) { return retryOnly(retry); }
         return withRetry(List.of(new ProposedEvent(FrontierRouteNetwork.OWNER, io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.constructionAssemblyStarted(state, project.id(), journey)),
                 new ProposedEvent(SYSTEM, new ScheduleEffect.Created(assemblyProgress(project.id(), nextAssemblyDue(state, action.dueAt().ticks()))))), retry);
     }
@@ -368,14 +373,21 @@ public final class RouteConstructionProcess {
     private static List<ProposedEvent> planReady(FrontierWorldState state, RouteConstruction value,
                                                    ScheduledAction action, Optional<ProposedEvent> retry) {
         StrategicTask task = constructionTask(state, value.settlementId(), StrategicTaskStatus.ACTIVE);
-        if (value.team().isPresent() && !EngineeringEquipmentProcess.returnedOrLost(state, value)) {
+        if (value.team().isPresent()) {
             if (!EngineeringExecutionAuthority.crewLiving(state, value)) return retryOnly(retry);
-            if (!EngineeringDepotService.atStations(state, value, EngineeringJourneyPurpose.RETURN_DEPOT)) {
-                return admitDepotJourney(state, value, EngineeringJourneyPurpose.RETURN_DEPOT, action, retry);
+            var visitProgress = EngineeringDepotService.progress(state, value);
+            if (visitProgress != EngineeringDepotService.VisitProgress.NONE && visitProgress != EngineeringDepotService.VisitProgress.CLEARED) {
+                if (visitProgress == EngineeringDepotService.VisitProgress.CLEAR_REQUIRED)
+                    return admitDepotJourney(state, value, EngineeringJourneyPurpose.RETURN_DEPOT, PhysicalIntentKind.EQUIPMENT_RETURN, action, retry);
+                if (visitProgress == EngineeringDepotService.VisitProgress.TRANSFER_READY)
+                    return EngineeringEquipmentProcess.returnOne(state, value).map(intent -> withRetry(List.of(new ProposedEvent(value.settlementId(),
+                            new PhysicalIntentPrepared(intent))), retry)).orElseGet(() -> retryOnly(retry));
+                return retryOnly(retry);
             }
-            return EngineeringEquipmentProcess.returnOne(state, value).map(intent -> withRetry(List.of(new ProposedEvent(value.settlementId(),
-                    new PhysicalIntentPrepared(intent))), retry)).orElseGet(() -> retryOnly(retry));
+            if (!EngineeringEquipmentProcess.returnedOrLost(state, value))
+                return admitDepotJourney(state, value, EngineeringJourneyPurpose.RETURN_DEPOT, PhysicalIntentKind.EQUIPMENT_RETURN, action, retry);
         }
+
         if (!RouteConstructionStateSupport.readyToCutover(state, value)) return retryOnly(retry);
         ProposedEvent cutover = new ProposedEvent(FrontierRouteNetwork.OWNER, io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.cutover(state, value.id()));
         ProposedEvent completed = transition(task, StrategicTaskStatus.COMPLETED);

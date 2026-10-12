@@ -32,6 +32,10 @@ public final class ShipmentEndpointComposition {
     public static List<SurfaceAnchor> stations(FrontierWorldState state, ShipmentEndpoint endpoint) {
         return port(endpoint).stations(state, endpoint);
     }
+    /** Shared structural validation can check a saved port without constructing a world or searching. */
+    public static List<SurfaceAnchor> declaredStations(FrontierBootstrap bootstrap, ShipmentEndpoint endpoint) {
+        return port(endpoint).declaredStations(bootstrap, endpoint);
+    }
     public static SurfaceAnchor interactionStation(FrontierWorldState state, ShipmentEndpoint endpoint) {
         return port(endpoint).interactionStation(state, endpoint);
     }

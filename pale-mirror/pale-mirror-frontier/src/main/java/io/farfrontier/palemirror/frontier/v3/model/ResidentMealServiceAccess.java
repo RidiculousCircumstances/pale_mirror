@@ -30,8 +30,12 @@ public final class ResidentMealServiceAccess implements ServiceAccessCapability 
     }
     public static boolean mayStart(FrontierWorldState state, SubjectId pointId, SubjectId residentId) {
         var actor = state.actorLocations().get(residentId);
-        return actor != null && (ServiceAccessCoordinator.boundary(state, pointId).cleared(actor.body())
-                || available(state, pointId, residentId));
+        return actor != null && mayStart(state, pointId, residentId, actor.body());
+    }
+    /** Read-only assessment of a retained movement checkpoint; it cannot reserve service access. */
+    static boolean mayStart(FrontierWorldState state, SubjectId pointId, SubjectId residentId, BodyPosition body) {
+        return ServiceAccessCoordinator.boundary(state, pointId).cleared(body)
+                || available(state, pointId, residentId);
     }
     private static boolean committedEntrance(ResidentMeal meal, ServiceAccessBoundary boundary) {
         return meal.phase() == ResidentMeal.Phase.MOVE && meal.coldTravel().map(travel -> {

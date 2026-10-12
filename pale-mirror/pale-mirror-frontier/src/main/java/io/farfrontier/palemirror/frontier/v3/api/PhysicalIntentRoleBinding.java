@@ -75,14 +75,14 @@ public final class PhysicalIntentRoleBinding {
             transfer, PhysicalIntentSubjectRole.CARGO, cargo, PhysicalIntentSubjectRole.SOURCE_ITEM, item)); }
     public static PhysicalIntentRoleBinding nutrientArrival(SubjectId transfer, SubjectId cargo, SubjectId item) { return bind(PhysicalIntentRoleSchema.NUTRIENT_ARRIVAL, map(PhysicalIntentSubjectRole.TRANSFER, transfer,
             PhysicalIntentSubjectRole.CARGO, cargo, PhysicalIntentSubjectRole.TARGET_ITEM, item)); }
-    public static PhysicalIntentRoleBinding engineeringEquipmentIssue(SubjectId workOrder, SubjectId worker, SubjectId equipment) { return bind(PhysicalIntentRoleSchema.ENGINEERING_EQUIPMENT_ISSUE,
-            map(PhysicalIntentSubjectRole.ENGINEERING_WORK_ORDER, workOrder, PhysicalIntentSubjectRole.ENGINEERING_WORKER, worker, PhysicalIntentSubjectRole.EQUIPMENT, equipment)); }
-    public static PhysicalIntentRoleBinding engineeringEquipmentReturn(SubjectId workOrder, SubjectId worker, SubjectId equipment) { return bind(PhysicalIntentRoleSchema.ENGINEERING_EQUIPMENT_RETURN,
-            map(PhysicalIntentSubjectRole.ENGINEERING_WORK_ORDER, workOrder, PhysicalIntentSubjectRole.ENGINEERING_WORKER, worker, PhysicalIntentSubjectRole.EQUIPMENT, equipment)); }
-    public static PhysicalIntentRoleBinding assaultEquipmentIssue(SubjectId assault, SubjectId defender, SubjectId equipment) { return bind(PhysicalIntentRoleSchema.ASSAULT_EQUIPMENT_ISSUE,
-            map(PhysicalIntentSubjectRole.SETTLEMENT_ASSAULT, assault, PhysicalIntentSubjectRole.ASSAULT_DEFENDER, defender, PhysicalIntentSubjectRole.EQUIPMENT, equipment)); }
-    public static PhysicalIntentRoleBinding assaultEquipmentReturn(SubjectId assault, SubjectId defender, SubjectId equipment) { return bind(PhysicalIntentRoleSchema.ASSAULT_EQUIPMENT_RETURN,
-            map(PhysicalIntentSubjectRole.SETTLEMENT_ASSAULT, assault, PhysicalIntentSubjectRole.ASSAULT_DEFENDER, defender, PhysicalIntentSubjectRole.EQUIPMENT, equipment)); }
+    public static PhysicalIntentRoleBinding engineeringEquipmentIssue(SubjectId workOrder, SubjectId worker, SubjectId equipment, SubjectId source) { return bind(PhysicalIntentRoleSchema.ENGINEERING_EQUIPMENT_ISSUE,
+            map(PhysicalIntentSubjectRole.ENGINEERING_WORK_ORDER, workOrder, PhysicalIntentSubjectRole.ENGINEERING_WORKER, worker, PhysicalIntentSubjectRole.EQUIPMENT, equipment, PhysicalIntentSubjectRole.RESOURCE_CONTAINER, source)); }
+    public static PhysicalIntentRoleBinding engineeringEquipmentReturn(SubjectId workOrder, SubjectId worker, SubjectId equipment, SubjectId target) { return bind(PhysicalIntentRoleSchema.ENGINEERING_EQUIPMENT_RETURN,
+            map(PhysicalIntentSubjectRole.ENGINEERING_WORK_ORDER, workOrder, PhysicalIntentSubjectRole.ENGINEERING_WORKER, worker, PhysicalIntentSubjectRole.EQUIPMENT, equipment, PhysicalIntentSubjectRole.RESOURCE_CONTAINER, target)); }
+    public static PhysicalIntentRoleBinding assaultEquipmentIssue(SubjectId assault, SubjectId defender, SubjectId equipment, SubjectId source) { return bind(PhysicalIntentRoleSchema.ASSAULT_EQUIPMENT_ISSUE,
+            map(PhysicalIntentSubjectRole.SETTLEMENT_ASSAULT, assault, PhysicalIntentSubjectRole.ASSAULT_DEFENDER, defender, PhysicalIntentSubjectRole.EQUIPMENT, equipment, PhysicalIntentSubjectRole.RESOURCE_CONTAINER, source)); }
+    public static PhysicalIntentRoleBinding assaultEquipmentReturn(SubjectId assault, SubjectId defender, SubjectId equipment, SubjectId target) { return bind(PhysicalIntentRoleSchema.ASSAULT_EQUIPMENT_RETURN,
+            map(PhysicalIntentSubjectRole.SETTLEMENT_ASSAULT, assault, PhysicalIntentSubjectRole.ASSAULT_DEFENDER, defender, PhysicalIntentSubjectRole.EQUIPMENT, equipment, PhysicalIntentSubjectRole.RESOURCE_CONTAINER, target)); }
     public static PhysicalIntentRoleBinding routeMaintenance(SubjectId route, SubjectId operation, SubjectId cargo, SubjectId material) { return bind(PhysicalIntentRoleSchema.ROUTE_MAINTENANCE,
             map(PhysicalIntentSubjectRole.ROUTE, route, PhysicalIntentSubjectRole.ROUTE_MAINTENANCE, operation, PhysicalIntentSubjectRole.CARGO, cargo, PhysicalIntentSubjectRole.MATERIAL, material)); }
     public static PhysicalIntentRoleBinding routeMaintenanceLoading(SubjectId route, SubjectId operation, SubjectId cargo, SubjectId cargoItem, SubjectId sourceItem) { return

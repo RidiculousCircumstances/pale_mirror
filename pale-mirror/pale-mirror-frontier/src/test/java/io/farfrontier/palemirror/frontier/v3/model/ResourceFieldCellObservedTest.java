@@ -219,9 +219,13 @@ class ResourceFieldCellObservedTest {
         FrontierWorldState withObstruction = changed.withResourceSites(changed.resourceSites().replace(
                 changed.resourceSites().site(site).bindHarvestTarget(retained, obstructed), obstructed));
         ResourceSiteHarvestJob rebound = withObstruction.resourceSites().site(site).harvestJob(retained.id()).orElseThrow();
-        var blocked = ResourceSiteHarvestProcess.blockedPrefix(obstructed, retained.progress().nextCropSlotIndex());
-        assertEquals(1, blocked.size());
-        var nextGoal = ResourceSiteHarvestProcess.blockedPrefixContinuationGoal(withObstruction, rebound, blocked);
+        var blocked = java.util.List.of(obstructed.layout().cells().get(rebound.progress().nextCropSlotIndex()).id());
+        var due = ResourceSiteHarvestProcess.coldProgress(rebound, 22_301L);
+        var skipped = ResourceSiteHarvestProcess.reduceBlockedCellSkipped(withObstruction, site,
+                new ResourceSiteHarvestBlockedCellSkipped(site, rebound.id(), rebound.workerId(),
+                        obstructed.layout().revision(), blocked, due.id(), due.dueAt().ticks(), java.util.Optional.of(hot.lease().id())));
+        var nextJob = skipped.resourceSites().site(site).harvestJob(rebound.id()).orElseThrow();
+        var nextGoal = ResourceSiteHarvestGoal.current(skipped, nextJob);
         assertTrue(nextGoal.nextWorkSlot() < obstructed.layout().cells().size());
         var nextCell = obstructed.layout().cells().get(nextGoal.nextWorkSlot()).id();
         assertFalse(blocked.contains(nextCell), "an unavailable selected cell must not hold the area task");

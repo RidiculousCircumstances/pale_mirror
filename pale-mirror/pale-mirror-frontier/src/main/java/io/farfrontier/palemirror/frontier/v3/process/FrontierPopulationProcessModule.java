@@ -62,15 +62,18 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
                             requireMedicalConsumptionPermission(state, intent, transition);
                             return reducePopulationConsumption(state, intent, transition);
                         }), intent -> FencedRecoveryAsset.EFFECT,
-                retirementAccount(PhysicalIntentLifecycleOwner.MEDICAL_TREATMENT), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery(), PhysicalIntentRecoveryDiagnosticProducer.MEDICAL_TREATMENT);
+                retirementAccount(PhysicalIntentLifecycleOwner.MEDICAL_TREATMENT), MedicalTreatmentProcess::mayCompactConsumption,
+                PhysicalIntentRecoveryDiagnosticProducer.MEDICAL_TREATMENT);
     }
 
     private static boolean medicalConsumptionPermitted(FrontierWorldState state,
                                                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent intent,
                                                        PhysicalIntentTransition transition) {
         return switch (transition.status()) {
-            case RUNNING -> FrontierMedicalTreatmentSceneSupport.permitsCurrentConsumptionIntent(state, intent);
+            case RUNNING -> MedicalPhysicalAuthority.mayBegin(state, intent)
+                    && FrontierMedicalTreatmentSceneSupport.permitsCurrentConsumptionIntent(state, intent);
             case CONFIRMED -> FrontierMedicalTreatmentSceneSupport.permitsConsumptionReceipt(state, intent);
+            case CONFLICTED -> intent.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.PREPARED;
             default -> true;
         };
     }

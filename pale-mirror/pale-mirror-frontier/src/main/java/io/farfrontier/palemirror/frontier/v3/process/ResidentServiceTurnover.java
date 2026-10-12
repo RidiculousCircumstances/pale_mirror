@@ -11,23 +11,42 @@ import java.util.Optional;
 /** Activity admission for optional service-buffer turnover; no food effect or separate movement authority. */
 final class ResidentServiceTurnover {
     private ResidentServiceTurnover() { }
-    static Optional<ActorMovement> select(FrontierWorldState state, SubjectId actorId, long atTick) {
+
+    /** Queue admission only; destination search belongs to the actual owner plan. */
+    static boolean mayPlan(FrontierWorldState state, SubjectId actorId, long atTick) {
+        return eligiblePoint(state, actorId, atTick, true).isPresent();
+    }
+
+    private static Optional<ServiceBoundaryProvider.Declaration> eligiblePoint(FrontierWorldState state,
+            SubjectId actorId, long atTick, boolean eligibilityOnly) {
         ResidentProfile resident = state.humanPopulation().resident(actorId);
         ActorLocation actor = state.actorLocations().get(actorId);
-        if (resident == null || actor == null) return Optional.empty();
-        HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(actorId);
-        boolean idle = ResidentActivityCoordinator.assess(state, actorId, atTick).kind() == ResidentActivityChoice.Kind.IDLE;
         if (resident == null || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
                 || state.actorMovements().containsKey(actorId) || state.humanPopulation().meals().containsKey(actorId)
-                || ActorExecutionCoordinator.sceneOwns(state, actorId)
-                || !ResidentWorkYield.assess(state, assignment).ready()
+                || ActorExecutionCoordinator.sceneOwns(state, actorId)) return Optional.empty();
+        var occupied = ServiceAccessCoordinator.turnoverPoint(state, actorId);
+        if (occupied.isEmpty()) return Optional.empty();
+        HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(actorId);
+        // A possible meal may win the actual plan; it cannot park an idle obstruction
+        // merely because its clearance route has not been computed yet.
+        boolean idle = eligibilityOnly
+                ? !assignment.active() || !ResidentActivityPreferences.work(
+                    state.humanPopulation().schedule(resident.settlementId()), atTick)
+                        .outranks(ResidentActivityPreferences.Priority.IDLE)
+                : ResidentActivityCoordinator.assess(state, actorId, atTick).kind() == ResidentActivityChoice.Kind.IDLE;
+        if (!ResidentWorkYield.assess(state, assignment).ready()
                 || !idle && !ActivityExecutionCapabilities.waitingForServiceResource(state, assignment))
             return Optional.empty();
         AmbientActorLease lease = state.ambientLeases().get(actorId);
         if (lease != null && lease.status() != AmbientLeaseStatus.CLOSED && lease.status() != AmbientLeaseStatus.HOT)
             return Optional.empty();
-        var occupied = ServiceAccessCoordinator.turnoverPoint(state, actorId);
+        return occupied;
+    }
+
+    static Optional<ActorMovement> select(FrontierWorldState state, SubjectId actorId, long atTick) {
+        var occupied = eligiblePoint(state, actorId, atTick, false);
         if (occupied.isEmpty()) return Optional.empty();
+        var actor = state.actorLocations().get(actorId);
         var point = occupied.orElseThrow();
         List<ServiceAccessPoint> points = ServiceBoundaryComposition.geometries(state);
         var knowledge = ServiceBoundaryComposition.knowledge(state, point.identity());

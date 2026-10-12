@@ -41,6 +41,7 @@ class BakeryPartialBatchTest {
         var codec = new FrontierWorldStateCodec(); var seen = EnumSet.noneOf(BakeryColdStep.Action.class);
         var expectedDestination = destination; boolean replaced = false;
         for (long due = 300, steps = 0; state.productionJobs().containsKey(job.id()) && steps < 700; due += 20, steps++) {
+            due = BakeryTestClock.due(state, job, due);
             var current = state.productionJobs().get(job.id());
             if (replaceOutput && !replaced && current.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DEPOT_DELIVERY) {
                 var horizontal = depotPort.facing().step(station, 10);
@@ -107,6 +108,7 @@ class BakeryPartialBatchTest {
         var codec = new FrontierWorldStateCodec();
         EnumSet<BakeryColdStep.Action> seen = EnumSet.noneOf(BakeryColdStep.Action.class);
         for (long due = 300L, steps = 0; state.productionJobs().containsKey(job.id()) && steps < 700; due += 20L, steps++) {
+            due = BakeryTestClock.due(state, job, due);
             var step = ProductionProcess.planCompletion(state, ProductionProcess.complete(
                     state.productionJobs().get(job.id()), due)).stream().map(ProposedEvent::payload)
                     .filter(BakeryColdStep.class::isInstance).map(BakeryColdStep.class::cast).findFirst().orElseThrow();

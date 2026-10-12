@@ -43,6 +43,37 @@ public final class AdjacentExcavationPlanner {
         @Override public List<Integer> floorOffsets(SurfaceAnchor station, int dx, int dz) { return List.of(0, -1); }
     };
     private AdjacentExcavationPlanner() { }
+    public static FrontSelection adjacentSelection() { return ADJACENT; }
+    /** Validate a selected bounded front against current facts, not a second preferred proposal. */
+    public static <B> void requireSelection(Collection<SurfaceAnchor> stations, List<Column<B>> columns,
+            KnownBlockGeometry<B> geometry, Predicate<SurfaceAnchor> permittedFront,
+            Predicate<B> supportsStanding, Predicate<B> mineable, int maxColumns, FrontSelection selection) {
+        if (stations.isEmpty() || stations.size() > MAX_STATIONS || maxColumns < 1 || maxColumns > MAX_COLUMNS
+                || columns.isEmpty() || columns.size() > maxColumns) throw new IllegalArgumentException("unbounded selected excavation front");
+        var declared = Set.copyOf(stations);
+        var seen = declared.stream().map(surface -> new TerrainColumn(surface.x(), surface.z()))
+                .collect(java.util.stream.Collectors.toCollection(HashSet::new));
+        for (var column : columns) {
+            var station = column.station(); var floor = column.floor();
+            int dx = floor.x() - station.x(), dz = floor.z() - station.z(), dy = floor.y() - station.y();
+            if (!declared.contains(station) || Math.abs(dx) + Math.abs(dz) != 1 || dy != 0 && dy != -1
+                    || !selection.floorOffsets(station, dx, dz).contains(dy)
+                    || !seen.add(new TerrainColumn(floor.x(), floor.z())) || !permittedFront.test(floor)
+                    || !geometry.at(floor.support()).equals(Optional.of(column.support()))
+                    || column.support().permission() != KnownBlockGeometry.Sample.Permission.PUBLIC
+                    || !supportsStanding.test(column.support().block()))
+                throw new IllegalArgumentException("selected excavation violates current support, access or terrace limits");
+            int height = selection.clearanceTopY(station, floor) - floor.y();
+            if (height < 2 || height > MAX_CLEARANCE_HEIGHT || column.clearance().size() != height)
+                throw new IllegalArgumentException("selected excavation has a changed cut height");
+            for (int y = 1; y <= height; y++) {
+                var sample = column.clearance().get(y - 1);
+                if (!geometry.at(floor.support().offset(0, y, 0)).equals(Optional.of(sample))
+                        || sample.permission() != KnownBlockGeometry.Sample.Permission.PUBLIC || !mineable.test(sample.block()))
+                    throw new IllegalArgumentException("selected excavation has unknown, changed or protected material");
+            }
+        }
+    }
     public static <B> List<Column<B>> propose(Collection<SurfaceAnchor> stations, KnownBlockGeometry<B> geometry,
             Predicate<SurfaceAnchor> reachable, Predicate<SurfaceAnchor> permittedFront,
             Predicate<B> supportsStanding, Predicate<B> mineable, int maxColumns) {

@@ -7,9 +7,10 @@ public final class EngineeringWorkOrderSupport {
     private EngineeringWorkOrderSupport() { }
 
     public static EngineeringWorkOrder require(FrontierWorldState state, SubjectId id) {
-        var owner = registry(state.routeConstructions(), state.routeMaintenances()).get(id);
-        if (owner == null) throw new IllegalArgumentException("equipment owner is not a registered engineering work order");
-        return owner;
+        return find(state, id).orElseThrow(() -> new IllegalArgumentException("equipment owner is not a registered engineering work order"));
+    }
+    public static java.util.Optional<EngineeringWorkOrder> find(FrontierWorldState state, SubjectId declaredWorkOrderId) {
+        return java.util.Optional.ofNullable(registry(state.routeConstructions(), state.routeMaintenances()).get(declaredWorkOrderId));
     }
     /** Registers already nominally declared owners; lookup never guesses a missing owner type. */
     static java.util.Map<SubjectId, EngineeringWorkOrder> registry(java.util.Map<SubjectId, RouteConstruction> constructions,

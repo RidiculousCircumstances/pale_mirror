@@ -118,7 +118,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                 PhysicalIntentLifecycleRetirementPolicy.of(
                         (state, command, intent, transition) -> planAssaultTransition(state, intent, transition),
                         FrontierHiveProcessModule::reduceAssaultTransition), intent -> FencedRecoveryAsset.EFFECT,
-                retirementAccount(PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT), PhysicalIntentResolvedRetentionPolicy.confirmedReceiptWithoutRecovery(), PhysicalIntentRecoveryDiagnosticProducer.SETTLEMENT_ASSAULT);
+                retirementAccount(PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT), DefenderEquipmentReturnProcess::mayCompact, PhysicalIntentRecoveryDiagnosticProducer.SETTLEMENT_ASSAULT);
     }
 
     private static PhysicalIntentRetirementAccount retirementAccount(PhysicalIntentLifecycleOwner owner) {
@@ -227,9 +227,7 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
                     commitment = new PhysicalIntentRetirementAccount.Exact<>(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ATTACKER));
                 } else {
                     SubjectId item = intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.EQUIPMENT);
-                    if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE) EquipmentIssueStateSupport.validateIntent(state, intent);
-                    else if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_RETURN) EquipmentReturnStateSupport.validateIntent(state, intent);
-                    else throw new IllegalArgumentException("settlement assault has foreign intent kind");
+                    EquipmentServiceBoundary.validateContinuation(state, intent);
                     carrier = new PhysicalIntentRetirementAccount.Exact<>(intent.roles().require(io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentSubjectRole.ASSAULT_DEFENDER)); commitment = new PhysicalIntentRetirementAccount.Exact<>(item);
                 }
             }
@@ -264,8 +262,9 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
         if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE) {
             return new CommandPlan.Accepted(List.of(new ProposedEvent(SceneStrikeStateSupport.transitionOwner(state, intent, transition), transition)));
         }
-        if (intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.EQUIPMENT_ISSUE) EquipmentIssueStateSupport.validateIntent(state, intent);
-        else EquipmentReturnStateSupport.validateIntent(state, intent);
+        if (transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING)
+            EquipmentServiceBoundary.requireMayBegin(state, intent);
+        else EquipmentServiceBoundary.validateContinuation(state, intent);
         return new CommandPlan.Accepted(List.of(new ProposedEvent(intent.causeSubjectId(), transition)));
     }
 
@@ -294,6 +293,11 @@ final class FrontierHiveProcessModule implements FrontierWorldProcessModule {
         } else if (!subject.equals(intent.causeSubjectId())) {
             throw new IllegalArgumentException("settlement-assault equipment transition lacks settlement ownership");
         }
+        if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE
+                && transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.RUNNING)
+            EquipmentServiceBoundary.requireMayBegin(state, intent);
+        else if (intent.kind() != io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE)
+            EquipmentServiceBoundary.validateContinuation(state, intent);
         return intent.kind() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentKind.SCENE_STRIKE
                 ? reduceSceneStrikeTransition(state, intent, transition)
                 : PhysicalIntentTransitionStorage.reduce(state, intent, transition,

@@ -41,6 +41,10 @@ final class GoodsShipmentPlanning {
         return false;
     }
     static List<ProposedEvent> dispatch(FrontierWorldState state, GoodsParticipant seller, long now) {
+        try { return dispatchReady(state, seller, now); }
+        catch (KnownPedestrianNavigation.RouteUnavailable pending) { return List.of(); }
+    }
+    private static List<ProposedEvent> dispatchReady(FrontierWorldState state, GoodsParticipant seller, long now) {
         for (var contract : state.companies().goodsTrade().contracts().values().stream()
                 .filter(value -> !value.terminal() && value.seller().equals(seller.party())
                         && !value.sourceContainerId().equals(value.receiverContainerId()))

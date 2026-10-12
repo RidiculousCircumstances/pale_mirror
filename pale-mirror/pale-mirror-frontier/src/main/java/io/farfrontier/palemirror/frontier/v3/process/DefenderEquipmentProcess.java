@@ -16,16 +16,23 @@ import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect;
 import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
-import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.HumanTacticalFunctionProjection;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalIntentPrepared;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssault;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementAssaultStatus;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceStorageSelection;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceStorageRole;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceStorageAccess;
+import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
+import io.farfrontier.palemirror.frontier.v3.model.ContainerPhysicalAuthorityComposition;
+import io.farfrontier.palemirror.frontier.v3.model.StableCorrelationIdentity;
+import io.farfrontier.palemirror.frontier.v3.model.EquipmentServiceBoundary;
+import io.farfrontier.palemirror.frontier.v3.model.EquipmentPhysicalAuthority;
+import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 /** Bounded settlement-owned review that admits at most one exact defender issue per assault step. */
@@ -39,8 +46,10 @@ public final class DefenderEquipmentProcess {
     }
 
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
+        if (!REVIEW_ACTION.equals(action.kind())) throw new IllegalArgumentException("equipment issue rejects a foreign scheduled kind");
         SettlementAssault assault = state.strategicPlans().settlementAssaults().get(action.subject());
-        if (assault == null || assault.status() == SettlementAssaultStatus.RESOLVED || !action.id().equals(review(assault, action.dueAt().ticks()).id())) return List.of();
+        if (assault == null || assault.status() == SettlementAssaultStatus.RESOLVED || !action.id().equals(review(assault, action.dueAt().ticks()).id()))
+            return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
         List<ProposedEvent> events = new ArrayList<>(); issue(state, assault, action.dueAt().ticks()).ifPresent(intent ->
                 events.add(new ProposedEvent(assault.settlementId(), new PhysicalIntentPrepared(intent))));
         events.add(new ProposedEvent(assault.id(), new ScheduleEffect.Created(review(assault,
@@ -49,26 +58,43 @@ public final class DefenderEquipmentProcess {
     }
 
     private static java.util.Optional<PhysicalIntent> issue(FrontierWorldState state, SettlementAssault assault, long now) {
-        SubjectId depot = FrontierWorldState.depotId(assault.settlementId());
-        if (state.inventory().surfaces().get(depot) == null || state.inventory().surfaces().get(depot).status() != ContainerSurfaceStatus.ACTIVE) return java.util.Optional.empty();
         List<SubjectId> candidates = assault.defenderIds().stream().sorted().filter(candidate -> state.inventory().actorItems(candidate).stream()
                         .noneMatch(item -> HumanTacticalFunctionProjection.isGrayboxWeaponKind(item.itemKind())))
-                .filter(candidate -> state.physicalIntents().values().stream().noneMatch(intent -> intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE
-                        && intent.status() != PhysicalIntentStatus.CONFIRMED && intent.roles().require(PhysicalIntentSubjectRole.ASSAULT_DEFENDER).equals(candidate))).toList();
+                .filter(candidate -> state.actorLocations().get(candidate).condition().status() == ActorLifeStatus.ALIVE
+                        && !EquipmentPhysicalAuthority.actorCommitted(state, candidate)).toList();
         SubjectId resident = candidates.stream().filter(candidate -> !candidate.equals(assault.defenderUnit().leaderId())).findFirst()
                 .orElse(candidates.isEmpty() ? null : candidates.getFirst());
         if (resident == null) return java.util.Optional.empty();
-        ExactItemStack item = state.inventory().items().values().stream().filter(value -> value.custody() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot slot
-                        && slot.containerId().equals(depot) && value.economicOwnerId().equals(assault.settlementId()))
-                .filter(value -> HumanTacticalFunctionProjection.isGrayboxWeaponKind(value.itemKind()))
+        var origin = state.actorLocations().get(resident).supportingSurface();
+        ExactItemStack item = HumanTacticalFunctionProjection.grayboxWeaponKinds().stream().sorted()
+                .flatMap(kind -> ResourceStorageSelection.exactSources(state, assault.settlementId(), kind, 1, origin,
+                        java.util.Set.of(ResourceStorageRole.WAREHOUSE)).stream())
+                .filter(value -> {
+                    var source = ((InventoryCustody.ContainerSlot) value.custody()).containerId();
+                    return !io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody.blocksCanonicalUse(state, source)
+                            // This unfinished family has no admitted service journey. Never reserve remote stock.
+                            && ResourceStorageAccess.at(state, source).stations().contains(origin)
+                            && !ContainerPhysicalAuthorityComposition.pending(state, source);
+                })
                 .filter(value -> state.physicalIntents().values().stream().noneMatch(intent -> intent.kind() == PhysicalIntentKind.EQUIPMENT_ISSUE
                         && intent.status() != PhysicalIntentStatus.CONFIRMED && intent.roles().require(PhysicalIntentSubjectRole.EQUIPMENT).equals(value.id())))
-                .min(Comparator.comparing(ExactItemStack::id)).orElse(null);
+                .findFirst().orElse(null);
         if (item == null) return java.util.Optional.empty();
-        String suffix = assault.id().value().substring("assault:".length()) + "-" + resident.value().replace(':', '-') + "-" + item.id().value().replace(':', '-');
-        return java.util.Optional.of(new PhysicalIntent(new PhysicalIntentId("intent:equipment-issue-" + suffix), PhysicalIntentKind.EQUIPMENT_ISSUE,
-                PhysicalIntentStatus.PREPARED, assault.settlementId(), PhysicalIntentRoleBinding.assaultEquipmentIssue(assault.id(), resident, item.id()),
-                new FixedPosition(FixedScalar.whole(assault.settlementAnchor().x()), FixedScalar.whole(assault.settlementAnchor().y()), FixedScalar.whole(assault.settlementAnchor().z())),
-                0, PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT));
+        SubjectId container = ((InventoryCustody.ContainerSlot) item.custody()).containerId();
+        ResourceStorageAccess.at(state, container);
+        var body = state.actorLocations().get(resident).body();
+        String suffix = StableCorrelationIdentity.digest(assault.id().value() + "|" + resident.value() + "|"
+                + item.id().value() + "|" + container.value() + "|" + now);
+        var intent = new PhysicalIntent(new PhysicalIntentId("intent:equipment-issue-" + suffix), PhysicalIntentKind.EQUIPMENT_ISSUE,
+                PhysicalIntentStatus.PREPARED, assault.settlementId(), PhysicalIntentRoleBinding.assaultEquipmentIssue(assault.id(), resident, item.id(), container),
+                new FixedPosition(FixedScalar.whole(body.x()), FixedScalar.whole(body.y()), FixedScalar.whole(body.z())),
+                0, PhysicalPostcondition.EQUIPMENT_ISSUED_OBSERVED,
+                new io.farfrontier.palemirror.frontier.v3.model.EquipmentServiceRequest(
+                        new io.farfrontier.palemirror.frontier.v3.model.ServiceAccessDemand.Identity(
+                                io.farfrontier.palemirror.frontier.v3.model.ServiceAccessDemand.Kind.DEFENDER_EQUIPMENT,
+                                assault.id(), resident, container), now),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT);
+        EquipmentServiceBoundary.validateIntent(state, intent);
+        return java.util.Optional.of(intent);
     }
 }

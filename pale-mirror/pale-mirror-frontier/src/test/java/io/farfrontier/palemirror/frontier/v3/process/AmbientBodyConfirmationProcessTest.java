@@ -63,7 +63,10 @@ class AmbientBodyConfirmationProcessTest {
     private AmbientBodyConfirmed confirmation(FrontierWorldState state, SubjectId actor, AmbientBodyConfirmed.Boundary boundary, BodyPosition body) {
         return new AmbientBodyConfirmed(actor, state.ambientLeases().get(actor).revision(), boundary,
                 boundary == AmbientBodyConfirmed.Boundary.ADMISSION ? state.ambientLeases().get(actor).handoffBody()
-                        : state.actorLocations().get(actor).body(), body, ActorBodyAuthority.current(state, actor));
+                        : state.actorLocations().get(actor).body(), body, ActorBodyAuthority.current(state, actor),
+                boundary == AmbientBodyConfirmed.Boundary.ADMISSION
+                        ? AmbientPlacementPolicy.selectedRoute(state, state.ambientLeases().get(actor), body.supportingSurface())
+                        : java.util.Optional.empty());
     }
     private FrontierWorldState confirmed(FrontierWorldState state, AmbientBodyConfirmed evidence) {
         var inspected = ModeledActorBodyFacts.inspected(state, evidence.actorId(), evidence.observedBody());
@@ -84,7 +87,7 @@ class AmbientBodyConfirmationProcessTest {
         assertEquals(ResidentMeal.Phase.TAKE, ResidentMealProcess.reduceHotArrived(state, f.security(), arrival)
                 .humanPopulation().meals().get(f.security()).phase());
     }
-    @Test void alternativePlacementRetainsClaimAndRequiresApproachAcrossRecovery() {
+    @Test void alternativePlacementRetainsClaimAndRequiresApproachAcrossRecovery() throws Exception {
         Fixture f = fixture();
         ResidentMeal previous = f.state().humanPopulation().meals().get(f.medic());
         SurfaceAnchor waiting = AmbientPlacementPolicy.candidates(f.state(), f.state().ambientLeases().get(f.medic())).stream()
@@ -92,9 +95,31 @@ class AmbientBodyConfirmationProcessTest {
         AmbientBodyConfirmed evidence = confirmation(f.state(), f.medic(), AmbientBodyConfirmed.Boundary.ADMISSION, waiting.standingBody());
         var codecs = FrontierWorldPayloadCodecs.create();
         assertEquals(evidence, codecs.decode(evidence.type(), codecs.encode(evidence)));
+        var exactEvidence = confirmation(f.state(), f.medic(), AmbientBodyConfirmed.Boundary.ADMISSION,
+                f.state().ambientLeases().get(f.medic()).handoffBody());
+        var currentBytes = codecs.encode(exactEvidence);
+        assertThrows(IllegalArgumentException.class, () -> codecs.decode(exactEvidence.type(),
+                java.util.Arrays.copyOf(currentBytes, currentBytes.length - 1)), "retired payloads without the explicit route field are rejected");
         assertThrows(IllegalArgumentException.class, () -> AmbientBodyConfirmationProcess.reduce(f.state(), evidence),
                 "scope receipt cannot substitute for an independent body observation");
-        FrontierWorldState next = confirmed(f.state(), evidence);
+        var inspected = ModeledActorBodyFacts.inspected(f.state(), f.medic(), evidence.observedBody());
+        var recoveredBeforeAdmission = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(inspected));
+        FrontierWorldState next;
+        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            throw new AssertionError("placement replay must not rediscover candidates or routes");
+        })) {
+            next = AmbientBodyConfirmationProcess.reduce(recoveredBeforeAdmission,
+                    (AmbientBodyConfirmed) codecs.decode(evidence.type(), codecs.encode(evidence)));
+            assertThrows(IllegalArgumentException.class, () -> AmbientBodyConfirmationProcess.reduce(next, evidence));
+            assertThrows(IllegalArgumentException.class, () -> AmbientBodyConfirmationProcess.reduce(recoveredBeforeAdmission,
+                    new AmbientBodyConfirmed(evidence.actorId(), evidence.leaseRevision(), evidence.boundary(), evidence.previousBody(),
+                            evidence.observedBody(), evidence.bodyId(), java.util.Optional.empty())));
+            var reversed = new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(
+                    evidence.placementRoute().orElseThrow().route().reversed());
+            assertThrows(IllegalArgumentException.class, () -> AmbientBodyConfirmationProcess.reduce(recoveredBeforeAdmission,
+                    new AmbientBodyConfirmed(evidence.actorId(), evidence.leaseRevision(), evidence.boundary(), evidence.previousBody(),
+                            evidence.observedBody(), evidence.bodyId(), java.util.Optional.of(reversed))));
+        }
         assertEquals(waiting.standingBody(), next.actorLocations().get(f.medic()).body());
         assertEquals(AmbientLeaseStatus.HOT, next.ambientLeases().get(f.medic()).status());
         assertEquals(ResidentMeal.Phase.MOVE, next.humanPopulation().meals().get(f.medic()).phase());
@@ -109,16 +134,39 @@ class AmbientBodyConfirmationProcessTest {
                 draining.actorLocations().get(f.medic()).condition().health()));
         assertEquals(waiting, ResidentMealKnownNavigation.path(cold, cold.humanPopulation().meals().get(f.medic())).getFirst());
     }
+    @Test void pendingPlacementDoesNotBecomeAbsenceOrEscapeIntoAnotherCandidate() throws Exception {
+        Fixture f = fixture(); var lease = f.state().ambientLeases().get(f.medic());
+        var waiting = AmbientPlacementPolicy.candidates(f.state(), lease).stream()
+                .filter(surface -> f.port().accessBoundary().cleared(surface.standingBody())).findFirst().orElseThrow();
+        for (var status : List.of(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
+                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.UNKNOWN_GEOMETRY,
+                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.SAFETY_LIMIT)) {
+            var queries = new java.util.concurrent.atomic.AtomicInteger();
+            try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) -> {
+                queries.incrementAndGet(); return new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(status,
+                        List.of(), 0L, 0, "placement dependency");
+            })) {
+                var failure = assertThrows(io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable.class,
+                        () -> AmbientPlacementPolicy.candidates(f.state(), lease));
+                assertEquals(status, failure.status()); assertEquals(1, queries.get());
+                failure = assertThrows(io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable.class,
+                        () -> AmbientPlacementPolicy.selectedRoute(f.state(), lease, waiting));
+                assertEquals(status, failure.status()); assertEquals(2, queries.get());
+                assertTrue(AmbientPlacementPolicy.selectedRoute(f.state(), lease, lease.handoffBody().supportingSurface()).isEmpty());
+                assertEquals(2, queries.get(), "an unchanged exact placement needs no route calculation");
+            }
+        }
+    }
     @Test void staleEpochForgedPreviousAndOutsidePlacementFailBeforeMutation() {
         Fixture f = fixture();
         AmbientBodyConfirmed valid = confirmation(f.state(), f.medic(), AmbientBodyConfirmed.Boundary.ADMISSION,
                 f.port().serviceSurface().standingBody());
         for (AmbientBodyConfirmed invalid : List.of(
-                new AmbientBodyConfirmed(valid.actorId(), valid.leaseRevision() + 1, valid.boundary(), valid.previousBody(), valid.observedBody(), valid.bodyId()),
-                new AmbientBodyConfirmed(valid.actorId(), valid.leaseRevision(), valid.boundary(), new BodyPosition(0, 65, 0), valid.observedBody(), valid.bodyId()),
-                new AmbientBodyConfirmed(valid.actorId(), valid.leaseRevision(), valid.boundary(), valid.previousBody(), new BodyPosition(0, 65, 0), valid.bodyId()),
+                new AmbientBodyConfirmed(valid.actorId(), valid.leaseRevision() + 1, valid.boundary(), valid.previousBody(), valid.observedBody(), valid.bodyId(), valid.placementRoute()),
+                new AmbientBodyConfirmed(valid.actorId(), valid.leaseRevision(), valid.boundary(), new BodyPosition(0, 65, 0), valid.observedBody(), valid.bodyId(), valid.placementRoute()),
+                new AmbientBodyConfirmed(valid.actorId(), valid.leaseRevision(), valid.boundary(), valid.previousBody(), new BodyPosition(0, 65, 0), valid.bodyId(), valid.placementRoute()),
                 new AmbientBodyConfirmed(valid.actorId(), valid.leaseRevision(), valid.boundary(), valid.previousBody(), valid.observedBody(),
-                        new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(valid.actorId(), valid.bodyId().physicalEpoch() + 1))))
+                        new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(valid.actorId(), valid.bodyId().physicalEpoch() + 1), valid.placementRoute())))
             assertThrows(IllegalArgumentException.class, () -> AmbientBodyConfirmationProcess.reduce(f.state(), invalid));
         assertThrows(IllegalArgumentException.class, () -> AmbientBodyConfirmed.Boundary.fromWireTag(99));
         assertThrows(IllegalArgumentException.class, () -> AmbientBodyConfirmationProcess.reduce(f.state(), confirmation(f.state(), f.medic(),

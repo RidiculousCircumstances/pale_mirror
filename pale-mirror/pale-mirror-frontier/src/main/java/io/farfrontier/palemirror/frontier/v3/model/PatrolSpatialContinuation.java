@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /** Patrol-owned rejoin and geometry knowledge; the common departure alone records actual poses. */
 public final class PatrolSpatialContinuation {
@@ -16,7 +17,6 @@ public final class PatrolSpatialContinuation {
         boolean divergent = patrol.memberIds().stream().anyMatch(actor -> !current.get(actor).equals(
                 actor.equals(request.execution().actorId()) ? request.observedPosition() : state.actorLocations().get(actor).body()));
         if (!divergent) return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin());
-        var knowledge = view(state, patrol);
         PatrolAssembly assembly = patrol.assembly(); PatrolTravel travel = patrol.travel();
         if (patrol.status() == RoutePatrolStatus.ASSEMBLING) {
             var members = new LinkedHashMap<>(assembly.members());
@@ -24,7 +24,7 @@ public final class PatrolSpatialContinuation {
                 var observed = actor.equals(request.execution().actorId()) ? request.observedPosition().supportingSurface()
                         : state.actorLocations().get(actor).supportingSurface();
                 if (member.currentSurface().equals(observed)) return member;
-                return member.withRejoin(approach(knowledge, patrol, actor, observed, member.checkpointSurface(), member.routeRevision()));
+                return member.observedAt(observed);
             });
             assembly = new PatrolAssembly(members);
         } else {
@@ -32,8 +32,8 @@ public final class PatrolSpatialContinuation {
             members.replaceAll((actor, member) -> {
                 var observed = actor.equals(request.execution().actorId()) ? request.observedPosition().supportingSurface()
                         : state.actorLocations().get(actor).supportingSurface();
-                if (member.currentSurface().equals(observed) && (member.rejoin().isPresent() || member.arrived())) return member;
-                return member.withRejoin(approach(knowledge, patrol, actor, observed, member.checkpointSurface(), member.routeRevision()));
+                if (member.currentSurface().equals(observed) && (member.spatial().pending() || member.arrived())) return member;
+                return member.observedAt(observed);
             });
             travel = new PatrolTravel(travel.leaderId(), travel.leaderRoute(), members);
         }
@@ -41,13 +41,55 @@ public final class PatrolSpatialContinuation {
         return new ActorActivityBodyCheckpoint.Acknowledgement(request, FrontierWorldStateUpdate.begin()
                 .strategicPlans(state.strategicPlans().replacePatrol(next)));
     }
-    private static TraversalRejoin approach(KnownPedestrianRouteKnowledge knowledge, RoutePatrol patrol, SubjectId actor,
-                                             SurfaceAnchor observed, SurfaceAnchor target, long revision) {
-        var order = new MovementOrder(patrol.taskId(), actor, 1L, Math.incrementExact(revision), List.of(target),
+    public static boolean planningRequired(RoutePatrol patrol) {
+        return patrol.status() == RoutePatrolStatus.ASSEMBLING ? patrol.assembly().planningRequired()
+                : patrol.status() == RoutePatrolStatus.EN_ROUTE && patrol.travel().planningRequired();
+    }
+
+    /** One producer-owned, all-or-nothing selection. Pending knowledge never becomes a blocked patrol. */
+    public static RoutePatrolSpatialPlanned plan(FrontierWorldState state, RoutePatrol patrol) {
+        var knowledge = view(state, patrol);
+        var executions = RoutePatrolExecutionAuthority.current(state, patrol);
+        Map<SubjectId, TraversalRejoin> selected = new LinkedHashMap<>();
+        for (var actor : patrol.memberIds().stream().sorted().toList()) {
+            var spatial = spatial(patrol, actor);
+            if (spatial.waitingOrigin().isEmpty()) continue;
+            var order = order(patrol, actor, executions.requireMember(actor).generation());
+            selected.put(actor, StationApproachNavigation.plan(knowledge, spatial, order).orElseThrow());
+        }
+        return new RoutePatrolSpatialPlanned(patrol.taskId(), PatrolFormationStep.capture(patrol), selected, executions);
+    }
+
+    /** Pure replay: validate the exact selected paths, not planner readiness or alternative ranking. */
+    public static RoutePatrol adopt(FrontierWorldState state, RoutePatrol patrol, RoutePatrolSpatialPlanned planned) {
+        planned.predecessor().requireCurrent(patrol);
+        RoutePatrolExecutionAuthority.requireCurrent(state, patrol, planned.executions());
+        var waiting = patrol.memberIds().stream().filter(actor -> spatial(patrol, actor).waitingOrigin().isPresent())
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        if (!waiting.equals(planned.approaches().keySet()))
+            throw new IllegalArgumentException("patrol selection must cover exactly its waiting cohort");
+        var knowledge = view(state, patrol);
+        planned.approaches().forEach((actor, selected) -> StationApproachNavigation.requireSelected(knowledge,
+                spatial(patrol, actor), order(patrol, actor, planned.executions().requireMember(actor).generation()), selected));
+        if (patrol.status() == RoutePatrolStatus.ASSEMBLING) {
+            var members = new LinkedHashMap<>(patrol.assembly().members());
+            planned.approaches().forEach((actor, path) -> members.put(actor, members.get(actor).withPlannedApproach(path)));
+            return patrol.withSpatialContinuation(new PatrolAssembly(members), patrol.travel());
+        }
+        var members = new LinkedHashMap<>(patrol.travel().members());
+        planned.approaches().forEach((actor, path) -> members.put(actor, members.get(actor).withPlannedApproach(path)));
+        return patrol.withSpatialContinuation(patrol.assembly(), new PatrolTravel(patrol.travel().leaderId(), patrol.travel().leaderRoute(), members));
+    }
+
+    private static StationApproachState spatial(RoutePatrol patrol, SubjectId actor) {
+        return patrol.status() == RoutePatrolStatus.ASSEMBLING ? patrol.assembly().members().get(actor).spatial()
+                : patrol.travel().members().get(actor).spatial();
+    }
+    private static MovementOrder order(RoutePatrol patrol, SubjectId actor, long generation) {
+        var target = patrol.status() == RoutePatrolStatus.ASSEMBLING ? patrol.assembly().members().get(actor).checkpointSurface()
+                : patrol.travel().members().get(actor).checkpointSurface();
+        return new MovementOrder(patrol.taskId(), actor, generation, spatial(patrol, actor).revision(), List.of(target),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-        var path = knowledge.path(observed, order);
-        if (path.isEmpty()) throw new IllegalArgumentException("patrol departure has no bounded known rejoin to its retained checkpoint");
-        return new TraversalRejoin(path, 0);
     }
     private static KnownPedestrianRouteKnowledge view(FrontierWorldState state, RoutePatrol patrol) {
         var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), patrol.settlementId());

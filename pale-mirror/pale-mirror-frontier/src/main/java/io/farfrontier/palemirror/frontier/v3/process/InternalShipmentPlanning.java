@@ -49,7 +49,10 @@ final class InternalShipmentPlanning {
                     io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION);
             knowledge.plannedPath(state.actorLocations().get(worker.id()).supportingSurface(), pickup);
         }
-        catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }
+        catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
+            if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH) throw unavailable;
+            return Optional.empty();
+        }
         return Optional.of(new InternalShipmentDispatched(shipment, claim));
     }
     private InternalShipmentPlanning() { }

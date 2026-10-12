@@ -81,7 +81,8 @@ public final class ResourceSiteHarvestCargo {
     public static ActorContainerItemOrder deliveryOrder(FrontierWorldState state, ResourceSiteHarvestJob job) {
         ResourceLot part = part(state, job).orElseThrow(() -> new IllegalArgumentException("harvest delivery has no carried part"));
         if (!job.progress().complete() && (!job.returningForBatch() || part.quantity() != 64)
-                || !ResourceSiteHarvestGoal.actorAtDepot(state, job))
+                || !ResourceSiteHarvestGoal.actorAtDepot(state, job)
+                || !HarvestStorageReplacement.retainedAvailable(state, job))
             throw new IllegalArgumentException("harvest delivery lacks its ready part or actual depot arrival");
         var container = new ResourceCustody.Container(job.outputSlot().containerId());
         return new ActorContainerItemOrder(job.id(), job.workerId(), ActorContainerItemOrder.Direction.PLACE,

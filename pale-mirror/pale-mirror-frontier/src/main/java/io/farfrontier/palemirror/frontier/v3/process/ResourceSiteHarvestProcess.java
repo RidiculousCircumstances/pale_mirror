@@ -34,12 +34,6 @@ import java.util.OptionalInt;
  */
 public final class ResourceSiteHarvestProcess {
     public static final String COLD_PROGRESS_KIND = ResourceSiteHarvestContinuation.KIND;
-    /** A valid retained farmer has no bounded route to its next semantic goal. */
-    public static final class ContinuationUnavailable extends IllegalArgumentException {
-        public ContinuationUnavailable(IllegalArgumentException cause) {
-            super("field work continuation has no bounded route", cause);
-        }
-    }
     private ResourceSiteHarvestProcess() { }
 
     /** Physical materialization remains a loaded postcondition; exact output ownership does not. */
@@ -393,64 +387,6 @@ public final class ResourceSiteHarvestProcess {
         throw new IllegalArgumentException("field route segments are retired by goal navigation");
     }
 
-    /** Only the selected outstanding CellId may be skipped; completed count is not a slot. */
-    public static List<ResourceFieldLayout.CellId> blockedPrefix(ResourceFieldCycle cycle, int firstSlot) {
-        var cells = cycle.layout().cells();
-        if (firstSlot < 0 || firstSlot >= cells.size()) throw new IllegalArgumentException("blocked field prefix starts outside layout");
-        ResourceFieldLayout.CellId id = cells.get(firstSlot).id();
-        ResourceFieldCycle.CellState condition = cycle.cell(id);
-        return cycle.pendingPlayerBreaks().containsKey(id) || condition.accounted()
-                || condition.crop() != ResourceFieldCycle.Crop.OBSTRUCTED ? List.of() : List.of(id);
-    }
-
-    public static boolean blockedPrefixMeetsPendingPlayerBreak(FrontierWorldState state, ResourceSiteHarvestJob job,
-                                                                List<ResourceFieldLayout.CellId> prefix) {
-        if (prefix.isEmpty()) return false;
-        ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
-        ResourceFieldCycle worked = cycle.skipBlocked(prefix.getFirst());
-        int next = state.resourceSites().site(job.siteId()).nextHarvestTarget(job, worked);
-        return next >= 0 && cycle.pendingPlayerBreaks().containsKey(cycle.layout().cells().get(next).id());
-    }
-
-    /** The next semantic goal after an observed blocked prefix, not an old route waypoint. */
-    public static ResourceSiteHarvestGoal blockedPrefixContinuationGoal(FrontierWorldState state,
-                                                                        ResourceSiteHarvestJob job,
-                                                                        List<ResourceFieldLayout.CellId> prefix) {
-        ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
-        if (prefix.size() != 1 || !cycle.layout().cells().get(job.progress().nextCropSlotIndex()).id().equals(prefix.getFirst()))
-            throw new IllegalArgumentException("blocked continuation has no selected CellId");
-        ResourceFieldCycle worked = cycle.skipBlocked(prefix.getFirst());
-        int selected = state.resourceSites().site(job.siteId()).nextHarvestTarget(job, worked);
-        int next = selected < 0 ? cycle.layout().cells().size() : selected;
-        return ResourceSiteHarvestGoal.forSlot(state, job, next);
-    }
-
-    /** Pure bounded route probe shared by skip and exact clearance; never changes canonical progress. */
-    public static void blockedPrefixContinuation(FrontierWorldState state,
-                                                                               SubjectId subject,
-                                                                               ResourceSiteHarvestJob job,
-                                                                               List<ResourceFieldLayout.CellId> prefix) {
-        ResourceFieldCycle cycle = state.resourceSites().cycle(subject);
-        ActorLocation actor = state.actorLocations().get(job.workerId());
-        if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
-            throw new IllegalArgumentException("blocked-cell continuation has no retained farmer body");
-        int nextSlot = blockedPrefixContinuationGoal(state, job, prefix).nextWorkSlot();
-        ResourceFieldCycle worked = cycle.skipBlocked(prefix.getFirst());
-        int carried = ResourceSiteHarvestCargo.quantity(state, job);
-        if (nextSlot < cycle.layout().cells().size() && carried >= 64)
-            throw new IllegalArgumentException("field work continuation cannot exceed its physical hand capacity");
-        try {
-            ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
-            ResourceSiteLifecycle advanced = lifecycle.skipSelectedHarvestCell(job,
-                    nextSlot == cycle.layout().cells().size() ? -1 : nextSlot, worked);
-            ResourceSiteHarvestJob nextJob = advanced.harvestJob(job.id()).orElseThrow();
-            ResourceSiteHarvestKnownNavigation.path(state.withResourceSites(
-                    state.resourceSites().replace(advanced, worked)), nextJob);
-        } catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable noRoute) {
-            throw new ContinuationUnavailable(noRoute);
-        }
-    }
-
     public static FrontierWorldState reduceBlockedCellSkipped(FrontierWorldState state, SubjectId subject,
                                                               ResourceSiteHarvestBlockedCellSkipped skipped) {
         return reduceCellSkipped(state, subject, skipped);
@@ -471,26 +407,8 @@ public final class ResourceSiteHarvestProcess {
                 || !job.workerId().equals(blocked.workerId()) || job.navigationBlock().isPresent()
                 || blocked.block().layoutRevision() != state.resourceSites().cycle(subject).layout().revision())
             throw new IllegalArgumentException("farmer route block has stale job, target or layout");
-        if (blocked.block().reason() != ResourceSiteHarvestNavigationBlock.Reason.CONTINUATION_UNAVAILABLE
-                && !blocked.block().target().equals(ResourceSiteHarvestGoal.current(state, job).representative()))
+        if (!blocked.block().target().equals(ResourceSiteHarvestGoal.current(state, job).representative()))
             throw new IllegalArgumentException("farmer goal block has a foreign semantic target");
-        if (blocked.block().reason() == ResourceSiteHarvestNavigationBlock.Reason.CONTINUATION_UNAVAILABLE) {
-            ResourceFieldCycle cycle = state.resourceSites().cycle(subject);
-            if (state.resourceSites().harvestMutationPending(job))
-                throw new IllegalArgumentException("farmer continuation block cannot overtake pending physical field change");
-            List<ResourceFieldLayout.CellId> prefix = blockedPrefix(cycle, job.progress().nextCropSlotIndex());
-            if (prefix.isEmpty()
-                    || blockedPrefixMeetsPendingPlayerBreak(state, job, prefix)
-                    || !blocked.block().target().equals(blockedPrefixContinuationGoal(state, job, prefix).representative()))
-                throw new IllegalArgumentException("farmer continuation block lacks its exact observed work prefix");
-            boolean unavailable = false;
-            try {
-                blockedPrefixContinuation(state, subject, job, prefix);
-            } catch (ContinuationUnavailable noRoute) {
-                unavailable = true;
-            }
-            if (!unavailable) throw new IllegalArgumentException("farmer continuation is available and cannot be blocked");
-        }
         requireContinuationBinding(job, new ScheduledAction(blocked.coldScheduleId(),
                 new SimInstant(blocked.coldDueAt()), 0, subject, COLD_PROGRESS_KIND, 1));
         FrontierResourceSiteHarvestSceneSupport.requireHotLease(state, job, blocked.leaseId());
@@ -498,39 +416,6 @@ public final class ResourceSiteHarvestProcess {
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
             throw new IllegalArgumentException("farmer route block lacks the retained worker station");
         return state.withResourceSites(state.resourceSites().replace(lifecycle.blockHarvestRoute(job, blocked.block())));
-    }
-
-    public static FrontierWorldState reduceRouteCleared(FrontierWorldState state, SubjectId subject,
-                                                         ResourceSiteHarvestRouteCleared cleared) {
-        if (!subject.equals(cleared.siteId())) throw new IllegalArgumentException("farmer route clearance has foreign site owner");
-        ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
-        ResourceSiteHarvestJob job = lifecycle.harvestJob(cleared.jobId()).orElseThrow(
-                        () -> new IllegalArgumentException("farmer route clearance has no active job"));
-        if (lifecycle.phase() != ResourceSitePhase.HARVESTING || !job.id().equals(cleared.jobId())
-                || !job.workerId().equals(cleared.workerId())
-                || cleared.expected().layoutRevision() != state.resourceSites().cycle(subject).layout().revision())
-            throw new IllegalArgumentException("farmer route clearance has stale job or layout");
-        if (cleared.expected().reason() != ResourceSiteHarvestNavigationBlock.Reason.CONTINUATION_UNAVAILABLE
-                && !cleared.expected().target().equals(ResourceSiteHarvestGoal.current(state, job).representative()))
-            throw new IllegalArgumentException("farmer goal clearance has a foreign semantic target");
-        if (cleared.expected().reason() == ResourceSiteHarvestNavigationBlock.Reason.CONTINUATION_UNAVAILABLE) {
-            ResourceFieldCycle cycle = state.resourceSites().cycle(subject);
-            if (state.resourceSites().harvestMutationPending(job))
-                throw new IllegalArgumentException("farmer continuation clearance cannot overtake pending physical field change");
-            List<ResourceFieldLayout.CellId> prefix = blockedPrefix(cycle, job.progress().nextCropSlotIndex());
-            if (blockedPrefixMeetsPendingPlayerBreak(state, job, prefix))
-                throw new IllegalArgumentException("farmer continuation clearance would overtake a player break");
-            if (!prefix.isEmpty()
-                    && cleared.expected().target().equals(blockedPrefixContinuationGoal(state, job, prefix).representative()))
-                blockedPrefixContinuation(state, subject, job, prefix);
-        }
-        requireContinuationBinding(job, new ScheduledAction(cleared.coldScheduleId(),
-                new SimInstant(cleared.coldDueAt()), 0, subject, COLD_PROGRESS_KIND, 1));
-        FrontierResourceSiteHarvestSceneSupport.requireHotLease(state, job, cleared.leaseId());
-        ActorLocation actor = state.actorLocations().get(job.workerId());
-        if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
-            throw new IllegalArgumentException("farmer route clearance would change a displaced worker");
-        return state.withResourceSites(state.resourceSites().replace(lifecycle.clearHarvestRouteBlock(job, cleared.expected())));
     }
 
     /** Pins next-batch capacity before either the farmer hand or chest may be written. */
@@ -640,7 +525,7 @@ public final class ResourceSiteHarvestProcess {
         if (advanced.plannedRoute().isEmpty() && !next.equals(actor.supportingSurface().standingBody()))
             throw new IllegalArgumentException("COLD field arrival without movement has a foreign body");
         boolean arrived = goal.arrivedAt(advanced.nextBody().supportingSurface());
-        if (actor == null || (actor.body().equals(next)
+        if (actor == null || (actor.body().equals(next) && job.navigationBlock().isEmpty()
                 && (!arrived || job.arriveAtSemanticGoal(goal).equals(job))))
             throw new IllegalArgumentException("COLD field goal has no forward travel or new arrival");
         java.util.Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(state.actorLocations());
@@ -651,7 +536,7 @@ public final class ResourceSiteHarvestProcess {
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
                 .resourceSites(state.resourceSites().replace(arrived ? resumed.arriveHarvestGoal(active, goal) : resumed)));
     }
-    /** A COLD planner failure is retained as a typed local pause, never repeated as silent progress. */
+    /** Validate an exact refusal, not a second search that might choose a different answer. */
     public static FrontierWorldState reduceColdGoalHeld(FrontierWorldState state, SubjectId subject,
                                                         ResourceSiteHarvestColdGoalHeld held) {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
@@ -661,35 +546,19 @@ public final class ResourceSiteHarvestProcess {
                 || !job.id().equals(held.jobId()) || !job.workerId().equals(held.workerId())
                 || job.navigationBlock().isPresent()
                 || FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job)
-                || !ActorExecutionCoordinator.coldAvailable(state, job.workerId()))
+                || !ActorExecutionCoordinator.coldAvailable(state, job.workerId())
+                || !state.actorExecutions().owns(job.workerId(),
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST, job.id()))
             throw new IllegalArgumentException("COLD goal hold has no exclusive current field owner");
-        ResourceSiteHarvestGoal goal;
-        List<ResourceFieldLayout.CellId> blockedPrefix = List.of();
-        if (held.reason() == ResourceSiteHarvestNavigationBlock.Reason.CONTINUATION_UNAVAILABLE) {
-            ResourceFieldCycle cycle = state.resourceSites().cycle(subject);
-            blockedPrefix = blockedPrefix(cycle, job.progress().nextCropSlotIndex());
-            if (state.resourceSites().harvestMutationPending(job)
-                    || blockedPrefix.isEmpty()
-                    || blockedPrefixMeetsPendingPlayerBreak(state, job, blockedPrefix))
-                throw new IllegalArgumentException("COLD continuation hold lacks a stable blocked work prefix");
-            goal = blockedPrefixContinuationGoal(state, job, blockedPrefix);
-        } else {
-            goal = ResourceSiteHarvestGoal.current(state, job);
-        }
+        state.actorExecutions().requireCurrent(held.executionId());
+        ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
         if (goal.layoutRevision() != held.layoutRevision() || goal.nextWorkSlot() != held.nextWorkSlot()
-                || goal.kind() != held.kind() || !goal.representative().equals(held.target()))
+                || goal.goalRevision() != held.goalRevision()
+                || goal.kind() != held.kind() || !goal.representative().equals(held.target())
+                || !state.actorLocations().get(job.workerId()).supportingSurface().equals(held.origin()))
             throw new IllegalArgumentException("COLD goal hold names a foreign semantic destination");
         requireContinuationBinding(job, new ScheduledAction(held.coldScheduleId(),
                 new SimInstant(held.coldDueAt()), 0, subject, COLD_PROGRESS_KIND, 1));
-        boolean unavailable = false;
-        if (held.reason() == ResourceSiteHarvestNavigationBlock.Reason.CONTINUATION_UNAVAILABLE) {
-            try { blockedPrefixContinuation(state, subject, job, blockedPrefix); }
-            catch (ContinuationUnavailable noRoute) { unavailable = true; }
-        } else {
-            try { ResourceSiteHarvestKnownNavigation.path(state, job); }
-            catch (ResourceSiteHarvestKnownNavigation.KnowledgeUnavailable noKnowledge) { unavailable = true; }
-        }
-        if (!unavailable) throw new IllegalArgumentException("COLD goal hold cannot suppress an available path");
         var block = new ResourceSiteHarvestNavigationBlock(goal.representative(),
                 goal.layoutRevision(), held.reason());
         return state.withResourceSites(state.resourceSites().replace(lifecycle.blockHarvestRoute(job, block)));
@@ -907,7 +776,6 @@ public final class ResourceSiteHarvestProcess {
                     || job.returningForBatch() || job.navigationBlock().isPresent())
                 throw new IllegalArgumentException("field start must declare an unstarted semantic job");
             ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
-            ActorLocation location = state.actorLocations().get(job.workerId());
             int selected = job.progress().nextCropSlotIndex();
             if (!lifecycle.targetAvailable(selected, job.id())
                     || cycle.cell(cycle.layout().cells().get(selected).id()).accounted())
@@ -915,10 +783,6 @@ public final class ResourceSiteHarvestProcess {
             if (!job.target().current(cycle)
                     || !job.target().cellId().equals(cycle.layout().cells().get(selected).id()))
                 throw new IllegalArgumentException("field start has a foreign cell-generation claim");
-            if (cycle.expectedWorkOutcome(cycle.layout().cells().get(selected).id())
-                    != ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED)
-                ResourceSiteHarvestKnownNavigation.path(state.withResourceSites(
-                        state.resourceSites().replace(lifecycle.harvesting(job))), job);
         }
         if (admitted) {
             HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(job.workerId());
@@ -929,7 +793,10 @@ public final class ResourceSiteHarvestProcess {
         var storage = ResourceStorageAccess.at(state, job.outputSlot().containerId());
         var policy = state.inventory().containers().get(storage.containerId()).storage().orElseThrow();
         if (!storage.settlementId().equals(settlement.id()) || policy.role() != ResourceStorageRole.WAREHOUSE
-                || !admitted && (!policy.filter().accepts("minecraft:wheat") || !state.containerSlotAvailable(job.outputSlot()))) {
+                || !admitted && (!policy.filter().accepts("minecraft:wheat") || !state.containerSlotAvailable(job.outputSlot())
+                    || ResourceStorageSelection.receivingCandidates(state, settlement.id(), "minecraft:wheat", 64,
+                            state.actorLocations().get(job.workerId()).supportingSurface(), java.util.Set.of(ResourceStorageRole.WAREHOUSE),
+                            java.util.Optional.empty()).stream().noneMatch(endpoint -> endpoint.containerId().equals(storage.containerId())))) {
             throw new IllegalArgumentException("resource-site harvest output slot is unavailable");
         }
         if (state.inventory().items().containsKey(job.outputItemId())) throw new IllegalArgumentException("resource-site harvest output identity already exists");

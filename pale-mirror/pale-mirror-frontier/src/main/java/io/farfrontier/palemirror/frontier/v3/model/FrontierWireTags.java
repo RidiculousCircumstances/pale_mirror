@@ -19,13 +19,22 @@ import java.util.Objects;
  */
 public final class FrontierWireTags {
     private static final Map<Class<?>, Map<Integer, ? extends Enum<?>>> BY_TYPE = Map.ofEntries(
+            entry(ServiceAccessDemand.Kind.class,
+                    tag(1, ServiceAccessDemand.Kind.MEAL), tag(2, ServiceAccessDemand.Kind.PRODUCTION),
+                    tag(3, ServiceAccessDemand.Kind.FIELD_HARVEST), tag(4, ServiceAccessDemand.Kind.COURIER),
+                    tag(5, ServiceAccessDemand.Kind.EXPEDITION_SUPPLY), tag(6, ServiceAccessDemand.Kind.EXTRACTION),
+                    tag(7, ServiceAccessDemand.Kind.ENGINEERING_EQUIPMENT), tag(8, ServiceAccessDemand.Kind.DEFENDER_EQUIPMENT)),
             entry(ActorActivityKind.class,
                     tag(10, ActorActivityKind.PRESENCE), tag(11, ActorActivityKind.MEAL), tag(12, ActorActivityKind.SERVICE_EXIT),
                     tag(13, ActorActivityKind.FIELD_HARVEST), tag(14, ActorActivityKind.PRODUCTION), tag(16, ActorActivityKind.ROUTE_PATROL), tag(17, ActorActivityKind.SETTLEMENT_ASSAULT), tag(18, ActorActivityKind.ENGINEERING_WORK),
                     tag(19, ActorActivityKind.SETTLEMENT_SERVICE), tag(20, ActorActivityKind.MEDICAL_TREATMENT), tag(21, ActorActivityKind.TRANSIT),
                     tag(22, ActorActivityKind.SCOUT_PATROL), tag(23, ActorActivityKind.HIVE_TASK_ASSEMBLY), tag(24, ActorActivityKind.HIVE_TASK_RETURN),
                     tag(26, ActorActivityKind.ENGINEERING_ASSEMBLY),
-                    tag(28, ActorActivityKind.COURIER), tag(29, ActorActivityKind.GROUP_MEMBER), tag(30, ActorActivityKind.EXTRACTION)),
+                    tag(28, ActorActivityKind.COURIER), tag(29, ActorActivityKind.GROUP_MEMBER), tag(30, ActorActivityKind.EXTRACTION),
+                    tag(31, ActorActivityKind.EQUIPMENT_SERVICE)),
+            entry(DefenderEquipmentReturnVisit.Phase.class,
+                    tag(1, DefenderEquipmentReturnVisit.Phase.SELECTED), tag(2, DefenderEquipmentReturnVisit.Phase.APPROACH),
+                    tag(3, DefenderEquipmentReturnVisit.Phase.SERVICE), tag(4, DefenderEquipmentReturnVisit.Phase.CLEARANCE)),
             entry(ActorKind.class, tag(0, ActorKind.RESIDENT), tag(1, ActorKind.BIOFORM), tag(2, ActorKind.PACK_ANIMAL)),
             entry(ResidentMealResourceEffectObserved.Outcome.class,
                     tag(10, ResidentMealResourceEffectObserved.Outcome.TAKE_UNAPPLIED),

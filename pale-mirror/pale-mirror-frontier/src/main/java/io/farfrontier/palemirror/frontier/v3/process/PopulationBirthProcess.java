@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Bounded demographic growth: one canonical, exact-food commitment at a time per settlement.
+ * Bounded demographic growth: one canonical, exact-portion food commitment at a time per settlement.
  * The semantic food consequence is durable before its delayed resident admission; a serialized
  * depot replica is only a later projection of that current canonical balance.
  */
@@ -33,20 +33,9 @@ public final class PopulationBirthProcess {
         List<ProposedEvent> events = new java.util.ArrayList<>();
         events.add(schedule(review(settlement.id(), nextOrdinal(action), action.dueAt().ticks() + state.bootstrap().ruleset().cadence().populationBirthReviewInterval())));
         if (hasActiveJob(state, settlement.id()) || !hasHousing(state, settlement.id())) return List.copyOf(events);
-        // A new resident is discretionary while the settlement's exact ration
-        // owner still has an unresolved cycle.  In particular, do not let a
-        // birth permit retain the only COLD bread stack between a visible
-        // shortage and its next ordinary provision review.
+        // Growth is discretionary; the common food policy protects existing residents first.
         if (!SettlementFoodPolicy.allowsPopulationGrowth(state, settlement.id())) return List.copyOf(events);
-        // A current physical custodian fences its item scope, but historical
-        // replica status never changes autonomous demographic eligibility.
-        // COLD therefore commits the exact one-bread semantic consequence and
-        // leaves any unloaded replica to catch up from canonical custody.
-        SubjectId depot = FrontierWorldState.depotId(settlement.id());
-        if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return List.copyOf(events);
-        if (ReferenceContainerCustody.isReferenceContainer(state, depot)
-                && ReferenceContainerCustody.hasLiveCustody(state, depot)) return List.copyOf(events);
-        Optional<ExactItemStack> food = food(state, settlement.id());
+        Optional<ColdResourceConsumption> food = food(state, settlement);
         if (food.isEmpty()) return List.copyOf(events);
         Household household = household(state, settlement.id());
         if (household == null) return List.copyOf(events);
@@ -80,14 +69,15 @@ public final class PopulationBirthProcess {
         ResidentBirthJob job = started.job();
         if (!subject.equals(job.settlementId()) || !hasHousing(state, job.settlementId())
                 || !SettlementFoodPolicy.allowsPopulationGrowth(state, job.settlementId())
-                || !food(state, job.settlementId()).map(item -> item.id().equals(job.foodItemId())).orElse(false)) {
+                || !ColdResourceConsumptionSupport.available(state, job.food(), java.util.Set.of(ResourceStorageRole.WAREHOUSE))) {
             throw new IllegalArgumentException("resident birth start lacks unfenced canonical food and housing");
         }
         // This is one semantic event: retain the exact pending resident and
         // atomically commit exactly one ration.  No PhysicalIntent is created,
         // so an unvisited replica cannot fence the rest of its stack from COLD
         // provisioning or turn a player visit into demographic eligibility.
-        return state.startResidentBirth(job).withInventory(state.inventory().consume(job.foodItemId(), 1));
+        ExactInventory consumed = ColdResourceConsumptionSupport.consume(state, job.food(), java.util.Set.of(ResourceStorageRole.WAREHOUSE));
+        return state.startResidentBirth(job).withInventory(consumed);
     }
 
     public static FrontierWorldState reduceBorn(FrontierWorldState state, SubjectId subject, ResidentBorn birth) {
@@ -107,13 +97,9 @@ public final class PopulationBirthProcess {
         return SettlementFacilityCapability.livingResidents(state, settlementId) < SettlementFacilityCapability.housingCapacity(state, settlementId);
     }
 
-    private static Optional<ExactItemStack> food(FrontierWorldState state, SubjectId settlementId) {
-        SubjectId depot = FrontierWorldState.depotId(settlementId);
-        if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)
-                || ReferenceContainerCustody.hasLiveCustody(state, depot)) return Optional.empty();
-        return state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id)).filter(item -> BREAD.equals(item.itemKind())
-                && item.count() >= 1 && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)
-                ).findFirst();
+    private static Optional<ColdResourceConsumption> food(FrontierWorldState state, Settlement settlement) {
+        return ColdResourceConsumptionSupport.select(state, settlement.id(), BREAD, 1,
+                new SurfaceAnchor(settlement.anchor()), java.util.Set.of(ResourceStorageRole.WAREHOUSE));
     }
 
     private static Household household(FrontierWorldState state, SubjectId settlementId) {
@@ -123,7 +109,7 @@ public final class PopulationBirthProcess {
     }
 
     private static ResidentBirthJob job(WorldBounds bounds, TerrainSurfacePlan terrain, Settlement settlement, int housingBeds,
-                                        Household household, ExactItemStack food, int ordinal, int placementOrdinal, long birthTick,
+                                        Household household, ColdResourceConsumption food, int ordinal, int placementOrdinal, long birthTick,
                                         FrontierRuleset.ResidentLife residentLife, long seed) {
         String suffix = suffix(settlement.id()) + "-" + ordinal;
         SubjectId residentId = new SubjectId("resident:" + suffix(settlement.id()) + "-born-" + ordinal);
@@ -132,7 +118,7 @@ public final class PopulationBirthProcess {
                 birthTick, HumanPopulation.birthSkills(ordinal))
                 .withCharacteristics(ResidentCharacteristics.initial(residentLife,
                         new SubjectId("resident:" + suffix(settlement.id()) + "-born-" + ordinal)));
-        return new ResidentBirthJob(new SubjectId("job:resident-birth-" + suffix), settlement.id(), household.id(), food.id(),
+        return new ResidentBirthJob(new SubjectId("job:resident-birth-" + suffix), settlement.id(), household.id(), food,
                 new SubjectId("commitment:resident-birth-food-" + suffix), resident,
                 FrontierSettlementActorSlots.residentSlot(bounds, terrain, settlement, housingBeds, placementOrdinal));
     }

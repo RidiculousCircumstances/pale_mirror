@@ -172,14 +172,21 @@ final class FrontierV3ProductionWorkSceneExecutor {
         if (job.spatial().pending()) {
             SurfaceAnchor target = ProductionJourneyKnowledge.target(job);
             if (!FrontierV3SemanticMovement.arrived(level, worker, target)) {
-                var retained = job.spatial().knownApproach(origin -> ProductionJourneyKnowledge.checkpoint(state, job, origin).approach())
-                        .map(value -> value.path().subList(value.cursor(), value.path().size()));
+                Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin> approach;
+                try { approach = ProductionJourneyKnowledge.approach(state, job); }
+                catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable pending) {
+                    FrontierV3GoalNavigation.stop(worker, actuation);
+                    FrontierV3PhysicalWaitTrace.actor(worker, state, job.workerId(),
+                            "production-approach:" + pending.status() + ":" + pending.getMessage());
+                    return;
+                }
+                var retained = approach.map(value -> value.path().subList(value.cursor(), value.path().size()));
                 if (retained.isPresent()) {
                     var hint = retained.orElseThrow();
                     FrontierV3GoalNavigation.pursue(level, worker, new FrontierV3GoalNavigation.Goal(List.of(target),
                             TraversalCapability.PEDESTRIAN, new FrontierV3NavigationScope.RetainedApproach(hint),
                             Optional.empty(), hint), actuation);
-                }
+                } else FrontierV3GoalNavigation.stop(worker, actuation);
                 // Missing known geometry retains the same owner obligation; it never resets work or body.
                 return;
             }

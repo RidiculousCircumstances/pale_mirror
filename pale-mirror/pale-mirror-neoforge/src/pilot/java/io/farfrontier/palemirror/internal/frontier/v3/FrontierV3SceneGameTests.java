@@ -244,7 +244,7 @@ public final class FrontierV3SceneGameTests {
                 new io.farfrontier.palemirror.frontier.v3.model.AmbientBodyConfirmed(resident, lease.revision(),
                         io.farfrontier.palemirror.frontier.v3.model.AmbientBodyConfirmed.Boundary.ADMISSION,
                         lease.handoffBody(), lease.handoffBody(),
-                        io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state(runtime), resident)));
+                        io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state(runtime), resident), java.util.Optional.empty()));
         helper.assertValueEqual(FrontierV3AmbientLeaseRestartSafety.quarantineActiveLeases(runtime), 1,
                 "restart recovery must make an active ambient lease UNKNOWN before any body is accepted");
 

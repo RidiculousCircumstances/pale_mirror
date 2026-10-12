@@ -121,7 +121,14 @@ final class FrontierV3AmbientMovementExecutor {
                 FrontierV3GoalNavigation.stop(body, actuation);
                 return false;
             }
-            var approach = io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationJourneyKnowledge.approach(state, journey);
+            Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin> approach;
+            try { approach = io.farfrontier.palemirror.frontier.v3.model.ResidentMigrationJourneyKnowledge.approach(state, journey); }
+            catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable pending) {
+                FrontierV3GoalNavigation.stop(body, actuation);
+                FrontierV3PhysicalWaitTrace.actor(body, state, actorId,
+                        "transit-approach:" + pending.status() + ":" + pending.getMessage());
+                return false;
+            }
             if (journey.spatial().pending() && approach.isEmpty()) {
                 FrontierV3GoalNavigation.stop(body, actuation);
                 return false;
@@ -179,7 +186,7 @@ final class FrontierV3AmbientMovementExecutor {
         }
         if (lease.goal() == AmbientGoalKind.ENGINEERING_ASSEMBLY) {
             EngineeringWorkAssembly.Member member = engineeringAssemblyMember(state, actorId, lease);
-            if (member == null || member.arrived()) {
+            if (member == null || !member.canAdvance()) {
                 FrontierV3GoalNavigation.stop(body, actuation);
                 return false;
             }
@@ -300,7 +307,7 @@ final class FrontierV3AmbientMovementExecutor {
                                                               FrontierV3ActorActuation actuation) {
         EngineeringWorkAssembly.Member member = engineeringAssemblyMember(state, actorId, lease);
         EngineeringWorkOrder project = engineeringProject(state, actorId);
-        if (project == null || member == null || member.arrived()
+        if (project == null || member == null || !member.canAdvance()
                 || !FrontierV3SemanticMovement.arrived(level, body, lease.goalBody().supportingSurface())) return false;
         EngineeringWorkAssembly assembly = project.assembly().orElseThrow();
         if (!assembly.safeAdvances().contains(actorId)) return false;
@@ -356,7 +363,7 @@ final class FrontierV3AmbientMovementExecutor {
         EngineeringWorkOrder project = engineeringProject(state, actorId);
         if (project == null || lease.goal() != AmbientGoalKind.ENGINEERING_ASSEMBLY) return null;
         EngineeringWorkAssembly.Member member = project.assembly().orElseThrow().members().get(actorId);
-        SurfaceAnchor expected = member.arrived() ? member.currentSurface() : member.nextSurface();
+        SurfaceAnchor expected = member.ambientTarget();
         return lease.goalBody().equals(expected.standingBody()) ? member : null;
     }
     private static HiveMobilization assemblingMobilization(FrontierWorldState state, SubjectId actorId) {

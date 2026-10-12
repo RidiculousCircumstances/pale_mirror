@@ -29,7 +29,12 @@ class ResourceSiteHarvestTargetRetargetedCodecTest {
             var fact = new ResourceSiteHarvestTargetRetargeted(new SubjectId("site:1-wheat-field"),
                     new SubjectId("job:site-harvest-1"), new SubjectId("resident:1-1"), 7L,
                     2, 5, new ScheduleId("schedule:resource-site-harvest-cold-progress-site-harvest-1"),
-                    900L, lease);
+                    900L, lease, new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
+                            new SubjectId("resident:1-1"), io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST,
+                            new SubjectId("job:site-harvest-1"), 3L), lease.isPresent() ? Optional.empty() : Optional.of(
+                                    new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(java.util.List.of(
+                                            io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor.at(0, 63, 0),
+                                            io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor.at(1, 63, 0)))));
             assertEquals(fact, codec.decode(codec.encode(fact)));
         }
     }

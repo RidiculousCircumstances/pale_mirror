@@ -143,7 +143,7 @@ public final class FrontierV3AmbientMotionGameTests {
         FrontierV3ActorBodyController.confirmPresent(level, runtime, body);
         FrontierV3CommandSubmission.submit(runtime, "ambient-prepared-game-test-hot", resident.value(),
                 new AmbientBodyConfirmed(resident, lease.revision(), AmbientBodyConfirmed.Boundary.ADMISSION, lease.handoffBody(), lease.handoffBody(),
-                        io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state(runtime), resident)));
+                        io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state(runtime), resident), java.util.Optional.empty()));
         helper.assertValueEqual(FrontierV3AmbientActorExecutor.materialize(level, state(runtime), resident,
                         bodyAt(origin)), FrontierV3AmbientActorExecutor.Result.CURRENT,
                 "the durable HOT acknowledgement retains the one existing UUID rather than duplicating it");
@@ -359,7 +359,7 @@ public final class FrontierV3AmbientMotionGameTests {
             FrontierV3CommandSubmission.submit(runtime, "scout-cursor-hot", scout.value(),
                     new io.farfrontier.palemirror.frontier.v3.model.AmbientBodyConfirmed(scout, lease.revision(),
                             io.farfrontier.palemirror.frontier.v3.model.AmbientBodyConfirmed.Boundary.ADMISSION,
-                            handoff, handoff, io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state(runtime), scout)));
+                            handoff, handoff, io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state(runtime), scout), java.util.Optional.empty()));
             var started = io.farfrontier.palemirror.frontier.v3.process.HiveScoutPatrolProcess.start(state(runtime), scout);
             FrontierV3CommandSubmission.submit(runtime, "scout-cursor-start", state(runtime).bootstrap().hive().id().value(), started);
             var goal = io.farfrontier.palemirror.frontier.v3.process.HiveScoutPatrolProcess.journey(state(runtime), scout).target();

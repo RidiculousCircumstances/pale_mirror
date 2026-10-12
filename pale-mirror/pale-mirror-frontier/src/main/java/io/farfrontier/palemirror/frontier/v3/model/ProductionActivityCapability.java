@@ -61,9 +61,7 @@ final class ProductionActivityCapability implements ActorActivityCapability {
                     ? ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT : ResidentWorkYield.Status.READY;
     }
     @Override public FrontierWorldState pause(FrontierWorldState state, ActorExecutionId execution, long atTick) {
-        job(state, execution);
-        // Bakery progress accrues only by confirmed owned work steps, never elapsed travel time.
-        return state;
+        return BakeryLabour.pauseJob(state, job(state, execution), atTick);
     }
     @Override public FrontierWorldState resume(FrontierWorldState state, ActorExecutionId execution, long atTick) {
         job(state, execution); return state;

@@ -7,7 +7,8 @@ public record ResourceSiteHarvestNavigationBlock(SurfaceAnchor target, long layo
     public enum Reason {
         TARGET_SUPPORT(1), TARGET_CLEARANCE(2), TARGET_MEDIUM(3),
         PATH_UNAVAILABLE(4), PATH_STALLED(5), TARGET_CHUNK_UNLOADED(6),
-        CONTINUATION_UNAVAILABLE(7), OFF_CONTRACT(8), UNSUPPORTED_CAPABILITY(9),
+        // Tag7 belonged to retired path-plan clearance; it must never be reused.
+        OFF_CONTRACT(8), UNSUPPORTED_CAPABILITY(9),
         KNOWN_GEOMETRY_UNAVAILABLE(10), SEARCH_BUDGET_EXHAUSTED(11);
 
         private final int wireTag;
@@ -27,5 +28,8 @@ public record ResourceSiteHarvestNavigationBlock(SurfaceAnchor target, long layo
     }
 
     /** A local path miss may be reconsidered without clearing a physical/support observation. */
-    public boolean reroutable() { return reason == Reason.PATH_UNAVAILABLE || reason == Reason.PATH_STALLED; }
+    public boolean reroutable() {
+        return reason == Reason.PATH_UNAVAILABLE || reason == Reason.PATH_STALLED
+                || reason == Reason.KNOWN_GEOMETRY_UNAVAILABLE;
+    }
 }

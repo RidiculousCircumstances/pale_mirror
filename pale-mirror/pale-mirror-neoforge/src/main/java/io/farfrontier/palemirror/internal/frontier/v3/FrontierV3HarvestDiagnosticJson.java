@@ -27,7 +27,6 @@ import io.farfrontier.palemirror.frontier.v3.model.DiagnosticIncident;
 import io.farfrontier.palemirror.frontier.v3.model.DiagnosticSubject;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
 import io.farfrontier.palemirror.frontier.v3.model.DiagnosticSubjectKind;
-import io.farfrontier.palemirror.frontier.v3.process.SettlementProvisionProcess;
 import io.farfrontier.palemirror.frontier.v3.model.HiveNutrientReceipt;
 import io.farfrontier.palemirror.frontier.v3.model.HiveNutrientTransfer;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;

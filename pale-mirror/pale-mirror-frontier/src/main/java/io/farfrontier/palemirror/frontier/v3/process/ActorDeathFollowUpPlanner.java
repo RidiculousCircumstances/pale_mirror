@@ -8,5 +8,6 @@ import java.util.List;
 /** Registered process composition supplies owner events; the body protocol knows no job. */
 @FunctionalInterface
 interface ActorDeathFollowUpPlanner {
-    List<ProposedEvent> plan(FrontierWorldState beforeDeath, FrontierWorldState afterDeath, SubjectId actor);
+    List<ProposedEvent> plan(FrontierWorldState beforeDeath, FrontierWorldState afterDeath, SubjectId actor,
+                           io.farfrontier.palemirror.frontier.v3.api.FrontierCommand command);
 }

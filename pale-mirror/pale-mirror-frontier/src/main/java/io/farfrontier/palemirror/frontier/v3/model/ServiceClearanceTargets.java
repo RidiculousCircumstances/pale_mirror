@@ -11,6 +11,16 @@ import java.util.Set;
 public final class ServiceClearanceTargets {
     private ServiceClearanceTargets() { }
 
+    public record Selection(SurfaceAnchor surface,
+            io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt access) {
+        public Selection {
+            java.util.Objects.requireNonNull(surface);
+            java.util.Objects.requireNonNull(access);
+            if (!access.route().getLast().equals(surface))
+                throw new IllegalArgumentException("clearance selection has a foreign route endpoint");
+        }
+    }
+
     /** Bounded exit region, independent of any preferred parking destination or activity. */
     public static List<SurfaceAnchor> exits(ServiceAccessBoundary boundary,
             SurfaceAnchor start, KnownPedestrianRouteKnowledge knowledge, Set<SurfaceAnchor> excluded) {
@@ -45,18 +55,59 @@ public final class ServiceClearanceTargets {
     /** Exclusions reserve final destinations; they do not make walking actors terrain obstacles. */
     public static Optional<SurfaceAnchor> select(ServiceAccessPoint point, SubjectId actorId,
             KnownPedestrianRouteKnowledge knowledge, Set<SurfaceAnchor> excluded) {
+        return plannedSelection(point, actorId, knowledge, excluded).map(Selection::surface);
+    }
+
+    /** Queue readiness inspects retained evidence only. Missing evidence admits planning, not walking. */
+    public static boolean mayPlan(ServiceAccessPoint point, KnownPedestrianRouteKnowledge knowledge,
+                                  Set<SurfaceAnchor> excluded) {
+        return point.waitingSurfaces().stream().filter(candidate -> admissible(point, candidate, excluded))
+                .anyMatch(candidate -> knowledge.planningEvidence(point.station(), candidate)
+                        .map(result -> result.status()
+                            != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
+                        .orElse(true));
+    }
+
+    public static void requireSelected(ServiceAccessPoint point, KnownPedestrianRouteKnowledge knowledge,
+            Set<SurfaceAnchor> excluded, Selection selected) {
+        if (!admissible(point, selected.surface(), excluded)
+                || !selected.access().route().getFirst().equals(point.station()))
+            throw new IllegalArgumentException("clearance selection lost its declared service endpoint");
+        knowledge.requireRoute(selected.access().route());
+    }
+
+    private static boolean admissible(ServiceAccessPoint point, SurfaceAnchor candidate, Set<SurfaceAnchor> excluded) {
+        return point.waitingSurfaces().contains(candidate) && point.boundary().cleared(candidate.standingBody())
+                && !excluded.contains(candidate);
+    }
+
+    /** Retained occupants wait beyond immediate egress, so later visitors can still approach. */
+    public static List<SurfaceAnchor> waitingTargets(ServiceAccessPoint point, SurfaceAnchor origin, Set<SurfaceAnchor> excluded) {
+        return point.waitingSurfaces().stream().filter(candidate -> admissible(point, candidate, excluded))
+                .filter(candidate -> !point.egressSurfaces().contains(candidate))
+                .sorted(java.util.Comparator.comparingInt((SurfaceAnchor candidate) -> Math.abs(candidate.x() - origin.x())
+                        + Math.abs(candidate.y() - origin.y()) + Math.abs(candidate.z() - origin.z()))
+                        .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z).thenComparingInt(SurfaceAnchor::y)).toList();
+    }
+
+    /** The producer serializes bounded candidate searches; unfinished work is never treated as NO_PATH. */
+    public static Optional<Selection> plannedSelection(ServiceAccessPoint point, SubjectId actorId,
+            KnownPedestrianRouteKnowledge knowledge, Set<SurfaceAnchor> excluded) {
         List<SurfaceAnchor> candidates = point.waitingSurfaces();
         if (candidates.isEmpty()) return Optional.empty();
         int first = Math.floorMod(actorId.value().hashCode(), candidates.size());
         for (int offset = 0; offset < candidates.size(); offset++) {
             SurfaceAnchor candidate = candidates.get((first + offset) % candidates.size());
-            if (!point.boundary().cleared(candidate.standingBody()) || excluded.contains(candidate)) continue;
+            if (!admissible(point, candidate, excluded)) continue;
             MovementOrder order = new MovementOrder(actorId, actorId, 0, 1L, List.of(candidate),
                     TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
             try {
-                knowledge.path(point.station(), order);
-                return Optional.of(candidate);
+                var route = knowledge.plannedPath(point.station(), order);
+                return Optional.of(new Selection(candidate,
+                        new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(route)));
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
+                    throw unavailable;
                 // Try another declared target; never invent support or force admission.
             }
         }

@@ -78,12 +78,19 @@ public final class PopulationMigrationProcess {
         if (journey.arriving()) return List.of(new ProposedEvent(journey.destinationSettlementId(), new ResidentMigrated(journey.residentId(),
                 journey.destinationHouseholdId(), journey.destinationSettlementId(), journey.currentPosition(), journey.executionId())));
         if (journey.spatial().pending()) {
-            var approach = ResidentMigrationJourneyKnowledge.approach(state, journey);
+            Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin> approach;
+            try { approach = ResidentMigrationJourneyKnowledge.approach(state, journey); }
+            catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable pending) {
+                if (pending.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
+                    throw pending;
+                return List.of(schedule(progress(journey,
+                        Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval()))));
+            }
             if (approach.isEmpty()) return List.of(schedule(progress(journey,
                     Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval()))));
             return List.of(new ProposedEvent(journey.originSettlementId(),
                 new ResidentMigrationRejoinAdvanced(journey.residentId(), journey.routeRevision(),
-                        approach.orElseThrow().nextCursor(ResidentMigrationJourney.MAX_COLD_ADVANCE_BLOCKS), journey.executionId())),
+                        approach.orElseThrow().nextCursor(ResidentMigrationJourney.MAX_COLD_ADVANCE_BLOCKS), journey.executionId(), approach.orElseThrow())),
                 schedule(progress(journey, Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().migrationStepInterval()))));
         }
         return List.of(new ProposedEvent(journey.originSettlementId(), new ResidentMigrationAdvanced(journey.residentId(), journey.nextRouteIndex(), journey.routeRevision(), journey.executionId())),

@@ -71,6 +71,15 @@ public final class UnitInventoryPresentation {
     }
 
     public static Optional<ActorItemSlot> freeSlot(FrontierWorldState state, SubjectId actor) {
+        var used = occupiedSlots(state, actor);
+        return slots().stream().filter(slot -> !used.contains(slot)).findFirst();
+    }
+
+    public static boolean availableSlot(FrontierWorldState state, SubjectId actor, ActorItemSlot slot) {
+        return slots().contains(slot) && !occupiedSlots(state, actor).contains(slot);
+    }
+
+    private static java.util.Set<ActorItemSlot> occupiedSlots(FrontierWorldState state, SubjectId actor) {
         var used = inventory(state, actor).values().stream().map(ActorCarriedResources.Presentation::slot)
                 .collect(java.util.stream.Collectors.toSet());
         used.addAll(UnitInventorySlotReservations.reserved(state, actor));
@@ -78,7 +87,7 @@ public final class UnitInventoryPresentation {
             used.add(new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN));
         var meal = state.humanPopulation().meals().get(actor);
         if (meal != null) used.add(meal.inventorySlot());
-        return slots().stream().filter(slot -> !used.contains(slot)).findFirst();
+        return used;
     }
 
     private static void add(Map<SubjectId, ActorCarriedResources.Presentation> result,
