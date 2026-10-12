@@ -73,7 +73,8 @@ public final class ResidentWorkSelection {
         return opportunities.stream().filter(port -> port.kind() != requested && policy.permits(port.kind(), resident.id())
                         && policy.priority(port.kind(), resident.id()) < priority
                         && resident.capability(port.capability()) > 0)
-                .noneMatch(port -> port.available(state, resident, atTick));
+                .noneMatch(port -> port.readiness(state, resident, atTick)
+                    == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.Readiness.READY);
     }
 
 }

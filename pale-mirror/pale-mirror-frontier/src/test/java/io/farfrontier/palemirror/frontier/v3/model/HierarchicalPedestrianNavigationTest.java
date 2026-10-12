@@ -8,6 +8,56 @@ import java.util.function.Predicate;
 import static org.junit.jupiter.api.Assertions.*;
 
 class HierarchicalPedestrianNavigationTest {
+    @Test void shortSearchesShareOneBudgetAndDeferredWorkKeepsItsAgeAndFinishes() {
+        var ground = geometry(new WorldBounds(0, 0, 32, 32), (x, z) -> SurfaceAnchor.at(x, 63, z), s -> false);
+        var start = SurfaceAnchor.at(1, 63, 1);
+        try (var planner = new CooperativePedestrianPlanner()) {
+            for (int i = 0; i < 12; i++) planner.query(ground, start, SurfaceAnchor.at(2 + i, 63, 1));
+            assertEquals(8, planner.pendingCount()); assertEquals(4, planner.deferredCount());
+            assertEquals(4, planner.waitingDiagnostics(12).stream().filter(
+                    CooperativePedestrianPlanner.WaitingDiagnostic::deferred).count());
+            int budget = HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2;
+            planner.advance(budget);
+            assertTrue(planner.completedCount() >= 3, "one short result cannot discard the rest of the shared budget");
+            assertTrue(planner.workUnits() <= budget);
+            assertEquals(1, planner.oldestWaitTurns());
+            long work = planner.workUnits();
+            var waiting = planner.waitingDiagnostics(12);
+            for (int read = 0; read < 20; read++) assertEquals(waiting, planner.waitingDiagnostics(12));
+            assertEquals(work, planner.workUnits(), "diagnostics must not spend search work or refresh wait age");
+            for (int turn = 0; turn < 100 && planner.pendingCount() > 0; turn++) {
+                long before = planner.workUnits(); planner.advance(budget);
+                assertTrue(planner.workUnits() - before <= budget);
+            }
+            assertEquals(12, planner.completedCount()); assertEquals(0, planner.deferredCount());
+            assertEquals(0, planner.oldestWaitTurns());
+            for (int i = 0; i < 12; i++) assertEquals(PedestrianRouteResult.Status.FOUND,
+                    planner.peek(ground, start, SurfaceAnchor.at(2 + i, 63, 1)).orElseThrow().status());
+        }
+    }
+
+    @Test void opportunityInspectionCannotStartSearchOrOwnWakeButDistinguishesUnresolvedFromNoPath() throws Exception {
+        var ground = geometry(new WorldBounds(0, 0, 32, 16), (x, z) -> SurfaceAnchor.at(x, 63, z), s -> s.x() == 8);
+        var start = SurfaceAnchor.at(2, 63, 2); var goal = SurfaceAnchor.at(25, 63, 2);
+        try (var planner = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(planner)) {
+            java.util.function.BooleanSupplier probe = () -> {
+                var result = PedestrianRoutePlanning.query(ground, start, goal);
+                if (result.status() == PedestrianRouteResult.Status.PLANNING)
+                    PedestrianRoutePlanning.await(PedestrianRouteRequest.of(ground, start, goal));
+                return result.status() == PedestrianRouteResult.Status.FOUND;
+            };
+            var observation = PedestrianRoutePlanning.observe(() -> PedestrianRoutePlanning.inspectAvailability(probe));
+            assertEquals(PedestrianRoutePlanning.Readiness.UNRESOLVED, observation.result());
+            assertTrue(observation.requests().isEmpty()); assertEquals(0, planner.pendingCount());
+            PedestrianRoutePlanning.query(ground, start, goal);
+            while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            assertEquals(PedestrianRoutePlanning.Readiness.UNAVAILABLE, PedestrianRoutePlanning.inspectAvailability(probe));
+            assertEquals(0, planner.pendingCount());
+            assertThrows(IllegalArgumentException.class, () -> PedestrianRoutePlanning.inspectAvailability(() -> {
+                throw new IllegalArgumentException("invalid authority is not an unavailable opportunity");
+            }));
+        }
+    }
     private static PedestrianRouteGeometry geometry(WorldBounds bounds, BiFunction<Integer, Integer, SurfaceAnchor> supports,
                                                     Predicate<SurfaceAnchor> blocked) {
         return new PedestrianRouteGeometry() {

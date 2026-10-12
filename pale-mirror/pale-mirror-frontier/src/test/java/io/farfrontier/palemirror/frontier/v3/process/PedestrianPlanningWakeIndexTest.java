@@ -82,7 +82,7 @@ class PedestrianPlanningWakeIndexTest {
         assertEquals(List.of(owner), index.ready(view(20, owner, other)));
         index.remove(owner.id()); assertTrue(index.ready(view(20, owner, other)).isEmpty());
     }
-    @Test void cancelledChangedAndAlreadyDueGenerationsDoNotProduceCommands() {
+    @Test void cancelledChangedAndAlreadyRunnableDueGenerationsDoNotProduceCommands() {
         for (var retained : List.of(List.<ScheduledAction>of(), List.of(action("a", 7000)), List.of(action("a", 6000)))) {
             var index = new PedestrianPlanningWakeIndex(); var owner = action("a", 6000);
             index.replace(owner, List.of(request(3)));
@@ -90,6 +90,40 @@ class PedestrianPlanningWakeIndexTest {
             assertTrue(index.ready(view(retained.equals(List.of(owner)) ? 6000 : 20,
                     retained.toArray(ScheduledAction[]::new))).isEmpty());
         }
+    }
+    @Test void dueCalculationWaitParksWithoutPollingAndNeedsAnAddressedWake() {
+        var index = new PedestrianPlanningWakeIndex(); var owner = action("parked", 20);
+        index.replace(owner, List.of(request(3)));
+        var queue = new ScheduledActionQueue(); queue.schedule(owner);
+        var checks = new java.util.concurrent.atomic.AtomicInteger();
+        for (long tick = 20; tick < 200; tick++) assertTrue(queue.selectDue(new SimInstant(tick), new WorkBudget(1, 1),
+                action -> { checks.incrementAndGet(); return !index.waiting(action); },
+                action -> { index.markParked(action); return java.util.Set.of(action.subject()); }).admitted().isEmpty());
+        assertEquals(1, checks.get()); assertEquals(List.of(owner), queue.snapshot());
+        index.changed(List.of(new PedestrianPlanningChange(request(3), PedestrianPlanningChange.Kind.RESULT_AVAILABLE)));
+        assertFalse(index.waiting(owner));
+        assertEquals(List.of(owner), index.ready(view(200, owner)), "due time must not discard a parked owner's wake");
+        assertEquals(List.of(owner), index.ready(view(201, owner)), "notification capacity cannot lose the wake");
+        queue.wake(java.util.Set.of(owner.subject()));
+        assertEquals(List.of(owner), queue.selectDue(new SimInstant(201), new WorkBudget(1, 1),
+                action -> !index.waiting(action)).admitted());
+        index.remove(owner.id()); assertFalse(index.waiting(owner));
+    }
+    @Test void boundNotificationCanWakeADueParkedOwnerButCannotForgeItsGeneration() {
+        var state = io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState.initial(
+                io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper.create(new WorldId("frontier:due-planning-wake"), 421L));
+        var owner = action("parked", 20); var module = new PedestrianPlanningProcessModule();
+        var commandId = new CommandId("test:due-planning-wake");
+        var bound = new FrontierCommand(FrontierCommand.SCHEMA_VERSION, commandId, state.bootstrap().worldId(),
+                Revision.ZERO, new SimInstant(200), owner.subject(), CauseChain.root(commandId), new PedestrianPlanningReady(owner),
+                java.util.Optional.of(new EngineScheduleBinding(Revision.ZERO, owner)));
+        var accepted = assertInstanceOf(CommandPlan.Accepted.class, module.planCommand(state, bound));
+        var replacement = assertInstanceOf(ScheduleEffect.Rescheduled.class, accepted.events().getFirst().payload()).replacement();
+        assertEquals(owner.id(), replacement.id()); assertEquals(new SimInstant(201), replacement.dueAt());
+        var foreign = new FrontierCommand(FrontierCommand.SCHEMA_VERSION, commandId, state.bootstrap().worldId(),
+                Revision.ZERO, new SimInstant(200), owner.subject(), CauseChain.root(commandId), new PedestrianPlanningReady(owner),
+                java.util.Optional.of(new EngineScheduleBinding(Revision.ZERO, action("parked", 21))));
+        assertInstanceOf(CommandPlan.Rejected.class, module.planCommand(state, foreign));
     }
     @Test void deferredReadyWorkRemainsFairUntilAcknowledged() {
         var index = new PedestrianPlanningWakeIndex(); var a = action("a", 6000); var b = action("b", 6000);

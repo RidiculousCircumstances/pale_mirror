@@ -13,6 +13,7 @@ public final class PedestrianPlanningWakeIndex {
     private final Map<ScheduleId, Wait> waits = new LinkedHashMap<>();
     private final Map<PedestrianRouteRequest, Set<ScheduleId>> dependents = new LinkedHashMap<>();
     private final Set<ScheduleId> ready = new LinkedHashSet<>();
+    private final Set<ScheduleId> parked = new HashSet<>();
 
     public void replace(ScheduledAction action, List<PedestrianRouteRequest> requests) {
         remove(action.id());
@@ -23,6 +24,7 @@ public final class PedestrianPlanningWakeIndex {
     }
     public void remove(ScheduleId id) {
         ready.remove(id);
+        parked.remove(id);
         var previous = waits.remove(id);
         if (previous == null) return;
         for (var request : previous.requests()) {
@@ -33,7 +35,16 @@ public final class PedestrianPlanningWakeIndex {
     public void changed(List<PedestrianPlanningChange> changes) {
         for (var change : changes) ready.addAll(dependents.getOrDefault(change.request(), Set.of()));
     }
-    /** Exact schedule equality is the generation fence; stale/retired/due owners never receive a command. */
+    public boolean waiting(ScheduledAction action) {
+        var wait = waits.get(action.id());
+        return wait != null && wait.action().equals(action) && !ready.contains(action.id());
+    }
+    /** Records the kernel's hold-dependency inquiry, not a domain grant or queue mutation. */
+    public void markParked(ScheduledAction action) {
+        if (!waiting(action)) throw new IllegalArgumentException("calculation hold has no exact unresolved continuation");
+        parked.add(action.id());
+    }
+    /** Exact schedule equality is the generation fence; a due but parked owner still needs its addressed wake. */
     public List<ScheduledAction> ready(FrontierScheduleView view) {
         if (waits.isEmpty()) return List.of();
         var retained = new HashMap<ScheduleId, ScheduledAction>();
@@ -48,10 +59,9 @@ public final class PedestrianPlanningWakeIndex {
         for (var entry : List.copyOf(waits.entrySet())) {
             var action = entry.getValue().action();
             if (!retained.test(action)) remove(entry.getKey());
-            else if (ready.contains(entry.getKey())) {
-                if (action.dueAt().ticks() <= instant.ticks() || action.dueAt().ticks() - instant.ticks() == 1L)
-                    remove(entry.getKey());
-            }
+            else if (ready.contains(entry.getKey()) && !parked.contains(entry.getKey())
+                    && (action.dueAt().ticks() <= instant.ticks()
+                        || action.dueAt().ticks() - instant.ticks() == 1L)) remove(entry.getKey());
         }
         // Completion order, not original registration order: a repeatedly rearmed owner
         // joins the tail and cannot starve another retained ready continuation.

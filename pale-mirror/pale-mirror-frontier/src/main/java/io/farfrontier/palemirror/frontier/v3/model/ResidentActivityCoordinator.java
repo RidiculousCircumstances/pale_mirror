@@ -21,7 +21,7 @@ public final class ResidentActivityCoordinator {
                         state.bootstrap().ruleset().residentLife(),
                         resident.characteristics().effectiveMetabolismPermille(assessedAt)).satietyUnits()
                     >= state.bootstrap().ruleset().residentLife().eatBelowUnits()
-                    || ResidentMealOpportunity.find(state, residentId, assessedAt).isEmpty());
+                    || !ResidentMealOpportunity.mayPlan(state, residentId, assessedAt));
     }
 
     public static long nextOrdinaryWorkAdmission(FrontierWorldState state,
@@ -47,7 +47,7 @@ public final class ResidentActivityCoordinator {
                         state.bootstrap().ruleset().residentLife(),
                         resident.characteristics().effectiveMetabolismPermille(assessedAt))
                     .wantsFood(state.bootstrap().ruleset().residentLife())
-                    && ResidentMealOpportunity.find(state, residentId, assessedAt).isPresent();
+                    && ResidentMealOpportunity.mayPlan(state, residentId, assessedAt);
     }
 
     /** A work owner asks the same arbiter used by self-care before admitting its next safe step. */
@@ -64,7 +64,7 @@ public final class ResidentActivityCoordinator {
                                                 long dueAt) {
         if (state.actorMovements().containsKey(residentId)) return false;
         long assessedAt = Math.max(dueAt, state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
-        return assess(state, residentId, assessedAt).kind() == ResidentActivityChoice.Kind.WORK;
+        return assessEligibility(state, residentId, assessedAt).kind() == ResidentActivityChoice.Kind.WORK;
     }
 
     /** Preserve the retained job while another executable activity owns the person. */
@@ -120,7 +120,7 @@ public final class ResidentActivityCoordinator {
                         resident.characteristics().effectiveMetabolismPermille(assessedAt)).satietyUnits()
                     >= state.bootstrap().ruleset().residentLife().eatBelowUnits()
                 || checkpointFoodCandidate.orElseGet(() -> eligibilityOnly
-                    ? ResidentMealOpportunity.candidate(state, residentId, assessedAt).isPresent()
+                    ? ResidentMealOpportunity.mayPlan(state, residentId, assessedAt)
                     : ResidentMealOpportunity.find(state, residentId, assessedAt).isPresent())) return choice;
         // No executable meal exists. An available work assignment outranks idle in either window;
         // the activity wake still retries food independently without losing the assignment.

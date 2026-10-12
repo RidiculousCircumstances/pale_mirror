@@ -18,8 +18,8 @@ final class PedestrianPlanningProcessModule implements FrontierWorldProcessModul
         var expected = value.expected();
         if (command.scheduleBinding().isEmpty() || !command.scheduleBinding().orElseThrow().action().equals(expected))
             return FrontierWorldCommandPlanner.rejected("calculation wake lacks its exact engine schedule binding");
-        if (expected.dueAt().ticks() <= command.submittedAt().ticks())
-            return FrontierWorldCommandPlanner.rejected("calculation owner is already due");
+        // A due action can be parked on this exact calculation. Schedule binding,
+        // not historical due time or queue-head position, fences its generation.
         // Match ordinary owner wake semantics: run on the next canonical tick,
         // never manufacture a tick-zero review or execute inside notification admission.
         var replacement = new ScheduledAction(expected.id(), new SimInstant(Math.addExact(command.submittedAt().ticks(), 1L)), expected.priority(),

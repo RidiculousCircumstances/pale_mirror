@@ -11,6 +11,14 @@ import java.util.function.Supplier;
 public final class PedestrianPlanningContinuations {
     private static PedestrianPlanningWakeIndex current;
     private PedestrianPlanningContinuations() { }
+    static boolean waiting(ScheduledAction action) {
+        var index = current;
+        return index != null && index.waiting(action);
+    }
+    static void markParked(ScheduledAction action) {
+        if (current == null) throw new IllegalStateException("calculation hold has no continuation owner");
+        current.markParked(action);
+    }
     public static synchronized AutoCloseable bind(PedestrianPlanningWakeIndex index) {
         if (current != null) throw new IllegalStateException("planning continuations already have an owner");
         current = java.util.Objects.requireNonNull(index);

@@ -10,6 +10,9 @@ public final class PedestrianRoutePlanning {
     private static final PedestrianRoutePlanner DIRECT = new CachedDirectPlanner();
     private static PedestrianRoutePlanner current = DIRECT;
     private static final ThreadLocal<java.util.LinkedHashSet<PedestrianRouteRequest>> observations = new ThreadLocal<>();
+    private static final ThreadLocal<Inspection> inspection = new ThreadLocal<>();
+    private static final class Inspection { private boolean unresolved; }
+    public enum Readiness { READY, UNAVAILABLE, UNRESOLVED }
     private PedestrianRoutePlanning() { }
 
     public static synchronized AutoCloseable bind(PedestrianRoutePlanner planner) {
@@ -21,6 +24,14 @@ public final class PedestrianRoutePlanning {
         } };
     }
     public static PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
+        var probe = inspection.get();
+        if (probe != null) {
+            var result = peek(geometry, start, target).orElseGet(() -> new PedestrianRouteResult(
+                    PedestrianRouteResult.Status.PLANNING, java.util.List.of(), 0L, 0, "PLANNING_NOT_REQUESTED"));
+            if (result.status() != PedestrianRouteResult.Status.FOUND && result.status() != PedestrianRouteResult.Status.NO_PATH)
+                probe.unresolved = true;
+            return result;
+        }
         PedestrianRoutePlanner planner;
         synchronized (PedestrianRoutePlanning.class) { planner = current; }
         return planner.query(geometry, start, target);
@@ -28,8 +39,29 @@ public final class PedestrianRoutePlanning {
 
     /** The consumer declares a dependency only when an unresolved calculation actually prevents its result. */
     public static void await(PedestrianRouteRequest request) {
+        if (inspection.get() != null) return; // Inspection owns no calculation or continuation.
         var observation = observations.get();
         if (observation != null) observation.add(Objects.requireNonNull(request));
+    }
+
+    /** Bounded read-only opportunity probe. Reuse family predicates through a
+     * retained-only calculation capability, without speculative searches or wakes.
+     * Only the actual chosen process may acquire the ordinary query capability. */
+    public static Readiness inspectAvailability(java.util.function.BooleanSupplier opportunity) {
+        var previous = inspection.get();
+        var probe = new Inspection(); inspection.set(probe);
+        try {
+            boolean available;
+            try { available = opportunity.getAsBoolean(); }
+            catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                if (unavailable.status() != PedestrianRouteResult.Status.NO_PATH) probe.unresolved = true;
+                available = false;
+            }
+            return available ? Readiness.READY : probe.unresolved ? Readiness.UNRESOLVED : Readiness.UNAVAILABLE;
+        } finally {
+            if (previous == null) inspection.remove();
+            else { previous.unresolved |= probe.unresolved; inspection.set(previous); }
+        }
     }
 
     /** Captures declared pending dependencies of this caller, not diagnostics or unused alternatives. */

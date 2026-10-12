@@ -62,11 +62,27 @@ final class FrontierV3PedestrianPlanning {
         var capacity = runtime.commandAdmissionCapacity().orElseThrow();
         return "{\"waiting\":" + (owner == runtime ? continuations.waitingCount() : 0)
                 + ",\"readyDeferred\":" + (owner == runtime ? deferredReady : 0)
+                + ",\"activeSearches\":" + (owner == runtime ? planner.pendingCount() : 0)
+                + ",\"deferredSearches\":" + (owner == runtime ? planner.deferredCount() : 0)
+                + ",\"oldestWaitPlanningTurns\":" + (owner == runtime ? planner.oldestWaitTurns() : 0)
+                + ",\"searchWorkUnits\":" + (owner == runtime ? planner.workUnits() : 0)
+                + ",\"completedSearches\":" + (owner == runtime ? planner.completedCount() : 0)
+                + ",\"searchProgressRevision\":" + (owner == runtime ? planner.progressRevision() : 0)
+                + ",\"oldestRequests\":" + waitingDiagnostic(runtime)
                 + ",\"wakeSafetyMaximum\":" + MAX_WAKE_COMMANDS_PER_TURN
                 + ",\"availableReceipts\":" + capacity.availableReceipts()
                 + ",\"maximumReceipts\":" + capacity.maximumReceipts()
                 + ",\"physicalAdmissionHeld\":" + !capacity.hasCausalHeadroom()
                 + ",\"availableTransactions\":" + capacity.availableTransactions() + "}";
+    }
+    private static String waitingDiagnostic(FrontierV3ServerRuntime<?, ?> runtime) {
+        if (owner != runtime) return "[]";
+        return planner.waitingDiagnostics(MAX_WAKE_COMMANDS_PER_TURN).stream().map(wait ->
+                "{\"from\":[" + wait.start().x() + "," + wait.start().y() + "," + wait.start().z()
+                + "],\"to\":[" + wait.target().x() + "," + wait.target().y() + "," + wait.target().z()
+                + "],\"phase\":\"" + (wait.deferred() ? "CAPACITY_WAIT" : "SEARCHING")
+                + "\",\"waitPlanningTurns\":" + wait.waitTurns() + ",\"searchWorkUnits\":" + wait.searchWorkUnits() + "}")
+                .collect(java.util.stream.Collectors.joining(",", "[", "]"));
     }
     static synchronized void forget(FrontierV3ServerRuntime<?, ?> runtime) {
         if (owner != runtime) return;

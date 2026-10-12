@@ -56,6 +56,15 @@ public final class ResidentMealOpportunity {
         return find(state, residentId, state.humanPopulation().nutrition(residentId).lastEvaluatedTick());
     }
 
+    /** Eligibility reads stock and retained clearance evidence; it never starts a route calculation.
+     * Missing/pending evidence permits the activity owner to try planning, not to claim food. */
+    public static boolean mayPlan(FrontierWorldState state, SubjectId residentId, long atTick) {
+        return candidate(state, residentId, atTick).filter(candidate ->
+                candidate.foodSource() instanceof ResidentFoodSource.Personal
+                || ServiceAccessCoordinator.mayPlanMealClearance(state, residentId,
+                    ((ResidentFoodSource.Storage) candidate.foodSource()).containerId())).isPresent();
+    }
+
     public static Optional<Source> find(FrontierWorldState state, SubjectId residentId, long atTick) {
         return candidate(state, residentId, atTick).flatMap(candidate -> {
             if (candidate.foodSource() instanceof ResidentFoodSource.Personal)

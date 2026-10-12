@@ -573,7 +573,7 @@ public final class FrontierWorldProcessCatalog {
         registry.requireScheduledOwner(action.kind());
         ScheduledPlanner planner = SCHEDULED_PLANNERS.get(action.kind());
         if (planner == null) throw new IllegalStateException("registered scheduled kind has no planner: " + action.kind());
-        return planner.held(state, action);
+        return PedestrianPlanningContinuations.waiting(action) || planner.held(state, action);
     }
 
     public static int scheduledAdmissionWeight(DeterministicProcessRegistry registry, FrontierWorldState state, ScheduledAction action) {
@@ -593,6 +593,10 @@ public final class FrontierWorldProcessCatalog {
             FrontierWorldState state, ScheduledAction action) {
         ScheduledPlanner planner = SCHEDULED_PLANNERS.get(action.kind());
         if (planner == null) throw new IllegalStateException("scheduled kind has no wake owner: " + action.kind());
+        if (PedestrianPlanningContinuations.waiting(action)) {
+            PedestrianPlanningContinuations.markParked(action);
+            return Set.of(action.subject());
+        }
         return planner.wakeDependencies(state, action);
     }
 

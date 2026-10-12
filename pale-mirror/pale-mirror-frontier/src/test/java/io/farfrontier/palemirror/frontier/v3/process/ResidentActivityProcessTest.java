@@ -20,6 +20,40 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResidentActivityProcessTest {
+    @Test void hungryWorkEligibilityDoesNotCalculateMealsAndOwnedPendingReviewParksUntilItsResult() throws Exception {
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:meal-work-eligibility-planning"), 421L));
+        var home = initial.bootstrap().settlements().getFirst(); var actor = home.residents().getFirst().id();
+        var account = ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(home.id()));
+        var resources = initial.inventory().fungibleResources().transformCold(account,
+                Map.of(new SubjectId("lot:bootstrap-1-wheat"), 1), Map.of(),
+                new ResourceLot(new SubjectId("lot:eligibility-planning-bread"), home.id(),
+                        ResidentMeal.BREAD_KIND, 1, "test", List.of()));
+        var state = initial.withInventory(initial.inventory().withFungibleResources(resources));
+        var index = new PedestrianPlanningWakeIndex();
+        try (var planner = new io.farfrontier.palemirror.frontier.v3.model.navigation.CooperativePedestrianPlanner();
+                var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind(planner);
+                var continuations = PedestrianPlanningContinuations.bind(index)) {
+            assertFalse(ResidentActivityCoordinator.mayStartOrdinaryWork(state, actor, 24_000));
+            assertTrue(ResidentActivityCoordinator.requestsYield(state, actor, 24_000));
+            assertEquals(0, planner.pendingCount(), "eligibility and yield intent may not initiate food searches");
+            var action = ResidentActivityProcess.review(actor, 24_000);
+            var proposed = PedestrianPlanningContinuations.plan(action, () -> ResidentActivityProcess.plan(state, action));
+            assertTrue(proposed.stream().noneMatch(event -> event.payload() instanceof ResidentMealStarted));
+            var successor = proposed.stream().map(event -> event.payload()).filter(ScheduleEffect.Rescheduled.class::isInstance)
+                    .map(ScheduleEffect.Rescheduled.class::cast).findFirst().orElseThrow().replacement();
+            assertTrue(FrontierWorldRuntimeDefinition.scheduledHeld(state, successor));
+            assertEquals(java.util.Set.of(actor), FrontierWorldRuntimeDefinition.holdWakeKeys(state, successor));
+            assertEquals(1, planner.pendingCount(), "only the actual selected activity starts its clearance calculation");
+            while (planner.pendingCount() > 0) planner.advance(
+                    io.farfrontier.palemirror.frontier.v3.model.navigation.HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            index.changed(planner.drainChanges());
+            assertFalse(FrontierWorldRuntimeDefinition.scheduledHeld(state, successor));
+            var started = PedestrianPlanningContinuations.plan(successor, () -> ResidentActivityProcess.plan(state, successor));
+            assertTrue(started.stream().anyMatch(event -> event.payload() instanceof ResidentMealStarted));
+            assertEquals(0, index.waitingCount());
+        }
+    }
     @Test void ordinaryReviewAdmitsPresenceOnceWithoutMaterializingMovingOrInventingWork() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:passive-execution-admission"), 421L));
