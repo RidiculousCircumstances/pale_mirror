@@ -296,31 +296,28 @@ final class FrontierV3ContainerClickExecutor {
                                              List<PhysicalStackBinding> bindings, CustodyAccount account,
                                              FrontierWorldState state) {
         if (account.claimQuantities().isEmpty()) return false;
-        if (kind == ClickType.PICKUP_ALL) return hasUnretirableClaim(account, state);
+        if (kind == ClickType.PICKUP_ALL) {
+            var carried = menu.getCarried();
+            if (carried.isEmpty()) return false;
+            String itemKind = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(carried.getItem()).toString();
+            int available = bindings.stream().filter(binding -> binding.itemKind().equals(itemKind))
+                    .mapToInt(PhysicalStackBinding::quantity).sum();
+            int departure = Math.min(available, carried.getMaxStackSize() - carried.getCount());
+            return !SourceStockClaimLoss.canDepart(state, account.id(), itemKind, departure);
+        }
         if (slot < 0) return false;
         if (kind != ClickType.PICKUP && kind != ClickType.QUICK_MOVE && kind != ClickType.THROW) return false;
         var matching = bindings.stream().filter(binding -> binding.address() instanceof PhysicalStackAddress.ContainerSlot source
                 && source.slot().slot() == slot).findFirst().orElse(null);
         if (matching == null) return false;
-        if (!exceedsUnclaimedPortion(matching, kind, button, menu.getCarried().isEmpty())) return false;
-        return hasUnretirableClaim(account, state);
-    }
-
-    private static boolean hasUnretirableClaim(CustodyAccount account, FrontierWorldState state) {
-        return !SourceStockClaimLoss.admissibleClaims(state, account.id()).containsAll(account.claimQuantities().keySet());
-    }
-
-    static boolean exceedsUnclaimedPortion(PhysicalStackBinding matching, ClickType kind,
-                                           int button, boolean carriedEmpty) {
-        int free = matching.quantity() - matching.claimQuantities().values().stream().mapToInt(Integer::intValue).sum();
         int possibleDeparture = switch (kind) {
             case QUICK_MOVE -> matching.quantity();
             case THROW -> button == 0 ? 1 : matching.quantity();
-            case PICKUP -> carriedEmpty
+            case PICKUP -> menu.getCarried().isEmpty()
                     ? button == 1 ? (matching.quantity() + 1) / 2 : matching.quantity() : 0;
             default -> 0;
         };
-        return possibleDeparture > free;
+        return !SourceStockClaimLoss.canDepart(state, account.id(), matching.itemKind(), possibleDeparture);
     }
 
     static ContainerRecord ownedContainer(FrontierWorldState state, BlockPos position) {

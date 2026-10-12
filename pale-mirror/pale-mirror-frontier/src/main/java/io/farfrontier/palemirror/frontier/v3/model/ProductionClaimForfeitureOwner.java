@@ -7,8 +7,14 @@ import java.util.Optional;
 
 /** Production owns input reallocation, payment and retirement, not the stock ledger. */
 final class ProductionClaimForfeitureOwner implements FungibleClaimForfeitureOwner {
-    @Override public void validate(FrontierWorldState state, ClaimAllocation claim, FungibleResourceHandoffObserved observed) {
+    @Override public void validate(FrontierWorldState state, ClaimAllocation claim,
+                                   io.farfrontier.palemirror.frontier.v3.api.SubjectId sourceAccount) {
         requireJob(state, claim);
+    }
+    @Override public List<SourceStockClaimLossOwner.ReleasedActivity> released(FrontierWorldState before,
+                                                                             ClaimAllocation claim) {
+        return List.of(new SourceStockClaimLossOwner.ReleasedActivity(requireJob(before, claim).workerId(),
+                Optional.empty(), java.util.OptionalLong.empty()));
     }
 
     @Override public FungibleForfeitureSettlement settle(FrontierWorldState before, List<ClaimAllocation> claims,

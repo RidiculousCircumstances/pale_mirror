@@ -12,7 +12,7 @@ final class ExtractionWorkPlanning {
         boolean work = state.extractionSites().deposits().values().stream()
                 .filter(deposit -> deposit.site().settlementId().equals(home))
                 .anyMatch(deposit -> demanded(state, home) && (ExtractionWorkPolicy.remaining(deposit)
-                        || ExtractionAreaPlanning.hasKnownExtension(state, deposit.site().id())));
+                        || ExtractionAreaPlanning.extensionAvailability(state, deposit.site().id()) != ExtractionAreaPlanning.Availability.NONE));
         return new SettlementStaffingPort.Demand(ResidentWorkKind.EXTRACTION, HumanCapability.EXTRACTION,
                 work ? rules.targetWorkers() : 0, work ? rules.minimumLocalStaff() : 0, rules.priority(),
                 state.extractionSites().work().values().stream().filter(job -> !job.terminal()

@@ -108,8 +108,8 @@ export function validateScenario(scenario) {
     throw new Error('assertNoServerTickStallDuringIngress must be true when declared');
   }
   if (scenario.isolation !== undefined && (!scenario.isolation || scenario.isolation.mode !== 'disposable_lite'
-      || !Number.isInteger(scenario.isolation.seed) || scenario.isolation.seed < -2_147_483_648 || scenario.isolation.seed > 2_147_483_647)) {
-    throw new Error('isolation must declare disposable_lite with a signed 32-bit seed');
+      || !Number.isSafeInteger(scenario.isolation.seed))) {
+    throw new Error('isolation must declare disposable_lite with an exactly represented integer seed');
   }
   if (scenario.server?.viewDistance !== undefined && (!Number.isInteger(scenario.server.viewDistance)
       || scenario.server.viewDistance < 2 || scenario.server.viewDistance > 32)) {

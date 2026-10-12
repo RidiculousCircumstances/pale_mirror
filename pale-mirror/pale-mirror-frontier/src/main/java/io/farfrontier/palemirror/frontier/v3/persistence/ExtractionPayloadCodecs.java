@@ -13,7 +13,7 @@ final class ExtractionPayloadCodecs {
             var value = (ExtractionGeologyInvalidated) payload;
             FrontierWorldStateCodec.writePosition(out, value.position()); out.writeLong(value.stratumRevision());
         }, in -> new ExtractionGeologyInvalidated(FrontierWorldStateCodec.readPosition(in), in.readLong())),
-        codec("frontier.extraction_area_extended.v2", (out, payload) -> {
+        codec("frontier.extraction_area_extended.v3", (out, payload) -> {
             var value = (ExtractionAreaExtended) payload;
             out.writeUTF(value.siteId().value()); out.writeLong(value.expectedRevision()); out.writeInt(value.columns().size());
             for (var column : value.columns()) {
@@ -168,6 +168,9 @@ final class ExtractionPayloadCodecs {
             case io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWorkDecision.Finished finished -> {
                 out.writeByte(3); ActorExecutionStateCodec.writeId(out, finished.execution());
             }
+            case io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWorkDecision.StorePart part -> {
+                out.writeByte(4); ActorExecutionStateCodec.writeId(out, part.execution());
+            }
         }
     }
     private static java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWorkDecision> readDecision(DataInputStream in) throws IOException {
@@ -184,6 +187,7 @@ final class ExtractionPayloadCodecs {
                     ActorExecutionStateCodec.readId(in), new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),
                     ShipmentStateCodec.endpoint(in), PedestrianRouteReceiptCodec.read(in)));
             case 3 -> java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWorkDecision.Finished(ActorExecutionStateCodec.readId(in)));
+            case 4 -> java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWorkDecision.StorePart(ActorExecutionStateCodec.readId(in)));
             default -> throw new IllegalArgumentException("unknown extraction selected-decision wire tag");
         };
     }

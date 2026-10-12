@@ -27,6 +27,19 @@ public final class ExtractionSourceCustody {
         var lease = state.replicaCustody().custodyByScope().get(region.scopeId());
         return lease != null && lease.live();
     }
+    /** A region version cannot change while another exact block/hand receipt is unresolved.
+     * This is admission availability, not permission to release or replay an existing intent. */
+    public static boolean mutationAvailable(ExtractionSiteState sites, ExtractionWork job) {
+        if (!job.equals(sites.work().get(job.id())) || job.phase() != ExtractionWork.Phase.EXTRACT)
+            throw new IllegalArgumentException("source mutation availability lacks its current extraction owner");
+        if (job.pending().isPresent()) return false;
+        var layout = sites.deposits().get(job.siteId()).site().layout();
+        var source = layout.require(job.target().orElseThrow().key().cell()).source();
+        var region = new ExtractionRegion(job.siteId(), Math.floorDiv(source.x(), 16), Math.floorDiv(source.z(), 16));
+        return sites.work().values().stream().noneMatch(other -> other.siteId().equals(job.siteId())
+                && other.pending().orElse(null) instanceof ExtractionPhysicalStep.BlockWork
+                && region.contains(layout.require(other.target().orElseThrow().key().cell()).source()));
+    }
     public static PhysicalReplicaCustodyState apply(FrontierWorldState state, SubjectId subject,
             ExtractionSourceBoundary event, long canonicalRevision) {
         var region = event.region(); region.cells(state.extractionSites());

@@ -68,6 +68,7 @@ public final class ProductionResourceCustody {
     }
 
     public static FrontierWorldState release(FrontierWorldState state, SubjectId accountId, long epoch) {
+        var inventory = state.inventory().retainContainerLayout(accountId, epoch);
         FungibleResourceLedger resources = state.inventory().fungibleResources().releaseBindings(accountId, epoch);
         Map<SubjectId, ProductionJob> jobs = new LinkedHashMap<>(state.productionJobs());
         var intents = new LinkedHashMap<>(state.physicalIntents());
@@ -93,7 +94,7 @@ public final class ProductionResourceCustody {
             jobs.put(job.id(), job.withInputHold(new ProductionInputHold.FungibleCold(bound.itemId(), accountId, bound.claimId(), bound.inputLots())));
         }
         return state.withChanges(FrontierWorldStateUpdate.begin()
-                .inventory(state.inventory().withFungibleResources(resources)).productionJobs(jobs)
+                .inventory(inventory.withFungibleResources(resources)).productionJobs(jobs)
                 .physicalIntents(intents).fencedRecovery(recovery));
     }
 

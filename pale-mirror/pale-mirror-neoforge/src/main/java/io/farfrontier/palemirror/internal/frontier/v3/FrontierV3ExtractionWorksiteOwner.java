@@ -50,6 +50,11 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
     @Override public WorksiteBlock current(FrontierWorldState state, WorksiteBlock declaration) {
         return ExtractionWorksiteBlocks.current(state.extractionSites().deposits().get(declaration.key().owner()), declaration);
     }
+    @Override public Optional<WorksiteBlockTransition> reclassification(FrontierWorldState state,
+            WorksiteBlock predecessor, WorksiteBlock successor) {
+        return ExtractionWorksiteBlocks.reclassification(
+                state.extractionSites().deposits().get(successor.key().owner()), predecessor, successor);
+    }
     @Override public Optional<FrontierV3WorksiteBlockWitness> committedEffect(FrontierWorldState state, FrontierV3WorksiteBlockWitness witness) {
         if (witness.phase() != FrontierV3WorksiteBlockWitness.Phase.EFFECT_BLOCK_APPLIED
                 && witness.phase() != FrontierV3WorksiteBlockWitness.Phase.EFFECT_COMMITTED
@@ -107,6 +112,16 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
                         && witness.declaration().revision() == current.revision()
                         && FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position)).equals(current.knownBlock());
             });
+            if (complete) complete = declarations(state).stream().filter(cell -> cell.key().owner().equals(region.siteId())
+                    && cell.key().role() == WorksiteBlock.Role.NATURAL_TERRAIN && region.contains(cell.position()))
+                    .allMatch(cell -> {
+                        var position = FrontierV3WorksiteProjection.position(cell);
+                        if (!level.hasChunkAt(position)) return false;
+                        var witness = ledger.worksite(position); var current = current(state, cell);
+                        return witness != null && witness.phase() == FrontierV3WorksiteBlockWitness.Phase.SETTLED
+                                && witness.declaration().equals(current)
+                                && FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position)).equals(current.block());
+                    });
             if (complete) {
                 submit(runtime, new ExtractionSourceBoundary(region, ExtractionSourceBoundary.Operation.CONFIRM,
                         lease.authorityEpoch(), lease.expectedReplicaRevision(), ExtractionSourceCustody.fingerprint(state.extractionSites(), region)));
@@ -132,7 +147,7 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
                     new WorksiteBlock(new WorksiteBlock.Key(family(), region.siteId(), WorksiteBlock.Role.RESOURCE, cell.id()),
                             cell.source(), 1, cell.definition().before()));
             var position = FrontierV3WorksiteProjection.position(declaration);
-            var witness = ledger.worksite(position);
+            var witness = FrontierV3WorksiteProjection.alignDeclaration(ledger, state, declaration);
             if (!FrontierV3WorksiteBlockWitness.permitsProjectionWithdrawal(witness, declaration)) return;
             if (chunk != null && witness != null && !FrontierV3MinecraftBlockExtraction.describe(chunk.getBlockState(position))
                     .equals(witness.declaration().block())) return;

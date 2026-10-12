@@ -50,6 +50,7 @@ public final class KnownServiceExitNavigation {
             SubjectId depotId, SubjectId ownerId, SubjectId actorId, int phase, long generation, SurfaceAnchor start,
             boolean retainedOnly) {
         var stations = exitStations(state, settlementId, depotId, actorId, start);
+        var excluded = ServiceDestinationClaims.forImmediateExit(state, actorId);
         for (int offset = 0; offset < stations.size(); offset += MovementOrder.MAX_LEGAL_STATIONS) {
             var batch = stations.subList(offset, Math.min(stations.size(), offset + MovementOrder.MAX_LEGAL_STATIONS));
             var order = new MovementOrder(ownerId, actorId, phase, generation, batch,
@@ -58,7 +59,7 @@ public final class KnownServiceExitNavigation {
                 var route = pathFrom(state, settlementId, depotId, order, start, retainedOnly);
                 var boundary = ServiceAccessCoordinator.boundary(state, depotId);
                 for (int index = 0; index < route.size(); index++) {
-                    if (boundary.cleared(route.get(index).standingBody()))
+                    if (boundary.cleared(route.get(index).standingBody()) && !excluded.contains(route.get(index)))
                         return List.copyOf(route.subList(0, index + 1));
                 }
                 throw new IllegalArgumentException("service exit route never clears its declared boundary");

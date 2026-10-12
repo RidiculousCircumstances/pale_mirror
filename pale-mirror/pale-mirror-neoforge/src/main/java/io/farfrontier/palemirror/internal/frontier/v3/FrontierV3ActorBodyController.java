@@ -38,11 +38,20 @@ final class FrontierV3ActorBodyController {
                         FrontierV3ActorOwnerBinding binding, List<SurfaceAnchor> surfaces,
                         FrontierV3NavigationScope scope,
                         BiFunction<ServerLevel, BlockPos, BlockPos> standing,
-                        NewBodyProjection projection) {
+                        java.util.function.Predicate<SurfaceAnchor> placementPermission,
+                        NewBodyProjection projection,
+                        java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.BodyPosition> retainedSpatialPose) {
+        BirthRequest(FrontierV3ActorCarrierComposition.InventoryEntry requester,
+                     FrontierV3ActorOwnerBinding binding, List<SurfaceAnchor> surfaces,
+                     FrontierV3NavigationScope scope, BiFunction<ServerLevel, BlockPos, BlockPos> standing,
+                     java.util.function.Predicate<SurfaceAnchor> placementPermission, NewBodyProjection projection) {
+            this(requester, binding, surfaces, scope, standing, placementPermission, projection, java.util.Optional.empty());
+        }
         BirthRequest {
             FrontierV3ActorCarrierComposition.requireRole(requester, FrontierV3ActorCarrierComposition.Role.ADOPTER);
             Objects.requireNonNull(binding); Objects.requireNonNull(scope);
-            Objects.requireNonNull(standing); Objects.requireNonNull(projection);
+            Objects.requireNonNull(standing); Objects.requireNonNull(placementPermission); Objects.requireNonNull(projection);
+            Objects.requireNonNull(retainedSpatialPose);
             surfaces = List.copyOf(surfaces);
             if (surfaces.isEmpty()) throw new IllegalArgumentException("body birth requires an explicit placement zone");
             if (binding.declaration().representation() != FrontierV3ActorCarrierComposition.Representation.LIVE_BODY)
@@ -592,7 +601,25 @@ final class FrontierV3ActorBodyController {
         Mob body = FrontierV3ActorCarrierFactory.create(
                 FrontierV3ActorCarrierComposition.InventoryEntry.ACTOR_BODY, level, declaration,
                 state.actorLocations().get(declaration.actorId()).condition());
-        var placement = FrontierV3BodyPlacement.select(level, body, request.surfaces(), request.scope(), request.standing());
+        var surfaces = request.surfaces();
+        var permission = request.placementPermission();
+        if (admission == Admission.RECONSTRUCTION && request.retainedSpatialPose().isPresent()) {
+            var pose = request.retainedSpatialPose().orElseThrow();
+            if (!state.actorLocations().get(declaration.actorId()).body().equals(pose)) return Result.CONFLICT;
+            var contact = reconstructionContact(state, pose);
+            if (contact.isPresent() && surfaces.getFirst().equals(pose.supportingSurface())) {
+                var grounded = contact.orElseThrow();
+                surfaces = java.util.stream.Stream.concat(java.util.stream.Stream.of(grounded),
+                        surfaces.stream().skip(1)).distinct().toList();
+                var original = permission;
+                // Vertical settling of a fenced absent body is physical placement,
+                // not a new task station or semantic goal arrival. The owner still
+                // grants its original pose, while its hard scope bounds the contact.
+                permission = surface -> original.test(surface.equals(grounded) ? pose.supportingSurface() : surface);
+            }
+        }
+        var placement = FrontierV3BodyPlacement.select(level, body, surfaces, request.scope(),
+                request.standing(), permission);
         if (placement.isEmpty()) return Result.DEFERRED;
         var point = FrontierV3SemanticMovement.point(level, placement.orElseThrow());
         body.setPos(point.x, point.y, point.z);
@@ -626,6 +653,34 @@ final class FrontierV3ActorBodyController {
         // false, or throw if that absence is not provable. A canceled, uncreated insertion
         // is retryable, not a family conflict. Unknown outcomes remain durable and fenced.
         return added ? Result.APPLIED : Result.DEFERRED;
+    }
+
+    /** Known same-column contact only; never relocate a live actor or manufacture missing-body authority. */
+    static java.util.Optional<SurfaceAnchor> reconstructionContact(FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.model.BodyPosition pose) {
+        return reconstructionContact(pose,
+                io.farfrontier.palemirror.frontier.v3.model.KnownPedestrianRouteKnowledge.forFrontier(state).geometry());
+    }
+    static java.util.Optional<SurfaceAnchor> reconstructionContact(
+            io.farfrontier.palemirror.frontier.v3.model.BodyPosition pose,
+            io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry geometry) {
+        var ground = geometry.supportAt(pose.x(), pose.z());
+        // One legal vertical settling step; a larger gap, unknown land or upward
+        // obstruction needs observation/reconciliation rather than a spawn fallback.
+        return ground != null && ground.x() == pose.x() && ground.z() == pose.z() && ground.y() == pose.y() - 2
+                ? java.util.Optional.of(ground) : java.util.Optional.empty();
+    }
+
+    /** Whole-set recovery preflight uses the same common admission and exact pending ticket. */
+    static boolean resumableAdmission(ServerLevel level, FrontierWorldState state, FrontierV3ActorOwnerBinding binding) {
+        var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        var ticket = FrontierV3BodyInsertionJournal.get(level, state.bootstrap().worldId(), binding.declaration().actorId());
+        if (ticket != null) return ticket.binding().equals(binding) && ticket.current(ledger)
+                && recognizesDeclaration(state, binding.declaration())
+                && ActorBodyAuthority.require(state, ActorBodyAuthority.current(state, binding.declaration().actorId())).phase() == FencedRecoveryPhase.PREPARED
+                && level.getEntity(binding.declaration().entityId()) == null;
+        var decision = admission(state, binding, ledger, level.getEntity(binding.declaration().entityId()) != null);
+        return decision == Admission.FIRST || decision == Admission.RECONSTRUCTION;
     }
 
     /** Exact physical incarnation plus durable history, never UUID absence alone. */

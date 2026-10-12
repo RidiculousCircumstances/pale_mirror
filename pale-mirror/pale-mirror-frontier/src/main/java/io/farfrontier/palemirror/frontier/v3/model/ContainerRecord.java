@@ -9,12 +9,14 @@ import java.util.Optional;
 public record ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount,
                               ContainerPurpose purpose,
                               Optional<ProductionStationSpec> productionStation,
-                              Optional<ResourceStoragePolicy> storage) {
+                              Optional<ResourceStoragePolicy> storage,
+                              FungibleContainerLayout fungibleLayout) {
     public ContainerRecord {
         Objects.requireNonNull(id, "container id"); Objects.requireNonNull(ownerId, "container owner");
         productionStation = Objects.requireNonNull(productionStation, "production station declaration");
         Objects.requireNonNull(purpose, "container purpose");
         storage = Objects.requireNonNull(storage, "explicit optional warehouse capability");
+        Objects.requireNonNull(fungibleLayout, "retained container placement");
         if (storage.isPresent() && productionStation.isPresent())
             throw new IllegalArgumentException("production station cannot be an ordinary warehouse");
         storage.ifPresent(policy -> {
@@ -27,10 +29,21 @@ public record ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount,
                 != storage.map(policy -> policy.endpoint() instanceof ShipmentEndpoint.Storage).orElse(false))
             throw new IllegalArgumentException("resource storage requires its complete ordinary access declaration");
         if (slotCount <= 0 || slotCount > 54) throw new IllegalArgumentException("container slot count must be 1..54");
+        if (fungibleLayout.slots().keySet().stream().anyMatch(slot -> slot >= slotCount))
+            throw new IllegalArgumentException("retained placement targets a slot outside this container");
         productionStation.ifPresent(station -> {
             if (!station.containerId().equals(id) || station.inputSlot() >= slotCount || station.outputSlot() >= slotCount)
                 throw new IllegalArgumentException("production station does not own its declared bounded container");
         });
+    }
+
+    public ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount, ContainerPurpose purpose,
+                           Optional<ProductionStationSpec> productionStation, Optional<ResourceStoragePolicy> storage) {
+        this(id, ownerId, slotCount, purpose, productionStation, storage, FungibleContainerLayout.empty());
+    }
+
+    public ContainerRecord withFungibleLayout(FungibleContainerLayout layout) {
+        return new ContainerRecord(id, ownerId, slotCount, purpose, productionStation, storage, layout);
     }
 
     public ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount, ContainerPurpose purpose,
@@ -39,7 +52,7 @@ public record ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount,
     }
 
     public ContainerRecord withStorage(ResourceStoragePolicy policy) {
-        return new ContainerRecord(id, ownerId, slotCount, purpose, productionStation, Optional.of(policy));
+        return new ContainerRecord(id, ownerId, slotCount, purpose, productionStation, Optional.of(policy), fungibleLayout);
     }
 
     public ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount) {

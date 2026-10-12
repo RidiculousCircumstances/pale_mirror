@@ -22,6 +22,10 @@ public sealed interface ExtractionWorkDecision {
     record Finished(ActorExecutionId execution) implements ExtractionWorkDecision {
         public Finished { requireExecution(execution); }
     }
+    /** Settle a held part before another selection, without ending the site mandate. */
+    record StorePart(ActorExecutionId execution) implements ExtractionWorkDecision {
+        public StorePart { requireExecution(execution); }
+    }
     private static void requireExecution(ActorExecutionId execution) {
         if (Objects.requireNonNull(execution).activityKind() != ActorActivityKind.EXTRACTION)
             throw new IllegalArgumentException("extraction choice has a foreign execution declaration");

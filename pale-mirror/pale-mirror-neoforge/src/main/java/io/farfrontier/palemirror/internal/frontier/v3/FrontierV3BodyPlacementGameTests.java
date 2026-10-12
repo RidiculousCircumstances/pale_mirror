@@ -58,6 +58,24 @@ public final class FrontierV3BodyPlacementGameTests {
         helper.assertTrue(selected.surface().filter(side::equals).isPresent(), "an occupied exact placement selects a connected free candidate: " + selected.rejections());
         helper.assertValueEqual(candidate.position(), initialPose, "successful selection is evidence, not relocation");
         helper.assertTrue(level.getEntity(candidate.getUUID()) == null, "selection cannot publish a physical body or acquire custody");
+        var permissions = new java.util.ArrayList<SurfaceAnchor>();
+        try {
+            FrontierV3BodyPlacement.assess(level, candidate, List.of(exact, side), scope,
+                    FrontierV3StandingPosition::aboveExactFloor, surface -> {
+                        permissions.add(surface);
+                        throw new io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable(
+                                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
+                                "placement dependency");
+                    });
+            throw new AssertionError("pending permission cannot admit a body");
+        } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable pending) {
+            helper.assertValueEqual(pending.status(),
+                    io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
+                    "pending owner proof retains its exact typed wait");
+        }
+        helper.assertValueEqual(permissions, List.of(side), "proof is requested only for the physically usable candidate");
+        helper.assertValueEqual(candidate.position(), initialPose, "a pending proof restores the unpublished prototype");
+        helper.assertTrue(level.getEntity(candidate.getUUID()) == null, "pending proof cannot insert a body");
         for (int z = 1; z <= 5; z++) for (int y = 1; y <= 2; y++)
             level.setBlock(helper.absolutePos(new BlockPos(3, y, z)), Blocks.STONE.defaultBlockState(), 3);
         var disconnected = FrontierV3BodyPlacement.assess(level, candidate, List.of(exact, side), scope, FrontierV3StandingPosition::aboveExactFloor);
@@ -76,6 +94,14 @@ public final class FrontierV3BodyPlacementGameTests {
         occupant.discard(); second.discard();
         helper.assertTrue(FrontierV3BodyPlacement.select(level, candidate, List.of(exact, side), scope,
                 FrontierV3StandingPosition::aboveExactFloor).filter(exact::equals).isPresent(), "the exact placement remains preferred once free");
+        permissions.clear();
+        helper.assertTrue(FrontierV3BodyPlacement.assess(level, candidate, List.of(exact, side), scope,
+                FrontierV3StandingPosition::aboveExactFloor, surface -> {
+                    permissions.add(surface);
+                    if (!surface.equals(exact)) throw new AssertionError("a safe exact body cannot plan an unused alternative");
+                    return true;
+                }).surface().filter(exact::equals).isPresent(), "safe exact placement is independent of alternative planning");
+        helper.assertValueEqual(permissions, List.of(exact), "only the chosen exact permission is consulted");
         helper.assertValueEqual(candidate.position(), retainedPose, "even successful selection cannot place or teleport a body");
         candidate.discard(); helper.succeed();
     }

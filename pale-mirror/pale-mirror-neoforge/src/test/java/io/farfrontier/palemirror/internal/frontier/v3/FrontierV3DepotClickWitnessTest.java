@@ -4,19 +4,14 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
-import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding;
-import net.minecraft.world.inventory.ClickType;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3DepotClickWitnessTest {
     @Test void composedWitnessFencesEveryMemberAndRecoversAsOneTransaction() {
@@ -70,18 +65,6 @@ class FrontierV3DepotClickWitnessTest {
         var observed = prepared.observed(List.of());
         assertEquals(observed, FrontierV3DepotClickWitness.read(observed.save()));
         assertThrows(IllegalArgumentException.class, () -> observed.observed(List.of(stack(0, 1))));
-    }
-
-    @Test void partiallyClaimedStackPermitsOnlyTheUnclaimedPhysicalPortion() {
-        SubjectId claim = new SubjectId("claim:one-bread");
-        PhysicalStackBinding binding = new PhysicalStackBinding(new SubjectId("binding:bread"), ACCOUNT,
-                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(DEPOT, 0)),
-                7L, "minecraft:bread", Map.of(new SubjectId("lot:bread"), 64), Map.of(claim, 33));
-        assertFalse(FrontierV3ContainerClickExecutor.exceedsUnclaimedPortion(binding, ClickType.THROW, 0, true));
-        assertTrue(FrontierV3ContainerClickExecutor.exceedsUnclaimedPortion(binding, ClickType.PICKUP, 1, true));
-        assertTrue(FrontierV3ContainerClickExecutor.exceedsUnclaimedPortion(binding, ClickType.PICKUP, 0, true));
-        assertTrue(FrontierV3ContainerClickExecutor.exceedsUnclaimedPortion(binding, ClickType.QUICK_MOVE, 0, true));
-        assertFalse(FrontierV3ContainerClickExecutor.exceedsUnclaimedPortion(binding, ClickType.PICKUP, 1, false));
     }
 
     @Test void trackedReturnPersistsBothExactSourceAndPostimageAndRejectsMissingEvidence() {

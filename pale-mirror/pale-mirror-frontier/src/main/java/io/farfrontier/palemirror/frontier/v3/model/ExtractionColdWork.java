@@ -45,20 +45,27 @@ public final class ExtractionColdWork {
             if (job.phase() != ExtractionWork.Phase.SELECT_SOURCE)
                 throw new IllegalArgumentException("next mining source requires its retained selection boundary");
             var decision = event.decision().orElseThrow();
-            Optional<ExtractionTarget> target;
+            ExtractionWork next;
             if (decision instanceof ExtractionWorkDecision.Source selected) {
                 if (!ExtractionWorkPolicy.requested(state, job))
                     throw new IllegalArgumentException("mining selected source has a withdrawn mandate");
                 ExtractionWorkTargets.requireSelection(state, job, selected);
-                target = Optional.of(selected.target());
+                var kind = site.layout().require(selected.target().key().cell()).definition().coldOutput().getFirst().itemKind();
+                if (!kind.equals(job.outputKind()) && ExtractionWorkAuthority.carried(state, job) != 0)
+                    throw new IllegalArgumentException("new mining resource part would mix an undelivered held cargo");
+                next = job.selectSource(selected.target(), kind);
+            } else if (decision instanceof ExtractionWorkDecision.StorePart) {
+                if (ExtractionWorkAuthority.carried(state, job) == 0)
+                    throw new IllegalArgumentException("empty mining cargo cannot authorize a part delivery");
+                next = job.transition(ExtractionWork.Phase.STORE, Optional.empty());
             } else {
                 if (!ExtractionWorkPolicy.finished(state, job))
                     throw new IllegalArgumentException("temporarily unavailable mining frontier is not completion");
-                target = Optional.empty();
+                next = job.transition(ExtractionWorkAuthority.carried(state, job) > 0
+                        ? ExtractionWork.Phase.STORE : ExtractionWork.Phase.RETURN_TOOL, Optional.empty());
             }
             return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replaceWork(
-                    job, job.transition(target.isPresent() ? ExtractionWork.Phase.EXTRACT
-                            : ExtractionWorkAuthority.carried(state, job) > 0 ? ExtractionWork.Phase.STORE : ExtractionWork.Phase.RETURN_TOOL, target))));
+                    job, next)));
         }
         if (event.operation() == ExtractionWorkProgressed.Operation.SELECT_REACHABLE) {
             if (job.phase() != ExtractionWork.Phase.EXTRACT)
@@ -114,6 +121,8 @@ public final class ExtractionColdWork {
                     throw new IllegalArgumentException("miner does not hold its admitted tool");
                 var deposit = state.extractionSites().deposits().get(job.siteId());
                 var target = job.target().orElseThrow(); var cell = site.layout().require(target.key().cell());
+                if (!ExtractionWorkSafety.available(state, deposit, cell))
+                    throw new IllegalArgumentException("mining effect would remove an occupied support or retained exit");
                 var effect = BlockExtraction.prepareKnown("extraction:" + job.id().value() + ":" + job.revision(), job.execution(),
                         cell.source(), cell.definition(), deposit.cells().get(cell.id()).knownBlock());
                 var output = effect.output().getFirst();

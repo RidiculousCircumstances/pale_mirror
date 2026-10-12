@@ -3,7 +3,6 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt;
-import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -135,19 +134,11 @@ public final class AmbientPlacementPolicy {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), resident.settlementId());
         List<SurfaceAnchor> result = new ArrayList<>(exact(state, lease));
         for (ServiceAccessPoint point : SettlementServiceAccessPoints.placementPoint(state, settlement.id(), lease.handoffBody()).stream().toList()) {
-            SettlementStructure depot = settlement.structures().stream().filter(value -> value.id().equals(point.facilityId())).findFirst().orElseThrow();
-            var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), List.of(
-                    new KnownPedestrianRouteKnowledge.Passage(depot, KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
+            // These are bounded geometric proposals, not admission proofs. The physical
+            // selector tries the retained body first and proves only a usable alternative.
             for (var surface : point.waitingSurfaces().stream().sorted(Comparator.comparingLong(
                     value -> distance(value, lease.handoffBody().supportingSurface()))).toList()) {
-                MovementOrder order = new MovementOrder(lease.actorId(), lease.actorId(), 0, lease.revision(),
-                        List.of(surface), TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-                try {
-                    knowledge.plannedPath(lease.handoffBody().supportingSurface(), order);
-                    if (!result.contains(surface)) result.add(surface);
-                } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
-                    if (unavailable.status() != PedestrianRouteResult.Status.NO_PATH) throw unavailable;
-                }
+                if (!result.contains(surface)) result.add(surface);
             }
         }
         return List.copyOf(result);

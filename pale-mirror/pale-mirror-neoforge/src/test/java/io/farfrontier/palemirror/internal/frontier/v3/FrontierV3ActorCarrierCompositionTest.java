@@ -21,6 +21,22 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3ActorCarrierCompositionTest {
+    @Test void reconstructionContactDistinguishesSpatialPoseFromKnownGroundWithoutHorizontalRelocation() {
+        var pose = new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(0, 65, 0);
+        var ground = io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor.at(0, 63, 0);
+        var geometry = new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry() {
+            public io.farfrontier.palemirror.frontier.v3.model.WorldBounds bounds() { return new io.farfrontier.palemirror.frontier.v3.model.WorldBounds(-8, -8, 16, 16); }
+            public io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor supportAt(int x, int z) { return ground; }
+            public boolean blocked(io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor surface) { return false; }
+        };
+        assertEquals(java.util.Optional.of(ground), FrontierV3ActorBodyController.reconstructionContact(pose, geometry));
+        assertTrue(FrontierV3ActorBodyController.reconstructionContact(new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(0, 64, 0), geometry).isEmpty(),
+                "a standing pose needs no alternate contact");
+        assertTrue(FrontierV3ActorBodyController.reconstructionContact(new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(0, 67, 0), geometry).isEmpty(),
+                "a larger unknown fall cannot turn into relocation permission");
+        assertTrue(FrontierV3ActorBodyController.reconstructionContact(new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(1, 65, 0), geometry).isEmpty(),
+                "the contact must retain the exact column, even from a malformed provider");
+    }
     @Test
     void commonReadinessCannotPromoteAnUnobservedOrStaleBody() {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:body-readiness"), 91L));

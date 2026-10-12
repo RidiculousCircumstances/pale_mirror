@@ -25,6 +25,71 @@ class ExtractionTerracesTest {
             next = next.extracted(id, next.cells().get(id).revision(), "fixture:prior-clearance-" + id);
         return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(next)));
     }
+    @Test void availableFrontChecksInteractionBeforeQuotaAndRetainsExitWhenLoweringNaturalLand() {
+        var sample = new io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockGeometry.Sample<>("stone", 1,
+                io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockGeometry.Sample.Permission.PUBLIC);
+        var station = SurfaceAnchor.at(0, 60, 0);
+        var selected = io.farfrontier.palemirror.frontier.v3.model.geometry.AdjacentExcavationPlanner.propose(List.of(station),
+                point -> Optional.of(sample), ignored -> true, ignored -> true, "stone"::equals, "stone"::equals, 1,
+                io.farfrontier.palemirror.frontier.v3.model.geometry.AdjacentExcavationPlanner.adjacentSelection(),
+                column -> column.floor().x() == 1);
+        assertEquals(1, selected.size()); assertEquals(1, selected.getFirst().floor().x());
+        var lower = SurfaceAnchor.at(1, 59, 0);
+        var current = Map.of(new TerrainColumn(1, 0), SurfaceAnchor.at(1, 60, 0), new TerrainColumn(0, 0), station);
+        assertTrue(io.farfrontier.palemirror.frontier.v3.model.geometry.WorkingSurfaceTransition.preservesAccess(lower, current,
+                ignored -> true, Set.of()));
+        assertFalse(io.farfrontier.palemirror.frontier.v3.model.geometry.WorkingSurfaceTransition.preservesAccess(lower, current,
+                ignored -> true, Set.of(SurfaceAnchor.at(1, 60, 0).support())));
+        assertFalse(io.farfrontier.palemirror.frontier.v3.model.geometry.WorkingSurfaceTransition.preservesAccess(lower,
+                Map.of(new TerrainColumn(1, 0), SurfaceAnchor.at(1, 60, 0), new TerrainColumn(0, 0), SurfaceAnchor.at(0, 61, 0)),
+                ignored -> true, Set.of()), "lowering may not turn an existing exit into a two-block wall");
+    }
+    @Test void grayboxRisesUseTheSameNaturalDeclarationsForColdKnowledgeAndPhysicalProjection() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:available-front-rises"),
+                20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r7")));
+        int rises = 0;
+        for (var quarry : state.extractionSites().deposits().values()) {
+            var above = quarry.site().layout().terrainSupports().keySet().stream().filter(point -> point.y() > 63).findFirst();
+            if (above.isEmpty()) continue;
+            rises++;
+            var point = above.orElseThrow();
+            var fact = ExtractionGroundKnowledge.forSite(state, quarry).at(point).orElseThrow();
+            var physical = ExtractionWorksiteBlocks.declared(quarry).stream().filter(cell -> cell.position().equals(point)).findFirst().orElseThrow();
+            assertEquals(WorksiteBlock.Role.NATURAL_TERRAIN, physical.key().role());
+            assertEquals(fact.block(), physical.block()); assertEquals("minecraft:stone", physical.block().kind());
+            assertTrue(KnownPedestrianRouteKnowledge.forFrontier(state).geometry().blocked(SurfaceAnchor.at(point.x(), 63, point.z())));
+            assertFalse(quarry.site().layout().fixedBlocks().containsKey(point));
+        }
+        assertEquals(3, rises);
+        var codec = new FrontierWorldStateCodec(); assertEquals(state, codec.decode(codec.encode(state)));
+    }
+    @Test void naturalContactReclassificationRequiresItsExactOwnerAndCurrentSourceDeclaration() {
+        var before = clearDeclared(initial()); var old = deposit(before);
+        ExtractionAreaExtended event = null;
+        FrontierWorldState after = null;
+        for (int step = 0; step < 20; step++) {
+            event = ExtractionAreaPlanning.proposal(before, old.site().id()).orElseThrow();
+            after = ExtractionAreaPlanning.apply(before, old.site().id(), event, 1000 + step);
+            var chosen = event.columns().stream().map(column -> column.floor().support().offset(0, 1, 0))
+                    .filter(old.site().layout().terrainSupports()::containsKey).findFirst();
+            if (chosen.isPresent()) {
+                var prior = ExtractionWorksiteBlocks.declared(old).stream().filter(cell -> cell.position().equals(chosen.orElseThrow())).findFirst().orElseThrow();
+                var next = ExtractionWorksiteBlocks.declared(deposit(after)).stream().filter(cell -> cell.position().equals(chosen.orElseThrow())).findFirst().orElseThrow();
+                assertEquals(WorksiteBlock.Role.NATURAL_TERRAIN, prior.key().role());
+                assertEquals(WorksiteBlock.Role.RESOURCE, next.key().role());
+                assertTrue(ExtractionWorksiteBlocks.reclassification(deposit(after), prior, next).isPresent());
+                assertTrue(ExtractionWorksiteBlocks.reclassification(deposit(after), new WorksiteBlock(prior.key(), prior.position(),
+                        prior.revision() + 1, prior.block()), next).isEmpty());
+                assertTrue(ExtractionWorksiteBlocks.reclassification(deposit(after), prior,
+                        new WorksiteBlock(new WorksiteBlock.Key(next.key().family(), new SubjectId("extraction:foreign"), next.key().role(), next.key().cell()),
+                            next.position(), next.revision(), next.block())).isEmpty());
+                assertEquals(before.inventory(), after.inventory());
+                return;
+            }
+            before = clearDeclared(after); old = deposit(before);
+        }
+        fail("no mutable natural contact was selected by the available front");
+    }
     @Test void courtesyPrefersNearbyPitFloorOverHorizontallyAdjacentHighRim() {
         var state = clearDeclared(initial());
         var quarry = deposit(state); var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state);
@@ -49,7 +114,7 @@ class ExtractionTerracesTest {
         assertEquals(Optional.of(floor), ServiceAreaDestinations.select(List.of(), actor, start, knowledge, Set.of(),
                 candidate -> candidate.equals(rim) || candidate.equals(floor)));
     }
-    @Test void lowerLandingsRequireWholeColumnPreparationAndRetainAllOldSupports() {
+    @Test void lowerLandingsRequireBodyClearanceWithoutStrippingTheRoofAndRetainHistory() {
         var before = clearDeclared(initial()); var old = deposit(before); var id = old.site().id();
         var event = ExtractionAreaPlanning.proposal(before, id).orElseThrow();
         var column = event.columns().stream().filter(c -> c.floor().y() < old.site().layout().storagePort().y()).findFirst().orElseThrow();
@@ -60,17 +125,10 @@ class ExtractionTerracesTest {
         assertEquals(0, ExtractionTerraceView.read(admitted, next).openDepth());
         var upper = next.site().layout().cells().stream().filter(c -> c.source().equals(column.floor().support().offset(0, 2, 0))).findFirst().orElseThrow();
         var lower = next.site().layout().cells().stream().filter(c -> c.source().equals(column.floor().support().offset(0, 1, 0))).findFirst().orElseThrow();
-        var clearedRoof = next;
         var roof = next.site().layout().cells().stream().filter(c -> c.source().x() == column.floor().x()
                 && c.source().z() == column.floor().z() && c.source().y() > upper.source().y())
                 .sorted(Comparator.comparingInt((ExtractionLayout.Cell cell) -> cell.source().y()).reversed()).toList();
-        assertFalse(roof.isEmpty(), "an exterior cut cannot leave its known roof and grass cap");
-        assertEquals("minecraft:dirt", roof.getFirst().definition().coldOutput().getFirst().itemKind());
-        for (var cell : roof) {
-            assertTrue(clearedRoof.available(Set.of()).contains(cell));
-            clearedRoof = clearedRoof.extracted(cell.id(), 1, "fixture:roof-" + cell.id());
-        }
-        next = clearedRoof;
+        assertTrue(roof.isEmpty(), "a two-block front must not mandate stripping a roof or grass cap");
         assertTrue(lower.prerequisites().contains(upper.id()));
         assertFalse(next.available(Set.of()).contains(lower));
         var clearedUpper = next.extracted(upper.id(), 1, "fixture:upper-clearance");
@@ -122,13 +180,27 @@ class ExtractionTerracesTest {
         assertTrue(ExtractionTerraceView.read(state, deposit(state)).openDepth() >= 3);
         assertEquals(initial().inventory(), state.inventory(), "declaration and fixture geometry are never resource receipts");
     }
-    @Test void actualKernelMiningOpensALowerLandingAndAccountsRealStoneBeforeRecovery() {
-        var initial = initial(); var site = deposit(initial).site();
+    @Test void actualKernelMiningOpensALowerLandingAndAccountsRealStoneBeforeRecovery() throws Exception {
+        var initial = clearDeclared(initial()); var site = deposit(initial).site();
+        var cfg = FrontierWorldRuntimeDefinition.configuration(initial.bootstrap());
+        var configuration = new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(cfg.worldId(), initial,
+                cfg.initialInstant(), cfg.commandPlanner(), cfg.scheduledPlanner(), cfg.reducer(), cfg.stateCodec(), cfg.projectionMapper(),
+                cfg.limits(), cfg.initialSchedules(), cfg.transactionCommitter(), cfg.stateValidator(), cfg.executionMetrics(), cfg.kernelQuarantineReporter());
         var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(
-                FrontierWorldRuntimeDefinition.configuration(initial.bootstrap()));
+                configuration);
         for (int boundary = 0; boundary < 6000 && ExtractionTerraceView.read(engine.canonicalState().state(),
                 engine.canonicalState().state().extractionSites().deposits().get(site.id())).openDepth() == 0; boundary++) {
             var current = engine.canonicalState().state(); var view = engine.executionView();
+            var occupied = new HashSet<SurfaceAnchor>();
+            for (var active : current.extractionSites().work().values()) {
+                if (!active.siteId().equals(site.id()) || active.target().isEmpty()) continue;
+                var station = current.extractionSites().deposits().get(site.id()).site().layout()
+                        .require(active.target().orElseThrow().key().cell()).workstation();
+                assertTrue(occupied.add(station), "different source cells cannot admit two workers to one standing place");
+                assertThrows(IllegalArgumentException.class, () -> ExtractionWorkTargets.requireStationAvailable(current,
+                        current.extractionSites().deposits().get(site.id()), new SubjectId("resident:competing-source-selection"),
+                        current.extractionSites().deposits().get(site.id()).site().layout().require(active.target().orElseThrow().key().cell())));
+            }
             var next = view.schedules().stream().filter(action -> !FrontierWorldRuntimeDefinition.scheduledHeld(current, action)).sorted().findFirst().orElseThrow();
             var result = engine.advanceTo(new SimInstant(Math.max(next.dueAt().ticks(), view.instant().ticks())),
                     new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(128, 1024));
@@ -138,10 +210,8 @@ class ExtractionTerracesTest {
         var end = engine.canonicalState().state(); var mined = end.extractionSites().deposits().get(site.id());
         assertTrue(ExtractionTerraceView.read(end, mined).openDepth() > 0, () -> "no lower landing at " + engine.executionView().instant());
         assertTrue(mined.cells().values().stream().filter(c -> c.disposition() == ExtractionDeposit.Disposition.EXTRACTED).count() > 64);
-        assertTrue(ProductionStockDemand.read(end, site.settlementId(), "minecraft:cobblestone").held() > 64);
-        assertTrue(end.inventory().fungibleResources().lots().values().stream().anyMatch(lot ->
-                lot.economicOwnerId().equals(site.settlementId()) && lot.itemKind().equals("minecraft:dirt") && lot.quantity() > 0),
-                "the cap's ordinary byproduct must not disappear or turn into cobblestone");
+        assertTrue(ProductionStockDemand.read(end, site.settlementId(), "minecraft:cobblestone").held() > 0,
+                "only actual new mining after the geometry fixture credits stone");
         assertEquals(end, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(end)));
     }
 }

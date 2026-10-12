@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "id": "live_hearthvale_player_stock_exit",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMAudit" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "inventoryConflicts": 0, "sceneConflicts": 0 } },
+      { "view": "resource", "id": "custody:container-6-depot", "expect": { "status": "ok" } }
+    ] },
+    { "type": "command", "command": "/gamemode creative" },
+    { "type": "command", "command": "/clear PMAudit" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "container", "id": "container:6-depot", "field": "position" } },
+      "offset": { "x": -2, "y": 0, "z": -2 }, "settleMs": 0, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:6-depot",
+      "expect": { "status": "ok", "surface": "ACTIVE", "custody": { "status": "ACQUIRED" } }, "timeoutMs": 60000 },
+    { "type": "open_container",
+      "position": { "diagnostic": { "view": "container", "id": "container:6-depot", "field": "position" } }, "timeoutMs": 15000 },
+    { "type": "inspect", "view": "resource", "id": "custody:container-6-depot" },
+    { "type": "quick_move_from_container", "item": "minecraft:cobblestone", "count": 64, "timeoutMs": 15000 },
+    { "type": "inspect", "view": "resource", "id": "custody:container-6-depot" },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:6-depot",
+      "expect": { "status": "ok", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" },
+        "custody": { "status": "ACQUIRED", "unresolvedReason": "" } }, "timeoutMs": 30000 },
+    { "type": "quick_move_from_inventory", "item": "minecraft:cobblestone", "count": 64, "timeoutMs": 15000 },
+    { "type": "inspect", "view": "resource", "id": "custody:container-6-depot" },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 7, "view": "container", "id": "container:6-depot",
+      "expect": { "status": "ok", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } },
+    { "after": 10, "view": "summary", "id": "", "expect": { "status": "ok", "inventoryConflicts": 0, "sceneConflicts": 0 } }
+  ],
+  "frames": [
+    { "after": 4, "name": "hearthvale-stone-before-exit", "presentation": "player" },
+    { "after": 7, "name": "hearthvale-stone-exited", "presentation": "player" },
+    { "after": 9, "name": "hearthvale-stone-returned", "presentation": "player" }
+  ]
+}

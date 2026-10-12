@@ -21,6 +21,58 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KnownPedestrianRouteKnowledgeTest {
+    @Test void authoredQuarryChestUsesTheSameDepartureGeometryAsDeclaredWarehouses() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:quarry-chest-departure"),
+                20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r6")));
+        var deposit = state.extractionSites().deposits().values().stream()
+                .filter(value -> value.site().settlementId().equals(new SubjectId("settlement:6"))).findFirst().orElseThrow();
+        var container = state.inventory().containers().get(deposit.site().containerId());
+        assertEquals(ContainerPurpose.EXTRACTIVE_STORAGE, container.purpose());
+        var endpoint = container.storage().orElseThrow().endpoint();
+        var start = new SurfaceAnchor(state.inventory().surfaces().get(container.id()).position());
+        var knowledge = ResourceStorageNavigation.forEndpoint(state, endpoint);
+        var route = knowledge.plannedBetween(start, endpoint.station());
+        assertEquals(start, route.getFirst());
+        assertEquals(endpoint.station(), route.getLast());
+        knowledge.requireRoute(route);
+        assertTrue(knowledge.geometry().blocked(start));
+        assertThrows(KnownPedestrianNavigation.RouteUnavailable.class, () -> knowledge.plannedBetween(endpoint.station(), start));
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        ResourceStorageNavigation.forEndpoint(codec.decode(codec.encode(state)), endpoint).requireRoute(route);
+    }
+
+    @Test void retainedContactCanLeaveAChestWithoutOpeningItAsATransitDestinationOrIgnoringDamage() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:raised-storage-departure"), 91L));
+        var home = state.bootstrap().settlements().getFirst();
+        var ground = KnownPedestrianGround.forFrontier(state).at(home.anchor().x() + 22, home.anchor().z() + 22);
+        var id = new SubjectId("container:raised-storage-departure");
+        var endpoint = new ShipmentEndpoint.Storage(home.id(), id, ground, Optional.empty(), ground);
+        var record = new ContainerRecord(id, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
+                Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+        var block = ground.support().offset(0, 1, 0);
+        var declared = new ResourceStorageDeclared(record, block).apply(state, home.id());
+        var start = new SurfaceAnchor(block);
+        var target = KnownPedestrianGround.forFrontier(declared).at(start.x() + 1, start.z());
+        var knowledge = ResourceStorageNavigation.forEndpoint(declared, endpoint);
+        var route = knowledge.plannedBetween(start, target);
+        assertEquals(List.of(start, target), route);
+        knowledge.requireRoute(route);
+        assertTrue(knowledge.geometry().blocked(start), "the departure exception cannot open the chest as a remote goal");
+        assertThrows(KnownPedestrianNavigation.RouteUnavailable.class, () -> knowledge.plannedBetween(target, start));
+        assertThrows(KnownPedestrianNavigation.RouteUnavailable.class, () -> knowledge.withTaskExclusions(java.util.Set.of(start))
+                .plannedBetween(start, target));
+        var obstruction = declared.recordPhysicalDelta(new PhysicalDelta(block.offset(0, 1, 0), PhysicalDeltaKind.UNKNOWN_SCAR,
+                Optional.empty(), Optional.empty(), "test:blocked-raised-body"));
+        assertThrows(KnownPedestrianNavigation.RouteUnavailable.class, () -> ResourceStorageNavigation.forEndpoint(obstruction, endpoint)
+                .plannedBetween(start, target));
+        var lost = declared.recordPhysicalDelta(new PhysicalDelta(block, PhysicalDeltaKind.UNKNOWN_SCAR,
+                Optional.empty(), Optional.empty(), "test:changed-raised-support"));
+        assertThrows(KnownPedestrianNavigation.RouteUnavailable.class, () -> ResourceStorageNavigation.forEndpoint(lost, endpoint)
+                .plannedBetween(start, target));
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        ResourceStorageNavigation.forEndpoint(codec.decode(codec.encode(declared)), endpoint).requireRoute(route);
+    }
+
     @Test void realStorageProviderPreservesUnrelatedPlanningButRecoveryStartsANewKnowledgeEpoch() throws Exception {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:regional-provider"), 91L));
         var home = state.bootstrap().settlements().getFirst();

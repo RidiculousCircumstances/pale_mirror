@@ -8,6 +8,58 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3WorksiteWitnessTest {
+    @Test void ownerCertifiedReclassificationRetainsPhysicalPreimageAndSurvivesLedgerHydration() {
+        var owner = new SubjectId("extraction:test"); var position = new BlockPosition(1, 64, 1);
+        var stone = new BlockExtraction.Block("minecraft:stone", Map.of());
+        var original = new BlockExtraction.Block("minecraft:dirt", Map.of());
+        var terrain = new WorksiteBlock(new WorksiteBlock.Key(CellMutationKey.OwnerFamily.EXTRACTIVE_SITE,
+                owner, WorksiteBlock.Role.NATURAL_TERRAIN, 7), position, 1, stone);
+        var resource = new WorksiteBlock(new WorksiteBlock.Key(CellMutationKey.OwnerFamily.EXTRACTIVE_SITE,
+                owner, WorksiteBlock.Role.RESOURCE, 100), position, 1, new BlockExtraction.Block("minecraft:air", Map.of()));
+        var ledger = FrontierV3GrayboxLedger.inMemory();
+        var prior = new FrontierV3WorksiteBlockWitness(terrain, original, FrontierV3WorksiteBlockWitness.Phase.SETTLED);
+        ledger.worksite(prior);
+        var proposed = new FrontierV3WorksiteBlockWitness(resource, original, FrontierV3WorksiteBlockWitness.Phase.SETTLED);
+        assertThrows(IllegalStateException.class, () -> ledger.worksite(proposed), "ordinary writes may not rekey provenance");
+        var rebound = ledger.reclassify(prior, new WorksiteBlockTransition(terrain, resource));
+        assertEquals(resource.key(), rebound.declaration().key());
+        assertEquals(stone, rebound.declaration().block(), "reclassification must not claim the successor's unwritten AIR postimage");
+        assertEquals(original, rebound.before());
+        assertEquals(FrontierV3WorksiteBlockWitness.Phase.SETTLED, rebound.phase());
+        var nativePosition = new net.minecraft.core.BlockPos(position.x(), position.y(), position.z());
+        var restored = FrontierV3GrayboxLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), null), null);
+        assertEquals(rebound, restored.worksite(nativePosition));
+        assertThrows(IllegalStateException.class, () -> restored.reclassify(prior, new WorksiteBlockTransition(terrain, resource)));
+        restored.worksite(new FrontierV3WorksiteBlockWitness(resource, stone, FrontierV3WorksiteBlockWitness.Phase.PREPARED));
+        assertEquals(FrontierV3WorksiteBlockWitness.Phase.PREPARED, restored.worksite(nativePosition).phase());
+    }
+    @Test void unresolvedOrStalePhysicalWitnessCannotCrossReclassification() {
+        var owner = new SubjectId("extraction:test"); var stone = new BlockExtraction.Block("minecraft:stone", Map.of());
+        var terrain = new WorksiteBlock(new WorksiteBlock.Key(CellMutationKey.OwnerFamily.EXTRACTIVE_SITE,
+                owner, WorksiteBlock.Role.NATURAL_TERRAIN, 7), new BlockPosition(1, 64, 1), 1, stone);
+        var resource = new WorksiteBlock(new WorksiteBlock.Key(CellMutationKey.OwnerFamily.EXTRACTIVE_SITE,
+                owner, WorksiteBlock.Role.RESOURCE, 100), terrain.position(), 1, stone);
+        var transition = new WorksiteBlockTransition(terrain, resource);
+        for (var phase : FrontierV3WorksiteBlockWitness.Phase.values()) {
+            if (phase == FrontierV3WorksiteBlockWitness.Phase.SETTLED) continue;
+            var effect = phase == FrontierV3WorksiteBlockWitness.Phase.EFFECT_BLOCK_APPLIED
+                    || phase == FrontierV3WorksiteBlockWitness.Phase.EFFECT_COMMITTED ? Optional.of("effect:1") : Optional.<String>empty();
+            var prior = new FrontierV3WorksiteBlockWitness(terrain, stone, phase, effect);
+            var ledger = FrontierV3GrayboxLedger.inMemory(); ledger.worksite(prior);
+            assertThrows(IllegalStateException.class, () -> ledger.reclassify(prior, transition), phase.name());
+            assertEquals(prior, ledger.worksite(new net.minecraft.core.BlockPos(1, 64, 1)));
+        }
+        var ledger = FrontierV3GrayboxLedger.inMemory();
+        var prior = new FrontierV3WorksiteBlockWitness(terrain, stone, FrontierV3WorksiteBlockWitness.Phase.SETTLED);
+        ledger.worksite(prior);
+        var stale = new WorksiteBlock(terrain.key(), terrain.position(), 2, stone);
+        assertThrows(IllegalStateException.class, () -> ledger.reclassify(prior, new WorksiteBlockTransition(stale, resource)));
+        assertThrows(IllegalArgumentException.class, () -> new WorksiteBlockTransition(terrain,
+                new WorksiteBlock(resource.key(), terrain.position().offset(1, 0, 0), 1, stone)));
+        assertThrows(IllegalArgumentException.class, () -> new WorksiteBlockTransition(terrain,
+                new WorksiteBlock(new WorksiteBlock.Key(resource.key().family(), new SubjectId("extraction:foreign"),
+                        resource.key().role(), resource.key().cell()), terrain.position(), 1, stone)));
+    }
     @Test void withdrawalAcceptsOnlyUnwrittenOrSettledOwnedProjectionNeverAmbiguousWritesOrEffects() {
         var key = new WorksiteBlock.Key(CellMutationKey.OwnerFamily.EXTRACTIVE_SITE, new SubjectId("extraction:test"), WorksiteBlock.Role.RESOURCE, 1);
         var stone = new BlockExtraction.Block("minecraft:stone", Map.of());

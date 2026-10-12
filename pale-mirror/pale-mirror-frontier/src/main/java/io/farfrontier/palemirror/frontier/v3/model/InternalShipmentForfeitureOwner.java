@@ -2,7 +2,8 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 /** Recognized source withdrawal releases only its internal promise, not title or treasury. */
 final class InternalShipmentForfeitureOwner implements FungibleClaimForfeitureOwner {
-    @Override public void validate(FrontierWorldState state, ClaimAllocation claim, FungibleResourceHandoffObserved observed) {
+    @Override public void validate(FrontierWorldState state, ClaimAllocation claim,
+                                   io.farfrontier.palemirror.frontier.v3.api.SubjectId sourceAccount) {
         if (claim.purpose() != ClaimPurpose.INTERNAL_LOGISTICS || !claim.claimantId().equals(claim.economicOwnerId()))
             throw new IllegalArgumentException("internal withdrawal has a foreign issuer");
         ShipmentStateSupport.requireSourceWithdrawal(state, claim.id());

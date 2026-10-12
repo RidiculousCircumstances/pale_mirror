@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "id": "live_quarry_available_front_recovery",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMAudit" },
+  "setup": [
+    { "type": "command", "command": "/gamemode creative" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "inventoryConflicts": 0, "sceneConflicts": 0 } },
+      { "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "expect": { "status": "ok", "result": { "geologyKnown": true, "productionRequested": true } } },
+      { "view": "process", "id": "work:extraction-14", "expect": { "status": "ok", "identity": { "worker": "resident:6-1", "entityId": "9b2e1380-0383-349c-86a6-4e8bf8498654" } } },
+      { "view": "process", "id": "shipment:internal/94f83fbc-a6bc-3282-8b0b-a9b3ecd41946", "expect": { "status": "ok", "identity": { "worker": "resident:6-24" }, "result": { "stage": "CARRYING", "remainingQuantity": 10 } } }
+    ] }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -77, "y": 64, "z": -4 }, "settleMs": 0 },
+    { "type": "wait_until_block", "position": { "x": -69, "y": 66, "z": 7 }, "block": "minecraft:stone", "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "work:extraction-14",
+      "expect": { "status": "ok", "lease": "HOT", "result": { "stage": "EXTRACT" } }, "timeoutMs": 90000 },
+    { "type": "look", "at": { "x": -73, "y": 61, "z": 3 } },
+    { "type": "inspect", "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 64, "z": 480 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24",
+      "expect": { "status": "ok", "result": { "workersCold": true, "liveSourceRegions": 0 } }, "timeoutMs": 90000 },
+    { "type": "fast_forward", "ticks": 12000, "timeoutMs": 180000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -77, "y": 64, "z": -4 }, "settleMs": 0 },
+    { "type": "look", "at": { "x": -73, "y": 61, "z": 3 } },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "shipment:internal/94f83fbc-a6bc-3282-8b0b-a9b3ecd41946",
+      "expect": { "status": "ok", "identity": { "worker": "resident:6-24" }, "result": { "stage": "DELIVERED", "remainingQuantity": 0, "pendingPhysicalEffect": false } }, "timeoutMs": 180000 },
+    { "type": "inspect", "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24" },
+    { "type": "inspect", "view": "resident_life", "id": "resident:6-10" },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 3, "view": "process", "id": "work:extraction-14", "expect": { "status": "ok", "lease": "HOT", "result": { "stage": "EXTRACT" } } },
+    { "after": 11, "view": "process", "id": "shipment:internal/94f83fbc-a6bc-3282-8b0b-a9b3ecd41946", "expect": { "status": "ok", "identity": { "worker": "resident:6-24" }, "result": { "stage": "DELIVERED", "remainingQuantity": 0, "pendingPhysicalEffect": false } } },
+    { "after": 12, "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "expect": { "status": "ok", "result": { "adjacentAreaMined": true } } },
+    { "after": 13, "view": "resident_life", "id": "resident:6-10", "expect": { "status": "ok", "life": "ALIVE", "nutrition": "NOURISHED" } },
+    { "after": 14, "view": "summary", "id": "", "expect": { "status": "ok", "inventoryConflicts": 0, "sceneConflicts": 0 } }
+  ],
+  "frames": [
+    { "after": 5, "name": "recovered-miners-and-available-front" },
+    { "after": 12, "name": "recovered-front-after-cold-return" }
+  ]
+}

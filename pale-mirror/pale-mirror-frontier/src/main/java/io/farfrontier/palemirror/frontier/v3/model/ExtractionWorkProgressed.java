@@ -22,7 +22,8 @@ public record ExtractionWorkProgressed(SubjectId jobId, long expectedRevision, O
         boolean selecting = operation == Operation.SELECT_SOURCE || operation == Operation.SELECT_REACHABLE || operation == Operation.SELECT_STORAGE;
         if (selecting != decision.isPresent() || decision.filter(value -> !value.execution().activityOwnerId().equals(jobId)
                 || switch (operation) {
-                    case SELECT_SOURCE -> !(value instanceof ExtractionWorkDecision.Source || value instanceof ExtractionWorkDecision.Finished);
+                    case SELECT_SOURCE -> !(value instanceof ExtractionWorkDecision.Source || value instanceof ExtractionWorkDecision.Finished
+                            || value instanceof ExtractionWorkDecision.StorePart);
                     case SELECT_REACHABLE -> !(value instanceof ExtractionWorkDecision.Source);
                     case SELECT_STORAGE -> !(value instanceof ExtractionWorkDecision.Storage);
                     default -> true;

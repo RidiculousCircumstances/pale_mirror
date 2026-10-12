@@ -104,12 +104,33 @@ class ExtractionAdmissionReplayTest {
                 ExtractionWorkProgressed.Operation.SELECT_SOURCE, Optional.of(selection));
         var codec = new FrontierWorldStateCodec(); var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
         assertEquals(sourceEvent, codecs.decode(sourceEvent.type(), codecs.encode(sourceEvent)));
+        var delivery = new ExtractionWorkProgressed(selecting.id(), selecting.revision(),
+                ExtractionWorkProgressed.Operation.SELECT_SOURCE, Optional.of(new ExtractionWorkDecision.StorePart(selecting.execution())));
+        assertEquals(delivery, codecs.decode(delivery.type(), codecs.encode(delivery)));
         try (var ignored = PedestrianRoutePlanning.bind((geometry, start, target) -> {
             fail("accepted source choice cannot query a planner"); return null;
         })) {
             var selected = ExtractionColdWork.apply(codec.decode(codec.encode(beforeSource)), selecting.id(), sourceEvent, done);
             assertEquals(Optional.of(selection.target()), selected.extractionSites().work().get(selecting.id()).target());
             assertEquals(beforeSource.inventory(), selected.inventory()); assertEquals(beforeSource.actorLocations(), selected.actorLocations());
+            var flushing = ExtractionColdWork.apply(codec.decode(codec.encode(beforeSource)), selecting.id(), delivery, done);
+            var retained = flushing.extractionSites().work().get(selecting.id());
+            assertEquals(ExtractionWork.Phase.STORE, retained.phase());
+            assertEquals(selecting.execution(), retained.execution());
+            assertEquals(selecting.toolId(), retained.toolId());
+            assertEquals(beforeSource.inventory(), flushing.inventory());
+            assertEquals(flushing, codec.decode(codec.encode(flushing)));
+            assertThrows(IllegalArgumentException.class, () -> ExtractionColdWork.apply(flushing, selecting.id(), delivery, done));
+            var atStorage = flushing.withActorBody(actor, retained.storageTarget().station().standingBody());
+            var rejected = ExtractionColdWork.apply(atStorage, retained.id(), new ExtractionWorkProgressed(
+                    retained.id(), retained.revision(), ExtractionWorkProgressed.Operation.STORE), done);
+            var empty = rejected.extractionSites().work().get(retained.id());
+            assertEquals(ExtractionWork.Phase.SELECT_SOURCE, empty.phase());
+            assertEquals(0, ExtractionWorkAuthority.carried(rejected, empty));
+            assertEquals(retained.toolId(), empty.toolId());
+            assertThrows(IllegalArgumentException.class, () -> ExtractionColdWork.apply(rejected, empty.id(),
+                    new ExtractionWorkProgressed(empty.id(), empty.revision(), ExtractionWorkProgressed.Operation.SELECT_SOURCE,
+                            Optional.of(new ExtractionWorkDecision.StorePart(empty.execution()))), f.tick()));
         }
         // Isolated legal initial boundary: the retained real cargo must now be stored.
         var storing = job.transition(ExtractionWork.Phase.STORE, Optional.empty());

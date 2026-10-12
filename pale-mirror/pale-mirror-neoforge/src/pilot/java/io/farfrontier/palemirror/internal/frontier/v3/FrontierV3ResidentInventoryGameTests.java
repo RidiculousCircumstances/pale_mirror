@@ -23,6 +23,44 @@ public final class FrontierV3ResidentInventoryGameTests {
     private FrontierV3ResidentInventoryGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-scene-body-lifetime", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void independentFoodChangeCannotInvalidateExactWorkCargoReceipt(GameTestHelper helper) {
+        var state = io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState.initial(
+                io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper.create(new WorldId("frontier:independent-carry"), 91L));
+        var actor = new SubjectId("resident:1-1"); var owner = new SubjectId("settlement:1");
+        var wheat = new SubjectId("lot:independent-work"); var bread = new SubjectId("lot:independent-food");
+        var cargo = new SubjectId("custody:independent-work"); var food = new SubjectId("custody:independent-food");
+        var resources = io.farfrontier.palemirror.frontier.v3.model.FungibleResourceLedger.empty();
+        resources = resources.issue(new io.farfrontier.palemirror.frontier.v3.model.ResourceLot(wheat, owner,
+                "minecraft:wheat", 32, "fixture", java.util.List.of()),
+                new io.farfrontier.palemirror.frontier.v3.model.CustodyAccount(cargo,
+                    new io.farfrontier.palemirror.frontier.v3.model.ResourceCustody.Actor(actor), java.util.Map.of(wheat, 32), java.util.Map.of(),
+                    java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.model.ActorItemSlot.Hand(
+                        io.farfrontier.palemirror.frontier.v3.model.ActorContainerItemOrder.Hand.OFF))));
+        resources = resources.issue(new io.farfrontier.palemirror.frontier.v3.model.ResourceLot(bread, owner,
+                "minecraft:bread", 2, "fixture", java.util.List.of()),
+                new io.farfrontier.palemirror.frontier.v3.model.CustodyAccount(food,
+                    new io.farfrontier.palemirror.frontier.v3.model.ResourceCustody.Actor(actor), java.util.Map.of(bread, 2), java.util.Map.of(),
+                    java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.model.ActorItemSlot.Pocket(0))));
+        state = state.withInventory(state.inventory().withFungibleResources(resources));
+        var body = managed(helper);
+        helper.assertTrue(FrontierV3ActorCarryProjection.prepareNew(state, actor, body), "prepare declared independent accounts");
+        resources = resources.destroy(food, java.util.Map.of(bread, 1), java.util.Map.of());
+        state = state.withInventory(state.inventory().withFungibleResources(resources));
+        body.getInventory().setItem(0, new ItemStack(Items.BREAD, 1));
+        helper.assertFalse(FrontierV3ActorCarryProjection.witnessed(state, actor, body), "whole-inventory receipt is now stale");
+        helper.assertTrue(FrontierV3ActorCarryProjection.witnessed(state, actor, cargo, body),
+                "unchanged wheat retains its exact prior provenance, not merely kind/count");
+        helper.assertFalse(FrontierV3ActorCarryProjection.witnessed(state, actor, food, body), "changed food cannot borrow wheat's receipt");
+        body.setItemSlot(net.minecraft.world.entity.EquipmentSlot.OFFHAND, new ItemStack(Items.WHEAT, 31));
+        helper.assertFalse(FrontierV3ActorCarryProjection.witnessed(state, actor, cargo, body), "real cargo mismatch still fails");
+        body.setItemSlot(net.minecraft.world.entity.EquipmentSlot.OFFHAND, new ItemStack(Items.WHEAT, 32));
+        FrontierV3ActorCarryProjection.rememberConfirmed(state, actor, body);
+        var restored = EntityType.VILLAGER.create(helper.getLevel()); restored.load(body.saveWithoutId(new CompoundTag()));
+        helper.assertTrue(FrontierV3ActorCarryProjection.witnessed(state, actor, restored), "confirmed successor receipt survives native save/load");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-body-lifetime", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void managedPocketAddressesSurviveConsumeUnloadAndReload(GameTestHelper helper) {
         var body = managed(helper);
         body.getInventory().setItem(0, new ItemStack(Items.BREAD, 1));

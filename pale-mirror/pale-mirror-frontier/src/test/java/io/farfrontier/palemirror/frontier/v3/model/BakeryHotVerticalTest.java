@@ -174,6 +174,16 @@ class BakeryHotVerticalTest {
                 1L, new PhysicalStackAddress.PlayerSlot(player, 0)).forfeitMovedClaims()
                 .withPlayerSaveFence(java.util.UUID.fromString("00000000-0000-0000-0000-000000000156"));
         assertTrue(FungibleClaimForfeitureStateSupport.supports(state, theft));
+        assertTrue(SourceStockClaimLoss.canDepart(state, work.sourceAccountId(), "minecraft:wheat", 64));
+        var loss = assertInstanceOf(FungibleStockDepartureObserved.class, FungibleContainerPlayerEdit.classify(
+                bound, work.sourceAccountId(), depot, task.ownerId(), 1, player, java.util.UUID.randomUUID(),
+                List.of(), SourceStockClaimLoss.admissibleClaims(state, work.sourceAccountId())));
+        var menuAfter = SourceStockClaimLoss.settle(state, loss);
+        FrontierReferenceClosure.validateTransition(state, menuAfter, List.of());
+        assertEquals(original.workerId(), menuAfter.productionJobs().get(original.id()).workerId());
+        assertEquals(BakeryWorkBlock.Reason.SOURCE_CHANGED,
+                menuAfter.productionJobs().get(original.id()).bakeryWork().orElseThrow().block().orElseThrow().reason());
+        assertEquals(menuAfter, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(menuAfter)));
         state = FungibleClaimForfeitureStateSupport.apply(state, theft);
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         assertEquals(original.workerId(), state.productionJobs().get(original.id()).workerId());

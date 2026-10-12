@@ -39,7 +39,7 @@ public record ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits, Ma
                     throw new IllegalArgumentException("extraction work has a stale source generation");
                 var outputs = deposit.site().layout().require(target.key().cell()).definition().coldOutput();
                 if (outputs.size() != 1 || !outputs.getFirst().itemKind().equals(job.outputKind()))
-                    throw new IllegalArgumentException("extraction target differs from its immutable output kind");
+                    throw new IllegalArgumentException("extraction target differs from its current resource part");
                 if (job.pending().orElse(null) instanceof ExtractionPhysicalStep.BlockWork step
                         && (!step.extraction().target().equals(deposit.site().layout().require(target.key().cell()).source())
                             || !step.extraction().definition().equals(deposit.site().layout().require(target.key().cell()).definition())))
@@ -50,9 +50,7 @@ public record ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits, Ma
     public static ExtractionSiteState empty() { return new ExtractionSiteState(Map.of()); }
     public void validate(io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrap bootstrap,
                          io.farfrontier.palemirror.frontier.v3.model.ExactInventory inventory) {
-        for (var position : geologicalExclusions.positions())
-            if (io.farfrontier.palemirror.frontier.v3.model.ExtractionTerrainFacts.at(bootstrap, position).isEmpty())
-                throw new IllegalArgumentException("geological exclusion has no declared baseline");
+        io.farfrontier.palemirror.frontier.v3.model.ExtractionTerrainFacts.validateExclusions(bootstrap, geologicalExclusions);
         var homes = bootstrap.settlements().stream().map(io.farfrontier.palemirror.frontier.v3.model.Settlement::id)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         for (var deposit : deposits.values()) {
@@ -106,7 +104,9 @@ public record ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits, Ma
                 || !expected.siteId().equals(next.siteId()) || !expected.toolId().equals(next.toolId())
                 || !expected.execution().actorId().equals(next.execution().actorId())
                 || !expected.toolReturnSlot().equals(next.toolReturnSlot()) || !expected.toolSource().equals(next.toolSource())
-                || !expected.outputKind().equals(next.outputKind())
+                || !expected.outputKind().equals(next.outputKind()) && !(expected.phase() == ExtractionWork.Phase.SELECT_SOURCE
+                    && next.phase() == ExtractionWork.Phase.EXTRACT
+                    && expected.selectSource(next.target().orElseThrow(), next.outputKind()).equals(next))
                 || !sameResourcePart(expected, next))
             throw new IllegalArgumentException("extraction continuation has a stale or changed retained relationship");
     }

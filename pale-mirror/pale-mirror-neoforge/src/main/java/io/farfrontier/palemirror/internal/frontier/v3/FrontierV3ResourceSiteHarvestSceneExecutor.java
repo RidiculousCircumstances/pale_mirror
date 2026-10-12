@@ -702,7 +702,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (pending == null) {
             Entity existingBody = level.getEntity(lease.members().getFirst().entityId());
             boolean retainedCargo = existingBody instanceof Mob retained
-                    && FrontierV3ActorCarryProjection.witnessed(state, job.workerId(), retained);
+                    && FrontierV3ActorCarryProjection.witnessed(state, job.workerId(), job.actorAccountId(), retained);
             if (hand.disposition() != FrontierV3ActorHandObservation.Disposition.EMPTY && !retainedCargo) {
                 conflict(level, runtime, lease, "cold-carried-hand-unwitnessed-item"); return true;
             }

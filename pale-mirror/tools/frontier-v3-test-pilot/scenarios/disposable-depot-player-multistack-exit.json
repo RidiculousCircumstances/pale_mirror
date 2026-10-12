@@ -4,6 +4,7 @@
   "isolation": { "mode": "disposable_lite", "seed": 41 },
   "server": { "host": "127.0.0.1", "port": 25575, "profile": "world", "viewDistance": 6 },
   "pilot": { "username": "PMTestPilot" },
+  "restart": { "mode": "graceful", "afterAction": 12 },
   "setup": [
     { "type": "command", "command": "/clear PMTestPilot" },
     { "type": "command", "command": "/give PMTestPilot minecraft:bread 64" },
@@ -23,7 +24,7 @@
     { "type": "quick_move_from_inventory", "item": "minecraft:bread", "count": 64, "timeoutMs": 15000 },
     { "type": "wait_until_diagnostic", "view": "resource", "id": "custody:container-1-depot",
       "expect": { "status": "ok", "quantity": 192, "bindingCount": 3 }, "timeoutMs": 30000 },
-    { "type": "quick_move_from_container", "item": "minecraft:bread", "count": 64, "timeoutMs": 15000 },
+    { "type": "quick_move_from_container", "item": "minecraft:wheat", "count": 64, "timeoutMs": 15000 },
     { "type": "wait_until_diagnostic", "view": "resource", "id": "custody:container-1-depot",
       "expect": { "status": "ok", "quantity": 128, "bindingCount": 2 }, "timeoutMs": 30000 },
     { "type": "quick_move_from_container", "item": "minecraft:bread", "count": 64, "timeoutMs": 15000 },
@@ -31,7 +32,16 @@
       "expect": { "status": "ok", "quantity": 64, "bindingCount": 1 }, "timeoutMs": 30000 },
     { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot",
       "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" },
-        "custody": { "status": "ACQUIRED", "unresolvedReason": "" } }, "timeoutMs": 30000 }
+        "custody": { "status": "ACQUIRED", "unresolvedReason": "" },
+        "fungibleOccupied": [{ "slot": 2, "account": "custody:container-1-depot", "itemKind": "minecraft:bread", "count": 64 }] }, "timeoutMs": 30000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },
+      "offset": { "x": -2, "y": -1, "z": 0 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:1-depot",
+      "expect": { "status": "ok", "custody": { "status": "ACQUIRED" },
+        "fungibleOccupied": [{ "slot": 2, "account": "custody:container-1-depot", "itemKind": "minecraft:bread", "count": 64 }] }, "timeoutMs": 30000 },
+    { "type": "open_container", "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },
+      "timeoutMs": 15000 }
   ],
   "assertions": [
     { "after": 5, "view": "resource", "id": "custody:container-1-depot",
@@ -44,10 +54,15 @@
       "expect": { "status": "ok", "quantity": 64, "bindingCount": 1 } },
     { "after": 12, "view": "container", "id": "container:1-depot",
       "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" },
-        "custody": { "status": "ACQUIRED", "unresolvedReason": "" } } }
+        "custody": { "status": "ACQUIRED", "unresolvedReason": "" },
+        "fungibleOccupied": [{ "slot": 2, "account": "custody:container-1-depot", "itemKind": "minecraft:bread", "count": 64 }] } },
+    { "after": 14, "view": "container", "id": "container:1-depot",
+      "expect": { "status": "ok", "custody": { "status": "ACQUIRED" },
+        "fungibleOccupied": [{ "slot": 2, "account": "custody:container-1-depot", "itemKind": "minecraft:bread", "count": 64 }] } }
   ],
   "frames": [
     { "after": 7, "name": "two-bread-stacks-owned", "presentation": "player" },
-    { "after": 11, "name": "two-bread-stacks-exited", "presentation": "player" }
+    { "after": 11, "name": "two-bread-stacks-exited", "presentation": "player" },
+    { "after": 15, "name": "sparse-layout-survived-restart", "presentation": "player" }
   ]
 }

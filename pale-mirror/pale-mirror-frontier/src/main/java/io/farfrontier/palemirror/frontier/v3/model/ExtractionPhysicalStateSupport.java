@@ -36,10 +36,10 @@ public final class ExtractionPhysicalStateSupport {
                         || block.carriedBefore() != ExtractionWorkAuthority.carried(state, job))
                     throw new IllegalArgumentException("physical extraction lacks completed labour or its stack preimage");
                 var site = ExtractionWorkAuthority.site(state, job); var cell = site.layout().require(job.target().orElseThrow().key().cell());
+                if (!ExtractionWorkSafety.available(state, state.extractionSites().deposits().get(site.id()), cell))
+                    throw new IllegalArgumentException("physical mining would remove an occupied support or retained exit");
                 var region = new ExtractionRegion(site.id(), Math.floorDiv(cell.source().x(), 16), Math.floorDiv(cell.source().z(), 16));
-                if (state.extractionSites().work().values().stream().anyMatch(other -> !other.id().equals(job.id())
-                        && other.siteId().equals(site.id()) && other.pending().orElse(null) instanceof ExtractionPhysicalStep.BlockWork
-                        && other.target().filter(target -> region.contains(site.layout().require(target.key().cell()).source())).isPresent()))
+                if (!ExtractionSourceCustody.mutationAvailable(state.extractionSites(), job))
                     throw new IllegalArgumentException("source region already fences another non-replayable mining effect");
                 var lease = state.replicaCustody().custodyByScope().get(region.scopeId());
                 if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED

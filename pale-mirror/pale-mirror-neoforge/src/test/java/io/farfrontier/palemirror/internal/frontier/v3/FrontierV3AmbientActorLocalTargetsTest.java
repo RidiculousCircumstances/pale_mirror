@@ -8,8 +8,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierV3AmbientActorLocalTargetsTest {
     @Test
-    void ordinaryIngressWritersShareTheFixedEightCellWorkBudget() {
-        assertEquals(8, FrontierV3GrayboxExecutor.firstVisibilityCellBudget());
+    void initialStaticPresentationUsesOperationalBudgetWithoutRetuningDurationBearingWriters() {
+        assertEquals(256, FrontierV3GrayboxExecutor.firstVisibilityCellBudget(256));
+        assertEquals(16, FrontierV3GrayboxExecutor.firstVisibilityCellBudget(16));
         assertEquals(8, FrontierV3GrayboxExecutor.structuralCellBudget());
         assertEquals(8, FrontierV3ResourceSiteExecutor.projectionWriteBudget());
     }

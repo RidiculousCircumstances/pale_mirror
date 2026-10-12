@@ -27,5 +27,5 @@ public record ExtractionAreaExtended(SubjectId siteId, long expectedRevision,
                 throw new IllegalArgumentException("excavation requires an adjacent known public front");
         }
     }
-    @Override public String type() { return "frontier.extraction_area_extended.v2"; }
+    @Override public String type() { return "frontier.extraction_area_extended.v3"; }
 }

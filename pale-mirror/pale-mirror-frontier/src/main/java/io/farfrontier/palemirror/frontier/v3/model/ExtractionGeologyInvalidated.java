@@ -11,6 +11,7 @@ public record ExtractionGeologyInvalidated(BlockPosition position, long stratumR
         if (stratumRevision < 1) throw new IllegalArgumentException("geological observation lacks its baseline version");
     }
     @Override public String type() { return "frontier.extraction_geology_invalidated"; }
+    @Override public boolean requiresDurableBeforeEffect() { return true; }
     public FrontierWorldState apply(FrontierWorldState state, SubjectId subject) {
         var fact = ExtractionTerrainFacts.at(state.bootstrap(), position).orElseThrow(
                 () -> new IllegalArgumentException("no declared geological knowledge"));

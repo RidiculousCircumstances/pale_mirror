@@ -4,9 +4,9 @@ import java.io.*;
 
 /** Sole header grammar for early installed-world selection and complete aggregate hydration. */
 final class FrontierStateSchema {
-    // Field admission and retarget WAL retain selected geometry and execution authority;
-    // historical disposable worlds cannot replay that changed event grammar.
-    static final int VERSION = 276;
+    // Confirmed container placement survives resource-custody release separately from live bindings.
+    // Historical disposable worlds cannot hydrate this changed declaration grammar.
+    static final int VERSION = 278;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

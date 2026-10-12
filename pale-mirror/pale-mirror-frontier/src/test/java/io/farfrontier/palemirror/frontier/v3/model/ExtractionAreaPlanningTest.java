@@ -62,6 +62,36 @@ class ExtractionAreaPlanningTest {
         assertThrows(IllegalArgumentException.class, () -> ExtractionAreaPlanning.apply(before, new SubjectId("extraction:foreign"), event, 1001));
         assertTrue(ExtractionAreaPlanning.proposal(after, id).isEmpty(), "an admitted live front is not depletion");
     }
+    @Test void unresolvedAlternativeDoesNotBlockAnIndependentlyAccessibleFront() throws Exception {
+        var before = exhausted(); var id = deposit(before).site().id();
+        var pending = new java.util.concurrent.atomic.AtomicReference<SurfaceAnchor>();
+        try (var ignored = PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            pending.compareAndSet(null, to);
+            return to.equals(pending.get()) ? new PedestrianRouteResult(PedestrianRouteResult.Status.PLANNING,
+                    List.of(), 0, 0, "fixture:first-alternative-pending") : PedestrianRoutePlanning.calculate(geometry, from, to);
+        })) {
+            var observed = PedestrianRoutePlanning.observe(() -> ExtractionAreaPlanning.proposal(before, id));
+            var event = observed.result().orElseThrow();
+            assertTrue(event.columns().stream().noneMatch(column -> column.station().equals(pending.get())));
+            assertTrue(observed.requests().isEmpty(), "unused alternatives cannot park the successful continuation");
+            var after = ExtractionAreaPlanning.apply(before, id, event, 1000);
+            assertTrue(deposit(after).cells().size() > deposit(before).cells().size());
+            assertEquals(before.inventory(), after.inventory(), "declaring reachable rock cannot credit production");
+        }
+    }
+    @Test void noResolvedFrontRetainsAllRelevantCalculationWaitsWithoutDeclaringExhaustion() throws Exception {
+        var before = exhausted(); var id = deposit(before).site().id();
+        try (var ignored = PedestrianRoutePlanning.bind((geometry, from, to) -> new PedestrianRouteResult(
+                PedestrianRouteResult.Status.PLANNING, List.of(), 0, 0, "fixture:alternatives-pending"))) {
+            var observed = PedestrianRoutePlanning.observe(() -> ExtractionAreaPlanning.extensionAvailability(before, id));
+            assertEquals(ExtractionAreaPlanning.Availability.WAITING, observed.result());
+            assertTrue(observed.requests().size() > 1, "discovery cannot serialize unrelated alternatives behind the first request");
+            assertEquals(0, deposit(before).available(Set.of()).size());
+            var unavailable = assertThrows(KnownPedestrianNavigation.RouteUnavailable.class,
+                    () -> ExtractionAreaPlanning.proposal(before, id));
+            assertEquals(PedestrianRouteResult.Status.PLANNING, unavailable.status());
+        }
+    }
     @Test void externalMutationOfUnadmittedRockRevokesBaselineRatherThanBeingMinedOrRegenerated() {
         var before = exhausted(); var id = deposit(before).site().id();
         var original = ExtractionAreaPlanning.proposal(before, id).orElseThrow();
@@ -121,6 +151,10 @@ class ExtractionAreaPlanningTest {
         assertTrue(AdjacentExcavationPlanner.propose(List.of(station), protectedGeometry, ignored -> true, ignored -> true, "stone"::equals, "stone"::equals, 8).isEmpty());
         assertTrue(AdjacentExcavationPlanner.propose(List.of(station), position -> Optional.of(sample), ignored -> false, ignored -> true, "stone"::equals, "stone"::equals, 8).isEmpty());
         assertEquals(1, AdjacentExcavationPlanner.propose(List.of(station), position -> Optional.of(sample), ignored -> true, ignored -> true, "stone"::equals, "stone"::equals, 1).size());
+        assertTrue(AdjacentExcavationPlanner.propose(List.of(station), position -> Optional.of(sample), ignored -> {
+            fail("an unexecutable cut cannot request navigation"); return false;
+        }, ignored -> true, "stone"::equals, "stone"::equals, 1, AdjacentExcavationPlanner.adjacentSelection(),
+                ignored -> false).isEmpty());
         KnownBlockGeometry<String> nonFlat = position -> Optional.of(new KnownBlockGeometry.Sample<>(
                 position.y() == 2 ? "protected-cap" : "stone", 7, KnownBlockGeometry.Sample.Permission.PUBLIC));
         var descent = AdjacentExcavationPlanner.propose(List.of(station), nonFlat, ignored -> true, ignored -> true, "stone"::equals, "stone"::equals, 1).getFirst();

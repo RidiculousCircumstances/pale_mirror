@@ -7,12 +7,12 @@ import java.util.Objects;
 /** A producer-declared physical cell. Material is data, not a new execution family. */
 public record WorksiteBlock(Key key, BlockPosition position, long revision, BlockExtraction.Block block) {
     public enum Role {
-        INFRASTRUCTURE(1), RESOURCE(2), CONTAINER_SOCKET(3);
+        INFRASTRUCTURE(1), RESOURCE(2), CONTAINER_SOCKET(3), NATURAL_TERRAIN(4);
         private final int tag;
         Role(int tag) { this.tag = tag; }
         public int wireTag() { return tag; }
         public static Role decode(int tag) {
-            return switch (tag) { case 1 -> INFRASTRUCTURE; case 2 -> RESOURCE; case 3 -> CONTAINER_SOCKET;
+            return switch (tag) { case 1 -> INFRASTRUCTURE; case 2 -> RESOURCE; case 3 -> CONTAINER_SOCKET; case 4 -> NATURAL_TERRAIN;
                 default -> throw new IllegalArgumentException("unknown worksite cell role"); };
         }
     }

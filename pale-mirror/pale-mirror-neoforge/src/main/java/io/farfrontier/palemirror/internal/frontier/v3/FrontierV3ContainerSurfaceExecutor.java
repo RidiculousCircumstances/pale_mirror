@@ -14,6 +14,7 @@ import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceActivationSta
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceTransition;
 import io.farfrontier.palemirror.frontier.v3.model.ExactItemStack;
+import io.farfrontier.palemirror.frontier.v3.model.FungibleContainerLayout;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceLedger;
 import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
@@ -318,44 +319,18 @@ final class FrontierV3ContainerSurfaceExecutor {
                 .filter(account -> account.custody() instanceof ResourceCustody.Container value && value.containerId().equals(containerId)).toList();
         if (accounts.size() > 1) return Optional.empty();
         if (accounts.isEmpty()) return Optional.of(List.copyOf(planned));
-        if (state.inventory().containers().get(containerId).productionStation().isPresent()) {
-            var projected = ReferenceContainerCustody.expectedFungibleSlots(state, containerId);
-            for (int slot = 0; slot < capacity; slot++) {
-                var expected = projected.get(slot);
-                if (expected == null) continue;
-                ResourceLocation id = ResourceLocation.tryParse(expected.itemKind());
-                if (id == null || !BuiltInRegistries.ITEM.containsKey(id)
-                        || BuiltInRegistries.ITEM.get(id) == net.minecraft.world.item.Items.AIR
-                        || !planned.get(slot).isEmpty()
-                        || expected.quantity() > BuiltInRegistries.ITEM.get(id).getDefaultMaxStackSize()) return Optional.empty();
-                planned.set(slot, new ItemStack(BuiltInRegistries.ITEM.get(id), expected.quantity()));
-            }
-            return Optional.of(List.copyOf(planned));
-        }
-        Map<String, Long> quantities = new LinkedHashMap<>();
-        accounts.getFirst().lotQuantities().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
-            String kind = resources.lots().get(entry.getKey()).itemKind();
-            quantities.merge(kind, entry.getValue().longValue(), Math::addExact);
-        });
-        int slot = 0;
-        for (Map.Entry<String, Long> entry : quantities.entrySet()) {
-            ResourceLocation id = ResourceLocation.tryParse(entry.getKey());
+        // The domain image owns placement for every container, not a second adapter packing algorithm.
+        Map<Integer, ReferenceContainerCustody.ProjectedFungibleSlot> projected;
+        try { projected = ReferenceContainerCustody.expectedFungibleSlots(state, containerId); }
+        catch (FungibleContainerLayout.CapacityUnavailable full) { return Optional.empty(); }
+        for (var entry : projected.entrySet()) {
+            int slot = entry.getKey(); var expected = entry.getValue();
+            ResourceLocation id = ResourceLocation.tryParse(expected.itemKind());
             if (id == null || !BuiltInRegistries.ITEM.containsKey(id)
-                    || BuiltInRegistries.ITEM.get(id) == net.minecraft.world.item.Items.AIR) return Optional.empty();
-            long remaining = entry.getValue();
-            while (remaining > 0) {
-                // A retained field job owns its future exact output slot even while its
-                // wheat is still carried by the farmer. The fungible cold-stock image must
-                // leave that slot vacant, or first visibility creates a physical collision
-                // which only surfaces at the much later terminal harvest receipt.
-                slot = nextProjectionSlot(state, containerId, capacity, slot, index -> !planned.get(index).isEmpty());
-                if (slot == capacity) return Optional.empty();
-                var item = BuiltInRegistries.ITEM.get(id);
-                int count = (int) Math.min(item.getDefaultMaxStackSize(), remaining);
-                if (count < 1) return Optional.empty();
-                planned.set(slot++, new ItemStack(item, count));
-                remaining -= count;
-            }
+                    || BuiltInRegistries.ITEM.get(id) == net.minecraft.world.item.Items.AIR
+                    || slot < 0 || slot >= capacity || !planned.get(slot).isEmpty()
+                    || expected.quantity() > BuiltInRegistries.ITEM.get(id).getDefaultMaxStackSize()) return Optional.empty();
+            planned.set(slot, new ItemStack(BuiltInRegistries.ITEM.get(id), expected.quantity()));
         }
         return Optional.of(List.copyOf(planned));
     }

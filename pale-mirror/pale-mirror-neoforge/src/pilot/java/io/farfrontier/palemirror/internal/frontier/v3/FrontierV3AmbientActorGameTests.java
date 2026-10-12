@@ -519,14 +519,14 @@ public final class FrontierV3AmbientActorGameTests {
                 FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY, binding, List.of(support),
                 new FrontierV3NavigationScope.Restricted(io.farfrontier.palemirror.frontier.v3.model.LocalNavigationEnvelope.around(
                         support.standingBody(), support.standingBody())),
-                FrontierV3StandingPosition::aboveExactFloor, body -> {
+                FrontierV3StandingPosition::aboveExactFloor, surface -> surface.equals(support), body -> {
                     body.setHealth(7.0F);
                     body.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,
                             new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WHEAT, 7));
                     return true; // Scene callback intentionally does not prepare personal pockets.
                 });
         var rejectedRequest = new FrontierV3ActorBodyController.BirthRequest(request.requester(), binding,
-                request.surfaces(), request.scope(), request.standing(), body -> {
+                request.surfaces(), request.scope(), request.standing(), request.placementPermission(), body -> {
                     body.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,
                             new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WHEAT, 6));
                     return true;

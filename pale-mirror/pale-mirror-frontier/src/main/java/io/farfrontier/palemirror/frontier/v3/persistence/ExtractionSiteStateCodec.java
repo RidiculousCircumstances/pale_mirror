@@ -26,6 +26,11 @@ final class ExtractionSiteStateCodec {
                 FrontierWorldStateCodec.writePosition(out, entry.getKey()); writeBlock(out, entry.getValue());
                 out.writeLong(layout.infrastructureIds().get(entry.getKey()));
             }
+            out.writeInt(layout.terrainSupports().size());
+            for (var entry : layout.terrainSupports().entrySet().stream().sorted(Map.Entry.comparingByKey(positionOrder)).toList()) {
+                FrontierWorldStateCodec.writePosition(out, entry.getKey()); writeBlock(out, entry.getValue());
+                out.writeLong(layout.terrainIds().get(entry.getKey()));
+            }
             out.writeInt(layout.cells().size());
             for (var cell : layout.cells()) {
                 out.writeLong(cell.id()); FrontierWorldStateCodec.writePosition(out, cell.source());
@@ -68,6 +73,14 @@ final class ExtractionSiteStateCodec {
                     throw new IllegalArgumentException("duplicate extraction fixed block");
                 infrastructureIds.put(position, stableId);
             }
+            var natural = new LinkedHashMap<BlockPosition, BlockExtraction.Block>();
+            var terrainIds = new LinkedHashMap<BlockPosition, Long>();
+            for (int b = 0, blocks = count(in, ExtractionLayout.MAX_CELLS * 4); b < blocks; b++) {
+                var position = FrontierWorldStateCodec.readPosition(in); var block = readBlock(in); long stableId = in.readLong();
+                if (natural.putIfAbsent(position, block) != null)
+                    throw new IllegalArgumentException("duplicate natural work surface");
+                terrainIds.put(position, stableId);
+            }
             var cells = new ArrayList<ExtractionLayout.Cell>(); var states = new LinkedHashMap<Long, ExtractionDeposit.CellState>();
             for (int c = 0, cellCount = count(in, ExtractionLayout.MAX_CELLS); c < cellCount; c++) {
                 long cellId = in.readLong(); BlockPosition source = FrontierWorldStateCodec.readPosition(in);
@@ -83,7 +96,7 @@ final class ExtractionSiteStateCodec {
                 var state = new ExtractionDeposit.CellState(cellRevision, disposition, block, operation);
                 if (states.putIfAbsent(cellId, state) != null) throw new IllegalArgumentException("duplicate extraction cell state");
             }
-            var site = new ExtractionSite(id, home, containerId, new ExtractionLayout(cells, fixed, surfaces, entrance, container, port, infrastructureIds));
+            var site = new ExtractionSite(id, home, containerId, new ExtractionLayout(cells, fixed, surfaces, entrance, container, port, infrastructureIds, natural, terrainIds));
             var geometry = new LinkedHashMap<BlockPosition, ExtractionDeposit.GeometryState>();
             for (int g = 0, n = count(in, ExtractionLayout.MAX_CELLS * 4); g < n; g++) {
                 var position = FrontierWorldStateCodec.readPosition(in);

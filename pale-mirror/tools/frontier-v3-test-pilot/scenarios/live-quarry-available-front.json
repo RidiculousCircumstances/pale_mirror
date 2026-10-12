@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "id": "live_quarry_available_front",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMAudit" },
+  "setup": [
+    { "type": "command", "command": "/gamemode creative" },
+    { "type": "command", "command": "/clear PMAudit" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "inventoryConflicts": 0, "sceneConflicts": 0 } },
+      { "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "expect": { "status": "ok", "result": { "geologyKnown": true, "homeReserveSupplied": true } } }
+    ] }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox",
+      "position": { "diagnostic": { "view": "container", "id": "container:6-depot", "field": "position" } },
+      "offset": { "x": -2, "y": -1, "z": -2 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:6-depot",
+      "expect": { "status": "ok", "surface": "ACTIVE", "custody": { "status": "ACQUIRED" } }, "timeoutMs": 60000 },
+    { "type": "open_container", "position": { "diagnostic": { "view": "container", "id": "container:6-depot", "field": "position" } }, "timeoutMs": 15000 },
+    { "type": "quick_move_from_container", "item": "minecraft:cobblestone", "count": 64, "timeoutMs": 15000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -81, "y": 64, "z": -3 }, "settleMs": 0 },
+    { "type": "wait_until_block", "position": { "x": -69, "y": 66, "z": 7 }, "block": "minecraft:stone", "timeoutMs": 60000 },
+    { "type": "look", "at": { "x": -73, "y": 61, "z": 3 } },
+    { "type": "inspect", "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24",
+      "expect": { "status": "ok", "result": { "adjacentAreaMined": true } }, "timeoutMs": 180000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 64, "z": 480 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24",
+      "expect": { "status": "ok", "result": { "workersCold": true, "liveSourceRegions": 0 } }, "timeoutMs": 90000 },
+    { "type": "fast_forward", "ticks": 5000, "timeoutMs": 180000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -81, "y": 64, "z": -3 }, "settleMs": 0 },
+    { "type": "look", "at": { "x": -73, "y": 61, "z": 3 } },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24",
+      "expect": { "status": "ok", "result": { "homeReserveSupplied": true, "adjacentAreaMined": true } }, "timeoutMs": 180000 },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 9, "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "expect": { "status": "ok", "result": { "adjacentAreaMined": true } } },
+    { "after": 15, "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "expect": { "status": "ok", "result": { "adjacentAreaMined": true, "homeReserveSupplied": true } } },
+    { "after": 16, "view": "summary", "id": "", "expect": { "status": "ok", "inventoryConflicts": 0, "sceneConflicts": 0 } }
+  ],
+  "frames": [
+    { "after": 8, "name": "available-front-and-natural-stone-rise" },
+    { "after": 15, "name": "available-front-after-cold-return" }
+  ]
+}

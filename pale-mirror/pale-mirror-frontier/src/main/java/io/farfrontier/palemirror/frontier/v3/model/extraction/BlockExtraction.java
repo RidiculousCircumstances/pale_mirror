@@ -11,6 +11,9 @@ public record BlockExtraction(String operationId,
                               BlockPosition target, Definition definition,
                               List<Output> output) {
     public static final int MAX_OUTPUTS = 32;
+    private static final java.util.regex.Pattern REGISTRY_KEY = java.util.regex.Pattern.compile("[a-z0-9_]+:[a-z0-9_./-]+");
+    private static final java.util.regex.Pattern PROPERTY_KEY = java.util.regex.Pattern.compile("[a-z0-9_]+");
+    private static final java.util.regex.Pattern PROPERTY_VALUE = java.util.regex.Pattern.compile("[a-z0-9_-]+");
 
     /** Complete nominal block state; support/feet coordinates never select a block type. */
     public record Block(String kind, Map<String, String> properties) {
@@ -18,7 +21,7 @@ public record BlockExtraction(String operationId,
             requireKey(kind);
             properties = Map.copyOf(properties);
             if (properties.size() > 32 || properties.entrySet().stream().anyMatch(entry ->
-                    !entry.getKey().matches("[a-z0-9_]+") || !entry.getValue().matches("[a-z0-9_-]+")))
+                    !PROPERTY_KEY.matcher(entry.getKey()).matches() || !PROPERTY_VALUE.matcher(entry.getValue()).matches()))
                 throw new IllegalArgumentException("invalid extraction block properties");
         }
     }
@@ -73,7 +76,7 @@ public record BlockExtraction(String operationId,
     }
 
     private static void requireKey(String key) {
-        if (key == null || !key.matches("[a-z0-9_]+:[a-z0-9_./-]+") || key.length() > 256)
+        if (key == null || key.length() > 256 || !REGISTRY_KEY.matcher(key).matches())
             throw new IllegalArgumentException("invalid extraction registry key");
     }
 }

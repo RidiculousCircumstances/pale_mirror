@@ -44,7 +44,6 @@ final class FrontierV3GrayboxExecutor {
     private static final int MAX_NATURAL_CHUNK_PROBES_PER_CELL = 64;
     private static final int MAX_WORKSITE_STAGING_PROBES_PER_CELL = 8;
     private static final int MAX_FIRST_VISIBILITY_CHUNKS_PER_TICK = 16;
-    private static final int MAX_FIRST_VISIBILITY_CELLS_PER_TICK = 8;
     private static final Map<FrontierV3ServerRuntime<?, ?>, Cursor> CURSORS = new IdentityHashMap<>();
     private static final Map<FrontierV3ServerRuntime<?, ?>, ProjectionWork> WORK = new IdentityHashMap<>();
     private static final Map<FrontierV3ServerRuntime<?, ?>, Map<ChunkPos, FirstVisibilityRecord>> FIRST_VISIBILITY = new IdentityHashMap<>();
@@ -79,7 +78,7 @@ final class FrontierV3GrayboxExecutor {
         static FirstVisibilitySnapshot unobserved(ChunkPos chunk) { return new FirstVisibilitySnapshot(chunk, "UNOBSERVED", -1L, 0); }
     }
     private FrontierV3GrayboxExecutor() { }
-    static int firstVisibilityCellBudget() { return MAX_FIRST_VISIBILITY_CELLS_PER_TICK; }
+    static int firstVisibilityCellBudget(int operationBudget) { return operationBudget; }
     static int structuralCellBudget() { return MAX_CELLS_PER_TICK; }
     static void primeStructuralBaseline(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         Objects.requireNonNull(runtime, "runtime");
@@ -263,8 +262,8 @@ final class FrontierV3GrayboxExecutor {
     private static void retainResourceSiteVisibility(FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state, ChunkPos ingress) {
         state.resourceSiteDescriptors().values().stream()
                 .filter(site -> resourceSiteIngressMatches(ingress, site))
-                .flatMap(site -> site.managedSlots().stream())
-                .map(position -> new ChunkPos(position.x() >> 4, position.z() >> 4))
+                .flatMap(site -> site.occupiedChunks().stream())
+                .map(column -> new ChunkPos(column.x(), column.z()))
                 .forEach(chunk -> retainFirstVisibility(runtime, chunk, true));
     }
     private static void retainSettlementVisibility(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos ingress) {
@@ -276,14 +275,20 @@ final class FrontierV3GrayboxExecutor {
         cursor.settlementVisibilityChunks(ingress).forEach(chunk -> retainFirstVisibility(runtime, chunk, true));
     }
     static boolean resourceSitePlayerIngressed(FrontierV3ServerRuntime<?, ?> runtime, ResourceSite site) {
-        return PLAYER_INGRESS.getOrDefault(runtime, java.util.Set.of()).stream()
-                .anyMatch(ingress -> resourceSiteIngressMatches(ingress, site));
+        return resourceSitePlayerIngressed(PLAYER_INGRESS.getOrDefault(runtime, java.util.Set.of()), site);
+    }
+    static boolean resourceSitePlayerIngressed(java.util.Set<ChunkPos> ingress, ResourceSite site) {
+        // Probe the immutable chunk footprint, not every visited chunk times every field cell.
+        for (var column : site.occupiedChunks())
+            for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++)
+                if (ingress.contains(new ChunkPos(column.x() + dx, column.z() + dz))) return true;
+        return false;
     }
     static boolean resourceSiteProjectionDemanded(FrontierV3ServerRuntime<?, ?> runtime, ServerLevel level, ResourceSite site) {
         boolean currentPlayerDemand = level.players().stream()
                 .filter(player -> !player.isSpectator())
-                .anyMatch(player -> site.managedSlots().stream().anyMatch(position ->
-                        player.getChunkTrackingView().contains(position.x() >> 4, position.z() >> 4)));
+                .anyMatch(player -> site.occupiedChunks().stream().anyMatch(column ->
+                        player.getChunkTrackingView().contains(column.x(), column.z())));
         // Current presentation demand is wider than physical work eligibility. Holding a
         // visible chunk while requiring the player to approach it would deadlock preparation.
         return resourceSiteProjectionDemanded(resourceSitePlayerIngressed(runtime, site), currentPlayerDemand);
@@ -292,7 +297,7 @@ final class FrontierV3GrayboxExecutor {
         return retainedIngress && currentPlayerDemand;
     }
     static boolean resourceSiteIngressMatches(ChunkPos ingress, ResourceSite site) {
-        return site.managedSlots().stream().map(position -> new ChunkPos(position.x() >> 4, position.z() >> 4))
+        return site.occupiedChunks().stream().map(column -> new ChunkPos(column.x(), column.z()))
                 .anyMatch(field -> Math.abs(field.x - ingress.x) <= 1 && Math.abs(field.z - ingress.z) <= 1);
     }
     private static void retainSiblingHiveVisibility(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos ingress, boolean priority) {
@@ -316,9 +321,9 @@ final class FrontierV3GrayboxExecutor {
         if (records == null) return;
         drainHiveFences(runtime, cursor);
         drainSettlementFences(runtime, cursor);
-        var budget = new FrontierV3FirstVisibilityBudget(
-                io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_WEIGHT_BUDGET.get(),
-                MAX_FIRST_VISIBILITY_CELLS_PER_TICK,
+        int operationBudget = io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_WEIGHT_BUDGET.get();
+        var budget = new FrontierV3FirstVisibilityBudget(operationBudget,
+                firstVisibilityCellBudget(operationBudget),
                 (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D),
                 System::nanoTime);
         var origins = level.players().stream().filter(player -> !player.isSpectator())

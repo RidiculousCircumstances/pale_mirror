@@ -89,6 +89,8 @@ final class FrontierV3ExtractionDiagnosticJson {
                 : storageConflict ? "STORAGE_RECONCILIATION_CONFLICT"
                 : state.actorMovements().containsKey(actor) ? "JOURNEY"
                 : !ResidentActivityCoordinator.ordinaryWorkPermitted(state, actor, now) ? "SCHEDULE_OR_NEED"
+                : job.phase() == ExtractionWork.Phase.SELECT_SOURCE ? (ExtractionWorkAuthority.carried(state, job) > 0
+                    ? "CARGO_DELIVERY_SELECTION" : "SOURCE_SELECTION")
                 : job.phase() == ExtractionWork.Phase.EXTRACT && sourceHeld ? "SOURCE_CUSTODY"
                 : job.phase() == ExtractionWork.Phase.EXTRACT && job.labour().filter(labour -> labour.completedAt(now) < labour.requiredMilliWork()).isPresent() ? "LABOUR"
                 : "STATION_OPERATION";
@@ -104,6 +106,7 @@ final class FrontierV3ExtractionDiagnosticJson {
                 + ",\"lease\":" + (lease == null || lease.status() == AmbientLeaseStatus.CLOSED ? "null" : string(lease.status().name()))
                 + ",\"result\":{\"stage\":" + string(job.phase().name()) + ",\"revision\":" + job.revision() + ",\"wait\":" + string(wait)
                 + ",\"deliveredBatches\":" + job.batch() + ",\"mandateActive\":" + ExtractionWorkPolicy.requested(state, job)
+                + ",\"cargoKind\":" + string(job.outputKind())
                 + ",\"labourMilliWork\":" + labour + ",\"carried\":" + ExtractionWorkAuthority.carried(state, job)
                 + ",\"pendingPhysicalEffect\":" + job.pending().isPresent() + "}"
                 + ",\"sourceCustody\":" + (sourceLease == null ? "null" : "{\"scope\":" + string(sourceLease.scopeId().value())

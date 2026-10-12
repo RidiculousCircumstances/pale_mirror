@@ -36,7 +36,8 @@ public record ExtractionDeposit(ExtractionSite site, Map<Long, CellState> cells,
         if (!cells.keySet().containsAll(development.openedCells()) || cells.entrySet().stream().anyMatch(entry ->
                 entry.getValue().disposition() == Disposition.EXTRACTED && !development.openedCells().contains(entry.getKey())))
             throw new IllegalArgumentException("depletion outside the declared developed area");
-        if (!site.layout().fixedBlocks().keySet().containsAll(geometry.keySet()))
+        if (geometry.keySet().stream().anyMatch(position -> !site.layout().fixedBlocks().containsKey(position)
+                && !site.layout().terrainSupports().containsKey(position)))
             throw new IllegalArgumentException("external geometry must name an authored worksite cell");
         if (!cells.keySet().equals(site.layout().cells().stream().map(ExtractionLayout.Cell::id)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet())))
@@ -82,7 +83,8 @@ public record ExtractionDeposit(ExtractionSite site, Map<Long, CellState> cells,
     }
     public ExtractionDeposit observeGeometry(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position,
             long expectedRevision, BlockExtraction.Block actual) {
-        if (!site.layout().fixedBlocks().containsKey(position)) throw new IllegalArgumentException("unknown extraction geometry cell");
+        if (!site.layout().fixedBlocks().containsKey(position) && !site.layout().terrainSupports().containsKey(position))
+            throw new IllegalArgumentException("unknown extraction geometry cell");
         var prior = geometry.get(position);
         if ((prior == null ? 1 : prior.revision()) != expectedRevision) throw new IllegalArgumentException("stale worksite geometry observation");
         var next = new LinkedHashMap<>(geometry); next.put(position, new GeometryState(Math.addExact(expectedRevision, 1), actual));

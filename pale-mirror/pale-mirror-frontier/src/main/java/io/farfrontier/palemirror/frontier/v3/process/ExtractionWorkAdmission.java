@@ -31,8 +31,10 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
         var source = state.inventory().containers().get(slot.containerId()).storage().orElseThrow().endpoint();
         var knowledge = sourceKnowledge(state, source);
         while (!cells.isEmpty()) {
-            var cell = ExtractionWorkTargets.spatialSelection(state, deposit, resident.id(), cells,
-                    AreaWorkSelection.SpatialPolicy.SPREAD_STARTS).orElseThrow();
+            var candidate = ExtractionWorkTargets.spatialSelection(state, deposit, resident.id(), cells,
+                    AreaWorkSelection.SpatialPolicy.SPREAD_STARTS);
+            if (candidate.isEmpty()) return Optional.empty();
+            var cell = candidate.orElseThrow();
             cells.remove(cell);
             if (!cell.definition().toolKind().equals(tool.item().itemKind())) continue;
             var output = cell.definition().coldOutput().getFirst();
@@ -97,6 +99,7 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
         var cell = deposit.available(state.extractionSites().reservedCells(job.siteId())).stream()
                 .filter(value -> ExtractionWorkEffects.target(deposit, value).equals(target)).findFirst().orElseThrow(
                         () -> new IllegalArgumentException("mining start has a reserved, removed or stale source"));
+        ExtractionWorkTargets.requireStationAvailable(state, deposit, resident.id(), cell);
         if (!cell.definition().toolKind().equals(tool.itemKind()) || cell.definition().coldOutput().size() != 1
                 || !cell.definition().coldOutput().getFirst().itemKind().equals(job.outputKind())
                 || !ResourceStorageSelection.receivingCandidates(state, resident.settlementId(), job.outputKind(),

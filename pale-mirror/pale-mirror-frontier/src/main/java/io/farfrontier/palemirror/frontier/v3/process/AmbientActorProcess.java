@@ -188,7 +188,8 @@ public final class AmbientActorProcess {
             var stationary = execution == null ? Optional.<io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityAmbientTarget>empty()
                     : execution.current().flatMap(id -> ActorExecutionComposition.CAPABILITIES.require(id.activityKind()).stationaryAmbientTarget(state, id));
             if (stationary.isPresent()) return new AmbientGoal(stationary.orElseThrow().kind(), stationary.orElseThrow().station().support());
-            ResidentActivityChoice choice = ResidentActivityCoordinator.assess(state, actorId, atTick);
+            // Presentation chooses intent; only the activity producer prepares its route.
+            ResidentActivityChoice choice = ResidentActivityCoordinator.assessEligibility(state, actorId, atTick);
             HumanAssignment assignment = HumanAssignmentProjection.compile(state).assignment(actorId);
             ResourceSiteHarvestJob harvest = assignment.kind() == HumanAssignmentKind.FIELD_HARVEST
                     && choice.kind() == ResidentActivityChoice.Kind.WORK

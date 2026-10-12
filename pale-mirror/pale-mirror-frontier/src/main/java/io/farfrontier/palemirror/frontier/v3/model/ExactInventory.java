@@ -697,6 +697,26 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
                 Objects.requireNonNull(nextResources, "fungible resource ledger")));
     }
 
+    /** Retain one exact current physical layout before releasing its authority, never recreate stock from it. */
+    ExactInventory retainContainerLayout(SubjectId accountId, long epoch) {
+        var account = Objects.requireNonNull(fungibleResources.accounts().get(accountId), "layout resource account");
+        if (!(account.custody() instanceof ResourceCustody.Container holder)) return this;
+        var bindings = fungibleResources.bindings().values().stream()
+                .filter(binding -> binding.accountId().equals(accountId)).toList();
+        if (bindings.isEmpty() || bindings.stream().anyMatch(binding -> binding.authorityEpoch() != epoch))
+            throw new IllegalArgumentException("retained layout requires its exact current physical epoch");
+        var slots = new HashMap<Integer, FungibleContainerLayout.Stack>();
+        for (var binding : bindings) {
+            if (!(binding.address() instanceof PhysicalStackAddress.ContainerSlot address)
+                    || !address.slot().containerId().equals(holder.containerId())
+                    || slots.put(address.slot().slot(), new FungibleContainerLayout.Stack(binding.itemKind(), binding.quantity())) != null)
+                throw new IllegalArgumentException("retained layout contains a foreign or duplicate slot");
+        }
+        var next = new HashMap<>(containers);
+        next.put(holder.containerId(), containers.get(holder.containerId()).withFungibleLayout(new FungibleContainerLayout(slots)));
+        return new ExactInventory(next, items, cargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, fungibleResources);
+    }
+
     private static Map<UUID, List<SubjectId>> mutableCustody(Map<UUID, List<SubjectId>> values) {
         Map<UUID, List<SubjectId>> mutable = new HashMap<>();
         values.forEach((player, itemIds) -> mutable.put(player, new java.util.ArrayList<>(itemIds)));

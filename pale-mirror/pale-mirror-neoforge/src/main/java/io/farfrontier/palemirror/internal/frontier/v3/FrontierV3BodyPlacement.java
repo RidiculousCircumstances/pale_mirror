@@ -12,7 +12,7 @@ import java.util.Optional;
 
 /** Physical placement provider: no queue, work phase, custody or semantic arrival authority. */
 final class FrontierV3BodyPlacement {
-    enum Reason { OUTSIDE_SCOPE, CHUNK_UNLOADED, ENTITY_STORAGE_PENDING, NO_EXACT_SUPPORT, SPACE_OCCUPIED, NO_CONNECTED_PATH }
+    enum Reason { OUTSIDE_SCOPE, CHUNK_UNLOADED, ENTITY_STORAGE_PENDING, NO_EXACT_SUPPORT, SPACE_OCCUPIED, NO_CONNECTED_PATH, OWNER_REJECTED }
     record Rejection(SurfaceAnchor surface, Reason reason) { }
     record Selection(Optional<SurfaceAnchor> surface, List<Rejection> rejections) {
         Selection { rejections = List.copyOf(rejections); }
@@ -23,15 +23,27 @@ final class FrontierV3BodyPlacement {
                                           java.util.function.BiFunction<ServerLevel, BlockPos, BlockPos> standing) {
         return assess(level, candidate, surfaces, scope, standing).surface();
     }
+    static Optional<SurfaceAnchor> select(ServerLevel level, Mob candidate, List<SurfaceAnchor> surfaces,
+                                          FrontierV3NavigationScope scope,
+                                          java.util.function.BiFunction<ServerLevel, BlockPos, BlockPos> standing,
+                                          java.util.function.Predicate<SurfaceAnchor> placementPermission) {
+        return assess(level, candidate, surfaces, scope, standing, placementPermission).surface();
+    }
     static Selection assess(ServerLevel level, Mob candidate, List<SurfaceAnchor> surfaces,
                              FrontierV3NavigationScope scope,
                              java.util.function.BiFunction<ServerLevel, BlockPos, BlockPos> standing) {
+        return assess(level, candidate, surfaces, scope, standing, surface -> true);
+    }
+    static Selection assess(ServerLevel level, Mob candidate, List<SurfaceAnchor> surfaces,
+                             FrontierV3NavigationScope scope,
+                             java.util.function.BiFunction<ServerLevel, BlockPos, BlockPos> standing,
+                             java.util.function.Predicate<SurfaceAnchor> placementPermission) {
         if (candidate.isRemoved() || candidate.level() != level || level.getEntity(candidate.getUUID()) != null)
             throw new IllegalArgumentException("placement selection requires an unpublished live body prototype");
         var previous = candidate.position();
         boolean previousOnGround = candidate.onGround();
         try {
-            return probe(level, candidate, surfaces, scope, standing);
+            return probe(level, candidate, surfaces, scope, standing, placementPermission);
         } finally {
             candidate.setPos(previous.x, previous.y, previous.z);
             candidate.setOnGround(previousOnGround);
@@ -40,7 +52,8 @@ final class FrontierV3BodyPlacement {
     /** Probe only an unpublished prototype. Selection never installs a live body's position. */
     private static Selection probe(ServerLevel level, Mob candidate, List<SurfaceAnchor> surfaces,
                              FrontierV3NavigationScope scope,
-                             java.util.function.BiFunction<ServerLevel, BlockPos, BlockPos> standing) {
+                             java.util.function.BiFunction<ServerLevel, BlockPos, BlockPos> standing,
+                             java.util.function.Predicate<SurfaceAnchor> placementPermission) {
         if (surfaces.isEmpty()) throw new IllegalArgumentException("body placement needs an explicit zone");
         List<Rejection> rejected = new java.util.ArrayList<>();
         SurfaceAnchor origin = surfaces.getFirst();
@@ -61,6 +74,9 @@ final class FrontierV3BodyPlacement {
                 var path = candidate.getNavigation().createPath(target, 0);
                 if (FrontierV3PhysicalPathPolicy.reject(level, path, scope).isPresent()) { rejected.add(new Rejection(surface, Reason.NO_CONNECTED_PATH)); continue; }
             }
+            // A pending owner proof propagates to its exact producer before insertion.
+            // It is not absence and does not permit trying unrelated alternatives.
+            if (!placementPermission.test(surface)) { rejected.add(new Rejection(surface, Reason.OWNER_REJECTED)); continue; }
             return new Selection(Optional.of(surface), rejected);
         }
         return new Selection(Optional.empty(), rejected);

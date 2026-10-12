@@ -140,14 +140,13 @@ final class FrontierV3SceneExecutor {
         }
         long completeLoadSince = restartRecoveryObservationSince(runtime, lease.id(), level.getGameTime());
         if (!restartRecoveryObservationReady(completeLoadSince, level.getGameTime())) return;
-        // A restart may precede the very first body insertion. UNKNOWN is not evidence
-        // that a body once existed: the retained, unconsumed first-admission permit is
-        // authoritative here. Reuse the ordinary durable-before-insertion boundary;
-        // never reset a pending attempt or infer creation permission from absence.
+        // Common admission distinguishes unused first birth from exact fenced
+        // reconstruction. UNKNOWN and UUID absence grant neither permission.
         if (FrontierSceneBehaviors.recoveredStatus(state, lease) != SceneLeaseStatus.DRAINING
-                && canResumeUnstartedBodyAdmissions(level, state, lease)) {
-            FrontierV3SceneExecutor.materializeBodies(
-                    level, runtime, state, lease, FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY);
+                && canResumeBodyAdmissions(level, state, lease)) {
+            if (FrontierV3SceneExecutor.materializeBodies(
+                    level, runtime, state, lease, FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY)
+                    == BodyMaterialization.DEFERRED) return;
         }
         java.util.Set<SubjectId> missing = lease.members().stream()
                 .filter(member -> state.actorLocations().get(member.actorId()).condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.ALIVE)
@@ -172,9 +171,8 @@ final class FrontierV3SceneExecutor {
         return observed;
     }
     /** Whole-set preflight: no partial admission when another member has unknown physical history. */
-    static boolean canResumeUnstartedBodyAdmissions(ServerLevel level, FrontierWorldState state, SceneLease lease) {
+    static boolean canResumeBodyAdmissions(ServerLevel level, FrontierWorldState state, SceneLease lease) {
         if (lease.status() != SceneLeaseStatus.UNKNOWN_AFTER_RESTART) return false;
-        var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
         boolean unstarted = false;
         for (SceneMember member : lease.members()) {
             var actor = state.actorLocations().get(member.actorId());
@@ -189,10 +187,7 @@ final class FrontierV3SceneExecutor {
             var declaration = FrontierV3AmbientActorExecutor.carrierDeclaration(state, member.actorId(), member.entityId(),
                     FrontierV3ActorCarrierComposition.Representation.LIVE_BODY,
                     io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, member.actorId()).physicalEpoch());
-            if (!FrontierV3AmbientActorExecutor.hasUnusedFirstAdmission(ledger, declaration)
-                    || ledger.pendingAdoption(member.actorId()).isPresent()
-
-                    || ledger.reconciliation(declaration) != FrontierV3AmbientCarrierLedger.Reconciliation.NO_FENCED_CARRIER)
+            if (!FrontierV3ActorBodyController.resumableAdmission(level, state, FrontierV3ActorOwnerBinding.body(declaration)))
                 return false;
             unstarted = true;
         }
@@ -300,12 +295,12 @@ final class FrontierV3SceneExecutor {
                     new FrontierV3ActorBodyController.BirthRequest(FrontierV3ActorCarrierComposition.InventoryEntry.SCENE_BODY,
                             FrontierV3ActorOwnerBinding.body(declaration),
                             surfaces, new FrontierV3NavigationScope.Restricted(LocalNavigationEnvelope.along(surfaces, surfaces)),
-                            standingPosition::resolve, body -> {
+                            standingPosition::resolve, surface -> surface.equals(canonical.supportingSurface()), body -> {
                                 if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie,
                                         FrontierV3AmbientActorExecutor.bioformProfile(state, member.actorId()));
                                 FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, member.actorId(), bioform);
                                 return FrontierV3BakeryHandProjection.prepareNew(state, lease, member, body);
-                            }));
+                            }, Optional.of(canonical)));
             if (result == FrontierV3ActorBodyController.Result.DEFERRED) return BodyMaterialization.DEFERRED;
             if (result == FrontierV3ActorBodyController.Result.CONFLICT) return BodyMaterialization.CONFLICT;
         }

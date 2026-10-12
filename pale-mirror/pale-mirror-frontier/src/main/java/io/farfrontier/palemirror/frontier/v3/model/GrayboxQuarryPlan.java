@@ -28,6 +28,7 @@ public final class GrayboxQuarryPlan {
         occupied.addAll(roads.foundationCells()); occupied.addAll(roads.surfaceCells());
         occupied.addAll(FrontierGrayboxPlan.intactOrganOccupancy(bootstrap.hive().organs()));
         Map<SubjectId, ExtractionDeposit> deposits = new LinkedHashMap<>();
+        int producerIndex = 0;
         for (Settlement home : producerSettlements(bootstrap)) {
             var local = new HashSet<BlockPosition>(FrontierSettlementActorSlots.intactStructureOccupancy(bootstrap.terrain(), home.structures()));
             home.residents().forEach(resident -> local.add(resident.home()));
@@ -41,8 +42,9 @@ public final class GrayboxQuarryPlan {
                 BlockPosition anchor = home.anchor().offset(facing.x() * distance, 0, facing.z() * distance);
                 int supportY = bootstrap.terrain().supportYAt(anchor.x(), anchor.z());
                 anchor = new BlockPosition(anchor.x(), supportY - rules.pitDepth(), anchor.z());
-                ExtractionLayout layout = layout(anchor, facing, rules);
+                ExtractionLayout layout = layout(anchor, facing, rules, producerIndex);
                 var positions = new HashSet<>(layout.fixedBlocks().keySet());
+                positions.addAll(layout.terrainSupports().keySet());
                 layout.cells().forEach(cell -> positions.add(cell.source()));
                 // A quarry must not overlap another owner even when its pit is vertically below it.
                 var columns = occupied.stream().map(position -> new TerrainColumn(position.x(), position.z()))
@@ -60,17 +62,27 @@ public final class GrayboxQuarryPlan {
                     : selected.layout().cells().stream().filter(cell -> cell.prerequisites().isEmpty()).map(ExtractionLayout.Cell::id);
             deposits.put(selected.id(), ExtractionDeposit.initial(selected,
                     opened.collect(java.util.stream.Collectors.toUnmodifiableSet())));
+            producerIndex++;
         }
         return new ExtractionSiteState(deposits);
     }
-    private static ExtractionLayout layout(BlockPosition anchor, FacilityFacing facing, ExtractionRules rules) {
+    private static ExtractionLayout layout(BlockPosition anchor, FacilityFacing facing, ExtractionRules rules, int producerIndex) {
         var fixed = new LinkedHashMap<BlockPosition, BlockExtraction.Block>();
+        var natural = new LinkedHashMap<BlockPosition, BlockExtraction.Block>();
         var cells = new ArrayList<ExtractionLayout.Cell>();
         var surfaces = new LinkedHashMap<TerrainColumn, SurfaceAnchor>();
         var stone = new BlockExtraction.Block("minecraft:stone", Map.of());
         var air = new BlockExtraction.Block("minecraft:air", Map.of());
+        rules.rockRise().filter(rise -> producerIndex % rise.producerPeriod() == 0).ifPresent(rise -> {
+            int top = rules.surfaceCut().orElseThrow().topY() + rise.height();
+            for (int x = rules.depth(); x < rules.depth() + rise.depth(); x++)
+                for (int z = 0; z < rules.width(); z++)
+                    for (int y = 0; y <= top - anchor.y(); y++) natural.put(at(anchor, facing, x, y, z), stone);
+        });
         for (int x = -5; x < rules.depth(); x++) for (int z = -1; z <= rules.width(); z++) {
-            fixed.put(at(anchor, facing, x, 0, z), stone);
+            var support = at(anchor, facing, x, 0, z);
+            if (x >= 0 && z >= 0 && z < rules.width()) natural.put(support, stone);
+            else fixed.put(support, stone);
             SurfaceAnchor surface = new SurfaceAnchor(at(anchor, facing, x, 0, z));
             surfaces.put(new TerrainColumn(surface.x(), surface.z()), surface);
             for (int y = 1; y <= rules.pitDepth() + 2; y++) if (!(x >= 0 && z >= 0 && z < rules.width() && y <= 2))
@@ -103,9 +115,12 @@ public final class GrayboxQuarryPlan {
         for (int x = -5; x <= -2; x++) for (int z = 1; z <= 3; z++)
             fixed.put(at(anchor, facing, x, 4, z), new BlockExtraction.Block("minecraft:oak_planks", Map.of()));
         fixed.put(at(anchor, facing, -4, 1, 0), new BlockExtraction.Block("minecraft:torch", Map.of()));
+        var infrastructureIds = new LinkedHashMap<BlockPosition, Long>();
+        fixed.keySet().stream().sorted(Comparator.comparingInt(BlockPosition::x).thenComparingInt(BlockPosition::y)
+                .thenComparingInt(BlockPosition::z)).forEach(position -> infrastructureIds.put(position, infrastructureIds.size() + 1L));
         return new ExtractionLayout(cells, fixed, List.copyOf(surfaces.values()),
                 new SurfaceAnchor(at(anchor, facing, -3, rules.pitDepth(), -rules.pitDepth() - 1)),
-                container, new SurfaceAnchor(at(anchor, facing, -3, 0, 1)));
+                container, new SurfaceAnchor(at(anchor, facing, -3, 0, 1)), infrastructureIds, natural);
     }
     private static BlockPosition at(BlockPosition anchor, FacilityFacing facing, int forward, int y, int sideways) {
         return anchor.offset(facing.x() * forward - facing.z() * sideways, y,

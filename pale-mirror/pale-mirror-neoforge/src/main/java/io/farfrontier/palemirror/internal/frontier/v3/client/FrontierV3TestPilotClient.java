@@ -590,7 +590,7 @@ public final class FrontierV3TestPilotClient {
         // Use the same direct local rotation primitive as the coordinate camera actions.  The
         // inherited Entity#lookAt path is authoritative for server entities but does not
         // consistently update the client render view between consecutive pilot actions.
-        look(minecraft, target.getEyePosition());
+        captureFocus = target.getEyePosition(); look(minecraft, captureFocus);
         advance("look_nearest_entity");
     }
     /**

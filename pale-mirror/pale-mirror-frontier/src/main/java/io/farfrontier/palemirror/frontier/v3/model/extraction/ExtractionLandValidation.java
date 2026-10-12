@@ -12,7 +12,8 @@ final class ExtractionLandValidation {
         if (bounds != currentBounds) { VALIDATED.clear(); bounds = currentBounds; }
         if (VALIDATED.containsKey(layout)) return;
         if (layout.cells().stream().anyMatch(cell -> !currentBounds.contains(cell.source()))
-                || layout.fixedBlocks().keySet().stream().anyMatch(position -> !currentBounds.contains(position)))
+                || layout.fixedBlocks().keySet().stream().anyMatch(position -> !currentBounds.contains(position))
+                || layout.terrainSupports().keySet().stream().anyMatch(position -> !currentBounds.contains(position)))
             throw new IllegalArgumentException("extraction layout leaves declared world bounds");
         if (VALIDATED.size() == 64) VALIDATED.clear();
         VALIDATED.put(layout, Boolean.TRUE);

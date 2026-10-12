@@ -6,8 +6,31 @@ import java.util.*;
 /** One atomic source loss, composed with explicit allocation-owner dispositions. */
 public final class SourceStockClaimLoss {
     private static final Map<ClaimPurpose, SourceStockClaimLossOwner> OWNERS = register(List.of(
-            new ResidentMealPlayerStockLoss(), new InternalShipmentPlayerStockLoss()));
+            new ResidentMealPlayerStockLoss(), new InternalShipmentPlayerStockLoss(),
+            allocation(ClaimPurpose.GOODS_TRADE), allocation(ClaimPurpose.EXPEDITION_SUPPLY),
+            allocation(ClaimPurpose.PRODUCTION_WORK)));
     private SourceStockClaimLoss() { }
+
+    private static SourceStockClaimLossOwner allocation(ClaimPurpose purpose) {
+        var owner = FungibleClaimForfeitureComposition.OWNERS.get(purpose);
+        if (owner == null) throw new IllegalArgumentException("missing declared allocation-loss owner: " + purpose);
+        return new FungibleAllocationSourceStockLoss(purpose, owner);
+    }
+
+    /** Exact resource debit permission; unrelated account reservations cannot block a player. */
+    public static boolean canDepart(FrontierWorldState state, SubjectId source, String itemKind, int quantity) {
+        var ledger = state.inventory().fungibleResources();
+        var account = ledger.accounts().get(source);
+        if (account == null || quantity < 0) return false;
+        try {
+            var losses = Map.of(itemKind, quantity);
+            var forfeited = SourceStockDepartureSelection.claimsNeededForExit(ledger, account, losses,
+                    admissibleClaims(state, source));
+            var cleared = forfeited.isEmpty() ? ledger : ledger.releaseClaims(forfeited);
+            SourceStockDepartureSelection.unclaimedDepartures(cleared, cleared.accounts().get(source), losses);
+            return true;
+        } catch (IllegalArgumentException held) { return false; }
+    }
 
     private static Map<ClaimPurpose, SourceStockClaimLossOwner> register(List<SourceStockClaimLossOwner> owners) {
         var result = new EnumMap<ClaimPurpose, SourceStockClaimLossOwner>(ClaimPurpose.class);

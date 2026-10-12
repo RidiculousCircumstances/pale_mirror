@@ -78,8 +78,19 @@ final class ExtractionWorkProcess {
                 && (job.phase() == ExtractionWork.Phase.TAKE_TOOL || job.phase() == ExtractionWork.Phase.EXTRACT))
             return advance(state, job, ExtractionWorkProgressed.Operation.END_WORK, action, now);
         if (job.phase() == ExtractionWork.Phase.SELECT_SOURCE) {
+            if (ExtractionWorkAuthority.carried(state, job) == 0 && ExtractionWorkPolicy.requested(state, job)
+                    && !ExtractionWorkPolicy.remaining(state.extractionSites().deposits().get(job.siteId()))) {
+                var development = new ArrayList<ProposedEvent>();
+                try {
+                    ExtractionDevelopmentContinuation.append(state, job.siteId(), development, now);
+                } catch (KnownPedestrianNavigation.RouteUnavailable pending) {
+                    return retry(state, job, now);
+                }
+                if (!development.isEmpty()) return List.copyOf(development);
+            }
             ExtractionWorkDecision decision;
-            if (ExtractionWorkPolicy.finished(state, job)) decision = new ExtractionWorkDecision.Finished(job.execution());
+            if (ExtractionWorkAuthority.carried(state, job) > 0) decision = new ExtractionWorkDecision.StorePart(job.execution());
+            else if (ExtractionWorkPolicy.finished(state, job)) decision = new ExtractionWorkDecision.Finished(job.execution());
             else {
                 if (!ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.execution().actorId(), now)) return retry(state, job, now);
                 Optional<ExtractionWorkDecision.Source> selected;
@@ -119,6 +130,9 @@ final class ExtractionWorkProcess {
             }
             if (!ActorExecutionCoordinator.coldAvailable(state, job.execution().actorId())
                     || ExtractionSourceCustody.blocksCold(state, job.target().orElseThrow())) return retry(state, job, now);
+            var deposit = state.extractionSites().deposits().get(job.siteId());
+            if (!ExtractionWorkSafety.available(state, deposit, deposit.site().layout().require(job.target().orElseThrow().key().cell())))
+                return retry(state, job, now);
             operation = ExtractionWorkProgressed.Operation.EXTRACT_BLOCK;
         } else {
             if (!ActorExecutionCoordinator.coldAvailable(state, job.execution().actorId())

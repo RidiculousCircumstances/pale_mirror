@@ -2,7 +2,12 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 /** The claim's owning domain decides its disposition; the resource handoff owns only physical accounting. */
 interface FungibleClaimForfeitureOwner {
-    void validate(FrontierWorldState before, ClaimAllocation claim, FungibleResourceHandoffObserved observation);
+    void validate(FrontierWorldState before, ClaimAllocation claim,
+                  io.farfrontier.palemirror.frontier.v3.api.SubjectId sourceAccount);
     FungibleForfeitureSettlement settle(FrontierWorldState before, java.util.List<ClaimAllocation> originalClaims,
                                         FungibleForfeitureSettlement transaction);
+    default java.util.List<SourceStockClaimLossOwner.ReleasedActivity> released(FrontierWorldState before,
+                                                                             ClaimAllocation claim) {
+        return java.util.List.of();
+    }
 }

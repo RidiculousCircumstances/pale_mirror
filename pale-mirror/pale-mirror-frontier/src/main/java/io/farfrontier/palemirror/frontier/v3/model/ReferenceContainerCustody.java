@@ -283,18 +283,11 @@ public final class ReferenceContainerCustody {
             }
             return Map.copyOf(slots);
         }
-        int next = 0;
-        for (Map.Entry<String, Integer> entry : quantities.entrySet()) {
-            int remaining = entry.getValue();
-            while (remaining > 0) {
-                while (inventory.itemAt(containerId, next).isPresent() || reservedSlots.contains(next)) next++;
-                if (next >= container.slotCount())
-                    throw new IllegalArgumentException("projected fungible stock exceeds unreserved container capacity");
-                int quantity = Math.min(64, remaining);
-                slots.put(next++, new ProjectedFungibleSlot(entry.getKey(), quantity));
-                remaining -= quantity;
-            }
-        }
+        var unavailable = new java.util.HashSet<>(reservedSlots);
+        for (int slot = 0; slot < container.slotCount(); slot++)
+            if (inventory.itemAt(containerId, slot).isPresent()) unavailable.add(slot);
+        container.fungibleLayout().project(quantities, container.slotCount(), unavailable)
+                .forEach((slot, stack) -> slots.put(slot, new ProjectedFungibleSlot(stack.itemKind(), stack.quantity())));
         return Map.copyOf(slots);
     }
 

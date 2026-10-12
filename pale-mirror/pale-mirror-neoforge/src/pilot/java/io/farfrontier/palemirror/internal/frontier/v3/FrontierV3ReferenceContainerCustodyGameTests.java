@@ -425,7 +425,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
-    public static void releasedMutationPreservesBulkStockBeforeRepackingColdLots(GameTestHelper helper) {
+    public static void releasedMutationAndCatchupPreserveConfirmedSparseSlots(GameTestHelper helper) {
         WorldId world = new WorldId("frontier:reference-released-repack");
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
         SubjectId settlement = initial.bootstrap().settlements().getFirst().id();
@@ -441,16 +441,17 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
                 Map.of(accountId, new CustodyAccount(accountId, new ResourceCustody.Container(depot),
                         Map.of(wheat.id(), 64, bread.id(), 64), Map.of())), Map.of());
         var breadSlot = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                new InventoryCustody.ContainerSlot(depot, 0)), bread.itemKind(), 64);
+                new InventoryCustody.ContainerSlot(depot, 3)), bread.itemKind(), 64);
         var wheatSlot = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                new InventoryCustody.ContainerSlot(depot, 1)), wheat.itemKind(), 64);
+                new InventoryCustody.ContainerSlot(depot, 7)), wheat.itemKind(), 64);
         FungibleResourceLedger hot = cold.rebind(accountId, 1L,
                 FungiblePhysicalObservation.bind(cold, accountId, 1L, List.of(breadSlot, wheatSlot)));
         state = held(state.withInventory(state.inventory().withFungibleResources(hot)), depot);
         ChestBlockEntity chest = chest(helper, local, depot);
         FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, state, depot);
-        chest.setItem(0, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BREAD, 64));
-        chest.setItem(1, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WHEAT, 64));
+        helper.assertTrue(chest.getItem(3).is(net.minecraft.world.item.Items.BREAD)
+                        && chest.getItem(7).is(net.minecraft.world.item.Items.WHEAT) && chest.getItem(0).isEmpty(),
+                "writer consumes the same current binding image without its own packing policy");
         chest.setChanged();
         helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.observed(state, depot, chest).fingerprint()
                         .equals(ReferenceContainerCustody.canonicalFingerprint(state, depot)),
@@ -462,7 +463,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
                         && emitted.fingerprint().equals(ReferenceContainerCustody.canonicalFingerprint(released, depot))
                         && FrontierV3ReferenceContainerCustodyExecutor.observedRetained(released, depot, chest).fingerprint()
                         .equals(emitted.fingerprint()),
-                "HOT release preserves the same stock image even when COLD lot packing changes order");
+                "HOT release preserves the confirmed sparse stock image after bindings retire");
         var runtime = runtime(world, released);
         helper.assertTrue(runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE, "released fixture startup");
         FrontierV3ReferenceContainerCustodyExecutor.reconcile(helper.getLevel(), runtime, released,
@@ -479,9 +480,9 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         helper.assertTrue(fence.authorityEpoch() == 2L
                         && ReferenceContainerCustody.hasOperationalCustody(confirmed, depot),
                 "the fenced catch-up write confirms its actual image in the same loaded turn, before unload");
-        helper.assertTrue(chest.getItem(0).is(net.minecraft.world.item.Items.WHEAT)
-                        && chest.getItem(1).is(net.minecraft.world.item.Items.BREAD),
-                "the fenced catch-up write must project the same lots in canonical COLD order");
+        helper.assertTrue(chest.getItem(3).is(net.minecraft.world.item.Items.BREAD)
+                        && chest.getItem(7).is(net.minecraft.world.item.Items.WHEAT) && chest.getItem(0).isEmpty(),
+                "custody catch-up preserves positions and holes rather than sorting resources");
         helper.assertTrue(!FrontierV3ReferenceContainerCustodyExecutor.retainsUnobservedRestartFungibleHot(
                         Map.of(fence.scopeId(), fence.authorityEpoch()), confirmed.inventory().fungibleResources(), fence),
                 "an actually confirmed current-process image must not be retained as unobserved restart custody");

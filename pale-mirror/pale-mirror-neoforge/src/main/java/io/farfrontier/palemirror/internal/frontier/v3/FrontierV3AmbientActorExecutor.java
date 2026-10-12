@@ -347,23 +347,44 @@ final class FrontierV3AmbientActorExecutor {
                     "placement:" + unavailable.status() + ":" + unavailable.getMessage());
             return Result.DEFERRED;
         }
-        var result = FrontierV3ActorBodyController.materialize(level, state,
+        FrontierV3ActorBodyController.Result result;
+        try {
+            result = FrontierV3ActorBodyController.materialize(level, state,
                 new FrontierV3ActorBodyController.BirthRequest(FrontierV3ActorCarrierComposition.InventoryEntry.AMBIENT_BODY,
                         FrontierV3ActorOwnerBinding.body(declaration), candidates,
                         new FrontierV3NavigationScope.Restricted(LocalNavigationEnvelope.along(candidates, candidates)),
-                        standingPositionProvider::resolve, body -> {
+                        standingPositionProvider::resolve,
+                        surface -> placementPermitted(state, lease, canonicalBody, surface), body -> {
                             if (body instanceof Zombie zombie) configureBioform(zombie, bioformProfile(state, actorId));
                             hydrateExactHeldEquipment(body, state, actorId);
                             if (!FrontierV3BakeryHandProjection.prepareAmbientNew(state, actorId, body)
                                     || !FrontierV3ResidentMealHandProjection.prepareAmbientNew(state, actorId, body)) return false;
                             FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, actorId, bioform);
                             return resourceProjection.test(body);
-                        }));
+                        }, Optional.of(canonicalBody)));
+        } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
+            FrontierV3PhysicalWaitTrace.admission(level, actorId,
+                    "placement:" + unavailable.status() + ":" + unavailable.getMessage());
+            return Result.DEFERRED;
+        }
         return switch (result) {
             case APPLIED -> Result.APPLIED;
             case DEFERRED -> Result.DEFERRED;
             case CONFLICT -> Result.CONFLICT;
         };
+    }
+    private static boolean placementPermitted(FrontierWorldState state, AmbientActorLease lease,
+            BodyPosition canonicalBody, io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor surface) {
+        if (lease == null || lease.status() != AmbientLeaseStatus.PREPARED || !canonicalBody.equals(lease.handoffBody()))
+            return surface.equals(canonicalBody.supportingSurface());
+        try {
+            AmbientPlacementPolicy.selectedRoute(state, lease, surface);
+            return true;
+        } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
+            if (unavailable.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
+                return false;
+            throw unavailable;
+        }
     }
     private static void hydrateExactHeldEquipment(Mob body, FrontierWorldState state, SubjectId actorId) {
         if (!body.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) return;
@@ -514,10 +535,20 @@ final class FrontierV3AmbientActorExecutor {
         if (!level.hasChunkAt(anchor)) return FrontierV3AmbientAdmissionDiagnostic.unloaded(expectedId);
         if (!level.areEntitiesLoaded(ChunkPos.asLong(anchor))) return FrontierV3AmbientAdmissionDiagnostic.entityStoragePending(expectedId,
                 new BlockPosition(location.body().x(), location.body().y(), location.body().z()));
-        if (!FrontierV3StandingPosition.hasExactStandingColumn(level, location.supportingSurface().support())) return FrontierV3AmbientAdmissionDiagnostic.blocked(expectedId, location.supportingSurface().support());
-        if (FrontierV3BodyPlacement.occupied(level, FrontierV3ActorCarrierFactory.physicalType(location.kind()), location.supportingSurface()))
+        var contact = location.supportingSurface();
+        var declaration = carrierDeclaration(state, actorId, expectedId,
+                FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, actorId).physicalEpoch());
+        var binding = FrontierV3ActorOwnerBinding.body(declaration);
+        var bodyTicket = FrontierV3BodyInsertionJournal.get(level, state.bootstrap().worldId(), actorId);
+        var decision = bodyTicket != null && bodyTicket.binding().equals(binding) && bodyTicket.current(ledger)
+                ? bodyTicket.admission() : FrontierV3ActorBodyController.admission(state, binding,
+                    ledger, false);
+        if (decision == FrontierV3ActorBodyController.Admission.RECONSTRUCTION)
+            contact = FrontierV3ActorBodyController.reconstructionContact(state, location.body()).orElse(contact);
+        if (!FrontierV3StandingPosition.hasExactStandingColumn(level, contact.support())) return FrontierV3AmbientAdmissionDiagnostic.blocked(expectedId, contact.support());
+        if (FrontierV3BodyPlacement.occupied(level, FrontierV3ActorCarrierFactory.physicalType(location.kind()), contact))
             return FrontierV3AmbientAdmissionDiagnostic.occupied(expectedId, new BlockPosition(location.body().x(), location.body().y(), location.body().z()));
-        return FrontierV3AmbientAdmissionDiagnostic.ready(expectedId, new BlockPosition(location.body().x(), location.body().y(), location.body().z()));
+        return FrontierV3AmbientAdmissionDiagnostic.ready(expectedId, new BlockPosition(contact.x(), contact.y() + 1, contact.z()));
     }
     static JoinDisposition observeJoin(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity) {
         FrontierWorldState state = runtime.decodedState().orElse(null);

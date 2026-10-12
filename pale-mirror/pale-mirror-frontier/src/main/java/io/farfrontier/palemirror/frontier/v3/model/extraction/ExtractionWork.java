@@ -101,6 +101,15 @@ public record ExtractionWork(SubjectId id, SubjectId siteId, ActorExecutionId ex
                 new SubjectId("lot:extraction/" + part),
                 nextBatch, Phase.SELECT_SOURCE, Math.addExact(revision, 1), Optional.empty(), Optional.empty(), Optional.empty());
     }
+    /** Output kind belongs to the bounded cargo part, never to the site's ongoing mandate.
+     * The family reducer proves the prior part empty before accepting another kind. */
+    public ExtractionWork selectSource(ExtractionTarget selected, String selectedOutput) {
+        if (phase != Phase.SELECT_SOURCE || pending.isPresent())
+            throw new IllegalArgumentException("resource part selection requires its unbegun source boundary");
+        return new ExtractionWork(id, siteId, execution, toolId, toolReturnSlot, toolSource, storageTarget, selectedOutput,
+                carriedAccountId, outputLotId, batch, Phase.EXTRACT, Math.addExact(revision, 1),
+                Optional.of(selected), Optional.empty(), Optional.empty());
+    }
     public ExtractionWork retargetStorage(ShipmentEndpoint destination) {
         if (pending.isPresent() || phase != Phase.STORE && phase != Phase.RETURN_TOOL
                 || !destination.settlementId().equals(storageTarget.settlementId()) || destination.equals(storageTarget))

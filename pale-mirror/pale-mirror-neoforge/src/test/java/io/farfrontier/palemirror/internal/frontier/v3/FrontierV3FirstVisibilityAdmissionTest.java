@@ -10,6 +10,18 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3FirstVisibilityAdmissionTest {
+    @Test void freshStaticChunkUsesAvailableOperationalHeadroomWithoutChangingOrdinaryWorkCadence() {
+        var world = new World();
+        var work = new FirstVisibilityWork(cells(151));
+        int limit = FrontierV3GrayboxExecutor.firstVisibilityCellBudget(256);
+        var budget = new FrontierV3FirstVisibilityBudget(256, limit, 3_000_000, () -> 0L);
+        while (!work.complete() && budget.takeRead())
+            work.observe(FrontierV3GrayboxExecutor.project(world, work.next(), budget::takeWrite));
+        assertTrue(work.complete(), "cheap fresh static cells are not artificially spread over nineteen host ticks");
+        assertEquals(151, world.writes);
+        assertEquals(8, FrontierV3GrayboxExecutor.structuralCellBudget(), "later duration-bearing projection keeps its limit");
+    }
+
     @Test void wholeUnchangedChunkCanBeCheckedWithoutSpendingWrites() {
         var world = new World();
         var cells = cells(151);

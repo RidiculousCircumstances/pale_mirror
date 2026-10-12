@@ -28,6 +28,7 @@ public final class ServiceClearanceTargets {
         // the body still straddles its raised sill. It is not a standable destination.
         // Keep pursuing the shared region until real supported exit observation wins.
         if (boundary.cleared(start.standingBody())
+                && !excluded.contains(start)
                 && start.equals(knowledge.supportAt(start.x(), start.z()))
                 && knowledge.traversable(List.of(start))) return List.of(start);
         return egressRegion(boundary, knowledge).stream().filter(candidate -> !excluded.contains(candidate))

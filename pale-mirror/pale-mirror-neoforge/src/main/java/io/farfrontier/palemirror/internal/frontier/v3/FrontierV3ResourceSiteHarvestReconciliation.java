@@ -49,7 +49,7 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
             if (unbound && !firstApplied && (job.progress().hasPendingCrop()
                     || FrontierV3ResourceSiteLedger.get(level).fieldDelivery(job.siteId()) != null
                     || FrontierV3ResourceSiteLedger.get(level).fieldHandProjection(job.siteId()) != null
-                    || !FrontierV3ActorCarryProjection.witnessed(state, job.workerId(), worker))) continue;
+                    || !FrontierV3ActorCarryProjection.witnessed(state, job.workerId(), job.actorAccountId(), worker))) continue;
             // Common body inspection has already committed current physical permission/pose.
             // This family receipt only resumes the inspected process and exact carried batch.
             var recoveryEpoch = recoveryEpoch(state, lease);

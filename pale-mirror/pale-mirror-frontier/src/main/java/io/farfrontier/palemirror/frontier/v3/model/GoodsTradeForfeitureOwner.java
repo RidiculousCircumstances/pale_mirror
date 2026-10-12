@@ -6,7 +6,7 @@ import java.util.UUID;
 
 /** Physical resource changes release the affected promise and money, never award buyer title or delivery. */
 final class GoodsTradeForfeitureOwner implements FungibleClaimForfeitureOwner {
-    @Override public void validate(FrontierWorldState before, ClaimAllocation claim, FungibleResourceHandoffObserved observation) {
+    @Override public void validate(FrontierWorldState before, ClaimAllocation claim, SubjectId sourceAccount) {
         GoodsTradeContract contract = require(before, claim);
         ShipmentStateSupport.requireSourceWithdrawal(before, claim.id());
         if (before.physicalIntents().values().stream().anyMatch(i -> i.causeSubjectId().equals(contract.id()))) {
@@ -14,6 +14,13 @@ final class GoodsTradeForfeitureOwner implements FungibleClaimForfeitureOwner {
         }
         // The resource handoff independently checks the exact old/new physical layout and holder.
         // Possibly applied shipment effects retain their own obligation independently.
+    }
+    @Override public java.util.List<SourceStockClaimLossOwner.ReleasedActivity> released(FrontierWorldState before,
+                                                                                      ClaimAllocation claim) {
+        return before.shipments().shipments().values().stream().filter(shipment -> !shipment.terminal()
+                && shipment.authorization().claimId().equals(claim.id()))
+                .map(shipment -> new SourceStockClaimLossOwner.ReleasedActivity(shipment.execution().actorId(),
+                        java.util.Optional.empty(), java.util.OptionalLong.empty())).toList();
     }
     @Override public FungibleForfeitureSettlement settle(FrontierWorldState before, java.util.List<ClaimAllocation> claims,
                                                         FungibleForfeitureSettlement transaction) {

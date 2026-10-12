@@ -166,6 +166,9 @@ test('native pilot reorders only one exact stack into a bounded chest slot', () 
 test('an isolated scenario has an explicit deterministic disposable-world seed', () => {
   const isolated = { ...scenario, isolation: { mode: 'disposable_lite', seed: 41 } };
   assert.doesNotThrow(() => validateScenario(isolated));
+  assert.doesNotThrow(() => validateScenario({ ...isolated, isolation: { mode: 'disposable_lite', seed: 20_260_918_065 } }));
+  for (const seed of [Number.MAX_SAFE_INTEGER + 1, 1.5, NaN])
+    assert.throws(() => validateScenario({ ...isolated, isolation: { mode: 'disposable_lite', seed } }), /isolation/);
   assert.throws(() => validateScenario({ ...isolated, isolation: { mode: 'shared', seed: 41 } }), /isolation/);
 });
 

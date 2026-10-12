@@ -96,6 +96,13 @@ class FrontierV3ResourceSiteExecutorTest {
                 "a present player cannot project an unadmitted facility");
         assertTrue(FrontierV3GrayboxExecutor.resourceSiteProjectionDemanded(true, true),
                 "an admitted facility can project only while its player is presently local");
+        var ingress = new java.util.HashSet<ChunkPos>();
+        for (int i = 0; i < 10_000; i++) ingress.add(new ChunkPos(i + 100, i + 100));
+        assertFalse(FrontierV3GrayboxExecutor.resourceSitePlayerIngressed(ingress, site));
+        ingress.add(new ChunkPos(9, 19));
+        assertTrue(FrontierV3GrayboxExecutor.resourceSitePlayerIngressed(ingress, site));
+        ingress.remove(new ChunkPos(9, 19));
+        assertFalse(FrontierV3GrayboxExecutor.resourceSitePlayerIngressed(ingress, site));
     }
 
     @Test

@@ -42,10 +42,12 @@ public final class FrontierV3FixtureCatalog {
     /** Test-only catalog: an alternate immutable ruleset must be named here and in the profile file. */
     private static final Map<String, FrontierRuleset> RULESETS = Map.of("production", FrontierRulesets.production(),
             "expedition-candidate", FrontierRulesets.installed("frontier-v3-expedition-candidate-r2"),
-            "quarry-graybox", FrontierRulesets.installed("frontier-v3-quarry-graybox-r4"));
+            "quarry-graybox", FrontierRulesets.installed("frontier-v3-quarry-graybox-r4"),
+            "quarry-front", FrontierRulesets.installed("frontier-v3-quarry-graybox-r7"));
     private static final Map<String, BiFunction<WorldId, Long, FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>>> PROVIDERS = Map.ofEntries(
             Map.entry("world", FrontierWorldRuntimeDefinition::configuration),
             Map.entry("quarryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("quarry-graybox"))),
+            Map.entry("quarryFront", QuarryFrontFixture::configuration),
             Map.entry("storageGround", StorageGroundFixture::configuration),
             Map.entry("goodsShipment", FrontierV3FixtureCatalog::goodsShipmentConfiguration),
             Map.entry("expeditionProvisioning", FrontierV3FixtureCatalog::expeditionProvisioningConfiguration),

@@ -61,7 +61,7 @@ public final class FungibleClaimForfeitureStateSupport {
                 throw new IllegalArgumentException("physical stock loss has no affected current allocation");
             return claim;
         }).toList();
-        affected.forEach(claim -> owner(claim.purpose()).validate(state, claim, observed));
+        affected.forEach(claim -> owner(claim.purpose()).validate(state, claim, observed.sourceAccountId()));
         return affected;
     }
 

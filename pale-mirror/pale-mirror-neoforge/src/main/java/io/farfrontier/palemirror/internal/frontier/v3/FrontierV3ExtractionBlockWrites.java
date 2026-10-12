@@ -41,6 +41,13 @@ final class FrontierV3ExtractionBlockWrites implements FrontierV3ManagedBlockWri
         var declaration = FrontierV3WorksiteRegistry.owner(indexed.key().family()).current(state, indexed);
         var actual = FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position));
         if (!committed && actual.equals(FrontierV3MinecraftBlockExtraction.describe(replacement))) return;
+        if (!committed && declaration.key().role() == WorksiteBlock.Role.NATURAL_TERRAIN) {
+            var fact = ExtractionTerrainFacts.at(state.bootstrap(), declaration.position());
+            if (fact.isPresent() && !state.extractionSites().geologicalExclusions().positions().contains(declaration.position())
+                    && !(FrontierV3CommandSubmission.submit(runtime, "extraction-geology-invalidated", ExtractionGeologyInvalidated.OWNER.value(),
+                        new ExtractionGeologyInvalidated(declaration.position(), fact.orElseThrow().revision())) instanceof CommandResult.Accepted))
+                throw new IllegalStateException("external natural-ground write lacks its before-write knowledge fence");
+        }
         if (declaration.key().role() == WorksiteBlock.Role.RESOURCE) {
             var region = new ExtractionRegion(declaration.key().owner(), position.getX() >> 4, position.getZ() >> 4);
             var lease = state.replicaCustody().custodyByScope().get(region.scopeId());

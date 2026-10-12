@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.extraction.*;
+import io.farfrontier.palemirror.frontier.v3.model.execution.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
@@ -9,6 +10,52 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ExtractionSourceCustodyTest {
+    @Test void pendingBlockReceiptFencesOnlyItsRegionAndItsReleaseRestoresAdmission() {
+        var original = initial().extractionSites();
+        var deposit = original.deposits().values().stream().filter(value -> value.site().layout().cells().stream()
+                .map(cell -> List.of(Math.floorDiv(cell.source().x(), 16), Math.floorDiv(cell.source().z(), 16)))
+                .distinct().count() > 1).findFirst().orElseThrow();
+        var first = deposit.site().layout().cells().getFirst();
+        var region = new ExtractionRegion(deposit.site().id(), Math.floorDiv(first.source().x(), 16), Math.floorDiv(first.source().z(), 16));
+        var second = deposit.site().layout().cells().stream().filter(cell -> cell.id() != first.id()
+                && region.contains(cell.source())).findFirst().orElseThrow();
+        var remote = deposit.site().layout().cells().stream().filter(cell -> !region.contains(cell.source())).findFirst().orElseThrow();
+        assertTrue(deposit.development().openedCells().containsAll(Set.of(first.id(), second.id(), remote.id())),
+                "the isolated declared front must admit all three mutation targets");
+        var sites = original.replace(deposit);
+        var one = mutationJob(deposit, first, 1); var two = mutationJob(deposit, second, 2); var three = mutationJob(deposit, remote, 3);
+        sites = new ExtractionSiteState(sites.deposits(), Map.of(one.id(), one, two.id(), two, three.id(), three), 4);
+        assertTrue(ExtractionSourceCustody.mutationAvailable(sites, one));
+        assertTrue(ExtractionSourceCustody.mutationAvailable(sites, two));
+        var step = new ExtractionPhysicalStep.BlockWork(new ActorHotObservation(new ActorActuationId(
+                new ActorBodyId(one.execution().actorId(), 1), one.execution()), one.revision()),
+                BlockExtraction.prepareKnown(ExtractionPhysicalStateSupport.operation(one), one.execution(), first.source(),
+                        first.definition(), first.definition().before()), 0, 1);
+        var event = new ExtractionHotPrepared(one.id(), step); var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        var restored = (ExtractionHotPrepared) codecs.decode(event.type(), codecs.encode(event));
+        var retained = one.prepare(restored.step());
+        var waiting = sites.replaceWork(one, retained);
+        assertFalse(ExtractionSourceCustody.mutationAvailable(waiting, two), "a peer cannot invalidate the unresolved source epoch");
+        assertFalse(ExtractionSourceCustody.mutationAvailable(waiting, retained), "an existing intent is resumed, never prepared twice");
+        assertTrue(ExtractionSourceCustody.mutationAvailable(waiting, three), "another region stays independent");
+        assertEquals(sites.deposits(), waiting.deposits(), "retaining/waiting is not extraction or depletion");
+        var stale = two.transition(ExtractionWork.Phase.EXTRACT, two.target()); var exactWaiting = waiting;
+        assertThrows(IllegalArgumentException.class, () -> ExtractionSourceCustody.mutationAvailable(exactWaiting, stale));
+        // Isolated successor boundary: actual settlement belongs to the effect reducer, not this availability query.
+        var settledOwner = retained.transition(ExtractionWork.Phase.SELECT_SOURCE, Optional.empty());
+        var released = waiting.replaceWork(retained, settledOwner);
+        assertTrue(ExtractionSourceCustody.mutationAvailable(released, two));
+    }
+    private static ExtractionWork mutationJob(ExtractionDeposit deposit, ExtractionLayout.Cell cell, int ordinal) {
+        var id = new SubjectId("work:mutation-" + ordinal); var actor = new SubjectId("resident:mutation-" + ordinal);
+        var site = deposit.site();
+        var endpoint = new ShipmentEndpoint.ExtractiveSite(site.settlementId(), site.id(), site.containerId(), site.layout().storagePort());
+        return new ExtractionWork(id, site.id(), new ActorExecutionId(actor, ActorActivityKind.EXTRACTION, id, 1),
+                new SubjectId("tool:mutation-" + ordinal), new InventoryCustody.ContainerSlot(site.containerId(), ordinal - 1),
+                endpoint, endpoint, cell.definition().coldOutput().getFirst().itemKind(), new SubjectId("custody:mutation-" + ordinal),
+                new SubjectId("lot:mutation-" + ordinal), 0, ExtractionWork.Phase.EXTRACT, 1,
+                Optional.of(ExtractionWorkEffects.target(deposit, cell)), Optional.empty(), Optional.empty());
+    }
     @Test void withdrawnPreparationUnblocksColdWithoutInventingPhysicalConfirmationAndSurvivesRecovery() {
         var original = initial(); var region = ExtractionRegion.all(original.extractionSites()).getFirst();
         var preparing = transition(original, boundary(original, region, ExtractionSourceBoundary.Operation.PREPARE), 10);

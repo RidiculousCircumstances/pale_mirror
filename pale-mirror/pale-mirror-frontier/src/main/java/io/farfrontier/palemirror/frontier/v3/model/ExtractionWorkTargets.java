@@ -11,14 +11,24 @@ public final class ExtractionWorkTargets {
     public static Optional<ExtractionLayout.Cell> spatialSelection(FrontierWorldState state, ExtractionDeposit deposit,
             io.farfrontier.palemirror.frontier.v3.api.SubjectId actor, List<ExtractionLayout.Cell> available,
             AreaWorkSelection.SpatialPolicy policy) {
-        var peers = state.extractionSites().work().values().stream()
-                .filter(job -> job.siteId().equals(deposit.site().id()) && !job.execution().actorId().equals(actor))
-                .flatMap(job -> job.target().stream().map(target -> deposit.site().layout().require(target.key().cell()).workstation()))
-                .toList();
-        var cells = available.stream().sorted(Comparator.comparingLong(ExtractionLayout.Cell::id)).toList();
+        var peers = peerStations(state, deposit, actor);
+        var cells = available.stream().filter(cell -> ExtractionWorkSafety.available(state, deposit, cell))
+                .sorted(Comparator.comparingLong(ExtractionLayout.Cell::id)).toList();
         var selected = AreaWorkSelection.spatiallySeparated(cells.size(), index -> true,
                 state.actorLocations().get(actor).supportingSurface(), index -> cells.get(index).workstation(), peers, policy);
         return selected.isEmpty() ? Optional.empty() : Optional.of(cells.get(selected.getAsInt()));
+    }
+    private static List<SurfaceAnchor> peerStations(FrontierWorldState state, ExtractionDeposit deposit,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId actor) {
+        return state.extractionSites().work().values().stream()
+                .filter(job -> job.siteId().equals(deposit.site().id()) && !job.execution().actorId().equals(actor))
+                .flatMap(job -> job.target().stream().map(target -> deposit.site().layout().require(target.key().cell()).workstation()))
+                .toList();
+    }
+    public static void requireStationAvailable(FrontierWorldState state, ExtractionDeposit deposit,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId actor, ExtractionLayout.Cell cell) {
+        if (!AreaWorkSelection.stationAvailable(cell.workstation(), peerStations(state, deposit, actor)))
+            throw new IllegalArgumentException("mining source has a concurrently claimed worker station");
     }
     /** A source revision invalidates its mining leg, not an independent service exit
      * or the route of a current activity while this exact work is suspended. */
@@ -73,7 +83,9 @@ public final class ExtractionWorkTargets {
         var knowledge = knowledge(state, job);
         var cells = new ArrayList<>(available);
         while (!cells.isEmpty()) {
-            var cell = spatialSelection(state, deposit, job.execution().actorId(), cells, policy).orElseThrow();
+            var candidate = spatialSelection(state, deposit, job.execution().actorId(), cells, policy);
+            if (candidate.isEmpty()) return Optional.empty();
+            var cell = candidate.orElseThrow();
             cells.remove(cell);
             try {
                 var route = knowledge.plannedBetween(start, cell.workstation());
@@ -90,9 +102,14 @@ public final class ExtractionWorkTargets {
         var cell = deposit.available(state.extractionSites().reservedCells(job.siteId())).stream()
                 .filter(value -> ExtractionWorkEffects.target(deposit, value).equals(selected.target())).findFirst().orElseThrow(
                         () -> new IllegalArgumentException("selected mining source is removed, reserved or stale"));
+        requireStationAvailable(state, deposit, job.execution().actorId(), cell);
+        if (!ExtractionWorkSafety.available(state, deposit, cell))
+            throw new IllegalArgumentException("selected mining source removes an occupied support or retained access edge");
+        boolean emptyPart = job.phase() == ExtractionWork.Phase.SELECT_SOURCE && ExtractionWorkAuthority.carried(state, job) == 0;
         if (!job.execution().equals(selected.execution()) || !selected.origin().equals(
                 state.actorLocations().get(job.execution().actorId()).supportingSurface())
-                || !ExtractionWorkPolicy.matchingOutput(cell, job))
+                || !ExtractionWorkPolicy.supportsTool(state, cell, job)
+                || !emptyPart && !ExtractionWorkPolicy.matchingOutput(cell, job))
             throw new IllegalArgumentException("selected mining source has a foreign execution, departure or output");
         var route = selected.route().map(PedestrianRouteReceipt::route).orElseGet(() -> List.of(selected.origin()));
         if (!route.getFirst().equals(selected.origin()) || !route.getLast().equals(cell.workstation()))

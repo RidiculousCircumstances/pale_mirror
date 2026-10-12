@@ -22,21 +22,19 @@ public final class ExtractionWorkPolicy {
         if (!requested(state, job)) return Optional.empty();
         var deposit = state.extractionSites().deposits().get(job.siteId());
         var available = deposit.available(state.extractionSites().reservedCells(job.siteId())).stream()
-                .filter(cell -> cell.definition().coldOutput().size() == 1
-                        && cell.definition().coldOutput().getFirst().itemKind().equals(job.outputKind()))
+                .filter(cell -> supportsTool(state, cell, job))
+                .filter(cell -> ExtractionWorkAuthority.carried(state, job) == 0 || matchingOutput(cell, job))
                 .toList();
         return ExtractionWorkTargets.plannedSelection(state, job, available, AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION);
     }
     public static boolean finished(FrontierWorldState state, ExtractionWork job) {
         var deposit = state.extractionSites().deposits().get(job.siteId());
-        if (!requested(state, job) || !remaining(deposit)) return true;
-        boolean matchingRemaining = deposit.site().layout().cells().stream().anyMatch(cell ->
-                deposit.cells().get(cell.id()).disposition() == ExtractionDeposit.Disposition.PRESENT && matchingOutput(cell, job));
-        if (!matchingRemaining) return true;
-        var available = deposit.available(state.extractionSites().reservedCells(job.siteId()));
-        // Another output's preparation must get an executor; reserved matching work still waits normally.
-        return available.stream().noneMatch(cell -> matchingOutput(cell, job))
-                && available.stream().anyMatch(cell -> !matchingOutput(cell, job));
+        return !requested(state, job) || !remaining(deposit);
+    }
+    public static boolean supportsTool(FrontierWorldState state, ExtractionLayout.Cell cell, ExtractionWork job) {
+        return cell.definition().coldOutput().size() == 1
+                && cell.definition().toolKind().equals(Objects.requireNonNull(
+                        state.inventory().items().get(job.toolId()), "retained mining tool").itemKind());
     }
     public static boolean matchingOutput(ExtractionLayout.Cell cell, ExtractionWork job) {
         return cell.definition().coldOutput().size() == 1 && cell.definition().coldOutput().getFirst().itemKind().equals(job.outputKind());

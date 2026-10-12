@@ -11,7 +11,18 @@ public record ExtractionRules(boolean enabled, int producerStride, int width, in
                               int developmentBatchCells,
                               java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockStratum> geology,
                               java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.ExcavationTerraces> terraces,
-                              java.util.Optional<ExtractionSurfaceCut> surfaceCut) {
+                              java.util.Optional<ExtractionSurfaceCut> surfaceCut,
+                              java.util.Optional<ExtractionRockRise> rockRise) {
+    public ExtractionRules(boolean enabled, int producerStride, int width, int depth, int reserveItems,
+            int minersPerSite, int haulBatch, long reviewTicks, int exteriorClearance, int pitDepth,
+            int projectionWritesPerTurn, BlockExtraction.Definition source, int developmentBatchCells,
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockStratum> geology,
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.ExcavationTerraces> terraces,
+            java.util.Optional<ExtractionSurfaceCut> surfaceCut) {
+        this(enabled, producerStride, width, depth, reserveItems, minersPerSite, haulBatch, reviewTicks,
+                exteriorClearance, pitDepth, projectionWritesPerTurn, source, developmentBatchCells, geology, terraces, surfaceCut,
+                java.util.Optional.empty());
+    }
     public ExtractionRules(boolean enabled, int producerStride, int width, int depth, int reserveItems,
             int minersPerSite, int haulBatch, long reviewTicks, int exteriorClearance, int pitDepth,
             int projectionWritesPerTurn, BlockExtraction.Definition source, int developmentBatchCells,
@@ -41,6 +52,9 @@ public record ExtractionRules(boolean enabled, int producerStride, int width, in
     }
     public ExtractionRules {
         Objects.requireNonNull(source); Objects.requireNonNull(geology); Objects.requireNonNull(terraces); Objects.requireNonNull(surfaceCut);
+        Objects.requireNonNull(rockRise);
+        if (rockRise.isPresent() && (!enabled || surfaceCut.isEmpty() || geology.isEmpty()))
+            throw new IllegalArgumentException("rock rise requires an explicit contiguous terrain baseline");
         if (producerStride < 1 || producerStride > 12 || width < 2 || width > 32
                 || depth < 1 || depth > 32 || reserveItems < 1 || reserveItems > 3_456
                 || minersPerSite < 1 || minersPerSite > 8 || haulBatch < 1 || haulBatch > 64
@@ -91,6 +105,13 @@ public record ExtractionRules(boolean enabled, int producerStride, int width, in
                         "minecraft:stone_pickaxe", "minecraft:blocks/stone",
                         List.of(new BlockExtraction.Output("minecraft:cobblestone", 1))));
     }
+    public static ExtractionRules availableFrontGraybox() {
+        var base = terracedGraybox();
+        return new ExtractionRules(base.enabled(), base.producerStride(), base.width(), base.depth(), base.reserveItems(),
+                base.minersPerSite(), base.haulBatch(), base.reviewTicks(), base.exteriorClearance(), base.pitDepth(),
+                base.projectionWritesPerTurn(), base.source(), base.developmentBatchCells(), base.geology(), base.terraces(),
+                base.surfaceCut(), java.util.Optional.of(new ExtractionRockRise(6, 4, 2)));
+    }
     public String canonicalText() {
         return enabled + "|" + producerStride + "|" + width + "|" + depth + "|" + reserveItems
                 + "|" + minersPerSite + "|" + haulBatch + "|" + reviewTicks
@@ -102,7 +123,8 @@ public record ExtractionRules(boolean enabled, int producerStride, int width, in
                 + (developmentBatchCells == 0 ? "" : "|development=" + developmentBatchCells)
                 + geology.map(value -> "|geology=" + value.canonicalText()).orElse("")
                 + terraces.map(value -> "|terraces=" + value.canonicalText()).orElse("")
-                + surfaceCut.map(value -> "|surface-cut=" + value.canonicalText()).orElse("");
+                + surfaceCut.map(value -> "|surface-cut=" + value.canonicalText()).orElse("")
+                + rockRise.map(value -> "|rock-rise=" + value.canonicalText()).orElse("");
     }
     public java.util.Optional<BlockExtraction.Definition> definitionFor(BlockExtraction.Block block) {
         return definitions().stream().filter(definition -> definition.before().equals(block)).findFirst();

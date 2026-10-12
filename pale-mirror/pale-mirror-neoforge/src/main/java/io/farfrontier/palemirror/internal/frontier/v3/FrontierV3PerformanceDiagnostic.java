@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
 
 import java.util.Comparator;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -105,14 +106,18 @@ final class FrontierV3PerformanceDiagnostic {
                 .append(",\"worstSpan\":").append(worstSpan(metrics.stages()))
                 .append(",\"hostTurn\":").append(hostTiming(metrics.stages(), FrontierExecutionMetrics.Stage.HOST_TURN))
                 .append(",\"hostTickThroughPmPost\":").append(hostTiming(metrics.stages(), FrontierExecutionMetrics.Stage.HOST_TICK))
-                .append(",\"scheduleQueue\":").append(queuePressure(metrics, checkpoint.instant().ticks()))
-                .append(",\"stages\":[");
-        appendStages(value, metrics.stages()); value.append("],\"queues\":["); appendQueues(value, metrics.queues(), checkpoint.instant().ticks()); value.append(']');
-        if (state != null) value.append(",\"frontier\":").append(frontier(state, checkpoint));
-        if (planningPressure != null) value.append(",\"pedestrianPlanning\":").append(planningPressure);
-        if (departurePressure != null) value.append(",\"ambientDepartureQueue\":").append(departurePressure);
-        if (journalPressure != null) value.append(",\"physicalJournal\":").append(journalPressure);
-        return FrontierV3DiagnosticJson.bounded("performance", "", checkpoint, value.append('}').toString());
+                .append(",\"scheduleQueue\":").append(queuePressure(metrics, checkpoint.instant().ticks()));
+        var details = new ArrayList<FrontierV3DiagnosticDetailBudget.Section>();
+        if (state != null) details.add(new FrontierV3DiagnosticDetailBudget.Section("frontier", frontier(state, checkpoint)));
+        if (planningPressure != null) details.add(new FrontierV3DiagnosticDetailBudget.Section("pedestrianPlanning", planningPressure));
+        if (departurePressure != null) details.add(new FrontierV3DiagnosticDetailBudget.Section("ambientDepartureQueue", departurePressure));
+        if (journalPressure != null) details.add(new FrontierV3DiagnosticDetailBudget.Section("physicalJournal", journalPressure));
+        StringBuilder stages = new StringBuilder("["); appendStages(stages, metrics.stages());
+        details.add(new FrontierV3DiagnosticDetailBudget.Section("stages", stages.append(']').toString()));
+        StringBuilder queues = new StringBuilder("["); appendQueues(queues, metrics.queues(), checkpoint.instant().ticks());
+        details.add(new FrontierV3DiagnosticDetailBudget.Section("queues", queues.append(']').toString()));
+        return FrontierV3DiagnosticJson.bounded("performance", "", checkpoint,
+                FrontierV3DiagnosticDetailBudget.finish(value.toString(), details));
     }
 
     private static String frontier(FrontierWorldState state, FrontierScheduleView checkpoint) {

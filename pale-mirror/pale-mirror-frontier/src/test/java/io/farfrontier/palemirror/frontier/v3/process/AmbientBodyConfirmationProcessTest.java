@@ -146,14 +146,13 @@ class AmbientBodyConfirmationProcessTest {
                 queries.incrementAndGet(); return new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(status,
                         List.of(), 0L, 0, "placement dependency");
             })) {
+                assertEquals(lease.handoffBody().supportingSurface(), AmbientPlacementPolicy.candidates(f.state(), lease).getFirst());
+                assertEquals(0, queries.get(), "geometric proposals cannot start speculative route searches");
                 var failure = assertThrows(io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable.class,
-                        () -> AmbientPlacementPolicy.candidates(f.state(), lease));
-                assertEquals(status, failure.status()); assertEquals(1, queries.get());
-                failure = assertThrows(io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable.class,
                         () -> AmbientPlacementPolicy.selectedRoute(f.state(), lease, waiting));
-                assertEquals(status, failure.status()); assertEquals(2, queries.get());
+                assertEquals(status, failure.status()); assertEquals(1, queries.get());
                 assertTrue(AmbientPlacementPolicy.selectedRoute(f.state(), lease, lease.handoffBody().supportingSurface()).isEmpty());
-                assertEquals(2, queries.get(), "an unchanged exact placement needs no route calculation");
+                assertEquals(1, queries.get(), "an unchanged exact placement needs no route calculation");
             }
         }
     }

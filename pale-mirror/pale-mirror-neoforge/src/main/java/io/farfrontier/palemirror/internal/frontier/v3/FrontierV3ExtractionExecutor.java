@@ -21,7 +21,8 @@ final class FrontierV3ExtractionExecutor {
         var state = runtime.decodedState().orElse(null);
         if (state == null) return;
         for (var job : state.extractionSites().work().values().stream().filter(value -> !value.terminal())
-                .sorted(Comparator.comparing(ExtractionWork::id)).toList()) {
+                .sorted(Comparator.comparing((ExtractionWork value) -> value.pending().isEmpty())
+                        .thenComparing(ExtractionWork::id)).toList()) {
             if (progress(level, runtime, state, job)) return;
         }
     }
@@ -107,7 +108,9 @@ final class FrontierV3ExtractionExecutor {
         var site = ExtractionWorkAuthority.site(state, job);
         if (job.phase() == ExtractionWork.Phase.EXTRACT) {
             if (job.labour().isEmpty() || job.labour().orElseThrow().completedAt(tick) < job.labour().orElseThrow().requiredMilliWork()) return null;
+            if (!ExtractionSourceCustody.mutationAvailable(state.extractionSites(), job)) return null;
             var target = job.target().orElseThrow(); var cell = site.layout().require(target.key().cell());
+            if (!ExtractionWorkSafety.available(state, state.extractionSites().deposits().get(site.id()), cell)) return null;
             var region = new ExtractionRegion(site.id(), Math.floorDiv(cell.source().x(), 16), Math.floorDiv(cell.source().z(), 16));
             var custody = state.replicaCustody().custodyByScope().get(region.scopeId());
             var witness = FrontierV3GrayboxLedger.get(level).worksite(new BlockPos(cell.source().x(), cell.source().y(), cell.source().z()));
@@ -178,6 +181,12 @@ final class FrontierV3ExtractionExecutor {
                     if (!handAfter && !plain(worker.getOffhandItem(), job.outputKind(), block.carriedBefore()))
                         throw new IllegalArgumentException("mining output hand matches neither retained preimage nor postimage");
                     if (!sourceAfter && external.isEmpty()) {
+                        var deposit = state.extractionSites().deposits().get(job.siteId());
+                        if (!ExtractionWorkSafety.available(state, deposit, deposit.site().layout().require(job.target().orElseThrow().key().cell()))
+                                || !level.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class,
+                                    new net.minecraft.world.phys.AABB(source).inflate(1.0D), entity -> entity.isAlive()
+                                        && FrontierV3BodyObservation.capture(entity).support().filter(support ->
+                                            support.support().equals(block.extraction().target())).isPresent()).isEmpty()) return null;
                         var result = new BlockExtractionPort.Result[1];
                         FrontierV3WorksiteWrites.apply(key, () -> {
                             result[0] = adapter.apply(block.extraction());

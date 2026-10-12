@@ -14,6 +14,21 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 class AmbientActorProcessTest {
     @Test
+    void hungryBodyPresentationNeverPlansAnUnassignedMealRoute() throws Exception {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:ambient-hungry-intent"), 20260918065L));
+        var resident = new SubjectId("resident:7-11");
+        state = state.withHumanPopulation(state.humanPopulation().accrueHunger(resident, 27_000L));
+        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, from, to) -> {
+            throw new AssertionError("physical presentation cannot enqueue an unassigned meal route");
+        })) {
+            var lease = AmbientActorProcess.nextLease(state, resident,
+                    new io.farfrontier.palemirror.frontier.v3.api.SimInstant(27_000L));
+            assertEquals(AmbientGoalKind.PATROL, lease.goal());
+            assertEquals(state.actorLocations().get(resident).body(), lease.handoffBody());
+        }
+    }
+    @Test
     void retainedFieldJobDoesNotBecomeAnAmbientWorkGoalWhenActivityYields() {
         var fixture = FrontierV3FixtureCatalog.configuration("resident-worker-meal",
                 new WorldId("frontier:ambient-worker-activity"), 125L);

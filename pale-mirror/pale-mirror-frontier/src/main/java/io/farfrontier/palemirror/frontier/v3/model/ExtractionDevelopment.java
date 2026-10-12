@@ -16,25 +16,16 @@ public final class ExtractionDevelopment {
         var accessible = deposit.accessibleSources(Set.of()).stream().map(ExtractionLayout.Cell::id)
                 .collect(java.util.stream.Collectors.toSet());
         var layout = deposit.site().layout(); var known = KnownPedestrianRouteKnowledge.forFrontier(state);
-        var access = new LinkedHashMap<SurfaceAnchor, Optional<PedestrianRouteReceipt>>();
-        java.util.function.LongPredicate reachable = id -> {
-            if (!accessible.contains(id)) return false;
-            var station = layout.require(id).workstation();
-            try {
-                var route = known.plannedBetween(layout.storagePort(), station);
-                access.put(station, route.size() > 1 ? Optional.of(new PedestrianRouteReceipt(route)) : Optional.empty()); return true;
-            } catch (KnownPedestrianNavigation.RouteUnavailable blocked) {
-                if (blocked.status() != PedestrianRouteResult.Status.NO_PATH) throw blocked;
-                return false;
-            }
-        };
+        var access = known.accessSelection(layout.storagePort());
+        java.util.function.LongPredicate reachable = id -> accessible.contains(id) && access.reachable(layout.require(id).workstation());
         // Reservations do not mean depletion. A damaged developed front does not veto reachable neighbours.
         if (deposit.available(Set.of()).stream().anyMatch(cell -> reachable.test(cell.id()))) return Optional.empty();
+        access.awaitUnresolved();
         var cells = layout.cells().stream().map(cell -> new AdjacentWorkArea.Cell(cell.id(), cell.source())).toList();
         var additions = AdjacentWorkArea.extend(cells, deposit.development(), reachable, rules.developmentBatchCells());
-        return additions.isEmpty() ? Optional.empty() : Optional.of(new ExtractionFrontierOpened(siteId, deposit.development().revision(), additions,
-                PedestrianAccessReceipt.selected(layout.storagePort(), access, additions.stream().map(id -> layout.require(id).workstation())
-                        .collect(java.util.stream.Collectors.toSet()))));
+        if (additions.isEmpty()) { access.awaitUnresolved(); return Optional.empty(); }
+        return Optional.of(new ExtractionFrontierOpened(siteId, deposit.development().revision(), additions,
+                access.receipt(additions.stream().map(id -> layout.require(id).workstation()).collect(java.util.stream.Collectors.toSet()))));
     }
     public static FrontierWorldState apply(FrontierWorldState state, SubjectId subject, ExtractionFrontierOpened event) {
         var deposit = state.extractionSites().deposits().get(subject);

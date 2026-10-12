@@ -7,15 +7,52 @@ import java.util.Optional;
 
 /** Exact content-declared terrain facts shared by planning and invalidation; never inferred from a worksite. */
 public final class ExtractionTerrainFacts {
+    private static final BlockExtraction.Block AIR = new BlockExtraction.Block("minecraft:air", Map.of());
+    // One derived proof per execution thread, keyed by the exact immutable declarations.
+    // Weak references neither retain retired worlds nor serialize/cache physical facts.
+    private static final ThreadLocal<CoverageProof> COVERAGE = new ThreadLocal<>();
+    private static final ThreadLocal<TerrainView> TERRAIN = new ThreadLocal<>();
+    private record TerrainView(java.lang.ref.WeakReference<io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRules> rules,
+            Optional<KnownBlockGeometry.Sample<BlockExtraction.Block>> air,
+            Optional<KnownBlockGeometry.Sample<BlockExtraction.Block>> cover,
+            Optional<KnownBlockGeometry.Sample<BlockExtraction.Block>> rock) { }
+    private record CoverageProof(java.lang.ref.WeakReference<FrontierBootstrap> bootstrap,
+            java.lang.ref.WeakReference<io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockExclusions> exclusions) { }
     private ExtractionTerrainFacts() { }
+
+    /** Coverage alone must not construct a nominal block/sample for every invalidated voxel. */
+    public static boolean contains(FrontierBootstrap bootstrap, BlockPosition position) {
+        if (!bootstrap.bounds().contains(position)) return false;
+        var rules = bootstrap.ruleset().extraction();
+        if (rules.surfaceCut().isPresent() && position.y() >= rules.surfaceCut().orElseThrow().topY()) return true;
+        return rules.geology().filter(stratum -> position.y() >= stratum.minY() && position.y() <= stratum.maxY()).isPresent();
+    }
+
+    public static void validateExclusions(FrontierBootstrap bootstrap,
+            io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockExclusions exclusions) {
+        java.util.Objects.requireNonNull(bootstrap); java.util.Objects.requireNonNull(exclusions);
+        var proof = COVERAGE.get();
+        if (proof != null && proof.bootstrap().get() == bootstrap && proof.exclusions().get() == exclusions) return;
+        for (var position : exclusions.positions())
+            if (!contains(bootstrap, position)) throw new IllegalArgumentException("geological exclusion has no declared baseline");
+        COVERAGE.set(new CoverageProof(new java.lang.ref.WeakReference<>(bootstrap), new java.lang.ref.WeakReference<>(exclusions)));
+    }
     public static Optional<KnownBlockGeometry.Sample<BlockExtraction.Block>> at(FrontierBootstrap bootstrap, BlockPosition position) {
         if (!bootstrap.bounds().contains(position)) return Optional.empty();
         var rules = bootstrap.ruleset().extraction();
-        var cover = rules.surfaceCut().filter(value -> value.topY() == position.y());
-        if (cover.isPresent()) return Optional.of(new KnownBlockGeometry.Sample<>(cover.orElseThrow().cover().before(),
-                cover.orElseThrow().revision(), KnownBlockGeometry.Sample.Permission.PUBLIC));
-        return rules.geology().flatMap(stratum -> stratum.at(bootstrap.bounds(), position).map(kind ->
-                new KnownBlockGeometry.Sample<>(new BlockExtraction.Block(kind, Map.of()), stratum.revision(),
-                        KnownBlockGeometry.Sample.Permission.PUBLIC)));
+        var view = TERRAIN.get();
+        if (view == null || view.rules().get() != rules) {
+            var air = rules.surfaceCut().map(cut -> new KnownBlockGeometry.Sample<>(AIR, cut.revision(), KnownBlockGeometry.Sample.Permission.PUBLIC));
+            var cover = rules.surfaceCut().map(cut -> new KnownBlockGeometry.Sample<>(cut.cover().before(), cut.revision(), KnownBlockGeometry.Sample.Permission.PUBLIC));
+            var rock = rules.geology().map(stratum -> new KnownBlockGeometry.Sample<>(new BlockExtraction.Block(stratum.blockKind(), Map.of()),
+                    stratum.revision(), KnownBlockGeometry.Sample.Permission.PUBLIC));
+            view = new TerrainView(new java.lang.ref.WeakReference<>(rules), air, cover, rock);
+            TERRAIN.set(view);
+        }
+        if (rules.surfaceCut().isPresent() && position.y() > rules.surfaceCut().orElseThrow().topY())
+            return view.air();
+        if (rules.surfaceCut().isPresent() && position.y() == rules.surfaceCut().orElseThrow().topY()) return view.cover();
+        return rules.geology().filter(stratum -> position.y() >= stratum.minY() && position.y() <= stratum.maxY()).isPresent()
+                ? view.rock() : Optional.empty();
     }
 }

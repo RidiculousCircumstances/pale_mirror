@@ -69,6 +69,15 @@ final class FrontierV3ActorCarryProjection {
                         .collect(java.util.stream.Collectors.joining(";")));
     }
 
+    /** One resource's provenance is independent of consumption or movement of another inventory account. */
+    static boolean witnessed(FrontierWorldState state, SubjectId actorId, SubjectId accountId, Mob body) {
+        var carry = declarations(state, actorId).stream().filter(value -> value.accountId().equals(accountId))
+                .findFirst().orElse(null);
+        return carry != null && matches(state.inventory().fungibleResources(), carry, body)
+                && java.util.Arrays.asList(body.getPersistentData().getString(WITNESS).split(";", -1))
+                    .contains(signature(state.inventory().fungibleResources(), carry));
+    }
+
     private static java.util.List<ActorCarriedResources.Presentation> declarations(FrontierWorldState state, SubjectId actor) {
         var meal = state.humanPopulation().meals().get(actor);
         return UnitInventoryPresentation.inventory(state, actor).values().stream()

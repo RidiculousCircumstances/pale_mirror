@@ -13,6 +13,9 @@ public final class ExtractionLayout {
     private final BlockPosition container;
     private final SurfaceAnchor storagePort;
     private final Map<BlockPosition, Long> infrastructureIds;
+    /** Natural substrate/volume declarations, not protected infrastructure or another depletion ledger. */
+    private final Map<BlockPosition, BlockExtraction.Block> terrainSupports;
+    private final Map<BlockPosition, Long> terrainIds;
     // Derived once from this immutable declaration; not durable state or a history cache.
     private final Map<Long, Cell> cellsById;
     public static final int MAX_CELLS = 8_192;
@@ -44,33 +47,60 @@ public final class ExtractionLayout {
                             List<SurfaceAnchor> accessSurfaces, SurfaceAnchor entrance,
                             BlockPosition container, SurfaceAnchor storagePort,
                             Map<BlockPosition, Long> infrastructureIds) {
+        this(cells, fixedBlocks, accessSurfaces, entrance, container, storagePort, infrastructureIds, Map.of());
+    }
+    public ExtractionLayout(List<Cell> cells, Map<BlockPosition, BlockExtraction.Block> fixedBlocks,
+                            List<SurfaceAnchor> accessSurfaces, SurfaceAnchor entrance,
+                            BlockPosition container, SurfaceAnchor storagePort,
+                            Map<BlockPosition, Long> infrastructureIds,
+                            Map<BlockPosition, BlockExtraction.Block> terrainSupports) {
+        this(cells, fixedBlocks, accessSurfaces, entrance, container, storagePort, infrastructureIds,
+                terrainSupports, initialInfrastructureIds(terrainSupports));
+    }
+    public ExtractionLayout(List<Cell> cells, Map<BlockPosition, BlockExtraction.Block> fixedBlocks,
+                            List<SurfaceAnchor> accessSurfaces, SurfaceAnchor entrance,
+                            BlockPosition container, SurfaceAnchor storagePort,
+                            Map<BlockPosition, Long> infrastructureIds,
+                            Map<BlockPosition, BlockExtraction.Block> terrainSupports,
+                            Map<BlockPosition, Long> terrainIds) {
         cells = List.copyOf(cells); fixedBlocks = Map.copyOf(fixedBlocks);
         infrastructureIds = Map.copyOf(infrastructureIds);
+        terrainSupports = Map.copyOf(terrainSupports);
+        terrainIds = Map.copyOf(terrainIds);
         accessSurfaces = List.copyOf(accessSurfaces);
         Objects.requireNonNull(entrance); Objects.requireNonNull(container); Objects.requireNonNull(storagePort);
         if (!infrastructureIds.keySet().equals(fixedBlocks.keySet())
                 || infrastructureIds.values().stream().distinct().count() != infrastructureIds.size()
                 || infrastructureIds.values().stream().anyMatch(id -> id < 1))
             throw new IllegalArgumentException("infrastructure requires exact stable unique declaration identities");
+        if (!terrainIds.keySet().equals(terrainSupports.keySet())
+                || terrainIds.values().stream().distinct().count() != terrainIds.size()
+                || terrainIds.values().stream().anyMatch(id -> id < 1))
+            throw new IllegalArgumentException("natural terrain requires exact stable declaration identities");
         if (cells.isEmpty() || cells.size() > MAX_CELLS || fixedBlocks.size() > MAX_CELLS * 4
                 || cells.stream().map(Cell::id).distinct().count() != cells.size()
                 || cells.stream().map(Cell::source).distinct().count() != cells.size()
                 || accessSurfaces.isEmpty() || accessSurfaces.size() > MAX_CELLS * 4
-                || accessSurfaces.stream().map(surface -> new io.farfrontier.palemirror.frontier.v3.model.TerrainColumn(surface.x(), surface.z()))
-                    .distinct().count() != accessSurfaces.size())
+                || accessSurfaces.stream().distinct().count() != accessSurfaces.size()
+                || terrainSupports.size() > MAX_CELLS * 4
+                || terrainSupports.keySet().stream().anyMatch(fixedBlocks::containsKey)
+                || terrainSupports.values().stream().anyMatch(block -> block.kind().equals("minecraft:air")))
             throw new IllegalArgumentException("extraction layout requires bounded unique source cells");
         Set<Long> ids = cells.stream().map(Cell::id).collect(java.util.stream.Collectors.toUnmodifiableSet());
         var protectedBlocks = fixedBlocks;
+        var naturalBlocks = terrainSupports;
         var sourcesByPosition = cells.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(Cell::source, cell -> cell));
         var sources = sourcesByPosition.keySet();
         var surfaces = Set.copyOf(accessSurfaces);
         if (cells.stream().anyMatch(cell -> !ids.containsAll(cell.prerequisites())
-                    || protectedBlocks.containsKey(cell.source()) || sources.contains(cell.workstation().support()))
+                    || protectedBlocks.containsKey(cell.source()))
                 || sources.contains(container) || !fixedBlocks.containsKey(container)
                 || !surfaces.contains(entrance) || !surfaces.contains(storagePort)
                 || cells.stream().anyMatch(cell -> !surfaces.contains(cell.workstation()))
                 || accessSurfaces.stream().anyMatch(surface -> !protectedBlocks.containsKey(surface.support())
-                    || protectedBlocks.get(surface.support()).kind().equals("minecraft:air")))
+                    && !naturalBlocks.containsKey(surface.support())
+                    || protectedBlocks.containsKey(surface.support())
+                        && protectedBlocks.get(surface.support()).kind().equals("minecraft:air")))
             throw new IllegalArgumentException("extraction source competes with protected access or storage geometry");
         for (var cell : cells) {
             BlockPosition feet = cell.workstation().support().offset(0, 1, 0);
@@ -87,6 +117,8 @@ public final class ExtractionLayout {
         this.cells = cells; this.fixedBlocks = fixedBlocks; this.accessSurfaces = accessSurfaces;
         this.entrance = entrance; this.container = container; this.storagePort = storagePort;
         this.infrastructureIds = infrastructureIds;
+        this.terrainSupports = terrainSupports;
+        this.terrainIds = terrainIds;
         this.cellsById = cells.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(Cell::id, cell -> cell));
     }
     public Cell require(long id) {
@@ -101,14 +133,17 @@ public final class ExtractionLayout {
     public BlockPosition container() { return container; }
     public SurfaceAnchor storagePort() { return storagePort; }
     public Map<BlockPosition, Long> infrastructureIds() { return infrastructureIds; }
+    public Map<BlockPosition, BlockExtraction.Block> terrainSupports() { return terrainSupports; }
+    public Map<BlockPosition, Long> terrainIds() { return terrainIds; }
     @Override public boolean equals(Object other) {
         return this == other || other instanceof ExtractionLayout layout && cells.equals(layout.cells)
                 && fixedBlocks.equals(layout.fixedBlocks) && accessSurfaces.equals(layout.accessSurfaces)
                 && entrance.equals(layout.entrance) && container.equals(layout.container)
-                && storagePort.equals(layout.storagePort) && infrastructureIds.equals(layout.infrastructureIds);
+                && storagePort.equals(layout.storagePort) && infrastructureIds.equals(layout.infrastructureIds)
+                && terrainSupports.equals(layout.terrainSupports) && terrainIds.equals(layout.terrainIds);
     }
     @Override public int hashCode() {
-        return Objects.hash(cells, fixedBlocks, accessSurfaces, entrance, container, storagePort, infrastructureIds);
+        return Objects.hash(cells, fixedBlocks, accessSurfaces, entrance, container, storagePort, infrastructureIds, terrainSupports, terrainIds);
     }
     /** Append-only declaration admission: no old source, station, infrastructure or port may change. */
     public void requireExtensionOf(ExtractionLayout prior) {
@@ -116,7 +151,9 @@ public final class ExtractionLayout {
                 || cells.size() <= prior.cells().size() || !cells.subList(0, prior.cells().size()).equals(prior.cells())
                 || !accessSurfaces.containsAll(prior.accessSurfaces())
                 || !fixedBlocks.entrySet().containsAll(prior.fixedBlocks().entrySet())
-                || !infrastructureIds.entrySet().containsAll(prior.infrastructureIds().entrySet()))
+                || !infrastructureIds.entrySet().containsAll(prior.infrastructureIds().entrySet())
+                || !terrainSupports.entrySet().containsAll(prior.terrainSupports.entrySet())
+                || !terrainIds.entrySet().containsAll(prior.terrainIds.entrySet()))
             throw new IllegalArgumentException("development changed an existing declaration");
     }
 }

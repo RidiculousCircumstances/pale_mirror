@@ -30,9 +30,8 @@ final class FrontierV3WorksiteProjection {
             if (declared.key().family() != owner.family()) throw new IllegalStateException("worksite owner returned foreign declaration");
             var position = position(declared);
             if (!level.hasChunkAt(position)) continue;
-            var current = owner.current(state, declared); var prior = ledger.worksite(position);
-            if (prior != null && !prior.declaration().key().equals(current.key()))
-                throw new IllegalStateException("worksite projection crosses a foreign physical owner");
+            var current = owner.current(state, declared); var prior = alignDeclaration(ledger, state, current);
+            if (prior != null && !prior.declaration().key().equals(current.key())) continue;
             if (prior != null && prior.phase() == FrontierV3WorksiteBlockWitness.Phase.EFFECT_BLOCK_APPLIED) {
                 var committed = owner.committedEffect(state, prior);
                 if (committed.isEmpty()) continue;
@@ -84,6 +83,21 @@ final class FrontierV3WorksiteProjection {
         }
         if (ledger.isDirty()) ledger.persist(level);
         for (var owner : FrontierV3WorksiteRegistry.OWNERS) owner.afterProjection(level, runtime);
+    }
+    /** Same metadata-only boundary for projection and an unloaded region's proven withdrawal. */
+    static FrontierV3WorksiteBlockWitness alignDeclaration(FrontierV3GrayboxLedger ledger,
+            FrontierWorldState state, WorksiteBlock current) {
+        var prior = ledger.worksite(position(current));
+        if (prior == null || prior.declaration().key().equals(current.key())) return prior;
+        var owner = FrontierV3WorksiteRegistry.owner(current.key().family());
+        var transition = owner.reclassification(state, prior.declaration(), current).orElseThrow(
+                () -> new IllegalStateException("worksite projection crosses an undeclared physical owner at " + current.position()
+                        + "; retained=" + prior.declaration().key() + "; proposed=" + current.key()));
+        if (!transition.predecessor().equals(prior.declaration()) || !transition.successor().equals(current))
+            throw new IllegalStateException("worksite owner returned a foreign reclassification proof");
+        if (prior.phase() != FrontierV3WorksiteBlockWitness.Phase.SETTLED) return prior;
+        // No block write or resource receipt: the following physical action still needs custody.
+        return ledger.reclassify(prior, transition);
     }
     private static io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block generatedBase(ServerLevel level, BlockPos position) {
         // The native generator supplies the initial terrain preimage. A foreign observed

@@ -10,6 +10,7 @@ interface FrontierV3WorksiteProjectionOwner {
     CellMutationKey.OwnerFamily family();
     List<WorksiteBlock> declarations(FrontierWorldState state);
     WorksiteBlock current(FrontierWorldState state, WorksiteBlock declared);
+    Optional<WorksiteBlockTransition> reclassification(FrontierWorldState state, WorksiteBlock predecessor, WorksiteBlock successor);
     void beforeTurn(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime);
     Optional<FrontierV3WorksiteBlockWitness> committedEffect(FrontierWorldState state, FrontierV3WorksiteBlockWitness witness);
     boolean effectResumption(FrontierWorldState state, WorksiteBlock cell, FrontierV3WorksiteBlockWitness witness,

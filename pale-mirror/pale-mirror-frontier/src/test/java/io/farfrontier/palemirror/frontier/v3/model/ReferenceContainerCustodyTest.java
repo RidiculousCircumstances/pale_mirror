@@ -104,6 +104,19 @@ class ReferenceContainerCustodyTest {
         assertEquals(expected, ReferenceContainerCustody.observedFingerprint(state, depot, matching));
         matching.set(1, new ReferenceContainerCustody.ObservedSlot(1, "foreign:minecraft:bread", "minecraft:bread", 10));
         assertNotEquals(expected, ReferenceContainerCustody.observedFingerprint(state, depot, matching));
+
+        var released = ProductionResourceCustody.release(state, accountId, 1L);
+        assertTrue(released.inventory().fungibleResources().bindings().isEmpty());
+        assertEquals(expected, ReferenceContainerCustody.canonicalFingerprint(released, depot),
+                "closing physical authority preserves the confirmed sparse slot layout");
+        assertTrue(ReferenceContainerCustody.expectedFungibleSlot(released, depot, 0).isEmpty());
+        assertEquals(new ReferenceContainerCustody.ProjectedFungibleSlot("minecraft:bread", 10),
+                ReferenceContainerCustody.expectedFungibleSlot(released, depot, 1).orElseThrow());
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        var restored = codec.decode(codec.encode(released));
+        assertEquals(expected, ReferenceContainerCustody.canonicalFingerprint(restored, depot),
+                "restart retains placement without restoring an expired binding or creating stock");
+        assertThrows(IllegalArgumentException.class, () -> ProductionResourceCustody.release(state, accountId, 2L));
     }
 
     @Test

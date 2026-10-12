@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.persistence;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerRecord;
 import io.farfrontier.palemirror.frontier.v3.model.ContainerPurpose;
+import io.farfrontier.palemirror.frontier.v3.model.FungibleContainerLayout;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionStationSpec;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 
@@ -41,6 +42,12 @@ final class ContainerRecordStateCodec {
             }
             output.writeBoolean(value.storage().isPresent());
             if (value.storage().isPresent()) ResourceStoragePolicyCodec.write(output, value.storage().orElseThrow());
+            output.writeByte(value.fungibleLayout().slots().size());
+            for (var entry : new java.util.TreeMap<>(value.fungibleLayout().slots()).entrySet()) {
+                output.writeByte(entry.getKey());
+                writeString(output, entry.getValue().itemKind());
+                output.writeByte(entry.getValue().quantity());
+            }
         }
     }
 
@@ -59,7 +66,16 @@ final class ContainerRecordStateCodec {
                     input.readUnsignedByte(), input.readUnsignedByte()));
             var storage = input.readBoolean() ? Optional.of(ResourceStoragePolicyCodec.read(input))
                     : Optional.<io.farfrontier.palemirror.frontier.v3.model.ResourceStoragePolicy>empty();
-            if (containers.put(id, new ContainerRecord(id, owner, slots, purpose, station, storage)) != null)
+            var placement = new LinkedHashMap<Integer, FungibleContainerLayout.Stack>();
+            int placementCount = input.readUnsignedByte();
+            if (placementCount > slots) throw new IllegalArgumentException("container placement exceeds capacity");
+            for (int entry = 0; entry < placementCount; entry++) {
+                int slot = input.readUnsignedByte();
+                var stack = new FungibleContainerLayout.Stack(readString(input), input.readUnsignedByte());
+                if (placement.put(slot, stack) != null) throw new IllegalArgumentException("duplicate retained container slot");
+            }
+            if (containers.put(id, new ContainerRecord(id, owner, slots, purpose, station, storage,
+                    new FungibleContainerLayout(placement))) != null)
                 throw new IllegalArgumentException("duplicate container id");
         }
         return containers;

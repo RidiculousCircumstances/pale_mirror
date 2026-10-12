@@ -34,6 +34,8 @@ public final class AdjacentExcavationPlanner {
         List<SurfaceAnchor> order(Collection<SurfaceAnchor> stations);
         List<Integer> floorOffsets(SurfaceAnchor station, int dx, int dz);
         default int clearanceTopY(SurfaceAnchor station, SurfaceAnchor floor) { return floor.y() + 2; }
+        /** Permanent access keeps its column; mutable terrain may be lowered by a later front. */
+        default boolean retainsColumn(SurfaceAnchor surface) { return true; }
     }
     private static final FrontSelection ADJACENT = new FrontSelection() {
         @Override public List<SurfaceAnchor> order(Collection<SurfaceAnchor> stations) {
@@ -51,7 +53,10 @@ public final class AdjacentExcavationPlanner {
         if (stations.isEmpty() || stations.size() > MAX_STATIONS || maxColumns < 1 || maxColumns > MAX_COLUMNS
                 || columns.isEmpty() || columns.size() > maxColumns) throw new IllegalArgumentException("unbounded selected excavation front");
         var declared = Set.copyOf(stations);
-        var seen = declared.stream().map(surface -> new TerrainColumn(surface.x(), surface.z()))
+        for (var column : columns) for (var other : columns)
+            if (column != other && removes(column, other.station().support()))
+                throw new IllegalArgumentException("selected excavation removes another front's work support");
+        var seen = declared.stream().filter(selection::retainsColumn).map(surface -> new TerrainColumn(surface.x(), surface.z()))
                 .collect(java.util.stream.Collectors.toCollection(HashSet::new));
         for (var column : columns) {
             var station = column.station(); var floor = column.floor();
@@ -82,15 +87,21 @@ public final class AdjacentExcavationPlanner {
     public static <B> List<Column<B>> propose(Collection<SurfaceAnchor> stations, KnownBlockGeometry<B> geometry,
             Predicate<SurfaceAnchor> reachable, Predicate<SurfaceAnchor> permittedFront,
             Predicate<B> supportsStanding, Predicate<B> mineable, int maxColumns, FrontSelection selection) {
+        return propose(stations, geometry, reachable, permittedFront, supportsStanding, mineable, maxColumns,
+                selection, ignored -> true);
+    }
+    /** All executable-front constraints run before quota; rejected fronts never hide later work. */
+    public static <B> List<Column<B>> propose(Collection<SurfaceAnchor> stations, KnownBlockGeometry<B> geometry,
+            Predicate<SurfaceAnchor> reachable, Predicate<SurfaceAnchor> permittedFront,
+            Predicate<B> supportsStanding, Predicate<B> mineable, int maxColumns, FrontSelection selection,
+            Predicate<Column<B>> executable) {
         if (stations.size() > MAX_STATIONS || maxColumns < 1 || maxColumns > MAX_COLUMNS)
             throw new IllegalArgumentException("unbounded adjacent excavation query");
         var ordered = selection.order(stations);
         if (ordered.size() != Set.copyOf(stations).size() || !Set.copyOf(ordered).equals(Set.copyOf(stations)))
             throw new IllegalArgumentException("excavation strategy changed its retained station set");
         var result = new ArrayList<Column<B>>();
-        // This plan extends a single-surface column graph. Digging below an existing
-        // access column would create competing heights and undermine its retained access.
-        var seen = ordered.stream().map(surface -> new TerrainColumn(surface.x(), surface.z()))
+        var seen = ordered.stream().filter(selection::retainsColumn).map(surface -> new TerrainColumn(surface.x(), surface.z()))
                 .collect(java.util.stream.Collectors.toCollection(HashSet::new));
         for (var station : ordered) {
             Boolean admitted = null;
@@ -120,14 +131,22 @@ public final class AdjacentExcavationPlanner {
                     overburden.add(sample.orElseThrow());
                 }
                 if (!knownCut) continue;
+                var candidate = new Column<>(station, new SurfaceAnchor(floor), support.get(), upper.get(), lower.get(), overburden);
+                if (result.stream().anyMatch(prior -> removes(candidate, prior.station().support())
+                        || removes(prior, candidate.station().support()))) continue;
+                if (!executable.test(candidate)) continue;
                 if (admitted == null) admitted = reachable.test(station);
                 if (!admitted) continue;
                 seen.add(column);
-                result.add(new Column<>(station, new SurfaceAnchor(floor), support.get(), upper.get(), lower.get(), overburden));
+                result.add(candidate);
                 if (result.size() == maxColumns) return List.copyOf(result);
                 }
             }
         }
         return List.copyOf(result);
+    }
+    private static boolean removes(Column<?> column, BlockPosition position) {
+        return position.x() == column.floor().x() && position.z() == column.floor().z()
+                && position.y() > column.floor().y() && position.y() <= column.floor().y() + column.clearance().size();
     }
 }

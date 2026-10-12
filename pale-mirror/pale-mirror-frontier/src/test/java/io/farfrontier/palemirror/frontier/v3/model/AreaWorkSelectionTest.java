@@ -5,6 +5,19 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AreaWorkSelectionTest {
+    @Test void distinctCellsCannotShareAnExactPeerStationButCanUseItsNeighbour() {
+        var occupied = SurfaceAnchor.at(0, 0, 0);
+        var targets = java.util.List.of(occupied, occupied, SurfaceAnchor.at(1, 0, 0));
+        for (var policy : AreaWorkSelection.SpatialPolicy.values()) {
+            assertEquals(2, AreaWorkSelection.spatiallySeparated(targets.size(), i -> true,
+                    occupied, targets::get, java.util.List.of(occupied), policy).orElseThrow());
+            assertTrue(AreaWorkSelection.spatiallySeparated(targets.size(), i -> i < 2,
+                    occupied, targets::get, java.util.List.of(occupied), policy).isEmpty());
+        }
+        assertTrue(AreaWorkSelection.stationAvailable(targets.get(2), java.util.List.of(occupied)));
+        assertFalse(AreaWorkSelection.stationAvailable(occupied, java.util.List.of(occupied)));
+    }
+
     @Test void workersSpreadAcrossIrregularAreaThenFinishEachOthersRemainingCells() {
         var targets = java.util.List.of(SurfaceAnchor.at(0, 0, 0), SurfaceAnchor.at(1, 0, 0),
                 SurfaceAnchor.at(2, 0, 1), SurfaceAnchor.at(8, 1, 3), SurfaceAnchor.at(9, 1, 3));

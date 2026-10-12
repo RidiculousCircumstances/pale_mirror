@@ -32,7 +32,35 @@ public final class ExtractionWorksiteBlocks {
             result.add(new WorksiteBlock(new WorksiteBlock.Key(CellMutationKey.OwnerFamily.EXTRACTIVE_SITE, site.id(),
                     WorksiteBlock.Role.RESOURCE, cell.id()), cell.source(), current.revision(), current.knownBlock()));
         }
+        var sources = site.layout().cells().stream().map(ExtractionLayout.Cell::source)
+                .collect(java.util.stream.Collectors.toSet());
+        site.layout().terrainSupports().entrySet().stream().filter(entry -> !sources.contains(entry.getKey()))
+                .sorted(Comparator.comparingLong(entry -> site.layout().terrainIds().get(entry.getKey())))
+                .forEach(entry -> result.add(new WorksiteBlock(new WorksiteBlock.Key(CellMutationKey.OwnerFamily.EXTRACTIVE_SITE,
+                        site.id(), WorksiteBlock.Role.NATURAL_TERRAIN, site.layout().terrainIds().get(entry.getKey())),
+                        entry.getKey(), 1, entry.getValue())));
         return List.copyOf(result);
+    }
+    /** Natural ground becomes a source only through this site's admitted, append-only declaration. */
+    public static Optional<WorksiteBlockTransition> reclassification(ExtractionDeposit deposit,
+            WorksiteBlock predecessor, WorksiteBlock successor) {
+        var layout = deposit.site().layout();
+        if (predecessor.key().family() != CellMutationKey.OwnerFamily.EXTRACTIVE_SITE
+                || successor.key().family() != CellMutationKey.OwnerFamily.EXTRACTIVE_SITE
+                || !predecessor.key().owner().equals(deposit.site().id()) || !successor.key().owner().equals(deposit.site().id())
+                || predecessor.key().role() != WorksiteBlock.Role.NATURAL_TERRAIN
+                || successor.key().role() != WorksiteBlock.Role.RESOURCE
+                || !predecessor.position().equals(successor.position())
+                || !Objects.equals(layout.terrainIds().get(predecessor.position()), predecessor.key().cell())) return Optional.empty();
+        var natural = layout.terrainSupports().get(predecessor.position());
+        if (natural == null || !current(deposit, new WorksiteBlock(predecessor.key(), predecessor.position(), 1, natural)).equals(predecessor))
+            return Optional.empty();
+        var cell = layout.require(successor.key().cell());
+        var state = deposit.cells().get(cell.id());
+        if (!cell.source().equals(successor.position()) || !cell.definition().before().equals(predecessor.block())
+                || !successor.equals(new WorksiteBlock(successor.key(), cell.source(), state.revision(), state.knownBlock())))
+            return Optional.empty();
+        return Optional.of(new WorksiteBlockTransition(predecessor, successor));
     }
     public static Optional<WorksiteBlock> support(FrontierWorldState state, ContainerSurface surface) {
         var container = state.inventory().containers().get(surface.containerId());

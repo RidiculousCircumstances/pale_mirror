@@ -397,6 +397,19 @@ class ExpeditionSupplyFlowTest {
         assertTrue(observation.forfeitedClaimIds().stream().noneMatch(after.inventory().fungibleResources().claims()::containsKey));
         assertFalse(after.inventory().fungibleResources().accounts().containsKey(allocation.destinationAccountId()));
         assertEquals(after, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(after)));
+        var source = allocation.sourceAccountId();
+        var exit = assertInstanceOf(FungibleStockDepartureObserved.class, FungibleContainerPlayerEdit.classify(
+                bound, source, mission.sender().containerId(), mission.sender().settlementId(), 7, player,
+                UUID.randomUUID(), List.of(), SourceStockClaimLoss.admissibleClaims(state, source)));
+        assertTrue(SourceStockClaimLoss.canDepart(state, source, binding.itemKind(),
+                quantities.get(binding.itemKind())));
+        var removed = SourceStockClaimLoss.settle(state, exit);
+        FrontierReferenceClosure.validateTransition(state, removed, List.of());
+        assertEquals(balances, removed.inventory().economics().accounts());
+        assertFalse(removed.inventory().fungibleResources().accounts().containsKey(source));
+        assertTrue(removed.shipments().missions().get(mission.id()).supplies().orElseThrow().needsReplan());
+        assertTrue(mission.shipmentIds().stream().map(removed.shipments().shipments()::get).allMatch(Shipment::terminal));
+        assertEquals(removed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(removed)));
         // The removed source lot also held merchandise: no cargo survives to justify departure.
         assertTrue(mission.shipmentIds().stream().map(after.shipments().shipments()::get).allMatch(Shipment::terminal));
         var returning = io.farfrontier.palemirror.frontier.v3.process.TransportMissionProcess.advance(after, mission.id(),

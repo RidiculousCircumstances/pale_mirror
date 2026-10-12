@@ -15,15 +15,15 @@ public record ExtractionTerraceView(int depthLimit, int plannedDepth, int openDe
         for (var cell : layout.cells()) if (!deposit.cells().get(cell.id()).knownBlock().kind().equals("minecraft:air"))
             remainingSources.add(cell.source());
         var preparation = new java.util.HashSet<BlockPosition>();
-        var openSurfaces = new java.util.HashSet<SurfaceAnchor>();
+        var openSurfaces = new ExtractionWorkingSurfaces(state, deposit).current().values().stream()
+                .filter(surface -> !geometry.blocked(surface)).collect(java.util.stream.Collectors.toSet());
         for (var surface : layout.accessSurfaces()) {
-            int top = state.bootstrap().ruleset().extraction().surfaceCut().map(cut -> cut.topY()).orElse(surface.y() + 2);
-            boolean clear = true;
-            if (surface.y() < root) for (int y = surface.y() + 1; y <= top; y++) {
+            // Only body clearance opens a contact. Rock above the head is a legitimate
+            // roof, not mandatory surface stripping or evidence that mining is pending.
+            for (int y = surface.y() + 1; y <= surface.y() + 2; y++) {
                 var point = new BlockPosition(surface.x(), y, surface.z());
-                if (remainingSources.contains(point)) { preparation.add(point); clear = false; }
+                if (remainingSources.contains(point)) preparation.add(point);
             }
-            if (clear && !geometry.blocked(surface)) openSurfaces.add(surface);
         }
         int open = openSurfaces.stream().mapToInt(surface -> Math.max(0, root - surface.y())).max().orElse(0);
         long pending = preparation.size();

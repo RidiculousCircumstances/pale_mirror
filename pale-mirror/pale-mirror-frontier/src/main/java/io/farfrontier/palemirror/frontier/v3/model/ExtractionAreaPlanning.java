@@ -14,8 +14,15 @@ public final class ExtractionAreaPlanning {
     }
     /** Staffing asks whether known work exists; it cannot require the staff it has not assigned yet. */
     public static boolean hasKnownExtension(FrontierWorldState state, SubjectId siteId) {
-        try { return proposal(state, siteId, false).isPresent(); }
-        catch (KnownPedestrianNavigation.RouteUnavailable pending) { return false; }
+        return extensionAvailability(state, siteId) == Availability.AVAILABLE;
+    }
+    public enum Availability { AVAILABLE, WAITING, NONE }
+    /** A calculation/knowledge wait is not geological exhaustion or an admission grant. */
+    public static Availability extensionAvailability(FrontierWorldState state, SubjectId siteId) {
+        try { return proposal(state, siteId, false).isPresent() ? Availability.AVAILABLE : Availability.NONE; }
+        catch (KnownPedestrianNavigation.RouteUnavailable pending) {
+            return pending.status() == PedestrianRouteResult.Status.NO_PATH ? Availability.NONE : Availability.WAITING;
+        }
     }
     private static Optional<ExtractionAreaExtended> proposal(FrontierWorldState state, SubjectId siteId, boolean requireStaff) {
         var deposit = Objects.requireNonNull(state.extractionSites().deposits().get(siteId), "declared excavation site");
@@ -24,39 +31,26 @@ public final class ExtractionAreaPlanning {
                 || requireStaff && SettlementWorkPolicy.permissions(state, deposit.site().settlementId()).workers(ResidentWorkKind.EXTRACTION).isEmpty()
                 || ExtractionDevelopment.proposal(state, siteId).isPresent()) return Optional.empty();
         var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state);
-        var access = new LinkedHashMap<SurfaceAnchor, Optional<PedestrianRouteReceipt>>();
-        java.util.function.Predicate<SurfaceAnchor> reachable = surface -> {
-            try {
-                var route = knowledge.plannedBetween(layout.storagePort(), surface);
-                access.put(surface, route.size() > 1 ? Optional.of(new PedestrianRouteReceipt(route)) : Optional.empty());
-                return true;
-            } catch (KnownPedestrianNavigation.RouteUnavailable blocked) {
-                if (blocked.status() != PedestrianRouteResult.Status.NO_PATH) throw blocked;
-                return false;
-            }
-        };
-        if (deposit.available(Set.of()).stream().anyMatch(cell -> reachable.test(cell.workstation()))) return Optional.empty();
+        var access = knowledge.accessSelection(layout.storagePort());
+        if (deposit.available(Set.of()).stream().anyMatch(cell -> access.reachable(cell.workstation()))) return Optional.empty();
+        access.awaitUnresolved();
+        var front = new ExtractionAvailableFront(state, deposit);
+        if (front.stations().isEmpty()) return Optional.empty();
         int count = columnLimit(rules, layout);
         if (count < 1) return Optional.empty();
-        var ground = ExtractionGroundKnowledge.forState(state);
-        var columns = rules.terraces().map(terraces -> AdjacentExcavationPlanner.propose(layout.accessSurfaces(), ground,
-                reachable, floor -> !declarationHeld(state, siteId, floor.support()),
-                rules.source().before()::equals, block -> rules.definitionFor(block).isPresent(), count,
-                terraces.selection(layout.storagePort().y(), rules.surfaceCut().map(cut -> OptionalInt.of(cut.topY())).orElseGet(OptionalInt::empty), layout.accessSurfaces(),
-                        surface -> !knowledge.geometry().blocked(surface)))).orElseGet(() -> AdjacentExcavationPlanner.propose(
-                layout.accessSurfaces(), ground, reachable, floor -> !declarationHeld(state, siteId, floor.support()),
-                rules.source().before()::equals, rules.source().before()::equals, count));
-        var reachableCuts = columns.stream().filter(column -> BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN.contains(
-                column.station(), column.floor().support().offset(0, column.clearance().size(), 0))
-                && BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN.contains(column.station(), column.floor().support().offset(0, 1, 0))).toList();
-        return reachableCuts.isEmpty() ? Optional.empty() : Optional.of(new ExtractionAreaExtended(siteId, deposit.development().revision(), reachableCuts,
-                PedestrianAccessReceipt.selected(layout.storagePort(), access, reachableCuts.stream().map(AdjacentExcavationPlanner.Column::station)
-                        .collect(java.util.stream.Collectors.toSet()))));
+        var ground = ExtractionGroundKnowledge.forSite(state, deposit);
+        var columns = AdjacentExcavationPlanner.propose(front.stations(), ground,
+                access::reachable, floor -> !declarationHeld(state, siteId, floor.support()),
+                block -> rules.definitionFor(block).isPresent(),
+                block -> block.kind().equals("minecraft:air") || rules.definitionFor(block).isPresent(), count,
+                front.selection(), front::executable);
+        if (columns.isEmpty()) { access.awaitUnresolved(); return Optional.empty(); }
+        return Optional.of(new ExtractionAreaExtended(siteId, deposit.development().revision(), columns,
+                access.receipt(columns.stream().map(AdjacentExcavationPlanner.Column::station).collect(java.util.stream.Collectors.toSet()))));
     }
     private static int columnLimit(ExtractionRules rules, ExtractionLayout layout) {
-        int clearanceBound = rules.surfaceCut().map(cut -> cut.topY() - layout.storagePort().y()
-                + rules.terraces().orElseThrow().maximumDepth()).orElse(2);
-        return Math.min(rules.developmentBatchCells() / clearanceBound, (ExtractionLayout.MAX_CELLS - layout.cells().size()) / clearanceBound);
+        return Math.min(AdjacentExcavationPlanner.MAX_COLUMNS,
+                Math.min(rules.developmentBatchCells() / 2, (ExtractionLayout.MAX_CELLS - layout.cells().size()) / 2));
     }
     private static boolean declarationHeld(FrontierWorldState state, SubjectId siteId, BlockPosition position) {
         var region = new ExtractionRegion(siteId, Math.floorDiv(position.x(), 16), Math.floorDiv(position.z(), 16));
@@ -76,16 +70,12 @@ public final class ExtractionAreaPlanning {
                 || SettlementWorkPolicy.permissions(state, prior.site().settlementId()).workers(ResidentWorkKind.EXTRACTION).isEmpty())
             throw new IllegalArgumentException("stale, foreign, protected or unavailable excavation plan");
         var layout = prior.site().layout(); var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state);
-        var selection = rules.terraces().map(terraces -> terraces.selection(layout.storagePort().y(),
-                rules.surfaceCut().map(cut -> OptionalInt.of(cut.topY())).orElseGet(OptionalInt::empty), layout.accessSurfaces(),
-                surface -> !knowledge.geometry().blocked(surface))).orElseGet(AdjacentExcavationPlanner::adjacentSelection);
-        AdjacentExcavationPlanner.requireSelection(layout.accessSurfaces(), event.columns(), ExtractionGroundKnowledge.forState(state),
-                floor -> !declarationHeld(state, subject, floor.support()), rules.source().before()::equals,
-                block -> rules.definitionFor(block).isPresent(), columnLimit(rules, layout), selection);
-        if (event.columns().stream().anyMatch(column -> !BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN.contains(
-                column.station(), column.floor().support().offset(0, column.clearance().size(), 0))
-                || !BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN.contains(column.station(), column.floor().support().offset(0, 1, 0))))
-            throw new IllegalArgumentException("selected excavation exceeds its declared block reach");
+        var front = new ExtractionAvailableFront(state, prior);
+        AdjacentExcavationPlanner.requireSelection(front.stations(), event.columns(), ExtractionGroundKnowledge.forSite(state, prior),
+                floor -> !declarationHeld(state, subject, floor.support()), block -> rules.definitionFor(block).isPresent(),
+                block -> block.kind().equals("minecraft:air") || rules.definitionFor(block).isPresent(), columnLimit(rules, layout), front.selection());
+        if (event.columns().stream().anyMatch(column -> !front.executable(column)))
+            throw new IllegalArgumentException("selected excavation loses work reach, occupied support or retained access");
         knowledge.requireAccess(event.access(), layout.storagePort(), event.columns().stream()
                 .map(AdjacentExcavationPlanner.Column::station).collect(java.util.stream.Collectors.toSet()));
         var next = prior.extend(event.expectedRevision(), extend(layout, rules, event));
@@ -121,9 +111,11 @@ public final class ExtractionAreaPlanning {
     private static ExtractionLayout extend(ExtractionLayout prior, ExtractionRules rules, ExtractionAreaExtended event) {
         var cells = new ArrayList<>(prior.cells()); var fixed = new LinkedHashMap<>(prior.fixedBlocks());
         var ids = new LinkedHashMap<>(prior.infrastructureIds()); var surfaces = new ArrayList<>(prior.accessSurfaces());
+        var natural = new LinkedHashMap<>(prior.terrainSupports());
+        var terrainIds = new LinkedHashMap<>(prior.terrainIds());
         var sources = prior.cells().stream().collect(java.util.stream.Collectors.toMap(ExtractionLayout.Cell::source, ExtractionLayout.Cell::id));
         long cellId = prior.cells().stream().mapToLong(ExtractionLayout.Cell::id).max().orElseThrow();
-        long infrastructureId = ids.values().stream().mapToLong(Long::longValue).max().orElseThrow();
+        long terrainId = terrainIds.values().stream().mapToLong(Long::longValue).max().orElse(0);
         for (var column : event.columns()) {
             var floor = column.floor().support(); var prerequisites = new HashSet<Long>();
             for (int height : List.of(1, 2)) {
@@ -132,14 +124,18 @@ public final class ExtractionAreaPlanning {
             }
             var clearance = column.clearance();
             for (int height = clearance.size(); height >= 1; height--) {
+                if (clearance.get(height - 1).block().kind().equals("minecraft:air")) continue;
                 var definition = rules.definitionFor(clearance.get(height - 1).block()).orElseThrow(
                         () -> new IllegalArgumentException("undeclared excavation preparation recipe"));
                 long currentId = ++cellId;
                 cells.add(new ExtractionLayout.Cell(currentId, floor.offset(0, height, 0), column.station(), definition, prerequisites));
                 prerequisites = new HashSet<>(prerequisites); prerequisites.add(currentId);
             }
-            fixed.put(floor, column.support().block()); ids.put(floor, ++infrastructureId); surfaces.add(column.floor());
+            if (!natural.containsKey(floor)) {
+                natural.put(floor, column.support().block()); terrainIds.put(floor, ++terrainId);
+            }
+            if (!surfaces.contains(column.floor())) surfaces.add(column.floor());
         }
-        return new ExtractionLayout(cells, fixed, surfaces, prior.entrance(), prior.container(), prior.storagePort(), ids);
+        return new ExtractionLayout(cells, fixed, surfaces, prior.entrance(), prior.container(), prior.storagePort(), ids, natural, terrainIds);
     }
 }

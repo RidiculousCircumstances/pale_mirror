@@ -7,7 +7,8 @@ import java.util.Map;
 
 /** Existing growth-loss behavior isolated behind its owning capability. */
 final class HiveGrowthClaimForfeitureOwner implements FungibleClaimForfeitureOwner {
-    @Override public void validate(FrontierWorldState state, ClaimAllocation claim, FungibleResourceHandoffObserved observed) {
+    @Override public void validate(FrontierWorldState state, ClaimAllocation claim,
+                                   io.farfrontier.palemirror.frontier.v3.api.SubjectId sourceAccount) {
         requireJob(state, claim);
     }
     @Override public FungibleForfeitureSettlement settle(FrontierWorldState before, List<ClaimAllocation> claims,

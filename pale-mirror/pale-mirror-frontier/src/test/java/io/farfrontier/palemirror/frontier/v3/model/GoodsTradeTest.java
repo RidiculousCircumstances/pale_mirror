@@ -414,6 +414,8 @@ class GoodsTradeTest {
             state = unprepared;
         }
         state = shipmentFact(state, shipment.id(), new ShipmentHotPrepared(shipment.id(), step));
+        assertFalse(SourceStockClaimLoss.admissibleClaims(state, SOURCE_ACCOUNT).contains(CLAIM));
+        assertFalse(SourceStockClaimLoss.canDepart(state, SOURCE_ACCOUNT, shipment.itemKind(), 64));
         assertFalse(ActorSpatialCourtesy.assess(state, shipment.execution()).ready(),
                 "courtesy cannot displace a carrier during an unresolved physical pickup");
         assertTrue(ContainerPhysicalAuthorityComposition.pending(state, SOURCE));
@@ -899,7 +901,7 @@ class GoodsTradeTest {
         assertEquals(dispatched, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(dispatched)));
     }
 
-    private static Shipment shipment(FrontierWorldState state) {
+    static Shipment shipment(FrontierWorldState state) {
         SubjectId shipment = id("shipment:goods-first");
         SubjectId actor = state.bootstrap().settlements().getFirst().residents().getFirst().id();
         var execution = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(actor,
@@ -934,7 +936,7 @@ class GoodsTradeTest {
         return new GoodsTradeReserved(contract, List.of(new GoodsTradeStockAllocation(SOURCE_ACCOUNT, claim,
                 GoodsTradeStockAllocation.Authority.COLD, 0)));
     }
-    private static FrontierWorldState reserved() {
+    static FrontierWorldState reserved() {
         return fact(fact(fact(initial(), SELLER, new GoodsTradeOrderPlaced(sellOrder())), BUYER,
                 new GoodsTradeOrderPlaced(buyOrder())), SELLER, reservation());
     }
@@ -981,7 +983,7 @@ class GoodsTradeTest {
     private static FrontierWorldState fact(FrontierWorldState state, SubjectId actor, FrontierPayload payload, long atTick) {
         return factForFamily(state, actor, payload, atTick, "goods-trade");
     }
-    private static FrontierWorldState factForFamily(FrontierWorldState state, SubjectId actor, FrontierPayload payload, long atTick, String family) {
+    static FrontierWorldState factForFamily(FrontierWorldState state, SubjectId actor, FrontierPayload payload, long atTick, String family) {
         var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
         var emitted = new ProposedEvent(actor, payload);
         FrontierWorldRuntimeDefinition.processRegistry().validateEmissions(family, List.of(emitted));

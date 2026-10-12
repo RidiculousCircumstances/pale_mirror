@@ -22,6 +22,8 @@ public final class AreaWorkSelection {
 
     /** Soft spatial ownership: prefer targets nearer this worker than any peer's work target.
      * No target is excluded by proximity; once the local region is exhausted, share the rest.
+     * An exact peer station is unavailable, however: different work cells do not
+     * grant two workers simultaneous use of the same physical standing place.
      * This is target ranking only, not a path, reservation or persisted territory.
      */
     public static OptionalInt spatiallySeparated(int targetCount, IntPredicate pending,
@@ -29,11 +31,12 @@ public final class AreaWorkSelection {
         Objects.requireNonNull(origin); Objects.requireNonNull(targets); Objects.requireNonNull(peers);
         Objects.requireNonNull(pending); Objects.requireNonNull(policy);
         if (targetCount < 0) throw new IllegalArgumentException("area work target count is outside its bound");
+        IntPredicate available = index -> pending.test(index) && stationAvailable(targets.apply(index), peers);
         IntToLongFunction distance = index -> distance(origin, targets.apply(index));
         if (policy == SpatialPolicy.SPREAD_STARTS && !peers.isEmpty()) {
             int choice = -1; long separation = -1; long travel = Long.MAX_VALUE;
             for (int index = 0; index < targetCount; index++) {
-                if (!pending.test(index)) continue;
+                if (!available.test(index)) continue;
                 SurfaceAnchor target = targets.apply(index);
                 long spacing = peers.stream().mapToLong(peer -> distance(peer, target)).min().orElseThrow();
                 long approach = distance.applyAsLong(index);
@@ -43,9 +46,14 @@ public final class AreaWorkSelection {
             }
             return choice < 0 ? OptionalInt.empty() : OptionalInt.of(choice);
         }
-        OptionalInt local = choose(targetCount, index -> pending.test(index)
+        OptionalInt local = choose(targetCount, index -> available.test(index)
                 && peers.stream().allMatch(peer -> distance(peer, targets.apply(index)) > distance.applyAsLong(index)), distance);
-        return local.isPresent() ? local : choose(targetCount, pending, distance);
+        return local.isPresent() ? local : choose(targetCount, available, distance);
+    }
+
+    /** Derived current work claims, not pedestrians in transit or permanent territories. */
+    public static boolean stationAvailable(SurfaceAnchor station, List<SurfaceAnchor> peerStations) {
+        return !Objects.requireNonNull(peerStations).contains(Objects.requireNonNull(station));
     }
 
     private static long distance(SurfaceAnchor from, SurfaceAnchor to) {

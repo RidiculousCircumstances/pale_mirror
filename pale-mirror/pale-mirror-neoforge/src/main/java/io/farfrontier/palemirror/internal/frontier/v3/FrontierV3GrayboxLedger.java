@@ -64,12 +64,31 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
         long address = new BlockPos(position.x(), position.y(), position.z()).asLong();
         var prior = worksiteCells.get(address);
         if (claims.containsKey(address) || prior != null && !prior.declaration().key().equals(witness.declaration().key()))
-            throw new IllegalStateException("competing block provenance at worksite cell");
+            throw new IllegalStateException("competing block provenance at worksite cell " + position
+                    + "; retained=" + (prior == null ? claims.get(address) : prior.declaration().key())
+                    + "; proposed=" + witness.declaration().key());
         if (prior == null && claims.size() + worksiteCells.size() >= MAX_CELLS)
             throw new IllegalStateException("bounded physical block provenance is full");
         if (!witness.equals(prior)) {
             worksiteCells.put(address, witness); indexExternalWorksite(address, witness); setDirty();
         }
+    }
+    /** The registered owner's exact proof changes declaration identity, never the witnessed world block. */
+    FrontierV3WorksiteBlockWitness reclassify(FrontierV3WorksiteBlockWitness expected,
+            io.farfrontier.palemirror.frontier.v3.model.WorksiteBlockTransition transition) {
+        java.util.Objects.requireNonNull(expected); java.util.Objects.requireNonNull(transition);
+        var position = expected.declaration().position();
+        long address = new BlockPos(position.x(), position.y(), position.z()).asLong();
+        if (claims.containsKey(address) || !expected.equals(worksiteCells.get(address))
+                || expected.phase() != FrontierV3WorksiteBlockWitness.Phase.SETTLED
+                || !transition.predecessor().equals(expected.declaration()))
+            throw new IllegalStateException("worksite reclassification lacks its exact settled predecessor at " + position);
+        var successor = transition.successor();
+        var rebound = new FrontierV3WorksiteBlockWitness(new io.farfrontier.palemirror.frontier.v3.model.WorksiteBlock(
+                successor.key(), successor.position(), successor.revision(), expected.declaration().block()),
+                expected.before(), FrontierV3WorksiteBlockWitness.Phase.SETTLED);
+        worksiteCells.put(address, rebound); indexExternalWorksite(address, rebound); setDirty();
+        return rebound;
     }
     void ensureCapacityFor(BlockPos position) {
         if (worksiteCells.containsKey(position.asLong())) throw new IllegalStateException("graybox write crosses declared worksite provenance");

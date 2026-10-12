@@ -73,17 +73,24 @@ public final class KnownPedestrianNavigation {
 
     /** Geometry-only admission: no fictitious actor/order is needed to request a supported leg. */
     public static List<SurfaceAnchor> plannedBetween(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
-        if (!geometry.bounds().contains(start.support()) || geometry.blocked(start)
-                || !geometry.bounds().contains(target.support()) || geometry.blocked(target))
-            throw new RouteUnavailable("known endpoints have no clear support/body column");
-        var result = PedestrianRoutePlanning.query(geometry, start, target);
+        var result = queryBetween(geometry, start, target);
         if (result.status() == PedestrianRouteResult.Status.PLANNING)
             PedestrianRoutePlanning.await(PedestrianRouteRequest.of(geometry, start, target));
         if (result.status() != PedestrianRouteResult.Status.FOUND)
             throw new RouteUnavailable(result.status(), result.reason());
-        if (result.route().isEmpty() || !result.route().getFirst().equals(start) || !result.route().getLast().equals(target))
-            throw new IllegalArgumentException("planner returned a route with foreign endpoints");
         return result.route();
+    }
+
+    /** Calculation result only. An alternatives owner decides which unresolved requests actually block its result. */
+    public static PedestrianRouteResult queryBetween(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
+        if (!geometry.bounds().contains(start.support()) || geometry.blocked(start)
+                || !geometry.bounds().contains(target.support()) || geometry.blocked(target))
+            throw new RouteUnavailable("known endpoints have no clear support/body column");
+        var result = PedestrianRoutePlanning.query(geometry, start, target);
+        if (result.status() == PedestrianRouteResult.Status.FOUND && (result.route().isEmpty()
+                || !result.route().getFirst().equals(start) || !result.route().getLast().equals(target)))
+            throw new IllegalArgumentException("planner returned a route with foreign endpoints");
+        return result;
     }
 
     /** Read-only diagnostics can use retained search evidence, never enqueue or finish a calculation. */

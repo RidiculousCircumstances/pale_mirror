@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -222,7 +223,7 @@ class ResidentMealKnownNavigationTest {
         assertTrue(!ServiceAreaDestinations.temporary(point, rest));
     }
 
-    @Test void occupiedExitIsNotTheOnlyGoalAndParkingDoesNotOwnClearance() {
+    @Test void occupiedExitIsNotTheOnlyGoalAndParkingDoesNotOwnClearance() throws Exception {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:exit-region"), 20260918065L));
         var settlement = initial.bootstrap().settlements().get(6);
@@ -247,6 +248,35 @@ class ResidentMealKnownNavigationTest {
         var path = ResidentMealKnownNavigation.clearancePathFrom(blocked, clearing, port.serviceSurface());
         assertTrue(port.accessBoundary().cleared(path.getLast().standingBody()));
         assertTrue(!path.getLast().equals(arbitraryParking));
+        // A legitimate detour may cross an occupied outside cell. It is transit space,
+        // not an admissible stop: truncating there used to make the producer's own receipt fail.
+        var occupiedExit = exits.getFirst();
+        var crossed = new java.util.concurrent.atomic.AtomicBoolean();
+        try (var ignored = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind(
+                (geometry, from, target) -> {
+                    var prefix = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.calculate(
+                            geometry, from, occupiedExit);
+                    var tail = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.calculate(
+                            geometry, occupiedExit, target);
+                    if (prefix.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.FOUND
+                            || tail.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.FOUND)
+                        return tail;
+                    var combined = new java.util.ArrayList<>(prefix.route());
+                    combined.addAll(tail.route().subList(1, tail.route().size()));
+                    crossed.set(true);
+                    return new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(
+                            io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.FOUND,
+                            List.copyOf(combined), prefix.workUnits() + tail.workUnits(),
+                            prefix.regions() + tail.regions(), "supported detour through occupied transit space");
+                })) {
+            var detour = KnownServiceExitNavigation.plannedClearancePathFrom(blocked, settlement.id(), depot,
+                    clearing.claimId(), actor, 0, 1, port.serviceSurface());
+            assertTrue(crossed.get());
+            assertTrue(detour.contains(occupiedExit), "exercise the occupied first outside cell, not merely another goal");
+            assertFalse(ServiceDestinationClaims.forImmediateExit(blocked, actor).contains(detour.getLast()));
+            ServiceBoundaryComposition.knowledge(blocked,
+                    ServiceBoundaryComposition.declaration(blocked, depot).identity()).requireRoute(detour);
+        }
     }
     @Test void waitingApproachCannotOccupyAnotherMealsReservedClearanceAndHotCanRejectOccupiedPockets() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(

@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "id": "disposable_quarry_front_vera_cycle",
+  "isolation": { "mode": "disposable_lite", "seed": 20260918065 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "quarry-front-vera", "viewDistance": 6 },
+  "pilot": { "username": "PMQuarryAudit" },
+  "restart": { "mode": "graceful", "afterAction": 9 },
+  "setup": [
+    { "type": "command", "command": "/gamemode creative" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "instant": 0, "inventoryConflicts": 0, "sceneConflicts": 0 } },
+      { "view": "actor", "id": "resident:6-23", "expect": { "status": "ok", "name": "Vera Wells", "life": "ALIVE" } },
+      { "view": "resident_life", "id": "resident:6-23", "expect": { "status": "ok", "nutrition": "NOURISHED", "metabolismBasePermille": 4000, "lastEvaluatedTick": 0, "mealPhase": "NONE" } },
+      { "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "expect": { "status": "ok", "result": { "extracted": 0, "homeQuantity": 0, "geologyKnown": true } } }
+    ] }
+  ],
+  "actions": [
+    { "type": "release_fast_forward_hold" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -78, "y": 64, "z": -4 }, "settleMs": 0 },
+    { "type": "wait_until_block", "position": { "x": -69, "y": 66, "z": 7 }, "block": "minecraft:stone", "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "resident:6-23", "expect": { "status": "ok", "name": "Vera Wells", "assignment": "EXTRACTION", "ambientLease": "HOT" }, "timeoutMs": 90000 },
+    { "type": "look_nearest_entity", "entityType": "minecraft:villager", "nameContains": "Vera Wells", "maxDistance": 64, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "expect": { "status": "ok", "result": { "hasExtraction": true } }, "timeoutMs": 90000 },
+    { "type": "inspect", "view": "resident_life", "id": "resident:6-23" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 64, "z": 480 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "expect": { "status": "ok", "result": { "workersCold": true, "liveSourceRegions": 0 } }, "timeoutMs": 90000 },
+    { "type": "fast_forward_to_instant", "targetInstant": 10000, "timeoutMs": 180000 },
+    { "type": "release_fast_forward_hold" },
+    { "type": "inspect", "view": "resident_life", "id": "resident:6-23" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -78, "y": 64, "z": -4 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "resident:6-23", "expect": { "status": "ok", "name": "Vera Wells", "assignment": "EXTRACTION", "ambientLease": "HOT" }, "timeoutMs": 90000 },
+    { "type": "inspect", "view": "process", "id": "work:extraction-12" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "work:extraction-12", "expect": { "status": "ok", "identity": { "worker": "resident:6-23" }, "result": { "mandateActive": true } }, "requireIncreaseAt": "result.deliveredBatches", "timeoutMs": 120000 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "work:extraction-12", "expect": { "status": "ok", "identity": { "worker": "resident:6-23" }, "result": { "stage": "EXTRACT", "wait": "LABOUR" } }, "timeoutMs": 120000 },
+    { "type": "look_nearest_entity", "entityType": "minecraft:villager", "nameContains": "Vera Wells", "maxDistance": 64, "timeoutMs": 60000 },
+    { "type": "assert_visible_entity", "entityType": "minecraft:villager", "nameContains": "Vera Wells", "maxDistance": 64, "timeoutMs": 60000 },
+    { "type": "wait_until_block", "position": { "diagnostic": { "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "field": "firstSource" } }, "block": "minecraft:air", "timeoutMs": 60000 },
+    { "type": "inspect", "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24" },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 7, "view": "resident_life", "id": "resident:6-23", "expect": { "status": "ok", "life": "ALIVE", "assignment": "EXTRACTION" } },
+    { "after": 12, "view": "resident_life", "id": "resident:6-23", "expect": { "status": "ok", "life": "ALIVE", "nutrition": "NOURISHED", "storedSatietyUnits": 1000, "assignment": "EXTRACTION", "mealPhase": "NONE" } },
+    { "after": 16, "view": "process", "id": "work:extraction-12", "expect": { "status": "ok", "identity": { "worker": "resident:6-23" }, "result": { "mandateActive": true } } },
+    { "after": 21, "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "expect": { "status": "ok", "result": { "minedOpenedFront": true } } },
+    { "after": 22, "view": "summary", "id": "", "expect": { "status": "ok", "inventoryConflicts": 0, "sceneConflicts": 0 } }
+  ],
+  "frames": [
+    { "after": 7, "name": "vera-working-before-cold" },
+    { "after": 19, "name": "vera-resumed-work-after-cold-and-restart" }
+  ]
+}
