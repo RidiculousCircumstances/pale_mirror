@@ -148,6 +148,8 @@ final class FrontierV3ResourceFieldWitness {
     private final Map<Long, Map<ResourceFieldLayout.CellId, Cell>> byIdBucket;
     private final int cellCount;
     private final String cellIdsFingerprint;
+    /** Derived immutable-image proof; lazy so ordinary cell updates do not scan the field. */
+    private volatile Boolean projectionImageOnly;
 
     private FrontierV3ResourceFieldWitness(SubjectId siteId, long epoch, long layoutRevision, String layoutFingerprint,
                                            Map<Long, Map<ResourceFieldLayout.CellId, Cell>> byIdBucket,
@@ -217,8 +219,11 @@ final class FrontierV3ResourceFieldWitness {
 
     SubjectId siteId() { return siteId; }
     boolean projectionImageOnly() {
-        return byIdBucket.values().stream().flatMap(bucket -> bucket.values().stream())
+        Boolean retained = projectionImageOnly;
+        if (retained == null) projectionImageOnly = retained = byIdBucket.values().stream()
+                .flatMap(bucket -> bucket.values().stream())
                 .allMatch(cell -> cell.pending().isEmpty() && cell.foreign().isEmpty() && cell.retiredWork().isEmpty());
+        return retained;
     }
     @Override public boolean equals(Object other) {
         return other instanceof FrontierV3ResourceFieldWitness witness

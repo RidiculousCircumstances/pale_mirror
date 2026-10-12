@@ -39,7 +39,7 @@ public final class FrontierV3FieldTurnGameTests {
             }
             FrontierV3ResourceFieldInitialWriter.reserve(level, a, new PhysicalIntentId("intent:field-turn-a"));
             FrontierV3ResourceFieldInitialWriter.reserve(level, b, new PhysicalIntentId("intent:field-turn-b"));
-            FrontierV3ResourceFieldInitialWriter.writeBatch(level, a);
+            FrontierV3ResourceFieldInitialWriter.writePreparedBatch(level, a, writes -> { });
             var paused = (FrontierV3ResourceSiteLedger.FieldInitialization) ledger.fieldClaim(a.id());
             int prefix = paused.cursor().nextWrite();
             var sites = List.of(new ResourceSiteLifecycle(a.id(), ResourceSitePhase.GROWING, 1L, 0, Optional.empty()),
@@ -67,13 +67,13 @@ public final class FrontierV3FieldTurnGameTests {
         var ledger = FrontierV3ResourceSiteLedger.get(helper.getLevel());
         var before = ((FrontierV3ResourceSiteLedger.FieldInitialization) ledger.fieldClaim(site.id())).cursor();
         if (before.complete()) { complete.run(); return; }
-        var result = FrontierV3ResourceFieldInitialWriter.writeBatch(helper.getLevel(), site);
+        var result = FrontierV3ResourceFieldInitialWriter.writePreparedBatch(helper.getLevel(), site, writes -> { });
         if (result == FrontierV3ResourceFieldInitialWriter.Result.FOREIGN
                 || result == FrontierV3ResourceFieldInitialWriter.Result.AMBIGUOUS)
             helper.fail("declared field projection lost its exact predecessor: " + result);
         var after = ((FrontierV3ResourceSiteLedger.FieldInitialization) ledger.fieldClaim(site.id())).cursor();
         helper.assertTrue(after.nextWrite() >= before.nextWrite()
-                && after.nextWrite() - before.nextWrite() <= FrontierV3ResourceSiteExecutor.projectionWriteBudget(),
+                && after.nextWrite() - before.nextWrite() <= FrontierV3ResourceFieldInitialWriter.MAX_BATCH_WRITES,
                 "one physical turn retains monotonic bounded projection progress");
         helper.runAfterDelay(1, () -> finishProjection(helper, site, complete));
     }

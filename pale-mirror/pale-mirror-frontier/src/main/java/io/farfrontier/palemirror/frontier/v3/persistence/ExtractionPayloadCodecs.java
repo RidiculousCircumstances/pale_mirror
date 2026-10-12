@@ -9,10 +9,21 @@ import java.util.List;
 final class ExtractionPayloadCodecs {
     private ExtractionPayloadCodecs() { }
     static PayloadCodecs create() {
-        return new PayloadCodecs(List.of(codec("frontier.extraction_geology_invalidated", (out, payload) -> {
+        return new PayloadCodecs(List.of(codec("frontier.extraction_geology_invalidated.v2", (out, payload) -> {
             var value = (ExtractionGeologyInvalidated) payload;
-            FrontierWorldStateCodec.writePosition(out, value.position()); out.writeLong(value.stratumRevision());
-        }, in -> new ExtractionGeologyInvalidated(FrontierWorldStateCodec.readPosition(in), in.readLong())),
+            out.writeInt(value.observations().size());
+            for (var observation : value.observations()) {
+                FrontierWorldStateCodec.writePosition(out, observation.position()); out.writeLong(observation.stratumRevision());
+            }
+        }, in -> {
+            int count = in.readInt();
+            if (count < 1 || count > ExtractionGeologyInvalidated.MAX_OBSERVATIONS)
+                throw new IllegalArgumentException("unbounded geological observation batch");
+            var observations = new java.util.ArrayList<ExtractionGeologyInvalidated.Observation>(count);
+            for (int i = 0; i < count; i++) observations.add(new ExtractionGeologyInvalidated.Observation(
+                    FrontierWorldStateCodec.readPosition(in), in.readLong()));
+            return new ExtractionGeologyInvalidated(observations);
+        }),
         codec("frontier.extraction_area_extended.v3", (out, payload) -> {
             var value = (ExtractionAreaExtended) payload;
             out.writeUTF(value.siteId().value()); out.writeLong(value.expectedRevision()); out.writeInt(value.columns().size());

@@ -42,7 +42,12 @@ final class KnownSiteGeometry {
                     throw new IllegalArgumentException("two geometry owners declared one surface column");
             obstacles.addAll(contribution.obstacles());
         }
-        var projected = new View(supports, obstacles);
+        // Retain each independent immutable component. A changed obstacle must not make
+        // every unchanged road/support column look like a new ground declaration.
+        var projected = new View(cachedBootstrap == state.bootstrap() && cachedView != null
+                    && supports.equals(cachedView.supports()) ? cachedView.supports() : supports,
+                cachedBootstrap == state.bootstrap() && cachedView != null
+                    && obstacles.equals(cachedView.obstacles()) ? cachedView.obstacles() : obstacles);
         if (cachedBootstrap != state.bootstrap() || !projected.equals(cachedView)) cachedView = projected;
         cachedBootstrap = state.bootstrap(); cachedVersions = versions;
         return cachedView;

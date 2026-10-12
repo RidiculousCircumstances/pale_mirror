@@ -5,10 +5,45 @@ import java.util.*;
 /** The extraction owner contributes only retained geometry/depletion, not worker-specific obstacle policy. */
 final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
     private final ImmutableInputView<Object> version = new ImmutableInputView<>();
+    private final ImmutableInputView<Set<BlockPosition>> queryFootprint = new ImmutableInputView<>();
+    private Set<BlockPosition> priorQueries;
+    private io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockExclusions priorExclusions;
+    private Set<BlockPosition> relevantExclusions = Set.of();
     @Override public KnownSiteGeometry.Owner owner() { return KnownSiteGeometry.Owner.EXTRACTION; }
     @Override public Object version(FrontierWorldState state) {
+        var declarations = new ArrayList<Object>();
+        declarations.add(state.bootstrap());
+        state.extractionSites().deposits().entrySet().stream().sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> declarations.add(entry.getValue().site().layout()));
+        var queries = queryFootprint.get(declarations, () -> {
+            var positions = new HashSet<BlockPosition>();
+            for (var deposit : state.extractionSites().deposits().values()) {
+                var layout = deposit.site().layout();
+                // Working contact probes support and both body cells; projection also
+                // reads retained natural blocks. No other baseline voxel is queried.
+                for (var surface : layout.accessSurfaces()) {
+                    positions.add(surface.support());
+                    positions.add(surface.support().offset(0, 1, 0));
+                    positions.add(surface.support().offset(0, 2, 0));
+                }
+                positions.addAll(layout.terrainSupports().keySet());
+            }
+            return Set.copyOf(positions);
+        });
+        var exclusions = state.extractionSites().geologicalExclusions();
+        if (priorQueries != queries || priorExclusions != exclusions) {
+            boolean unchanged = priorQueries == queries && priorExclusions != null
+                    && exclusions.additionsSince(priorExclusions)
+                        .filter(added -> Collections.disjoint(added, queries)).isPresent();
+            if (!unchanged) {
+                var relevant = new HashSet<BlockPosition>();
+                for (var position : queries) if (exclusions.positions().contains(position)) relevant.add(position);
+                if (!relevant.equals(relevantExclusions)) relevantExclusions = Set.copyOf(relevant);
+            }
+            priorQueries = queries; priorExclusions = exclusions;
+        }
         return version.get(List.of(state.bootstrap(), state.extractionSites().deposits(),
-                state.extractionSites().geologicalExclusions()), Object::new);
+                relevantExclusions), Object::new);
     }
     @Override public KnownSiteGeometry.View project(FrontierWorldState state) {
         var supports = new LinkedHashMap<TerrainColumn, SurfaceAnchor>();

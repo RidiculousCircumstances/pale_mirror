@@ -1,25 +1,44 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.*;
-import java.util.Objects;
+import java.util.*;
 
 /** Physical ingress revokes baseline knowledge BEFORE an unowned native mutation can occur. */
-public record ExtractionGeologyInvalidated(BlockPosition position, long stratumRevision) implements FrontierPayload {
+public record ExtractionGeologyInvalidated(List<Observation> observations) implements FrontierPayload {
     public static final SubjectId OWNER = new SubjectId("geometry:extraction-geology");
-    public ExtractionGeologyInvalidated {
-        Objects.requireNonNull(position);
-        if (stratumRevision < 1) throw new IllegalArgumentException("geological observation lacks its baseline version");
+    public static final int MAX_OBSERVATIONS = 256;
+    public record Observation(BlockPosition position, long stratumRevision) {
+        public Observation {
+            Objects.requireNonNull(position);
+            if (stratumRevision < 1) throw new IllegalArgumentException("geological observation lacks its baseline version");
+        }
     }
-    @Override public String type() { return "frontier.extraction_geology_invalidated"; }
+    public ExtractionGeologyInvalidated {
+        observations = List.copyOf(observations);
+        if (observations.isEmpty() || observations.size() > MAX_OBSERVATIONS)
+            throw new IllegalArgumentException("geological observation batch exceeds its bounded declaration");
+        var positions = new HashSet<BlockPosition>();
+        for (var observation : observations) if (!positions.add(observation.position()))
+            throw new IllegalArgumentException("duplicate geological observation");
+    }
+    public ExtractionGeologyInvalidated(BlockPosition position, long stratumRevision) {
+        this(List.of(new Observation(position, stratumRevision)));
+    }
+    @Override public String type() { return "frontier.extraction_geology_invalidated.v2"; }
     @Override public boolean requiresDurableBeforeEffect() { return true; }
     public FrontierWorldState apply(FrontierWorldState state, SubjectId subject) {
-        var fact = ExtractionTerrainFacts.at(state.bootstrap(), position).orElseThrow(
-                () -> new IllegalArgumentException("no declared geological knowledge"));
-        if (!subject.equals(OWNER) || fact.revision() != stratumRevision
-                || state.extractionSites().deposits().values().stream().anyMatch(deposit ->
-                    deposit.site().layout().fixedBlocks().containsKey(position)
-                    || deposit.site().layout().cells().stream().anyMatch(cell -> cell.source().equals(position))))
-            throw new IllegalArgumentException("foreign/stale observation or geology already has a worksite owner");
-        return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().invalidateGeology(position)));
+        if (!subject.equals(OWNER)) throw new IllegalArgumentException("foreign geological observation owner");
+        var positions = observations.stream().map(Observation::position).collect(java.util.stream.Collectors.toSet());
+        for (var observation : observations) {
+            var fact = ExtractionTerrainFacts.at(state.bootstrap(), observation.position()).orElseThrow(
+                    () -> new IllegalArgumentException("no declared geological knowledge"));
+            if (fact.revision() != observation.stratumRevision())
+                throw new IllegalArgumentException("stale geological observation");
+        }
+        if (state.extractionSites().deposits().values().stream().anyMatch(deposit ->
+                deposit.site().layout().fixedBlocks().keySet().stream().anyMatch(positions::contains)
+                || deposit.site().layout().cells().stream().anyMatch(cell -> positions.contains(cell.source()))))
+            throw new IllegalArgumentException("geology already has a worksite owner");
+        return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().invalidateGeology(positions)));
     }
 }

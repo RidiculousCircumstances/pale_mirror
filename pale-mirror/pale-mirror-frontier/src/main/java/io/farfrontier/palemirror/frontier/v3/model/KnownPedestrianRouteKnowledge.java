@@ -26,6 +26,8 @@ public final class KnownPedestrianRouteKnowledge {
     private record WitnessedScope(Object view, SurfaceAnchor departure) { }
     private static final java.util.Map<ViewKey, KnownPedestrianRouteKnowledge> VIEWS = new java.util.LinkedHashMap<>();
     private static KnownPedestrianRouteKnowledge frontierView;
+    private static final ImmutableInputView<java.util.Map<TerrainColumn, SurfaceAnchor>> ROAD_SUPPORTS = new ImmutableInputView<>();
+    private static final ImmutableInputView<java.util.Map<TerrainColumn, SurfaceAnchor>> GROUND_SUPPORTS = new ImmutableInputView<>();
     private record FieldView(ResourceSite site, ResourceStorageAccess port, ResourceFieldCycle cycle,
                              Set<BlockPosition> obstructions, KnownPedestrianRouteKnowledge knowledge,
                              java.util.Map<SurfaceAnchor, KnownPedestrianRouteKnowledge> witnessedDepartures) { }
@@ -152,12 +154,19 @@ public final class KnownPedestrianRouteKnowledge {
             var obstacles = new HashSet<BlockPosition>(sites.obstacles());
             obstacles.addAll(storage); obstacles.addAll(state.physicalDeltas().keySet());
             obstacles.addAll(FrontierGrayboxPlan.intactOrganOccupancy(List.copyOf(state.hiveColony().addedOrgans().values())));
-            var supports = new java.util.LinkedHashMap<TerrainColumn, SurfaceAnchor>();
-            for (var position : FrontierRouteNetwork.footprint(state.bootstrap(), state.routeTopology()).surfaceCells()) {
-                var column = new TerrainColumn(position.x(), position.z()); var current = supports.get(column);
-                if (current == null || current.y() < position.y()) supports.put(column, new SurfaceAnchor(position));
-            }
-            supports.putAll(sites.supports());
+            var roadCells = FrontierRouteNetwork.surfaceCells(state.bootstrap(), state.routeTopology());
+            var roads = ROAD_SUPPORTS.get(List.of(state.bootstrap(), roadCells), () -> {
+                var supports = new java.util.LinkedHashMap<TerrainColumn, SurfaceAnchor>();
+                for (var position : roadCells) {
+                    var column = new TerrainColumn(position.x(), position.z()); var current = supports.get(column);
+                    if (current == null || current.y() < position.y()) supports.put(column, new SurfaceAnchor(position));
+                }
+                return java.util.Map.copyOf(supports);
+            });
+            var supports = GROUND_SUPPORTS.get(List.of(roads, sites.supports()), () -> {
+                var merged = new java.util.LinkedHashMap<>(roads); merged.putAll(sites.supports());
+                return java.util.Map.copyOf(merged);
+            });
             KnownPedestrianGeometryScopes.refresh(state.bootstrap(), obstacles, supports);
             JOURNEYS.clear();
             frontierView = null;

@@ -11,6 +11,25 @@ import java.util.*;
 /** Durable physical capture before external writes; source policy alone acknowledges their meaning. */
 final class FrontierV3ExtractionBlockWrites implements FrontierV3ManagedBlockWrites.Owner {
     @Override public CellMutationKey.OwnerFamily family() { return CellMutationKey.OwnerFamily.EXTRACTIVE_SITE; }
+    @Override public void preparePlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            List<FrontierV3ManagedBlockWrites.PlannedWrite> writes) {
+        var state = runtime.decodedState().orElseThrow();
+        if (!state.bootstrap().ruleset().extraction().enabled()) return;
+        var observations = new LinkedHashMap<BlockPosition, ExtractionGeologyInvalidated.Observation>();
+        for (var write : writes) {
+            var position = write.position();
+            if (!level.hasChunkAt(position) || FrontierV3WorksiteRegistry.point(state, position).isPresent()
+                    || level.getBlockState(position).equals(write.replacement())) continue;
+            var raw = new BlockPosition(position.getX(), position.getY(), position.getZ());
+            if (state.extractionSites().geologicalExclusions().positions().contains(raw)) continue;
+            ExtractionTerrainFacts.at(state.bootstrap(), raw).ifPresent(fact -> observations.put(raw,
+                    new ExtractionGeologyInvalidated.Observation(raw, fact.revision())));
+        }
+        if (!observations.isEmpty()) FrontierV3CommandSubmission.submit(runtime, "extraction-geology-invalidated",
+                ExtractionGeologyInvalidated.OWNER.value(), new ExtractionGeologyInvalidated(List.copyOf(observations.values())));
+        // submit accepts only after the complete bounded intent has passed validation and the
+        // WAL prefix is forced. Per-block ingress below still owns indexed witnesses/effects.
+    }
     @Override public void observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             BlockPos position, BlockState replacement, boolean committed) {
         var state = runtime.passiveOwnershipState().orElse(null);

@@ -10,6 +10,43 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3FirstVisibilityAdmissionTest {
+    @Test void preparedWindowSurvivesBudgetYieldsWithoutASlidingFencePerBlock() {
+        var cells = cells(300);
+        var work = new FirstVisibilityWork(cells);
+        var preparations = new ArrayList<List<GrayboxCell>>();
+        for (int i = 0; i < 300; i++) {
+            work.preparePending(256, preparations::add);
+            assertEquals(cells.get(i), work.next());
+            work.observe(FrontierV3GrayboxExecutor.ProjectionResult.YIELDED);
+            work.preparePending(256, preparations::add);
+            assertEquals(cells.get(i), work.next());
+            work.observe(FrontierV3GrayboxExecutor.ProjectionResult.APPLIED);
+        }
+        assertTrue(work.complete());
+        assertEquals(List.of(cells.subList(0, 256), cells.subList(256, 300)), preparations,
+                "300 actual writes retain two bounded before-write fences, never 300 shifted windows");
+    }
+
+    @Test void rejectedPreparationCannotPublishItsWindowOrLoseTheNextPhysicalCell() {
+        var cells = cells(3);
+        var work = new FirstVisibilityWork(cells);
+        assertThrows(IllegalStateException.class, () -> work.preparePending(2, window -> {
+            assertEquals(cells.subList(0, 2), window);
+            throw new IllegalStateException("fixture: durable admission failed");
+        }));
+        var prepared = new ArrayList<List<GrayboxCell>>();
+        work.preparePending(2, prepared::add);
+        assertEquals(List.of(cells.subList(0, 2)), prepared);
+        assertEquals(cells.getFirst(), work.next());
+        work.observe(FrontierV3GrayboxExecutor.ProjectionResult.DEFERRED);
+        work.preparePending(2, window -> fail("the second already-prepared cell is retained"));
+        assertEquals(cells.get(1), work.next());
+        work.observe(FrontierV3GrayboxExecutor.ProjectionResult.CURRENT);
+        work.preparePending(2, prepared::add);
+        assertEquals(List.of(cells.get(2), cells.getFirst()), prepared.get(1),
+                "a deferred physical attempt is reconsidered, not falsely acknowledged");
+    }
+
     @Test void freshStaticChunkUsesAvailableOperationalHeadroomWithoutChangingOrdinaryWorkCadence() {
         var world = new World();
         var work = new FirstVisibilityWork(cells(151));

@@ -13,11 +13,19 @@ final class FirstVisibilityWork {
     private boolean progressedInPass;
     private boolean blocked;
     private GrayboxCell current;
+    private int preparedRemaining;
 
     FirstVisibilityWork(List<GrayboxCell> cells) {
         this.pending = new ArrayDeque<>(cells);
         this.cells = cells.size();
         this.remainingInPass = cells.size();
+    }
+    void preparePending(int limit, java.util.function.Consumer<List<GrayboxCell>> beforeWrite) {
+        if (limit < 1 || current != null) throw new IllegalArgumentException("invalid planned visibility window");
+        if (preparedRemaining > 0 || pending.isEmpty()) return;
+        var window = pending.stream().limit(limit).toList();
+        beforeWrite.accept(window);
+        preparedRemaining = window.size(); // Publish only after successful durable preparation.
     }
     GrayboxCell next() { return current = pending.removeFirst(); }
     void observe(ProjectionResult result) {
@@ -27,6 +35,7 @@ final class FirstVisibilityWork {
             current = null;
             return;
         }
+        if (preparedRemaining > 0) preparedRemaining--;
         if (result == ProjectionResult.DEFERRED) pending.addLast(current); else progressedInPass = true;
         remainingInPass--;
         if (remainingInPass == 0 && !pending.isEmpty()) {

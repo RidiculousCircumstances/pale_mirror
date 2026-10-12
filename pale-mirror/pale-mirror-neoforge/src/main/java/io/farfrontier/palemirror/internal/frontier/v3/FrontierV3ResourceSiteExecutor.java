@@ -268,7 +268,7 @@ final class FrontierV3ResourceSiteExecutor {
             }
             return;
         }
-        var result = FrontierV3ResourceFieldInitialWriter.writeBatch(level, site);
+        var result = FrontierV3ResourceFieldInitialWriter.writeBatch(level, runtime, site);
         if (result == FrontierV3ResourceFieldInitialWriter.Result.FOREIGN
                 || result == FrontierV3ResourceFieldInitialWriter.Result.AMBIGUOUS) {
             var step = FrontierV3ResourceFieldInitialPlan.stepAt(site, initial.cursor().nextWrite(), initial.cursor().target());
@@ -352,7 +352,7 @@ final class FrontierV3ResourceSiteExecutor {
             unknown(runtime, intent.id(), "cell-field-initialization-conflict"); return;
         }
         if (!initial.cursor().complete()) {
-            var result = FrontierV3ResourceFieldInitialWriter.writeBatch(level, site);
+            var result = FrontierV3ResourceFieldInitialWriter.writeBatch(level, runtime, site);
             if (result == FrontierV3ResourceFieldInitialWriter.Result.FOREIGN
                     || result == FrontierV3ResourceFieldInitialWriter.Result.AMBIGUOUS)
                 unknown(runtime, intent.id(), "cell-field-" + result.name().toLowerCase(java.util.Locale.ROOT));

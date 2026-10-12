@@ -18,6 +18,7 @@ final class KnownPedestrianGeometryScopes {
 
     static synchronized void refresh(Object currentBootstrap, Set<BlockPosition> currentObstacles,
                                     Map<TerrainColumn, SurfaceAnchor> currentSupports) {
+        currentObstacles = Set.copyOf(currentObstacles); currentSupports = Map.copyOf(currentSupports);
         if (bootstrap != currentBootstrap) {
             bootstrap = currentBootstrap; SCOPES.clear(); ground = PedestrianGeometryRevision.initial();
         } else {
@@ -44,11 +45,13 @@ final class KnownPedestrianGeometryScopes {
 
     private static void changedBlocks(Set<BlockPosition> before, Set<BlockPosition> after,
                                       Set<PedestrianGeometryRevision.Region> changed) {
+        if (before == after) return;
         for (var position : before) if (!after.contains(position)) changed.add(PedestrianGeometryRevision.Region.at(position));
         for (var position : after) if (!before.contains(position)) changed.add(PedestrianGeometryRevision.Region.at(position));
     }
     private static void changedSupports(Map<TerrainColumn, SurfaceAnchor> before, Map<TerrainColumn, SurfaceAnchor> after,
                                         Set<PedestrianGeometryRevision.Region> changed) {
+        if (before == after) return;
         for (var entry : before.entrySet()) if (!entry.getValue().equals(after.get(entry.getKey())))
             changed.add(PedestrianGeometryRevision.Region.at(entry.getValue().support()));
         for (var entry : after.entrySet()) if (!entry.getValue().equals(before.get(entry.getKey())))

@@ -7,9 +7,9 @@ import java.util.*;
 
 /** Registered owner, not a manual server tick branch. */
 final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
-    static final Set<String> COMMANDS = Set.of("frontier.extraction_geology_invalidated", "frontier.extraction_geometry_changed", "frontier.extraction_source_changed", "frontier.extraction_source_boundary", "frontier.extraction_hot_prepared",
+    static final Set<String> COMMANDS = Set.of("frontier.extraction_geology_invalidated.v2", "frontier.extraction_geometry_changed", "frontier.extraction_source_changed", "frontier.extraction_source_boundary", "frontier.extraction_hot_prepared",
             "frontier.extraction_hot_observed", "frontier.extraction_hand_custody_observed");
-    static final Set<String> TYPES = Set.of("frontier.extraction_geology_invalidated", "frontier.extraction_area_extended.v3", "frontier.extraction_frontier_opened", "frontier.extraction_work_started", "frontier.extraction_work_progressed",
+    static final Set<String> TYPES = Set.of("frontier.extraction_geology_invalidated.v2", "frontier.extraction_area_extended.v3", "frontier.extraction_frontier_opened", "frontier.extraction_work_started", "frontier.extraction_work_progressed",
             "frontier.extraction_geometry_changed", "frontier.extraction_source_changed", "frontier.extraction_source_boundary", "frontier.extraction_hot_prepared",
             "frontier.extraction_hot_observed", "frontier.extraction_hand_custody_observed");
     static final DeterministicProcessDescriptor DESCRIPTOR = new DeterministicProcessDescriptor("extraction",

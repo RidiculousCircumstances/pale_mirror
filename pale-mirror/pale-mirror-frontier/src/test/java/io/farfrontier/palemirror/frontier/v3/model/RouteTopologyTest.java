@@ -25,6 +25,32 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RouteTopologyTest {
+    @Test void immutableRoadCompilationIsSharedButCannotHideReplacementDamageOrRecovery() {
+        var bootstrap = FrontierBootstrapper.create(new WorldId("frontier:shared-road-projection"), 96L);
+        var topology = RouteTopology.initial();
+        var footprint = FrontierRouteNetwork.footprint(bootstrap, topology);
+        org.junit.jupiter.api.Assertions.assertSame(footprint, FrontierRouteNetwork.footprint(bootstrap, RouteTopology.initial()));
+        org.junit.jupiter.api.Assertions.assertSame(footprint.surfaceCells(), FrontierRouteNetwork.surfaceCells(bootstrap, topology));
+        var home = bootstrap.settlements().getFirst().id();
+        var baseline = topology.settlementWaypoints(bootstrap, home);
+        var damaged = topology.blockAffectedRouteEdges(bootstrap, baseline.getFirst());
+        assertFalse(damaged.routePassable(bootstrap, home));
+        org.junit.jupiter.api.Assertions.assertSame(footprint, FrontierRouteNetwork.footprint(bootstrap, damaged),
+                "availability is not a new authored road declaration and is still enforced by the topology owner");
+        var replacement = List.of(baseline.get(0), baseline.get(1), baseline.get(1).offset(0, 0, 10),
+                baseline.get(2).offset(0, 0, 10), baseline.get(2), baseline.get(3));
+        var changed = topology.replaceSettlementRoute(bootstrap, home, replacement);
+        var newFootprint = FrontierRouteNetwork.footprint(bootstrap, changed);
+        org.junit.jupiter.api.Assertions.assertNotSame(footprint, newFootprint);
+        assertTrue(newFootprint.surfaceCells().contains(replacement.get(2)));
+        assertFalse(footprint.surfaceCells().contains(replacement.get(2)), "the old view remains immutable");
+        var state = FrontierWorldState.initial(bootstrap).withRouteTopology(changed);
+        var codec = new FrontierWorldStateCodec(); var recovered = codec.decode(codec.encode(state));
+        assertEquals(newFootprint, FrontierRouteNetwork.footprint(recovered.bootstrap(), recovered.routeTopology()));
+        org.junit.jupiter.api.Assertions.assertNotSame(newFootprint,
+                FrontierRouteNetwork.footprint(recovered.bootstrap(), recovered.routeTopology()));
+    }
+
     @Test
     void directRouteSemanticLookupMatchesCompiledProjectionWithoutCompilingTheWorldPerLookup() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:route-direct-semantic"), 96L);

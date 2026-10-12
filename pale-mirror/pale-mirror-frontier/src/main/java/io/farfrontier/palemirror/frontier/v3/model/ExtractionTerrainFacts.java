@@ -33,7 +33,10 @@ public final class ExtractionTerrainFacts {
         java.util.Objects.requireNonNull(bootstrap); java.util.Objects.requireNonNull(exclusions);
         var proof = COVERAGE.get();
         if (proof != null && proof.bootstrap().get() == bootstrap && proof.exclusions().get() == exclusions) return;
-        for (var position : exclusions.positions())
+        var previous = proof != null && proof.bootstrap().get() == bootstrap ? proof.exclusions().get() : null;
+        var unchecked = previous == null ? exclusions.positions()
+                : exclusions.additionsSince(previous).orElse(exclusions.positions());
+        for (var position : unchecked)
             if (!contains(bootstrap, position)) throw new IllegalArgumentException("geological exclusion has no declared baseline");
         COVERAGE.set(new CoverageProof(new java.lang.ref.WeakReference<>(bootstrap), new java.lang.ref.WeakReference<>(exclusions)));
     }

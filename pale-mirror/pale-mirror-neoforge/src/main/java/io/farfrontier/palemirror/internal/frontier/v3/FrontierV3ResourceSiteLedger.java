@@ -281,7 +281,7 @@ final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
         FieldInitialization prior = fieldClaim(site.id()) instanceof FieldInitialization value ? value : null;
         if (prior == null || prior.status() != Status.PENDING || !prior.cursor().matches(site)
                 || prior.cursor().prepared() || reviews.isEmpty()
-                || reviews.size() > FrontierV3ResourceSiteExecutor.projectionWriteBudget()
+                || reviews.size() > FrontierV3ResourceFieldInitialWriter.MAX_BATCH_WRITES
                 || prior.cursor().nextWrite() + reviews.size() > prior.cursor().writeCount())
             throw new IllegalStateException("initial field batch lacks its exact unprepared owner");
         for (int offset = 0; offset < reviews.size(); offset++) {
@@ -482,7 +482,7 @@ final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
     record InitialBatch(int start, java.util.List<net.minecraft.world.level.block.state.BlockState> predecessors) {
         InitialBatch {
             predecessors = java.util.List.copyOf(predecessors);
-            if (start < 0 || predecessors.isEmpty() || predecessors.size() > FrontierV3ResourceSiteExecutor.projectionWriteBudget())
+            if (start < 0 || predecessors.isEmpty() || predecessors.size() > FrontierV3ResourceFieldInitialWriter.MAX_BATCH_WRITES)
                 throw new IllegalArgumentException("initial projection batch is outside its bounded window");
         }
         int end() { return start + predecessors.size(); }
@@ -496,7 +496,7 @@ final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
             if (!tag.contains("start", Tag.TAG_INT) || !tag.contains("predecessors", Tag.TAG_LIST))
                 throw new IllegalStateException("incomplete initial projection batch");
             var values = tag.getList("predecessors", Tag.TAG_COMPOUND);
-            if (values.isEmpty() || values.size() > FrontierV3ResourceSiteExecutor.projectionWriteBudget())
+            if (values.isEmpty() || values.size() > FrontierV3ResourceFieldInitialWriter.MAX_BATCH_WRITES)
                 throw new IllegalStateException("initial projection predecessors exceed the bounded window");
             var states = new java.util.ArrayList<net.minecraft.world.level.block.state.BlockState>();
             for (var value : values) {

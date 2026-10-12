@@ -7,6 +7,43 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ExtractionTerrainFactsTest {
+    @Test void boundedGeologyFenceIsAllOrNothingAndRetainsEveryPositionThroughRecovery() throws Exception {
+        var before = FrontierWorldState.initial(bootstrap("frontier-v3-quarry-graybox-r7"));
+        var observations = new java.util.ArrayList<ExtractionGeologyInvalidated.Observation>();
+        for (int x = 0; x < ExtractionGeologyInvalidated.MAX_OBSERVATIONS; x++)
+            observations.add(new ExtractionGeologyInvalidated.Observation(new BlockPosition(x, 65, 0), 1));
+        var fence = new ExtractionGeologyInvalidated(observations);
+        var after = fence.apply(before, ExtractionGeologyInvalidated.OWNER);
+        assertEquals(256, after.extractionSites().geologicalExclusions().positions().size());
+        for (var observation : observations) {
+            assertTrue(before.extractionSites().geologicalExclusions().positions().isEmpty());
+            assertTrue(ExtractionGroundKnowledge.forState(after).at(observation.position()).isEmpty());
+        }
+        assertEquals(before.inventory(), after.inventory());
+        assertEquals(before.extractionSites().deposits(), after.extractionSites().deposits());
+        assertEquals(before.actorLocations(), after.actorLocations());
+        assertEquals(before.replicaCustody(), after.replicaCustody(), "an intent is not a physical custody acknowledgement");
+        assertTrue(fence.requiresDurableBeforeEffect());
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        assertEquals(after, codec.decode(codec.encode(after)));
+        var payloads = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(fence, payloads.decode(fence.type(), payloads.encode(fence)));
+        assertThrows(RuntimeException.class, () -> payloads.decode("frontier.extraction_geology_invalidated", payloads.encode(fence)));
+        assertThrows(RuntimeException.class, () -> payloads.decode(fence.type(), java.util.Arrays.copyOf(payloads.encode(fence), 4)));
+        var tooMany = new java.util.ArrayList<>(observations);
+        tooMany.add(new ExtractionGeologyInvalidated.Observation(new BlockPosition(257, 65, 0), 1));
+        assertThrows(IllegalArgumentException.class, () -> new ExtractionGeologyInvalidated(tooMany));
+        assertThrows(IllegalArgumentException.class, () -> new ExtractionGeologyInvalidated(java.util.List.of(observations.getFirst(), observations.getFirst())));
+        assertThrows(IllegalArgumentException.class, () -> fence.apply(before, new io.farfrontier.palemirror.frontier.v3.api.SubjectId("geometry:foreign")));
+        var stale = new java.util.ArrayList<>(observations);
+        stale.set(255, new ExtractionGeologyInvalidated.Observation(observations.get(255).position(), 2));
+        assertThrows(IllegalArgumentException.class, () -> new ExtractionGeologyInvalidated(stale).apply(before, ExtractionGeologyInvalidated.OWNER));
+        var owned = before.extractionSites().deposits().values().iterator().next().site().layout().cells().getFirst().source();
+        assertThrows(IllegalArgumentException.class, () -> new ExtractionGeologyInvalidated(java.util.List.of(observations.getFirst(),
+                new ExtractionGeologyInvalidated.Observation(owned, 1))).apply(before, ExtractionGeologyInvalidated.OWNER));
+        assertTrue(before.extractionSites().geologicalExclusions().positions().isEmpty(), "a rejected batch cannot publish its valid prefix");
+    }
+
     private static FrontierBootstrap bootstrap(String rules) {
         return FrontierBootstrapper.create(new WorldId("frontier:terrain-facts"), 20260918065L, FrontierRulesets.installed(rules));
     }
@@ -37,5 +74,60 @@ class ExtractionTerrainFactsTest {
         assertThrows(IllegalArgumentException.class, () -> ExtractionTerrainFacts.validateExclusions(withoutGeology, exclusions));
         assertTrue(ExtractionTerrainFacts.at(withoutGeology, new BlockPosition(0, 62, 0)).isEmpty());
         assertEquals("minecraft:stone", ExtractionTerrainFacts.at(known, new BlockPosition(0, 62, 0)).orElseThrow().block().kind());
+    }
+
+    @Test void appendedInvalidationsRemainImmutableAndValidatedAcrossCompactionAndRecovery() {
+        var known = bootstrap("frontier-v3-quarry-graybox-r7");
+        var supplied = new java.util.HashSet<BlockPosition>();
+        supplied.add(new BlockPosition(0, 62, 0));
+        var initial = new KnownBlockExclusions(supplied); supplied.clear();
+        var current = initial;
+        for (int x = 1; x <= 150; x++) {
+            var next = current.invalidate(new BlockPosition(x, 62, 0));
+            assertFalse(current.positions().contains(new BlockPosition(x, 62, 0)));
+            assertEquals(x + 1, next.positions().size());
+            assertDoesNotThrow(() -> ExtractionTerrainFacts.validateExclusions(known, next));
+            current = next;
+        }
+        assertEquals(Set.of(new BlockPosition(0, 62, 0)), initial.positions());
+        var retained = current;
+        assertSame(retained, retained.invalidate(new BlockPosition(150, 62, 0)));
+        assertThrows(UnsupportedOperationException.class, () -> retained.positions().add(new BlockPosition(200, 62, 0)));
+        assertThrows(UnsupportedOperationException.class, () -> retained.positions().iterator().remove());
+        var state = FrontierWorldState.initial(known).withChanges(FrontierWorldStateUpdate.begin()
+                .extractionSites(new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState(
+                        java.util.Map.of(), java.util.Map.of(), 1, retained)));
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        assertEquals(state, codec.decode(codec.encode(state)));
+        var invalid = retained.invalidate(new BlockPosition(10000, 62, 0));
+        assertThrows(IllegalArgumentException.class, () -> ExtractionTerrainFacts.validateExclusions(known, invalid));
+        var full = new java.util.HashSet<BlockPosition>();
+        for (int x = 0; x < KnownBlockExclusions.MAX_POSITIONS; x++) full.add(new BlockPosition(x, 62, 0));
+        var exhausted = new KnownBlockExclusions(full);
+        assertThrows(IllegalArgumentException.class, () -> exhausted.invalidate(new BlockPosition(-1, 62, 0)));
+        assertSame(exhausted, exhausted.invalidate(new BlockPosition(0, 62, 0)));
+    }
+
+    @Test void remoteChangesDoNotRebuildSitesButLocalInvalidationsStillReachTheirProviderAndRecovery() {
+        var before = FrontierWorldState.initial(bootstrap("frontier-v3-quarry-graybox-r7"));
+        var sites = KnownSiteGeometry.forState(before);
+        var provider = new ExtractionKnownGeometry(); var priorVersion = provider.version(before);
+        var remote = new ExtractionGeologyInvalidated(new BlockPosition(0, 65, 0), 1)
+                .apply(before, ExtractionGeologyInvalidated.OWNER);
+        assertSame(sites, KnownSiteGeometry.forState(remote));
+        assertSame(priorVersion, provider.version(remote));
+        var local = before.extractionSites().deposits().values().stream()
+                .flatMap(deposit -> deposit.site().layout().terrainSupports().keySet().stream())
+                .filter(position -> before.extractionSites().deposits().values().stream().noneMatch(deposit ->
+                        deposit.site().layout().fixedBlocks().containsKey(position)
+                        || deposit.site().layout().cells().stream().anyMatch(cell -> cell.source().equals(position))))
+                .findFirst().orElseThrow();
+        var changed = new ExtractionGeologyInvalidated(local, 1).apply(remote, ExtractionGeologyInvalidated.OWNER);
+        assertNotSame(priorVersion, provider.version(changed), "local natural geometry changes must still reach the site owner");
+        assertTrue(ExtractionGroundKnowledge.forState(changed).at(local).isEmpty());
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        var recovered = codec.decode(codec.encode(changed));
+        assertTrue(ExtractionGroundKnowledge.forState(recovered).at(local).isEmpty());
+        assertEquals(KnownSiteGeometry.forState(changed), KnownSiteGeometry.forState(recovered));
     }
 }

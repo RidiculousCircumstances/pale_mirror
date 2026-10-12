@@ -342,6 +342,8 @@ final class FrontierV3GrayboxExecutor {
             FirstVisibilityWork work = firstVisibilityWork(runtime, chunk, cursor.cellsIn(chunk));
             FirstVisibility result = FirstVisibility.PENDING;
             while (!work.complete() && budget.takeRead()) {
+                work.preparePending(Math.min(operationBudget, FrontierV3ManagedBlockWrites.MAX_PLANNED_WRITES),
+                        cells -> FrontierV3FirstVisibilityPreparation.prepare(level, runtime, state, cells));
                 ProjectionResult projection = projectFirstVisible(FrontierV3AftermathPhysicalWorld.firstVisibility(level), ledger, state,
                         work.next(), budget::takeWrite);
                 if (projection == ProjectionResult.CONFLICT) { result = FirstVisibility.BLOCKED; break; }

@@ -8,13 +8,27 @@ import java.util.*;
 
 /** Native integration dispatches explicit owners; it never implements their mutation policy. */
 final class FrontierV3ManagedBlockWrites {
+    static final int MAX_PLANNED_WRITES = 256;
+    record PlannedWrite(BlockPos position, BlockState replacement) {
+        PlannedWrite {
+            position = Objects.requireNonNull(position).immutable();
+            Objects.requireNonNull(replacement);
+        }
+    }
     interface Owner {
         CellMutationKey.OwnerFamily family();
+        void preparePlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                List<PlannedWrite> writes);
         void observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                 BlockPos position, BlockState replacement, boolean committed);
     }
     private static final List<Owner> OWNERS = List.of(new Owner() {
         public CellMutationKey.OwnerFamily family() { return CellMutationKey.OwnerFamily.RESOURCE_SITE; }
+        public void preparePlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                List<PlannedWrite> writes) {
+            // Field effects retain their individual world-change/custody witnesses in observe.
+            // Planned static projection neither acquires field authority nor acknowledges work.
+        }
         public void observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                 BlockPos position, BlockState replacement, boolean committed) {
             FrontierV3ResourceFieldWorldChangeExecutor.observeBlockWrite(level, runtime, position, replacement, committed);
@@ -25,6 +39,13 @@ final class FrontierV3ManagedBlockWrites {
         for (var owner : OWNERS) if (!keys.add(owner.family())) throw new IllegalStateException("duplicate native mutation owner");
     }
     private FrontierV3ManagedBlockWrites() { }
+    static void preparePlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            List<PlannedWrite> writes) {
+        writes = List.copyOf(writes);
+        if (writes.isEmpty() || writes.size() > MAX_PLANNED_WRITES)
+            throw new IllegalArgumentException("unbounded planned native write window");
+        for (var owner : OWNERS) owner.preparePlannedWrites(level, runtime, writes);
+    }
     static void observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             BlockPos position, BlockState replacement, boolean committed) {
         for (var owner : OWNERS) owner.observe(level, runtime, position, replacement, committed);

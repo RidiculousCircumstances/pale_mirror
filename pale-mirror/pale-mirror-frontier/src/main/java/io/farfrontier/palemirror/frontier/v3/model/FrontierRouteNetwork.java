@@ -22,6 +22,13 @@ public final class FrontierRouteNetwork {
     public static final SubjectId OWNER = new SubjectId("route:frontier-network");
     public static final SubjectId MAINTENANCE_CONTAINER = new SubjectId("container:frontier-route-maintenance");
 
+    // One disposable immutable declaration view. Availability/physical damage is evaluated
+    // by its owning layers, not compiled into the authored road footprint.
+    private static FrontierBootstrap cachedBootstrap;
+    private static Map<SubjectId, List<BlockPosition>> cachedRoutes;
+    private static Set<BlockPosition> cachedSurfaces;
+    private static RouteFootprint cachedFootprint;
+
     private FrontierRouteNetwork() { }
 
     public static List<BlockPosition> settlementWaypoints(FrontierBootstrap bootstrap, SubjectId settlementId) {
@@ -79,8 +86,14 @@ public final class FrontierRouteNetwork {
         return surfaceCells(bootstrap, RouteTopology.initial());
     }
 
-    public static Set<BlockPosition> surfaceCells(FrontierBootstrap bootstrap, RouteTopology topology) {
-        return compileSurfaceCells(bootstrap, topology);
+    public static synchronized Set<BlockPosition> surfaceCells(FrontierBootstrap bootstrap, RouteTopology topology) {
+        Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(topology, "route topology");
+        var routes = topology.replacementRoutes();
+        if (cachedBootstrap != bootstrap || !routes.equals(cachedRoutes)) {
+            var compiled = compileSurfaceCells(bootstrap, topology);
+            cachedBootstrap = bootstrap; cachedRoutes = routes; cachedSurfaces = compiled; cachedFootprint = null;
+        }
+        return cachedSurfaces;
     }
 
     /**
@@ -92,8 +105,9 @@ public final class FrontierRouteNetwork {
      * enters a loaded scene.  This is still a pure, immutable compiler result; callers may not
      * cache it as world authority.</p>
      */
-    static RouteFootprint footprint(FrontierBootstrap bootstrap, RouteTopology topology) {
-        Set<BlockPosition> surfaces = compileSurfaceCells(bootstrap, topology);
+    static synchronized RouteFootprint footprint(FrontierBootstrap bootstrap, RouteTopology topology) {
+        Set<BlockPosition> surfaces = surfaceCells(bootstrap, topology);
+        if (cachedFootprint != null) return cachedFootprint;
         Set<BlockPosition> foundations = new LinkedHashSet<>();
         for (BlockPosition surface : surfaces) {
             int terrain = bootstrap.terrain().supportYAt(surface.x(), surface.z());
@@ -108,7 +122,9 @@ public final class FrontierRouteNetwork {
                 if (!surfaces.contains(footing)) foundations.add(footing);
             }
         }
-        return new RouteFootprint(surfaces, Set.copyOf(foundations));
+        var footprint = new RouteFootprint(surfaces, Set.copyOf(foundations));
+        cachedFootprint = footprint;
+        return footprint;
     }
 
     private static Set<BlockPosition> compileSurfaceCells(FrontierBootstrap bootstrap, RouteTopology topology) {

@@ -4,9 +4,9 @@ import java.io.*;
 
 /** Sole header grammar for early installed-world selection and complete aggregate hydration. */
 final class FrontierStateSchema {
-    // Confirmed container placement survives resource-custody release separately from live bindings.
-    // Historical disposable worlds cannot hydrate this changed declaration grammar.
-    static final int VERSION = 278;
+    // Geology before-write fences use a bounded versioned batch, never the old single-position WAL grammar.
+    // Reject historical disposable worlds before replay rather than silently accepting a mixed protocol.
+    static final int VERSION = 279;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

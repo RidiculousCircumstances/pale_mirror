@@ -60,7 +60,7 @@ public final class FrontierV3ResourceFieldObservationGameTests {
         helper.runAtTickTime(1, () -> {
             FrontierV3ResourceFieldInitialWriter.reserve(level, site,
                     new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:field-current-initial-test"), target);
-            finishInitialProjection(helper, site, () -> {
+            rejectInitialPreparationBeforeEffect(helper, site, () -> finishInitialProjection(helper, site, () -> {
                 var witness = FrontierV3ResourceFieldWitness.claimed(siteId, target.epoch(), ResourceFieldPhysicalSurface.fromCycle(target));
                 FrontierV3ResourceFieldInitialWriter.activate(level, site, target, witness);
                 helper.assertTrue(level.getBlockState(first.above()).getValue(CropBlock.AGE) == 7
@@ -69,8 +69,29 @@ public final class FrontierV3ResourceFieldObservationGameTests {
                         && owner.witness().matchesCycle(target) && target.harvestedCount() == 0,
                         "initial materialization shows the retained mature/absent COLD surface and awards no crop work");
                 helper.succeed();
-            });
+            }));
         });
+    }
+
+    private static final class RefusedPreparation extends RuntimeException { }
+    private static void rejectInitialPreparationBeforeEffect(GameTestHelper helper, ResourceSite site, Runnable completed) {
+        try {
+            FrontierV3ResourceFieldInitialWriter.writePreparedBatch(helper.getLevel(), site, writes -> {
+                helper.assertTrue(!writes.isEmpty() && writes.size() <= FrontierV3ResourceFieldInitialWriter.MAX_BATCH_WRITES,
+                        "initial field passes its exact bounded range to the registered before-write owner");
+                throw new RefusedPreparation();
+            });
+            helper.runAfterDelay(1, () -> rejectInitialPreparationBeforeEffect(helper, site, completed));
+        } catch (RefusedPreparation refused) {
+            var persisted = (FrontierV3ResourceSiteLedger.FieldInitialization) persistedField(helper.getLevel(), site.id());
+            helper.assertTrue(persisted.cursor().prepared() && persisted.cursor().nextWrite() == 0,
+                    "failed cross-owner preparation retains the durable unapplied field range");
+            for (var soil : site.soilSlots()) helper.assertTrue(helper.getLevel().getBlockState(
+                    new BlockPos(soil.x(), soil.y(), soil.z())).is(Blocks.DIRT), "no soil write precedes the before-write fence");
+            for (var crop : site.cropSlots()) helper.assertTrue(helper.getLevel().getBlockState(
+                    new BlockPos(crop.x(), crop.y(), crop.z())).isAir(), "no crop write precedes the before-write fence");
+            helper.runAfterDelay(1, completed);
+        }
     }
 
     @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft",
@@ -327,7 +348,7 @@ public final class FrontierV3ResourceFieldObservationGameTests {
         var ledger = FrontierV3ResourceSiteLedger.get(helper.getLevel());
         var owner = (FrontierV3ResourceSiteLedger.FieldInitialization) ledger.fieldClaim(site.id());
         if (owner.cursor().complete()) { completed.run(); return; }
-        var result = FrontierV3ResourceFieldInitialWriter.writeBatch(helper.getLevel(), site);
+        var result = FrontierV3ResourceFieldInitialWriter.writePreparedBatch(helper.getLevel(), site, writes -> { });
         if (result == FrontierV3ResourceFieldInitialWriter.Result.FOREIGN
                 || result == FrontierV3ResourceFieldInitialWriter.Result.AMBIGUOUS)
             helper.fail("initial projection rejected its actual physical predecessor: " + result);
