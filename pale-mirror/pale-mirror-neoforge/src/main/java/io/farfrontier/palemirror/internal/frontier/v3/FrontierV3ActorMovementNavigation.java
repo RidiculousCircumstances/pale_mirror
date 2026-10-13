@@ -33,6 +33,7 @@ final class FrontierV3ActorMovementNavigation {
             ROUTES.remove(body);
             BLOCKED.remove(body);
             STEERING.remove(body);
+            FrontierV3ServiceApproachNavigation.forget(body);
             return;
         }
         var provider = ActorMovementProviders.require(movement);
@@ -47,8 +48,8 @@ final class FrontierV3ActorMovementNavigation {
                 throw new IllegalArgumentException("movement service approach lost its exact actor/owner declaration");
         }
         boolean waitingForService = service.isPresent() && !ServiceAccessCoordinator.available(state, service.orElseThrow());
-        if (waitingForService && ServiceAccessCoordinator.boundary(state, service.orElseThrow().pointId())
-                .occupied(FrontierV3SurfaceObservation.observedBody(body))) {
+        if (waitingForService) {
+            ROUTES.remove(body); // Grant resumes from the actual waiting pocket, not an old ingress hint.
             var identity = service.orElseThrow();
             var point = ServiceBoundaryComposition.declaration(state, identity.pointId());
             var waiting = FrontierV3ServiceClearanceNavigation.waitForAccess(level, runtime, body, state,
@@ -57,6 +58,7 @@ final class FrontierV3ActorMovementNavigation {
             blocked(body, movement, "service-access:" + waiting.reason());
             return; // Local clearance is not arrival at the retained service/work goal.
         }
+        FrontierV3ServiceApproachNavigation.forget(body);
         long tick = runtime.calendarInstant().orElseThrow();
         FrontierV3MovementPositionIngress.observe(level, runtime, state, movement, tick);
         state = runtime.decodedState().orElseThrow();
@@ -87,14 +89,6 @@ final class FrontierV3ActorMovementNavigation {
                 return;
             }
             ROUTES.put(body, route);
-        }
-        if (waitingForService) {
-            var boundary = ServiceAccessCoordinator.boundary(state, service.orElseThrow().pointId());
-            var result = FrontierV3ServiceApproachNavigation.pursueOutside(level, body, route.waypoints(),
-                    boundary, state.bootstrap().bounds(), actuation, permission.pace());
-            blocked(body, movement, result.status() == FrontierV3GoalNavigation.Status.ARRIVED
-                    ? "service-access:waiting-outside" : "service-approach:" + result.reason());
-            return; // Arrival at this temporary outside point is never the retained semantic arrival.
         }
         if (FrontierV3SemanticMovement.arrived(level, body, route.waypoints().getLast())) {
             BLOCKED.remove(body);

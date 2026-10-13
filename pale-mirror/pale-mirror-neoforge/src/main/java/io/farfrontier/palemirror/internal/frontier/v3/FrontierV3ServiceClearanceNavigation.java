@@ -26,14 +26,16 @@ final class FrontierV3ServiceClearanceNavigation {
                     "stale-body-or-execution-authority", java.util.Optional.empty(), java.util.Optional.empty());
         var boundary = ServiceAccessCoordinator.boundary(state, depotId);
         var supported = FrontierV3SupportedBodyCapture.observe(level, body);
-        if (supported.isPresent() && boundary.cleared(supported.orElseThrow())) {
+        var observed = supported.orElseGet(() -> FrontierV3SurfaceObservation.observedBody(body));
+        if (boundary.cleared(observed)) {
             // Release the occupied turn on witnessed exit, not at a later work goal.
-            if (boundary.occupied(state.actorLocations().get(actorId).body()))
+            if (supported.isPresent() && boundary.occupied(state.actorLocations().get(actorId).body()))
                 FrontierV3ActorBodyController.inspectCurrent(level, runtime, body);
-            FrontierV3GoalNavigation.stop(body, actuation);
-            // Still waiting for service, not arrived at the retained work goal.
-            return new FrontierV3GoalNavigation.Result(FrontierV3GoalNavigation.Status.IN_PROGRESS,
-                    "service-access:waiting-outside", java.util.Optional.empty(), java.util.Optional.empty());
+            // Being outside is not a parking instruction: the exit must remain available.
+            // A normal jump on the way to a buffer must not switch back to an egress goal;
+            // only the occupancy receipt above requires supported-ground evidence.
+            return FrontierV3ServiceApproachNavigation.waitOutside(level, body, state, depotId,
+                    ownerId, actorId, phase, generation, actuation);
         }
         return pursue(level, body, state, settlementId, depotId, ownerId, actorId, phase, generation, actuation);
     }

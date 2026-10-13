@@ -6,6 +6,15 @@ import java.util.*;
 /** Internal authorization lifecycle, independent of mining and independent of commercial title/payment. */
 public final class InternalShipmentStateSupport {
     private InternalShipmentStateSupport() { }
+    /** A replenishing source accumulates the next batch while its current transport is outstanding.
+     * This is flow admission, not a lock on the receiving service point or its approach. */
+    public static boolean flowAvailable(FrontierWorldState state, SubjectId sourceAccount,
+            SubjectId receiver, String itemKind) {
+        return state.shipments().shipments().values().stream().noneMatch(shipment -> !shipment.terminal()
+                && shipment.authorization().kind() == ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT
+                && shipment.sourceAccountId().equals(sourceAccount)
+                && shipment.receiver().containerId().equals(receiver) && shipment.itemKind().equals(itemKind));
+    }
     public static FrontierWorldState dispatch(FrontierWorldState state, SubjectId issuer, InternalShipmentDispatched event) {
         var shipment = event.shipment(); var claim = event.claim();
         if (shipment.authorization().kind() != ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT
@@ -13,6 +22,8 @@ public final class InternalShipmentStateSupport {
                 || !claim.claimantId().equals(issuer) || !claim.economicOwnerId().equals(issuer)
                 || claim.purpose() != ClaimPurpose.INTERNAL_LOGISTICS || !claim.lotQuantities().equals(shipment.lotQuantities()))
             throw new IllegalArgumentException("internal shipment lacks its exact issued resource promise");
+        // Flow admission belongs to the serialized planner. Already accepted events
+        // replay as facts, including batches admitted before the current policy.
         var ledger = state.inventory().fungibleResources();
         var bindings = ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(shipment.sourceAccountId())).toList();
         ledger = bindings.isEmpty() ? ledger.reserve(claim, shipment.sourceAccountId())

@@ -31,6 +31,53 @@ public final class FrontierV3LocalNavigationGameTests {
     private FrontierV3LocalNavigationGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/treasure/big_air_full", timeoutTicks = 180)
+    public static void waitingVisitorsReachSeparateBuffersAcrossARaisedRoadWithoutEnteringService(GameTestHelper helper) {
+        var level = helper.getLevel();
+        for (int x = 4; x <= 15; x++) for (int z = 4; z <= 12; z++) {
+            int y = x < 8 ? 30 : 31;
+            var floor = helper.absolutePos(new BlockPos(x, y, z));
+            level.setBlock(floor, Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(floor.above(), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(floor.above(2), Blocks.AIR.defaultBlockState(), 3);
+        }
+        var anchor = helper.absolutePos(new BlockPos(12, 31, 8));
+        var station = SurfaceAnchor.at(anchor.getX(), anchor.getY(), anchor.getZ());
+        var left = SurfaceAnchor.at(anchor.getX() - 1, anchor.getY(), anchor.getZ() - 2);
+        var right = SurfaceAnchor.at(anchor.getX() - 1, anchor.getY(), anchor.getZ() + 2);
+        var boundary = new io.farfrontier.palemirror.frontier.v3.model.ServiceAccessBoundary(Set.of(station));
+        var point = new io.farfrontier.palemirror.frontier.v3.model.ServiceAccessPoint(
+                new io.farfrontier.palemirror.frontier.v3.api.SubjectId("test:facility"),
+                new io.farfrontier.palemirror.frontier.v3.api.SubjectId("test:settlement"), station, boundary,
+                List.of(left, right), Set.of(SurfaceAnchor.at(anchor.getX() - 1, anchor.getY(), anchor.getZ())));
+        var minimum = helper.absolutePos(new BlockPos(4, 30, 4));
+        var maximum = helper.absolutePos(new BlockPos(16, 31, 13));
+        var bounds = new io.farfrontier.palemirror.frontier.v3.model.WorldBounds(
+                minimum.getX(), minimum.getZ(), maximum.getX() - minimum.getX(), maximum.getZ() - minimum.getZ());
+        var first = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(4.5, 31, 6.5));
+        var second = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(4.5, 31, 10.5));
+        helper.runAfterDelay(1, () -> {
+            for (int turn = 0; turn < 150 && (!FrontierV3SemanticMovement.arrived(level, first, left)
+                    || !FrontierV3SemanticMovement.arrived(level, second, right)); turn++) {
+                for (var entry : List.of(java.util.Map.entry(first, left), java.util.Map.entry(second, right))) {
+                    var actor = entry.getKey();
+                    var result = FrontierV3GoalNavigation.pursue(level, actor,
+                            FrontierV3ServiceApproachNavigation.waitingGoal(point, entry.getValue(), bounds));
+                    helper.assertTrue(result.status() != FrontierV3GoalNavigation.Status.BLOCKED,
+                            "declared outside buffer remains reachable over the real raised road: " + result);
+                    FrontierV3GoalNavigation.advanceAtEntityBoundary(actor); actor.aiStep();
+                    helper.assertTrue(boundary.cleared(FrontierV3SurfaceObservation.observedBody(actor)),
+                            "waiting cannot enter the exclusive service boundary");
+                }
+            }
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(level, first, left)
+                    && FrontierV3SemanticMovement.arrived(level, second, right), "both physical visitors reach distinct waiting pockets");
+            FrontierV3GoalNavigation.stop(first); FrontierV3GoalNavigation.stop(second);
+            first.discard(); second.discard(); helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
             template = "bastion/treasure/big_air_full", timeoutTicks = 160)
     public static void quarryDescentNeedsSweptHeadroomNotJustTwoEmptyStandingCells(GameTestHelper helper) {
         var level = helper.getLevel();

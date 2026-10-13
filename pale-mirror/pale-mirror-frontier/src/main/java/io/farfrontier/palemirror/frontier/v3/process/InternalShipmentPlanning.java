@@ -22,6 +22,8 @@ final class InternalShipmentPlanning {
         var account = state.inventory().fungibleResources().accounts().values().stream()
                 .filter(value -> value.custody().equals(source.custody())).findFirst().orElse(null);
         if (account == null) return Optional.empty();
+        if (!InternalShipmentStateSupport.flowAvailable(state, account.id(), destination.containerId(), itemKind))
+            return Optional.empty();
         int quantity = Math.min(batchLimit, state.inventory().fungibleResources().unclaimedQuantity(account.id(), worker.settlementId(), itemKind));
         while (quantity > 0 && !state.canReceiveFungible(destination.containerId(), itemKind, quantity)) quantity--;
         if (quantity == 0) return Optional.empty();

@@ -338,6 +338,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 FrontierV3PhysicalWaitTrace.actor(worker, state, job.workerId(), "service-wait-clearance:" + waiting.reason());
             return;
         }
+        FrontierV3ServiceApproachNavigation.forget(worker);
         if (!job.progress().complete() && !job.returningForBatch() && !job.progress().hasPendingCrop()
                 && !state.resourceSites().harvestMutationPending(job)) {
             ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());

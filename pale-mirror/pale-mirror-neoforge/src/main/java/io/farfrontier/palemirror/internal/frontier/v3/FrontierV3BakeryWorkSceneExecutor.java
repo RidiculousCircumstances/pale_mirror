@@ -133,30 +133,13 @@ final class FrontierV3BakeryWorkSceneExecutor {
                 && job.bakeryWork().orElseThrow().pendingPhysicalStep().isEmpty()
                 && !ProductionServiceAccess.available(state, job)) {
             var point = ProductionServiceAccess.point(state, job);
-            var boundary = ServiceAccessCoordinator.boundary(state, point);
-            FrontierV3GoalNavigation.Result waiting;
-            if (boundary.occupied(FrontierV3SurfaceObservation.observedBody(worker))) {
-                waiting = FrontierV3ServiceClearanceNavigation.waitForAccess(level, runtime, worker, state,
-                        job.settlementId(), point, job.id(), job.workerId(), goal.phase().wireTag(), 1L, actuation);
-            } else {
-                // Waiting for fuel/space at the destination cannot pin a loaded
-                // worker at the source depot and prevent the supply courier's take.
-                List<SurfaceAnchor> route;
-                try {
-                    route = BakeryKnownNavigation.pathFrom(state, job,
-                            FrontierV3SurfaceObservation.observedBody(worker).supportingSurface());
-                } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
-                    FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "service-approach-route:" + unavailable.getMessage());
-                    return;
-                }
-                waiting = FrontierV3ServiceApproachNavigation.pursueOutside(level, worker, route, boundary,
-                        state.bootstrap().bounds(), actuation, Optional.empty());
-            }
+            var waiting = FrontierV3ServiceClearanceNavigation.waitForAccess(level, runtime, worker, state,
+                    job.settlementId(), point, job.id(), job.workerId(), goal.phase().wireTag(), 1L, actuation);
             FrontierV3PhysicalWaitTrace.bakery(worker, state, job,
-                    waiting.status() == FrontierV3GoalNavigation.Status.ARRIVED
-                            ? "service-access:waiting-outside" : "service-access:" + waiting.reason());
+                    "service-access:" + waiting.reason());
             return;
         }
+        FrontierV3ServiceApproachNavigation.forget(worker);
         if (FrontierV3SemanticMovement.arrived(level, worker, goal.station())) {
             FrontierV3PhysicalWaitTrace.clear(worker);
             FrontierV3GoalNavigation.stop(worker, actuation);

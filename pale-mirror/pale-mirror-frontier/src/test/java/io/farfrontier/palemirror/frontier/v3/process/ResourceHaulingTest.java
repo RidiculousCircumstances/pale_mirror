@@ -9,6 +9,38 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Product path: an owned drop admits the existing courier/claim and reserves receiving space once. */
 class ResourceHaulingTest {
+    @Test void partiallyReservedSupplyDoesNotRecruitAnotherCourierUntilTheOutstandingFlowCloses() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:bounded-haul-flow"),
+                20260918065L, FrontierRulesets.fuelledQuarryGraybox()));
+        var home = state.bootstrap().settlements().getFirst();
+        var source = GoodsParticipantDeclarations.endpoint(home);
+        var facility = home.structures().stream().filter(value -> value.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
+        var station = ProductionStationSpec.grayboxBakery(facility);
+        var receiver = new ShipmentEndpoint.ProductionPort(home.id(), station, ActorContainerItemOrder.StationPort.FUEL,
+                SettlementWorkshopServicePort.forWorkshop(facility).exteriorApproach());
+        var workers = SettlementWorkforce.candidates(state, home.id(), ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS);
+        var offer = InternalShipmentPlanning.prepare(state, workers.get(0), source, receiver, "minecraft:coal", 3, 1200).orElseThrow();
+        var earlierAccepted = InternalShipmentPlanning.prepare(state, workers.get(1), source, receiver, "minecraft:coal", 1, 1199).orElseThrow();
+        var dispatched = InternalShipmentStateSupport.dispatch(state, home.id(), offer);
+        assertEquals(1, dispatched.inventory().fungibleResources().unclaimedQuantity(offer.shipment().sourceAccountId(), home.id(), "minecraft:coal"));
+        assertTrue(InternalShipmentPlanning.prepare(dispatched, workers.get(1), source, receiver, "minecraft:coal", 1, 1201).isEmpty(),
+                "stock availability alone must not multiply couriers for the same outstanding flow");
+        var previousPolicyFacts = InternalShipmentStateSupport.dispatch(dispatched, home.id(), earlierAccepted);
+        assertEquals(previousPolicyFacts, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(previousPolicyFacts)),
+                "already accepted concurrent batches remain valid recovery facts, not a new replay invariant");
+        var shipment = offer.shipment();
+        var moved = dispatched.withActorBody(shipment.execution().actorId(), source.station().standingBody());
+        moved = ShipmentStateSupport.transferCold(moved, shipment.id(), shipment.id(), 1, Shipment.Status.AWAITING_LOAD);
+        moved = moved.withActorBody(shipment.execution().actorId(), receiver.station().standingBody());
+        moved = ShipmentStateSupport.transferCold(moved, shipment.id(), shipment.id(), 2, Shipment.Status.CARRYING);
+        var delivered = moved.shipments().shipments().get(shipment.id());
+        moved = InternalShipmentStateSupport.receive(moved, shipment.id(), new InternalShipmentReceived(shipment.id(),
+                delivered.revision(), delivered.reception().orElseThrow().id()));
+        var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(moved));
+        var next = InternalShipmentPlanning.prepare(recovered, workers.get(1), source, receiver, "minecraft:coal", 1, 1202).orElseThrow();
+        assertEquals(1, next.shipment().quantity(), "a partial next batch becomes eligible after actual delivery, including recovery");
+    }
+
     @Test void groundStockUsesOrdinaryInternalShipmentAndRetainsItsReservationAcrossRecovery() throws Exception {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:ground-haul"), 20260918065L,
                 FrontierRulesets.installed("frontier-v3-quarry-graybox-r6")));
@@ -35,6 +67,14 @@ class ResourceHaulingTest {
                 .map(worker -> ResourceHaulingPolicy.offer(state, worker, 1200)).flatMap(Optional::stream).findFirst().orElseThrow();
         assertEquals(ResourceSourceEndpoint.Kind.GROUND, offer.shipment().sender().sourceKind());
         var dispatched = InternalShipmentStateSupport.dispatch(state, home.id(), offer);
+        assertFalse(InternalShipmentStateSupport.flowAvailable(dispatched, account.id(), depot.id(), lot.itemKind()),
+                "continuous small replenishments must not enlist every free resident into the same transport flow");
+        assertTrue(InternalShipmentStateSupport.flowAvailable(dispatched, account.id(), depot.id(), "minecraft:coal"),
+                "flow admission does not lock unrelated commodities or the whole service point");
+        assertTrue(InternalShipmentStateSupport.flowAvailable(dispatched, new SubjectId("custody:other-source"), depot.id(), lot.itemKind()));
+        assertTrue(InternalShipmentPlanning.prepare(dispatched,
+                state.humanPopulation().residents().get(offer.shipment().execution().actorId()),
+                offer.shipment().sender(), offer.shipment().receiver(), lot.itemKind(), 8, 1201).isEmpty());
         assertEquals(dispatched, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(dispatched)));
         assertEquals(8, dispatched.inventory().fungibleResources().claims().get(offer.claim().id()).quantity());
         assertEquals(home.id(), dispatched.inventory().fungibleResources().lots().get(lot.id()).economicOwnerId());
@@ -73,6 +113,8 @@ class ResourceHaulingTest {
         assertEquals(picked, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(picked)));
         assertEquals(loss, codecs.decode(loss.type(), codecs.encode(loss)));
         var lost = loss.apply(dispatched, home.id());
+        assertTrue(InternalShipmentStateSupport.flowAvailable(lost, account.id(), depot.id(), lot.itemKind()),
+                "terminal loss releases admission without stealing or teleporting the outstanding cargo");
         assertEquals(Shipment.Status.ALLOCATION_WITHDRAWN, lost.shipments().shipments().get(offer.shipment().id()).status());
         assertFalse(lost.inventory().fungibleResources().lots().containsKey(lot.id()));
         assertFalse(lost.inventory().fungibleResources().claims().containsKey(offer.claim().id()));

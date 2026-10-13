@@ -15,17 +15,24 @@ class FrontierV3NavigationScopeTest {
         var waiting = SurfaceAnchor.at(4, 63, 1);
         var station = SurfaceAnchor.at(5, 63, 1);
         var boundary = new ServiceAccessBoundary(java.util.Set.of(station));
-        var goal = FrontierV3ServiceApproachNavigation.outsideGoal(List.of(start, waiting, station), boundary,
-                new WorldBounds(0, 0, 10, 10)).orElseThrow();
+        var exit = SurfaceAnchor.at(4, 63, 2);
+        var point = new ServiceAccessPoint(new SubjectId("test:facility"), new SubjectId("test:settlement"),
+                station, boundary, List.of(waiting), java.util.Set.of(exit));
+        var bounds = new WorldBounds(0, 0, 10, 10);
+        var goal = FrontierV3ServiceApproachNavigation.waitingGoal(point, waiting, bounds);
         assertEquals(List.of(waiting), goal.legalStations());
-        assertEquals(List.of(start, waiting), goal.routeHint());
+        assertTrue(goal.routeHint().isEmpty(), "waiting must not reuse every visitor's same ingress prefix");
         assertTrue(goal.scope().permits(start.support()));
         assertTrue(goal.scope().permits(new BlockPosition(3, 63, 3)));
         assertFalse(goal.scope().permits(station.support()));
         assertFalse(goal.scope().permits(new BlockPosition(-1, 63, 1)));
         assertTrue(goal.order().isEmpty(), "waiting arrival cannot be the retained owner goal arrival");
-        assertTrue(FrontierV3ServiceApproachNavigation.outsideGoal(List.of(station, waiting), boundary,
-                new WorldBounds(0, 0, 10, 10)).isEmpty(), "an occupant must use witnessed egress instead");
+        assertThrows(IllegalArgumentException.class,
+                () -> FrontierV3ServiceApproachNavigation.waitingGoal(point, exit, bounds), "egress is not parking");
+        assertThrows(IllegalArgumentException.class,
+                () -> FrontierV3ServiceApproachNavigation.waitingGoal(point, station, bounds), "service needs admission");
+        assertThrows(IllegalArgumentException.class,
+                () -> FrontierV3ServiceApproachNavigation.waitingGoal(point, start, bounds), "undeclared positions cannot become waiting targets");
     }
     @Test void progressAlongADetourCanIncreaseStraightLineDistanceToTheGoal() {
         var nodes = List.of(new net.minecraft.world.level.pathfinder.Node(2, 64, 4),
