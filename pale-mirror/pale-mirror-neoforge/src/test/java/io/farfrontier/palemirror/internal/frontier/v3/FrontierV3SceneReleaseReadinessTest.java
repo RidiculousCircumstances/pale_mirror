@@ -65,5 +65,20 @@ class FrontierV3SceneReleaseReadinessTest {
         assertTrue(FrontierV3SceneExecutor.entityStorageReady(true, true));
     }
 
+    @Test
+    void hotMissingBodyDefersOnlyForItsOwnDepartureOrUnfinishedEntityStorage() {
+        var hot = LEASE.withStatus(SceneLeaseStatus.HOT);
+        var exact = hot.members().getFirst();
+        assertTrue(FrontierV3SceneReleaseReadiness.awaitingBodyHandoff(STATE, hot,
+                ACTOR::equals, id -> false, body -> true), "current departure may precede canonical body release");
+        assertTrue(FrontierV3SceneReleaseReadiness.awaitingBodyHandoff(STATE, hot,
+                actor -> false, exact.entityId()::equals, body -> true), "native unload precedes its stored receipt");
+        assertTrue(FrontierV3SceneReleaseReadiness.awaitingBodyHandoff(STATE, hot,
+                actor -> false, id -> false, body -> false), "unfinished storage is not absence proof");
+        assertFalse(FrontierV3SceneReleaseReadiness.awaitingBodyHandoff(STATE, hot,
+                new SubjectId("resident:foreign")::equals, java.util.UUID.randomUUID()::equals, body -> true),
+                "foreign departures and completed storage cannot conceal unexplained body loss");
+    }
+
 
 }

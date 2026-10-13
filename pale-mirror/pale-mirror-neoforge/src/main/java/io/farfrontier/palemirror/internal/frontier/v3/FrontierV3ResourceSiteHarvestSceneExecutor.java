@@ -265,6 +265,19 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         // The resource-site owner retires the exact retained receipt independently
         // of this scene and current selection. No following-cell acknowledgement.
         if (job.progress().acceptance().isPresent()) return;
+        Entity entity = level.getEntity(lease.members().getFirst().entityId());
+        if (entity == null && FrontierV3SceneReleaseReadiness.awaitingBodyHandoff(level, state, lease)) {
+            // Native section unload precedes the saved body receipt. Demand at the next
+            // crop does not keep the worker's actual column entity-ticking. Release the
+            // presentation scope through the common evidence owner, never declare loss
+            // or issue a carried stack while this body is being stored. Prepared physical
+            // effects retain their original scope until their own reconciliation settles.
+            if (FrontierV3HarvestSceneReleaseBarrier.ready(level, state, lease)) {
+                if (FrontierV3ResourceFieldLabourExecutor.pause(level, runtime, state, lease, job)) return;
+                beginImmediateColdRelease(level, runtime, state, lease);
+            }
+            return;
+        }
         var physicalClaim = FrontierV3ResourceSiteLedger.get(level).siteClaim(site.id());
         if (projectColdCarriedHand(level, runtime, state, lease, job)) return;
         if (job.navigationBlock().isEmpty()
@@ -297,7 +310,6 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             beginImmediateColdRelease(level, runtime, state, lease);
             return;
         }
-        Entity entity = level.getEntity(lease.members().getFirst().entityId());
         if (!(entity instanceof Mob worker) || !worker.isAlive() || !FrontierV3SceneExecutor.recognizes(runtime, worker)) {
             conflict(level, runtime, lease, "hot-worker-unavailable"); return;
         }

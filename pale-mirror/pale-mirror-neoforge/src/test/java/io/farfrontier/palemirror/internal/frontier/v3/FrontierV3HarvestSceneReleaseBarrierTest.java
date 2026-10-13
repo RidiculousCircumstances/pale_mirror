@@ -83,4 +83,26 @@ class FrontierV3HarvestSceneReleaseBarrierTest {
         restored.retireFieldDelivery(witness);
         assertTrue(FrontierV3HarvestSceneReleaseBarrier.ready(restored, lease));
     }
+
+    @Test void pendingHandProjectionRetainsOnlyItsExactPhysicalScopeAcrossUnloadAndRestart() {
+        var base = FrontierV3FixtureCatalog.resourceSiteHarvestConfiguration(new WorldId("frontier:hand-release"), 421L);
+        var site = new SubjectId("site:1-wheat-field");
+        var job = base.initialState().resourceSites().site(site).harvestJobs().values().iterator().next();
+        var lease = SceneLease.forCause(new SceneLeaseId("lease:hand-release"), base.worldId(),
+                new ResourceSiteHarvestSceneCause(site, job.id()), base.initialState().actorLocations().get(job.workerId()).body().supportingSurface().support(),
+                base.initialInstant(), 17L, SceneLeaseStatus.HOT,
+                List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(base.worldId(), job.workerId()))), Set.of(), Optional.empty());
+        var witness = new FrontierV3ResourceSiteHandProjectionWitness(site, job.id(), job.actorAccountId(),
+                new SubjectId("lot:retained-wheat"), job.workerId(), lease.members().getFirst().entityId(),
+                lease.id(), lease.revision(), 1L, 1, 1);
+        var ledger = FrontierV3ResourceSiteLedger.fixture();
+        ledger.beginFieldHandProjection(witness);
+        var restored = FrontierV3ResourceSiteLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), null), null);
+        assertFalse(FrontierV3HarvestSceneReleaseBarrier.ready(restored, lease));
+        var sibling = SceneLease.forCause(new SceneLeaseId("lease:hand-release-sibling"), base.worldId(), lease.cause(),
+                lease.handoffPosition(), base.initialInstant(), 18L, SceneLeaseStatus.HOT, lease.members(), Set.of(), Optional.empty());
+        assertTrue(FrontierV3HarvestSceneReleaseBarrier.ready(restored, sibling));
+        restored.retireFieldHandProjection(witness);
+        assertTrue(FrontierV3HarvestSceneReleaseBarrier.ready(restored, lease));
+    }
 }

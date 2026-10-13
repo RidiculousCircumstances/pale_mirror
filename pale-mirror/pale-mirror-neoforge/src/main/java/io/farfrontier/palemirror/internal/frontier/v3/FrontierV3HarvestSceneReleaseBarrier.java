@@ -28,8 +28,10 @@ final class FrontierV3HarvestSceneReleaseBarrier {
     static boolean ready(FrontierV3ResourceSiteLedger ledger, SceneLease lease) {
         var cause = FrontierSceneBehaviors.resourceSiteHarvest(lease);
         var delivery = ledger.fieldDelivery(cause.siteId());
+        var handProjection = ledger.fieldHandProjection(cause.siteId());
         // Another worker on the same field owns a different effect. Never serialize
         // all farmers behind a site-wide test, nor drop an unresolved stale witness.
-        return delivery == null || !delivery.leaseId().equals(lease.id());
+        return (delivery == null || !delivery.leaseId().equals(lease.id()))
+                && (handProjection == null || !handProjection.leaseId().equals(lease.id()));
     }
 }

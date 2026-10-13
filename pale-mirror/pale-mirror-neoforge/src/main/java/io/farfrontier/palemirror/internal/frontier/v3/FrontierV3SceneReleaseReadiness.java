@@ -12,6 +12,22 @@ import net.minecraft.server.level.ServerLevel;
 final class FrontierV3SceneReleaseReadiness {
     private FrontierV3SceneReleaseReadiness() { }
 
+    /** An absent HOT body can already be in Minecraft's ordinary unload pipeline. */
+    static boolean awaitingBodyHandoff(ServerLevel level, FrontierWorldState state, SceneLease lease) {
+        return awaitingBodyHandoff(state, lease,
+                actor -> FrontierV3ActorBodyController.departurePending(level, state, actor),
+                id -> FrontierV3NativeBodyResidence.departurePending(level, id),
+                body -> FrontierV3SceneExecutor.entityStorageReady(level, new BlockPos(body.x(), body.y(), body.z())));
+    }
+
+    static boolean awaitingBodyHandoff(FrontierWorldState state, SceneLease lease,
+            java.util.function.Predicate<io.farfrontier.palemirror.frontier.v3.api.SubjectId> currentDeparture,
+            java.util.function.Predicate<java.util.UUID> nativeDeparture,
+            java.util.function.Predicate<io.farfrontier.palemirror.frontier.v3.model.BodyPosition> storageReady) {
+        return lease.members().stream().anyMatch(member -> currentDeparture.test(member.actorId()))
+                || awaitingEntityStorage(state, lease, id -> false, storageReady, nativeDeparture);
+    }
+
     static boolean awaitingEntityStorage(ServerLevel level, FrontierWorldState state, SceneLease lease) {
         // A stored receipt also permits inspection, not acceptance. The release owner must
         // reject stale/conflicting evidence rather than hide it behind an unloaded-column wait.
