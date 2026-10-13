@@ -44,4 +44,11 @@ final class ExtractionWorkingSurfaces {
         }
         return Map.copyOf(result);
     }
+    /** Navigation retains every independent level; mining front preference is a separate query. */
+    List<SurfaceAnchor> allCurrent() {
+        return deposit.site().layout().accessSurfaces().stream().filter(surface -> at(surface.support())
+                .filter(block -> state.bootstrap().ruleset().extraction().definitionFor(block).isPresent()).isPresent())
+                .sorted(Comparator.comparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z)
+                        .thenComparingInt(SurfaceAnchor::y)).toList();
+    }
 }

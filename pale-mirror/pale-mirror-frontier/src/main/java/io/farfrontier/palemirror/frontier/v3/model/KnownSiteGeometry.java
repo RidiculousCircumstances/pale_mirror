@@ -10,11 +10,14 @@ final class KnownSiteGeometry {
         Object version(FrontierWorldState state);
         View project(FrontierWorldState state);
     }
-    record View(Map<TerrainColumn, SurfaceAnchor> supports, Set<BlockPosition> obstacles) {
+    record View(Map<TerrainColumn, List<SurfaceAnchor>> supports, Set<BlockPosition> obstacles,
+                Set<BlockPosition> withdrawnSupports) {
         View {
             supports = Map.copyOf(supports); obstacles = Set.copyOf(obstacles);
-            if (supports.entrySet().stream().anyMatch(entry -> entry.getKey().x() != entry.getValue().x()
-                    || entry.getKey().z() != entry.getValue().z()))
+            withdrawnSupports = Set.copyOf(withdrawnSupports);
+            if (supports.entrySet().stream().anyMatch(entry -> entry.getValue().isEmpty()
+                    || entry.getValue().stream().anyMatch(surface -> entry.getKey().x() != surface.x()
+                        || entry.getKey().z() != surface.z())))
                 throw new IllegalArgumentException("site geometry column differs from its declared support");
         }
     }
@@ -33,21 +36,30 @@ final class KnownSiteGeometry {
         boolean same = cachedBootstrap == state.bootstrap() && cachedView != null && versions.size() == cachedVersions.size();
         for (int i = 0; same && i < versions.size(); i++) same = versions.get(i) == cachedVersions.get(i);
         if (same) return cachedView;
-        var supports = new LinkedHashMap<TerrainColumn, SurfaceAnchor>();
+        var supports = new LinkedHashMap<TerrainColumn, List<SurfaceAnchor>>();
         var obstacles = new HashSet<BlockPosition>();
+        var withdrawn = new HashSet<BlockPosition>();
         for (var provider : PROVIDERS) {
             var contribution = provider.project(state);
-            for (var entry : contribution.supports().entrySet())
-                if (supports.putIfAbsent(entry.getKey(), entry.getValue()) != null)
-                    throw new IllegalArgumentException("two geometry owners declared one surface column");
+            for (var entry : contribution.supports().entrySet()) {
+                var prior = supports.get(entry.getKey());
+                if (prior == null) { supports.put(entry.getKey(), entry.getValue()); continue; }
+                if (!Collections.disjoint(prior, entry.getValue()))
+                    throw new IllegalArgumentException("two geometry owners declared one exact support");
+                supports.put(entry.getKey(), java.util.stream.Stream.concat(prior.stream(), entry.getValue().stream())
+                        .sorted(Comparator.comparingInt(SurfaceAnchor::y)).toList());
+            }
             obstacles.addAll(contribution.obstacles());
+            withdrawn.addAll(contribution.withdrawnSupports());
         }
         // Retain each independent immutable component. A changed obstacle must not make
         // every unchanged road/support column look like a new ground declaration.
         var projected = new View(cachedBootstrap == state.bootstrap() && cachedView != null
                     && supports.equals(cachedView.supports()) ? cachedView.supports() : supports,
                 cachedBootstrap == state.bootstrap() && cachedView != null
-                    && obstacles.equals(cachedView.obstacles()) ? cachedView.obstacles() : obstacles);
+                    && obstacles.equals(cachedView.obstacles()) ? cachedView.obstacles() : obstacles,
+                cachedBootstrap == state.bootstrap() && cachedView != null
+                    && withdrawn.equals(cachedView.withdrawnSupports()) ? cachedView.withdrawnSupports() : withdrawn);
         if (cachedBootstrap != state.bootstrap() || !projected.equals(cachedView)) cachedView = projected;
         cachedBootstrap = state.bootstrap(); cachedVersions = versions;
         return cachedView;

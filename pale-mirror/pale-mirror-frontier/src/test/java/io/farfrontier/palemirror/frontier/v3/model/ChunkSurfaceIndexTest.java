@@ -16,5 +16,8 @@ class ChunkSurfaceIndexTest {
             assertEquals(SurfaceAnchor.at(x, x == -17 && z == -16 ? 100 : x - z, z), index.at(x, z));
         assertNull(index.at(34, 34));
         assertNull(index.at(2048, -2048));
+        assertEquals(java.util.List.of(SurfaceAnchor.at(-17, -1, -16), SurfaceAnchor.at(-17, 100, -16)),
+                index.surfacesAt(-17, -16), "a preference for the upper floor cannot discard the lower floor");
+        assertThrows(UnsupportedOperationException.class, () -> index.surfacesAt(-17, -16).clear());
     }
 }

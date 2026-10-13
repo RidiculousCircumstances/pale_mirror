@@ -37,14 +37,24 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
     @Override public Optional<PedestrianGeometryRevision> regionalRevision() { return revision; }
     @Override public WorldBounds bounds() { return terrain.bounds(); }
     @Override public SurfaceAnchor supportAt(int x, int z) { return terrain.supportAt(x, z); }
+    @Override public java.util.List<SurfaceAnchor> surfacesAt(int x, int z) { return terrain.surfacesAt(x, z); }
+    @Override public boolean supportExcluded(SurfaceAnchor surface) { return terrain.supportExcluded(surface); }
     @Override public boolean blocked(SurfaceAnchor surface) {
         if (!terrain.supportAvailable(surface)) return true;
-        return profile.footprintRadius() == 0 ? !clearVolume(surface.x() + 0.5, surface.z() + 0.5, surface.y() + 1) : poses(surface).isEmpty();
+        return !clearBody(surface);
+    }
+    @Override public boolean clearBody(SurfaceAnchor surface) {
+        return profile.footprintRadius() == 0 ? clearVolume(surface.x() + 0.5, surface.z() + 0.5, surface.y() + 1) : !poses(surface).isEmpty();
     }
     /** Interaction stations require the named centre; transit may use a clear sub-cell position.
      * A wide actor can approach a one-block rise without pretending its body overlaps the rise. */
     @Override public boolean clearStation(SurfaceAnchor surface) {
         return terrain.supportAvailable(surface) && clearVolume(surface.x() + 0.5, surface.z() + 0.5, surface.y() + 1);
+    }
+    @Override public boolean canProjectPlacement(SurfaceAnchor retained, SurfaceAnchor target) {
+        return Math.abs((long) retained.x() - target.x()) + Math.abs((long) retained.z() - target.z()) == 1
+                && profile.permitsGrade(retained.y(), target.y()) && bounds().contains(target.support())
+                && knowsSupport(target) && clearStation(target);
     }
     private java.util.List<double[]> poses(SurfaceAnchor surface) {
         double overhang = Math.max(0, (profile.width() - 1.0) / 2.0);
@@ -61,8 +71,11 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
         int minX = (int) Math.floor(centerX - half + 0.0000001), maxX = (int) Math.ceil(centerX + half - 0.0000001) - 1;
         int minZ = (int) Math.floor(centerZ - half + 0.0000001), maxZ = (int) Math.ceil(centerZ + half - 0.0000001) - 1;
         for (int x = minX; x <= maxX; x++) for (int z = minZ; z <= maxZ; z++) {
-            var ground = terrain.supportAt(x, z);
-            if (ground == null || !bounds().contains(ground.support()) || ground.y() >= feetY) return false;
+            var levels = terrain.surfacesAt(x, z);
+            if (levels.stream().noneMatch(ground -> bounds().contains(ground.support()) && ground.y() < feetY)) return false;
+            // An upper floor is solid only where it intersects this body, not an
+            // obstacle stretching down through every lower floor in the column.
+            if (levels.stream().anyMatch(ground -> ground.y() >= feetY && ground.y() < feetY + profile.bodyLayers())) return false;
             for (int y = feetY; y < feetY + profile.bodyLayers(); y++)
                 if (occupied.test(new BlockPosition(x, y, z))) return false;
         }

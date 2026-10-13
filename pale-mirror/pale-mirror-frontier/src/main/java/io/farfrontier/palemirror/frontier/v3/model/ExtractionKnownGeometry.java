@@ -47,27 +47,33 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
                 relevantExclusions), Object::new);
     }
     @Override public KnownSiteGeometry.View project(FrontierWorldState state) {
-        var supports = new LinkedHashMap<TerrainColumn, SurfaceAnchor>();
+        var supports = new LinkedHashMap<TerrainColumn, List<SurfaceAnchor>>();
         var obstacles = new HashSet<BlockPosition>();
+        var withdrawn = new HashSet<BlockPosition>();
         for (var deposit : state.extractionSites().deposits().values()) {
             var layout = deposit.site().layout();
             var working = new ExtractionWorkingSurfaces(state, deposit);
-            var active = working.current();
+            var active = working.allCurrent();
             var floorBlocks = new HashSet<BlockPosition>();
-            var localColumns = new HashSet<TerrainColumn>();
-            for (var surface : layout.accessSurfaces()) {
+            for (var surface : active) {
                 var column = new TerrainColumn(surface.x(), surface.z());
-                if (!localColumns.add(column)) continue;
-                var current = active.get(column);
-                if (current != null) floorBlocks.add(current.support());
-                // Closed/unknown landings cannot fall back to the untouched bootstrap datum.
-                if (supports.putIfAbsent(column, current == null ? surface : current) != null)
-                    throw new IllegalArgumentException("extraction sites declare competing working columns");
-                if (current == null) obstacles.add(supports.get(column).support().offset(0, 1, 0));
+                floorBlocks.add(surface.support());
+                var levels = new ArrayList<>(supports.getOrDefault(column, List.of()));
+                if (!levels.contains(surface)) levels.add(surface);
+                levels.sort(Comparator.comparingInt(SurfaceAnchor::y)); supports.put(column, List.copyOf(levels));
             }
+            // Exact unavailable supports cannot be resurrected by bootstrap terrain.
+            for (var surface : layout.accessSurfaces()) if (!active.contains(surface)) withdrawn.add(surface.support());
+            layout.cells().forEach(cell -> {
+                if (deposit.cells().get(cell.id()).knownBlock().kind().equals("minecraft:air")) withdrawn.add(cell.source());
+            });
+            deposit.geometry().forEach((position, observation) -> {
+                if (observation.block().kind().equals("minecraft:air")) withdrawn.add(position);
+            });
             layout.fixedBlocks().forEach((position, block) -> {
                 var observed = deposit.geometry().get(position);
                 var actual = observed == null ? block : observed.block();
+                if (actual.kind().equals("minecraft:air")) withdrawn.add(position);
                 if (!actual.kind().equals("minecraft:air") && !floorBlocks.contains(position)) obstacles.add(position);
             });
             layout.terrainSupports().keySet().forEach(position -> {
@@ -81,12 +87,12 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
             // A clear standing pocket does not prove its incoming edge is clear.
             // Retain the known ceiling used by the common canTraverse query, even
             // when that block was never admitted as a mining resource cell.
-            for (var surface : active.values()) {
-                var ceiling = surface.support().offset(0, 3, 0);
-                if (working.at(ceiling).filter(block -> !block.kind().equals("minecraft:air")).isPresent()
-                        && !floorBlocks.contains(ceiling)) obstacles.add(ceiling);
+            for (var surface : active) for (int height = 1; height <= 3; height++) {
+                var bodyBlock = surface.support().offset(0, height, 0);
+                if (working.at(bodyBlock).filter(block -> !block.kind().equals("minecraft:air")).isPresent()
+                        && !floorBlocks.contains(bodyBlock)) obstacles.add(bodyBlock);
             }
         }
-        return new KnownSiteGeometry.View(supports, obstacles);
+        return new KnownSiteGeometry.View(supports, obstacles, withdrawn);
     }
 }

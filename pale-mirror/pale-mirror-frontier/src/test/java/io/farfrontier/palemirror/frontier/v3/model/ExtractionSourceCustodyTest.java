@@ -151,12 +151,15 @@ class ExtractionSourceCustodyTest {
         var changed = event.apply(state, deposit.site().id());
         assertEquals(state.inventory(), changed.inventory());
         assertEquals(state.actorLocations(), changed.actorLocations());
-        assertTrue(KnownSiteGeometry.forState(changed).obstacles().contains(support.support().offset(0, 1, 0)));
+        assertTrue(KnownSiteGeometry.forState(changed).withdrawnSupports().contains(support.support()));
+        assertFalse(KnownPedestrianRouteKnowledge.forFrontier(changed).geometry().knowsSupport(support));
+        assertTrue(KnownPedestrianRouteKnowledge.forFrontier(changed).geometry().supportExcluded(support));
         assertThrows(IllegalArgumentException.class, () -> event.apply(changed, deposit.site().id()));
         var codec = new FrontierWorldStateCodec(); assertEquals(changed, codec.decode(codec.encode(changed)));
         var current = ExtractionWorksiteBlocks.current(changed.extractionSites().deposits().get(deposit.site().id()), declaration);
         var restored = new ExtractionGeometryChanged(current, declaration.block()).apply(changed, deposit.site().id());
-        assertFalse(KnownSiteGeometry.forState(restored).obstacles().contains(support.support().offset(0, 1, 0)));
+        assertFalse(KnownSiteGeometry.forState(restored).withdrawnSupports().contains(support.support()));
+        assertTrue(KnownPedestrianRouteKnowledge.forFrontier(restored).geometry().knowsSupport(support));
         assertEquals(state.inventory(), restored.inventory());
     }
 }

@@ -23,6 +23,13 @@ public final class BoundedPedestrianApproach {
     @FunctionalInterface
     public interface SurveyedSurface {
         SurfaceAnchor at(int x, int z);
+        /** All independently known contacts. The scalar view is only a presentation preference. */
+        default List<SurfaceAnchor> surfacesAt(int x, int z) {
+            var surface = at(x, z);
+            return surface == null ? List.of() : List.of(surface);
+        }
+        /** An exact removed/invalid support is different from an unobserved level. */
+        default boolean excluded(SurfaceAnchor surface) { return false; }
     }
 
     /** An ordinary bounded-search miss, not malformed geometry or an invalid call. */

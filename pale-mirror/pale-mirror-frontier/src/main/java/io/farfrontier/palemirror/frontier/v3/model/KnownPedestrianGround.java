@@ -18,21 +18,8 @@ public final class KnownPedestrianGround {
 
     public static BoundedPedestrianApproach.SurveyedSurface forSettlement(FrontierWorldState state,
                                                                        SubjectId settlementId) {
-        ChunkSurfaceIndex roads = roads(state.bootstrap(), state.routeTopology());
-        ChunkSurfaceIndex local = local(state.bootstrap(), settlementId);
-        var terrain = state.bootstrap().terrain();
-        var sites = KnownSiteGeometry.forState(state);
-        return (x, z) -> {
-            var site = sites.supports().get(new TerrainColumn(x, z));
-            if (site != null) return site;
-            SurfaceAnchor road = roads.at(x, z), settlement = local.at(x, z);
-            // Both solid authored floors are physically projected. Only their upper exposed
-            // collision surface is standable; selecting the lower puts feet inside the upper.
-            if (road != null && settlement != null) return road.y() >= settlement.y() ? road : settlement;
-            if (road != null) return road;
-            return settlement != null ? settlement : SurfaceAnchor.at(x,
-                    terrain.supportYAt(x, z), z);
-        };
+        return layered(state.bootstrap(), roads(state.bootstrap(), state.routeTopology()),
+                local(state.bootstrap(), settlementId), KnownSiteGeometry.forState(state));
     }
 
     /** Immutable admission/hydration datum, using the same authored-ground policy. */
@@ -42,21 +29,33 @@ public final class KnownPedestrianGround {
 
     /** Cross-settlement movement uses all authored local floors, not one origin's datum. */
     public static BoundedPedestrianApproach.SurveyedSurface forFrontier(FrontierWorldState state) {
-        var base = frontierSurvey(state.bootstrap(), roads(state.bootstrap(), state.routeTopology()));
-        var sites = KnownSiteGeometry.forState(state);
-        return (x, z) -> {
-            var site = sites.supports().get(new TerrainColumn(x, z));
-            return site != null ? site : base.at(x, z);
-        };
+        return layered(state.bootstrap(), roads(state.bootstrap(), state.routeTopology()),
+                frontierLocal(state.bootstrap()), KnownSiteGeometry.forState(state));
     }
 
     private static BoundedPedestrianApproach.SurveyedSurface frontierSurvey(FrontierBootstrap bootstrap, ChunkSurfaceIndex roads) {
-        var local = frontierLocal(bootstrap);
-        var terrain = bootstrap.terrain();
-        return (x, z) -> {
-            var road = roads.at(x, z); var floor = local.at(x, z);
-            if (road != null && floor != null) return road.y() >= floor.y() ? road : floor;
-            return road != null ? road : floor != null ? floor : SurfaceAnchor.at(x, terrain.supportYAt(x, z), z);
+        return layered(bootstrap, roads, frontierLocal(bootstrap),
+                new KnownSiteGeometry.View(Map.of(), java.util.Set.of(), java.util.Set.of()));
+    }
+
+    private static BoundedPedestrianApproach.SurveyedSurface layered(FrontierBootstrap bootstrap,
+            ChunkSurfaceIndex roads, ChunkSurfaceIndex local, KnownSiteGeometry.View sites) {
+        return new BoundedPedestrianApproach.SurveyedSurface() {
+            @Override public boolean excluded(SurfaceAnchor surface) { return sites.withdrawnSupports().contains(surface.support()); }
+            @Override public SurfaceAnchor at(int x, int z) {
+                var levels = surfacesAt(x, z); return levels.isEmpty() ? null : levels.getLast();
+            }
+            @Override public java.util.List<SurfaceAnchor> surfacesAt(int x, int z) {
+                var natural = SurfaceAnchor.at(x, bootstrap.terrain().supportYAt(x, z), z);
+                var road = roads.surfacesAt(x, z); var floor = local.surfacesAt(x, z);
+                var site = sites.supports().getOrDefault(new TerrainColumn(x, z), java.util.List.of());
+                if (road.isEmpty() && floor.isEmpty() && site.isEmpty())
+                    return sites.withdrawnSupports().contains(natural.support()) ? java.util.List.of() : java.util.List.of(natural);
+                var result = new java.util.TreeSet<SurfaceAnchor>(java.util.Comparator.comparingInt(SurfaceAnchor::y));
+                result.add(natural); result.addAll(road); result.addAll(floor); result.addAll(site);
+                result.removeIf(surface -> sites.withdrawnSupports().contains(surface.support()));
+                return java.util.List.copyOf(result);
+            }
         };
     }
 

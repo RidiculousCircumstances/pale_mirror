@@ -29,7 +29,7 @@ public final class ServiceClearanceTargets {
         // Keep pursuing the shared region until real supported exit observation wins.
         if (boundary.cleared(start.standingBody())
                 && !excluded.contains(start)
-                && start.equals(knowledge.supportAt(start.x(), start.z()))
+                && knowledge.geometry().knowsSupport(start)
                 && knowledge.traversable(List.of(start))) return List.of(start);
         return egressRegion(boundary, knowledge).stream().filter(candidate -> !excluded.contains(candidate))
                 .sorted(java.util.Comparator
@@ -45,9 +45,10 @@ public final class ServiceClearanceTargets {
         java.util.Set<SurfaceAnchor> candidates = new java.util.HashSet<>();
         for (SurfaceAnchor occupied : boundary.occupiedSurfaces()) {
             for (int[] step : List.of(new int[]{1, 0}, new int[]{-1, 0}, new int[]{0, 1}, new int[]{0, -1})) {
-                SurfaceAnchor candidate = knowledge.supportAt(occupied.x() + step[0], occupied.z() + step[1]);
-                if (boundary.cleared(candidate.standingBody()) && knowledge.traversable(List.of(candidate)))
-                    candidates.add(candidate);
+                for (SurfaceAnchor candidate : knowledge.surfacesAt(occupied.x() + step[0], occupied.z() + step[1])) {
+                    if (knowledge.geometry().canTraverse(occupied, candidate) && boundary.cleared(candidate.standingBody()) && knowledge.traversable(List.of(candidate)))
+                        candidates.add(candidate);
+                }
             }
         }
         return Set.copyOf(candidates);

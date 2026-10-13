@@ -47,10 +47,10 @@ public final class ServiceAreaDestinations {
             for (int dx = -distance; dx <= distance; dx++) {
                 int dz = distance - Math.abs(dx);
                 for (int sign : dz == 0 ? new int[] {1} : new int[] {1, -1}) {
-                    SurfaceAnchor candidate = knowledge.supportAt(start.x() + dx, start.z() + sign * dz);
-                    if (candidate == null) continue;
-                    long displacement = distance + Math.abs((long) candidate.y() - start.y());
-                    if (displacement <= MAX_SEARCH_RADIUS) candidates.add(new Candidate(candidate, displacement, ordinal++));
+                    for (SurfaceAnchor candidate : knowledge.surfacesAt(start.x() + dx, start.z() + sign * dz)) {
+                        long displacement = distance + Math.abs((long) candidate.y() - start.y());
+                        if (displacement <= MAX_SEARCH_RADIUS) candidates.add(new Candidate(candidate, displacement, ordinal++));
+                    }
                 }
             }
             while (!candidates.isEmpty() && candidates.peek().distance() <= distance) {

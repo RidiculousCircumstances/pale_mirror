@@ -21,9 +21,10 @@ public final class ResourceSourceDiscovery {
                     || !address.entityId().equals(ground.entityId())) continue;
             var stations = new ArrayList<SurfaceAnchor>();
             for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++) {
-                var station = knowledge.supportAt(ground.position().x() + dx, ground.position().z() + dz);
-                if (station != null && !knowledge.geometry().blocked(station)
-                        && BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN.contains(station, ground.position())) stations.add(station);
+                for (var station : knowledge.surfacesAt(ground.position().x() + dx, ground.position().z() + dz)) {
+                    if (!knowledge.geometry().blocked(station)
+                            && BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN.contains(station, ground.position())) stations.add(station);
+                }
             }
             stations.sort(Comparator.comparingLong((SurfaceAnchor station) -> Math.abs((long) station.x() - ground.position().x())
                     + Math.abs((long) station.y() - ground.position().y()) + Math.abs((long) station.z() - ground.position().z()))

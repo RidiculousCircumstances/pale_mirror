@@ -37,8 +37,21 @@ public final class PedestrianLocalDeparture {
     public static List<SurfaceAnchor> exitToPublic(FrontierWorldState state,
             io.farfrontier.palemirror.frontier.v3.api.SubjectId actor, SurfaceAnchor start) {
         if (publicPosition(state, start)) return List.of(start);
-        var knowledge = departure(state, start);
-        for (var exit : exits(state, start)) {
+        var knowledge = departure(state, start).forActor(state, actor);
+        var declaredExits = exits(state, start);
+        if (declaredExits.isEmpty()) {
+            // A compatible witnessed off-datum origin has no private facility to exit.
+            // Use the common bounded geometry proof, not an invented scalar height or teleport.
+            return knowledge.localMovementRoutes(start).entrySet().stream()
+                    .filter(entry -> publicPosition(state, entry.getKey()))
+                    .min(java.util.Comparator.<java.util.Map.Entry<SurfaceAnchor, List<SurfaceAnchor>>>comparingInt(entry -> entry.getValue().size())
+                            .thenComparingInt(entry -> entry.getKey().x()).thenComparingInt(entry -> entry.getKey().z())
+                            .thenComparingInt(entry -> entry.getKey().y()))
+                    .map(java.util.Map.Entry::getValue)
+                    .orElseThrow(() -> new io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable(
+                            "retained departure has no bounded known public continuation"));
+        }
+        for (var exit : declaredExits) {
             var target = FrontierTraversalPlan.facilityPort(exit.passage().facility()).orElseThrow()
                     .exteriorApproach().getFirst();
             if (!publicPosition(state, target)) continue;

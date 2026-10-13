@@ -21,9 +21,10 @@ public final class MobileContainerAccess {
         var geometry = knowledge.geometry(); var candidates = new ArrayList<SurfaceAnchor>();
         for (int x = center.x() - 2; x <= center.x() + 2; x++) for (int z = center.z() - 2; z <= center.z() + 2; z++) {
             if (Math.abs(x - center.x()) + Math.abs(z - center.z()) < 2) continue;
-            var candidate = geometry.supportAt(x, z);
-            if (candidate != null && geometry.bounds().contains(candidate.support()) && !geometry.blocked(candidate)
-                    && reachable(candidate.standingBody(), source.body()) && !excluded.contains(candidate)) candidates.add(candidate);
+            for (var candidate : geometry.surfacesAt(x, z)) {
+                if (geometry.bounds().contains(candidate.support()) && !geometry.blocked(candidate)
+                        && reachable(candidate.standingBody(), source.body()) && !excluded.contains(candidate)) candidates.add(candidate);
+            }
         }
         candidates.sort(Comparator.comparingLong((SurfaceAnchor s) -> squared(s.standingBody(), recipient.body())).thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z));
         for (var candidate : candidates) try {

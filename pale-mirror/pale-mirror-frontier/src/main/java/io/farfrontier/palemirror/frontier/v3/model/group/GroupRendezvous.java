@@ -13,7 +13,7 @@ public final class GroupRendezvous {
         if (members < 1 || members > UnitGroup.MAX_MEMBERS) throw new IllegalArgumentException("invalid assembly roster size");
         var geometry = knowledge.geometry();
         var queue = new ArrayDeque<SurfaceAnchor>(); var seen = new HashSet<SurfaceAnchor>();
-        if (!entrance.equals(geometry.supportAt(entrance.x(), entrance.z())) || geometry.blocked(entrance))
+        if (!geometry.knowsSupport(entrance) || geometry.blocked(entrance))
             throw new KnownPedestrianNavigation.RouteUnavailable("assembly entrance is not currently known and traversable");
         queue.add(entrance); seen.add(entrance);
         while (!queue.isEmpty() && seen.size() <= MAX_VISITED) {
@@ -21,9 +21,10 @@ public final class GroupRendezvous {
             if (knowledge.clearStation(current) && serviceBoundary.stream().allMatch(surface -> Math.abs((long) surface.x() - current.x())
                     + Math.abs((long) surface.z() - current.z()) >= members * 2L)) return current;
             for (int[] offset : List.of(new int[]{0, -1}, new int[]{-1, 0}, new int[]{1, 0}, new int[]{0, 1})) {
-                var next = geometry.supportAt(current.x() + offset[0], current.z() + offset[1]);
-                if (next != null && geometry.bounds().contains(next.support()) && !geometry.blocked(next)
-                        && geometry.canTraverse(current, next) && seen.add(next)) queue.addLast(next);
+                for (var next : geometry.surfacesAt(current.x() + offset[0], current.z() + offset[1])) {
+                    if (geometry.bounds().contains(next.support()) && !geometry.blocked(next)
+                            && geometry.canTraverse(current, next) && seen.add(next)) queue.addLast(next);
+                }
             }
         }
         throw new KnownPedestrianNavigation.RouteUnavailable("no bounded known assembly space outside service boundary");

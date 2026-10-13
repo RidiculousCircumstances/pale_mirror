@@ -27,9 +27,16 @@ class FrontierV3ActorCarrierCompositionTest {
         var geometry = new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry() {
             public io.farfrontier.palemirror.frontier.v3.model.WorldBounds bounds() { return new io.farfrontier.palemirror.frontier.v3.model.WorldBounds(-8, -8, 16, 16); }
             public io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor supportAt(int x, int z) { return ground; }
+            public java.util.List<io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor> surfacesAt(int x, int z) {
+                return java.util.List.of(io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor.at(0, 58, 0), ground);
+            }
             public boolean blocked(io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor surface) { return false; }
         };
         assertEquals(java.util.Optional.of(ground), FrontierV3ActorBodyController.reconstructionContact(pose, geometry));
+        assertEquals(java.util.Optional.of(io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor.at(0, 58, 0)),
+                FrontierV3ActorBodyController.reconstructionContact(
+                        new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(0, 60, 0), geometry),
+                "a higher independent floor cannot move reconstruction out of its actual layer");
         assertTrue(FrontierV3ActorBodyController.reconstructionContact(new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(0, 64, 0), geometry).isEmpty(),
                 "a standing pose needs no alternate contact");
         assertTrue(FrontierV3ActorBodyController.reconstructionContact(new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(0, 67, 0), geometry).isEmpty(),

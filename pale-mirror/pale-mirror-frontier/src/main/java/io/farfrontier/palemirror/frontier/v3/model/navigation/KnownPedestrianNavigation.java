@@ -57,8 +57,19 @@ public final class KnownPedestrianNavigation {
             @Override public java.util.Optional<PedestrianGeometryRevision> regionalRevision() { return regionalRevision; }
             @Override public io.farfrontier.palemirror.frontier.v3.model.WorldBounds bounds() { return bootstrap.bounds(); }
             @Override public SurfaceAnchor supportAt(int x, int z) { return surveyed.at(x, z); }
-            @Override public boolean blocked(SurfaceAnchor surface) { return KnownPedestrianNavigation.blocked(surface, hard); }
-            @Override public boolean supportAvailable(SurfaceAnchor surface) { return !hard.contains(surface.support()); }
+            @Override public List<SurfaceAnchor> surfacesAt(int x, int z) { return surveyed.surfacesAt(x, z); }
+            @Override public boolean blocked(SurfaceAnchor surface) {
+                return supportExcluded(surface) || !clearBody(surface);
+            }
+            @Override public boolean supportExcluded(SurfaceAnchor surface) {
+                return surveyed.excluded(surface) || hard.contains(surface.support());
+            }
+            @Override public boolean clearBody(SurfaceAnchor surface) {
+                return !hard.contains(surface.support().offset(0, 1, 0))
+                        && !hard.contains(surface.support().offset(0, 2, 0)) && surfacesAt(surface.x(), surface.z()).stream()
+                        .noneMatch(other -> other.y() > surface.y() && other.y() <= surface.y() + 2);
+            }
+            @Override public boolean supportAvailable(SurfaceAnchor surface) { return !surveyed.excluded(surface) && !hard.contains(surface.support()); }
         };
     }
 
@@ -126,7 +137,7 @@ public final class KnownPedestrianNavigation {
             if (candidate.size() > TimedKnownRoute.MAX_SURFACES) continue;
             // A changed surface invalidates this optimization, not the semantic order.
             if (candidate.stream().anyMatch(surface -> !geometry.bounds().contains(surface.support())
-                    || geometry.blocked(surface) || !surface.equals(geometry.supportAt(surface.x(), surface.z())))) continue;
+                    || geometry.blocked(surface) || !geometry.knowsSupport(surface))) continue;
             boolean connected = true;
             for (int index = 1; index < candidate.size(); index++)
                 if (!geometry.canTraverse(candidate.get(index - 1), candidate.get(index))) { connected = false; break; }
@@ -183,7 +194,7 @@ public final class KnownPedestrianNavigation {
         if (route.isEmpty()) throw new IllegalArgumentException("accepted pedestrian route is empty");
         for (SurfaceAnchor surface : route) {
             if (!geometry.bounds().contains(surface.support()) || geometry.blocked(surface)
-                    || !surface.equals(geometry.supportAt(surface.x(), surface.z())))
+                    || !geometry.knowsSupport(surface))
                 throw new IllegalArgumentException("accepted pedestrian route differs from current known geometry at " + surface);
         }
         for (int index = 1; index < route.size(); index++)

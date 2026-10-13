@@ -20,7 +20,7 @@ final class ServiceWaitingTargets {
     }
     private static void add(Set<SurfaceAnchor> waiting, ServiceAccessBoundary boundary,
             KnownPedestrianRouteKnowledge knowledge, int x, int z) {
-        SurfaceAnchor supported = knowledge.supportAt(x, z);
-        if (boundary.cleared(supported.standingBody())) waiting.add(supported);
+        for (SurfaceAnchor supported : knowledge.surfacesAt(x, z))
+            if (boundary.cleared(supported.standingBody())) waiting.add(supported);
     }
 }

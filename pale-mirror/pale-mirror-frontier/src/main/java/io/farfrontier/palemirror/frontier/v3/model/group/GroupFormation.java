@@ -38,9 +38,10 @@ public final class GroupFormation {
                     if (knowledge.clearStation(candidate) && result.values().stream().allMatch(value -> Math.abs((long) value.x() - candidate.x())
                             + Math.abs((long) value.z() - candidate.z()) >= bodySpacing)) { station = candidate; break; }
                     for (int[] offset : List.of(new int[]{0,-1}, new int[]{-1,0}, new int[]{1,0}, new int[]{0,1})) {
-                        var next = knowledge.geometry().supportAt(candidate.x() + offset[0], candidate.z() + offset[1]);
-                        if (next != null && knowledge.geometry().bounds().contains(next.support()) && !knowledge.geometry().blocked(next)
-                                && knowledge.geometry().canTraverse(candidate, next) && seen.add(next)) queue.addLast(next);
+                        for (var next : knowledge.surfacesAt(candidate.x() + offset[0], candidate.z() + offset[1])) {
+                            if (knowledge.geometry().bounds().contains(next.support()) && !knowledge.geometry().blocked(next)
+                                    && knowledge.geometry().canTraverse(candidate, next) && seen.add(next)) queue.addLast(next);
+                        }
                     }
                 }
                 if (station == null) throw new KnownPedestrianNavigation.RouteUnavailable("group lacks distinct known assembly space");

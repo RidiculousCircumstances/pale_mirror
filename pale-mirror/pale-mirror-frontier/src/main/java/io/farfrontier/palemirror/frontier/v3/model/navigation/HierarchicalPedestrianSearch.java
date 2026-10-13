@@ -39,6 +39,14 @@ public final class HierarchicalPedestrianSearch {
     private long work;
     private boolean initialized, unknown;
     private PedestrianRouteResult terminal;
+    private Candidate expanding;
+    private final Map<Node, Edge> expansionExits = new HashMap<>();
+    private int expansionNode, expansionEdge, expansionDirection = -1, expansionOffset, expansionExit, expansionEntrance;
+    private PedestrianRegion.Refinement segmentRefinement;
+    private long turnLimit;
+    private int retainedSurfaces;
+    private List<Map.Entry<Node, Edge>> publishingExits;
+    private int publication;
 
     public HierarchicalPedestrianSearch(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
         this(geometry, start, target, new PedestrianRegionCache());
@@ -73,35 +81,56 @@ public final class HierarchicalPedestrianSearch {
         if (budget < MIN_SLICE_WORK) throw new IllegalArgumentException("navigation slice cannot fit one bounded regional expansion");
         if (terminal != null) return terminal;
         long limit = work + budget;
+        turnLimit = limit;
         if (!initialized) {
             if (!geometry.bounds().contains(start.support()) || !geometry.bounds().contains(target.support()))
                 return finish(PedestrianRouteResult.Status.NO_PATH, "ENDPOINT_OUTSIDE_KNOWN_WORLD");
-            var first = region(PedestrianRegion.Tile.at(start)); var last = region(PedestrianRegion.Tile.at(target));
+            var first = region(PedestrianRegion.Tile.at(start));
+            if (terminal != null) return terminal;
+            if (first == null) return result(PedestrianRouteResult.Status.PLANNING, "REGION_BUILD_IN_PROGRESS");
+            var last = region(PedestrianRegion.Tile.at(target));
+            if (terminal != null) return terminal;
+            if (last == null) return result(PedestrianRouteResult.Status.PLANNING, "REGION_BUILD_IN_PROGRESS");
             int sourceComponent = first.component(start), targetComponent = last.component(target);
-            if (sourceComponent < 0 || targetComponent < 0) return unavailable("ENDPOINT_NOT_ON_KNOWN_CLEAR_SUPPORT");
+            if (sourceComponent < 0 || targetComponent < 0) {
+                if (geometry.supportExcluded(start) || geometry.supportExcluded(target))
+                    return finish(PedestrianRouteResult.Status.NO_PATH, "ENDPOINT_KNOWN_REMOVED_SUPPORT");
+                if (!geometry.knowsSupport(start) || !geometry.knowsSupport(target))
+                    return finish(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY, "ENDPOINT_LEVEL_NOT_KNOWN");
+                if (geometry.blocked(start) || geometry.blocked(target))
+                    return finish(PedestrianRouteResult.Status.NO_PATH, "ENDPOINT_KNOWN_BLOCKED_SUPPORT");
+                return unavailable("ENDPOINT_NOT_ON_KNOWN_CLEAR_SUPPORT");
+            }
             Node source = new Node(first.tile, sourceComponent); destination = new Node(last.tile, targetComponent);
             distance.put(source, 0); queue.add(candidate(source, 0)); initialized = true;
         }
-        while (work + MIN_SLICE_WORK <= limit && itinerary == null && rewind == null && !queue.isEmpty()) {
-            Candidate candidate = queue.remove(); work++;
-            if (candidate.distance() != distance.get(candidate.node())) continue;
-            if (candidate.node().equals(destination)) { beginRefinement(candidate.node()); break; }
-            if (regions.size() + 4 > MAX_REGIONS || distance.size() > MAX_NODES)
-                return finish(PedestrianRouteResult.Status.SAFETY_LIMIT, "REGIONAL_SEARCH_SAFETY_LIMIT");
-            expand(candidate);
+        while (work < limit && itinerary == null && rewind == null && (expanding != null || !queue.isEmpty())) {
+            if (expanding == null) {
+                Candidate candidate = queue.remove(); work++;
+                if (candidate.distance() != distance.get(candidate.node())) continue;
+                if (candidate.node().equals(destination)) { beginRefinement(candidate.node()); break; }
+                if (regions.size() + 4 > MAX_REGIONS || distance.size() > MAX_NODES)
+                    return finish(PedestrianRouteResult.Status.SAFETY_LIMIT, "REGIONAL_SEARCH_SAFETY_LIMIT");
+                expanding = candidate; expansionNode = expansionEdge = expansionOffset = expansionExit = expansionEntrance = 0;
+                expansionDirection = -1; expansionExits.clear(); publishingExits = null; publication = 0;
+            }
+            expandStep();
             if (terminal != null) return terminal;
         }
-        if (itinerary == null && rewind == null && queue.isEmpty()) return unavailable("NO_CONNECTED_KNOWN_REGION_PATH");
+        if (itinerary == null && rewind == null && expanding == null && queue.isEmpty()) return unavailable("NO_CONNECTED_KNOWN_REGION_PATH");
         while (rewind != null && work < limit) {
             work++;
             Edge edge = previous.get(rewind);
             if (edge == null) { itinerary = reverseItinerary; rewind = null; refinementStart = start; }
             else { reverseItinerary.add(edge); rewind = edge.previous(); }
         }
-        while (itinerary != null && work + PedestrianRegion.REFINE_WORK <= limit) {
+        while (itinerary != null && work < limit) {
             SurfaceAnchor end = refinement < itinerary.size() ? forwardEdge(refinement).exit() : target;
-            var segment = region(PedestrianRegion.Tile.at(refinementStart)).path(refinementStart, end);
-            work += PedestrianRegion.REFINE_WORK;
+            if (segmentRefinement == null) segmentRefinement = regions.get(PedestrianRegion.Tile.at(refinementStart)).refine(refinementStart, end);
+            work += segmentRefinement.advance(Math.toIntExact(limit - work));
+            var segment = segmentRefinement.result();
+            if (segment == null) break;
+            segmentRefinement = null;
             if (route.size() + segment.size() > MAX_ROUTE_SURFACES)
                 return finish(PedestrianRouteResult.Status.SAFETY_LIMIT, "ROUTE_OUTPUT_SAFETY_LIMIT");
             if (route.isEmpty()) route.addAll(segment); else route.addAll(segment.subList(1, segment.size()));
@@ -115,45 +144,87 @@ public final class HierarchicalPedestrianSearch {
     private PedestrianRegion region(PedestrianRegion.Tile tile) {
         PedestrianRegion prior = regions.get(tile);
         if (prior != null) return prior;
-        var lookup = regionCache.region(geometry, tile);
+        if (work >= turnLimit) return null;
+        var lookup = regionCache.region(geometry, tile, Math.toIntExact(turnLimit - work));
         PedestrianRegion built = lookup.region();
         dependencies.put(tile, geometry.regionalRevision().map(revision -> revision.at(tile.x(), tile.z())).orElse(geometry.version()));
-        work += lookup.work(); unknown |= built.unknown(); regions.put(tile, built); return built;
+        work += lookup.work();
+        if (lookup.limited()) { finish(PedestrianRouteResult.Status.SAFETY_LIMIT, "LAYERED_REGION_SAFETY_LIMIT"); return null; }
+        if (built != null) {
+            if (retainedSurfaces + built.size() > MAX_REGIONS * PedestrianRegion.CELLS) {
+                finish(PedestrianRouteResult.Status.SAFETY_LIMIT, "LAYERED_SEARCH_RETENTION_LIMIT"); return null;
+            }
+            retainedSurfaces += built.size(); unknown |= built.unknown(); regions.put(tile, built);
+        }
+        return built;
     }
-    private void expand(Candidate candidate) {
-        var local = region(candidate.node().tile());
+    private void expandStep() {
+        var candidate = expanding;
+        var local = regions.get(candidate.node().tile());
+        if (expansionDirection < 0) {
+            work++;
+            if (expansionNode == local.size()) { expansionDirection = 0; return; }
+            var outgoing = local.outgoing(expansionNode);
+            if (local.component(local.surface(expansionNode)) != candidate.node().component() || expansionEdge == outgoing.size()) {
+                expansionNode++; expansionEdge = 0; return;
+            }
+            var exit = local.surface(expansionNode); var entrance = local.surface(outgoing.get(expansionEdge++));
+            if (local.component(entrance) != candidate.node().component()) recordPortal(candidate, local, exit, entrance);
+            return;
+        }
         var bounds = geometry.bounds();
-        for (int direction = 0; direction < 4; direction++) {
+        if (expansionDirection < 4) {
+            int direction = expansionDirection;
             int tileX = local.tile.x() + (direction == 0 ? 1 : direction == 2 ? -1 : 0);
             int tileZ = local.tile.z() + (direction == 3 ? 1 : direction == 1 ? -1 : 0);
             int minX = Math.multiplyExact(tileX, PedestrianRegion.SIDE), minZ = Math.multiplyExact(tileZ, PedestrianRegion.SIDE);
             if (minX >= bounds.maxXExclusive() || minX + PedestrianRegion.SIDE <= bounds.minX()
-                    || minZ >= bounds.maxZExclusive() || minZ + PedestrianRegion.SIDE <= bounds.minZ()) continue;
+                    || minZ >= bounds.maxZExclusive() || minZ + PedestrianRegion.SIDE <= bounds.minZ()) {
+                work++; nextDirection(); return;
+            }
             var neighbour = region(new PedestrianRegion.Tile(tileX, tileZ));
-            var exits = new HashMap<Node, Edge>();
-            for (int offset = 0; offset < PedestrianRegion.SIDE; offset++) {
-                work++;
-                int x = direction == 0 ? PedestrianRegion.SIDE - 1 : direction == 2 ? 0 : offset;
-                int z = direction == 3 ? PedestrianRegion.SIDE - 1 : direction == 1 ? 0 : offset;
-                int otherX = direction == 0 ? 0 : direction == 2 ? PedestrianRegion.SIDE - 1 : x;
-                int otherZ = direction == 3 ? 0 : direction == 1 ? PedestrianRegion.SIDE - 1 : z;
-                SurfaceAnchor exit = local.surface(x, z), entrance = neighbour.surface(otherX, otherZ);
-                if (local.componentAt(x, z) != candidate.node().component() || entrance == null || exit == null
-                        || !geometry.canTraverse(exit, entrance)) continue;
-                Node node = new Node(neighbour.tile, neighbour.componentAt(otherX, otherZ));
-                var edge = new Edge(candidate.node(), exit, entrance);
-                Edge prior = exits.get(node);
-                if (prior == null || portalScore(edge) < portalScore(prior)) exits.put(node, edge);
+            if (neighbour == null || work >= turnLimit) return;
+            work++;
+            if (expansionOffset == PedestrianRegion.SIDE) { nextDirection(); return; }
+            int offset = expansionOffset;
+            int x = direction == 0 ? PedestrianRegion.SIDE - 1 : direction == 2 ? 0 : offset;
+            int z = direction == 3 ? PedestrianRegion.SIDE - 1 : direction == 1 ? 0 : offset;
+            int otherX = direction == 0 ? 0 : direction == 2 ? PedestrianRegion.SIDE - 1 : x;
+            int otherZ = direction == 3 ? 0 : direction == 1 ? PedestrianRegion.SIDE - 1 : z;
+            var exits = local.surfaces(x, z); var entrances = neighbour.surfaces(otherX, otherZ);
+            if (expansionExit == exits.size()) { expansionOffset++; expansionExit = expansionEntrance = 0; return; }
+            var exit = exits.get(expansionExit);
+            if (local.component(exit) != candidate.node().component() || expansionEntrance == entrances.size()) {
+                expansionExit++; expansionEntrance = 0; return;
             }
-            for (var entry : exits.entrySet().stream().sorted(Comparator.comparingInt(value -> value.getKey().component())).toList()) {
-                Node node = entry.getKey(); int nextDistance = candidate.distance() + 1;
-                if (distance.getOrDefault(node, Integer.MAX_VALUE) <= nextDistance) continue;
-                if (!distance.containsKey(node) && distance.size() >= MAX_NODES) {
-                    finish(PedestrianRouteResult.Status.SAFETY_LIMIT, "REGIONAL_NODE_SAFETY_LIMIT"); return;
-                }
-                distance.put(node, nextDistance); previous.put(node, entry.getValue()); queue.add(candidate(node, nextDistance));
-            }
+            var entrance = entrances.get(expansionEntrance++);
+            if (geometry.canTraverse(exit, entrance)) recordPortal(candidate, neighbour, exit, entrance);
+            return;
         }
+        // At most one exit per bounded component. Stable ordering keeps map iteration irrelevant.
+        if (publishingExits == null) publishingExits = expansionExits.entrySet().stream().sorted(Comparator
+                    .comparing((Map.Entry<Node, Edge> value) -> value.getKey().tile())
+                    .thenComparingInt(value -> value.getKey().component())).toList();
+        work++;
+        if (publication < publishingExits.size()) {
+            var entry = publishingExits.get(publication++);
+            Node node = entry.getKey(); int nextDistance = candidate.distance() + 1;
+            if (distance.getOrDefault(node, Integer.MAX_VALUE) <= nextDistance) return;
+            if (!distance.containsKey(node) && distance.size() >= MAX_NODES) {
+                finish(PedestrianRouteResult.Status.SAFETY_LIMIT, "REGIONAL_NODE_SAFETY_LIMIT"); return;
+            }
+            distance.put(node, nextDistance); previous.put(node, entry.getValue()); queue.add(candidate(node, nextDistance));
+            return;
+        }
+        expanding = null; expansionExits.clear(); publishingExits = null;
+    }
+    private void recordPortal(Candidate candidate, PedestrianRegion neighbour, SurfaceAnchor exit, SurfaceAnchor entrance) {
+        Node node = new Node(neighbour.tile, neighbour.component(entrance));
+        var edge = new Edge(candidate.node(), exit, entrance); Edge prior = expansionExits.get(node);
+        if (prior == null || portalScore(edge) < portalScore(prior)) expansionExits.put(node, edge);
+    }
+    private void nextDirection() {
+        expansionDirection++; expansionOffset = expansionExit = expansionEntrance = 0;
     }
     private long portalScore(Edge edge) {
         return Math.abs((long) edge.entrance().x() - target.x()) + Math.abs((long) edge.entrance().z() - target.z())

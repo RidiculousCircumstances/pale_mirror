@@ -24,9 +24,17 @@ public final class ResourceSiteHarvestKnownGeometry {
         Map<Long, SurfaceAnchor> field = new HashMap<>();
         for (BlockPosition crop : site.cropSlots())
             field.put(column(crop.x(), crop.z()), new SurfaceAnchor(crop.offset(0, -1, 0)));
-        return (x, z) -> {
-            var known = field.get(column(x, z));
-            return known != null ? known : ground.at(x, z);
+        return new BoundedPedestrianApproach.SurveyedSurface() {
+            @Override public boolean excluded(SurfaceAnchor surface) { return ground.excluded(surface); }
+            @Override public SurfaceAnchor at(int x, int z) {
+                var known = field.get(column(x, z)); return known != null ? known : ground.at(x, z);
+            }
+            @Override public java.util.List<SurfaceAnchor> surfacesAt(int x, int z) {
+                var known = field.get(column(x, z)); var levels = ground.surfacesAt(x, z);
+                if (known == null || levels.contains(known)) return levels;
+                var merged = new java.util.ArrayList<>(levels); merged.add(known);
+                merged.sort(java.util.Comparator.comparingInt(SurfaceAnchor::y)); return java.util.List.copyOf(merged);
+            }
         };
     }
 

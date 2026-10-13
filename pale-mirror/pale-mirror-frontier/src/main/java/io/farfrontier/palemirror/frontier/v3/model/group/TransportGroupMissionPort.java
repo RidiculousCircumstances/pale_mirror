@@ -126,7 +126,7 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
     public static void validateRendezvous(FrontierWorldState state, ShipmentEndpoint endpoint, SurfaceAnchor target, int members) {
         var geometry = ShipmentEndpointComposition.knowledge(state, List.of(endpoint)).geometry();
         var boundary = ServiceAccessCoordinator.boundary(state, endpoint.containerId());
-        if (!geometry.bounds().contains(target.support()) || !target.equals(geometry.supportAt(target.x(), target.z())) || geometry.blocked(target)
+        if (!geometry.bounds().contains(target.support()) || !geometry.knowsSupport(target) || geometry.blocked(target)
                 || boundary.occupiedSurfaces().stream().anyMatch(surface -> Math.abs((long) surface.x() - target.x())
                     + Math.abs((long) surface.z() - target.z()) < members * 2L))
             throw new IllegalArgumentException("transport admission lacks a known assembly point outside its service boundary");
