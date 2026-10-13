@@ -70,13 +70,18 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
         double half = profile.width() / 2.0;
         int minX = (int) Math.floor(centerX - half + 0.0000001), maxX = (int) Math.ceil(centerX + half - 0.0000001) - 1;
         int minZ = (int) Math.floor(centerZ - half + 0.0000001), maxZ = (int) Math.ceil(centerZ + half - 0.0000001) - 1;
+        int topY = feetY + profile.bodyLayers();
         for (int x = minX; x <= maxX; x++) for (int z = minZ; z <= maxZ; z++) {
             var levels = terrain.surfacesAt(x, z);
-            if (levels.stream().noneMatch(ground -> bounds().contains(ground.support()) && ground.y() < feetY)) return false;
             // An upper floor is solid only where it intersects this body, not an
             // obstacle stretching down through every lower floor in the column.
-            if (levels.stream().anyMatch(ground -> ground.y() >= feetY && ground.y() < feetY + profile.bodyLayers())) return false;
-            for (int y = feetY; y < feetY + profile.bodyLayers(); y++)
+            boolean supported = false;
+            for (var ground : levels) {
+                if (ground.y() >= feetY && ground.y() < topY) return false;
+                if (ground.y() < feetY && bounds().contains(ground.support())) supported = true;
+            }
+            if (!supported) return false;
+            for (int y = feetY; y < topY; y++)
                 if (occupied.test(new BlockPosition(x, y, z))) return false;
         }
         return true;

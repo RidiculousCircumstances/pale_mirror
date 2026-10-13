@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
 
 /** Read-only as-of body projection from the sole retained movement and physical authority. */
 public final class ActorMovementProjection {
+    private static final ThreadLocal<KnownRouteBarrierIndex> BARRIERS = ThreadLocal.withInitial(KnownRouteBarrierIndex::new);
     private ActorMovementProjection() { }
 
     public static BodyPosition bodyAt(FrontierWorldState state, SubjectId actorId, long atTick) {
@@ -26,12 +27,6 @@ public final class ActorMovementProjection {
     }
 
     public static int firstKnownBarrier(FrontierWorldState state, TimedKnownRoute travel) {
-        for (int index = 1; index < travel.route().size(); index++) {
-            BlockPosition support = travel.route().get(index).support();
-            if (state.physicalDeltas().containsKey(support)
-                    || state.physicalDeltas().containsKey(support.offset(0, 1, 0))
-                    || state.physicalDeltas().containsKey(support.offset(0, 2, 0))) return index;
-        }
-        return -1;
+        return BARRIERS.get().first(state.physicalDeltas(), travel.route());
     }
 }
