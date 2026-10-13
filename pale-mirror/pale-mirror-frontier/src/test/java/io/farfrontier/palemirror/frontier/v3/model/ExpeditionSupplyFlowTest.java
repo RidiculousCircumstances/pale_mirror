@@ -205,7 +205,7 @@ class ExpeditionSupplyFlowTest {
         FrontierReferenceClosure.validateTransition(travelling, holding, List.of());
         assertTrue(new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(holding)).shipments().equals(holding.shipments()));
         int beforeMeal = bread(holding);
-        var provisioned = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.cold(holding, mission.id(), refill.claimId());
+        var provisioned = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.cold(holding, mission.id(), refill.claimId(), 1000);
         FrontierReferenceClosure.validateTransition(holding, provisioned, List.of());
         assertEquals(beforeMeal, bread(provisioned), "shared-to-person handoff is not consumption");
         assertTrue(provisioned.shipments().missions().get(missionId).replenishment().isEmpty());

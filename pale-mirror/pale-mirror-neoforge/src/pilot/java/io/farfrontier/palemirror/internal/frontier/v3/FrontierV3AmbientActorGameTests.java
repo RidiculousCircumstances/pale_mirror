@@ -531,7 +531,7 @@ public final class FrontierV3AmbientActorGameTests {
                             new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WHEAT, 6));
                     return true;
                 });
-        helper.assertValueEqual(FrontierV3ActorBodyController.materialize(level, state, rejectedRequest),
+        helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.body(level, state, rejectedRequest),
                 FrontierV3ActorBodyController.Result.CONFLICT, "wrong preprojected hand cannot be silently overwritten");
         helper.assertTrue(level.getEntity(declaration.entityId()) == null, "bad inventory cannot enter the native index");
         helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.body(level, state, request),

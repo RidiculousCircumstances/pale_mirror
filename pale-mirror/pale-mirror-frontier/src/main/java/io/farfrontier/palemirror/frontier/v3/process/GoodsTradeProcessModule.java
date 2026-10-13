@@ -9,7 +9,8 @@ import java.util.Set;
 /** The registered commercial owner; no concrete producer, carrier or physical actuator. */
 final class GoodsTradeProcessModule implements FrontierWorldProcessModule {
     static final Set<String> TYPES = Set.of("frontier.goods_order_placed", "frontier.goods_trade_reserved", "frontier.goods_trade_accepted",
-            "frontier.goods_trade_cancelled", "frontier.goods_trade_claim_partitioned", "frontier.goods_trade_retired", "frontier.goods_participant_reviewed");
+            "frontier.goods_trade_cancelled", "frontier.goods_trade_claim_partitioned", "frontier.goods_trade_retired", "frontier.goods_participant_reviewed",
+            "frontier.goods_participant_prices_reviewed", "frontier.goods_order_withdrawn", "frontier.goods_trade_collected");
     static final DeterministicProcessDescriptor DESCRIPTOR = new DeterministicProcessDescriptor(
             "goods-trade", Set.of(), Set.of(GoodsTradeReceiptProcess.REVIEW, GoodsParticipantProcess.REVIEW, GoodsParticipantWakeup.OPPORTUNITY), TYPES,
             java.util.stream.Stream.concat(TYPES.stream(), Set.of("kernel.reconsideration_requested", "kernel.schedule_created", "kernel.schedule_rescheduled", "kernel.schedule_cancelled",
@@ -19,6 +20,10 @@ final class GoodsTradeProcessModule implements FrontierWorldProcessModule {
         return apply(state, event.subject(), event.instant().ticks(), event.payload());
     }
     private static FrontierWorldState apply(FrontierWorldState state, SubjectId subject, long now, FrontierPayload payload) {
+        if (payload instanceof GoodsTradeCollected collected) return GoodsTradeCollectionSupport.accept(state, subject, collected, now);
+        if (payload instanceof GoodsParticipantPricesReviewed prices) return GoodsParticipantPricing.apply(state, subject, prices, now);
+        if (payload instanceof GoodsTradeOrderWithdrawn withdrawn) return state.withCompanies(state.companies()
+                .withGoodsTrade(state.companies().goodsTrade().withdraw(subject, withdrawn)));
         if (payload instanceof GoodsParticipantReviewed reviewed) {
             if (reviewed.atTick() > now) throw new IllegalArgumentException("participant review is in the future");
             var trade = state.companies().goodsTrade();
@@ -27,7 +32,7 @@ final class GoodsTradeProcessModule implements FrontierWorldProcessModule {
         }
         if (payload instanceof GoodsTradeOrderPlaced placed) return GoodsTradeStateSupport.place(state, subject, placed.order(), now);
         if (payload instanceof GoodsTradeReserved reserved) return GoodsTradeStateSupport.reserve(state, subject, reserved.contract(), reserved.allocations(), now);
-        if (payload instanceof GoodsTradeAccepted accepted) return GoodsTradeStateSupport.accept(state, subject, accepted.receipt());
+        if (payload instanceof GoodsTradeAccepted accepted) return GoodsTradeStateSupport.accept(state, subject, accepted.receipt(), now);
         if (payload instanceof GoodsTradeCancelled cancelled) return GoodsTradeStateSupport.cancelBeforeLoading(state, subject, cancelled.disposition());
         if (payload instanceof GoodsTradeClaimPartitioned partitioned) return GoodsTradeStateSupport.partition(state, subject,
                 partitioned.contractId(), partitioned.partition());

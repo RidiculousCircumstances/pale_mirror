@@ -8,7 +8,7 @@ import java.util.Objects;
 
 /** Commercial terms and exact remaining obligations. Stock and balances remain in their ledgers. */
 public record GoodsTradeContract(SubjectId id, SubjectId sellOrderId, SubjectId buyOrderId,
-                                GoodsTradeParty seller, GoodsTradeParty buyer,
+                                GoodsTradeParty seller, GoodsTradeParty buyer, GoodsTradeFulfillment fulfillment,
                                 SubjectId sourceContainerId, SubjectId receiverContainerId,
                                 String itemKind, int quantity, FixedScalar deliveredUnitPrice,
                                 SubjectId financialReservationId, long revision,
@@ -18,17 +18,17 @@ public record GoodsTradeContract(SubjectId id, SubjectId sellOrderId, SubjectId 
                                 int acceptedQuantity, int disposedQuantity) {
     public static final int MAX_RECEIPTS = 128;
     public GoodsTradeContract(SubjectId id, SubjectId sellOrderId, SubjectId buyOrderId,
-                              GoodsTradeParty seller, GoodsTradeParty buyer, SubjectId sourceContainerId,
+                              GoodsTradeParty seller, GoodsTradeParty buyer, GoodsTradeFulfillment fulfillment, SubjectId sourceContainerId,
                               SubjectId receiverContainerId, String itemKind, int quantity, FixedScalar deliveredUnitPrice,
                               SubjectId financialReservationId, long revision, Map<SubjectId, Integer> outstandingClaims,
                               Map<SubjectId, GoodsTradeAcceptance> acceptances) {
-        this(id, sellOrderId, buyOrderId, seller, buyer, sourceContainerId, receiverContainerId, itemKind, quantity,
+        this(id, sellOrderId, buyOrderId, seller, buyer, fulfillment, sourceContainerId, receiverContainerId, itemKind, quantity,
                 deliveredUnitPrice, financialReservationId, revision, outstandingClaims, acceptances, Map.of(),
                 acceptances.values().stream().mapToInt(r -> r.title().quantity()).reduce(0, Math::addExact), 0);
     }
     public GoodsTradeContract {
         Objects.requireNonNull(id); Objects.requireNonNull(sellOrderId); Objects.requireNonNull(buyOrderId);
-        Objects.requireNonNull(seller); Objects.requireNonNull(buyer);
+        Objects.requireNonNull(seller); Objects.requireNonNull(buyer); Objects.requireNonNull(fulfillment); fulfillment.require(seller, buyer);
         Objects.requireNonNull(sourceContainerId); Objects.requireNonNull(receiverContainerId);
         Objects.requireNonNull(deliveredUnitPrice); Objects.requireNonNull(financialReservationId);
         outstandingClaims = Map.copyOf(outstandingClaims); acceptances = Map.copyOf(acceptances); dispositions = Map.copyOf(dispositions);
@@ -86,7 +86,7 @@ public record GoodsTradeContract(SubjectId id, SubjectId sellOrderId, SubjectId 
         if (remaining == 0) claims.remove(receipt.title().claimId()); else claims.put(receipt.title().claimId(), remaining);
         Map<SubjectId, GoodsTradeAcceptance> receipts = new HashMap<>(acceptances); receipts.put(receipt.id(), receipt);
         Map<SubjectId, GoodsTradeDisposition> dispositionWindow = new HashMap<>(dispositions); trim(receipts, dispositionWindow);
-        return new GoodsTradeContract(id, sellOrderId, buyOrderId, seller, buyer, sourceContainerId, receiverContainerId, itemKind,
+        return new GoodsTradeContract(id, sellOrderId, buyOrderId, seller, buyer, fulfillment, sourceContainerId, receiverContainerId, itemKind,
                 quantity, deliveredUnitPrice, financialReservationId, Math.addExact(revision, 1), claims, receipts, dispositionWindow,
                 Math.addExact(acceptedQuantity, receipt.title().quantity()), disposedQuantity);
     }
@@ -99,7 +99,7 @@ public record GoodsTradeContract(SubjectId id, SubjectId sellOrderId, SubjectId 
         Map<SubjectId, Integer> claims = new HashMap<>(outstandingClaims); claims.remove(disposition.claimId());
         Map<SubjectId, GoodsTradeDisposition> next = new HashMap<>(dispositions); next.put(disposition.id(), disposition);
         Map<SubjectId, GoodsTradeAcceptance> receipts = new HashMap<>(acceptances); trim(receipts, next);
-        return new GoodsTradeContract(id, sellOrderId, buyOrderId, seller, buyer, sourceContainerId, receiverContainerId, itemKind,
+        return new GoodsTradeContract(id, sellOrderId, buyOrderId, seller, buyer, fulfillment, sourceContainerId, receiverContainerId, itemKind,
                 quantity, deliveredUnitPrice, financialReservationId, Math.addExact(revision, 1), claims, receipts, next,
                 acceptedQuantity, Math.addExact(disposedQuantity, disposition.quantity()));
     }
@@ -111,8 +111,16 @@ public record GoodsTradeContract(SubjectId id, SubjectId sellOrderId, SubjectId 
         }
         Map<SubjectId, Integer> claims = new HashMap<>(outstandingClaims);
         claims.put(partition.claimId(), remaining); claims.put(partition.childClaimId(), quantity);
-        return new GoodsTradeContract(id, sellOrderId, buyOrderId, seller, buyer, sourceContainerId, receiverContainerId, itemKind,
+        return new GoodsTradeContract(id, sellOrderId, buyOrderId, seller, buyer, fulfillment, sourceContainerId, receiverContainerId, itemKind,
                 this.quantity, deliveredUnitPrice, financialReservationId, revision, claims, acceptances, dispositions, acceptedQuantity, disposedQuantity);
+    }
+    /** Change a local unadmitted draft only; accepted obligations are immutable. */
+    public GoodsTradeContract declareFulfillment(GoodsTradeFulfillment value) {
+        if (revision != 0 || acceptedQuantity != 0 || disposedQuantity != 0 || !acceptances.isEmpty() || !dispositions.isEmpty())
+            throw new IllegalArgumentException("cannot redeclare fulfillment of a progressed obligation");
+        return new GoodsTradeContract(id, sellOrderId, buyOrderId, seller, buyer, value, sourceContainerId, receiverContainerId,
+                itemKind, quantity, deliveredUnitPrice, financialReservationId, revision, outstandingClaims, acceptances,
+                dispositions, acceptedQuantity, disposedQuantity);
     }
     private static void trim(Map<SubjectId, GoodsTradeAcceptance> receipts, Map<SubjectId, GoodsTradeDisposition> dispositions) {
         if (receipts.size() + dispositions.size() <= MAX_RECEIPTS) return;

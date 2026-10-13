@@ -24,7 +24,7 @@ final class ShipmentStateCodec {
     }
     static void writeShipment(DataOutputStream out, Shipment value) throws IOException {
         id(out, value.id());
-        switch (value.authorization().kind()) { case GOODS_CONTRACT_SHIPMENT -> out.writeByte(1); case INTERNAL_SHIPMENT -> out.writeByte(2); }
+        switch (value.authorization().kind()) { case GOODS_CONTRACT_SHIPMENT -> out.writeByte(1); case INTERNAL_SHIPMENT -> out.writeByte(2); case OWNED_GOODS_SHIPMENT -> out.writeByte(3); }
         id(out, value.authorization().claimId()); id(out, value.authorization().claimantId()); id(out, value.authorization().executorId());
         out.writeLong(value.authorization().authorizationRevision()); ActorExecutionStateCodec.writeId(out, value.execution());
         source(out, value.sender()); endpoint(out, value.receiver()); id(out, value.sourceAccountId()); id(out, value.carriedAccountId()); id(out, value.receivingAccountId());
@@ -43,6 +43,7 @@ final class ShipmentStateCodec {
         var kind = switch (in.readUnsignedByte()) {
             case 1 -> ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT;
             case 2 -> ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT;
+            case 3 -> ResourceClaimDelegation.Kind.OWNED_GOODS_SHIPMENT;
             default -> throw new IllegalArgumentException("unknown delegation provider tag");
         };
         var grant = new ResourceClaimDelegation(kind, id(in), id(in), id(in), in.readLong());

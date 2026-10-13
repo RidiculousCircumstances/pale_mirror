@@ -8,7 +8,7 @@ import java.util.*;
 public final class ExpeditionTransferDeathAuthority {
     private ExpeditionTransferDeathAuthority() { }
 
-    public static FrontierWorldState observed(FrontierWorldState state, ExpeditionTransferDeathObserved receipt) {
+    public static FrontierWorldState observed(FrontierWorldState state, ExpeditionTransferDeathObserved receipt, long now) {
         ActorBodyAuthority.requireRetiredDeath(state, receipt.body());
         var mission = state.shipments().missions().get(receipt.missionId());
         if (mission == null) throw new IllegalArgumentException("retired expedition effect lost its mission");
@@ -17,7 +17,7 @@ public final class ExpeditionTransferDeathAuthority {
                 .filter(a -> a.claimId().equals(receipt.claimId())).findFirst().orElseThrow(
                         () -> new IllegalArgumentException("retired expedition effect lost its exact claim")) : null;
         var pending = refill == null ? allocation.pending() : refill.pending();
-        var order = refill == null ? mission.supplies().orElseThrow().order(mission.id(), mission.sender(), allocation)
+        var order = refill == null ? mission.supplies().orElseThrow().order(mission.id(), mission.organization().home(), allocation)
                 : refill.order(mission.id(), mission.revision());
         if (!pending.equals(Optional.of(receipt.step()))) throw new IllegalArgumentException("retired expedition effect has no original prepared fence");
         var sourceSurface = state.inventory().surfaces().get(order.containerEndpoint().containerId());
@@ -44,7 +44,10 @@ public final class ExpeditionTransferDeathAuthority {
         var shipments = refill != null ? state.shipments().replaceReplenishment(mission, Optional.empty())
                 : state.shipments().replaceSupplies(mission, mission.supplies().orElseThrow().replace(allocation,
                     receipt.applied() ? allocation.confirmed() : allocation.unappliedAfterDeath()));
-        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).shipments(shipments));
+        var trade = receipt.applied() && refill != null && mission.replenishmentPurchase().isPresent()
+                ? GoodsSpotPurchaseAuthority.acceptedHistory(state.companies().goodsTrade(), refill, mission.replenishmentPurchase().orElseThrow(), now)
+                : state.companies().goodsTrade();
+        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).companies(state.companies().withGoodsTrade(trade)).shipments(shipments));
     }
 
     private static void requireUnapplied(FrontierWorldState state, ActorContainerItemOrder order, ExpeditionTransferDeathObserved receipt) {

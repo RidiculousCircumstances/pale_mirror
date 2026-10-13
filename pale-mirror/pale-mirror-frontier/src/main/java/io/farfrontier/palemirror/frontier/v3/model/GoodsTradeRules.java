@@ -6,7 +6,14 @@ import java.util.*;
 /** Persisted balance choices. Commodity names belong here, not to the market or carrier. */
 public record GoodsTradeRules(long reviewInterval, long orderLifetime, int maximumBatch, int maximumPairReviews,
                              Map<GoodsPolicyKind, List<Commodity>> policies,
-                             io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanningRules supplyPlanning) {
+                             io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanningRules supplyPlanning,
+                             io.farfrontier.palemirror.frontier.v3.model.market.MarketPricingRules pricing) {
+    public GoodsTradeRules(long reviewInterval, long orderLifetime, int maximumBatch, int maximumPairReviews,
+                           Map<GoodsPolicyKind, List<Commodity>> policies,
+                           io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanningRules supplyPlanning) {
+        this(reviewInterval, orderLifetime, maximumBatch, maximumPairReviews, policies, supplyPlanning,
+                io.farfrontier.palemirror.frontier.v3.model.market.MarketPricingRules.disabled());
+    }
     public GoodsTradeRules(long reviewInterval, long orderLifetime, int maximumBatch, int maximumPairReviews,
                            Map<GoodsPolicyKind, List<Commodity>> policies) {
         this(reviewInterval, orderLifetime, maximumBatch, maximumPairReviews, policies,
@@ -25,6 +32,7 @@ public record GoodsTradeRules(long reviewInterval, long orderLifetime, int maxim
     }
     public GoodsTradeRules {
         Objects.requireNonNull(supplyPlanning);
+        Objects.requireNonNull(pricing);
         var copy = new EnumMap<GoodsPolicyKind, List<Commodity>>(GoodsPolicyKind.class);
         policies.forEach((kind, commodities) -> {
             var values = List.copyOf(commodities);
@@ -61,11 +69,24 @@ public record GoodsTradeRules(long reviewInterval, long orderLifetime, int maxim
         if (values.stream().anyMatch(value -> value.itemKind().equals(commodity.itemKind())))
             throw new IllegalArgumentException("goods commodity already declared for this policy");
         values.add(commodity); next.put(policy, List.copyOf(values));
-        return new GoodsTradeRules(reviewInterval, orderLifetime, maximumBatch, maximumPairReviews, next, supplyPlanning);
+        return new GoodsTradeRules(reviewInterval, orderLifetime, maximumBatch, maximumPairReviews, next, supplyPlanning, pricing);
     }
     public GoodsTradeRules withSupplyPlanning(io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanningRules planning) {
         policies.get(GoodsPolicyKind.PUBLIC_SETTLEMENT).forEach(c -> planning.require(c.itemKind()));
-        return new GoodsTradeRules(reviewInterval, orderLifetime, maximumBatch, maximumPairReviews, policies, planning);
+        return new GoodsTradeRules(reviewInterval, orderLifetime, maximumBatch, maximumPairReviews, policies, planning, pricing);
+    }
+    public GoodsTradeRules withPricing(io.farfrontier.palemirror.frontier.v3.model.market.MarketPricingRules rules) {
+        return new GoodsTradeRules(reviewInterval, orderLifetime, maximumBatch, maximumPairReviews, policies, supplyPlanning, rules);
+    }
+    /** Explicit new-profile price calibration; saved profiles are never rewritten. */
+    public GoodsTradeRules withPriceSeeds(GoodsPolicyKind policy, String item, FixedScalar ask, FixedScalar bid) {
+        var next = new EnumMap<GoodsPolicyKind, List<Commodity>>(GoodsPolicyKind.class); next.putAll(policies);
+        var values = Objects.requireNonNull(policies.get(policy), "declared commodity policy");
+        if (values.stream().noneMatch(value -> value.itemKind().equals(item)))
+            throw new IllegalArgumentException("price calibration cannot invent a commodity");
+        next.put(policy, values.stream().map(value -> value.itemKind().equals(item)
+                ? new Commodity(item, value.targetPerResident(), value.targetFixed(), ask, bid) : value).toList());
+        return new GoodsTradeRules(reviewInterval, orderLifetime, maximumBatch, maximumPairReviews, next, supplyPlanning, pricing);
     }
     public String canonicalText() {
         var result = new StringBuilder(reviewInterval + "," + orderLifetime + "," + maximumBatch + "," + maximumPairReviews);
@@ -77,6 +98,7 @@ public record GoodsTradeRules(long reviewInterval, long orderLifetime, int maxim
                             .append(',').append(value.maximumBuyPrice().raw()));
         });
         if (supplyPlanning.enabled()) result.append("|supply:").append(supplyPlanning.canonicalText());
+        if (pricing.enabled()) result.append("|pricing:").append(pricing.canonicalText());
         return result.toString();
     }
 }

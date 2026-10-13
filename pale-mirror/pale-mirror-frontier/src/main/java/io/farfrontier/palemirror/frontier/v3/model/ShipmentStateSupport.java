@@ -4,6 +4,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 /** Transport admission and custody transitions. Neither movement nor unloading sells the goods. */
 public final class ShipmentStateSupport {
+    public static boolean departureReady(FrontierWorldState state, Shipment shipment, TransportOrganization organization) {
+        return ShipmentAuthorizationComposition.departureReady(state, shipment, organization);
+    }
     private ShipmentStateSupport() { }
     public static boolean serviceAvailable(FrontierWorldState state, Shipment shipment) {
         return ShipmentServiceAccess.available(state, shipment);
@@ -16,8 +19,17 @@ public final class ShipmentStateSupport {
     }
     /** Validation contributes no partial shipment, execution or mission publication. */
     public static void validateDispatch(FrontierWorldState state, SubjectId subject, Shipment shipment) {
-        if (shipment.mobileContainerId().isPresent()) io.farfrontier.palemirror.frontier.v3.model.expedition.TransportAssetAdmission.requireCourier(state, shipment);
-        else SettlementLabourAllocation.requireMissionCommitment(state, shipment.sender().settlementId(),
+        if (TransportCargoExecution.shared(shipment)) throw new IllegalArgumentException("manifest cargo requires its declared mission admission");
+        validateDispatchAtHome(state, subject, shipment, shipment.sender().settlementId());
+    }
+    public static void validateDispatch(FrontierWorldState state, SubjectId subject, Shipment shipment, TransportOrganization organization) {
+        organization.require(state);
+        ShipmentAuthorizationComposition.validateMission(state, shipment, organization);
+        validateDispatchAtHome(state, subject, shipment, organization.home().settlementId());
+    }
+    private static void validateDispatchAtHome(FrontierWorldState state, SubjectId subject, Shipment shipment, SubjectId home) {
+        if (shipment.mobileContainerId().isPresent()) io.farfrontier.palemirror.frontier.v3.model.expedition.TransportAssetAdmission.requireCourier(state, shipment, home);
+        else SettlementLabourAllocation.requireMissionCommitment(state, home,
                 ResidentWorkKind.LOGISTICS, java.util.List.of(shipment.execution().actorId()));
         ShipmentAuthorizationComposition.validate(state, shipment, true);
         ResourceSourceComposition.admit(state, shipment.sender()); ShipmentEndpointComposition.validate(state, shipment.receiver());

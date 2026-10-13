@@ -100,6 +100,9 @@ class FrontierV3DiagnosticJsonTest {
         assertEquals(0, json.get("instant").getAsLong());
         assertEquals(0, json.getAsJsonObject("expeditions").get("activeMissions").getAsInt());
         assertEquals(0, json.getAsJsonObject("expeditions").get("reservedAnimals").getAsInt());
+        var stages = json.getAsJsonObject("expeditions").getAsJsonObject("stages");
+        for (var stage : io.farfrontier.palemirror.frontier.v3.model.TransportMission.Stage.values())
+            assertEquals(0, stages.get(stage.name()).getAsInt());
         assertEquals(12, state.transportFleet().assets().size());
         assertEquals(checkpoint, engine.checkpoint());
     }

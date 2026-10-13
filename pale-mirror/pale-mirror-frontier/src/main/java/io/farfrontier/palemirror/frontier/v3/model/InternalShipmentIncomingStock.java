@@ -7,7 +7,7 @@ final class InternalShipmentIncomingStock {
     static int quantity(ShipmentState state, SubjectId owner, SubjectId container, String itemKind) {
         int quantity = 0;
         for (var shipment : state.shipments().values()) {
-            if (shipment.authorization().kind() != ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT
+            if ((shipment.authorization().kind() != ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT && shipment.authorization().kind() != ResourceClaimDelegation.Kind.OWNED_GOODS_SHIPMENT)
                     || !shipment.authorization().claimantId().equals(owner)
                     || !shipment.receiver().containerId().equals(container) || !shipment.itemKind().equals(itemKind)) continue;
             if (!shipment.terminal()) quantity = Math.addExact(quantity, shipment.quantity());

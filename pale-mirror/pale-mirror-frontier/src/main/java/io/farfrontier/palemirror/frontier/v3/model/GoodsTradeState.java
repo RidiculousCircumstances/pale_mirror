@@ -6,7 +6,12 @@ import java.util.Map;
 
 /** Bounded commercial registry, independent of the production-service order book. */
 public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<SubjectId, GoodsTradeContract> contracts,
-                              GoodsParticipantState participants) {
+                              GoodsParticipantState participants,
+                              io.farfrontier.palemirror.frontier.v3.model.market.MarketPriceHistory priceHistory) {
+    public GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<SubjectId, GoodsTradeContract> contracts,
+                           GoodsParticipantState participants) {
+        this(orders, contracts, participants, io.farfrontier.palemirror.frontier.v3.model.market.MarketPriceHistory.empty());
+    }
     public GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<SubjectId, GoodsTradeContract> contracts) {
         this(orders, contracts, GoodsParticipantState.empty());
     }
@@ -15,6 +20,7 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
     public GoodsTradeState {
         orders = Map.copyOf(orders);
         java.util.Objects.requireNonNull(participants);
+        java.util.Objects.requireNonNull(priceHistory);
         contracts = Map.copyOf(contracts);
         if (orders.size() > MAX_ORDERS || orders.entrySet().stream().anyMatch(e -> !e.getKey().equals(e.getValue().id()))
                 || contracts.size() > MAX_CONTRACTS || contracts.entrySet().stream().anyMatch(e -> !e.getKey().equals(e.getValue().id()))) {
@@ -29,13 +35,16 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
             throw new IllegalArgumentException("goods contracts compete for an allocation, receipt or financial hold");
         }
     }
+    public GoodsTradeState recordSale(String item, io.farfrontier.palemirror.frontier.v3.model.market.MarketPriceHistory.Sale sale) {
+        return new GoodsTradeState(orders, contracts, participants, priceHistory.record(item, sale));
+    }
     public static GoodsTradeState empty() { return new GoodsTradeState(Map.of(), Map.of()); }
     public GoodsTradeState place(GoodsTradeOrder order) {
         if (orders.containsKey(order.id()) || order.committedQuantity() != 0) {
             throw new IllegalArgumentException("goods order must be a fresh participant authorization");
         }
         Map<SubjectId, GoodsTradeOrder> next = new HashMap<>(orders); next.put(order.id(), order);
-        return new GoodsTradeState(next, contracts, participants);
+        return new GoodsTradeState(next, contracts, participants, priceHistory);
     }
     public GoodsTradeState admit(GoodsTradeContract contract, long now) {
         if (contracts.containsKey(contract.id()) || contract.revision() != 0 || contract.terminal()) {
@@ -49,12 +58,32 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
         Map<SubjectId, GoodsTradeOrder> nextOrders = new HashMap<>(orders);
         nextOrders.put(sell.id(), sell.commit(contract.quantity())); nextOrders.put(buy.id(), buy.commit(contract.quantity()));
         Map<SubjectId, GoodsTradeContract> next = new HashMap<>(contracts); next.put(contract.id(), contract);
-        return new GoodsTradeState(nextOrders, next, participants);
+        return new GoodsTradeState(nextOrders, next, participants, priceHistory);
     }
-    public GoodsTradeState accept(GoodsTradeAcceptance receipt) {
+    public GoodsTradeState withdraw(SubjectId participant, GoodsTradeOrderWithdrawn withdrawal) {
+        var order = orders.get(withdrawal.orderId());
+        if (order == null || !order.party().id().equals(participant)
+                || order.committedQuantity() != withdrawal.expectedCommittedQuantity() || order.availableQuantity() == 0)
+            throw new IllegalArgumentException("stale or foreign unmatched-order withdrawal");
+        var next = new HashMap<>(orders);
+        if (order.committedQuantity() == 0) next.remove(order.id());
+        else next.put(order.id(), new GoodsTradeOrder(order.id(), order.party(), order.counterparty(), order.side(),
+                order.containerId(), order.itemKind(), order.committedQuantity(), order.committedQuantity(),
+                order.unitPriceLimit(), order.expiresAtTick()));
+        return new GoodsTradeState(next, contracts, participants, priceHistory);
+    }
+    public GoodsTradeState accept(GoodsTradeAcceptance receipt, long now) {
         GoodsTradeContract contract = contracts.get(receipt.contractId());
         if (contract == null) throw new IllegalArgumentException("acceptance names an unknown goods contract");
-        return put(contract.accept(receipt));
+        return put(contract.accept(receipt)).recordSale(receipt, now);
+    }
+    private GoodsTradeState recordSale(GoodsTradeAcceptance receipt, long now) {
+        var contract = contracts.get(receipt.contractId());
+        if (contract == null || !receipt.equals(contract.acceptances().get(receipt.id())))
+            throw new IllegalArgumentException("market history requires an actual accepted portion");
+        return new GoodsTradeState(orders, contracts, participants, priceHistory.record(contract.itemKind(),
+                new io.farfrontier.palemirror.frontier.v3.model.market.MarketPriceHistory.Sale(receipt.id(),
+                        contract.seller().id(), contract.buyer().id(), now, receipt.title().quantity(), contract.deliveredUnitPrice())));
     }
     public GoodsTradeState dispose(GoodsTradeDisposition disposition) {
         GoodsTradeContract contract = contracts.get(disposition.contractId());
@@ -84,20 +113,20 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
         }
         Map<SubjectId, GoodsTradeOrder> nextOrders = new HashMap<>(orders); retired.orderIds().forEach(nextOrders::remove);
         Map<SubjectId, GoodsTradeContract> next = new HashMap<>(contracts); retired.contractIds().forEach(next::remove);
-        return new GoodsTradeState(nextOrders, next, participants);
+        return new GoodsTradeState(nextOrders, next, participants, priceHistory);
     }
     private GoodsTradeState put(GoodsTradeContract contract) {
         Map<SubjectId, GoodsTradeContract> next = new HashMap<>(contracts); next.put(contract.id(), contract);
-        return new GoodsTradeState(orders, next, participants);
+        return new GoodsTradeState(orders, next, participants, priceHistory);
     }
-    public GoodsTradeState withParticipants(GoodsParticipantState next) { return new GoodsTradeState(orders, contracts, next); }
+    public GoodsTradeState withParticipants(GoodsParticipantState next) { return new GoodsTradeState(orders, contracts, next, priceHistory); }
     static void validateTerms(GoodsTradeContract contract, GoodsTradeOrder sell, GoodsTradeOrder buy) {
         if (sell == null || buy == null || sell.side() != GoodsTradeOrder.Side.SELL || buy.side() != GoodsTradeOrder.Side.BUY
                 || !sell.party().equals(contract.seller()) || !buy.party().equals(contract.buyer())
                 || !sell.counterparty().equals(contract.buyer()) || !buy.counterparty().equals(contract.seller())
                 || !sell.containerId().equals(contract.sourceContainerId()) || !buy.containerId().equals(contract.receiverContainerId())
                 || !sell.itemKind().equals(contract.itemKind()) || !buy.itemKind().equals(contract.itemKind())
-                || contract.deliveredUnitPrice().compareTo(sell.unitPriceLimit()) < 0
+                || !contract.deliveredUnitPrice().equals(sell.unitPriceLimit())
                 || contract.deliveredUnitPrice().compareTo(buy.unitPriceLimit()) > 0) {
             throw new IllegalArgumentException("goods agreement violates its exact buyer or seller authorization");
         }

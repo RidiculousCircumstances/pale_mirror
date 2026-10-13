@@ -53,7 +53,7 @@ final class FrontierV3GroupDiagnosticJson {
                 wait = "ROUTE_" + calculation.orElseThrow().status();
             else if (movement == null && state.humanPopulation().meals().containsKey(actor))
                 wait = "MEAL_" + state.humanPopulation().meals().get(actor).phase();
-            else if (mission != null && mission.stage() == TransportMission.Stage.LOADING) wait = "LOADING";
+            else if (mission != null && mission.preparingSupplies()) wait = "LOADING";
             var physicalWait = movement == null ? java.util.Optional.<String>empty() : nativeWait.apply(movement);
             return "{\"actor\":" + string(actor.value()) + ",\"role\":" + string(member.role().name())
                     + ",\"originalPurpose\":" + string(member.activityKind().name()) + ",\"originalOwner\":" + string(member.activityOwnerId().value())
@@ -109,7 +109,7 @@ final class FrontierV3GroupDiagnosticJson {
                         ? "REFILL_APPROACH_OR_TAKE" : "REFILL_SERVICE_ACCESS");
         }
         var next = mission.supplies().flatMap(load -> load.next());
-        if (mission.stage() != TransportMission.Stage.LOADING || next.isEmpty()) return "null";
+        if (!mission.preparingSupplies() || next.isEmpty()) return "null";
         var allocation = next.orElseThrow();
         return string(allocation.pending().isPresent() ? "LOAD_PHYSICAL_RECEIPT"
                 : ServiceAccessCoordinator.available(state, ExpeditionSupplyServiceAccess.identity(mission, allocation))

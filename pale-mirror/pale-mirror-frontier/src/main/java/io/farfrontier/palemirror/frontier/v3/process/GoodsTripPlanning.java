@@ -3,23 +3,32 @@ package io.farfrontier.palemirror.frontier.v3.process;
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.supply.*;
+import io.farfrontier.palemirror.frontier.v3.model.market.ProcurementSelection;
 import java.util.*;
 
 /** One transaction publishes sales only after exact logistics admission has succeeded on an immutable draft. */
 final class GoodsTripPlanning {
     record Result(FrontierWorldState state, List<ProposedEvent> events, String decision) { }
+    private record Candidate(Result result, ProcurementSelection.Offer offer) { }
     static Result plan(FrontierWorldState initial, GoodsParticipant reviewer, long now) {
         if (initial.unitGroups().groups().size() >= io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState.MAX_GROUPS
                 || initial.shipments().missions().size() >= io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState.MAX_GROUPS
                 || initial.shipments().shipments().size() >= ShipmentState.MAX_SHIPMENTS)
             return new Result(initial, List.of(), "WAITING_FOR_TRANSPORT_RETENTION; reserved=0");
         String decision = "NO_MUTUAL_KNOWN_QUOTE";
+        var candidates = new ArrayList<Candidate>();
+        var buyer = reviewer;
+        var demand = GoodsParticipantView.read(initial, buyer);
+        var requirements = GoodsParticipantPolicies.require(buyer).decide(demand, initial.bootstrap().ruleset().goodsTrade())
+                .stream().filter(intent -> intent.side() == GoodsTradeOrder.Side.BUY)
+                .map(intent -> new ProcurementSelection.Requirement(intent.itemKind(), intent.quantity(),
+                        demand.supplyPlan().map(plan -> plan.require(intent.itemKind()).deadlineTicks()).orElse(Long.MAX_VALUE))).toList();
+        if (requirements.isEmpty()) return new Result(initial, List.of(), "NO_CURRENT_PURCHASE_REQUIREMENT");
         for (var peer : reviewer.known()) {
             var other = initial.companies().goodsTrade().participants().participants().get(peer.party().id());
             if (other == null || !other.party().equals(peer.party()) || !other.endpoint().equals(peer.endpoint())) continue;
-            for (int direction = 0; direction < 2; direction++) {
-                var seller = direction == 0 ? reviewer : other;
-                var buyer = direction == 0 ? other : reviewer;
+            for (var mode : GoodsTradeFulfillment.Mode.values()) {
+                var seller = other;
                 var state = initial; var reservations = new ArrayList<ProposedEvent>(); var parcels = new ArrayList<GoodsTripAssembly.Parcel>();
                 int reviews = 0; var considered = new HashSet<String>();
                 int cargoLimit = Math.min(initial.bootstrap().ruleset().goodsTrade().supplyPlanning().maximumTripCargoStacks(),
@@ -32,13 +41,15 @@ final class GoodsTripPlanning {
                         if (!considered.isEmpty()) { considered.clear(); continue; }
                         if (parcels.isEmpty()) decision = search.disposition(); break;
                     }
-                    var match = search.match().orElseThrow();
-                    if (match.allocations().size() != 1) throw new IllegalArgumentException("trip selection requires one exact allocation per match");
-                    considered.add(match.contract().itemKind());
-                    if (match.contract().sourceContainerId().equals(match.contract().receiverContainerId())) break;
-                    state = GoodsTradeStateSupport.reserve(state, seller.party().id(), match.contract(), match.allocations(), now);
-                    reservations.add(new ProposedEvent(seller.party().id(), new GoodsTradeReserved(match.contract(), match.allocations())));
-                    for (var allocation : match.allocations()) parcels.add(new GoodsTripAssembly.Parcel(match.contract(), allocation.claim(), allocation.accountId()));
+                    var raw = search.match().orElseThrow();
+                    var fulfillment = new GoodsTradeFulfillment(mode, mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? seller.party() : buyer.party());
+                    var matchContract = raw.contract().declareFulfillment(fulfillment);
+                    if (raw.allocations().size() != 1) throw new IllegalArgumentException("trip selection requires one exact allocation per match");
+                    considered.add(matchContract.itemKind());
+                    if (matchContract.sourceContainerId().equals(matchContract.receiverContainerId())) break;
+                    state = GoodsTradeStateSupport.reserve(state, seller.party().id(), matchContract, raw.allocations(), now);
+                    reservations.add(new ProposedEvent(seller.party().id(), new GoodsTradeReserved(matchContract, raw.allocations())));
+                    for (var allocation : raw.allocations()) parcels.add(new GoodsTripAssembly.Parcel(matchContract, allocation.claim(), allocation.accountId()));
                 }
                 if (parcels.isEmpty()) continue;
                 // Bounded capacity backtracking, never cancel/re-reserve a published sale.
@@ -54,7 +65,7 @@ final class GoodsTripPlanning {
                         selectedEvents.add(event);
                     }
                     Optional<TransportMissionStarted> trip;
-                    try { trip = GoodsTripAssembly.prepare(selectedState, seller, buyer, selected, now); }
+                    try { trip = GoodsTripAssembly.prepare(selectedState, seller, buyer, selected, mode, now); }
                     catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
                         // Calculation dependencies have already been declared by the shared planner.
                         // Nothing in this draft has been published: its ordinary continuation owns the retry.
@@ -65,13 +76,37 @@ final class GoodsTripPlanning {
                     var declaration = trip.orElseThrow();
                     selectedEvents.addAll(GoodsTripAssembly.events(declaration, now));
                     var admitted = TransportMissionProcess.admit(selectedState, declaration.mission().id(), declaration, now);
-                    return new Result(admitted, List.copyOf(selectedEvents), "TRIP_ADMITTED; cause=" + cause + "; parcels=" + count
+                    var result = new Result(admitted, List.copyOf(selectedEvents), "TRIP_ADMITTED; cause=" + cause + "; parcels=" + count
                             + "; items=" + selected.stream().mapToInt(p -> p.claim().quantity()).sum()
                             + "; members=" + declaration.group().members().size() + "; mission=" + declaration.mission().id().value());
+                    candidates.add(new Candidate(result, offer(declaration, selected)));
+                    break;
                 }
-            }
         }
+            }
+        var selected = new ProcurementSelection().select(requirements, candidates.stream().map(Candidate::offer).toList());
+        if (selected.isPresent()) return candidates.stream().filter(candidate -> candidate.offer().id().equals(selected.orElseThrow()))
+                .findFirst().orElseThrow().result();
         return new Result(initial, List.of(), decision);
+    }
+    private static ProcurementSelection.Offer offer(TransportMissionStarted declaration, List<GoodsTripAssembly.Parcel> parcels) {
+        var quantities = new TreeMap<String, Integer>(); var amounts = new TreeMap<String, Long>();
+        for (var parcel : parcels) {
+            var contract = parcel.contract();
+            quantities.merge(contract.itemKind(), parcel.claim().quantity(), Math::addExact);
+            amounts.merge(contract.itemKind(), contract.deliveredUnitPrice().multiply(parcel.claim().quantity()).raw(), Math::addExact);
+        }
+        var lines = new TreeMap<String, ProcurementSelection.Line>();
+        quantities.forEach((item, quantity) -> lines.put(item, new ProcurementSelection.Line(quantity,
+                new FixedScalar(Math.ceilDiv(amounts.get(item), quantity)))));
+        // Quotes retain their agreed price; no second cash payment or internal wage
+        // is invented. The bounded full-itinerary forecast conservatively bounds
+        // reception. Supply deadlines and arrival forecasts are remaining durations,
+        // not absolute simulation instants; no world age enters their comparison.
+        return new ProcurementSelection.Offer(declaration.mission().id(), lines, FixedScalar.ZERO,
+                declaration.mission().supplies().orElseThrow().forecastDurationTicks(),
+                declaration.mission().organization().itinerary() == TransportOrganization.Itinerary.DESTINATION_COLLECTION
+                    ? Math.multiplyExact(declaration.group().members().size(), declaration.mission().supplies().orElseThrow().forecastDurationTicks()) : 0);
     }
     static TripDispatchPolicy.Cause dispatchCause(FrontierWorldState state, GoodsParticipant buyer, List<GoodsTripAssembly.Parcel> parcels, long now) {
         var rules = state.bootstrap().ruleset().goodsTrade(); var view = GoodsParticipantView.read(state, buyer);

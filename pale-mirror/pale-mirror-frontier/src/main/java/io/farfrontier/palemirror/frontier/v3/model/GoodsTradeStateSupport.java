@@ -64,12 +64,12 @@ public final class GoodsTradeStateSupport {
                 .companies(state.companies().withGoodsTrade(trade)));
     }
 
-    public static FrontierWorldState accept(FrontierWorldState state, SubjectId subject, GoodsTradeAcceptance receipt) {
+    public static FrontierWorldState accept(FrontierWorldState state, SubjectId subject, GoodsTradeAcceptance receipt, long now) {
         GoodsTradeContract contract = state.companies().goodsTrade().contracts().get(receipt.contractId());
-        if (contract == null || !subject.equals(contract.buyer().id())) {
+        if (contract == null || !subject.equals(contract.buyer().id()) || contract.fulfillment().mode() != GoodsTradeFulfillment.Mode.SELLER_DELIVERY) {
             throw new IllegalArgumentException("goods acceptance lacks its exact receiving buyer");
         }
-        GoodsTradeState trade = state.companies().goodsTrade().accept(receipt);
+        GoodsTradeState trade = state.companies().goodsTrade().accept(receipt, now);
         ResourceTitleTransfer title = receipt.title();
         CustodyAccount account = state.inventory().fungibleResources().accounts().get(title.accountId());
         ClaimAllocation claim = state.inventory().fungibleResources().claims().get(title.claimId());

@@ -70,8 +70,8 @@ class ExpeditionTransferDeathTest {
             var receipt = new ExpeditionTransferDeathObserved(mission.id(), allocation.claimId(), body, step, applied, remainder, destination);
             var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
             assertEquals(receipt, codecs.decode(receipt.type(), codecs.encode(receipt)));
-            assertThrows(IllegalArgumentException.class, () -> ExpeditionTransferDeathAuthority.observed(prepared, receipt));
-            var after = ExpeditionTransferDeathAuthority.observed(died, receipt);
+            assertThrows(IllegalArgumentException.class, () -> ExpeditionTransferDeathAuthority.observed(prepared, receipt, 1000));
+            var after = ExpeditionTransferDeathAuthority.observed(died, receipt, 1000);
             FrontierReferenceClosure.validateTransition(died, after, List.of());
             assertEquals(after, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(after)));
             assertFalse(after.inventory().fungibleResources().claims().containsKey(allocation.claimId()));
@@ -80,7 +80,7 @@ class ExpeditionTransferDeathTest {
             var settled = after.shipments().missions().get(mission.id()).supplies().orElseThrow().allocations().stream()
                     .filter(a -> a.claimId().equals(allocation.claimId())).findFirst().orElseThrow();
             assertEquals(applied, settled.loaded()); assertEquals(!applied, settled.withdrawn());
-            assertThrows(IllegalArgumentException.class, () -> ExpeditionTransferDeathAuthority.observed(after, receipt));
+            assertThrows(IllegalArgumentException.class, () -> ExpeditionTransferDeathAuthority.observed(after, receipt, 1000));
         }
     }
     private static long total(FrontierWorldState state) {

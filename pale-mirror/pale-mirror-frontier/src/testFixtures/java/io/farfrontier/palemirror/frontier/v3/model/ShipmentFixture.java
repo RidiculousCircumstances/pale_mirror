@@ -26,7 +26,7 @@ final class ShipmentFixture {
                 GoodsTradeOrder.Side.SELL, source, "minecraft:bread", 32, 0, FixedScalar.whole(1), 100_000), 0);
         state = GoodsTradeStateSupport.place(state, buyer.id(), new GoodsTradeOrder(buy, buyParty, sellParty,
                 GoodsTradeOrder.Side.BUY, target, "minecraft:bread", 32, 0, FixedScalar.whole(1), 100_000), 0);
-        state = GoodsTradeStateSupport.reserve(state, seller.id(), new GoodsTradeContract(contract, sell, buy, sellParty, buyParty,
+        state = GoodsTradeStateSupport.reserve(state, seller.id(), new GoodsTradeContract(contract, sell, buy, sellParty, buyParty, new GoodsTradeFulfillment(GoodsTradeFulfillment.Mode.SELLER_DELIVERY, sellParty),
                 source, target, "minecraft:bread", 32, FixedScalar.whole(1), new SubjectId("reservation:development-goods"),
                 0, Map.of(claim, 32), Map.of()), List.of(new GoodsTradeStockAllocation(sourceAccount,
                 new ClaimAllocation(claim, contract, seller.id(), "minecraft:bread", 32, Map.of(lot, 32), ClaimPurpose.GOODS_TRADE),

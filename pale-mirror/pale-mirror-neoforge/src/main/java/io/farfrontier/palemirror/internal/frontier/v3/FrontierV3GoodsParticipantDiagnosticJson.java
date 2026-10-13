@@ -36,6 +36,8 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                 .sorted(java.util.Comparator.comparing(GoodsTradeContract::id)).map(value ->
                         "{\"id\":" + string(value.id().value()) + ",\"seller\":" + string(value.seller().id().value())
                                 + ",\"buyer\":" + string(value.buyer().id().value()) + ",\"commodity\":" + string(value.itemKind())
+                                + ",\"fulfillment\":" + string(value.fulfillment().mode().name())
+                                + ",\"organizer\":" + string(value.fulfillment().organizer().id().value())
                                 + ",\"acceptedQuantity\":" + value.acceptedQuantity() + ",\"remainingQuantity\":" + value.remainingQuantity()
                                 + ",\"disposedQuantity\":" + value.disposedQuantity()
                                 + ",\"withdrawalReasons\":[" + value.dispositions().values().stream()
@@ -53,6 +55,20 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                 .filter(value -> value.seller().equals(participant.party()) || value.buyer().equals(participant.party()))
                 .filter(value -> value.acceptedQuantity() > 0).map(GoodsTradeContract::itemKind).distinct().sorted()
                 .map(kind -> string(kind) + ":true").collect(Collectors.joining(","));
+        var prices = participant.prices().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
+                .map(e -> "{\"commodity\":" + string(e.getKey()) + ",\"askRaw\":" + e.getValue().ask().raw()
+                        + ",\"bidRaw\":" + e.getValue().bid().raw() + ",\"referenceRaw\":" + e.getValue().reference().raw()
+                        + ",\"reviewedAtTick\":" + e.getValue().reviewedAt() + "}").collect(Collectors.joining(","));
+        var completedSales = trade.priceHistory().commodities().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
+                .map(e -> "{\"commodity\":" + string(e.getKey()) + ",\"acceptedQuantity\":" + e.getValue().stream()
+                        .filter(s -> s.buyer().equals(participant.party().id()) || s.seller().equals(participant.party().id()))
+                        .mapToLong(io.farfrontier.palemirror.frontier.v3.model.market.MarketPriceHistory.Sale::quantity).sum() + "}")
+                .collect(Collectors.joining(","));
+        var completedCommodities = trade.priceHistory().commodities().entrySet().stream()
+                .filter(e -> e.getValue().stream().anyMatch(s -> s.buyer().equals(participant.party().id())
+                        || s.seller().equals(participant.party().id())))
+                .sorted(java.util.Map.Entry.comparingByKey()).map(e -> string(e.getKey()) + ":true")
+                .collect(Collectors.joining(","));
         return FrontierV3DiagnosticJson.base("process", participant.party().id().value(), checkpoint)
                 + ",\"status\":\"ok\",\"family\":\"frontier.goods-participant\""
                 + ",\"identity\":{\"participant\":" + string(participant.party().id().value()) + ",\"ownerKind\":" + string(participant.party().kind().name())
@@ -64,6 +80,8 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                 + ",\"knownCounterparties\":[" + known + "],\"stocks\":[" + stocks
                 + "],\"supplyPlan\":[" + supply + "],\"orders\":[" + orders + "],\"contracts\":[" + contracts + "]"
                 + ",\"acceptedCommodities\":{" + acceptedCommodities + "}"
+                + ",\"prices\":[" + prices + "],\"completedSales\":[" + completedSales + "]"
+                + ",\"completedCommodities\":{" + completedCommodities + "}"
                 + ",\"expeditions\":" + FrontierV3ExpeditionDiagnosticJson.render(checkpoint, state, participant) + "}";
     }
     private static String string(String value) { return "\"" + FrontierV3DiagnosticJson.quote(value) + "\""; }

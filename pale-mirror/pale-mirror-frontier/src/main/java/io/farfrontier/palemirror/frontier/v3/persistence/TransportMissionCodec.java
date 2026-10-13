@@ -10,6 +10,10 @@ final class TransportMissionCodec {
         UnitGroupStateCodec.id(out, value.id()); UnitGroupStateCodec.id(out, value.groupId()); out.writeInt(value.shipmentIds().size());
         for (var id : value.shipmentIds()) UnitGroupStateCodec.id(out, id);
         ShipmentStateCodec.endpoint(out, value.sender()); ShipmentStateCodec.endpoint(out, value.receiver());
+        UnitGroupStateCodec.id(out, value.organization().sponsor().id());
+        out.writeByte(value.organization().sponsor().kind().wireTag());
+        ShipmentStateCodec.endpoint(out, value.organization().home());
+        out.writeByte(switch (value.organization().itinerary()) { case SOURCE_DELIVERY -> 1; case DESTINATION_COLLECTION -> 2; });
         UnitGroupStateCodec.surface(out, value.homeRendezvous()); UnitGroupStateCodec.surface(out, value.destinationRendezvous());
         stage(out, value.stage()); out.writeLong(value.revision());
         out.writeBoolean(value.financialBudgetId().isPresent());
@@ -27,7 +31,7 @@ final class TransportMissionCodec {
         var id = UnitGroupStateCodec.id(in); var group = UnitGroupStateCodec.id(in);
         int n = UnitGroupStateCodec.count(in, 32); var shipments = new ArrayList<io.farfrontier.palemirror.frontier.v3.api.SubjectId>();
         for (int i = 0; i < n; i++) shipments.add(UnitGroupStateCodec.id(in));
-        return new TransportMission(id, group, shipments, ShipmentStateCodec.endpoint(in), ShipmentStateCodec.endpoint(in),
+        return new TransportMission(id, group, shipments, ShipmentStateCodec.endpoint(in), ShipmentStateCodec.endpoint(in), organization(in),
                 UnitGroupStateCodec.surface(in), UnitGroupStateCodec.surface(in), stage(in), in.readLong(),
                 in.readBoolean() ? java.util.Optional.of(UnitGroupStateCodec.id(in)) : java.util.Optional.empty(),
                 in.readBoolean() ? java.util.Optional.of(ExpeditionSupplyLoadCodec.read(in)) : java.util.Optional.empty(),
@@ -35,11 +39,22 @@ final class TransportMissionCodec {
                 in.readBoolean() ? java.util.Optional.of(UnitResourceTransferCodec.read(in)) : java.util.Optional.empty(),
                 in.readBoolean() ? java.util.Optional.of(GoodsSpotPurchaseCodec.read(in)) : java.util.Optional.empty());
     }
+    private static io.farfrontier.palemirror.frontier.v3.model.TransportOrganization organization(DataInputStream in) throws IOException {
+        var sponsor = new io.farfrontier.palemirror.frontier.v3.model.EconomicIdentity(UnitGroupStateCodec.id(in),
+                io.farfrontier.palemirror.frontier.v3.model.FrontierWireTags.require(io.farfrontier.palemirror.frontier.v3.model.EconomicOwnerKind.class, in.readUnsignedByte()));
+        var home = ShipmentStateCodec.endpoint(in);
+        var itinerary = switch (in.readUnsignedByte()) { case 1 -> io.farfrontier.palemirror.frontier.v3.model.TransportOrganization.Itinerary.SOURCE_DELIVERY;
+            case 2 -> io.farfrontier.palemirror.frontier.v3.model.TransportOrganization.Itinerary.DESTINATION_COLLECTION;
+            default -> throw new IllegalArgumentException("unknown transport itinerary tag"); };
+        return new io.farfrontier.palemirror.frontier.v3.model.TransportOrganization(sponsor, home, itinerary);
+    }
     static void stage(DataOutputStream out, TransportMission.Stage stage) throws IOException {
-        out.writeByte(switch (stage) { case LOADING -> 1; case OUTBOUND -> 2; case UNLOADING -> 3; case RETURNING -> 4; case COMPLETE -> 5; });
+        out.writeByte(switch (stage) { case LOADING -> 1; case OUTBOUND -> 2; case UNLOADING -> 3; case RETURNING -> 4; case COMPLETE -> 5; case PREPARING -> 6; case TO_SOURCE -> 7; });
     }
     static TransportMission.Stage stage(DataInputStream in) throws IOException {
         return switch (in.readUnsignedByte()) { case 1 -> TransportMission.Stage.LOADING; case 2 -> TransportMission.Stage.OUTBOUND; case 3 -> TransportMission.Stage.UNLOADING; case
-                4 -> TransportMission.Stage.RETURNING; case 5 -> TransportMission.Stage.COMPLETE; default -> throw new IllegalArgumentException("unknown transport stage tag"); };
+                4 -> TransportMission.Stage.RETURNING; case 5 -> TransportMission.Stage.COMPLETE;
+                case 6 -> TransportMission.Stage.PREPARING; case 7 -> TransportMission.Stage.TO_SOURCE;
+                default -> throw new IllegalArgumentException("unknown transport stage tag"); };
     }
 }

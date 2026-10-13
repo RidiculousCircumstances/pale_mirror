@@ -61,6 +61,7 @@ public final class DiagnosticProducerContract {
         "frontier.pedestrian_planning_ready",
         "frontier.settlement_work_policy_changed",
         "frontier.goods_order_placed", "frontier.goods_trade_reserved", "frontier.goods_trade_accepted", "frontier.goods_trade_cancelled", "frontier.goods_participant_reviewed",
+        "frontier.goods_order_withdrawn", "frontier.goods_participant_prices_reviewed", "frontier.goods_trade_collected",
         "frontier.goods_trade_claim_partitioned",
         "frontier.goods_trade_retired",
         "frontier.extraction_geology_invalidated.v2", "frontier.extraction_area_extended.v3", "frontier.extraction_frontier_opened",

@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.LinkedHashMap;
 import java.util.HashSet;
 
@@ -57,6 +58,21 @@ public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, T
             throw new IllegalArgumentException("shipment transition has a stale predecessor");
         var next = new LinkedHashMap<>(shipments); next.put(replacement.id(), replacement); return new ShipmentState(next, missions);
     }
+    public ShipmentState purchased(Shipment previous, ResourceClaimDelegation grant, Map<SubjectId, Integer> lots) {
+        if (!previous.equals(shipments.get(previous.id())) || previous.status() != Shipment.Status.CARRYING
+                || previous.pendingPhysicalStep().isPresent() || previous.reception().isPresent()
+                || previous.authorization().kind() != ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT
+                || grant.kind() != ResourceClaimDelegation.Kind.OWNED_GOODS_SHIPMENT
+                || !grant.executorId().equals(previous.id()) || grant.authorizationRevision() != 1
+                || previous.quantity() != lots.values().stream().reduce(0, Math::addExact))
+            throw new IllegalArgumentException("paid pickup changed its exact carrying predecessor or quantity");
+        var next = new LinkedHashMap<>(shipments);
+        next.put(previous.id(), new Shipment(previous.id(), grant, previous.execution(), previous.sender(), previous.receiver(),
+                previous.sourceAccountId(), previous.carriedAccountId(), previous.receivingAccountId(), previous.itemKind(), lots,
+                previous.status(), Math.addExact(previous.revision(), 1), Optional.empty(), Optional.empty(),
+                previous.transportMissionId(), previous.mobileContainerId()));
+        return new ShipmentState(next, missions);
+    }
     public ShipmentState retire(SubjectId id, long revision) {
         Shipment current = shipments.get(id);
         if (current == null || !current.terminal() || current.revision() != revision || current.reception().isPresent())
@@ -84,7 +100,7 @@ public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, T
         return new ShipmentState(next, missions);
     }
     public ShipmentState admitMission(TransportMission mission) {
-        if (missions.containsKey(mission.id()) || mission.stage() != TransportMission.Stage.LOADING || mission.revision() != 1)
+        if (missions.containsKey(mission.id()) || !mission.preparingSupplies() || mission.revision() != 1)
             throw new IllegalArgumentException("mission admission requires a fresh declaration");
         var next = new LinkedHashMap<>(missions); next.put(mission.id(), mission); return new ShipmentState(shipments, next);
     }

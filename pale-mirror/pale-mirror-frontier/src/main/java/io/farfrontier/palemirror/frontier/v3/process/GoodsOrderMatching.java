@@ -8,9 +8,8 @@ import java.util.*;
 final class GoodsOrderMatching {
     record Match(GoodsTradeContract contract, List<GoodsTradeStockAllocation> allocations) { }
     record Search(Optional<Match> match, String disposition, int checkedPairs) { }
-    private record Pair(GoodsTradeParty seller, GoodsTradeParty buyer, String commodity) { }
     static Search first(FrontierWorldState state, GoodsParticipant reviewer, long now) {
-        return first(state, reviewer, now, Optional.empty(), Optional.empty());
+        return first(state, reviewer, now, Optional.empty(), Optional.of(reviewer.party()));
     }
     static Search first(FrontierWorldState state, GoodsParticipant reviewer, long now,
                         Optional<GoodsTradeParty> selectedSeller, Optional<GoodsTradeParty> selectedBuyer) {
@@ -19,26 +18,17 @@ final class GoodsOrderMatching {
     static Search first(FrontierWorldState state, GoodsParticipant reviewer, long now,
                         Optional<GoodsTradeParty> selectedSeller, Optional<GoodsTradeParty> selectedBuyer, Set<String> excludedCommodities) {
         var trade = state.companies().goodsTrade();
-        var candidates = trade.orders().values().stream().filter(order -> order.expiresAtTick() >= now
-                && order.availableQuantity() > 0 && (order.party().equals(reviewer.party()) || order.counterparty().equals(reviewer.party())))
-                .sorted(Comparator.comparing(GoodsTradeOrder::expiresAtTick).thenComparing(GoodsTradeOrder::id)).toList();
-        var bids = new HashMap<Pair, List<GoodsTradeOrder>>();
-        for (var order : candidates) if (order.side() == GoodsTradeOrder.Side.BUY)
-            bids.computeIfAbsent(new Pair(order.counterparty(), order.party(), order.itemKind()), ignored -> new ArrayList<>()).add(order);
-        var offers = new ArrayList<>(candidates.stream().filter(order -> order.side() == GoodsTradeOrder.Side.SELL).toList());
-        if (!offers.isEmpty()) Collections.rotate(offers, -(int) (reviewer.reviewRevision() % offers.size()));
+        var book = new io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook(trade.orders().values(), now);
+        var offers = book.buyers().stream().filter(buyer -> selectedBuyer.filter(value -> !value.equals(buyer)).isEmpty())
+                .flatMap(buyer -> book.offers(buyer, selectedSeller, excludedCommodities).stream())
+                .filter(pair -> pair.buy().party().equals(reviewer.party()) || pair.sell().party().equals(reviewer.party())).toList();
         var cachedIntents = new HashMap<SubjectId, List<GoodsParticipantPolicy.Intent>>();
         String disposition = "NO_MUTUAL_KNOWN_QUOTE"; int checked = 0;
-        for (var sell : offers) {
-            if (sell.side() != GoodsTradeOrder.Side.SELL) continue;
-            if (excludedCommodities.contains(sell.itemKind())) continue;
-            if (selectedSeller.filter(party -> !party.equals(sell.party())).isPresent()
-                    || selectedBuyer.filter(party -> !party.equals(sell.counterparty())).isPresent()) continue;
+        for (var pair : offers) {
+            var sell = pair.sell();
             var seller = trade.participants().participants().get(sell.party().id());
             if (seller == null || !seller.party().equals(sell.party())) continue;
-            var compatibleBids = new ArrayList<>(bids.getOrDefault(new Pair(sell.party(), sell.counterparty(), sell.itemKind()), List.of()));
-            if (!compatibleBids.isEmpty()) Collections.rotate(compatibleBids, -(int) (reviewer.reviewRevision() % compatibleBids.size()));
-            for (var buy : compatibleBids) {
+            var buy = pair.buy();
                 if (checked >= state.bootstrap().ruleset().goodsTrade().maximumPairReviews())
                     return new Search(Optional.empty(), "SEARCH_BUDGET; last=" + disposition, checked);
                 checked++;
@@ -75,13 +65,12 @@ final class GoodsOrderMatching {
                             selected.lotQuantities(), ClaimPurpose.GOODS_TRADE);
                     boolean hot = ReferenceContainerCustody.hasLiveCustody(state, sell.containerId());
                     long epoch = hot ? state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(sell.containerId())).authorityEpoch() : 0;
-                    var contract = new GoodsTradeContract(contractId, sell.id(), buy.id(), sell.party(), buy.party(),
+                    var contract = new GoodsTradeContract(contractId, sell.id(), buy.id(), sell.party(), buy.party(), new GoodsTradeFulfillment(GoodsTradeFulfillment.Mode.SELLER_DELIVERY, sell.party()),
                             sell.containerId(), buy.containerId(), sell.itemKind(), quantity, price,
                             new SubjectId("reservation:goods/" + stem), 0, Map.of(claimId, quantity), Map.of());
                     return new Search(Optional.of(new Match(contract, List.of(new GoodsTradeStockAllocation(selected.accountId(), claim,
                             hot ? GoodsTradeStockAllocation.Authority.PHYSICAL : GoodsTradeStockAllocation.Authority.COLD, epoch)))), "MATCH", checked);
                 }
-            }
         }
         return new Search(Optional.empty(), disposition, checked);
     }

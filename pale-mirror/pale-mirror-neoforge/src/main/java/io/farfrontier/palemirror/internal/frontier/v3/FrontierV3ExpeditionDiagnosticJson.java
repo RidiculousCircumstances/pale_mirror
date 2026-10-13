@@ -10,7 +10,7 @@ final class FrontierV3ExpeditionDiagnosticJson {
     private FrontierV3ExpeditionDiagnosticJson() { }
     static String render(FrontierScheduleView checkpoint, FrontierWorldState state, GoodsParticipant participant) {
         var home = participant.party().id();
-        var missions = state.shipments().missions().values().stream().filter(m -> m.sender().settlementId().equals(home))
+        var missions = state.shipments().missions().values().stream().filter(m -> m.organization().home().settlementId().equals(home))
                 .sorted(Comparator.comparing(TransportMission::id)).toList();
         var assets = state.transportFleet().assets().values().stream().filter(a -> a.homeSettlementId().equals(home))
                 .sorted(Comparator.comparing(a -> a.actorId())).toList();
@@ -22,14 +22,17 @@ final class FrontierV3ExpeditionDiagnosticJson {
             var readiness = io.farfrontier.palemirror.frontier.v3.process.UnitGroupProcess.navigationReadiness(state, group);
             return "{\"id\":" + string(m.id().value()) + ",\"group\":" + string(m.groupId().value())
                     + ",\"stage\":" + string(m.stage().name()) + ",\"revision\":" + m.revision()
+                    + ",\"itinerary\":" + string(m.organization().itinerary().name())
+                    + ",\"sponsor\":" + string(m.organization().sponsor().id().value())
+                    + ",\"home\":" + string(m.organization().home().settlementId().value())
                     + ",\"goalOrdinal\":" + group.goalOrdinal() + ",\"groupPhase\":" + string(group.phase().name())
                     + ",\"memberCount\":" + group.members().size() + ",\"parcelCount\":" + m.shipmentIds().size()
                     + ",\"plannedPersonalFood\":" + planned + ",\"loadedFood\":" + loaded
                     + ",\"provisioned\":" + m.supplies().map(s -> s.complete()).orElse(false)
                     + ",\"refillPending\":" + m.replenishment().isPresent()
-                    + ",\"materialPreparation\":" + (m.stage() != TransportMission.Stage.LOADING ? "null"
+                    + ",\"materialPreparation\":" + (!m.preparingSupplies() ? "null"
                         : m.supplies().flatMap(s -> s.next().filter(a -> a.pending().isEmpty())
-                        .map(a -> FrontierV3MaterialPreparationDiagnosticJson.render(state, s.order(m.id(), m.sender(), a))))
+                        .map(a -> FrontierV3MaterialPreparationDiagnosticJson.render(state, s.order(m.id(), m.organization().home(), a))))
                         .orElse("null"))
                     + ",\"navigationStatus\":" + string(readiness.status()) + ",\"navigationReason\":" + string(readiness.reason())
                     + ",\"memberView\":" + string(group.id().value())
@@ -55,9 +58,13 @@ final class FrontierV3ExpeditionDiagnosticJson {
         }
         String cargo = manifestGoods.entrySet().stream().map(e -> string(e.getKey()) + ":" + e.getValue())
                 .collect(Collectors.joining(","));
+        String stages = java.util.Arrays.stream(TransportMission.Stage.values())
+                .map(stage -> string(stage.name()) + ":" + missions.stream().filter(m -> m.stage() == stage).count())
+                .collect(Collectors.joining(","));
         return "{\"activeMissions\":" + missions.size() + ",\"reservedAnimals\":" + assets.stream().filter(a -> a.missionId().isPresent()).count()
                 + ",\"activeMembers\":" + missions.stream().mapToInt(m -> state.unitGroups().groups().get(m.groupId()).members().size()).sum()
                 + ",\"manifestGoods\":{" + cargo + "}"
+                + ",\"stages\":{" + stages + "}"
                 + ",\"provisionedOutbound\":" + missions.stream().filter(m -> m.stage() == TransportMission.Stage.OUTBOUND
                     && m.supplies().map(s -> s.complete()).orElse(false)).count()
                 + ",\"returningMissions\":" + missions.stream().filter(m -> m.stage() == TransportMission.Stage.RETURNING).count()

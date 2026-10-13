@@ -2,6 +2,28 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 /** Commercial owner supplies transport consent without exporting price logic into logistics. */
 final class GoodsShipmentAuthorization implements ShipmentAuthorizationPort {
+    @Override public boolean departureReady(Shipment shipment, TransportOrganization organization) {
+        // Collected goods must first leave commercial custody through the exact
+        // paid-title transition; delivery keeps that obligation until reception.
+        return organization.itinerary() == TransportOrganization.Itinerary.SOURCE_DELIVERY;
+    }
+    @Override public void validateMission(FrontierWorldState state, Shipment shipment, TransportOrganization organization) {
+        var contract = state.companies().goodsTrade().contracts().get(shipment.authorization().claimantId());
+        if (contract == null) throw new IllegalArgumentException("commercial mission lost its contract");
+        var fulfillment = contract.fulfillment();
+        var expected = switch (fulfillment.mode()) {
+            case SELLER_DELIVERY -> TransportOrganization.Itinerary.SOURCE_DELIVERY;
+            case BUYER_COLLECTION -> TransportOrganization.Itinerary.DESTINATION_COLLECTION;
+        };
+        if (organization.itinerary() != expected || !organization.home().equals(
+                fulfillment.mode() == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? shipment.sender() : shipment.receiver()))
+            throw new IllegalArgumentException("transport itinerary contradicts its immutable commercial fulfillment");
+        // A company may use its settlement's fleet, without changing who owns the sale or its terms.
+        var organizer = state.companies().goodsTrade().participants().participants().get(fulfillment.organizer().id());
+        if (organizer == null || !organizer.party().equals(fulfillment.organizer())
+                || !organizer.endpoint().withStation(organization.home().station()).equals(organization.home()))
+            throw new IllegalArgumentException("commercial organizer has no exact declared home");
+    }
     @Override public FrontierWorldStateUpdate allocationDisposed(FrontierWorldState state, Shipment shipment, ExactInventory inventory) {
         validate(state, shipment, false);
         var contract = state.companies().goodsTrade().contracts().get(shipment.authorization().claimantId());
@@ -49,6 +71,8 @@ final class GoodsShipmentAuthorization implements ShipmentAuthorizationPort {
                 || !contract.receiverContainerId().equals(shipment.receiver().containerId())
                 || (admission ? grant.authorizationRevision() != contract.revision() : grant.authorizationRevision() > contract.revision()))
             throw new IllegalArgumentException("shipment lacks the exact commercial allocation, endpoints or authorization revision");
+        shipment.transportMissionId().map(state.shipments().missions()::get)
+                .ifPresent(mission -> validateMission(state, shipment, mission.organization()));
     }
     @Override public FrontierWorldStateUpdate allocationPartitioned(FrontierWorldState state, Shipment shipment, ResourceClaimPartition partition) {
         validate(state, shipment, false);

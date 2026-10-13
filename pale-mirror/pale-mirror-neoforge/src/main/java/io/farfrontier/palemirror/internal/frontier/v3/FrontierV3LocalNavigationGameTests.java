@@ -30,6 +30,40 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class FrontierV3LocalNavigationGameTests {
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
             template = "bastion/treasure/big_air_full", timeoutTicks = 40)
+    public static void pushedParkedPedestrianRemainsAnObstacleButSlowTravellerKeepsItsHeadway(GameTestHelper helper) {
+        var level = helper.getLevel(); var supports = new LinkedHashSet<BlockPosition>();
+        for (int x = 4; x <= 12; x++) for (int z = 3; z <= 7; z++) {
+            var floor = helper.absolutePos(new BlockPos(x, 30, z));
+            level.setBlock(floor, Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(floor.above(), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(floor.above(2), Blocks.AIR.defaultBlockState(), 3);
+            supports.add(new BlockPosition(floor.getX(), floor.getY(), floor.getZ()));
+        }
+        var target = helper.absolutePos(new BlockPos(12, 31, 5));
+        var scope = new FrontierV3NavigationScope.Restricted(new LocalNavigationEnvelope(supports));
+        Villager actor = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(4.5, 31, 5.5));
+        Villager peer = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(6.5, 31, 5.5));
+        helper.runAfterDelay(1, () -> {
+            FrontierV3BodyObservation.refreshGroundContact(level, actor);
+            FrontierV3BodyObservation.refreshGroundContact(level, peer);
+            peer.getNavigation().stop(); peer.setDeltaMovement(.001, 0, 0);
+            var parked = FrontierV3PedestrianTraffic.query(level, actor, target, scope);
+            helper.assertTrue(parked.blockers().stream().anyMatch(body -> body.id().equals(peer.getUUID())),
+                    "a pushed parked body cannot disappear from detour/courtesy evidence");
+            helper.assertTrue(FrontierV3PhysicalPathPolicy.reject(level, parked.path(), scope).isEmpty(),
+                    "the ordinary native graph finds a legal detour around the parked pedestrian");
+            var peerPath = peer.getNavigation().createPath(target, 0);
+            helper.assertTrue(peerPath != null && peer.getNavigation().moveTo(peerPath, .01), "peer has an actual unfinished travel leg");
+            var travelling = FrontierV3PedestrianTraffic.query(level, actor, target, scope);
+            helper.assertTrue(travelling.blockers().stream().noneMatch(body -> body.id().equals(peer.getUUID())),
+                    "genuinely slow travel keeps following semantics without a velocity threshold");
+            FrontierV3GoalNavigation.stop(actor); FrontierV3GoalNavigation.stop(peer);
+            actor.discard(); peer.discard(); helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/treasure/big_air_full", timeoutTicks = 40)
     public static void declaredStepProfileFindsNativeDetourInsteadOfTheForbiddenRise(GameTestHelper helper) {
         var level = helper.getLevel();
         for (int x = 0; x <= 12; x++) for (int z = 0; z <= 12; z++)

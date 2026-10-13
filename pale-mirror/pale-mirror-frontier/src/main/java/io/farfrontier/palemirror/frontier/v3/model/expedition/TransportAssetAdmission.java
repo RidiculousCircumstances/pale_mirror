@@ -13,10 +13,10 @@ public final class TransportAssetAdmission {
                 && ActorInventoryInteractionFences.pendingOwner(state, asset.actorId()).isEmpty()
                 && ActorExecutionCoordinator.declaredActorWorkAdmission(state, asset.actorId()).permitted();
     }
-    public static void requireCourier(FrontierWorldState state, Shipment shipment) {
+    public static void requireCourier(FrontierWorldState state, Shipment shipment, SubjectId home) {
         var asset = state.transportFleet().require(shipment.execution().actorId());
         if (!shipment.mobileContainerId().equals(Optional.of(asset.containerId())) || shipment.transportMissionId().isEmpty()
-                || !available(state, asset, shipment.sender().settlementId()))
+                || !available(state, asset, home))
             throw new IllegalArgumentException("mobile shipment lacks an available exact finite transport capability");
     }
 }

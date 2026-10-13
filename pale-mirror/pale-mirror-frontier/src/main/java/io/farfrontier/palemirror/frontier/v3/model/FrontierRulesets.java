@@ -42,6 +42,7 @@ public final class FrontierRulesets {
     private static final FrontierRuleset HIGH_RESERVE_QUARRY_GRAYBOX = quarryReserve(AVAILABLE_FRONT_QUARRY_GRAYBOX);
     private static final FrontierRuleset FUELLED_QUARRY_GRAYBOX = fuelledQuarry(HIGH_RESERVE_QUARRY_GRAYBOX);
     private static final FrontierRuleset SUPPLY_QUARRY_GRAYBOX = supplyQuarry(FUELLED_QUARRY_GRAYBOX);
+    private static final FrontierRuleset MARKET_QUARRY_GRAYBOX = marketQuarry(SUPPLY_QUARRY_GRAYBOX);
     /** Existing worlds retain their exact selector and timing; they are never silently retuned. */
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R6 = ruleset("frontier-v3-production-r6", 8, 1L, 20L, 1L);
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R4 = ruleset("frontier-v3-production-r4", 6, 1L, 20L, 1L);
@@ -55,6 +56,7 @@ public final class FrontierRulesets {
      */
     private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L, 200L);
     private static final Map<String, FrontierRuleset> INSTALLED = Map.ofEntries(
+            Map.entry(MARKET_QUARRY_GRAYBOX.id(), MARKET_QUARRY_GRAYBOX),
             Map.entry(SUPPLY_QUARRY_GRAYBOX.id(), SUPPLY_QUARRY_GRAYBOX),
             Map.entry(TERRACED_QUARRY_GRAYBOX.id(), TERRACED_QUARRY_GRAYBOX),
             Map.entry(AVAILABLE_FRONT_QUARRY_GRAYBOX.id(), AVAILABLE_FRONT_QUARRY_GRAYBOX),
@@ -80,6 +82,17 @@ public final class FrontierRulesets {
     public static FrontierRuleset production() { return PRODUCTION; }
     public static FrontierRuleset fuelledQuarryGraybox() { return FUELLED_QUARRY_GRAYBOX; }
     public static FrontierRuleset supplyQuarryGraybox() { return SUPPLY_QUARRY_GRAYBOX; }
+    public static FrontierRuleset marketQuarryGraybox() { return MARKET_QUARRY_GRAYBOX; }
+
+    private static FrontierRuleset marketQuarry(FrontierRuleset base) {
+        var trade = base.goodsTrade().withPricing(io.farfrontier.palemirror.frontier.v3.model.market.MarketPricingRules.initial())
+                .withPriceSeeds(GoodsPolicyKind.PUBLIC_SETTLEMENT, "minecraft:bread", FixedScalar.whole(4), FixedScalar.whole(6))
+                .withPriceSeeds(GoodsPolicyKind.OWN_ACCOUNT_COMPANY, "minecraft:bread", FixedScalar.whole(4), FixedScalar.whole(6));
+        return new FrontierRuleset("frontier-v3-quarry-graybox-r11", 27, base.cadence(), base.spatial(), base.rates(),
+                base.facilityCapacity(), base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
+                base.workCatalog(), trade,
+                base.initialSettlementStocks(), base.labour(), base.expedition(), base.extraction(), base.execution(), base.production(), base.fields());
+    }
 
     private static FrontierRuleset supplyQuarry(FrontierRuleset base) {
         var planning = new io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanningRules(Map.of(

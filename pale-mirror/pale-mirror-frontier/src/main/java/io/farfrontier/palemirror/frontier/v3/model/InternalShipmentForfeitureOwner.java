@@ -15,7 +15,7 @@ final class InternalShipmentForfeitureOwner implements FungibleClaimForfeitureOw
                 throw new IllegalArgumentException("internal withdrawal precedes accounted resource loss");
             transaction = ShipmentStateSupport.withdrawSourceClaim(state, claim.id(), transaction);
             for (var shipment : transaction.shipments().shipments().values()) {
-                if (shipment.authorization().kind() == ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT
+                if ((shipment.authorization().kind() == ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT || shipment.authorization().kind() == ResourceClaimDelegation.Kind.OWNED_GOODS_SHIPMENT)
                         && shipment.reception().filter(receipt -> receipt.claimId().equals(claim.id())).isPresent())
                     transaction = transaction.withShipments(transaction.shipments().replace(shipment,
                             shipment.acknowledged(shipment.reception().orElseThrow().id())), transaction.executions(), transaction.movements());

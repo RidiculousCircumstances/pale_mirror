@@ -7,10 +7,12 @@ import java.util.function.BiConsumer;
 final class ActorClaimDelegationComposition {
     private static final Map<ResourceClaimDelegation.Kind, BiConsumer<FrontierWorldState, ActorResourceItemOrder>> PORTS = Map.of(
             ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT, ShipmentStateSupport::validateOrder,
-            ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT, ShipmentStateSupport::validateOrder);
+            ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT, ShipmentStateSupport::validateOrder,
+            ResourceClaimDelegation.Kind.OWNED_GOODS_SHIPMENT, ShipmentStateSupport::validateOrder);
     private static final Map<ResourceClaimDelegation.Kind, java.util.function.BiFunction<FrontierWorldState, ActorResourceItemOrder, ActorItemTransferPreparation>> PREPARATIONS = Map.of(
             ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT, ShipmentStateSupport::prepareTransfer,
-            ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT, ShipmentStateSupport::prepareTransfer);
+            ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT, ShipmentStateSupport::prepareTransfer,
+            ResourceClaimDelegation.Kind.OWNED_GOODS_SHIPMENT, ShipmentStateSupport::prepareTransfer);
     static {
         if (!PORTS.keySet().equals(java.util.EnumSet.allOf(ResourceClaimDelegation.Kind.class)) || !PORTS.keySet().equals(PREPARATIONS.keySet()))
             throw new IllegalArgumentException("delegated item authority lacks an exact validation/preparation owner");

@@ -44,7 +44,7 @@ public final class GoodsParticipantDeclarations {
                         .noneMatch(peer -> peer.party().equals(publicParty(home.id())))) continue;
             var known = new ArrayList<>(participant.known()); known.add(new GoodsParticipant.Counterparty(ownParty, endpoint(home)));
             entry.setValue(new GoodsParticipant(participant.party(), participant.policy(), participant.endpoint(),
-                    known, participant.reviewRevision(), participant.decision(), participant.reviewedAtTick()));
+                    known, participant.reviewRevision(), participant.decision(), participant.reviewedAtTick(), participant.prices()));
         }
         return new GoodsParticipantState(map);
     }

@@ -26,17 +26,17 @@ final class ExpeditionSupplyProcessModule implements FrontierWorldProcessModule 
             case ExpeditionTransferDeathObserved v -> v.missionId();
             default -> throw new IllegalArgumentException("supplies reject a foreign command");
         };
-        try { reducePayload(state, mission, command.payload()); }
+        try { reducePayload(state, mission, command.payload(), command.submittedAt().ticks()); }
         catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         var events = new ArrayList<ProposedEvent>(); events.add(new ProposedEvent(mission, command.payload()));
         events.add(TransportMissionProcess.wake(mission, command.submittedAt().ticks()));
         if (command.payload() instanceof ExpeditionSupplyHotLoaded)
-            events.addAll(loadingContinuations(reducePayload(state, mission, command.payload()), mission, command.submittedAt().ticks()));
+            events.addAll(loadingContinuations(reducePayload(state, mission, command.payload(), command.submittedAt().ticks()), mission, command.submittedAt().ticks()));
         if (command.payload() instanceof ExpeditionTransferDeathObserved receipt
                 && state.actorLocations().get(receipt.step().observation().actuation().execution().actorId()).condition().status() == ActorLifeStatus.ALIVE)
             events.add(ResidentActivityProcess.wakeAfterActivity(receipt.step().observation().actuation().execution().actorId(), command.submittedAt().ticks()));
         if (command.payload() instanceof ExpeditionReplenishmentHotLoaded) {
-            var next = reducePayload(state, mission, command.payload());
+            var next = reducePayload(state, mission, command.payload(), command.submittedAt().ticks());
             events.addAll(replenishmentClearance(state, next, mission, command.submittedAt().ticks()));
             events.add(ResidentActivityProcess.wakeAfterActivity(state.shipments().missions().get(mission).replenishment().orElseThrow().actorId(), command.submittedAt().ticks()));
         }
@@ -65,9 +65,9 @@ final class ExpeditionSupplyProcessModule implements FrontierWorldProcessModule 
             if (!event.subject().equals(value.missionId())) throw new IllegalArgumentException("foreign replanning subject");
             return ExpeditionSupplyAuthority.replanned(state, value, event.instant().ticks());
         }
-        return reducePayload(state, event.subject(), event.payload());
+        return reducePayload(state, event.subject(), event.payload(), event.instant().ticks());
     }
-    private static FrontierWorldState reducePayload(FrontierWorldState state, SubjectId subject, FrontierPayload payload) {
+    private static FrontierWorldState reducePayload(FrontierWorldState state, SubjectId subject, FrontierPayload payload, long now) {
         SubjectId mission = switch (payload) {
             case ExpeditionSupplyColdLoaded v -> v.missionId(); case ExpeditionSupplyHotPrepared v -> v.missionId();
             case ExpeditionSupplyHotLoaded v -> v.missionId(); case ExpeditionReplenishmentColdLoaded v -> v.missionId();
@@ -80,10 +80,10 @@ final class ExpeditionSupplyProcessModule implements FrontierWorldProcessModule 
             case ExpeditionSupplyColdLoaded v -> ExpeditionSupplyAuthority.coldLoaded(state, v.missionId(), v.claimId());
             case ExpeditionSupplyHotPrepared v -> ExpeditionSupplyAuthority.prepare(state, v.missionId(), v.claimId(), v.step());
             case ExpeditionSupplyHotLoaded v -> ExpeditionSupplyAuthority.observed(state, v.missionId(), v.claimId(), v.step(), v.remainingSource(), v.destination());
-            case ExpeditionReplenishmentColdLoaded v -> ExpeditionReplenishmentAuthority.cold(state, v.missionId(), v.claimId());
+            case ExpeditionReplenishmentColdLoaded v -> ExpeditionReplenishmentAuthority.cold(state, v.missionId(), v.claimId(), now);
             case ExpeditionReplenishmentHotPrepared v -> ExpeditionReplenishmentAuthority.prepare(state, v.missionId(), v.claimId(), v.step());
-            case ExpeditionReplenishmentHotLoaded v -> ExpeditionReplenishmentAuthority.observed(state, v.missionId(), v.claimId(), v.step(), v.remainingSource(), v.destination());
-            case ExpeditionTransferDeathObserved v -> ExpeditionTransferDeathAuthority.observed(state, v);
+            case ExpeditionReplenishmentHotLoaded v -> ExpeditionReplenishmentAuthority.observed(state, v.missionId(), v.claimId(), v.step(), v.remainingSource(), v.destination(), now);
+            case ExpeditionTransferDeathObserved v -> ExpeditionTransferDeathAuthority.observed(state, v, now);
             default -> throw new IllegalArgumentException("supplies reject a foreign payload");
         };
     }

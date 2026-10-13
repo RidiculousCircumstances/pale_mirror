@@ -13,6 +13,12 @@ final class TradeStockSupply implements StockSupplyPort {
             result.add(new Commitment(contract.id(), contract.buyer().id(), contract.itemKind(), contract.remainingQuantity(), 0));
             result.add(new Commitment(contract.id(), contract.seller().id(), contract.itemKind(), 0, contract.remainingQuantity()));
         }
+        for (var shipment : state.shipments().shipments().values()) {
+            if (shipment.authorization().kind() != ResourceClaimDelegation.Kind.OWNED_GOODS_SHIPMENT) continue;
+            long incoming = shipment.terminal() ? 0 : shipment.quantity();
+            incoming += shipment.reception().map(ShipmentReception::quantity).orElse(0);
+            if (incoming > 0) result.add(new Commitment(shipment.id(), shipment.authorization().claimantId(), shipment.itemKind(), incoming, 0));
+        }
         // A bounded sales opportunity is production demand, not a sale/claim/payment.
         // Without it, producing exactly the local target can never create the first surplus quote.
         var rules = state.bootstrap().ruleset().goodsTrade();
@@ -28,7 +34,7 @@ final class TradeStockSupply implements StockSupplyPort {
                         .decide(GoodsParticipantView.read(state, buyer), rules));
                 int wanted = intents.stream().filter(intent -> intent.side() == GoodsTradeOrder.Side.BUY
                         && intent.itemKind().equals(commodity.itemKind())
-                        && intent.limit().compareTo(commodity.minimumSellPrice()) >= 0)
+                        && intent.limit().compareTo(GoodsParticipantPricing.ask(seller, commodity)) >= 0)
                         .mapToInt(GoodsParticipantPolicy.Intent::quantity).sum();
                 requested = Math.min(rules.maximumBatch(), Math.addExact(requested, wanted));
             }

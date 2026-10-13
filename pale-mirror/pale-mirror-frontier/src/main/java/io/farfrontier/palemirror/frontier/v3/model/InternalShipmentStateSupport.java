@@ -37,9 +37,9 @@ public final class InternalShipmentStateSupport {
         var grant = shipment.authorization(); var ledger = state.inventory().fungibleResources();
         var claim = ledger.claims().get(receipt.claimId()); var account = ledger.accounts().get(shipment.receivingAccountId());
         if (!subject.equals(shipment.id()) || shipment.revision() != event.expectedRevision()
-                || grant.kind() != ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT || !receipt.id().equals(event.receiptId())
+                || (grant.kind() != ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT && grant.kind() != ResourceClaimDelegation.Kind.OWNED_GOODS_SHIPMENT) || !receipt.id().equals(event.receiptId())
                 || claim == null || claim.purpose() != ClaimPurpose.INTERNAL_LOGISTICS
-                || !claim.claimantId().equals(grant.claimantId()) || !claim.economicOwnerId().equals(shipment.receiver().settlementId())
+                || !claim.claimantId().equals(grant.claimantId()) || !claim.economicOwnerId().equals(grant.claimantId())
                 || !claim.itemKind().equals(shipment.itemKind()) || !claim.lotQuantities().equals(receipt.lotQuantities())
                 || account == null || !account.custody().equals(new ResourceCustody.Container(shipment.receiver().containerId()))
                 || account.claimQuantities().getOrDefault(claim.id(), 0) != receipt.quantity())

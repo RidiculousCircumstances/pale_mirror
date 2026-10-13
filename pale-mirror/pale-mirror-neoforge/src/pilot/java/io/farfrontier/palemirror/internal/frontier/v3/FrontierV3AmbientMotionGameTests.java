@@ -46,7 +46,7 @@ public final class FrontierV3AmbientMotionGameTests {
             template = "bastion/mobs/empty", timeoutTicks = 30)
     public static void indexedCommonBodyConfirmationPrecedesAnyActivityReadiness(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        BlockPos feet = helper.absolutePos(new BlockPos(2, 8, 2));
+        BlockPos feet = helper.absolutePos(new BlockPos(0, 1, 0));
         var base = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:common-indexed-admission"), 91L);
         var actor = new SubjectId("resident:1-1");
         var origin = base.initialState().actorLocations().get(actor).body();

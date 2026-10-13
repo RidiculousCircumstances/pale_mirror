@@ -105,7 +105,8 @@ class ConsolidatedGoodsTradeTest {
         var state = initial(); var home = new SubjectId("settlement:1");
         var buyer = state.companies().goodsTrade().participants().participants().get(home).known().getFirst().party().id();
         state = state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans()
-                .withWorkPermissions(home, ResidentWorkPermissions.none())));
+                .withWorkPermissions(home, ResidentWorkPermissions.none())
+                .withWorkPermissions(buyer, ResidentWorkPermissions.none())));
         var inventory = state.inventory();
         state = review(state, home, 400); state = review(state, buyer, 401);
         assertEquals(inventory, state.inventory());

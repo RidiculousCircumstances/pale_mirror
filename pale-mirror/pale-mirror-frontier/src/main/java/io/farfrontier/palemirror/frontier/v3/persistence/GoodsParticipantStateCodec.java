@@ -15,6 +15,7 @@ final class GoodsParticipantStateCodec {
             out.writeInt(participant.known().size());
             for (var peer : participant.known()) { party(out, peer.party()); endpoint(out, peer.endpoint()); }
             out.writeLong(participant.reviewRevision()); out.writeUTF(participant.decision()); out.writeLong(participant.reviewedAtTick());
+            ParticipantPriceCodec.write(out, participant.prices());
         }
     }
     static GoodsParticipantState read(DataInputStream in) throws IOException {
@@ -24,7 +25,7 @@ final class GoodsParticipantStateCodec {
             var party = party(in); var policy = GoodsPolicyKind.fromWireTag(in.readUnsignedByte()); var endpoint = endpoint(in);
             var peers = new ArrayList<GoodsParticipant.Counterparty>();
             for (int n = bounded(in, 16); n > 0; n--) peers.add(new GoodsParticipant.Counterparty(party(in), endpoint(in)));
-            var participant = new GoodsParticipant(party, policy, endpoint, peers, in.readLong(), in.readUTF(), in.readLong());
+            var participant = new GoodsParticipant(party, policy, endpoint, peers, in.readLong(), in.readUTF(), in.readLong(), ParticipantPriceCodec.read(in));
             if (result.put(party.id(), participant) != null) throw new IllegalArgumentException("duplicate saved participant");
         }
         return new GoodsParticipantState(result);

@@ -54,13 +54,13 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
         @Override public java.util.Optional<SubjectId> delegatedGoalOwner() { return java.util.Optional.of(missionId); }
         @Override public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
             var mission = refs.shipments().missions().get(missionId);
-            if (mission == null || mission.stage() != TransportMission.Stage.LOADING || mission.supplies().isEmpty())
+            if (mission == null || !mission.preparingSupplies() || mission.supplies().isEmpty())
                 throw new IllegalArgumentException("supply movement lost its exact loading mission");
             var load = mission.supplies().orElseThrow();
             var allocation = load.allocations().stream().filter(a -> a.claimId().equals(claimId)).findFirst().orElseThrow();
             var group = refs.groups().groups().get(mission.groupId());
             if (!allocation.actorId().equals(movement.order().actorId()) || allocation.loaded() || allocation.pending().isPresent()
-                    || !load.order(mission.id(), mission.sender(), allocation).movementOrder().equals(movement.order())
+                    || !load.order(mission.id(), mission.organization().home(), allocation).movementOrder().equals(movement.order())
                     || group == null || !group.member(movement.order().actorId()).activityOwnerId().equals(movement.executionId().activityOwnerId()))
                 throw new IllegalArgumentException("supply movement lost its exact order or participant authority");
         }
@@ -71,7 +71,7 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
         @Override public java.util.Optional<SubjectId> delegatedGoalOwner() { return java.util.Optional.of(missionId); }
         @Override public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
             var mission = refs.shipments().missions().get(missionId);
-            if (mission == null || mission.stage() != TransportMission.Stage.LOADING || mission.supplies().isEmpty()
+            if (mission == null || !mission.preparingSupplies() || mission.supplies().isEmpty()
                     || !io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.assemblyOrder(mission, movement.order().actorId()).equals(movement.order())
                     || mission.supplies().orElseThrow().allocations().stream().anyMatch(a -> a.actorId().equals(movement.order().actorId()) && !a.loaded()))
                 throw new IllegalArgumentException("assembly movement lost its exact provisioned participant");

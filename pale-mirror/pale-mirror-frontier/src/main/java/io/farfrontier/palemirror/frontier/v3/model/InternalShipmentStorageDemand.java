@@ -7,7 +7,7 @@ final class InternalShipmentStorageDemand {
     private InternalShipmentStorageDemand() { }
     static List<ContainerInboundCapacity.Demand> pending(FrontierWorldState state) {
         return state.shipments().shipments().values().stream()
-                .filter(shipment -> !shipment.terminal() && shipment.authorization().kind() == ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT)
+                .filter(shipment -> !shipment.terminal() && (shipment.authorization().kind() == ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT || shipment.authorization().kind() == ResourceClaimDelegation.Kind.OWNED_GOODS_SHIPMENT))
                 .map(shipment -> new ContainerInboundCapacity.Demand(shipment.id(), shipment.receiver().containerId(), shipment.itemKind(), shipment.quantity()))
                 .toList();
     }

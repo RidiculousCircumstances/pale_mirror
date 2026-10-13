@@ -23,7 +23,7 @@ final class FrontierV3TownHallCard {
         long hungry = residents.stream().filter(person -> state.humanPopulation().nutrition(person.id())
                 .wantsFood(state.bootstrap().ruleset().residentLife())).count();
         long groups = state.shipments().missions().values().stream()
-                .filter(mission -> mission.sender().settlementId().equals(home.id()))
+                .filter(mission -> mission.organization().home().settlementId().equals(home.id()))
                 .filter(mission -> mission.stage() != TransportMission.Stage.COMPLETE).count();
         return new PlayerContextCard(home.displayName() + " · Town Hall", List.of(
                 "Treasury: " + money(account.balance()),

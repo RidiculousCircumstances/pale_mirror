@@ -15,8 +15,8 @@ final class ExpeditionSupplyForfeitureOwner implements FungibleClaimForfeitureOw
                 throw new IllegalArgumentException("source change cannot bypass prepared personal replenishment");
             return;
         }
-        if (claim.purpose() != ClaimPurpose.EXPEDITION_SUPPLY || mission == null || mission.stage() != TransportMission.Stage.LOADING
-                || mission.supplies().isEmpty() || !claim.economicOwnerId().equals(mission.sender().settlementId()))
+        if (claim.purpose() != ClaimPurpose.EXPEDITION_SUPPLY || mission == null || !mission.preparingSupplies()
+                || mission.supplies().isEmpty() || !claim.economicOwnerId().equals(mission.organization().sponsor().id()))
             throw new IllegalArgumentException("withdrawn supply claim lacks its exact loading owner");
         var a = mission.supplies().orElseThrow().allocations().stream().filter(value -> value.claimId().equals(claim.id())).findFirst().orElseThrow();
         if (a.loaded() || a.withdrawn() || a.pending().isPresent() || !a.sourceAccountId().equals(sourceAccount)

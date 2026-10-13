@@ -47,13 +47,15 @@ public final class FrontierV3FixtureCatalog {
             "quarry-graybox", FrontierRulesets.installed("frontier-v3-quarry-graybox-r4"),
             "quarry-front", FrontierRulesets.installed("frontier-v3-quarry-graybox-r7"),
             "fuelled-quarry", FrontierRulesets.fuelledQuarryGraybox(),
-            "supply-quarry", FrontierRulesets.supplyQuarryGraybox());
+            "supply-quarry", FrontierRulesets.supplyQuarryGraybox(),
+            "market-quarry", FrontierRulesets.marketQuarryGraybox());
     private static final Map<String, BiFunction<WorldId, Long, FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>>> PROVIDERS = Map.ofEntries(
             Map.entry("world", FrontierWorldRuntimeDefinition::configuration),
             Map.entry("quarryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("quarry-graybox"))),
             Map.entry("fuelledQuarryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("fuelled-quarry"))),
             Map.entry("supplyQuarryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("supply-quarry"))),
             Map.entry("consolidatedTrade", FrontierV3FixtureCatalog::consolidatedTradeConfiguration),
+            Map.entry("buyerCollection", FrontierV3FixtureCatalog::buyerCollectionConfiguration),
             Map.entry("quarryFront", QuarryFrontFixture::configuration),
             Map.entry("storageGround", StorageGroundFixture::configuration),
             Map.entry("goodsShipment", FrontierV3FixtureCatalog::goodsShipmentConfiguration),
@@ -129,6 +131,16 @@ public final class FrontierV3FixtureCatalog {
     }
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> consolidatedTradeConfiguration(WorldId worldId, long seed) {
         var state = ConsolidatedTradeFixture.initial(worldId, seed, true);
+        var seller = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
+        var schedules = new ArrayList<>(tradeSchedules(state, List.of(GoodsParticipantProcess.review(seller.party().id(), 400),
+                GoodsParticipantProcess.review(seller.known().getFirst().party().id(), 401))));
+        for (var resident : state.humanPopulation().residents().values()) schedules.add(ResidentNeedProcess.review(resident.id(),
+                state.humanPopulation().nutrition(resident.id()).nextThresholdTick(state.bootstrap().ruleset().residentLife(),
+                        resident.characteristics().effectiveMetabolismPermille(0))));
+        return configured(worldId, state, SimInstant.ZERO, schedules);
+    }
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> buyerCollectionConfiguration(WorldId worldId, long seed) {
+        var state = BuyerCollectionFixture.initial(worldId, seed);
         var seller = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
         var schedules = new ArrayList<>(tradeSchedules(state, List.of(GoodsParticipantProcess.review(seller.party().id(), 400),
                 GoodsParticipantProcess.review(seller.known().getFirst().party().id(), 401))));

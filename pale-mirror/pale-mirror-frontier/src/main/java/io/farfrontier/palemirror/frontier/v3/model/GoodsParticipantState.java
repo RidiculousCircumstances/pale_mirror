@@ -24,4 +24,11 @@ public record GoodsParticipantState(Map<SubjectId, GoodsParticipant> participant
         var next = new HashMap<>(participants); next.put(id, current.reviewed(decision, tick));
         return new GoodsParticipantState(next);
     }
+    public GoodsParticipantState prices(SubjectId id, GoodsParticipantPricesReviewed review) {
+        var current = participants.get(id);
+        if (current == null || current.reviewRevision() != review.expectedRevision() || review.atTick() < current.reviewedAtTick()
+                || current.prices().equals(review.prices())) throw new IllegalArgumentException("stale or repeated participant price review");
+        var next = new HashMap<>(participants); next.put(id, current.withPrices(review.prices()));
+        return new GoodsParticipantState(next);
+    }
 }

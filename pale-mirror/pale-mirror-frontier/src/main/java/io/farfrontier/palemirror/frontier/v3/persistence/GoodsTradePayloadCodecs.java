@@ -11,6 +11,20 @@ final class GoodsTradePayloadCodecs {
     private GoodsTradePayloadCodecs() { }
     static PayloadCodecs create() {
         return new PayloadCodecs(List.of(
+                codec("frontier.goods_trade_collected", (out, payload) -> {
+                    var value = (GoodsTradeCollected) payload;
+                    out.writeUTF(value.shipmentId().value()); out.writeLong(value.expectedShipmentRevision());
+                    GoodsTradeStateCodec.acceptance(out, value.receipt());
+                }, in -> new GoodsTradeCollected(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(in.readUTF()),
+                        in.readLong(), GoodsTradeStateCodec.acceptance(in))),
+                codec("frontier.goods_order_withdrawn", (out, payload) -> {
+                    var value = (GoodsTradeOrderWithdrawn) payload;
+                    out.writeUTF(value.orderId().value()); out.writeInt(value.expectedCommittedQuantity());
+                }, in -> new GoodsTradeOrderWithdrawn(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(in.readUTF()), in.readInt())),
+                codec("frontier.goods_participant_prices_reviewed", (out, payload) -> {
+                    var value = (GoodsParticipantPricesReviewed) payload;
+                    out.writeLong(value.expectedRevision()); out.writeLong(value.atTick()); ParticipantPriceCodec.write(out, value.prices());
+                }, in -> new GoodsParticipantPricesReviewed(in.readLong(), in.readLong(), ParticipantPriceCodec.read(in))),
                 codec("frontier.goods_participant_reviewed", (out, payload) -> {
                     var value = (GoodsParticipantReviewed) payload;
                     out.writeLong(value.expectedRevision()); out.writeUTF(value.decision()); out.writeLong(value.atTick());

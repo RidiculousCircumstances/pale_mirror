@@ -20,8 +20,8 @@ public final class ExpeditionSupplyPlanning {
     public static Optional<ExpeditionSupplyLoad> walkingLoad(FrontierWorldState state, TransportMission mission,
             UnitGroup group, long now, long revision, FungibleResourceLedger availableResources) {
         var rules = state.bootstrap().ruleset(); var life = rules.residentLife();
-        var source = FungibleResourceCustodySupport.accountAtContainer(state, mission.sender().containerId()).orElse(null);
-        if (source == null || ReferenceContainerCustody.blocksCanonicalUse(state, mission.sender().containerId())) return Optional.empty();
+        var source = FungibleResourceCustodySupport.accountAtContainer(state, mission.organization().home().containerId()).orElse(null);
+        if (source == null || ReferenceContainerCustody.blocksCanonicalUse(state, mission.organization().home().containerId())) return Optional.empty();
         var knowledge = TransportGroupMissionPort.knowledgeForEndpoints(state, mission.sender(), mission.receiver()).forActors(state, group.members().stream().map(UnitGroup.Member::actorId).toList());
         ExpeditionJourneyProof journey;
         try { journey = ExpeditionJourneyProof.select(state, mission, group); }
@@ -36,7 +36,7 @@ public final class ExpeditionSupplyPlanning {
             if (inputs.isEmpty()) return Optional.empty();
             var input = inputs.orElseThrow(); var free = input.freeSlots();
             int cargoSlots = input.roster().stream().mapToInt(ExpeditionProvisioning.Member::cargoStackSlots).sum();
-            int foodAvailable = resources.unclaimedQuantity(source.id(), mission.sender().settlementId(), food.itemKind());
+            int foodAvailable = resources.unclaimedQuantity(source.id(), mission.organization().sponsor().id(), food.itemKind());
             var plan = forecast(state, mission, group, input, food, foodAvailable);
             if (!plan.feasible()) continue;
             var allocations = new ArrayList<ExpeditionSupplyLoad.Allocation>(); var targets = new LinkedHashMap<SubjectId, Integer>();
@@ -49,13 +49,13 @@ public final class ExpeditionSupplyPlanning {
                     if (index >= free.get(member.actorId()).size()) { fits = false; break; }
                     int quantity = Math.min(64, remaining);
                     var selected = FungibleResourceCustodySupport.selectAtAccount(resources, source.id(),
-                            mission.sender().settlementId(), food.itemKind(), quantity).orElseThrow();
+                            mission.organization().sponsor().id(), food.itemKind(), quantity).orElseThrow();
                     var claim = new SubjectId("claim:expedition/" + mission.id().value().replace(':', '-')
                             + "/" + revision + "/" + member.actorId().value().replace(':', '-') + "/" + index);
                     var account = new SubjectId("custody:expedition/" + claim.value().replace(':', '-'));
                     var allocation = new ExpeditionSupplyLoad.Allocation(claim, member.actorId(), source.id(), account,
                             free.get(member.actorId()).get(index++), selected.lotQuantities(), ExpeditionSupplyLoad.Outcome.RESERVED, Optional.empty());
-                    resources = reserve(resources, allocation, mission.id(), mission.sender().settlementId(), food.itemKind());
+                    resources = reserve(resources, allocation, mission.id(), mission.organization().sponsor().id(), food.itemKind());
                     allocations.add(allocation); remaining -= quantity;
                 }
                 if (!fits) break;
@@ -64,16 +64,16 @@ public final class ExpeditionSupplyPlanning {
                 var asset = state.transportFleet().require(mission.transportAssetId().orElseThrow());
                 var destination = FungibleResourceCustodySupport.accountAtContainer(state, asset.containerId()).map(CustodyAccount::id)
                         .orElseGet(() -> ReferenceContainerCustody.scopeId(asset.containerId()));
-                int stocked = resources.accounts().containsKey(destination) ? resources.unclaimedQuantity(destination, mission.sender().settlementId(), food.itemKind()) : 0;
+                int stocked = resources.accounts().containsKey(destination) ? resources.unclaimedQuantity(destination, mission.organization().sponsor().id(), food.itemKind()) : 0;
                 int remaining = Math.max(0, plan.sharedFoodItems() - stocked);
                 int index = 0;
                 while (remaining > 0) {
                     int quantity = Math.min(64, remaining);
-                    var selected = FungibleResourceCustodySupport.selectAtAccount(resources, source.id(), mission.sender().settlementId(), food.itemKind(), quantity).orElseThrow();
+                    var selected = FungibleResourceCustodySupport.selectAtAccount(resources, source.id(), mission.organization().sponsor().id(), food.itemKind(), quantity).orElseThrow();
                     var claim = new SubjectId("claim:expedition/" + mission.id().value().replace(':', '-') + "/" + revision + "/shared/" + index++);
                     var allocation = new ExpeditionSupplyLoad.Allocation(claim, asset.actorId(), source.id(), destination,
                             new ActorItemSlot.AttachedStorage(asset.containerId()), selected.lotQuantities(), ExpeditionSupplyLoad.Outcome.RESERVED, Optional.empty());
-                    resources = reserve(resources, allocation, mission.id(), mission.sender().settlementId(), food.itemKind());
+                    resources = reserve(resources, allocation, mission.id(), mission.organization().sponsor().id(), food.itemKind());
                     allocations.add(allocation); remaining -= quantity;
                 }
             }
@@ -121,14 +121,14 @@ public final class ExpeditionSupplyPlanning {
     public static void requireSelectedLoad(FrontierWorldState state, TransportMission mission, UnitGroup group,
             ExpeditionSupplyLoad load, FungibleResourceLedger resources) {
         load.journey().require(state, mission, group);
-        var source = FungibleResourceCustodySupport.accountAtContainer(state, mission.sender().containerId()).orElseThrow();
-        if (ReferenceContainerCustody.blocksCanonicalUse(state, mission.sender().containerId()))
+        var source = FungibleResourceCustodySupport.accountAtContainer(state, mission.organization().home().containerId()).orElseThrow();
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, mission.organization().home().containerId()))
             throw new IllegalArgumentException("selected supply source is physically unavailable");
         var food = state.bootstrap().ruleset().residentLife().foods().require(load.foodKind());
         var input = walkingInputs(state, mission, group, load.calculatedAtTick(), food, resources,
                 load.journey().outward().size() - 1L, load.journey().returning().size() - 1L).orElseThrow();
         var plan = forecast(state, mission, group, input, food,
-                resources.unclaimedQuantity(source.id(), mission.sender().settlementId(), food.itemKind()));
+                resources.unclaimedQuantity(source.id(), mission.organization().sponsor().id(), food.itemKind()));
         var targets = new LinkedHashMap<SubjectId, Integer>();
         plan.members().forEach((id, member) -> targets.put(id, member.requiredFoodItems()));
         if (!plan.feasible() || plan.durationTicks() != load.forecastDurationTicks() || !targets.equals(load.foodTargets())
@@ -195,7 +195,7 @@ public final class ExpeditionSupplyPlanning {
             int rate = profile.characteristics().effectiveMetabolismPermille(now);
             var nutrition = state.humanPopulation().nutrition(member.actorId()).accrueThrough(now, life, rate);
             int personal = UnitInventory.accounts(resources, member.actorId()).stream().filter(a -> a.claimQuantities().isEmpty())
-                    .mapToInt(a -> resources.unclaimedQuantity(a.id(), mission.sender().settlementId(), food.itemKind())).sum();
+                    .mapToInt(a -> resources.unclaimedQuantity(a.id(), mission.organization().sponsor().id(), food.itemKind())).sum();
             roster.add(new ExpeditionProvisioning.Member(member.actorId(), nutrition.satietyUnits(), rate,
                     used.size() - (cargoAlreadyCounted ? 1 : 0), cargoSlots, personal, 0));
         }

@@ -26,14 +26,20 @@ class AutonomousGoodsTradeTest {
         // mining-haul checks establish how the same endpoint acquires this stock.
         state = issue(state, HOME, "minecraft:cobblestone", 128, "stone-policy-fixture");
         state = issue(state, HOME, "minecraft:bread", 384, "dispatch-provisions-fixture");
+        // Isolate the stone purchase: an underfed buyer correctly procures bread first.
+        state = issueAt(state, FrontierWorldState.depotId(buyer), buyer, "minecraft:bread", 384, "buyer-food-fixture");
         var view = GoodsParticipantView.read(state, state.companies().goodsTrade().participants().participants().get(HOME));
         var stoneOffer = GoodsParticipantPolicies.require(view.participant()).decide(view, state.bootstrap().ruleset().goodsTrade()).stream()
                 .filter(intent -> intent.itemKind().equals("minecraft:cobblestone")).findFirst().orElseThrow();
         assertEquals(GoodsTradeOrder.Side.SELL, stoneOffer.side()); assertEquals(64, stoneOffer.quantity());
         var treasury = state.inventory().economics().require(buyer).balance();
         state = review(state, HOME, 400); state = review(state, buyer, 400);
+        var reviewed = state;
         var contract = state.companies().goodsTrade().contracts().values().stream().filter(value ->
-                value.itemKind().equals("minecraft:cobblestone") && value.buyer().id().equals(buyer)).findFirst().orElseThrow();
+                value.itemKind().equals("minecraft:cobblestone") && value.buyer().id().equals(buyer)).findFirst()
+                .orElseThrow(() -> new AssertionError("missing stone purchase; decision=" + reviewed.companies().goodsTrade()
+                        .participants().participants().get(buyer).decision() + "; trades=" + reviewed.companies().goodsTrade().contracts().values()
+                        .stream().map(c -> c.itemKind() + ":" + c.buyer().id().value() + ":" + c.quantity()).toList()));
         assertTrue(contract.quantity() > 0 && contract.quantity() <= 64, "normal funds/cargo limits may split the reserve purchase");
         assertEquals(HOME, contract.seller().id());
         assertEquals(treasury, state.inventory().economics().require(buyer).balance(), "dispatch is not acceptance/payment");
@@ -286,15 +292,18 @@ class AutonomousGoodsTradeTest {
     }
 
     private static FrontierWorldState issue(FrontierWorldState state, SubjectId owner, String kind, int quantity, String suffix) {
+        return issueAt(state, DEPOT, owner, kind, quantity, suffix);
+    }
+    private static FrontierWorldState issueAt(FrontierWorldState state, SubjectId container, SubjectId owner, String kind, int quantity, String suffix) {
         var lot = new SubjectId("lot:" + suffix); var staging = new SubjectId("custody:fixture-" + suffix);
-        var destination = FungibleResourceCustodySupport.accountAtContainer(state, DEPOT);
+        var destination = FungibleResourceCustodySupport.accountAtContainer(state, container);
         if (destination.isEmpty()) {
             var resources = state.inventory().fungibleResources().issue(new ResourceLot(lot, owner, kind, quantity, "fixture:" + suffix, List.of()),
-                    new CustodyAccount(ReferenceContainerCustody.scopeId(DEPOT), new ResourceCustody.Container(DEPOT), Map.of(lot, quantity), Map.of()));
+                    new CustodyAccount(ReferenceContainerCustody.scopeId(container), new ResourceCustody.Container(container), Map.of(lot, quantity), Map.of()));
             return state.withInventory(state.inventory().withFungibleResources(resources));
         }
         var resources = state.inventory().fungibleResources().issue(new ResourceLot(lot, owner, kind, quantity, "fixture:" + suffix, List.of()),
-                new CustodyAccount(staging, new ResourceCustody.Container(DEPOT), Map.of(lot, quantity), Map.of()));
+                new CustodyAccount(staging, new ResourceCustody.Container(container), Map.of(lot, quantity), Map.of()));
         resources = resources.transfer(staging, destination.orElseThrow().id(), Map.of(lot, quantity), Map.of());
         return state.withInventory(state.inventory().withFungibleResources(resources));
     }

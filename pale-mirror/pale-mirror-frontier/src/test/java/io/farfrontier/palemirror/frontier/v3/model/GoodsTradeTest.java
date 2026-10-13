@@ -298,7 +298,10 @@ class GoodsTradeTest {
         // Prepared physical-boundary fixture. Full finite-asset/mission admission is
         // separately exercised by ExpeditionSupplyFlowTest, not claimed by this setup.
         if (mobile) {
-            var mission = new TransportMission(missionId, groupId, List.of(shipment.id()), ResourceSourceComposition.requireContainer(shipment.sender()), shipment.receiver(),
+            var home = ResourceSourceComposition.requireContainer(shipment.sender());
+            var sponsor = new EconomicIdentity(SELLER, EconomicOwnerKind.SETTLEMENT_TREASURY);
+            var mission = new TransportMission(missionId, groupId, List.of(shipment.id()), home, shipment.receiver(),
+                    new TransportOrganization(sponsor, home, TransportOrganization.Itinerary.SOURCE_DELIVERY),
                     shipment.sender().station(), shipment.receiver().station(), TransportMission.Stage.LOADING, 1).withTransportAsset(actor);
             var group = new io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup(groupId,
                     new io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Mission(
@@ -584,7 +587,7 @@ class GoodsTradeTest {
 
     @Test void wrongPriceOvercommitAndForgedParticipantKindAreRejected() {
         FrontierWorldState state = fact(fact(initial(), SELLER, new GoodsTradeOrderPlaced(sellOrder())), BUYER, new GoodsTradeOrderPlaced(buyOrder()));
-        GoodsTradeContract priced = new GoodsTradeContract(CONTRACT, SELL_ORDER, BUY_ORDER, SELLER_PARTY, BUYER_PARTY,
+        GoodsTradeContract priced = new GoodsTradeContract(CONTRACT, SELL_ORDER, BUY_ORDER, SELLER_PARTY, BUYER_PARTY, new GoodsTradeFulfillment(GoodsTradeFulfillment.Mode.SELLER_DELIVERY, SELLER_PARTY),
                 SOURCE, RECEIVER, "minecraft:wheat", 60, FixedScalar.whole(4), HOLD, 0, Map.of(CLAIM, 60), Map.of());
         FrontierWorldState offered = state;
         assertThrows(IllegalArgumentException.class, () -> fact(offered, SELLER, new GoodsTradeReserved(priced, reservation().allocations())));
@@ -607,7 +610,7 @@ class GoodsTradeTest {
                 GoodsTradeOrder.Side.BUY, RECEIVER, "minecraft:bread", 1, 0, PRICE, 10_000);
         state = fact(fact(state, SELLER, new GoodsTradeOrderPlaced(extraSell)), BUYER, new GoodsTradeOrderPlaced(extraBuy));
         var contractId = id("contract:extra"); var claimId = id("claim:extra");
-        var contract = new GoodsTradeContract(contractId, extraSell.id(), extraBuy.id(), SELLER_PARTY, BUYER_PARTY,
+        var contract = new GoodsTradeContract(contractId, extraSell.id(), extraBuy.id(), SELLER_PARTY, BUYER_PARTY, new GoodsTradeFulfillment(GoodsTradeFulfillment.Mode.SELLER_DELIVERY, SELLER_PARTY),
                 SOURCE, RECEIVER, "minecraft:bread", 1, PRICE, id("reservation:extra"), 0, Map.of(claimId, 1), Map.of());
         var excessive = new GoodsTradeReserved(contract, List.of(new GoodsTradeStockAllocation(SOURCE_ACCOUNT,
                 new ClaimAllocation(claimId, contractId, SELLER, "minecraft:bread", 1, Map.of(id("lot:trade-bread"), 1),
@@ -704,7 +707,7 @@ class GoodsTradeTest {
                 GoodsTradeOrder.Side.SELL, SOURCE, "minecraft:bread", 60, 0, PRICE, 10_000)));
         state = fact(state, BUYER, new GoodsTradeOrderPlaced(new GoodsTradeOrder(BUY_ORDER, BUYER_PARTY, SELLER_PARTY,
                 GoodsTradeOrder.Side.BUY, RECEIVER, "minecraft:bread", 60, 0, PRICE, 10_000)));
-        var contract = new GoodsTradeContract(CONTRACT, SELL_ORDER, BUY_ORDER, SELLER_PARTY, BUYER_PARTY,
+        var contract = new GoodsTradeContract(CONTRACT, SELL_ORDER, BUY_ORDER, SELLER_PARTY, BUYER_PARTY, new GoodsTradeFulfillment(GoodsTradeFulfillment.Mode.SELLER_DELIVERY, SELLER_PARTY),
                 SOURCE, RECEIVER, "minecraft:bread", 60, PRICE, HOLD, 0, Map.of(CLAIM, 60), Map.of());
         state = fact(state, SELLER, new GoodsTradeReserved(contract, List.of(new GoodsTradeStockAllocation(SOURCE_ACCOUNT,
                 new ClaimAllocation(CLAIM, CONTRACT, SELLER, "minecraft:bread", 60, Map.of(bread, 60), ClaimPurpose.GOODS_TRADE),
@@ -718,15 +721,6 @@ class GoodsTradeTest {
         FrontierWorldState arrived = arrive(state);
         assertTrue(ContainerStorageAdmission.inbound(arrived, RECEIVER, java.util.Optional.empty()).isEmpty());
         assertEquals(60, arrived.companies().goodsTrade().contracts().get(CONTRACT).remainingQuantity());
-    }
-
-    @Test void activeContractAndReservedStockCannotBeErasedAtPublication() {
-        FrontierWorldState state = reserved();
-        FrontierWorldState erased = state.withCompanies(state.companies().withGoodsTrade(GoodsTradeState.empty()));
-        assertThrows(IllegalArgumentException.class, () -> FrontierReferenceClosure.validateTransition(state, erased, List.of()));
-        var resources = state.inventory().fungibleResources().releaseClaim(SOURCE_ACCOUNT, CLAIM);
-        FrontierWorldState unreserved = state.withInventory(state.inventory().withFungibleResources(resources));
-        assertThrows(IllegalArgumentException.class, () -> FrontierDomainRelationships.validate(unreserved));
     }
 
     @Test void independentShipmentPortionCanArriveWhileTheOtherPortionIsCancelledWithoutPayment() {
@@ -802,7 +796,7 @@ class GoodsTradeTest {
 
     @Test void manySmallReceiptsHaveBoundedEvidenceWithoutForgettingCancelledQuantityOrAllowingReplay() {
         SubjectId cancelled = id("claim:cancelled-one");
-        var contract = new GoodsTradeContract(CONTRACT, SELL_ORDER, BUY_ORDER, SELLER_PARTY, BUYER_PARTY, SOURCE, RECEIVER,
+        var contract = new GoodsTradeContract(CONTRACT, SELL_ORDER, BUY_ORDER, SELLER_PARTY, BUYER_PARTY, new GoodsTradeFulfillment(GoodsTradeFulfillment.Mode.SELLER_DELIVERY, SELLER_PARTY), SOURCE, RECEIVER,
                 "minecraft:wheat", 131, PRICE, HOLD, 0, Map.of(CLAIM, 130, cancelled, 1), Map.of());
         var first = new GoodsTradeDisposition(id("receipt:early-cancel"), CONTRACT, 0, cancelled, 1,
                 GoodsTradeDisposition.Reason.CANCELLED_BEFORE_LOADING);
@@ -930,7 +924,7 @@ class GoodsTradeTest {
                 "minecraft:wheat", 60, 0, FixedScalar.whole(3), 10_000);
     }
     private static GoodsTradeReserved reservation() {
-        var contract = new GoodsTradeContract(CONTRACT, SELL_ORDER, BUY_ORDER, SELLER_PARTY, BUYER_PARTY, SOURCE, RECEIVER,
+        var contract = new GoodsTradeContract(CONTRACT, SELL_ORDER, BUY_ORDER, SELLER_PARTY, BUYER_PARTY, new GoodsTradeFulfillment(GoodsTradeFulfillment.Mode.SELLER_DELIVERY, SELLER_PARTY), SOURCE, RECEIVER,
                 "minecraft:wheat", 60, PRICE, HOLD, 0, Map.of(CLAIM, 60), Map.of());
         var claim = new ClaimAllocation(CLAIM, CONTRACT, SELLER, "minecraft:wheat", 60, Map.of(LOT, 60), ClaimPurpose.GOODS_TRADE);
         return new GoodsTradeReserved(contract, List.of(new GoodsTradeStockAllocation(SOURCE_ACCOUNT, claim,

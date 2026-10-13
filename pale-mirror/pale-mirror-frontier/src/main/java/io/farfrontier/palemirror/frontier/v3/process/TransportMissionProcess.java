@@ -22,7 +22,7 @@ public final class TransportMissionProcess {
     }
     public static boolean held(FrontierWorldState state, ScheduledAction action) {
         var mission = state.shipments().missions().get(action.subject());
-        return mission != null && mission.stage() == TransportMission.Stage.LOADING
+        return mission != null && mission.preparingSupplies()
                 && mission.replenishment().isEmpty() && mission.supplies().isPresent()
                 && mission.shipmentIds().stream().anyMatch(id -> !state.shipments().shipments().get(id).terminal())
                 && ExpeditionSupplyProcess.serviceHeld(state, mission);
@@ -32,7 +32,7 @@ public final class TransportMissionProcess {
         var mission = state.shipments().missions().get(action.subject());
         if (mission == null) return java.util.Set.of(action.subject());
         var keys = new java.util.HashSet<SubjectId>();
-        keys.add(mission.id()); keys.add(mission.groupId()); keys.add(mission.sender().containerId());
+        keys.add(mission.id()); keys.add(mission.groupId()); keys.add(mission.sender().containerId()); keys.add(mission.organization().home().containerId());
         var group = state.unitGroups().groups().get(mission.groupId());
         group.members().forEach(member -> keys.add(member.actorId()));
         return java.util.Set.copyOf(keys);
@@ -53,21 +53,21 @@ public final class TransportMissionProcess {
         if (now < 0 || mission.supplies().filter(load -> load.calculatedAtTick() != now).isPresent())
             throw new IllegalArgumentException("transport provisioning declaration has a stale or future calculation time");
         var supplyDeclaration = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.reserveDeclaration(state, mission, group);
-        SettlementLabourAllocation.requireMissionCommitment(state, mission.sender().settlementId(),
+        SettlementLabourAllocation.requireMissionCommitment(state, mission.organization().home().settlementId(),
                 ResidentWorkKind.LOGISTICS, group.members().stream().map(UnitGroup.Member::actorId)
                     .filter(actor -> state.actorLocations().get(actor).kind() == ActorKind.RESIDENT).toList());
-        TransportGroupMissionPort.validateRendezvous(state, mission.sender(), mission.homeRendezvous(), group.members().size());
-        TransportGroupMissionPort.validateRendezvous(state, mission.receiver(), mission.destinationRendezvous(), group.members().size());
+        TransportGroupMissionPort.validateRendezvous(state, mission.organization().home(), mission.homeRendezvous(), group.members().size());
+        TransportGroupMissionPort.validateRendezvous(state, mission.organization().itinerary() == TransportOrganization.Itinerary.SOURCE_DELIVERY ? mission.receiver() : mission.sender(), mission.destinationRendezvous(), group.members().size());
         var economics = state.inventory().economics();
         var budgetAmount = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionFundingAuthority.allocation(state, mission);
         if (mission.financialBudgetId().isPresent()) {
             economics = economics.reserveBudget(new FinancialBudget(mission.financialBudgetId().orElseThrow(),
-                    mission.sender().settlementId(), FinancialBudget.OwnerKind.TRANSPORT_MISSION, mission.id(), budgetAmount));
+                    mission.organization().sponsor().id(), FinancialBudget.OwnerKind.TRANSPORT_MISSION, mission.id(), budgetAmount));
             if (budgetAmount.raw() == 0) throw new IllegalArgumentException("expedition declares an unfunded contingency budget");
         }
         for (var shipment : value.shipments()) {
             if (!shipment.transportMissionId().equals(Optional.of(mission.id()))) throw new IllegalArgumentException("shipment has a foreign mission binding");
-            ShipmentStateSupport.validateDispatch(state, value.senderId(), shipment);
+            ShipmentStateSupport.validateDispatch(state, value.senderId(), shipment, mission.organization());
             shipments = shipments.admit(shipment);
             if (shipment.execution().activityKind() == io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.COURIER)
                 declarations.add(shipment.execution());
@@ -90,24 +90,31 @@ public final class TransportMissionProcess {
         var group = state.unitGroups().groups().get(mission.groupId());
         var shipments = mission.shipmentIds().stream().map(id -> state.shipments().shipments().get(id)).toList();
         boolean ready = switch (value.next()) {
-            case OUTBOUND -> value.departure().map(proof -> io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(state, mission, now, proof))
-                    .orElse(mission.supplies().isEmpty() && state.bootstrap().ruleset().schemaVersion() < 17)
-                    && (mission.supplies().isEmpty() || ExpeditionSupplyProcess.assembled(state, mission))
+            case TO_SOURCE -> mission.stage() == TransportMission.Stage.PREPARING && value.departure().map(proof ->
+                    io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(state, mission, now, proof)).orElse(false)
+                    && ExpeditionSupplyProcess.assembled(state, mission);
+            case OUTBOUND -> (mission.organization().itinerary() == TransportOrganization.Itinerary.DESTINATION_COLLECTION
+                    ? mission.supplies().filter(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyLoad::complete).isPresent()
+                    : value.departure().map(proof -> io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(state, mission, now, proof))
+                    .orElse(mission.supplies().isEmpty() && state.bootstrap().ruleset().schemaVersion() < 17))
+                    && (mission.organization().itinerary() == TransportOrganization.Itinerary.DESTINATION_COLLECTION || mission.supplies().isEmpty() || ExpeditionSupplyProcess.assembled(state, mission))
                     && shipments.stream().anyMatch(s -> s.status() == Shipment.Status.CARRYING)
                     && shipments.stream().allMatch(s -> (s.terminal() || s.status() == Shipment.Status.CARRYING)
-                        && s.pendingPhysicalStep().isEmpty() && s.reception().isEmpty());
-            case UNLOADING -> group.phase() == UnitGroup.Phase.AT_GOAL && group.goalOrdinal() == 1;
+                        && s.pendingPhysicalStep().isEmpty() && s.reception().isEmpty()
+                        && (s.terminal() || ShipmentStateSupport.departureReady(state, s, mission.organization())));
+            case UNLOADING -> group.phase() == UnitGroup.Phase.AT_GOAL && group.goalOrdinal() == mission.deliveryOrdinal();
             case RETURNING -> mayReturn(state, mission, group);
             case COMPLETE -> group.phase() == UnitGroup.Phase.CLOSED && (group.goalOrdinal() == 2
                     || group.members().stream().allMatch(m -> state.actorLocations().get(m.actorId()).condition().status() == ActorLifeStatus.DEAD));
-            case LOADING -> false;
+            case LOADING -> mission.stage() == TransportMission.Stage.TO_SOURCE && group.phase() == UnitGroup.Phase.AT_GOAL && group.goalOrdinal() == 1;
+            case PREPARING -> false;
         };
         if (!ready) throw new IllegalArgumentException("transport workflow lacks its actual loading, arrival or delivery evidence");
         var economics = state.inventory().economics();
         if (value.next() == TransportMission.Stage.COMPLETE && mission.financialBudgetId().isPresent())
             economics = economics.closeBudget(mission.financialBudgetId().orElseThrow());
         var inventory = state.inventory().withEconomics(economics);
-        boolean abort = mission.stage() == TransportMission.Stage.LOADING && value.next() == TransportMission.Stage.RETURNING;
+        boolean abort = mission.preparingSupplies() && value.next() == TransportMission.Stage.RETURNING;
         if (abort) inventory = inventory.withFungibleResources(
                 io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.releaseForAbort(state, mission));
         return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory)
@@ -159,7 +166,7 @@ public final class TransportMissionProcess {
                     && ActorExecutionCoordinator.coldAvailable(state, transfer.actorId())
                     && !ReferenceContainerCustody.hasLiveCustody(state, transfer.containerId())
                     && !ReferenceContainerCustody.blocksCanonicalUse(state, transfer.containerId())) {
-                var received = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.cold(state, mission.id(), transfer.claimId());
+                var received = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.cold(state, mission.id(), transfer.claimId(), now);
                 events.add(new ProposedEvent(mission.id(), new ExpeditionReplenishmentColdLoaded(mission.id(), transfer.claimId())));
                 events.addAll(ExpeditionSupplyProcessModule.replenishmentClearance(state, received, mission.id(), now));
                 events.add(ResidentActivityProcess.wakeAfterActivity(transfer.actorId(), now));
@@ -175,21 +182,28 @@ public final class TransportMissionProcess {
             var shipment = state.shipments().shipments().get(id);
             return shipment.terminal() || shipment.status() == Shipment.Status.CARRYING;
         });
-        if (mission.stage() == TransportMission.Stage.LOADING && !allCargoTerminal && mission.supplies().isPresent()
+        if (mission.preparingSupplies() && !allCargoTerminal && mission.supplies().isPresent()
                 && (!mission.supplies().orElseThrow().complete()
-                    || cargoLoaded && (!ExpeditionSupplyProcess.assembled(state, mission)
+                    || (cargoLoaded || mission.stage() == TransportMission.Stage.PREPARING) && (!ExpeditionSupplyProcess.assembled(state, mission)
                         || !io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(state, mission, now))))
             return ExpeditionSupplyProcess.plan(state, mission, action, now);
         TransportMission.Stage next = switch (mission.stage()) {
+            case PREPARING -> allCargoTerminal ? (mayReturn(state, mission, group) ? TransportMission.Stage.RETURNING : null)
+                    : io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(state, mission, now)
+                        && ExpeditionSupplyProcess.assembled(state, mission) ? TransportMission.Stage.TO_SOURCE : null;
+            case TO_SOURCE -> mayReturn(state, mission, group) ? TransportMission.Stage.RETURNING
+                    : group.phase() == UnitGroup.Phase.AT_GOAL && group.goalOrdinal() == 1 ? TransportMission.Stage.LOADING : null;
             case LOADING -> allCargoTerminal
                     ? (mayReturn(state, mission, group) ? TransportMission.Stage.RETURNING : null) : mission.shipmentIds().stream().allMatch(id -> {
                 var shipment = state.shipments().shipments().get(id);
                 return (shipment.terminal() || shipment.status() == Shipment.Status.CARRYING) && shipment.pendingPhysicalStep().isEmpty() && shipment.reception().isEmpty()
-                        && !state.actorMovements().containsKey(shipment.execution().actorId());
-            }) && io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(state, mission, now)
+                        && !state.actorMovements().containsKey(shipment.execution().actorId())
+                        && (shipment.terminal() || ShipmentStateSupport.departureReady(state, shipment, mission.organization()));
+            }) && (mission.organization().itinerary() == TransportOrganization.Itinerary.DESTINATION_COLLECTION
+                    || io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(state, mission, now))
                     ? TransportMission.Stage.OUTBOUND : null;
             case OUTBOUND -> mayReturn(state, mission, group) ? TransportMission.Stage.RETURNING
-                    : group.phase() == UnitGroup.Phase.AT_GOAL && group.goalOrdinal() == 1 ? TransportMission.Stage.UNLOADING : null;
+                    : group.phase() == UnitGroup.Phase.AT_GOAL && group.goalOrdinal() == mission.deliveryOrdinal() ? TransportMission.Stage.UNLOADING : null;
             case UNLOADING -> mayReturn(state, mission, group)
                     ? TransportMission.Stage.RETURNING : null;
             case RETURNING -> (group.phase() == UnitGroup.Phase.AT_GOAL && group.goalOrdinal() == 2 || group.phase() == UnitGroup.Phase.CLOSED)
@@ -204,7 +218,8 @@ public final class TransportMissionProcess {
                 events.add(ResidentActivityProcess.wakeAfterActivity(member.actorId(), now));
         }
         Optional<io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionJourneyProof> departure = Optional.empty();
-        if (next == TransportMission.Stage.OUTBOUND) {
+        if (next == TransportMission.Stage.TO_SOURCE || next == TransportMission.Stage.OUTBOUND
+                && mission.organization().itinerary() == TransportOrganization.Itinerary.SOURCE_DELIVERY) {
             try { departure = Optional.of(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionJourneyProof.select(state, mission)); }
             catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable pending) {
                 return List.of(new ProposedEvent(mission.id(), new ScheduleEffect.Rescheduled(action.id(), progress(mission.id(),
@@ -214,19 +229,22 @@ public final class TransportMissionProcess {
         var transition = next == null ? null : new TransportMissionAdvanced(mission.id(), mission.revision(), next, departure);
         if (next != null) {
             events.add(new ProposedEvent(mission.id(), transition));
-            if (next == TransportMission.Stage.UNLOADING) for (var id : mission.shipmentIds()) events.add(ShipmentProcess.wake(id, now));
+            if (next == TransportMission.Stage.UNLOADING || next == TransportMission.Stage.LOADING) for (var id : mission.shipmentIds()) events.add(ShipmentProcess.wake(id, now));
         }
-        if (next == TransportMission.Stage.OUTBOUND || next == TransportMission.Stage.RETURNING
-                || next == null && (mission.stage() == TransportMission.Stage.OUTBOUND || mission.stage() == TransportMission.Stage.RETURNING)
+        if (next == TransportMission.Stage.TO_SOURCE || next == TransportMission.Stage.OUTBOUND || next == TransportMission.Stage.RETURNING
+                || next == null && (mission.stage() == TransportMission.Stage.TO_SOURCE || mission.stage() == TransportMission.Stage.OUTBOUND || mission.stage() == TransportMission.Stage.RETURNING)
                     && group.phase() != UnitGroup.Phase.TRAVELLING) {
-            long ordinal = (next == TransportMission.Stage.RETURNING || mission.stage() == TransportMission.Stage.RETURNING) ? 2 : 1;
+            long ordinal = (next == TransportMission.Stage.RETURNING || mission.stage() == TransportMission.Stage.RETURNING)
+                    ? mission.returnOrdinal() : (next == TransportMission.Stage.TO_SOURCE || mission.stage() == TransportMission.Stage.TO_SOURCE)
+                        ? 1 : mission.deliveryOrdinal();
             var planningState = next != null ? advance(state, mission.id(), transition, now) : state;
-            UnitGroupProcess.start(planningState, group, ordinal).ifPresent(value -> {
+            if (group.phase() != UnitGroup.Phase.AT_GOAL || group.goalOrdinal() != ordinal)
+                UnitGroupProcess.start(planningState, group, ordinal).ifPresent(value -> {
                 events.add(new ProposedEvent(group.id(), value)); events.add(UnitGroupProcess.wake(group.id(), now));
             });
         }
         events.add(new ProposedEvent(mission.id(), new ScheduleEffect.Rescheduled(action.id(), progress(mission.id(),
-                now + state.bootstrap().ruleset().cadence().transportReviewInterval()))));
+                now + (next != null ? 1 : state.bootstrap().ruleset().cadence().transportReviewInterval())))));
         return List.copyOf(events);
     }
     private static boolean mayReturn(FrontierWorldState state, TransportMission mission, UnitGroup group) {

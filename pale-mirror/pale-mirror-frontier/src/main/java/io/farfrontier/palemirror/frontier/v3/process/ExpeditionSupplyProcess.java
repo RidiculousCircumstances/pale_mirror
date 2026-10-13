@@ -27,7 +27,7 @@ final class ExpeditionSupplyProcess {
         if (state.actorLocations().get(actor).condition().status() != ActorLifeStatus.ALIVE
                 || load.allocations().stream().anyMatch(a -> a.actorId().equals(actor) && !a.loaded())
                 || state.actorMovements().containsKey(actor) || state.humanPopulation().meals().containsKey(actor)
-                || load.complete() && mission.shipmentIds().stream().map(state.shipments().shipments()::get)
+                || load.complete() && mission.stage() == TransportMission.Stage.LOADING && mission.shipmentIds().stream().map(state.shipments().shipments()::get)
                     .anyMatch(shipment -> shipment.execution().actorId().equals(actor) && shipment.status() == Shipment.Status.AWAITING_LOAD))
             return false;
         var group = state.unitGroups().groups().get(mission.groupId());
@@ -79,7 +79,7 @@ final class ExpeditionSupplyProcess {
             io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyLoad load,
             io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyLoad.Allocation a,
             long now, List<ProposedEvent> events) {
-        var order = load.order(mission.id(), mission.sender(), a);
+        var order = load.order(mission.id(), mission.organization().home(), a);
         var execution = ExpeditionSupplyAuthority.execution(state, mission, a);
         boolean permitted = a.pending().isEmpty() && execution.isPresent() && !state.actorMovements().containsKey(a.actorId())
                 && ServiceAccessCoordinator.available(state, ExpeditionSupplyServiceAccess.identity(mission, a));
@@ -92,8 +92,8 @@ final class ExpeditionSupplyProcess {
                 events.add(new ProposedEvent(a.actorId(), new ScheduleEffect.Created(ActorMovementProcess.progress(movement, now + 1))));
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { /* Retain named load; common navigation owns reconsideration. */ }
         } else if (permitted && ActorExecutionCoordinator.coldAvailable(state, a.actorId())
-                && !ReferenceContainerCustody.hasLiveCustody(state, mission.sender().containerId())
-                && !ReferenceContainerCustody.blocksCanonicalUse(state, mission.sender().containerId())) {
+                && !ReferenceContainerCustody.hasLiveCustody(state, mission.organization().home().containerId())
+                && !ReferenceContainerCustody.blocksCanonicalUse(state, mission.organization().home().containerId())) {
             var received = ExpeditionSupplyAuthority.coldLoaded(state, mission.id(), a.claimId());
             events.add(new ProposedEvent(mission.id(), new ExpeditionSupplyColdLoaded(mission.id(), a.claimId())));
             events.addAll(ExpeditionSupplyProcessModule.loadingContinuations(received, mission.id(), now));

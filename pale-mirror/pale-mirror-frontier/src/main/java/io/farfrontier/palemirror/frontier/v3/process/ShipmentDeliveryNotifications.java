@@ -10,12 +10,17 @@ final class ShipmentDeliveryNotifications {
     static List<ProposedEvent> loaded(Shipment shipment, long atTick) {
         if (shipment.status() != Shipment.Status.CARRYING || shipment.pendingPhysicalStep().isPresent())
             throw new IllegalArgumentException("loaded notification lacks confirmed cargo custody");
-        return shipment.transportMissionId().map(id -> List.of(TransportMissionProcess.wake(id, atTick))).orElseGet(List::of);
+        var notices = new ArrayList<ProposedEvent>();
+        if (shipment.authorization().kind() == ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT)
+            notices.add(GoodsTradeReceiptProcess.wake(shipment.authorization().claimantId(), shipment.id(), atTick));
+        shipment.transportMissionId().ifPresent(id -> notices.add(TransportMissionProcess.wake(id, atTick)));
+        return List.copyOf(notices);
     }
     private static final Map<ResourceClaimDelegation.Kind, BiFunction<Shipment, Long, List<ProposedEvent>>> PORTS = Map.of(
             ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT,
             (shipment, tick) -> List.of(GoodsTradeReceiptProcess.wake(shipment.authorization().claimantId(), shipment.reception().orElseThrow().id(), tick)),
-            ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT, InternalShipmentReceipts::wake);
+            ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT, InternalShipmentReceipts::wake,
+            ResourceClaimDelegation.Kind.OWNED_GOODS_SHIPMENT, InternalShipmentReceipts::wake);
     static {
         if (!PORTS.keySet().equals(EnumSet.allOf(ResourceClaimDelegation.Kind.class)))
             throw new IllegalArgumentException("missing shipment receiver-notification owner");

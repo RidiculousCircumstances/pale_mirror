@@ -14,7 +14,7 @@ public record TransportMissionAdvanced(SubjectId missionId, long expectedRevisio
     public TransportMissionAdvanced {
         Objects.requireNonNull(missionId); Objects.requireNonNull(next);
         Objects.requireNonNull(departure);
-        if (next != TransportMission.Stage.OUTBOUND && departure.isPresent())
+        if (next != TransportMission.Stage.OUTBOUND && next != TransportMission.Stage.TO_SOURCE && departure.isPresent())
             throw new IllegalArgumentException("only outbound admission may carry a departure proof");
         if (expectedRevision < 1) throw new IllegalArgumentException("invalid transport transition revision");
     }

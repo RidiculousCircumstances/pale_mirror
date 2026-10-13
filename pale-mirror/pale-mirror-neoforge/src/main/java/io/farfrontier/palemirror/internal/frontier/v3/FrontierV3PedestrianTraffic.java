@@ -190,6 +190,10 @@ final class FrontierV3PedestrianTraffic {
 
     private static boolean following(Mob actor, LivingEntity other, Path path) {
         if (path == null || path.isDone()) return false;
+        // Collision can give a parked pedestrian a small forward velocity. That
+        // is still an obstacle, not a travelling peer whose headway we must keep.
+        if (other instanceof Mob mob && !FrontierV3MinecraftGoalNavigation.travelling(mob)
+                && mob.getNavigation().isDone()) return false;
         return FrontierV3PedestrianFollowing.coFlow(actor.position(), heading(actor, path), other.position(), other.getDeltaMovement());
     }
 

@@ -20,8 +20,8 @@
       "expect": { "status": "ok", "expeditions": { "activeMissions": 1, "reservedAnimals": 1, "activeMembers": 2,
         "allocatedBudgets": 1 } },
       "timeoutMs": 180000, "causalMilestone": "one_real_finite_asset_for_a_mixed_manifest" },
-    { "type": "wait_until_diagnostic", "view": "process", "id": "unit-group:goods-trip/072dda445ab25ee967835f2100ac9787",
-      "expect": { "status": "ok", "mission": "transport-mission:goods-trip/072dda445ab25ee967835f2100ac9787" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "unit-group:goods-trip/seller_delivery/072dda445ab25ee967835f2100ac9787",
+      "expect": { "status": "ok", "mission": "transport-mission:goods-trip/seller_delivery/072dda445ab25ee967835f2100ac9787" },
       "timeoutMs": 30000, "causalMilestone": "exact_first_fixture_group_exists" },
     { "type": "wait_until_diagnostic", "view": "process", "id": "settlement:1",
       "expect": { "status": "ok", "expeditions": { "provisionedOutbound": 1, "activeMembers": 2 } },
@@ -58,7 +58,7 @@
       "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } },
       "offset": { "x": -8, "y": -1, "z": -8 }, "settleMs": 0 },
     { "type": "release_fast_forward_hold" },
-    { "type": "wait_until_diagnostic", "view": "process", "id": "unit-group:goods-trip/072dda445ab25ee967835f2100ac9787",
+    { "type": "wait_until_diagnostic", "view": "process", "id": "unit-group:goods-trip/seller_delivery/072dda445ab25ee967835f2100ac9787",
       "expect": { "status": "not_found" },
       "timeoutMs": 180000, "causalMilestone": "same_animal_returns_and_shared_responsibility_retires" },
     { "type": "inspect", "view": "actor", "id": "actor:pack/settlement-1" },
@@ -67,7 +67,7 @@
   "assertions": [
     { "after": 15, "view": "process", "id": "settlement:1", "expect": { "acceptedCommodities": {
       "minecraft:bread": true, "minecraft:cobblestone": true, "minecraft:coal": true } } },
-    { "after": 24, "view": "process", "id": "unit-group:goods-trip/072dda445ab25ee967835f2100ac9787",
+    { "after": 24, "view": "process", "id": "unit-group:goods-trip/seller_delivery/072dda445ab25ee967835f2100ac9787",
       "expect": { "status": "not_found" } },
     { "after": 25, "view": "actor", "id": "actor:pack/settlement-1", "expect": {
       "status": "ok", "life": "ALIVE", "navigationProfile": { "widthMicros": 1396485, "heightMicros": 1500000 },

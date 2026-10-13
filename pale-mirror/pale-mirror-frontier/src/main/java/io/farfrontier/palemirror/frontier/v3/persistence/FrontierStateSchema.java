@@ -6,7 +6,8 @@ import java.io.*;
 final class FrontierStateSchema {
     // A declared group execution can retain several stack-sized shipment obligations.
     // Older disposable worlds cannot inherit this new cargo authority/food-budget contract.
-    static final int VERSION = 284;
+    // Completed market prices survive contract retirement; old snapshots have no such grammar.
+    static final int VERSION = 286;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

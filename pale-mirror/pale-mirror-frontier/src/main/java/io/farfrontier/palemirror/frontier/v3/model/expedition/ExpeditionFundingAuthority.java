@@ -18,7 +18,7 @@ public final class ExpeditionFundingAuthority {
         // not repurpose the optional replenishment ceiling as that requirement.
         return ExpeditionFundingPolicy.allocation(FixedScalar.ZERO,
                 state.bootstrap().ruleset().expedition().replenishmentBudget(),
-                state.inventory().economics().availableToReserve(mission.sender().settlementId())).orElseThrow();
+                state.inventory().economics().availableToReserve(mission.organization().sponsor().id())).orElseThrow();
     }
 
     public static TransportMission declare(FrontierWorldState state, TransportMission mission) {

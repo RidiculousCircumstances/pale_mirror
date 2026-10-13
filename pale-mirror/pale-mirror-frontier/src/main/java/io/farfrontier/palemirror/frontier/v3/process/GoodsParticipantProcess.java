@@ -7,6 +7,7 @@ import java.util.*;
 
 /** Registered bounded economic reviews. Each participant supplies consent; matching and delivery remain separate. */
 public final class GoodsParticipantProcess {
+    private record QuoteKey(GoodsTradeParty counterparty, String itemKind, GoodsTradeOrder.Side side) { }
     public static final String REVIEW = "frontier.goods.participant.review";
     public static ScheduledAction review(SubjectId party, long due) {
         return new ScheduledAction(new ScheduleId("schedule:goods-participant/" + party.value().replace(':', '-')),
@@ -21,10 +22,17 @@ public final class GoodsParticipantProcess {
         if (periodic ? !action.id().equals(review(action.subject(), action.dueAt().ticks()).id())
                 : !action.kind().equals(GoodsParticipantWakeup.OPPORTUNITY) || !action.id().value().startsWith("schedule:goods-opportunity/"))
             throw new IllegalArgumentException("goods participant review has a foreign schedule");
-        var participant = state.companies().goodsTrade().participants().participants().get(action.subject());
-        if (participant == null) throw new IllegalArgumentException("goods review lost its exact declared participant");
+        var registered = state.companies().goodsTrade().participants().participants().get(action.subject());
+        if (registered == null) throw new IllegalArgumentException("goods review lost its exact declared participant");
         long now = executionInstant.ticks();
         var events = new ArrayList<ProposedEvent>();
+        var prices = GoodsParticipantPricing.review(state, registered, now);
+        if (!prices.equals(registered.prices())) {
+            var review = new GoodsParticipantPricesReviewed(registered.reviewRevision(), now, prices);
+            events.add(new ProposedEvent(registered.party().id(), review));
+            state = GoodsParticipantPricing.apply(state, registered.party().id(), review, now);
+        }
+        var participant = state.companies().goodsTrade().participants().participants().get(action.subject());
         // Retire only obligations already terminal in this transaction's pre-state.
         // Newly withdrawn promises must retain their settlement until a later review.
         var retirement = closedRetirement(state, now);
@@ -56,7 +64,7 @@ public final class GoodsParticipantProcess {
                             + "|" + contract.revision() + "|" + lot.getKey().value())));
                 var receipt = new GoodsTradeAcceptance(new SubjectId("receipt:goods-local/" + contract.id().value().replace(':', '-') + "/" + contract.revision()),
                         contract.id(), contract.revision(), new ResourceTitleTransfer(account.id(), claim.id(), contract.seller().id(), contract.buyer().id(), claim.lotQuantities(), splits));
-                state = GoodsTradeStateSupport.accept(state, participant.party().id(), receipt);
+                state = GoodsTradeStateSupport.accept(state, participant.party().id(), receipt, now);
                 events.add(new ProposedEvent(participant.party().id(), new GoodsTradeAccepted(receipt)));
                 events.addAll(GoodsParticipantWakeup.party(state, contract.seller().id(), receipt.id().value(), now));
                 break; // One exact reception per contract/review.
@@ -64,6 +72,20 @@ public final class GoodsParticipantProcess {
         }
         var rules = state.bootstrap().ruleset().goodsTrade();
         var intents = GoodsParticipantPolicies.require(participant).decide(GoodsParticipantView.read(state, participant), rules);
+        var retainedExpiry = new HashMap<QuoteKey, Long>();
+        for (var order : state.companies().goodsTrade().orders().values().stream()
+                .filter(value -> value.party().equals(participant.party()) && value.availableQuantity() > 0)
+                .sorted(Comparator.comparing(GoodsTradeOrder::id)).toList()) {
+            var replacement = intents.stream().filter(intent -> intent.itemKind().equals(order.itemKind()) && intent.side() == order.side()).findFirst();
+            boolean currentPeer = participant.known().stream().anyMatch(peer -> peer.party().equals(order.counterparty()));
+            if (currentPeer && order.expiresAtTick() >= now && replacement.filter(intent -> intent.quantity() == order.availableQuantity()
+                    && intent.limit().equals(order.unitPriceLimit())).isPresent()) continue;
+            if (order.expiresAtTick() >= now && replacement.isPresent()) retainedExpiry.merge(
+                    new QuoteKey(order.counterparty(), order.itemKind(), order.side()), order.expiresAtTick(), Math::min);
+            var withdrawal = new GoodsTradeOrderWithdrawn(order.id(), order.committedQuantity());
+            events.add(new ProposedEvent(participant.party().id(), withdrawal));
+            state = state.withCompanies(state.companies().withGoodsTrade(state.companies().goodsTrade().withdraw(participant.party().id(), withdrawal)));
+        }
         int published = 0;
         for (var intent : intents) for (var peer : participant.known()) {
             var counterparty = state.companies().goodsTrade().participants().participants().get(peer.party().id());
@@ -75,7 +97,8 @@ public final class GoodsParticipantProcess {
             var id = new SubjectId("order:goods-policy/" + WorkOpportunityIdentity.digest(participant.party().id().value() + "|" + participant.reviewRevision()
                     + "|" + peer.party().id().value() + "|" + intent.itemKind() + "|" + intent.side().wireTag()));
             var order = new GoodsTradeOrder(id, participant.party(), peer.party(), intent.side(), participant.endpoint().containerId(),
-                    intent.itemKind(), intent.quantity(), 0, intent.limit(), Math.addExact(now, rules.orderLifetime()));
+                    intent.itemKind(), intent.quantity(), 0, intent.limit(), retainedExpiry.getOrDefault(
+                            new QuoteKey(peer.party(), intent.itemKind(), intent.side()), Math.addExact(now, rules.orderLifetime())));
             state = GoodsTradeStateSupport.place(state, participant.party().id(), order, now);
             events.add(new ProposedEvent(participant.party().id(), new GoodsTradeOrderPlaced(order))); published++;
         }

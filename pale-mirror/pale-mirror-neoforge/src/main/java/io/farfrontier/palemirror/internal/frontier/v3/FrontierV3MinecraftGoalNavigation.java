@@ -296,6 +296,15 @@ final class FrontierV3MinecraftGoalNavigation {
         return control != null && control.permission().current(actor);
     }
 
+    /** A current unfinished physical leg, not velocity imparted by another body. */
+    static boolean travelling(Mob actor) {
+        var control = ACTIVE.get(actor);
+        return control != null && actor.isAlive() && !actor.isRemoved()
+                && actor.level() instanceof ServerLevel level && control.permission().current(actor)
+                && level.getGameTime() - control.refreshedAt() <= RETRY_TICKS
+                && !FrontierV3SemanticMovement.arrived(level, actor, control.target());
+    }
+
     /** Exact currently requested native leg, including failed legs awaiting a traffic retry. */
     record Demand(List<SurfaceAnchor> stations, FrontierV3NavigationScope scope, Optional<MovementOrder> order) {
         Demand {

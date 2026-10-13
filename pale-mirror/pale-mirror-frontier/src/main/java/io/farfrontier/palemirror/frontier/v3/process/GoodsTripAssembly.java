@@ -12,38 +12,40 @@ import java.util.*;
 final class GoodsTripAssembly {
     record Parcel(GoodsTradeContract contract, ClaimAllocation claim, SubjectId sourceAccount) { }
     static Optional<TransportMissionStarted> prepare(FrontierWorldState state, GoodsParticipant seller,
-                                                    GoodsParticipant buyer, List<Parcel> parcels, long now) {
+                                                    GoodsParticipant buyer, List<Parcel> parcels, GoodsTradeFulfillment.Mode mode, long now) {
+        var organizer = switch (mode) { case SELLER_DELIVERY -> seller; case BUYER_COLLECTION -> buyer; };
         if (parcels.isEmpty() || parcels.size() > 32) throw new IllegalArgumentException("unbounded trade manifest");
         for (var parcel : parcels) if (!parcel.contract().seller().equals(seller.party()) || !parcel.contract().buyer().equals(buyer.party())
+                || parcel.contract().fulfillment().mode() != mode || !parcel.contract().fulfillment().organizer().equals(organizer.party())
                 || !parcel.contract().sourceContainerId().equals(seller.endpoint().containerId())
                 || !parcel.contract().receiverContainerId().equals(buyer.endpoint().containerId())
                 || parcel.claim().quantity() > 64 || !parcel.contract().outstandingClaims().containsKey(parcel.claim().id()))
             throw new IllegalArgumentException("manifest mixes recipients or loses an exact accepted allocation");
-        var people = ResidentWorkComposition.SELECTION.eligible(state, seller.endpoint().settlementId(),
+        var people = ResidentWorkComposition.SELECTION.eligible(state, organizer.endpoint().settlementId(),
                 ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS, now);
         var available = new ArrayList<ResidentProfile>();
         for (var person : people) {
             var ids = new ArrayList<>(available.stream().map(ResidentProfile::id).toList()); ids.add(person.id());
-            if (SettlementLabourAllocation.canCommitToMission(state, seller.endpoint().settlementId(), ResidentWorkKind.LOGISTICS, ids))
+            if (SettlementLabourAllocation.canCommitToMission(state, organizer.endpoint().settlementId(), ResidentWorkKind.LOGISTICS, ids))
                 available.add(person);
         }
         if (available.isEmpty()) return Optional.empty();
         // A person carries one stack. Do not add support people to a walking load.
         if (parcels.size() <= available.size()) {
-            var walking = declaration(state, seller, buyer, parcels, available.subList(0, parcels.size()), Optional.empty(), now);
+            var walking = declaration(state, seller, buyer, parcels, mode, available.subList(0, parcels.size()), Optional.empty(), now);
             if (walking.isPresent()) return walking;
         }
         for (var animal : state.transportFleet().assets().values().stream().filter(a ->
-                TransportAssetAdmission.available(state, a, seller.endpoint().settlementId())).sorted(Comparator.comparing(TransportAsset::actorId)).toList()) {
+                TransportAssetAdmission.available(state, a, organizer.endpoint().settlementId())).sorted(Comparator.comparing(TransportAsset::actorId)).toList()) {
             if (parcels.size() > Math.min(animal.stackSlots(), state.bootstrap().ruleset().expedition().packAnimalStackSlots())) continue;
-            var packed = declaration(state, seller, buyer, parcels, List.of(available.getFirst()), Optional.of(animal), now);
+            var packed = declaration(state, seller, buyer, parcels, mode, List.of(available.getFirst()), Optional.of(animal), now);
             if (packed.isPresent()) return packed;
         }
         return Optional.empty();
     }
     private static Optional<TransportMissionStarted> declaration(FrontierWorldState state, GoodsParticipant seller,
-            GoodsParticipant buyer, List<Parcel> parcels, List<ResidentProfile> people, Optional<TransportAsset> animal, long now) {
-        String stem = WorkOpportunityIdentity.digest(parcels.stream().map(p -> p.claim().id().value()).collect(java.util.stream.Collectors.joining("|")));
+            GoodsParticipant buyer, List<Parcel> parcels, GoodsTradeFulfillment.Mode mode, List<ResidentProfile> people, Optional<TransportAsset> animal, long now) {
+        String stem = mode.name().toLowerCase(java.util.Locale.ROOT) + "/" + WorkOpportunityIdentity.digest(parcels.stream().map(p -> p.claim().id().value()).collect(java.util.stream.Collectors.joining("|")));
         var missionId = new SubjectId("transport-mission:goods-trip/" + stem);
         var groupId = new SubjectId("unit-group:goods-trip/" + stem);
         var approachActor = animal.map(TransportAsset::actorId).orElse(people.getFirst().id());
@@ -78,12 +80,16 @@ final class GoodsTripAssembly {
         var group = new UnitGroup(groupId, new UnitGroup.Mission(UnitGroup.MissionKind.TRANSPORT, missionId), members,
                 UnitGroup.Formation.COLUMN, UnitGroup.Phase.READY, 1, 0, Optional.empty());
         try {
-            var home = TransportGroupMissionPort.rendezvous(state, senderEndpoint, members.size(),
+            var homeEndpoint = mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? senderEndpoint : receiverEndpoint;
+            var remoteEndpoint = mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? receiverEndpoint : senderEndpoint;
+            var home = TransportGroupMissionPort.rendezvous(state, homeEndpoint, members.size(),
                     state.actorLocations().get(approachActor).navigationProfile());
-            var destination = TransportGroupMissionPort.rendezvous(state, receiverEndpoint, members.size(),
+            var destination = TransportGroupMissionPort.rendezvous(state, remoteEndpoint, members.size(),
                     state.actorLocations().get(approachActor).navigationProfile());
             var mission = new TransportMission(missionId, groupId, shipments.stream().map(Shipment::id).toList(),
-                    senderEndpoint, receiverEndpoint, home, destination, TransportMission.Stage.LOADING, 1);
+                    senderEndpoint, receiverEndpoint, new TransportOrganization(new EconomicIdentity(homeEndpoint.settlementId(), EconomicOwnerKind.SETTLEMENT_TREASURY),
+                            homeEndpoint, mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? TransportOrganization.Itinerary.SOURCE_DELIVERY : TransportOrganization.Itinerary.DESTINATION_COLLECTION),
+                    home, destination, mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? TransportMission.Stage.LOADING : TransportMission.Stage.PREPARING, 1);
             if (animal.isPresent()) mission = mission.withTransportAsset(animal.orElseThrow().actorId());
             var load = ExpeditionSupplyPlanning.load(state, mission, group, now);
             if (load.isEmpty()) return Optional.empty();

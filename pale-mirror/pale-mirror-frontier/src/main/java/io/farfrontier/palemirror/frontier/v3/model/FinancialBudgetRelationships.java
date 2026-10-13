@@ -13,7 +13,7 @@ final class FinancialBudgetRelationships {
             var mission = state.shipments().missions().get(budget.ownerId());
             if (budget.ownerKind() != FinancialBudget.OwnerKind.TRANSPORT_MISSION || mission == null
                     || !mission.financialBudgetId().equals(Optional.of(budget.id()))
-                    || !mission.sender().settlementId().equals(budget.payerId())
+                    || !mission.organization().sponsor().id().equals(budget.payerId())
                     || mission.stage() == TransportMission.Stage.COMPLETE && budget.remaining().raw() != 0)
                 throw new IllegalArgumentException("financial budget lost its exact active or closed mission owner");
             var life = mission.stage() == TransportMission.Stage.COMPLETE ? Lifecycle.TERMINAL_RETAINED : Lifecycle.ACTIVE;

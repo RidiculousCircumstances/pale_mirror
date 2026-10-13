@@ -23,7 +23,7 @@ public final class ExpeditionSupplyMovementProvider implements ActorMovementProv
         }
         if (movement.context() instanceof ActorMovementContext.ExpeditionAssembly assembly) {
             var mission = state.shipments().missions().get(assembly.missionId());
-            if (mission == null || mission.stage() != TransportMission.Stage.LOADING || mission.supplies().isEmpty()
+            if (mission == null || !mission.preparingSupplies() || mission.supplies().isEmpty()
                     || !ExpeditionSupplyAuthority.assemblyOrder(mission, movement.order().actorId()).equals(movement.order())
                     || mission.supplies().orElseThrow().allocations().stream().anyMatch(a -> a.actorId().equals(movement.order().actorId()) && !a.loaded()))
                 throw new IllegalArgumentException("assembly movement lacks a provisioned participant and its exact station");
@@ -35,11 +35,11 @@ public final class ExpeditionSupplyMovementProvider implements ActorMovementProv
         }
         if (!(movement.context() instanceof ActorMovementContext.ExpeditionSupply context)) throw new IllegalArgumentException("foreign supply movement context");
         var mission = state.shipments().missions().get(context.missionId());
-        if (mission == null || mission.stage() != TransportMission.Stage.LOADING || mission.supplies().isEmpty())
+        if (mission == null || !mission.preparingSupplies() || mission.supplies().isEmpty())
             throw new IllegalArgumentException("supply movement lost its loading mission");
         var load = mission.supplies().orElseThrow(); var allocation = load.allocations().stream()
                 .filter(a -> a.claimId().equals(context.claimId()) && !a.loaded()).findFirst().orElseThrow();
-        var order = load.order(mission.id(), mission.sender(), allocation).movementOrder();
+        var order = load.order(mission.id(), mission.organization().home(), allocation).movementOrder();
         if (!order.equals(movement.order()) || allocation.pending().isPresent()
                 || !ExpeditionSupplyAuthority.execution(state, mission, allocation).equals(Optional.of(movement.executionId())))
             throw new IllegalArgumentException("supply movement has a stale goal or foreign participant authority");

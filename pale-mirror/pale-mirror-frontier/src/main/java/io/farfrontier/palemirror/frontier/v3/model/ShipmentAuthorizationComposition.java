@@ -6,7 +6,8 @@ import java.util.Map;
 final class ShipmentAuthorizationComposition {
     private static final Map<ResourceClaimDelegation.Kind, ShipmentAuthorizationPort> PORTS = Map.of(
             ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT, new GoodsShipmentAuthorization(),
-            ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT, new InternalShipmentAuthorization());
+            ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT, new InternalShipmentAuthorization(),
+            ResourceClaimDelegation.Kind.OWNED_GOODS_SHIPMENT, new OwnedGoodsShipmentAuthorization());
     static {
         if (!PORTS.keySet().equals(java.util.EnumSet.allOf(ResourceClaimDelegation.Kind.class)))
             throw new IllegalArgumentException("shipment authorization registry is incomplete");
@@ -24,6 +25,17 @@ final class ShipmentAuthorizationComposition {
         ShipmentAuthorizationPort port = PORTS.get(shipment.authorization().kind());
         if (port == null) throw new IllegalArgumentException("unregistered shipment permission provider");
         port.validate(state, shipment, admission);
+    }
+    static void validateMission(FrontierWorldState state, Shipment shipment, TransportOrganization organization) {
+        var port = PORTS.get(shipment.authorization().kind());
+        if (port == null) throw new IllegalArgumentException("unregistered shipment mission permission provider");
+        port.validateMission(state, shipment, organization);
+    }
+    static boolean departureReady(FrontierWorldState state, Shipment shipment, TransportOrganization organization) {
+        var port = PORTS.get(shipment.authorization().kind());
+        if (port == null) throw new IllegalArgumentException("unregistered shipment departure permission provider");
+        port.validate(state, shipment, false);
+        return port.departureReady(shipment, organization);
     }
     private ShipmentAuthorizationComposition() { }
     static FrontierWorldStateUpdate allocationPartitioned(FrontierWorldState state, Shipment shipment, ResourceClaimPartition partition) {

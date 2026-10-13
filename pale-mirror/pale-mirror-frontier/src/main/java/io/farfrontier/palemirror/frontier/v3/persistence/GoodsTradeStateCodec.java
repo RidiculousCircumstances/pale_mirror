@@ -14,6 +14,7 @@ final class GoodsTradeStateCodec {
         out.writeInt(state.contracts().size());
         for (var entry : state.contracts().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) writeContract(out, entry.getValue());
         GoodsParticipantStateCodec.write(out, state.participants());
+        MarketPriceHistoryCodec.write(out, state.priceHistory());
     }
     static GoodsTradeState read(DataInputStream in) throws IOException {
         Map<SubjectId, GoodsTradeOrder> orders = new HashMap<>();
@@ -24,7 +25,7 @@ final class GoodsTradeStateCodec {
         for (int n = count(in, GoodsTradeState.MAX_CONTRACTS); n > 0; n--) {
             var contract = readContract(in); put(contracts, contract.id(), contract);
         }
-        return new GoodsTradeState(orders, contracts, GoodsParticipantStateCodec.read(in));
+        return new GoodsTradeState(orders, contracts, GoodsParticipantStateCodec.read(in), MarketPriceHistoryCodec.read(in));
     }
     static void writeOrder(DataOutputStream out, GoodsTradeOrder order) throws IOException {
         id(out, order.id()); party(out, order.party()); party(out, order.counterparty()); out.writeByte(order.side().wireTag());
@@ -37,7 +38,9 @@ final class GoodsTradeStateCodec {
     }
     static void writeContract(DataOutputStream out, GoodsTradeContract contract) throws IOException {
         id(out, contract.id()); id(out, contract.sellOrderId()); id(out, contract.buyOrderId());
-        party(out, contract.seller()); party(out, contract.buyer()); id(out, contract.sourceContainerId()); id(out, contract.receiverContainerId());
+        party(out, contract.seller()); party(out, contract.buyer());
+        out.writeByte(switch (contract.fulfillment().mode()) { case SELLER_DELIVERY -> 1; case BUYER_COLLECTION -> 2; });
+        party(out, contract.fulfillment().organizer()); id(out, contract.sourceContainerId()); id(out, contract.receiverContainerId());
         out.writeUTF(contract.itemKind()); out.writeInt(contract.quantity()); out.writeLong(contract.deliveredUnitPrice().raw());
         id(out, contract.financialReservationId()); out.writeLong(contract.revision()); quantities(out, contract.outstandingClaims());
         out.writeInt(contract.acceptedQuantity()); out.writeInt(contract.disposedQuantity());
@@ -48,6 +51,9 @@ final class GoodsTradeStateCodec {
     }
     static GoodsTradeContract readContract(DataInputStream in) throws IOException {
         SubjectId id = id(in), sell = id(in), buy = id(in); GoodsTradeParty seller = party(in), buyer = party(in);
+        var mode = switch (in.readUnsignedByte()) { case 1 -> GoodsTradeFulfillment.Mode.SELLER_DELIVERY; case 2 -> GoodsTradeFulfillment.Mode.BUYER_COLLECTION;
+            default -> throw new IllegalArgumentException("unknown goods fulfillment mode"); };
+        var fulfillment = new GoodsTradeFulfillment(mode, party(in));
         SubjectId source = id(in), receiver = id(in); String kind = in.readUTF(); int quantity = in.readInt();
         FixedScalar price = new FixedScalar(in.readLong()); SubjectId reservation = id(in); long revision = in.readLong();
         Map<SubjectId, Integer> claims = quantities(in); int accepted = in.readInt(), disposed = in.readInt();
@@ -55,7 +61,7 @@ final class GoodsTradeStateCodec {
         for (int n = count(in, GoodsTradeContract.MAX_RECEIPTS); n > 0; n--) { var receipt = acceptance(in); put(receipts, receipt.id(), receipt); }
         Map<SubjectId, GoodsTradeDisposition> dispositions = new HashMap<>();
         for (int n = count(in, GoodsTradeContract.MAX_RECEIPTS); n > 0; n--) { var disposition = disposition(in); put(dispositions, disposition.id(), disposition); }
-        return new GoodsTradeContract(id, sell, buy, seller, buyer, source, receiver, kind, quantity, price, reservation, revision, claims,
+        return new GoodsTradeContract(id, sell, buy, seller, buyer, fulfillment, source, receiver, kind, quantity, price, reservation, revision, claims,
                 receipts, dispositions, accepted, disposed);
     }
     static void disposition(DataOutputStream out, GoodsTradeDisposition disposition) throws IOException {

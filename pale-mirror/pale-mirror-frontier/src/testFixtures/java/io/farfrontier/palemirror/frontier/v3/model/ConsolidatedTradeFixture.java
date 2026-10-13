@@ -7,7 +7,10 @@ import java.util.*;
 public final class ConsolidatedTradeFixture {
     private ConsolidatedTradeFixture() { }
     public static FrontierWorldState initial(WorldId world, long seed, boolean requireAnimal) {
-        var state = FrontierWorldState.initial(FrontierBootstrapper.create(world, seed, FrontierRulesets.supplyQuarryGraybox()));
+        return initial(world, seed, requireAnimal, FrontierRulesets.supplyQuarryGraybox());
+    }
+    public static FrontierWorldState initial(WorldId world, long seed, boolean requireAnimal, FrontierRuleset rules) {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(world, seed, rules));
         var seller = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
         var buyer = state.companies().goodsTrade().participants().participants().get(seller.known().getFirst().party().id());
         var participants = new HashMap<>(state.companies().goodsTrade().participants().participants());

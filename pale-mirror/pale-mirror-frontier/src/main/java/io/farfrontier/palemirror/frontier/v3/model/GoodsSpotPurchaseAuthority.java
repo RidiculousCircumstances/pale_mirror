@@ -17,7 +17,7 @@ public final class GoodsSpotPurchaseAuthority {
         var sale = GoodsParticipantPolicies.require(seller).decide(GoodsParticipantView.read(state, seller), rules).stream()
                 .filter(i -> i.side() == GoodsTradeOrder.Side.SELL && i.itemKind().equals(kind)).findFirst().orElse(null);
         if (sale == null || rules.policies().get(buyer.policy()).stream().noneMatch(c -> c.itemKind().equals(kind)
-                && c.maximumBuyPrice().compareTo(sale.limit()) >= 0)) return 0;
+                && GoodsParticipantPricing.bid(buyer, c).compareTo(sale.limit()) >= 0)) return 0;
         return (int) Math.min(sale.quantity(), budget.remaining().raw() / sale.limit().raw());
     }
     public static Optional<GoodsSpotPurchase> offer(FrontierWorldState state, UnitResourceTransfer transfer,
@@ -33,7 +33,7 @@ public final class GoodsSpotPurchaseAuthority {
         var amount = sale.orElseThrow().limit().multiply(transfer.quantity());
         var buyer = state.companies().goodsTrade().participants().participants().get(buyerId);
         if (buyer == null || rules.policies().get(buyer.policy()).stream().noneMatch(c -> c.itemKind().equals(transfer.itemKind())
-                && c.maximumBuyPrice().compareTo(sale.orElseThrow().limit()) >= 0) || budget.remaining().compareTo(amount) < 0) return Optional.empty();
+                && GoodsParticipantPricing.bid(buyer, c).compareTo(sale.orElseThrow().limit()) >= 0) || budget.remaining().compareTo(amount) < 0) return Optional.empty();
         var splits = new LinkedHashMap<SubjectId, SubjectId>();
         for (var entry : new TreeMap<>(transfer.lots()).entrySet()) {
             var lot = state.inventory().fungibleResources().lots().get(entry.getKey());
@@ -57,6 +57,13 @@ public final class GoodsSpotPurchaseAuthority {
             throw new IllegalArgumentException("spot purchase lacks the actual complete goods receipt and retained payment");
         return inventory.withFungibleResources(inventory.fungibleResources().transferTitle(purchase.title()))
                 .withEconomics(inventory.economics().settle(purchase.payment().id()));
+    }
+    public static GoodsTradeState acceptedHistory(GoodsTradeState trade, UnitResourceTransfer transfer, GoodsSpotPurchase purchase, long now) {
+        if (purchase.payment().amount().raw() % transfer.quantity() != 0)
+            throw new IllegalArgumentException("spot payment does not retain an exact unit quote");
+        return trade.recordSale(transfer.itemKind(), new io.farfrontier.palemirror.frontier.v3.model.market.MarketPriceHistory.Sale(
+                purchase.payment().id(), purchase.payment().payeeId(), purchase.payment().payerId(), now, transfer.quantity(),
+                new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(purchase.payment().amount().raw() / transfer.quantity())));
     }
     public static ExactInventory cancel(ExactInventory inventory, GoodsSpotPurchase purchase) {
         if (!purchase.payment().equals(inventory.economics().reservations().get(purchase.payment().id())))

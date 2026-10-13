@@ -19,7 +19,7 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
     }
     @Override public boolean permitsHomeFood(FrontierWorldState state, UnitGroup group) {
         var mission = mission(state, group);
-        return mission.stage() == TransportMission.Stage.LOADING || mission.stage() == TransportMission.Stage.COMPLETE;
+        return mission.preparingSupplies() || mission.stage() == TransportMission.Stage.COMPLETE;
     }
     public static TransportMission mission(FrontierWorldState state, UnitGroup group) {
         var mission = state.shipments().missions().get(group.mission().id());
@@ -36,6 +36,9 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
             java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, Shipment> shipments) {
         if (!mission.groupId().equals(group.id()) || !group.mission().equals(new UnitGroup.Mission(UnitGroup.MissionKind.TRANSPORT, mission.id())))
             throw new IllegalArgumentException("transport declaration has a foreign nominal group/mission tuple");
+        mission.organization().require(state);
+        var expectedHome = switch (mission.organization().itinerary()) { case SOURCE_DELIVERY -> mission.sender(); case DESTINATION_COLLECTION -> mission.receiver(); };
+        if (!mission.organization().home().equals(expectedHome)) throw new IllegalArgumentException("transport home contradicts its declared itinerary");
         var carriers = new java.util.HashSet<io.farfrontier.palemirror.frontier.v3.api.SubjectId>();
         for (var member : group.members()) {
             var actor = state.actorLocations().get(member.actorId());
@@ -71,7 +74,7 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
             throw new IllegalArgumentException("transport roster does not cover its exact shipments");
         mission.transportAssetId().ifPresent(actor -> {
             var asset = state.transportFleet().require(actor);
-            if (!asset.homeSettlementId().equals(mission.sender().settlementId())
+            if (!asset.homeSettlementId().equals(mission.organization().home().settlementId())
                     || group.members().stream().noneMatch(m -> m.actorId().equals(actor))
                     || shipments.values().stream().filter(s -> mission.shipmentIds().contains(s.id()))
                         .anyMatch(s -> !s.execution().actorId().equals(actor) || !s.mobileContainerId().equals(Optional.of(asset.containerId()))))
@@ -163,8 +166,9 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
     }
     @Override public boolean mayTravel(FrontierWorldState state, UnitGroup group, long ordinal) {
         var mission = mission(state, group);
-        return mission.replenishment().isEmpty() && (ordinal == 1 && mission.stage() == TransportMission.Stage.OUTBOUND
-                || ordinal == 2 && mission.stage() == TransportMission.Stage.RETURNING);
+        return mission.replenishment().isEmpty() && (ordinal == 1 && mission.stage() == TransportMission.Stage.TO_SOURCE
+                || ordinal == mission.deliveryOrdinal() && mission.stage() == TransportMission.Stage.OUTBOUND
+                || ordinal == mission.returnOrdinal() && mission.stage() == TransportMission.Stage.RETURNING);
     }
     @Override public MovementPermission movementPermission(FrontierWorldState state, UnitGroup group) {
         var mission = mission(state, group);
@@ -176,7 +180,7 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
     }
     @Override public boolean requestsJourneyStop(FrontierWorldState state, UnitGroup group) {
         var mission = mission(state, group);
-        return mission.stage() == TransportMission.Stage.OUTBOUND
+        return (mission.stage() == TransportMission.Stage.OUTBOUND || mission.stage() == TransportMission.Stage.TO_SOURCE)
                 && mission.shipmentIds().stream().allMatch(id -> state.shipments().shipments().get(id).terminal());
     }
     @Override public boolean mayClose(FrontierWorldState state, UnitGroup group) {
