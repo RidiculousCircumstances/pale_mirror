@@ -34,7 +34,6 @@ final class ExtractionWorkPlanning {
         return false;
     }
     static boolean demanded(FrontierWorldState state, SubjectId home) {
-        return state.bootstrap().ruleset().extraction().enabled() && state.bootstrap().ruleset().extraction().source().coldOutput().stream()
-                .anyMatch(output -> ProductionStockDemand.read(state, home, output.itemKind()).requested());
+        return ExtractionStockDemand.requested(state, home);
     }
 }

@@ -82,7 +82,7 @@ final class FrontierV3AmbientActorExecutor {
     static final String ACTOR_KEY = FrontierV3ActorCarrierComposition.ACTOR_KEY;
     static final String KIND_KEY = FrontierV3ActorCarrierComposition.KIND_KEY;
     static final String CUSTODY_EPOCH_KEY = FrontierV3ActorCarrierComposition.EPOCH_KEY;
-    private static final int DRAIN_SAFE_RADIUS_BLOCKS = 64;
+    static final int DRAIN_SAFE_RADIUS_BLOCKS = 64;
     static final long DRAIN_HYSTERESIS_TICKS = 200L;
     private static final int GRAYBOX_BIOFORM_FIRE_RESISTANCE_TICKS = Integer.MAX_VALUE;
     private static final int MAX_ACTOR_PROBES_PER_TICK = 32;

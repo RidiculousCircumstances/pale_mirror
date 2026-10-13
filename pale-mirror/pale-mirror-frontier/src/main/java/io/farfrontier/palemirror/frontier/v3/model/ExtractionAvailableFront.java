@@ -36,6 +36,7 @@ final class ExtractionAvailableFront {
         return new AdjacentExcavationPlanner.FrontSelection() {
             @Override public List<SurfaceAnchor> order(Collection<SurfaceAnchor> surfaces) { return terraces.order(surfaces); }
             @Override public List<Integer> floorOffsets(SurfaceAnchor station, int dx, int dz) { return terraces.floorOffsets(station, dx, dz); }
+            @Override public int clearanceTopY(SurfaceAnchor station, SurfaceAnchor floor) { return terraces.clearanceTopY(station, floor); }
             @Override public boolean retainsColumn(SurfaceAnchor surface) {
                 return deposit.site().layout().fixedBlocks().containsKey(surface.support());
             }

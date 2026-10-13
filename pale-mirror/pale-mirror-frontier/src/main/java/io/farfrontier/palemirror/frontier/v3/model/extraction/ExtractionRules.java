@@ -12,7 +12,18 @@ public record ExtractionRules(boolean enabled, int producerStride, int width, in
                               java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockStratum> geology,
                               java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.ExcavationTerraces> terraces,
                               java.util.Optional<ExtractionSurfaceCut> surfaceCut,
-                              java.util.Optional<ExtractionRockRise> rockRise) {
+                              java.util.Optional<ExtractionRockRise> rockRise,
+                              java.util.Optional<ExtractionPocketProfile> pocket) {
+    public ExtractionRules(boolean enabled, int producerStride, int width, int depth, int reserveItems,
+            int minersPerSite, int haulBatch, long reviewTicks, int exteriorClearance, int pitDepth,
+            int projectionWritesPerTurn, BlockExtraction.Definition source, int developmentBatchCells,
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockStratum> geology,
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.ExcavationTerraces> terraces,
+            java.util.Optional<ExtractionSurfaceCut> surfaceCut, java.util.Optional<ExtractionRockRise> rockRise) {
+        this(enabled, producerStride, width, depth, reserveItems, minersPerSite, haulBatch, reviewTicks,
+                exteriorClearance, pitDepth, projectionWritesPerTurn, source, developmentBatchCells, geology,
+                terraces, surfaceCut, rockRise, java.util.Optional.empty());
+    }
     public ExtractionRules(boolean enabled, int producerStride, int width, int depth, int reserveItems,
             int minersPerSite, int haulBatch, long reviewTicks, int exteriorClearance, int pitDepth,
             int projectionWritesPerTurn, BlockExtraction.Definition source, int developmentBatchCells,
@@ -52,7 +63,12 @@ public record ExtractionRules(boolean enabled, int producerStride, int width, in
     }
     public ExtractionRules {
         Objects.requireNonNull(source); Objects.requireNonNull(geology); Objects.requireNonNull(terraces); Objects.requireNonNull(surfaceCut);
-        Objects.requireNonNull(rockRise);
+        Objects.requireNonNull(rockRise); Objects.requireNonNull(pocket);
+        pocket.ifPresent(value -> {
+            if (!enabled || value.firstDepth() + value.depthCells() > depth || value.firstRow() + value.rowCells() > width
+                    || !value.material().toolKind().equals(source.toolKind()) || value.material().before().equals(source.before()))
+                throw new IllegalArgumentException("deposit inclusion has no finite compatible initial face");
+        });
         if (rockRise.isPresent() && (!enabled || surfaceCut.isEmpty() || geology.isEmpty()))
             throw new IllegalArgumentException("rock rise requires an explicit contiguous terrain baseline");
         if (producerStride < 1 || producerStride > 12 || width < 2 || width > 32
@@ -115,7 +131,12 @@ public record ExtractionRules(boolean enabled, int producerStride, int width, in
     public ExtractionRules withReserveItems(int quantity) {
         return new ExtractionRules(enabled, producerStride, width, depth, quantity, minersPerSite, haulBatch,
                 reviewTicks, exteriorClearance, pitDepth, projectionWritesPerTurn, source, developmentBatchCells,
-                geology, terraces, surfaceCut, rockRise);
+                geology, terraces, surfaceCut, rockRise, pocket);
+    }
+    public ExtractionRules withPocket(ExtractionPocketProfile value) {
+        return new ExtractionRules(enabled, producerStride, width, depth, reserveItems, minersPerSite, haulBatch,
+                reviewTicks, exteriorClearance, pitDepth, projectionWritesPerTurn, source, developmentBatchCells,
+                geology, terraces, surfaceCut, rockRise, java.util.Optional.of(value));
     }
     public String canonicalText() {
         return enabled + "|" + producerStride + "|" + width + "|" + depth + "|" + reserveItems
@@ -129,13 +150,16 @@ public record ExtractionRules(boolean enabled, int producerStride, int width, in
                 + geology.map(value -> "|geology=" + value.canonicalText()).orElse("")
                 + terraces.map(value -> "|terraces=" + value.canonicalText()).orElse("")
                 + surfaceCut.map(value -> "|surface-cut=" + value.canonicalText()).orElse("")
-                + rockRise.map(value -> "|rock-rise=" + value.canonicalText()).orElse("");
+                + rockRise.map(value -> "|rock-rise=" + value.canonicalText()).orElse("")
+                + pocket.map(value -> "|pocket=" + value.canonicalText()).orElse("");
     }
     public java.util.Optional<BlockExtraction.Definition> definitionFor(BlockExtraction.Block block) {
         return definitions().stream().filter(definition -> definition.before().equals(block)).findFirst();
     }
     public List<BlockExtraction.Definition> definitions() {
-        return surfaceCut.map(value -> List.of(source, value.cover())).orElseGet(() -> List.of(source));
+        var values = new java.util.ArrayList<BlockExtraction.Definition>(); values.add(source);
+        surfaceCut.ifPresent(value -> values.add(value.cover())); pocket.ifPresent(value -> values.add(value.material()));
+        return List.copyOf(values);
     }
     static String blockText(BlockExtraction.Block block) {
         return block.kind() + block.properties().entrySet().stream().sorted(Map.Entry.comparingByKey())

@@ -47,7 +47,7 @@ class FrontierV3FixtureCatalogTest {
         assertEquals(1, state.productionJobs().size());
         var job = state.productionJobs().values().iterator().next();
         assertEquals(BakeryWorkState.Phase.PROCESSING, job.bakeryWork().orElseThrow().phase());
-        assertTrue(job.bakeryWork().orElseThrow().labour().orElseThrow().running());
+        assertTrue(BakeryLabour.progress(state, job).orElseThrow().running());
         assertEquals(new SubjectId("job:production-" + job.taskId().value().substring("task:".length())), job.id());
         assertTrue(SettlementWorkPolicy.permissions(state, job.settlementId())
                 .permits(ResidentWorkKind.BAKING, job.workerId()));
@@ -65,7 +65,7 @@ class FrontierV3FixtureCatalogTest {
         assertEquals(1, state.productionJobs().size());
         var job = state.productionJobs().values().iterator().next();
         assertEquals(BakeryWorkState.Phase.PROCESSING, job.bakeryWork().orElseThrow().phase());
-        assertTrue(job.bakeryWork().orElseThrow().labour().orElseThrow().running());
+        assertTrue(BakeryLabour.progress(state, job).orElseThrow().running());
         var held = assertInstanceOf(ProductionInputHold.FungibleCold.class, job.inputHold());
         assertEquals(java.util.Map.of(new SubjectId("lot:production-two-field-first"), 32,
                 new SubjectId("lot:production-two-field-second"), 32), held.inputLots());
@@ -157,7 +157,7 @@ class FrontierV3FixtureCatalogTest {
         for (int index = 0; index < profiles.size(); index++) {
             FrontierV3FixtureCatalog.Profile profile = profiles.get(index);
             assertTrue(profile.provider().length() > 0);
-            assertTrue(java.util.Set.of("production", "expedition-candidate", "quarry-graybox", "quarry-front").contains(profile.rulesetId()));
+            assertTrue(java.util.Set.of("production", "expedition-candidate", "quarry-graybox", "quarry-front", "fuelled-quarry").contains(profile.rulesetId()));
             assertTrue(profile.sourceProfile().length() > 0);
             assertTrue(profile.requiredAssertion().length() > 0);
             String world = "frontier:catalog-" + profile.id();
@@ -168,6 +168,7 @@ class FrontierV3FixtureCatalogTest {
                 case "expedition-candidate" -> FrontierRulesets.installed("frontier-v3-expedition-candidate-r2");
                 case "quarry-graybox" -> FrontierRulesets.installed("frontier-v3-quarry-graybox-r4");
                 case "quarry-front" -> FrontierRulesets.installed("frontier-v3-quarry-graybox-r7");
+                case "fuelled-quarry" -> FrontierRulesets.fuelledQuarryGraybox();
                 default -> throw new AssertionError("undeclared fixture ruleset " + profile.rulesetId());
             };
             assertEquals(expected, configuration.initialState().bootstrap().ruleset(),

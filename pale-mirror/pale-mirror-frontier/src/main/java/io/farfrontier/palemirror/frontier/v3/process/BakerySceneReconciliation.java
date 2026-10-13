@@ -31,16 +31,17 @@ public final class BakerySceneReconciliation {
                 .filter(candidate -> candidate.id().equals(work.stationId())).findFirst().orElseThrow(
                         () -> new IllegalArgumentException("station recovery lost its production station"));
         var batch = ledger.accounts().get(work.stationAccountId());
-        String kind = work.phase() == BakeryWorkState.Phase.PROCESSING ? "minecraft:wheat" : "minecraft:bread";
+        String kind = BakeryCargo.kind(job);
         if (work.phase() != receipt.phase() || work.pendingPhysicalStep().isPresent()
+                || ContainerPhysicalAuthorityComposition.pending(state, station.containerId())
                 || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
                 || !ActorExecutionCoordinator.ambientAvailable(state, java.util.List.of(job.workerId()))
                 || state.actorMovements().containsKey(job.workerId())
                 || ledger.accounts().containsKey(work.actorAccountId())
                 || FrontierSceneLeaseStateSupport.hasBoundSceneHand(state, lease)
                 || batch == null || !batch.custody().equals(new ResourceCustody.Container(station.containerId()))
-                || batch.lotQuantities().values().stream().mapToInt(Integer::intValue).sum() != job.outputCount()
-                || batch.lotQuantities().keySet().stream().anyMatch(id -> !ledger.lots().get(id).itemKind().equals(kind)))
+                || batch.lotQuantities().entrySet().stream().filter(entry -> ledger.lots().get(entry.getKey()).itemKind().equals(kind))
+                    .mapToInt(java.util.Map.Entry::getValue).sum() != BakeryCargo.quantity(job))
             throw new IllegalArgumentException("station recovery cannot abandon cargo or a pending physical effect");
         var fence = state.fencedRecovery().current().get(ActorBodyId.recoveryBindingId(job.workerId()));
         if (fence == null || fence.asset() != FencedRecoveryAsset.BODY || !fence.ownerId().equals(job.workerId())
@@ -72,14 +73,14 @@ public final class BakerySceneReconciliation {
         var account = state.inventory().fungibleResources().accounts().get(work.actorAccountId());
         var bindings = state.inventory().fungibleResources().bindings().values().stream()
                 .filter(value -> value.accountId().equals(work.actorAccountId())).toList();
-        String kind = work.phase() == BakeryWorkState.Phase.STATION_LOAD ? "minecraft:wheat" : "minecraft:bread";
+        String kind = BakeryCargo.kind(job);
         if (work.pendingPhysicalStep().isPresent()
                 || work.phase() != BakeryWorkState.Phase.STATION_LOAD && work.phase() != BakeryWorkState.Phase.DEPOT_DELIVERY
                 || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
                 || state.actorMovements().containsKey(job.workerId())
                 || !ActorExecutionCoordinator.ambientAvailable(state, java.util.List.of(job.workerId()))
                 || !hand.actorId().equals(job.workerId()) || !hand.entityId().equals(lease.members().getFirst().entityId())
-                || !kind.equals(receipt.observedHand().itemKind()) || receipt.observedHand().quantity() != job.outputCount()
+                || !kind.equals(receipt.observedHand().itemKind()) || receipt.observedHand().quantity() != BakeryCargo.quantity(job)
                 || account == null || !account.custody().equals(new ResourceCustody.Actor(job.workerId()))
                 || bindings.size() > 1
                 || !bindings.isEmpty() && (!bindings.getFirst().address().equals(hand)

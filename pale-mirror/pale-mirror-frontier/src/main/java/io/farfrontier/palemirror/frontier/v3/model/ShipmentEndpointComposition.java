@@ -5,7 +5,7 @@ import java.util.*;
 /** Facility capabilities validate a declared physical station; carriers do not guess geometry. */
 public final class ShipmentEndpointComposition {
     private static final List<ShipmentEndpointPort> PROVIDERS = List.of(new DepotShipmentEndpointPort(), new ExtractiveShipmentEndpointPort(),
-            new StorageShipmentEndpointPort());
+            new StorageShipmentEndpointPort(), new ProductionShipmentEndpointPort());
     private static final Map<ShipmentEndpoint.Kind, ShipmentEndpointPort> PORTS = PROVIDERS.stream()
             .collect(java.util.stream.Collectors.toUnmodifiableMap(ShipmentEndpointPort::kind, value -> value));
     static {
@@ -20,6 +20,7 @@ public final class ShipmentEndpointComposition {
     public static void validate(FrontierWorldState state, ShipmentEndpoint endpoint) {
         port(endpoint).validate(state, endpoint);
     }
+    static ShipmentReceiverReplacement replacementPolicy(ShipmentEndpoint endpoint) { return port(endpoint).replacementPolicy(); }
     public static KnownPedestrianRouteKnowledge knowledge(FrontierWorldState state, List<ShipmentEndpoint> endpoints) {
         endpoints = List.copyOf(endpoints);
         if (endpoints.isEmpty() || endpoints.size() > 8) throw new IllegalArgumentException("shipment journey needs bounded endpoints");

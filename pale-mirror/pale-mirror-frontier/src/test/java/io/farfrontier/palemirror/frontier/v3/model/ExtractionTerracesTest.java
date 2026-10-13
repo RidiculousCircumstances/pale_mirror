@@ -114,7 +114,7 @@ class ExtractionTerracesTest {
         assertEquals(Optional.of(floor), ServiceAreaDestinations.select(List.of(), actor, start, knowledge, Set.of(),
                 candidate -> candidate.equals(rim) || candidate.equals(floor)));
     }
-    @Test void lowerLandingsRequireBodyClearanceWithoutStrippingTheRoofAndRetainHistory() {
+    @Test void lowerLandingsRequireSweptStepClearanceWithoutStrippingTheWholeColumnAndRetainHistory() {
         var before = clearDeclared(initial()); var old = deposit(before); var id = old.site().id();
         var event = ExtractionAreaPlanning.proposal(before, id).orElseThrow();
         var column = event.columns().stream().filter(c -> c.floor().y() < old.site().layout().storagePort().y()).findFirst().orElseThrow();
@@ -128,10 +128,13 @@ class ExtractionTerracesTest {
         var roof = next.site().layout().cells().stream().filter(c -> c.source().x() == column.floor().x()
                 && c.source().z() == column.floor().z() && c.source().y() > upper.source().y())
                 .sorted(Comparator.comparingInt((ExtractionLayout.Cell cell) -> cell.source().y()).reversed()).toList();
-        assertTrue(roof.isEmpty(), "a two-block front must not mandate stripping a roof or grass cap");
+        assertEquals(1, roof.size(), "a descent needs just its swept headroom, not stripping the whole column");
+        assertEquals(column.station().y() + 2, roof.getFirst().source().y());
+        assertTrue(upper.prerequisites().contains(roof.getFirst().id()));
         assertTrue(lower.prerequisites().contains(upper.id()));
         assertFalse(next.available(Set.of()).contains(lower));
-        var clearedUpper = next.extracted(upper.id(), 1, "fixture:upper-clearance");
+        var clearedRoof = next.extracted(roof.getFirst().id(), 1, "fixture:step-headroom");
+        var clearedUpper = clearedRoof.extracted(upper.id(), 1, "fixture:upper-clearance");
         assertTrue(clearedUpper.available(Set.of()).contains(lower));
         var partial = admitted.withChanges(FrontierWorldStateUpdate.begin().extractionSites(admitted.extractionSites().replace(clearedUpper)));
         assertTrue(KnownPedestrianRouteKnowledge.forFrontier(partial).geometry().blocked(column.floor()));

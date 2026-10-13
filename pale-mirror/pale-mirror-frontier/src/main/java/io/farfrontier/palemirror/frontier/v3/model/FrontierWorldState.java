@@ -20,7 +20,29 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         Map<SubjectId, ActorMovement> actorMovements, ActorExecutionState actorExecutions, ShipmentState shipments,
         io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState unitGroups,
         io.farfrontier.palemirror.frontier.v3.model.expedition.TransportFleet transportFleet,
+        io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState extractionSites,
+        ProductionStations productionStations) {
+    /** Fresh construction without operating equipment; hydration always supplies its own runtime. */
+    public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actorLocations,
+        Map<SubjectId, StructureCondition> structureConditions, Map<InfectionCell, FixedRatio> infection, ExactInventory inventory,
+        Map<SubjectId, ProductionJob> productionJobs, Map<SubjectId, SettlementServiceWork> serviceWorks,
+        Map<PhysicalIntentId, PhysicalIntent> physicalIntents, Map<PhysicalObservationId, PhysicalEffectObservation> physicalObservations,
+        Map<SceneLeaseId, SceneLease> sceneLeases, HiveColony hiveColony, Map<SubjectId, StructureDamage> structureDamage,
+        Map<BlockPosition, PhysicalDelta> physicalDeltas, Map<SubjectId, AmbientActorLease> ambientLeases,
+        Map<SubjectId, RouteConstruction> routeConstructions, Map<SubjectId, RouteMaintenance> routeMaintenances,
+        RouteTopology routeTopology, StrategicPlanState strategicPlans, HumanPopulation humanPopulation, CompanyRegistry companies,
+        ResourceSiteState resourceSites, PhysicalReplicaCustodyState replicaCustody, DeferredAftermathState deferredAftermath,
+        FencedRecoveryState fencedRecovery, DiagnosticIncidentIndex diagnosticIncidents,
+        Map<SubjectId, ActorMovement> actorMovements, ActorExecutionState actorExecutions, ShipmentState shipments,
+        io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState unitGroups,
+        io.farfrontier.palemirror.frontier.v3.model.expedition.TransportFleet transportFleet,
         io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState extractionSites) {
+        this(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, serviceWorks,
+                physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas,
+                ambientLeases, routeConstructions, routeMaintenances, routeTopology, strategicPlans, humanPopulation,
+                companies, resourceSites, replicaCustody, deferredAftermath, fencedRecovery, diagnosticIncidents,
+                actorMovements, actorExecutions, shipments, unitGroups, transportFleet, extractionSites, ProductionStations.empty());
+    }
     /** Construction for worlds with no declared extractive content; current hydration declares it explicitly. */
     public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actorLocations,
         Map<SubjectId, StructureCondition> structureConditions, Map<InfectionCell, FixedRatio> infection, ExactInventory inventory,
@@ -188,13 +210,15 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         HarvestActivityCapability.validateReferences(resourceSites, actorExecutions);
         ProductionActivityCapability.validateReferences(productionJobs, actorExecutions);
         if (!actorLocations.keySet().containsAll(actorExecutions.actors().keySet())) throw new IllegalArgumentException("execution names unknown actor");
+        Objects.requireNonNull(productionStations, "installed-machine runtime");
         if (!fullValidationDeferred()) {
+            productionStations.validate(inventory, bootstrap.ruleset().production());
             ContainerPhysicalReservations.validate(inventory, resourceSites, productionJobs, shipments, extractionSites, physicalIntents);
             ActorBodyAuthority.validate(actorLocations, fencedRecovery);
             validateFullState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs,
                 serviceWorks, physicalIntents, physicalObservations, sceneLeases, hiveColony,
                 structureDamage, physicalDeltas, ambientLeases, routeConstructions, routeMaintenances, routeTopology, strategicPlans,
-                humanPopulation, companies, resourceSites, fencedRecovery, actorExecutions, transportFleet);
+                humanPopulation, companies, resourceSites, fencedRecovery, actorExecutions, transportFleet, productionStations);
         }
     }
     /** Keeps the high-frequency immutable-state constructor below the JIT's large-method threshold. */
@@ -211,7 +235,12 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                                           StrategicPlanState strategicPlans, HumanPopulation humanPopulation,
                                           CompanyRegistry companies, ResourceSiteState resourceSites, FencedRecoveryState fencedRecovery,
                                           io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState actorExecutions,
-                                          io.farfrontier.palemirror.frontier.v3.model.expedition.TransportFleet transportFleet) {
+                                          io.farfrontier.palemirror.frontier.v3.model.expedition.TransportFleet transportFleet,
+                                          ProductionStations productionStations) {
+            productionJobs.values().stream().filter(job -> job.bakeryWork().isPresent())
+                    .forEach(job -> BakeryStationOperation.validate(productionStations, job));
+            ProductionOperationCompletionComposition.validateRelations(productionStations,
+                    Map.of(ProductionOrderKind.BAKERY, BakeryStationOperation.activeOrders(productionJobs)));
             resourceSites.validate(bootstrap); HarvestContainerReservations.validate(inventory, resourceSites);
             HarvestContainerReservations.validateAccounts(inventory, resourceSites);
             strategicPlans.validate(bootstrap, routeTopology, humanPopulation);
@@ -349,7 +378,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             if (worker == null) throw new IllegalArgumentException("production job worker must be a canonical resident");
             if (!worker.settlementId().equals(settlement.id())) throw new IllegalArgumentException("bread production job worker must belong to its retained settlement");
             if (job.bakeryWork().isPresent()) {
-                BakeryWorkValidation.validate(inventory, job, settlement);
+                BakeryWorkValidation.validate(inventory, job, settlement, bootstrap.ruleset().production());
                 continue;
             }
             if (inventory.items().containsKey(job.outputItemId())) {
@@ -475,7 +504,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         try {
             new FrontierWorldState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs, serviceWorks, physicalIntents, physicalObservations, sceneLeases, hiveColony, structureDamage, physicalDeltas,
                     ambientLeases, routeConstructions, routeMaintenances, routeTopology, strategicPlans, humanPopulation, companies, resourceSites, replicaCustody, deferredAftermath, fencedRecovery, diagnosticIncidents,
-                            actorMovements, actorExecutions, shipments, unitGroups, transportFleet, extractionSites);
+                            actorMovements, actorExecutions, shipments, unitGroups, transportFleet, extractionSites, productionStations);
         } finally {
             if (depth != 0) DEFERRED_FULL_VALIDATION_DEPTH.set(depth);
         }
@@ -505,7 +534,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     private boolean onlyPlannerAndHealthChangedFrom(FrontierWorldState previous, boolean requirePlannerOrHealthChange) {
         if (bootstrap != previous.bootstrap || actorLocations != previous.actorLocations || structureConditions != previous.structureConditions
                 || (requirePlannerOrHealthChange && infection != previous.infection) || inventory != previous.inventory || productionJobs != previous.productionJobs
-                || shipments != previous.shipments || transportFleet != previous.transportFleet || extractionSites != previous.extractionSites ||
+                || productionStations != previous.productionStations || shipments != previous.shipments || transportFleet != previous.transportFleet || extractionSites != previous.extractionSites ||
                         unitGroups != previous.unitGroups || physicalIntents != previous.physicalIntents
                 || physicalObservations != previous.physicalObservations || sceneLeases != previous.sceneLeases || hiveColony != previous.hiveColony
                 || structureDamage != previous.structureDamage || physicalDeltas != previous.physicalDeltas || ambientLeases != previous.ambientLeases
@@ -536,7 +565,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     }
     private boolean onlyInfectionChangedFrom(FrontierWorldState previous) {
         return bootstrap == previous.bootstrap && actorLocations == previous.actorLocations && structureConditions == previous.structureConditions
-                && inventory == previous.inventory && productionJobs == previous.productionJobs && shipments == previous.shipments
+                && productionStations == previous.productionStations && inventory == previous.inventory && productionJobs == previous.productionJobs && shipments == previous.shipments
                 && unitGroups == previous.unitGroups && transportFleet == previous.transportFleet && extractionSites == previous.extractionSites &&
                         physicalIntents == previous.physicalIntents && physicalObservations == previous.physicalObservations
                 && sceneLeases == previous.sceneLeases && hiveColony == previous.hiveColony && structureDamage == previous.structureDamage
@@ -553,7 +582,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                             Map<BlockPosition, PhysicalDelta> deltas, Map<SubjectId, AmbientActorLease> ambient) {
         return new FrontierWorldState(bootstrap, actors, structures, nextInfection, nextInventory, jobs, serviceWorks, intents, observations, leases, colony, damage, deltas, ambient, routeConstructions, routeMaintenances,
                 routeTopology, strategicPlans, humanPopulation, companies, resourceSites, replicaCustody, deferredAftermath,
-                fencedRecovery, diagnosticIncidents, actorMovements, actorExecutions, shipments, unitGroups, transportFleet, extractionSites);
+                fencedRecovery, diagnosticIncidents, actorMovements, actorExecutions, shipments, unitGroups, transportFleet, extractionSites, productionStations);
     }
     public FrontierWorldState withChanges(FrontierWorldStateUpdate change) {
         change = Objects.requireNonNull(change, "state change");
@@ -563,7 +592,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
                 change.structureDamage(this), change.physicalDeltas(this), change.ambientLeases(this), change.routeConstructions(this), change.routeMaintenances(this),
                 change.routeTopology(this), change.strategicPlans(this), change.humanPopulation(this), change.companies(this), change.resourceSites(this), change.replicaCustody(this), change.deferredAftermath(this),
                         change.fencedRecovery(this), change.diagnosticIncidents(this), change.actorMovements(this), change.actorExecutions(this),
-                        change.shipments(this), change.unitGroups(this), change.transportFleet(this), change.extractionSites(this));
+                        change.shipments(this), change.unitGroups(this), change.transportFleet(this), change.extractionSites(this), change.productionStations(this));
     }
     public FrontierWorldState withRouteTopology(RouteTopology nextTopology) { return withChanges(FrontierWorldStateUpdate.begin().routeTopology(nextTopology)); }
     public FrontierWorldState withStrategicPlans(StrategicPlanState nextPlans) { return withChanges(FrontierWorldStateUpdate.begin().strategicPlans(nextPlans)); }

@@ -29,7 +29,7 @@ public final class ProductionStockDemand {
                 .filter(value -> value.itemKind().equals(itemKind)).findFirst().orElseThrow(
                         () -> new IllegalArgumentException("production output has no declared stock target: " + itemKind));
         int residents = LivingResidentStockView.counts(state).getOrDefault(settlement, 0);
-        int minimum = itemKind.equals(SettlementFoodPolicy.BREAD) ? SettlementFoodPolicy.reserveRequirement(state, settlement) : 0;
+        int minimum = PublicStockProtection.minimum(state, settlement, itemKind);
         long incoming = 0, outgoing = 0;
         for (var commitment : StockSupplyComposition.pending(state)) {
             if (!commitment.economicOwner().equals(settlement) || !commitment.itemKind().equals(itemKind)

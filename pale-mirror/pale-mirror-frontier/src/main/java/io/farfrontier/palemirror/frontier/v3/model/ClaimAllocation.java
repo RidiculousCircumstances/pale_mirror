@@ -22,7 +22,6 @@ public record ClaimAllocation(SubjectId id, SubjectId claimantId, SubjectId econ
             throw new IllegalArgumentException("claim lot allocation must retain its exact bounded quantity");
         }
         if (purpose != ClaimPurpose.EXTERNAL_RESERVATION && lotQuantities.isEmpty()
-                || purpose == ClaimPurpose.PRODUCTION_WORK && !itemKind.equals("minecraft:wheat")
                 || purpose == ClaimPurpose.HIVE_GROWTH && !itemKind.equals("minecraft:rotten_flesh")
                 || purpose == ClaimPurpose.SETTLEMENT_RATION && !itemKind.equals("minecraft:bread")
                 || purpose == ClaimPurpose.RESIDENT_MEAL && quantity > 64) {

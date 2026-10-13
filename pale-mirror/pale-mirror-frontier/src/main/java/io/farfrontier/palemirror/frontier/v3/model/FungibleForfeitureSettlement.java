@@ -11,39 +11,51 @@ record FungibleForfeitureSettlement(ExactInventory inventory, CompanyRegistry co
                                     ActorExecutionState executions, Map<SubjectId, ActorMovement> movements,
                                     Map<SubjectId, ProductionJob> productionJobs, StrategicPlanState plans,
                                     HiveColony hive, Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId,
-                                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents) {
+                                        io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> intents,
+                                    ProductionStations productionStations,
+                                    Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> leases) {
     FungibleForfeitureSettlement {
         Objects.requireNonNull(inventory); Objects.requireNonNull(companies); Objects.requireNonNull(shipments);
         Objects.requireNonNull(executions); movements = Map.copyOf(movements);
         productionJobs = Map.copyOf(productionJobs); Objects.requireNonNull(plans); Objects.requireNonNull(hive);
         intents = Map.copyOf(intents);
+        Objects.requireNonNull(productionStations);
+        leases = Map.copyOf(leases);
     }
     static FungibleForfeitureSettlement from(FrontierWorldState state, ExactInventory inventory) {
         return new FungibleForfeitureSettlement(inventory, state.companies(), state.shipments(), state.actorExecutions(),
-                state.actorMovements(), state.productionJobs(), state.strategicPlans(), state.hiveColony(), state.physicalIntents());
+                state.actorMovements(), state.productionJobs(), state.strategicPlans(), state.hiveColony(), state.physicalIntents(), state.productionStations(), state.sceneLeases());
     }
     FungibleForfeitureSettlement withTrade(ExactInventory nextInventory, CompanyRegistry nextCompanies) {
         return new FungibleForfeitureSettlement(nextInventory, nextCompanies, shipments, executions, movements,
-                productionJobs, plans, hive, intents);
+                productionJobs, plans, hive, intents, productionStations, leases);
     }
     FungibleForfeitureSettlement withShipments(ShipmentState next, ActorExecutionState authority,
                                               Map<SubjectId, ActorMovement> motion) {
-        return new FungibleForfeitureSettlement(inventory, companies, next, authority, motion, productionJobs, plans, hive, intents);
+        return new FungibleForfeitureSettlement(inventory, companies, next, authority, motion, productionJobs, plans, hive, intents, productionStations, leases);
     }
     FungibleForfeitureSettlement withProduction(ExactInventory nextInventory, CompanyRegistry nextCompanies,
                                                ActorExecutionState authority, Map<SubjectId, ProductionJob> jobs,
                                                StrategicPlanState strategic) {
         return new FungibleForfeitureSettlement(nextInventory, nextCompanies, shipments, authority, movements,
-                jobs, strategic, hive, intents);
+                jobs, strategic, hive, intents, productionStations, leases);
     }
     FungibleForfeitureSettlement withHive(HiveColony colony, StrategicPlanState strategic,
             Map<io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent> effects) {
         return new FungibleForfeitureSettlement(inventory, companies, shipments, executions, movements,
-                productionJobs, strategic, colony, effects);
+                productionJobs, strategic, colony, effects, productionStations, leases);
+    }
+    FungibleForfeitureSettlement withStations(ProductionStations stations) {
+        return new FungibleForfeitureSettlement(inventory, companies, shipments, executions, movements,
+                productionJobs, plans, hive, intents, stations, leases);
+    }
+    FungibleForfeitureSettlement withLeases(Map<io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId, SceneLease> next) {
+        return new FungibleForfeitureSettlement(inventory, companies, shipments, executions, movements,
+                productionJobs, plans, hive, intents, productionStations, next);
     }
     FrontierWorldStateUpdate contribution() {
         return FrontierWorldStateUpdate.begin().inventory(inventory).companies(companies).shipments(shipments)
                 .actorExecutions(executions).actorMovements(movements).productionJobs(productionJobs)
-                .strategicPlans(plans).hiveColony(hive).physicalIntents(intents);
+                .strategicPlans(plans).hiveColony(hive).physicalIntents(intents).productionStations(productionStations).sceneLeases(leases);
     }
 }

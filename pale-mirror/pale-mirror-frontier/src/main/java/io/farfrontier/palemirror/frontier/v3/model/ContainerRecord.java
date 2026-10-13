@@ -32,7 +32,8 @@ public record ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount,
         if (fungibleLayout.slots().keySet().stream().anyMatch(slot -> slot >= slotCount))
             throw new IllegalArgumentException("retained placement targets a slot outside this container");
         productionStation.ifPresent(station -> {
-            if (!station.containerId().equals(id) || station.inputSlot() >= slotCount || station.outputSlot() >= slotCount)
+            if (!station.containerId().equals(id) || station.inputSlot() >= slotCount || station.outputSlot() >= slotCount
+                    || station.fuelSlot() >= slotCount)
                 throw new IllegalArgumentException("production station does not own its declared bounded container");
         });
     }

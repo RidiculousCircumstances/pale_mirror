@@ -91,7 +91,7 @@ class StrategicObjectiveProcessTest {
         }
         assertTrue(added > 0);
         FrontierWorldState full = state.withInventory(inventory);
-        assertEquals("READY TO HARVEST · DEPOT FULL",
+        assertEquals("READY TO HARVEST · STORAGE UNAVAILABLE",
                 FrontierReadabilityPlan.compile(full).boards().get(site).text().split("\\n")[2]);
 
         var due = StrategicObjectiveProcess.resourceHarvestOpportunity(full, full.resourceSites().site(site), 22_000L);

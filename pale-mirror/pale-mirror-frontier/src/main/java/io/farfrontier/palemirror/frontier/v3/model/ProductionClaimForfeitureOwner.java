@@ -52,8 +52,9 @@ final class ProductionClaimForfeitureOwner implements FungibleClaimForfeitureOwn
         if (job == null || claim.purpose() != ClaimPurpose.PRODUCTION_WORK)
             throw new IllegalArgumentException("stock loss has no declared production owner");
         if (!(job.inputHold() instanceof ProductionInputHold.FungibleBound held) || !held.claimId().equals(claim.id())
-                || !claim.economicOwnerId().equals(job.settlementId()) || !"minecraft:wheat".equals(claim.itemKind())
-                || claim.quantity() != job.outputCount() || !claim.lotQuantities().equals(held.inputLots())
+                || !claim.economicOwnerId().equals(job.settlementId())
+                || !job.bakeryWork().map(BakeryWorkState::inputItemKind).orElse("minecraft:wheat").equals(claim.itemKind())
+                || claim.quantity() != job.inputCount() || !claim.lotQuantities().equals(held.inputLots())
                 || state.physicalIntents().values().stream().anyMatch(intent -> intent.causeSubjectId().equals(job.id()))
                 || job.bakeryWork().isEmpty() && state.sceneLeases().values().stream().anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
                     && FrontierSceneBehaviors.isProductionWork(lease) && FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id())))

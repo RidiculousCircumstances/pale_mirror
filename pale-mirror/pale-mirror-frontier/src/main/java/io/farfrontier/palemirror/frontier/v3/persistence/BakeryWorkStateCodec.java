@@ -24,12 +24,13 @@ final class BakeryWorkStateCodec {
         BakeryWorkState value = work.orElseThrow();
         output.writeByte(value.phase().wireTag());
         writeString(output, value.stationId().value());
+        writeString(output, value.recipeId().value());
+        writeString(output, value.inputItemKind()); output.writeInt(value.inputQuantity());
         writeString(output, value.sourceAccountId().value());
         writeString(output, value.sourceContainerId().value());
         writeString(output, value.actorAccountId().value());
         writeString(output, value.stationAccountId().value());
         writeString(output, value.destinationAccountId().value());
-        WorkStateCodec.writeProgress(output, value.labour());
         output.writeBoolean(value.pendingPhysicalStep().isPresent());
         if (value.pendingPhysicalStep().isPresent()) {
             BakeryPhysicalStep step = value.pendingPhysicalStep().orElseThrow();
@@ -45,18 +46,19 @@ final class BakeryWorkStateCodec {
         if (!input.readBoolean()) return Optional.empty();
         BakeryWorkState.Phase phase = BakeryWorkState.Phase.fromWireTag(input.readUnsignedByte());
         SubjectId station = new SubjectId(readString(input));
+        var recipe = new io.farfrontier.palemirror.frontier.v3.model.ProductionRecipe.Id(readString(input));
+        String inputKind = readString(input); int inputQuantity = input.readInt();
         SubjectId source = new SubjectId(readString(input));
         SubjectId sourceContainer = new SubjectId(readString(input));
         SubjectId actor = new SubjectId(readString(input));
         SubjectId stationAccount = new SubjectId(readString(input));
         SubjectId destination = new SubjectId(readString(input));
-        var labour = WorkStateCodec.readProgress(input);
         Optional<BakeryPhysicalStep> pending = input.readBoolean()
                 ? Optional.of(new BakeryPhysicalStep(BakeryWorkState.Phase.fromWireTag(input.readUnsignedByte()),
                 new SceneLeaseId(readString(input)), input.readByte())) : Optional.empty();
         Optional<BakeryWorkBlock> block = input.readBoolean() ? Optional.of(readBlock(input)) : Optional.empty();
-        return Optional.of(new BakeryWorkState(phase, station, source, sourceContainer, actor, stationAccount,
-                destination, labour, pending, block));
+        return Optional.of(new BakeryWorkState(phase, station, recipe, inputKind, inputQuantity, source, sourceContainer, actor, stationAccount,
+                destination, pending, block));
     }
 
     static void writeBlock(DataOutputStream output, BakeryWorkBlock block) throws IOException {

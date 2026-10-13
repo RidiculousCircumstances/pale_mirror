@@ -84,6 +84,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 FencedRecoveryStateCodec.write(output, state.fencedRecovery());
                 DiagnosticIncidentIndexCodec.write(output, state.diagnosticIncidents());
                 ProductionJobStateCodec.write(output, state.productionJobs());
+                ProductionStationsCodec.write(output, state.productionStations());
                 SettlementServiceWorkStateCodec.write(output, state.serviceWorks());
                 PhysicalIntentStateCodec.write(output, state.physicalIntents());
                 PhysicalEffectObservationStateCodec.write(output, state.physicalObservations());
@@ -129,6 +130,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             FencedRecoveryState fencedRecovery = FencedRecoveryStateCodec.read(input);
             DiagnosticIncidentIndex diagnosticIncidents = DiagnosticIncidentIndexCodec.read(input);
             Map<SubjectId, ProductionJob> jobs = ProductionJobStateCodec.read(input);
+            ProductionStations productionStations = ProductionStationsCodec.read(input);
             Map<SubjectId, SettlementServiceWork> serviceWorks = SettlementServiceWorkStateCodec.read(input);
             Map<PhysicalIntentId, PhysicalIntent> intents = PhysicalIntentStateCodec.read(input, true);
             Map<PhysicalObservationId, PhysicalEffectObservation> observations = PhysicalEffectObservationStateCodec.read(input);
@@ -145,7 +147,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                     physicalDeltas, ambient, constructions, maintenances, topology, plans, population, companies,
                     sites, replicaCustody, deferredAftermath, fencedRecovery, diagnosticIncidents, actorMovements,
                     ActorExecutionStateCodec.read(input), ShipmentStateCodec.read(input), UnitGroupStateCodec.read(input),
-                    TransportFleetStateCodec.read(input), ExtractionSiteStateCodec.read(input));
+                    TransportFleetStateCodec.read(input), ExtractionSiteStateCodec.read(input), productionStations);
             FrontierWorldStateCodecValidation.validate(input, state);
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }

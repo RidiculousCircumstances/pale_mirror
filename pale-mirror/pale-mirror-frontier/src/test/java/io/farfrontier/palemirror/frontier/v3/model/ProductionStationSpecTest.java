@@ -38,6 +38,23 @@ class ProductionStationSpecTest {
         FrontierWorldState restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         assertEquals(state.inventory().containers(), restored.inventory().containers());
         assertEquals(state.inventory().surfaces(), restored.inventory().surfaces());
+        var station = stations.getFirst();
+        var container = state.inventory().containers().get(station.containerId());
+        var productId = new SubjectId("lot:uncollected-station-product");
+        var accountId = new SubjectId("custody:uncollected-station-product");
+        var ledger = state.inventory().fungibleResources().issue(new ResourceLot(productId, container.ownerId(),
+                "minecraft:bread", 1, "fixture:uncollected-product", java.util.List.of()),
+                new CustodyAccount(accountId, new ResourceCustody.Container(container.id()), Map.of(productId, 1), Map.of()));
+        var occupied = state.withInventory(state.inventory().withFungibleResources(ledger));
+        assertTrue(occupied.inventory().slotVacant(new InventoryCustody.ContainerSlot(container.id(), station.outputSlot())),
+                "generic unbound packing has space but cannot assign a semantic machine output port");
+        assertFalse(ProductionStationRecipe.portVacant(occupied, station, ActorContainerItemOrder.StationPort.OUTPUT));
+        assertTrue(ProductionStationRecipe.portVacant(occupied, station, ActorContainerItemOrder.StationPort.INPUT));
+        assertFalse(ProductionStationProcessing.canStart(occupied, station.id(), BakeryRecipes.BREAD, 64));
+        var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(occupied));
+        assertFalse(ProductionStationRecipe.portVacant(recovered, station, ActorContainerItemOrder.StationPort.OUTPUT));
+        var cleared = occupied.withInventory(occupied.inventory().withFungibleResources(ledger.destroy(accountId, Map.of(productId, 1), Map.of())));
+        assertTrue(ProductionStationProcessing.canStart(cleared, station.id(), BakeryRecipes.BREAD, 64));
     }
 
     @Test
@@ -46,13 +63,13 @@ class ProductionStationSpecTest {
         SubjectId container = new SubjectId("container:bakery-station");
         SubjectId owner = new SubjectId("settlement:one");
         ProductionStationSpec station = new ProductionStationSpec(new SubjectId("station:bakery"), facility,
-                container, ProductionStationSpec.Capability.BAKING,
-                SurfaceAnchor.at(1, 64, 1), SurfaceAnchor.at(2, 64, 1), 0, 1);
+                container, ProductionEquipment.BENCH, ProductionStationSpec.Capability.BAKING,
+                SurfaceAnchor.at(1, 64, 1), SurfaceAnchor.at(2, 64, 1), 0, 1, 2);
         assertThrows(IllegalArgumentException.class, () -> new ContainerRecord(
                 new SubjectId("container:other"), owner, 27, ContainerPurpose.PRODUCTION_STATION, Optional.of(station)));
         assertThrows(IllegalArgumentException.class, () -> new ContainerRecord(container, owner, 1, ContainerPurpose.PRODUCTION_STATION, Optional.of(station)));
         assertThrows(IllegalArgumentException.class, () -> new ProductionStationSpec(station.id(), facility, container,
-                station.capability(), station.workerStation(), station.workerStation(), 0, 1));
+                station.equipmentType(), station.capability(), station.workerStation(), station.workerStation(), 0, 1, 2));
     }
 
     @Test
@@ -76,8 +93,8 @@ class ProductionStationSpecTest {
                 new ActorContainerItemOrder.ContainerEndpoint.FungibleStation(machine, ActorContainerItemOrder.StationPort.OUTPUT),
                 machine.workerStation(), load.actorSlot(), load.goalOrdinal(), load.goalRevision()));
         ProductionStationSpec foreign = new ProductionStationSpec(machine.id(), new SubjectId("structure:foreign"),
-                machine.containerId(), machine.capability(), machine.workerStation(), machine.socketSurface(),
-                machine.inputSlot(), machine.outputSlot());
+                machine.containerId(), machine.equipmentType(), machine.capability(), machine.workerStation(), machine.socketSurface(),
+                machine.inputSlot(), machine.outputSlot(), machine.fuelSlot());
         ActorContainerItemOrder forged = new ActorContainerItemOrder(load.ownerId(), actor, load.direction(), wheat,
                 new ActorContainerItemOrder.ContainerEndpoint.FungibleStation(foreign, ActorContainerItemOrder.StationPort.INPUT),
                 machine.workerStation(), load.actorSlot(), load.goalOrdinal(), load.goalRevision());

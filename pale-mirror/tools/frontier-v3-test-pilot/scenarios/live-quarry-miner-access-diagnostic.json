@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "id": "live_quarry_miner_access_diagnostic",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "inventoryConflicts": 0, "sceneConflicts": 0 } }
+    ] },
+    { "type": "command", "command": "/gamemode creative" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -81, "y": 64, "z": -3 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24",
+      "expect": { "status": "ok", "result": { "hasExtraction": true } }, "timeoutMs": 60000 },
+    { "type": "look", "at": { "x": -78, "y": 61, "z": 2 } },
+    { "type": "inspect", "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24" },
+    { "type": "inspect", "view": "actor", "id": "resident:6-10" },
+    { "type": "inspect", "view": "actor", "id": "resident:6-11" },
+    { "type": "wait", "ms": 20000 },
+    { "type": "inspect", "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24" },
+    { "type": "inspect", "view": "actor", "id": "resident:6-10" },
+    { "type": "inspect", "view": "actor", "id": "resident:6-11" },
+    { "type": "wait", "ms": 20000 },
+    { "type": "inspect", "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24" },
+    { "type": "wait", "ms": 20000 },
+    { "type": "inspect", "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24" },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 15, "view": "summary", "id": "", "expect": { "status": "ok", "inventoryConflicts": 0, "sceneConflicts": 0 } }
+  ],
+  "frames": [
+    { "after": 4, "name": "quarry-miners-at-ingress" },
+    { "after": 14, "name": "quarry-miners-after-observation" }
+  ]
+}

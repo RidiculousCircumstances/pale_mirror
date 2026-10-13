@@ -64,10 +64,15 @@ final class FrontierV3ContainerClickExecutor {
                     || menu.getSlot(1).mayPlace(menu.getSlot(slot).getItem()))) return null;
         SubjectId containerId = owned.id();
         var witnessLedger = FrontierV3DepotClickLedger.get(level);
-        if (witnessLedger.pending(containerId) != null || witnessLedger.pending().stream().anyMatch(witness ->
-                witness.playerId().equals(player.getUUID())) || kind == ClickType.SWAP
-                || FrontierV3ContainerEffectFence.pending(level, state, containerId)
-                || !exactSlotsCurrent(state, containerId, chest)) return null;
+        if (witnessLedger.pending(containerId) != null)
+            return refused(player, target, slot, kind, "CONTAINER_CLICK_PENDING");
+        if (witnessLedger.pending().stream().anyMatch(witness -> witness.playerId().equals(player.getUUID())))
+            return refused(player, target, slot, kind, "PLAYER_CLICK_PENDING");
+        if (kind == ClickType.SWAP) return refused(player, target, slot, kind, "SWAP_UNSUPPORTED");
+        if (FrontierV3ContainerEffectFence.pending(level, state, containerId))
+            return refused(player, target, slot, kind, "PHYSICAL_EFFECT_PENDING");
+        if (!exactSlotsCurrent(state, containerId, chest))
+            return refused(player, target, slot, kind, "EXACT_ITEM_LAYOUT_CHANGED");
         if (cargoSlot >= 0 && state.inventory().itemAt(containerId, cargoSlot).isPresent()) return null;
         if (kind == ClickType.PICKUP_ALL && !menu.getCarried().isEmpty()
                 && state.inventory().items().values().stream().anyMatch(item ->
@@ -83,10 +88,12 @@ final class FrontierV3ContainerClickExecutor {
             return null;
         PhysicalCustodyLease lease = state.replicaCustody().custodyByScope()
                 .get(ReferenceContainerCustody.scopeId(containerId));
-        if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED
-                || !ReferenceContainerCustody.hasOperationalCustody(state, containerId)
-                || FrontierV3ContainerSurfaceExecutor.hasForeignFungibleComponents(chest, state, containerId))
-            return null;
+        if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED)
+            return refused(player, target, slot, kind, "CUSTODY_NOT_ACQUIRED:" + (lease == null ? "MISSING" : lease.status()));
+        if (!ReferenceContainerCustody.hasOperationalCustody(state, containerId))
+            return refused(player, target, slot, kind, "CUSTODY_NOT_OPERATIONAL");
+        if (FrontierV3ContainerSurfaceExecutor.hasForeignFungibleComponents(chest, state, containerId))
+            return refused(player, target, slot, kind, "FOREIGN_ITEM_COMPONENTS");
         var before = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, state, containerId);
         SubjectId accountId = account == null ? ReferenceContainerCustody.scopeId(containerId) : account.id();
         List<PhysicalStackBinding> canonical = state.inventory().fungibleResources().bindings().values().stream()
@@ -96,10 +103,10 @@ final class FrontierV3ContainerClickExecutor {
             if (account == null ? !before.isEmpty() || !canonical.isEmpty()
                     : canonical.isEmpty() || !canonical.equals(FungiblePhysicalObservation.bind(
                         state.inventory().fungibleResources(), accountId, lease.authorityEpoch(), before)))
-                return null;
-        } catch (IllegalArgumentException invalid) { return null; }
+                return refused(player, target, slot, kind, "FUNGIBLE_LAYOUT_MISMATCH");
+        } catch (IllegalArgumentException invalid) { return refused(player, target, slot, kind, "INVALID_BINDING:" + invalid.getMessage()); }
         if (account != null && mayRemoveReserved(menu, cargoSlot, button, kind, canonical, account, state))
-            return null;
+            return refused(player, target, slot, kind, "RESERVED_STOCK");
         if (kind == ClickType.PICKUP && cargoSlot >= 0) {
             ItemStack cursor = menu.getCarried(), source = chest.getItem(cargoSlot);
             if (!cursor.isEmpty() && !source.isEmpty() && !ItemStack.isSameItemSameComponents(cursor, source))
@@ -107,7 +114,7 @@ final class FrontierV3ContainerClickExecutor {
         }
         java.util.Optional<FrontierV3DepotClickWitness.ReturnSource> returning;
         try { returning = playerReturnSource(player, menu, slot, kind, state); }
-        catch (IllegalArgumentException invalid) { return null; }
+        catch (IllegalArgumentException invalid) { return refused(player, target, slot, kind, "INVALID_PLAYER_RETURN:" + invalid.getMessage()); }
         return new FrontierV3DepotClickWitness(containerId, accountId, owned.ownerId(),
                 lease.authorityEpoch(), player.getUUID(), interaction, before, java.util.Optional.empty(),
                 returning, java.util.Optional.empty());
@@ -121,6 +128,14 @@ final class FrontierV3ContainerClickExecutor {
                     || !FrontierV3ContainerMenuTarget.resolveAll(player, menu, state).isEmpty(); }
             catch (IllegalArgumentException unavailable) { return true; }
         }).orElse(true);
+    }
+
+    /** One bounded receipt per refused ordinary click; no polling or retained diagnostic state. */
+    private static FrontierV3DepotClickWitness refused(ServerPlayer player, FrontierV3ContainerMenuTarget target,
+                                                       int slot, ClickType kind, String reason) {
+        PaleMirrorMod.LOGGER.warn("PMV3_CONTAINER_CLICK_REJECTED container={} player={} slot={} kind={} reason={}",
+                target.record().id(), player.getUUID(), slot, kind, reason);
+        return null;
     }
 
     static void after(ServerPlayer player, AbstractContainerMenu menu,

@@ -451,18 +451,17 @@ class BakeryHotVerticalTest {
         state = ProductionProcess.reduceBakeryWorkChanged(state, task.ownerId(),
                 new BakeryWorkChanged(job.id(), leaseId, execution, station.workerStation().standingBody(), completedLabour));
         assertStationConflictCanReleaseHungryBaker(state, job.id(), leaseId);
-        state = ProductionProcess.reduceBakeryHotEffectPrepared(state, task.ownerId(),
-                new BakeryHotEffectPrepared(job.id(), leaseId, BakeryWorkState.Phase.PROCESSING, station.outputSlot()));
+        var recipeBoundary = ProductionStationTransformation.next(state, station.id()).orElseThrow();
+        state = ProductionStationTransformation.apply(state, station.id(), new ProductionStationRecipeChanged(
+                ProductionStationRecipeChanged.Stage.HOT_PREPARED, recipeBoundary, List.of()), ProductionOperationCompletionComposition::completed);
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         FrontierWorldState preparedRecipe = state;
-        assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryHotEffectObserved(
-                preparedRecipe, task.ownerId(), new BakeryHotEffectObserved(job.id(), leaseId, BakeryWorkState.Phase.PROCESSING,
-                        station.workerStation().standingBody(), 1L, 1L, List.of(), List.of())));
-        state = ProductionProcess.reduceBakeryHotEffectObserved(state, task.ownerId(), new BakeryHotEffectObserved(
-                job.id(), leaseId, BakeryWorkState.Phase.PROCESSING, station.workerStation().standingBody(),
-                1L, 1L, List.of(), List.of(new FungiblePhysicalObservation.Stack(
-                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(machine, station.outputSlot())),
-                "minecraft:bread", 64))));
+        assertThrows(IllegalArgumentException.class, () -> ProductionStationTransformation.apply(preparedRecipe, station.id(),
+                new ProductionStationRecipeChanged(ProductionStationRecipeChanged.Stage.HOT_COMPLETED, recipeBoundary, List.of()),
+                ProductionOperationCompletionComposition::completed));
+        state = ProductionStationTransformation.apply(state, station.id(), new ProductionStationRecipeChanged(
+                ProductionStationRecipeChanged.Stage.HOT_COMPLETED, recipeBoundary, recipeBoundary.after()),
+                ProductionOperationCompletionComposition::completed);
         assertEquals(BakeryWorkState.Phase.STATION_UNLOAD, state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
         assertFalse(state.inventory().fungibleResources().lots().containsKey(job.consumedItemId()));
         state = ProductionProcess.reduceBakeryHotEffectPrepared(state, task.ownerId(),
@@ -808,8 +807,9 @@ class BakeryHotVerticalTest {
         assertEquals(ambiguous.fencedRecovery(), savedDrain.fencedRecovery());
         var station = input.inventory().containers().values().stream().flatMap(value -> value.productionStation().stream())
                 .filter(value -> value.id().equals(job.bakeryWork().orElseThrow().stationId())).findFirst().orElseThrow();
-        var pending = ProductionProcess.reduceBakeryHotEffectPrepared(input, job.settlementId(),
-                new BakeryHotEffectPrepared(jobId, leaseId, BakeryWorkState.Phase.PROCESSING, station.outputSlot()));
+        var boundary = ProductionStationTransformation.next(input, station.id()).orElseThrow();
+        var pending = ProductionStationTransformation.apply(input, station.id(), new ProductionStationRecipeChanged(
+                ProductionStationRecipeChanged.Stage.HOT_PREPARED, boundary, List.of()), ProductionOperationCompletionComposition::completed);
         var pendingConflict = pending.transitionSceneLease(leaseId, SceneLeaseStatus.CONFLICT);
         assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.BakerySceneReconciliation
                 .reduce(pendingConflict, job.settlementId(), receipt), "a potentially applied recipe is never cleared by empty hands");

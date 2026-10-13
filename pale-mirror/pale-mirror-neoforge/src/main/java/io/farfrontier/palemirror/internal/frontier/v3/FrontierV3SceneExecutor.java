@@ -279,6 +279,10 @@ final class FrontierV3SceneExecutor {
                 if (owned(existing, state, lease, member)) {
                     if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie,
                             FrontierV3AmbientActorExecutor.bioformProfile(state, member.actorId()));
+                    // Activity handoff preserves the body, not its old idle presentation.
+                    // The same execution-derived policy applies to retained and newborn actors.
+                    FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, member.actorId(),
+                            bioform(state, member.actorId()));
                     continue;
                 }
                 return BodyMaterialization.CONFLICT;

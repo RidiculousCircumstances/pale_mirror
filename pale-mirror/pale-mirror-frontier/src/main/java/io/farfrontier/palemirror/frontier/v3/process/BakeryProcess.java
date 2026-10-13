@@ -35,7 +35,7 @@ public final class BakeryProcess {
         station(state, job);
         if (job.inputHold() instanceof ProductionInputHold.Materialized) {
             ExactItemStack wheat = state.inventory().items().get(assertedInput);
-            if (wheat == null || !"minecraft:wheat".equals(wheat.itemKind()) || wheat.count() != job.outputCount()
+            if (wheat == null || !work.inputItemKind().equals(wheat.itemKind()) || wheat.count() != job.inputCount()
                     || !wheat.economicOwnerId().equals(job.rights().resourceOwner().id())
                     || !(wheat.custody() instanceof InventoryCustody.ContainerSlot slot)
                     || !slot.containerId().equals(BakeryStorage.current(job)))
@@ -52,7 +52,7 @@ public final class BakeryProcess {
     static Optional<BakeryInputReallocated> planInputReallocation(FrontierWorldState state, ProductionJob job) {
         if (!inputReallocationReady(state, job)) return Optional.empty();
         var origin = state.actorLocations().get(job.workerId()).supportingSurface();
-        for (var storage : ResourceStorageSelection.candidates(state, job.settlementId(), "minecraft:wheat", origin,
+        for (var storage : ResourceStorageSelection.candidates(state, job.settlementId(), job.bakeryWork().orElseThrow().inputItemKind(), origin,
                 java.util.Set.of(ResourceStorageRole.WAREHOUSE))) {
             var candidate = replacementAt(state, job, storage.containerId());
             if (candidate.isEmpty()) continue;
@@ -89,7 +89,7 @@ public final class BakeryProcess {
         if (job.inputHold() instanceof ProductionInputHold.Materialized) {
             return state.inventory().items().values().stream().sorted(java.util.Comparator.comparing(ExactItemStack::id))
                     .filter(item -> item.economicOwnerId().equals(job.rights().resourceOwner().id())
-                            && item.itemKind().equals("minecraft:wheat") && item.count() == job.outputCount()
+                            && item.itemKind().equals(job.bakeryWork().orElseThrow().inputItemKind()) && item.count() == job.inputCount()
                             && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)
                             && !ResourceSiteHarvestLineage.hasPendingOutputReceipt(state.resourceSites().sites().values(), item.id())
                             && state.productionJobs().values().stream().noneMatch(other -> !other.id().equals(job.id())
@@ -100,9 +100,9 @@ public final class BakeryProcess {
         SubjectId claim = claimId(job);
         if (state.inventory().fungibleResources().claims().containsKey(claim)) return Optional.empty();
         return FungibleResourceCustodySupport.selectAtContainer(state, depot, job.rights().resourceOwner().id(),
-                "minecraft:wheat", job.outputCount()).filter(selection ->
-                ProductionResourceCustody.canStart(state, selection, job.outputCount())).map(selection ->
-                ProductionResourceCustody.holdForStart(state, selection, claim, job.outputCount()));
+                job.bakeryWork().orElseThrow().inputItemKind(), job.inputCount()).filter(selection ->
+                ProductionResourceCustody.canStart(state, selection, job.inputCount())).map(selection ->
+                ProductionResourceCustody.holdForStart(state, selection, claim, job.inputCount()));
     }
 
     static FrontierWorldState reduceInputReallocated(FrontierWorldState state, SubjectId subject,
@@ -111,7 +111,7 @@ public final class BakeryProcess {
         if (job == null || !job.settlementId().equals(subject)
                 || !inputReallocationReady(state, job)
                 || !reallocated.executionId().actorId().equals(job.workerId())
-                || !ResourceStorageSelection.containers(state, job.settlementId(), "minecraft:wheat",
+                || !ResourceStorageSelection.containers(state, job.settlementId(), job.bakeryWork().orElseThrow().inputItemKind(),
                     java.util.Set.of(ResourceStorageRole.WAREHOUSE)).contains(reallocated.sourceContainerId())
                 || !replacementAt(state, job, reallocated.sourceContainerId()).equals(Optional.of(reallocated.replacement())))
             throw new IllegalArgumentException("bakery replacement is not the current unclaimed owned depot input");
@@ -130,7 +130,7 @@ public final class BakeryProcess {
         Map<SubjectId, Integer> lots = replacement instanceof ProductionInputHold.FungibleCold cold
                 ? cold.inputLots() : ((ProductionInputHold.FungibleBound) replacement).inputLots();
         ClaimAllocation allocation = new ClaimAllocation(claimId, job.id(), job.rights().resourceOwner().id(),
-                "minecraft:wheat", job.outputCount(), lots, ClaimPurpose.PRODUCTION_WORK);
+                job.bakeryWork().orElseThrow().inputItemKind(), job.inputCount(), lots, ClaimPurpose.PRODUCTION_WORK);
         FungibleResourceLedger ledger = replacement instanceof ProductionInputHold.FungibleBound bound
                 ? state.inventory().fungibleResources().reserveBound(allocation, accountId, bound.authorityEpoch())
                 : state.inventory().fungibleResources().reserve(allocation, accountId);
@@ -158,7 +158,13 @@ public final class BakeryProcess {
         ProductionStationSpec station = station(state, job);
         SubjectId depot = BakeryStorage.current(job);
         BakeryWorkState.Phase phase = job.bakeryWork().orElseThrow().phase();
-        if ((phase == BakeryWorkState.Phase.DEPOT_PICKUP || phase == BakeryWorkState.Phase.DEPOT_DELIVERY)
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, station.containerId()))
+            return Optional.of("STATION_UNAVAILABLE");
+        if (phase == BakeryWorkState.Phase.STATION_LOAD
+                && state.actorLocations().get(job.workerId()).supportingSurface().equals(station.workerStation())
+                && !ProductionStationProcessing.canStart(state, station.id(), job.bakeryWork().orElseThrow().recipeId(), job.inputCount()))
+            return Optional.of("STATION_ENERGY_OR_OPERATION_WAIT");
+        if (phase != BakeryWorkState.Phase.PROCESSING && phase != BakeryWorkState.Phase.DELIVERED
                 && BakeryWorkGoal.current(state, job).station().equals(state.actorLocations().get(job.workerId()).supportingSurface())
                 && !ProductionServiceAccess.available(state, job))
             return Optional.of("DEPOT_SERVICE_WAIT");
@@ -168,8 +174,6 @@ public final class BakeryProcess {
         }
         if (ReferenceContainerCustody.hasLiveCustody(state, station.containerId()))
             return Optional.of("STATION_PHYSICAL_AUTHORITY");
-        if (ReferenceContainerCustody.blocksCanonicalUse(state, station.containerId()))
-            return Optional.of("STATION_CONFLICT");
         if (checkOutputCapacity && ProductionOutputCapacity.depotDeliveryUnavailable(state, job))
             return Optional.of("DEPOT_STORAGE_FULL");
         return Optional.empty();
@@ -182,7 +186,7 @@ public final class BakeryProcess {
         try {
             var route = BakeryKnownNavigation.retainedPath(state, job);
             var phase = job.bakeryWork().orElseThrow().phase();
-            if (route.size() > 1 && (phase == BakeryWorkState.Phase.DEPOT_PICKUP || phase == BakeryWorkState.Phase.DEPOT_DELIVERY)
+            if (route.size() > 1
                     && !ProductionServiceAccess.mayAdvance(state, job, route.get(1)))
                 return Optional.of("DEPOT_SERVICE_WAIT");
             return Optional.empty();
@@ -215,7 +219,7 @@ public final class BakeryProcess {
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }
         }
         if (coldBlocker(state, job, checkOutputCapacity).isPresent()) {
-            if (work.labour().filter(WorkProgress::running).isPresent()
+            if (BakeryLabour.attended(state, job) && BakeryLabour.progress(state, job).filter(WorkProgress::running).isPresent()
                     && work.pendingPhysicalStep().isEmpty()
                     && ActorExecutionCoordinator.ambientAvailable(state, List.of(job.workerId()))
                     && !ActorExecutionCoordinator.sceneOwns(state, job.workerId())
@@ -227,16 +231,16 @@ public final class BakeryProcess {
         try { route = BakeryKnownNavigation.plannedPath(state, job); }
         catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }
         if (route.size() > 1) {
-            if ((work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY)
-                    && !ProductionServiceAccess.mayAdvance(state, job, route.get(1))) return Optional.empty();
+            if (!ProductionServiceAccess.mayAdvance(state, job, route.get(1))) return Optional.empty();
             return Optional.of(coldStep(state, job, BakeryColdStep.Action.MOVE, route.get(1), route));
         }
         SurfaceAnchor current = state.actorLocations().get(job.workerId()).supportingSurface();
-        var action = BakeryColdStepAdmission.stationAction(work);
+        var action = BakeryColdStepAdmission.stationAction(state, job);
         if (action == BakeryColdStep.Action.LABOUR) {
-            if (work.labour().filter(progress -> progress.running() && tick < progress.activeUntilTick()).isPresent())
+            if (!BakeryLabour.attended(state, job)) return Optional.empty();
+            if (BakeryLabour.progress(state, job).filter(progress -> progress.running() && tick < progress.activeUntilTick()).isPresent())
                 return Optional.empty();
-            var prior = work.labour();
+            var prior = BakeryLabour.progress(state, job);
             boolean run = prior.isEmpty() || prior.orElseThrow().completedAt(tick) < prior.orElseThrow().requiredMilliWork();
             return Optional.of(labourStep(state, job, tick, run));
         }
@@ -249,7 +253,7 @@ public final class BakeryProcess {
                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION).get(job.workerId());
         return new BakeryColdStep(job.id(), work.phase(), BakeryColdStep.Action.LABOUR,
                 state.actorLocations().get(job.workerId()).supportingSurface(), execution, Optional.empty(),
-                Optional.of(new BakeryLabourChange(work.labour(), BakeryLabour.next(state, job, tick, run))));
+                Optional.of(new BakeryLabourChange(BakeryLabour.progress(state, job), BakeryLabour.next(state, job, tick, run))));
     }
 
     private static BakeryColdStep coldStep(FrontierWorldState state, ProductionJob job, BakeryColdStep.Action action,
@@ -289,24 +293,31 @@ public final class BakeryProcess {
         if (step.action() == BakeryColdStep.Action.LABOUR) {
             var change = step.labourChange().orElseThrow();
             BakeryLabour.require(state, job, change);
-            return FrontierProductionWorkSceneSupport.replaceJob(state, job.withBakeryWork(work.withLabour(change.next())));
+            return BakeryLabour.change(state, job, change.next());
         }
         ExactInventory inventory;
         if (step.action() == BakeryColdStep.Action.RECIPE) {
+            if (BakeryStationOperation.require(state, job).inputCustody() instanceof ProductionOperation.FungibleInput) {
+                var boundary = ProductionStationTransformation.next(state, work.stationId()).orElseThrow(
+                        () -> new IllegalArgumentException("bakery completion is waiting for its shared station boundary"));
+                return ProductionStationTransformation.apply(state, work.stationId(), new ProductionStationRecipeChanged(
+                        ProductionStationRecipeChanged.Stage.COLD_COMPLETED, boundary, List.of()), ProductionOperationCompletionComposition::completed);
+            }
             ProductionStationSpec station = station(state, job);
             if (job.inputHold() instanceof ProductionInputHold.Materialized) {
                 ExactItemStack input = state.inventory().items().get(job.consumedItemId());
                 ExactItemStack output = new ExactItemStack(job.outputItemId(), job.rights().resourceOwner().id(), job.outputItemKind(),
                         job.outputCount(), new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot()));
-                inventory = ProductionStationRecipe.transformExactCold(state, station, input, output);
+                inventory = ProductionStationRecipe.transformExactCold(state, station, work.recipeId(), input, output);
             } else {
                 FungibleResourceLedger ledger = state.inventory().fungibleResources();
                 ResourceLot output = new ResourceLot(job.outputItemId(), job.rights().resourceOwner().id(), job.outputItemKind(), job.outputCount(),
                         "recipe:bread", job.inputQuantities().keySet().stream().sorted().toList());
-                inventory = ProductionStationRecipe.transformCold(state, station, work.stationAccountId(), job.inputQuantities(),
-                        Map.of(claimId(job), job.outputCount()), output);
+                inventory = ProductionStationRecipe.transformCold(state, station, work.recipeId(), work.stationAccountId(), job.inputQuantities(),
+                        Map.of(claimId(job), job.inputCount()), output);
             }
-            return replace(state, job.withBakeryWork(work.advance(BakeryWorkState.Phase.STATION_UNLOAD)), inventory);
+            return replace(state, job.withBakeryWork(work.advance(BakeryWorkState.Phase.STATION_UNLOAD)), inventory,
+                    ProductionStationProcessing.transformed(state, BakeryStationOperation.require(state, job)));
         }
         ActorContainerItemOrder order = itemOrder(state, job, step.action());
         inventory = ActorItemCustody.transferCold(state, order);
@@ -318,7 +329,16 @@ public final class BakeryProcess {
             case UNLOAD -> BakeryWorkState.Phase.DEPOT_DELIVERY;
             default -> throw new IllegalArgumentException("bakery transfer has no next custody phase");
         };
-        return replace(state, job.withBakeryWork(work.advance(next)), inventory);
+        ProductionStations machines = switch (step.action()) {
+            case LOAD -> BakeryStationOperation.loaded(state, job, station(state, job));
+            case UNLOAD -> ProductionStationProcessing.unloaded(state, BakeryStationOperation.require(state, job));
+            default -> state.productionStations();
+        };
+        if (step.action() == BakeryColdStep.Action.LOAD)
+            inventory = ProductionStationProcessing.adoptInputOwnership(inventory, machines.require(work.stationId()).operation().orElseThrow());
+        if (step.action() == BakeryColdStep.Action.UNLOAD)
+            inventory = ProductionStationProcessing.collectedOutput(inventory, BakeryStationOperation.require(state, job), work.actorAccountId(), 0);
+        return replace(state, job.withBakeryWork(work.advance(next)), inventory, machines);
     }
 
     static FrontierWorldState hotBlockChanged(FrontierWorldState state, SubjectId subject, BakeryHotBlockChanged changed) {
@@ -371,10 +391,16 @@ public final class BakeryProcess {
         BakeryWorkState work = job.bakeryWork().orElseThrow();
         SceneLease lease = FrontierProductionWorkSceneSupport.requireHotLease(state, job, prepared.leaseId());
         ProductionStationSpec station = station(state, job);
+        if (prepared.phase() == BakeryWorkState.Phase.PROCESSING
+                && !(job.inputHold() instanceof ProductionInputHold.Materialized))
+            throw new IllegalArgumentException("fungible recipe preparation belongs exclusively to the station owner");
         if (work.phase() != prepared.phase() || work.pendingPhysicalStep().isPresent()
                 || !lease.memberBody(state.actorLocations(), job.workerId()).equals(BakeryWorkGoal.current(state, job).station().standingBody())
                 || prepared.phase() == BakeryWorkState.Phase.PROCESSING
-                && !work.labourComplete())
+                && !BakeryLabour.complete(state, job)
+                || prepared.phase() == BakeryWorkState.Phase.STATION_LOAD
+                && !ProductionStationProcessing.canStart(state, station.id(), work.recipeId(), job.inputCount())
+                || prepared.phase() != BakeryWorkState.Phase.PROCESSING && !ProductionServiceAccess.available(state, job))
             throw new IllegalArgumentException("bakery HOT effect is not at a ready current station");
         int requiredSlot = switch (prepared.phase()) {
             case DEPOT_PICKUP, STATION_UNLOAD -> -1;
@@ -442,8 +468,7 @@ public final class BakeryProcess {
                 || !lease.memberBody(state.actorLocations(), job.workerId()).equals(changed.observedWorker()))
             throw new IllegalArgumentException("bakery labour lost its observed exact worker");
         BakeryLabour.require(state, job, changed.change());
-        return FrontierProductionWorkSceneSupport.replaceJob(state,
-                job.withBakeryWork(job.bakeryWork().orElseThrow().withLabour(changed.change().next())));
+        return BakeryLabour.change(state, job, changed.change().next());
     }
 
     static FrontierWorldState releaseHotHand(FrontierWorldState state, SubjectId subject, BakeryHotHandRelease released) {
@@ -468,7 +493,7 @@ public final class BakeryProcess {
         CustodyAccount account = ledger.accounts().get(work.actorAccountId());
         List<PhysicalStackBinding> bindings = ledger.bindings().values().stream()
                 .filter(binding -> binding.accountId().equals(work.actorAccountId())).toList();
-        String kind = work.phase() == BakeryWorkState.Phase.STATION_LOAD ? "minecraft:wheat" : "minecraft:bread";
+        String kind = BakeryCargo.kind(job);
         if (!address.actorId().equals(job.workerId()) || !address.entityId().equals(lease.members().getFirst().entityId())
                 || address.hand() != ActorContainerItemOrder.Hand.MAIN
                 || account == null || !account.custody().equals(new ResourceCustody.Actor(job.workerId()))
@@ -477,7 +502,7 @@ public final class BakeryProcess {
                 || !bindings.getFirst().lotQuantities().equals(account.lotQuantities())
                 || !bindings.getFirst().claimQuantities().equals(account.claimQuantities())
                 || !kind.equals(released.observedHand().itemKind())
-                || released.observedHand().quantity() != job.outputCount())
+                || released.observedHand().quantity() != BakeryCargo.quantity(job))
             throw new IllegalArgumentException("bakery hand release does not match its current physical cargo");
         FrontierWorldState unbound = state.withInventory(state.inventory().withFungibleResources(
                 ledger.releaseBindings(account.id(), released.actorEpoch())));
@@ -493,7 +518,7 @@ public final class BakeryProcess {
         BakeryWorkState work = job.bakeryWork().orElseThrow();
         SceneLease lease = FrontierProductionWorkSceneSupport.requireHotLease(state, job, observed.leaseId());
         PhysicalStackAddress.ActorHand address = (PhysicalStackAddress.ActorHand) observed.observedHand().address();
-        String kind = work.phase() == BakeryWorkState.Phase.STATION_LOAD ? "minecraft:wheat" : "minecraft:bread";
+        String kind = BakeryCargo.kind(job);
         CustodyAccount account = state.inventory().fungibleResources().accounts().get(work.actorAccountId());
         if ((work.phase() != BakeryWorkState.Phase.STATION_LOAD
                 && work.phase() != BakeryWorkState.Phase.DEPOT_DELIVERY)
@@ -503,7 +528,7 @@ public final class BakeryProcess {
                 || !address.entityId().equals(lease.members().getFirst().entityId())
                 || observed.actorEpoch() != Math.max(1L, lease.revision())
                 || !kind.equals(observed.observedHand().itemKind())
-                || observed.observedHand().quantity() != job.outputCount()
+                || observed.observedHand().quantity() != BakeryCargo.quantity(job)
                 || account == null || !account.custody().equals(new ResourceCustody.Actor(job.workerId()))
                 || state.inventory().fungibleResources().bindings().values().stream()
                     .anyMatch(binding -> binding.accountId().equals(account.id())))
@@ -550,17 +575,12 @@ public final class BakeryProcess {
                 ExactItemStack input = state.inventory().items().get(job.consumedItemId());
                 ExactItemStack output = new ExactItemStack(job.outputItemId(), job.rights().resourceOwner().id(), job.outputItemKind(),
                         job.outputCount(), new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot()));
-                inventory = ProductionStationRecipe.transformExactObserved(state, station, input, output);
+                inventory = ProductionStationRecipe.transformExactObserved(state, station, work.recipeId(), input, output);
             } else {
-                ResourceLot output = new ResourceLot(job.outputItemId(), job.rights().resourceOwner().id(), job.outputItemKind(), job.outputCount(),
-                        "recipe:bread", job.inputQuantities().keySet().stream().sorted().toList());
-                inventory = ProductionStationRecipe.transformObserved(state, station, work.stationAccountId(),
-                        observed.sourceEpoch(), job.inputQuantities(), Map.of(claimId(job), job.outputCount()),
-                        output, observed.destination());
-                if (!observed.remainingSource().isEmpty())
-                    throw new IllegalArgumentException("station recipe cannot retain unprocessed source wheat");
+                throw new IllegalArgumentException("fungible recipe observation belongs exclusively to the station owner");
             }
-            return replace(state, job.withBakeryWork(ready.advance(BakeryWorkState.Phase.STATION_UNLOAD)), inventory);
+            return replace(state, job.withBakeryWork(ready.advance(BakeryWorkState.Phase.STATION_UNLOAD)), inventory,
+                    ProductionStationProcessing.transformed(state, BakeryStationOperation.require(state, job)));
         }
         BakeryColdStep.Action action = switch (observed.phase()) {
             case DEPOT_PICKUP -> BakeryColdStep.Action.PICKUP;
@@ -581,12 +601,26 @@ public final class BakeryProcess {
             case UNLOAD -> BakeryWorkState.Phase.DEPOT_DELIVERY;
             default -> throw new IllegalStateException("observed bakery transfer has no successor");
         };
-        return replace(state, job.withBakeryWork(ready.advance(next)), inventory);
+        ProductionStations machines = switch (action) {
+            case LOAD -> BakeryStationOperation.loaded(state, job, station(state, job));
+            case UNLOAD -> ProductionStationProcessing.unloaded(state, BakeryStationOperation.require(state, job));
+            default -> state.productionStations();
+        };
+        if (action == BakeryColdStep.Action.LOAD)
+            inventory = ProductionStationProcessing.adoptInputOwnership(inventory, machines.require(work.stationId()).operation().orElseThrow());
+        if (action == BakeryColdStep.Action.UNLOAD)
+            inventory = ProductionStationProcessing.collectedOutput(inventory, BakeryStationOperation.require(state, job), work.actorAccountId(), observed.destinationEpoch());
+        return replace(state, job.withBakeryWork(ready.advance(next)), inventory, machines);
     }
 
     private static FrontierWorldState replace(FrontierWorldState state, ProductionJob job, ExactInventory inventory) {
+        return replace(state, job, inventory, state.productionStations());
+    }
+
+    private static FrontierWorldState replace(FrontierWorldState state, ProductionJob job, ExactInventory inventory,
+                                              ProductionStations machines) {
         Map<SubjectId, ProductionJob> jobs = new LinkedHashMap<>(state.productionJobs()); jobs.put(job.id(), job);
-        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).productionJobs(jobs));
+        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).productionJobs(jobs).productionStations(machines));
     }
 
     private static FrontierWorldState finish(FrontierWorldState state, ProductionJob job, ExactInventory delivered) {
@@ -648,7 +682,8 @@ public final class BakeryProcess {
                     ? new ResourceCustody.Actor(job.workerId())
                     : new ResourceCustody.Container(action == BakeryColdStep.Action.LOAD ? station.containerId() : depotId);
             portion = new ActorContainerItemOrder.Portion.Fungible(source, from, destination, to,
-                    output ? Optional.empty() : Optional.of(claimId(job)), output ? job.outputItemKind() : "minecraft:wheat",
+                    action == BakeryColdStep.Action.UNLOAD ? Optional.of(BakeryStationOperation.require(state, job).outputClaimId())
+                        : output ? Optional.empty() : Optional.of(claimId(job)), output ? job.outputItemKind() : work.inputItemKind(),
                     output ? Map.of(job.outputItemId(), job.outputCount()) : job.inputQuantities());
             endpoint = switch (action) {
                 case PICKUP, DELIVER -> new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(depotId);

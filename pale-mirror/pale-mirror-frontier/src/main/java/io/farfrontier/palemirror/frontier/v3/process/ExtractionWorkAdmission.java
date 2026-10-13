@@ -21,7 +21,9 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
         if (!resident.settlementId().equals(deposit.site().settlementId())
                 || !ExtractionWorkPlanning.demanded(state, resident.settlementId())
                 || state.extractionSites().work().size() >= ExtractionSiteState.MAX_WORK) return Optional.empty();
+        var required = ExtractionStockDemand.requiredCells(state, deposit, Optional.empty());
         var cells = new ArrayList<>(deposit.available(state.extractionSites().reservedCells(siteId)).stream()
+                .filter(cell -> required.contains(cell.id()))
                 .filter(cell -> cell.definition().coldOutput().size() == 1).toList());
         if (cells.isEmpty()) return Optional.empty();
         var selectedTool = ExtractionToolSelection.select(state, resident);
@@ -96,6 +98,8 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
                 || !state.inventory().containers().get(job.toolReturnSlot().containerId()).storage().orElseThrow().endpoint().equals(job.toolSource()))
             throw new IllegalArgumentException("mining start has a changed tool/source or foreign site");
         var target = job.target().orElseThrow();
+        if (!ExtractionStockDemand.requiredCells(state, deposit, Optional.empty()).contains(target.key().cell()))
+            throw new IllegalArgumentException("mining admission selected an unrequested source/prerequisite");
         var cell = deposit.available(state.extractionSites().reservedCells(job.siteId())).stream()
                 .filter(value -> ExtractionWorkEffects.target(deposit, value).equals(target)).findFirst().orElseThrow(
                         () -> new IllegalArgumentException("mining start has a reserved, removed or stale source"));

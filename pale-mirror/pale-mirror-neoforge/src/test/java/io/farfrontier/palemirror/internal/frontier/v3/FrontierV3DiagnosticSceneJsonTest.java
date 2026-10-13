@@ -2,6 +2,8 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import com.google.gson.JsonParser;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
+import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
+import io.farfrontier.palemirror.frontier.v3.api.Revision;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
@@ -29,6 +31,10 @@ import io.farfrontier.palemirror.frontier.v3.model.InventoryCustody;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionJob;
+import io.farfrontier.palemirror.frontier.v3.model.ProductionOperation;
+import io.farfrontier.palemirror.frontier.v3.model.ProductionStations;
+import io.farfrontier.palemirror.frontier.v3.model.BakeryRecipes;
+import io.farfrontier.palemirror.frontier.v3.model.WorkProgress;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionWorkSceneCause;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstruction;
 import io.farfrontier.palemirror.frontier.v3.model.RouteConstructionStarted;
@@ -63,6 +69,85 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /** Typed production, medical and route diagnostics have an independent test owner. */
 class FrontierV3DiagnosticSceneJsonTest {
+    @Test
+    void mixedDepositReportsCoalSeparatelyWithoutPretendingBootstrapFuelWasMined() {
+        var configuration = FrontierV3FixtureCatalog.configuration("fuelled-quarry-world",
+                new WorldId("frontier:mixed-deposit-diagnostic"), 20260918065L);
+        var engine = FrontierEngines.create(configuration);
+        var state = configuration.initialState();
+        var checkpoint = engine.checkpoint();
+        var deposit = state.extractionSites().deposits().values().stream().filter(value ->
+                value.site().layout().cells().stream().anyMatch(cell -> cell.definition().coldOutput().stream()
+                        .anyMatch(output -> output.itemKind().equals("minecraft:coal")))).findFirst().orElseThrow();
+        var result = JsonParser.parseString(FrontierV3ExtractionDiagnosticJson.site(checkpoint, state, deposit)).getAsJsonObject();
+        var resources = result.getAsJsonObject("result").getAsJsonObject("resourceStocks");
+        var coal = resources.getAsJsonObject("minecraft:coal");
+        assertEquals(8, coal.get("totalCells").getAsInt());
+        assertEquals(8, coal.get("remainingCells").getAsInt());
+        assertEquals(0, coal.get("extractedCells").getAsInt());
+        assertFalse(coal.get("hasExtraction").getAsBoolean());
+        assertEquals(4, coal.get("homeQuantity").getAsInt());
+        assertTrue(resources.has("minecraft:cobblestone"));
+        assertEquals(checkpoint, engine.checkpoint(), "reading geology cannot mine or supply the fuel");
+        assertEquals(state, configuration.initialState());
+    }
+
+    @Test
+    void stationProcessReportsItsOwnIdentityHeatAndStockWithoutCreatingAResidentJob(@TempDir Path directory) {
+        var runtime = FrontierV3ServerRuntime.start(FrontierV3FixtureCatalog.configuration("fuelled-quarry-world",
+                new WorldId("frontier:diagnostic-fuelled-station"), 20260918065L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
+        var checkpoint = runtime.checkpointImage().orElseThrow();
+        var state = runtime.decodedState().orElseThrow();
+        var machine = state.productionStations().machines().values().stream()
+                .sorted(java.util.Comparator.comparing(io.farfrontier.palemirror.frontier.v3.model.ProductionStations.Machine::stationId))
+                .findFirst().orElseThrow();
+        var result = JsonParser.parseString(FrontierV3DiagnosticJson.render("process", machine.stationId().value(),
+                checkpoint, state, Optional.empty()).substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
+        assertEquals("frontier.production-station", result.get("family").getAsString());
+        assertEquals(machine.stationId().value(), result.getAsJsonObject("identity").get("station").getAsString());
+        assertEquals(0, result.getAsJsonObject("result").get("storedHeat").getAsLong());
+        assertTrue(result.getAsJsonObject("result").get("operation").isJsonNull());
+        assertEquals("CLOSED", result.getAsJsonObject("progressObligation").get("next").getAsString());
+        assertEquals(state, runtime.decodedState().orElseThrow(), "rendering cannot start or supply the machine");
+        // Render the retained clock value without inventing a canonical operation or advancing the engine.
+        var clock = WorkProgress.pending(1600, 0).resume(0, 1000, 400);
+        var operation = new ProductionOperation(new ProductionOperation.Id(new SubjectId("operation:diagnostic-clock")),
+                machine.stationId(), new SubjectId("order:diagnostic-clock"), BakeryRecipes.BREAD,
+                new ProductionOperation.ExactInput(new SubjectId("item:diagnostic-input")), new SubjectId("lot:diagnostic-output"),
+                3, 1, 80, Optional.of(clock), false, new ProductionOperation.PlayerInitiator(new UUID(0, 1),
+                        ProductionOperation.PlayerAttendanceIntent.RUN_REQUESTED));
+        FrontierScheduleView observed = new FrontierScheduleView() {
+            @Override public WorldId worldId() { return checkpoint.worldId(); }
+            @Override public Revision revision() { return checkpoint.revision(); }
+            @Override public SimInstant instant() { return new SimInstant(500); }
+            @Override public List<ScheduledAction> schedules() { return checkpoint.schedules(); }
+        };
+        var retained = new ProductionStations.Machine(machine.stationId(), 0, Optional.of(operation), 1, Optional.empty());
+        var running = JsonParser.parseString(FrontierV3ProductionStationDiagnosticJson.render(observed, state, retained)).getAsJsonObject()
+                .getAsJsonObject("result").getAsJsonObject("operation");
+        assertEquals(0, running.get("completedMilliWork").getAsLong());
+        assertEquals("RUN_REQUESTED", running.get("playerAttendanceIntent").getAsString());
+        assertEquals(400_000, running.get("elapsedCompletedMilliWork").getAsLong(), "read progress is bounded by attendance, not writes or wall time");
+        assertEquals(0, clock.completedMilliWork());
+        assertEquals(2, FrontierV3ProductionBenchAccess.processingStatus(operation, 100));
+        assertEquals(7, FrontierV3ProductionBenchAccess.processingStatus(operation, 500), "expired attendance is not active processing");
+        assertEquals(7, FrontierV3ProductionBenchAccess.processingStatus(operation.withProgress(clock.pause(200)), 500));
+        assertTrue(FrontierV3ProductionBenchAccess.attendanceRequested(operation.withProgress(clock.pause(200)), new UUID(0, 1)),
+                "expired physical attendance is not withdrawn player consent");
+        assertFalse(FrontierV3ProductionBenchAccess.attendanceRequested(operation.withProgress(clock.pause(200)).withPlayerAttendanceIntent(
+                ProductionOperation.PlayerAttendanceIntent.PAUSED), new UUID(0, 1)));
+        assertFalse(FrontierV3ProductionBenchAccess.attendanceRequested(operation, new UUID(0, 2)));
+        assertEquals(8, FrontierV3ProductionBenchAccess.processingStatus(operation.withProgress(
+                WorkProgress.pending(1600, 0).resume(0, 1000, 2000)), 1600));
+        var paused = new ProductionStations.Machine(machine.stationId(), 0, Optional.of(operation.withProgress(clock.pause(200))), 1, Optional.empty());
+        var stopped = JsonParser.parseString(FrontierV3ProductionStationDiagnosticJson.render(observed, state, paused)).getAsJsonObject()
+                .getAsJsonObject("result").getAsJsonObject("operation");
+        assertEquals(200_000, stopped.get("elapsedCompletedMilliWork").getAsLong());
+        assertEquals(state, runtime.decodedState().orElseThrow(), "reading elapsed work cannot commit or fabricate production");
+        runtime.shutdown();
+    }
+
     @Test
     void exposesOneTypedProductionWorkSceneWithoutCallingItMedical(@TempDir Path directory) {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerRuntime.start(
@@ -118,6 +203,12 @@ class FrontierV3DiagnosticSceneJsonTest {
         assertTrue(process.contains("\"retainedBody\":") && process.contains("\"actorBody\":")
                         && process.contains("\"lease\":null") && process.contains("\"workStage\":\"APPROACH\""),
                 "COLD ingress evidence needs the retained current cursor rather than a synthetic HOT scene");
+        var task = JsonParser.parseString(FrontierV3DiagnosticJson.render("process", job.taskId().value(),
+                checkpoint, state, Optional.empty()).substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
+        assertEquals("frontier.strategic-task", task.get("family").getAsString());
+        assertEquals(job.taskId().value(), task.getAsJsonObject("identity").get("task").getAsString());
+        assertEquals("ACTIVE", task.getAsJsonObject("result").get("taskStatus").getAsString(),
+                "an extant production job does not imply terminal task completion");
         assertEquals(state, runtime.decodedState().orElseThrow(), "process rendering must not admit or advance the worker");
         runtime.shutdown();
     }

@@ -40,7 +40,7 @@ final class BakeryColdStepAdmission {
             if (!pause && (step.action() == BakeryColdStep.Action.MOVE) == atGoal)
                 throw new IllegalArgumentException("bakery movement/work is not at its phase boundary");
             if (step.action() != BakeryColdStep.Action.MOVE
-                    && (step.action() != stationAction(work) || !step.nextSurface().equals(actor.supportingSurface())))
+                    && (step.action() != stationAction(state, job) || !step.nextSurface().equals(actor.supportingSurface())))
                 throw new IllegalArgumentException("bakery station step has a foreign phase or body");
         }
         if (step.action() == BakeryColdStep.Action.MOVE) {
@@ -52,11 +52,11 @@ final class BakeryColdStepAdmission {
         }
     }
 
-    static BakeryColdStep.Action stationAction(BakeryWorkState work) {
-        return switch (work.phase()) {
+    static BakeryColdStep.Action stationAction(FrontierWorldState state, ProductionJob job) {
+        return switch (job.bakeryWork().orElseThrow().phase()) {
             case DEPOT_PICKUP -> BakeryColdStep.Action.PICKUP;
             case STATION_LOAD -> BakeryColdStep.Action.LOAD;
-            case PROCESSING -> !work.labourComplete()
+            case PROCESSING -> !BakeryLabour.complete(state, job)
                     ? BakeryColdStep.Action.LABOUR : BakeryColdStep.Action.RECIPE;
             case STATION_UNLOAD -> BakeryColdStep.Action.UNLOAD;
             case DEPOT_DELIVERY -> BakeryColdStep.Action.DELIVER;

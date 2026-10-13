@@ -5,6 +5,7 @@ import java.util.List;
 /** Endpoint owns its declared identity/access; transport owns cargo, not facility interpretation. */
 interface ShipmentEndpointPort {
     ShipmentEndpoint.Kind kind();
+    ShipmentReceiverReplacement replacementPolicy();
     void validate(FrontierWorldState state, ShipmentEndpoint endpoint);
     List<KnownPedestrianRouteKnowledge.SettlementPassage> passages(FrontierWorldState state, ShipmentEndpoint endpoint);
     SurfaceAnchor exteriorApproach(FrontierWorldState state, ShipmentEndpoint endpoint);

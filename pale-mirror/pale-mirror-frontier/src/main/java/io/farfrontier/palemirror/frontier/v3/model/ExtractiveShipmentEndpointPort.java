@@ -5,6 +5,7 @@ import java.util.List;
 
 final class ExtractiveShipmentEndpointPort implements ShipmentEndpointPort {
     @Override public ShipmentEndpoint.Kind kind() { return ShipmentEndpoint.Kind.EXTRACTIVE_SITE; }
+    @Override public ShipmentReceiverReplacement replacementPolicy() { return StorageShipmentReceiverReplacement.INSTANCE; }
     private ExtractionSite site(FrontierWorldState state, ShipmentEndpoint endpoint) {
         if (!(endpoint instanceof ShipmentEndpoint.ExtractiveSite declared))
             throw new IllegalArgumentException("extractive endpoint has a foreign nominal schema");

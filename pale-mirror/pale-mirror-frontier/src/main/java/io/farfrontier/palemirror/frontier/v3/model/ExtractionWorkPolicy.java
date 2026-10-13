@@ -10,9 +10,7 @@ public final class ExtractionWorkPolicy {
     public static boolean requested(FrontierWorldState state, ExtractionWork job) {
         return SettlementWorkPolicy.permissions(state, ExtractionWorkAuthority.site(state, job).settlementId())
                 .permits(ResidentWorkKind.EXTRACTION, job.execution().actorId())
-                && state.bootstrap().ruleset().extraction().source().coldOutput().stream().anyMatch(output ->
-                    ProductionStockDemand.read(state, ExtractionWorkAuthority.site(state, job).settlementId(),
-                            output.itemKind(), Optional.of(job.id())).requested());
+                && ExtractionStockDemand.requested(state, state.extractionSites().deposits().get(job.siteId()), Optional.of(job.id()));
     }
     public static boolean remaining(ExtractionDeposit deposit) {
         return deposit.cells().values().stream().anyMatch(cell -> cell.disposition() == ExtractionDeposit.Disposition.PRESENT);
@@ -21,7 +19,9 @@ public final class ExtractionWorkPolicy {
     public static Optional<ExtractionWorkDecision.Source> nextTarget(FrontierWorldState state, ExtractionWork job) {
         if (!requested(state, job)) return Optional.empty();
         var deposit = state.extractionSites().deposits().get(job.siteId());
+        var required = ExtractionStockDemand.requiredCells(state, deposit, Optional.of(job.id()));
         var available = deposit.available(state.extractionSites().reservedCells(job.siteId())).stream()
+                .filter(cell -> required.contains(cell.id()))
                 .filter(cell -> supportsTool(state, cell, job))
                 .filter(cell -> ExtractionWorkAuthority.carried(state, job) == 0 || matchingOutput(cell, job))
                 .toList();

@@ -37,7 +37,7 @@ final class FrontierWorldInitialState {
                         .withStorage(new ResourceStoragePolicy(new ShipmentEndpoint.ExtractiveSite(deposit.site().settlementId(),
                                 deposit.site().id(), deposit.site().containerId(), deposit.site().layout().storagePort()),
                                 new ResourceStorageFilter(false, java.util.Set.of(bootstrap.ruleset().extraction().source().toolKind()),
-                                        Map.of("pale_mirror:extracted_materials", bootstrap.ruleset().extraction().source().coldOutput().stream()
+                                        Map.of("pale_mirror:extracted_materials", bootstrap.ruleset().extraction().definitions().stream().flatMap(definition -> definition.coldOutput().stream())
                                                 .map(output -> output.itemKind()).collect(java.util.stream.Collectors.toSet()))), 0, ResourceStorageRole.LOCAL_BUFFER))));
         bootstrap.settlements().forEach(settlement -> {
             SubjectId id = FrontierWorldState.depotId(settlement.id());
@@ -47,7 +47,7 @@ final class FrontierWorldInitialState {
         bootstrap.settlements().forEach(settlement -> settlement.structures().stream()
                 .filter(structure -> structure.kind() == StructureKind.WORKSHOP).findFirst().ifPresent(workshop -> {
                     ProductionStationSpec station = ProductionStationSpec.grayboxBakery(workshop);
-                    containers.put(station.containerId(), new ContainerRecord(station.containerId(), settlement.id(), 27, ContainerPurpose.PRODUCTION_STATION,
+                    containers.put(station.containerId(), new ContainerRecord(station.containerId(), settlement.id(), 3, ContainerPurpose.PRODUCTION_STATION,
                             java.util.Optional.of(station)));
                 }));
         bootstrap.hive().organs().forEach(organ -> organ.containerId().ifPresent(container -> containers.put(container, new ContainerRecord(container, bootstrap.hive().id(), 27, ContainerPurpose.HIVE_STORE))));
@@ -119,7 +119,10 @@ final class FrontierWorldInitialState {
                         ResourceSiteState.initial(bootstrap), PhysicalReplicaCustodyState.empty(),
                         DeferredAftermathState.empty(), FencedRecoveryState.empty(), DiagnosticIncidentIndex.empty(),
                         Map.of(), io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState.empty(),
-                        ShipmentState.empty(), io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState.empty(), fleet, extraction);
+                        ShipmentState.empty(), io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState.empty(), fleet, extraction,
+                        new ProductionStations(containers.values().stream().flatMap(container -> container.productionStation().stream())
+                                .collect(java.util.stream.Collectors.toMap(ProductionStationSpec::id,
+                                        station -> ProductionStations.Machine.installed(station.id())))));
     }
 
     private static Map<SubjectId, BioformLifecycle> initialBioformLifecycles(FrontierBootstrap bootstrap) {

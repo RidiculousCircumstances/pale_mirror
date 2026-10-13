@@ -15,6 +15,8 @@ final class FrontierV3ProcessDiagnosticJson {
                          java.util.function.Function<io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement,
                                  java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.MovementPermission>> steering) {
         var subject = FrontierV3DiagnosticJson.subject(id).orElse(null);
+        var machine = subject == null ? null : state.productionStations().machines().get(subject);
+        if (machine != null) return FrontierV3ProductionStationDiagnosticJson.render(checkpoint, state, machine);
         var extraction = subject == null ? null : state.extractionSites().deposits().get(subject);
         if (extraction != null) return FrontierV3ExtractionDiagnosticJson.site(checkpoint, state, extraction);
         var mining = subject == null ? null : state.extractionSites().work().get(subject);
@@ -32,8 +34,17 @@ final class FrontierV3ProcessDiagnosticJson {
                 .filter(value -> value.id().equals(subject)).findFirst().orElse(null);
         if (harvest != null) return FrontierV3HarvestDiagnosticJson.harvestProcess(checkpoint, state, harvest);
         var production = subject == null ? null : state.productionJobs().get(subject);
-        return production == null ? FrontierV3DiagnosticJson.unavailable("process", id, checkpoint, "not_found")
-                : FrontierV3ProductionProcessDiagnosticJson.render(checkpoint, state, production);
+        if (production != null) return FrontierV3ProductionProcessDiagnosticJson.render(checkpoint, state, production);
+        // A removed job is not a completion receipt. Report its retained exact
+        // task separately so a diagnostic can distinguish success from cancellation.
+        var task = subject == null ? null : state.strategicPlans().tasks().get(subject);
+        if (task == null) return FrontierV3DiagnosticJson.unavailable("process", id, checkpoint, "not_found");
+        return FrontierV3DiagnosticJson.base("process", id, checkpoint)
+                + ",\"status\":\"ok\",\"family\":\"frontier.strategic-task\",\"identity\":{\"task\":\""
+                + FrontierV3DiagnosticJson.quote(task.id().value()) + "\",\"owner\":\""
+                + FrontierV3DiagnosticJson.quote(task.ownerId().value()) + "\",\"objective\":\""
+                + FrontierV3DiagnosticJson.quote(task.objectiveId().value()) + "\"},\"result\":{\"kind\":\""
+                + task.kind().name() + "\",\"taskStatus\":\"" + task.status().name() + "\"}}";
     }
     private FrontierV3ProcessDiagnosticJson() { }
 }

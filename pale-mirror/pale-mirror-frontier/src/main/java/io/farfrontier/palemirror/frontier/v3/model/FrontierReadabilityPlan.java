@@ -580,8 +580,8 @@ public final class FrontierReadabilityPlan {
                 ? "BAKER PAUSED · STORAGE FULL" : switch (work.phase()) {
             case DEPOT_PICKUP -> "BAKER · WHEAT PICKUP";
             case STATION_LOAD -> "BAKER · STATION INPUT";
-            case PROCESSING -> work.labourComplete() ? "BAKING · WORK COMPLETE"
-                    : work.labour().filter(WorkProgress::running).isPresent() ? "BAKING · WORKING" : "BAKING · PAUSED";
+            case PROCESSING -> BakeryLabour.complete(state, job) ? "BAKING · WORK COMPLETE"
+                    : BakeryLabour.progress(state, job).filter(WorkProgress::running).isPresent() ? "BAKING · WORKING" : "BAKING · PAUSED";
             case STATION_UNLOAD -> "BAKER · BREAD READY";
             case DEPOT_DELIVERY -> "BAKER · BREAD DELIVERY";
             case DELIVERED -> "BAKER · BREAD STORED";

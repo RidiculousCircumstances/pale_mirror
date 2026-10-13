@@ -41,6 +41,12 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                                     .sorted(java.util.Comparator.comparing(Shipment::id))
                                     .map(shipment -> string(shipment.id().value())).collect(Collectors.joining(","))
                                 + "]}").collect(Collectors.joining(","));
+        // Acceptance is committed together with title/payment. This is a read-only
+        // summary of retained contracts, not a second ledger or lifetime turnover.
+        var acceptedCommodities = trade.contracts().values().stream()
+                .filter(value -> value.seller().equals(participant.party()) || value.buyer().equals(participant.party()))
+                .filter(value -> value.acceptedQuantity() > 0).map(GoodsTradeContract::itemKind).distinct().sorted()
+                .map(kind -> string(kind) + ":true").collect(Collectors.joining(","));
         return FrontierV3DiagnosticJson.base("process", participant.party().id().value(), checkpoint)
                 + ",\"status\":\"ok\",\"family\":\"frontier.goods-participant\""
                 + ",\"identity\":{\"participant\":" + string(participant.party().id().value()) + ",\"ownerKind\":" + string(participant.party().kind().name())
@@ -51,6 +57,7 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                 + ",\"nextReviewTick\":" + (reviews.isPresent() ? Long.toString(reviews.orElseThrow()) : "null")
                 + ",\"knownCounterparties\":[" + known + "],\"stocks\":[" + stocks
                 + "],\"orders\":[" + orders + "],\"contracts\":[" + contracts + "]"
+                + ",\"acceptedCommodities\":{" + acceptedCommodities + "}"
                 + ",\"expeditions\":" + FrontierV3ExpeditionDiagnosticJson.render(checkpoint, state, participant) + "}";
     }
     private static String string(String value) { return "\"" + FrontierV3DiagnosticJson.quote(value) + "\""; }

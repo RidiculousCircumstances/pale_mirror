@@ -6,8 +6,9 @@ import java.util.Objects;
 
 /** Explicit, persisted machine capability and physical custody port for one facility. */
 public record ProductionStationSpec(SubjectId id, SubjectId facilityId, SubjectId containerId,
+                                    ProductionEquipment.Id equipmentType,
                                     Capability capability, SurfaceAnchor workerStation,
-                                    SurfaceAnchor socketSurface, int inputSlot, int outputSlot) {
+                                    SurfaceAnchor socketSurface, int inputSlot, int outputSlot, int fuelSlot) {
     public enum Capability {
         BAKING(1);
 
@@ -24,16 +25,29 @@ public record ProductionStationSpec(SubjectId id, SubjectId facilityId, SubjectI
         Objects.requireNonNull(id, "station id");
         Objects.requireNonNull(facilityId, "station facility");
         Objects.requireNonNull(containerId, "station container");
+        Objects.requireNonNull(equipmentType, "declared equipment type");
         Objects.requireNonNull(capability, "station capability");
         Objects.requireNonNull(workerStation, "station worker surface");
         Objects.requireNonNull(socketSurface, "station machine socket");
-        if (inputSlot < 0 || outputSlot < 0 || inputSlot == outputSlot ||
+        if (inputSlot < 0 || outputSlot < 0 || fuelSlot < 0 || inputSlot == outputSlot
+                || inputSlot == fuelSlot || outputSlot == fuelSlot ||
                 Math.abs(workerStation.x() - socketSurface.x())
                         + Math.abs(workerStation.z() - socketSurface.z()) != 1
                 || workerStation.y() != socketSurface.y()) {
             throw new IllegalArgumentException("station needs distinct adjacent worker and machine surfaces and slots");
         }
     }
+
+    /** A declared semantic port, never a caller-selected container packing order. */
+    public int slot(ActorContainerItemOrder.StationPort port) {
+        return switch (Objects.requireNonNull(port)) {
+            case INPUT -> inputSlot;
+            case OUTPUT -> outputSlot;
+            case FUEL -> fuelSlot;
+        };
+    }
+    /** A full inventory witness may retain other ports beside the transferred portion. */
+    public boolean ownsSlot(int slot) { return slot == inputSlot || slot == outputSlot || slot == fuelSlot; }
 
     /** Genesis producer for the current six-building graybox; later providers declare their own specs. */
     public static ProductionStationSpec grayboxBakery(SettlementStructure workshop) {
@@ -46,7 +60,7 @@ public record ProductionStationSpec(SubjectId id, SubjectId facilityId, SubjectI
         if (!SettlementStructureFootprint.supportSurfaces(workshop).contains(machine))
             throw new IllegalArgumentException("bakery machine socket has no facility support");
         return new ProductionStationSpec(new SubjectId("station:" + suffix + "-bakery"), workshop.id(),
-                new SubjectId("container:" + suffix + "-bakery-station"), Capability.BAKING,
-                port.workStation(), machine, 0, 1);
+                new SubjectId("container:" + suffix + "-bakery-station"), ProductionEquipment.BENCH, Capability.BAKING,
+                port.workStation(), machine, 0, 1, 2);
     }
 }

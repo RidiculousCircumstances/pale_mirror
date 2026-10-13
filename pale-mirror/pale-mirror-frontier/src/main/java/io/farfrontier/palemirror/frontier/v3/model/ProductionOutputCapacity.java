@@ -36,7 +36,7 @@ public final class ProductionOutputCapacity {
     /** Input can free output capacity only in its own selected source storage. */
     public static boolean canAdmitBatch(FrontierWorldState state, ProductionRights rights, int quantity, SubjectId source) {
         return source.equals(rights.destinationContainerId()) ? canAdmitBreadBatch(state, rights, quantity)
-                : state.canReceiveFungible(rights.destinationContainerId(), "minecraft:bread", quantity);
+                : state.canReceiveFungible(rights.destinationContainerId(), "minecraft:bread", BakeryRecipes.bread(state).outputForInput(quantity));
     }
 
     /** The recipe owner declares its retained inbound demand after input has left storage. */
@@ -64,15 +64,15 @@ public final class ProductionOutputCapacity {
 
     public static boolean canAdmitBreadBatch(FrontierWorldState state, ProductionRights rights, int quantity) {
         Objects.requireNonNull(state, "production output state");
-        ProductionStationRecipe.breadOutputQuantity(quantity);
+        int output = BakeryRecipes.bread(state).outputForInput(quantity);
         SubjectId depot = rights.destinationContainerId();
         var storage = state.inventory().containers().get(depot);
         if (storage == null || storage.storage().map(policy -> !policy.filter().accepts("minecraft:bread")).orElse(true)
                 || ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return false;
         var pending = state.pendingContainerInbound(depot);
-        return state.canReceiveFungible(depot, "minecraft:bread", quantity)
+        return state.canReceiveFungible(depot, "minecraft:bread", output)
                 || state.inventory().canTransformFungible(depot, "minecraft:wheat", quantity,
-                    "minecraft:bread", quantity, state.reservedContainerSlots(depot), pending)
+                    "minecraft:bread", output, state.reservedContainerSlots(depot), pending)
                 || state.inventory().items().values().stream().anyMatch(item ->
                     item.economicOwnerId().equals(rights.resourceOwner().id()) && item.itemKind().equals("minecraft:wheat")
                     && item.count() == quantity && item.custody() instanceof InventoryCustody.ContainerSlot slot

@@ -13,7 +13,8 @@ public final class ExtractionDevelopment {
         var rules = state.bootstrap().ruleset().extraction();
         if (rules.developmentBatchCells() == 0 || SettlementWorkPolicy.permissions(state, deposit.site().settlementId())
                 .workers(ResidentWorkKind.EXTRACTION).isEmpty()) return Optional.empty();
-        var accessible = deposit.accessibleSources(Set.of()).stream().map(ExtractionLayout.Cell::id)
+        var needed = ExtractionStockDemand.requiredCells(state, deposit, Optional.empty());
+        var accessible = deposit.accessibleSources(Set.of()).stream().filter(cell -> needed.contains(cell.id())).map(ExtractionLayout.Cell::id)
                 .collect(java.util.stream.Collectors.toSet());
         var layout = deposit.site().layout(); var known = KnownPedestrianRouteKnowledge.forFrontier(state);
         var access = known.accessSelection(layout.storagePort());
@@ -34,7 +35,8 @@ public final class ExtractionDevelopment {
                 || rules.developmentBatchCells() == 0 || event.cells().size() > rules.developmentBatchCells()
                 || SettlementWorkPolicy.permissions(state, deposit.site().settlementId()).workers(ResidentWorkKind.EXTRACTION).isEmpty())
             throw new IllegalArgumentException("stale, unavailable or foreign extraction development");
-        var accessible = deposit.accessibleSources(Set.of()).stream().map(ExtractionLayout.Cell::id).collect(java.util.stream.Collectors.toSet());
+        var needed = ExtractionStockDemand.requiredCells(state, deposit, Optional.empty());
+        var accessible = deposit.accessibleSources(Set.of()).stream().filter(cell -> needed.contains(cell.id())).map(ExtractionLayout.Cell::id).collect(java.util.stream.Collectors.toSet());
         if (!accessible.containsAll(event.cells())) throw new IllegalArgumentException("developed source has changed physical prerequisites");
         var cells = deposit.site().layout().cells().stream().map(cell -> new AdjacentWorkArea.Cell(cell.id(), cell.source())).toList();
         if (!AdjacentWorkArea.extend(cells, deposit.development(), event.cells()::contains, rules.developmentBatchCells()).equals(event.cells()))

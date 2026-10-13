@@ -7,10 +7,31 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 import java.util.List;
 import java.util.Map;
 import java.util.LinkedHashMap;
+import java.util.Optional;
 
 /** Bakery supplies eligibility; generic progress/statistics do not know recipes or jobs. */
 public final class BakeryLabour {
     private BakeryLabour() { }
+
+    public static boolean attended(FrontierWorldState state, ProductionJob job) {
+        return state.bootstrap().ruleset().production().require(job.bakeryWork().orElseThrow().recipeId()).processingMode()
+                == ProductionRecipe.ProcessingMode.ATTENDED;
+    }
+
+    public static Optional<WorkProgress> progress(FrontierWorldState state, ProductionJob job) {
+        if (job.bakeryWork().orElseThrow().phase() != BakeryWorkState.Phase.PROCESSING) return Optional.empty();
+        return BakeryStationOperation.require(state, job).progress();
+    }
+    public static boolean complete(FrontierWorldState state, ProductionJob job) {
+        return progress(state, job).filter(WorkProgress::complete).isPresent();
+    }
+    public static int permille(FrontierWorldState state, ProductionJob job) {
+        return progress(state, job).map(value -> (int)(value.completedMilliWork() * 1_000L / value.requiredMilliWork())).orElse(0);
+    }
+    public static FrontierWorldState change(FrontierWorldState state, ProductionJob job, WorkProgress next) {
+        return state.withChanges(FrontierWorldStateUpdate.begin().productionStations(
+                ProductionStationProcessing.progress(state, BakeryStationOperation.require(state, job), next)));
+    }
 
     public static WorkProgress next(FrontierWorldState state, ProductionJob job, long tick, boolean run) {
         var work = job.bakeryWork().orElseThrow();
@@ -19,35 +40,32 @@ public final class BakeryLabour {
             throw new IllegalArgumentException("bakery labour needs an open loaded station");
         var catalog = state.bootstrap().ruleset().workCatalog();
         var definition = catalog.require(job.outputItemKind(), WorkOperation.PRODUCE);
-        var prior = work.labour().orElseGet(() -> WorkProgress.pending(definition.workUnits(), tick));
-        if (prior.requiredMilliWork() != Math.multiplyExact(definition.workUnits(), 1_000L))
-            throw new IllegalArgumentException("bakery labour has a foreign work definition");
-        var settled = prior.pause(tick);
-        if (!run) return settled;
-        if (settled.complete()) throw new IllegalArgumentException("completed bakery labour cannot restart");
+        var operation = BakeryStationOperation.require(state, job);
+        if (state.bootstrap().ruleset().production().require(work.recipeId()).processingMode() == ProductionRecipe.ProcessingMode.AUTOMATIC)
+            throw new IllegalArgumentException("automatic recipe clock belongs to its machine process, not the baker");
+        if (!run) return ProductionStationClock.next(state, operation, tick, Optional.empty());
+        if (operation.progress().filter(progress -> progress.completedAt(tick) == progress.requiredMilliWork()).isPresent())
+            throw new IllegalArgumentException("completed bakery labour cannot restart");
         var station = BakeryWorkGoal.current(state, job).station();
         if (!state.actorLocations().get(job.workerId()).supportingSurface().equals(station)
                 || !state.actorExecutions().owns(job.workerId(), ActorActivityKind.PRODUCTION, job.id())
                 || !ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.workerId(), tick))
             throw new IllegalArgumentException("bakery labour needs its working baker at the retained station");
-        return settled.resume(tick, ResidentWorkStatistics.speedPermille(
-                state.humanPopulation().resident(job.workerId()), definition, catalog),
-                ResidentWorkIntervals.permittedUntil(state, job.workerId(), tick));
+        return ProductionStationClock.next(state, operation, tick, Optional.of(new ProductionStationClock.Attendance(
+                ResidentWorkStatistics.speedPermille(state.humanPopulation().resident(job.workerId()), definition, catalog),
+                ResidentWorkIntervals.permittedUntil(state, job.workerId(), tick))));
     }
 
     public static void require(FrontierWorldState state, ProductionJob job, BakeryLabourChange change) {
-        if (!job.bakeryWork().orElseThrow().labour().equals(change.previous())
+        if (!progress(state, job).equals(change.previous())
                 || !next(state, job, change.atTick(), change.next().running()).equals(change.next()))
             throw new IllegalArgumentException("bakery labour has stale progress, rate or elapsed work");
     }
 
     public static FrontierWorldState pauseJob(FrontierWorldState state, ProductionJob job, long tick) {
         var work = job.bakeryWork();
-        if (work.isEmpty() || work.orElseThrow().labour().filter(WorkProgress::running).isEmpty()) return state;
-        Map<SubjectId, ProductionJob> jobs = new LinkedHashMap<>(state.productionJobs());
-        jobs.put(job.id(), job.withBakeryWork(work.orElseThrow().withLabour(
-                work.orElseThrow().labour().orElseThrow().pause(tick))));
-        return state.withChanges(FrontierWorldStateUpdate.begin().productionJobs(jobs));
+        if (work.isEmpty() || !attended(state, job) || progress(state, job).filter(WorkProgress::running).isEmpty()) return state;
+        return change(state, job, progress(state, job).orElseThrow().pause(tick));
     }
     private static ProductionJob assigned(FrontierWorldState state, HumanAssignment assignment) {
         if (assignment.kind() != HumanAssignmentKind.PRODUCTION)

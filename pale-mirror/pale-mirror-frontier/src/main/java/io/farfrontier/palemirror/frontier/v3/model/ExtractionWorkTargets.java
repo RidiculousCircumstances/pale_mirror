@@ -70,7 +70,9 @@ public final class ExtractionWorkTargets {
     public static Optional<ExtractionWorkDecision.Source> alternative(FrontierWorldState state, ExtractionWork job) {
         if (job.phase() != ExtractionWork.Phase.EXTRACT || job.pending().isPresent()) return Optional.empty();
         var deposit = state.extractionSites().deposits().get(job.siteId());
+        var required = ExtractionStockDemand.requiredCells(state, deposit, Optional.of(job.id()));
         var available = deposit.available(state.extractionSites().reservedCells(job.siteId())).stream()
+                .filter(cell -> required.contains(cell.id()))
                 .filter(cell -> cell.definition().coldOutput().size() == 1
                         && cell.definition().coldOutput().getFirst().itemKind().equals(job.outputKind()))
                 .toList();
@@ -105,6 +107,8 @@ public final class ExtractionWorkTargets {
         requireStationAvailable(state, deposit, job.execution().actorId(), cell);
         if (!ExtractionWorkSafety.available(state, deposit, cell))
             throw new IllegalArgumentException("selected mining source removes an occupied support or retained access edge");
+        if (!ExtractionStockDemand.requiredCells(state, deposit, Optional.of(job.id())).contains(cell.id()))
+            throw new IllegalArgumentException("selected mining source is not a requested product or prerequisite");
         boolean emptyPart = job.phase() == ExtractionWork.Phase.SELECT_SOURCE && ExtractionWorkAuthority.carried(state, job) == 0;
         if (!job.execution().equals(selected.execution()) || !selected.origin().equals(
                 state.actorLocations().get(job.execution().actorId()).supportingSurface())

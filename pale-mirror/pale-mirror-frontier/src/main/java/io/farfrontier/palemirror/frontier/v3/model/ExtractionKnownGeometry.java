@@ -19,12 +19,13 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
             var positions = new HashSet<BlockPosition>();
             for (var deposit : state.extractionSites().deposits().values()) {
                 var layout = deposit.site().layout();
-                // Working contact probes support and both body cells; projection also
+                // Working contact probes support, body and step headroom; projection also
                 // reads retained natural blocks. No other baseline voxel is queried.
                 for (var surface : layout.accessSurfaces()) {
                     positions.add(surface.support());
                     positions.add(surface.support().offset(0, 1, 0));
                     positions.add(surface.support().offset(0, 2, 0));
+                    positions.add(surface.support().offset(0, 3, 0)); // Swept headroom on a one-block step.
                 }
                 positions.addAll(layout.terrainSupports().keySet());
             }
@@ -77,6 +78,14 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
             for (var cell : layout.cells())
                 if (!deposit.cells().get(cell.id()).knownBlock().kind().equals("minecraft:air")
                         && !floorBlocks.contains(cell.source())) obstacles.add(cell.source());
+            // A clear standing pocket does not prove its incoming edge is clear.
+            // Retain the known ceiling used by the common canTraverse query, even
+            // when that block was never admitted as a mining resource cell.
+            for (var surface : active.values()) {
+                var ceiling = surface.support().offset(0, 3, 0);
+                if (working.at(ceiling).filter(block -> !block.kind().equals("minecraft:air")).isPresent()
+                        && !floorBlocks.contains(ceiling)) obstacles.add(ceiling);
+            }
         }
         return new KnownSiteGeometry.View(supports, obstacles);
     }

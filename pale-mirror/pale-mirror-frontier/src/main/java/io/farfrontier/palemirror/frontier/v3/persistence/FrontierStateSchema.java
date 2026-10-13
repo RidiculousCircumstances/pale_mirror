@@ -4,9 +4,8 @@ import java.io.*;
 
 /** Sole header grammar for early installed-world selection and complete aggregate hydration. */
 final class FrontierStateSchema {
-    // Geology before-write fences use a bounded versioned batch, never the old single-position WAL grammar.
-    // Reject historical disposable worlds before replay rather than silently accepting a mixed protocol.
-    static final int VERSION = 279;
+    // Explicit player consent is independent of the expiring machine attendance interval.
+    static final int VERSION = 282;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

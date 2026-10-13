@@ -56,9 +56,11 @@ public final class ExtractionWorkEffects {
     public static ExtractionWork afterBlock(FrontierWorldState state, ExtractionWork job, ExtractionDeposit nextDeposit, int carried) {
         var reserved = new HashSet<>(state.extractionSites().reservedCells(job.siteId()));
         reserved.remove(job.target().orElseThrow().key().cell());
+        var required = ExtractionStockDemand.requiredCells(state, nextDeposit, Optional.of(job.id()));
         var next = carried < ActorCarriedResources.MAX_STACK_ITEMS && ExtractionWorkPolicy.requested(state, job)
                 ? ExtractionWorkTargets.spatialSelection(state, nextDeposit, job.execution().actorId(),
-                    nextDeposit.available(reserved).stream().filter(cell -> ExtractionWorkPolicy.matchingOutput(cell, job)).toList(),
+                    nextDeposit.available(reserved).stream().filter(cell -> required.contains(cell.id()))
+                            .filter(cell -> ExtractionWorkPolicy.matchingOutput(cell, job)).toList(),
                     AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION)
                 : Optional.<ExtractionLayout.Cell>empty();
         return next.map(cell -> job.transition(ExtractionWork.Phase.EXTRACT, Optional.of(target(nextDeposit, cell))))

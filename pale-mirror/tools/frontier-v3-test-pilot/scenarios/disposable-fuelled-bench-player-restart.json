@@ -1,0 +1,94 @@
+{
+  "schema": 1,
+  "id": "disposable_fuelled_bench_player_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 20260918065 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "fuelled-quarry-world", "viewDistance": 6 },
+  "pilot": { "username": "PMFuelAudit" },
+  "setup": [
+    { "type": "command", "command": "/gamemode creative" },
+    { "type": "command", "command": "/give PMFuelAudit minecraft:wheat 3" },
+    { "type": "command", "command": "/give PMFuelAudit minecraft:coal 1" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "process", "id": "station:structure-1-workshop-bakery", "expect": {
+        "status": "ok", "family": "frontier.production-station", "result": { "storedHeat": 0, "operation": null }
+      } }
+    ] }
+  ],
+  "actions": [
+    { "type": "inspect", "view": "summary", "id": "" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": {
+      "diagnostic": { "view": "container", "id": "container:structure-1-workshop-bakery-station", "field": "position" }
+    }, "offset": { "x": 0, "y": -1, "z": -2 }, "settleMs": 0 },
+    { "type": "wait_until_block", "position": {
+      "diagnostic": { "view": "container", "id": "container:structure-1-workshop-bakery-station", "field": "position" }
+    }, "block": "pale_mirror:production_bench", "timeoutMs": 60000 },
+    { "type": "open_container", "position": {
+      "diagnostic": { "view": "container", "id": "container:structure-1-workshop-bakery-station", "field": "position" }
+    }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:structure-1-workshop-bakery-station", "expect": {
+      "status": "ok", "custody": { "status": "ACQUIRED" }, "replica": { "state": "OBSERVED_CURRENT" }
+    }, "timeoutMs": 30000 },
+    { "type": "quick_move_from_inventory", "item": "minecraft:coal", "count": 1, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "station:structure-1-workshop-bakery", "expect": {
+      "status": "ok", "result": { "operation": null, "pendingFuel": false, "fuelReady": true }
+    }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:structure-1-workshop-bakery-station", "expect": {
+      "status": "ok", "custody": { "status": "ACQUIRED" }, "replica": { "state": "OBSERVED_CURRENT" }
+    }, "timeoutMs": 30000 },
+    { "type": "quick_move_from_inventory", "item": "minecraft:wheat", "count": 3, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:structure-1-workshop-bakery-station", "expect": {
+      "status": "ok", "custody": { "status": "ACQUIRED" }, "replica": { "state": "OBSERVED_CURRENT" }
+    }, "timeoutMs": 30000 },
+    { "type": "click_menu_button", "button": 0, "causalMilestone": "ordinary_player_starts_real_recipe" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "station:structure-1-workshop-bakery", "expect": {
+      "status": "ok", "result": { "operation": { "recipe": "pale_mirror:bread", "mode": "ATTENDED", "inputQuantity": 3, "outputQuantity": 1 } }
+    }, "timeoutMs": 30000 },
+    { "type": "close_container", "causalMilestone": "operator_releases_attendance_not_machine_custody" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 0, "y": 64, "z": 480 }, "settleMs": 0 },
+    { "type": "fast_forward", "ticks": 2000, "timeoutMs": 180000 },
+    { "type": "inspect", "view": "process", "id": "station:structure-1-workshop-bakery" },
+    { "type": "inspect", "view": "summary", "id": "" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": {
+      "diagnostic": { "view": "container", "id": "container:structure-1-workshop-bakery-station", "field": "position" }
+    }, "offset": { "x": 0, "y": -1, "z": -2 }, "settleMs": 0 },
+    { "type": "wait_until_block", "position": {
+      "diagnostic": { "view": "container", "id": "container:structure-1-workshop-bakery-station", "field": "position" }
+    }, "block": "pale_mirror:production_bench", "timeoutMs": 60000 },
+    { "type": "open_container", "position": {
+      "diagnostic": { "view": "container", "id": "container:structure-1-workshop-bakery-station", "field": "position" }
+    }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:structure-1-workshop-bakery-station", "expect": {
+      "status": "ok", "custody": { "status": "ACQUIRED" }, "replica": { "state": "OBSERVED_CURRENT" }
+    }, "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "station:structure-1-workshop-bakery", "expect": {
+      "status": "ok", "result": { "operation": { "inputQuantity": 3, "transformed": false, "ratePermille": 0, "playerAttendanceIntent": "PAUSED" } }
+    }, "timeoutMs": 30000, "causalMilestone": "reopening_does_not_resume_explicitly_paused_work" },
+    { "type": "click_menu_button", "button": 0 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "station:structure-1-workshop-bakery", "expect": {
+      "status": "ok", "result": { "operation": { "ratePermille": 1000, "playerAttendanceIntent": "RUN_REQUESTED" } }
+    }, "timeoutMs": 30000, "causalMilestone": "explicit_resume_restores_consent_and_current_attendance" },
+    { "type": "wait_until_container_item", "containerId": "container:structure-1-workshop-bakery-station", "item": "minecraft:bread", "count": 1, "slot": 1, "timeoutMs": 120000 },
+    { "type": "inspect", "view": "process", "id": "station:structure-1-workshop-bakery" },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:structure-1-workshop-bakery-station", "expect": {
+      "status": "ok", "custody": { "status": "ACQUIRED" }, "replica": { "state": "OBSERVED_CURRENT" }
+    }, "timeoutMs": 30000 },
+    { "type": "quick_move_from_container", "item": "minecraft:bread", "count": 1, "timeoutMs": 30000 },
+    { "type": "close_container" },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "restart": { "mode": "graceful", "afterAction": 16 },
+  "assertions": [
+    { "after": 16, "view": "process", "id": "station:structure-1-workshop-bakery", "expect": {
+      "status": "ok", "result": { "operation": { "inputQuantity": 3, "outputQuantity": 1, "transformed": false, "ratePermille": 0, "playerAttendanceIntent": "PAUSED" } }
+    } },
+    { "after": 22, "view": "process", "id": "station:structure-1-workshop-bakery", "expect": {
+      "status": "ok", "result": { "operation": { "transformed": false, "ratePermille": 0, "playerAttendanceIntent": "PAUSED" } }
+    } },
+    { "after": 30, "view": "summary", "id": "", "expect": { "status": "ok", "inventoryConflicts": 0, "sceneConflicts": 0 } }
+  ],
+  "frames": [
+    { "after": 12, "name": "station-player-processing-ui", "presentation": "player" },
+    { "after": 22, "name": "station-explicit-pause-survives-reopening-ui", "presentation": "player" },
+    { "after": 25, "name": "station-confirmed-bread-ui", "presentation": "player" }
+  ]
+}

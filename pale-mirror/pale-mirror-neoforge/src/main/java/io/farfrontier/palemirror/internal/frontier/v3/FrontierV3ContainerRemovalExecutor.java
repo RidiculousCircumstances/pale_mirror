@@ -4,7 +4,6 @@ import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.block.entity.ChestBlockEntity;
 
 /** Closes witnessed provider destruction, never guesses disposal from a missing block. */
 final class FrontierV3ContainerRemovalExecutor {
@@ -25,8 +24,7 @@ final class FrontierV3ContainerRemovalExecutor {
             }
             var p = witness.position(); var pos = new BlockPos(p.x(), p.y(), p.z());
             if (level.getChunkSource().getChunkNow(p.x() >> 4, p.z() >> 4) == null) continue;
-            if (level.getBlockEntity(pos) instanceof ChestBlockEntity chest
-                    && FrontierV3PhysicalContainer.observedChest(id, chest).declared()) continue;
+            if (FrontierV3PhysicalContainer.loaded(level, state, id).isPresent()) continue;
             var recovery = state.fencedRecovery().current().get(FencedRecoveryContainerSupport.bindingId(record));
             if (recovery == null || recovery.authorityEpoch() != witness.recoveryEpoch()
                     || surface.status() != ContainerSurfaceStatus.ACTIVE)

@@ -65,10 +65,35 @@ final class FrontierV3ExtractionDiagnosticJson {
                 + ",\"stockTarget\":" + demand.target() + ",\"stockHeld\":" + demand.held()
                 + ",\"stockIncoming\":" + demand.incoming() + ",\"stockOutgoingDemand\":" + demand.outgoing()
                 + ",\"productionRequested\":" + demand.requested()
+                + ",\"resourceStocks\":" + resourceStocks(state, deposit, home.id())
                 + ",\"terraceDepthLimit\":" + terrace.depthLimit() + ",\"plannedDepth\":" + terrace.plannedDepth()
                 + ",\"openDepth\":" + terrace.openDepth() + ",\"preparationBlocks\":" + terrace.preparationBlocks()
                 + ",\"terraceOpened\":" + terrace.lowerLanding().isPresent()
                 + "},\"workers\":[" + workers + "],\"workerDetails\":[" + details + "]}";
+    }
+    /** Mixed deposits retain the primary-output fields above for older diagnostic consumers. */
+    private static String resourceStocks(FrontierWorldState state, ExtractionDeposit deposit, io.farfrontier.palemirror.frontier.v3.api.SubjectId home) {
+        var layout = deposit.site().layout();
+        var kinds = layout.outputKinds().stream().sorted().toList();
+        return "{" + kinds.stream().map(kind -> {
+            var cells = layout.cells().stream().filter(cell -> cell.definition().coldOutput().stream()
+                    .anyMatch(output -> output.itemKind().equals(kind))).toList();
+            long extracted = cells.stream().filter(cell -> deposit.cells().get(cell.id()).disposition() == ExtractionDeposit.Disposition.EXTRACTED).count();
+            long external = cells.stream().filter(cell -> deposit.cells().get(cell.id()).disposition() == ExtractionDeposit.Disposition.EXTERNALLY_CHANGED).count();
+            var demand = ProductionStockDemand.read(state, deposit.site().settlementId(), kind);
+            return string(kind) + ":{\"totalCells\":" + cells.size() + ",\"extractedCells\":" + extracted
+                    + ",\"externalCells\":" + external + ",\"remainingCells\":" + (cells.size() - extracted - external)
+                    + ",\"hasExtraction\":" + (extracted > 0) + ",\"firstSource\":" + FrontierV3DiagnosticJson.position(cells.getFirst().source())
+                    + ",\"siteQuantity\":" + quantityAt(state, deposit.site().containerId(), kind)
+                    + ",\"homeQuantity\":" + quantityAt(state, home, kind)
+                    + ",\"stockTarget\":" + demand.target() + ",\"productionRequested\":" + demand.requested() + "}";
+        }).collect(java.util.stream.Collectors.joining(",")) + "}";
+    }
+    private static int quantityAt(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId container, String kind) {
+        var resources = state.inventory().fungibleResources();
+        return resources.accounts().values().stream().filter(account -> account.custody().equals(new ResourceCustody.Container(container)))
+                .flatMap(account -> account.lotQuantities().entrySet().stream())
+                .filter(entry -> resources.lots().get(entry.getKey()).itemKind().equals(kind)).mapToInt(Map.Entry::getValue).sum();
     }
     static String work(FrontierScheduleView checkpoint, FrontierWorldState state, ExtractionWork job) {
         var actor = job.execution().actorId(); var lease = state.ambientLeases().get(actor);

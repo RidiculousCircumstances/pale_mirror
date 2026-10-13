@@ -20,7 +20,7 @@ public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Dire
         implements ActorResourceItemOrder {
     public enum Direction { TAKE, PLACE }
     public enum Hand { MAIN, OFF }
-    public enum StationPort { INPUT, OUTPUT }
+    public enum StationPort { INPUT, OUTPUT, FUEL }
     @Override public EndpointKind endpointKind() { return EndpointKind.CONTAINER; }
 
     public ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Direction direction,
@@ -50,7 +50,7 @@ public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Dire
                 Objects.requireNonNull(port, "exact station port");
                 Objects.requireNonNull(slot, "exact station slot");
                 if (!spec.containerId().equals(slot.containerId())
-                        || slot.slot() != (port == StationPort.INPUT ? spec.inputSlot() : spec.outputSlot()))
+                        || slot.slot() != spec.slot(port))
                     throw new IllegalArgumentException("exact station endpoint disagrees with its declared port");
             }
             @Override public SubjectId containerId() { return spec.containerId(); }
@@ -128,7 +128,7 @@ public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Dire
             default -> null;
         };
         if (stationSpec != null && (!stationSpec.workerStation().equals(station)
-                || direction == Direction.PLACE && stationPort(containerEndpoint) != StationPort.INPUT
+                || direction == Direction.PLACE && stationPort(containerEndpoint) == StationPort.OUTPUT
                 || direction == Direction.TAKE && stationPort(containerEndpoint) != StationPort.OUTPUT))
             throw new IllegalArgumentException("actor order uses the wrong declared station surface or port");
         if (portion instanceof Portion.Exact exact) {
@@ -204,7 +204,7 @@ public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Dire
                     && slot.slot().containerId().equals(container.containerId())
                     && (!container.containerId().equals(containerEndpoint.containerId())
                         || !(containerEndpoint instanceof ContainerEndpoint.FungibleStation station)
-                        || direction == Direction.PLACE && slot.slot().slot() == station.spec().inputSlot());
+                        || station.spec().ownsSlot(slot.slot().slot()));
         return ActorResourceSlotAddress.admits(actorId, actorSlot, custody, address);
     }
     @Override public ActorContainerItemOrder withPortion(Portion.Fungible replacement) {
@@ -221,7 +221,7 @@ public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Dire
         if (!(containerEndpoint instanceof ContainerEndpoint.FungibleStation endpoint)) return;
         var portion = (Portion.Fungible) this.portion;
         var slot = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(endpoint.containerId(),
-                endpoint.port() == StationPort.INPUT ? endpoint.spec().inputSlot() : endpoint.spec().outputSlot()));
+                endpoint.spec().slot(endpoint.port())));
         var layout = direction == Direction.PLACE ? destinationBindings
                 : ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(source.id())).toList();
         if (layout.stream().noneMatch(binding -> binding.address().equals(slot)

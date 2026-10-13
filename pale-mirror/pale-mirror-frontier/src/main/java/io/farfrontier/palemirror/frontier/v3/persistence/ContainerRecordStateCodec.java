@@ -30,15 +30,7 @@ final class ContainerRecordStateCodec {
             output.writeByte(value.purpose().wireTag());
             output.writeBoolean(value.productionStation().isPresent());
             if (value.productionStation().isPresent()) {
-                ProductionStationSpec station = value.productionStation().orElseThrow();
-                writeString(output, station.id().value());
-                writeString(output, station.facilityId().value());
-                writeString(output, station.containerId().value());
-                output.writeByte(station.capability().wireTag());
-                writePosition(output, station.workerStation().support());
-                writePosition(output, station.socketSurface().support());
-                output.writeByte(station.inputSlot());
-                output.writeByte(station.outputSlot());
+                ProductionStationSpecCodec.write(output, value.productionStation().orElseThrow());
             }
             output.writeBoolean(value.storage().isPresent());
             if (value.storage().isPresent()) ResourceStoragePolicyCodec.write(output, value.storage().orElseThrow());
@@ -59,11 +51,7 @@ final class ContainerRecordStateCodec {
             int slots = input.readUnsignedByte();
             ContainerPurpose purpose = ContainerPurpose.fromWireTag(input.readUnsignedByte());
             Optional<ProductionStationSpec> station = Optional.empty();
-            if (input.readBoolean()) station = Optional.of(new ProductionStationSpec(new SubjectId(readString(input)),
-                    new SubjectId(readString(input)), new SubjectId(readString(input)),
-                    ProductionStationSpec.Capability.fromWireTag(input.readUnsignedByte()),
-                    new SurfaceAnchor(readPosition(input)), new SurfaceAnchor(readPosition(input)),
-                    input.readUnsignedByte(), input.readUnsignedByte()));
+            if (input.readBoolean()) station = Optional.of(ProductionStationSpecCodec.read(input));
             var storage = input.readBoolean() ? Optional.of(ResourceStoragePolicyCodec.read(input))
                     : Optional.<io.farfrontier.palemirror.frontier.v3.model.ResourceStoragePolicy>empty();
             var placement = new LinkedHashMap<Integer, FungibleContainerLayout.Stack>();

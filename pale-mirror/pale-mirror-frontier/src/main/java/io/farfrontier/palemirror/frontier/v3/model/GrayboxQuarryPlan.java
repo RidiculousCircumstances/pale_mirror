@@ -92,11 +92,14 @@ public final class GrayboxQuarryPlan {
             Set<Long> previous = Set.of();
             for (int depth = 0; depth < rules.depth(); depth++) {
                 SurfaceAnchor work = new SurfaceAnchor(at(anchor, facing, depth - 1, 0, row));
+                int localDepth = depth, localRow = row;
+                var material = rules.pocket().filter(pocket -> pocket.contains(producerIndex, localDepth, localRow))
+                        .map(ExtractionPocketProfile::material).orElse(rules.source());
                 long upper = cells.size() + 1L;
-                cells.add(new ExtractionLayout.Cell(upper, at(anchor, facing, depth, 2, row), work, rules.source(), previous));
+                cells.add(new ExtractionLayout.Cell(upper, at(anchor, facing, depth, 2, row), work, material, previous));
                 var lowerPrerequisites = new HashSet<>(previous); lowerPrerequisites.add(upper);
                 long lower = cells.size() + 1L;
-                cells.add(new ExtractionLayout.Cell(lower, at(anchor, facing, depth, 1, row), work, rules.source(), lowerPrerequisites));
+                cells.add(new ExtractionLayout.Cell(lower, at(anchor, facing, depth, 1, row), work, material, lowerPrerequisites));
                 previous = Set.of(upper, lower);
             }
         }

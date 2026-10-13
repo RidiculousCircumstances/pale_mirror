@@ -30,10 +30,7 @@ record FrontierV3PhysicalContainer(SubjectId containerId, Container inventory, C
         return switch (surface.location()) {
             case ContainerLocation.Fixed fixed -> {
                 var p = fixed.position(); var pos = new net.minecraft.core.BlockPos(p.x(), p.y(), p.z());
-                if (!level.hasChunkAt(pos) || !(level.getBlockEntity(pos) instanceof ChestBlockEntity chest))
-                    yield Optional.empty();
-                if (chest.getContainerSize() != record.slotCount()) throw new IllegalArgumentException("declared chest capacity differs");
-                yield Optional.of(observedChest(id, chest));
+                yield FrontierV3FixedContainerProviders.inspect(level, pos, record);
             }
             case ContainerLocation.Mobile mobile -> {
                 var actor = state.actorLocations().get(mobile.actorId());
@@ -65,6 +62,26 @@ record FrontierV3PhysicalContainer(SubjectId containerId, Container inventory, C
 
     static FrontierV3PhysicalContainer observedChest(SubjectId id, ChestBlockEntity chest) {
         return new FrontierV3PhysicalContainer(id, chest, chest.getPersistentData(), chest.getBlockPos());
+    }
+
+    /** Vanilla reports its actual destroyed inventory; validate the producer's declared provider. */
+    static Optional<FrontierV3PhysicalContainer> observedFixed(ServerLevel level, FrontierWorldState state, Container inventory) {
+        if (!(inventory instanceof net.minecraft.world.level.block.entity.BlockEntity entity)) return Optional.empty();
+        String declared = entity.getPersistentData().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY);
+        if (declared.isBlank()) return Optional.empty();
+        SubjectId id = new SubjectId(declared);
+        var record = state.inventory().containers().get(id);
+        if (record == null) throw new IllegalStateException("physical fixed inventory has an unknown declaration");
+        var surface = state.inventory().surfaces().get(id);
+        var position = entity.getBlockPos();
+        if (surface == null || !(surface.location() instanceof ContainerLocation.Fixed fixed)
+                || !fixed.position().equals(new BlockPosition(position.getX(), position.getY(), position.getZ())))
+            throw new IllegalStateException("physical fixed inventory contradicts its retained location");
+        var physical = FrontierV3FixedContainerProviders.observed(entity, record)
+                .filter(FrontierV3PhysicalContainer::declared)
+                .orElseThrow(() -> new IllegalStateException("physical inventory contradicts its registered provider"));
+        if (physical.inventory() != inventory) throw new IllegalStateException("physical inventory is not its declared provider");
+        return Optional.of(physical);
     }
 
     boolean declared() {

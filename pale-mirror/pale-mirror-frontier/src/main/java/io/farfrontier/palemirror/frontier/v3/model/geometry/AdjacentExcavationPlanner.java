@@ -33,7 +33,8 @@ public final class AdjacentExcavationPlanner {
     public interface FrontSelection {
         List<SurfaceAnchor> order(Collection<SurfaceAnchor> stations);
         List<Integer> floorOffsets(SurfaceAnchor station, int dx, int dz);
-        default int clearanceTopY(SurfaceAnchor station, SurfaceAnchor floor) { return floor.y() + 2; }
+        /** Clear the swept adult body while crossing the edge, not only the landing's standing volume. */
+        default int clearanceTopY(SurfaceAnchor station, SurfaceAnchor floor) { return Math.max(station.y(), floor.y()) + 2; }
         /** Permanent access keeps its column; mutable terrain may be lowered by a later front. */
         default boolean retainsColumn(SurfaceAnchor surface) { return true; }
     }
@@ -68,7 +69,7 @@ public final class AdjacentExcavationPlanner {
                     || column.support().permission() != KnownBlockGeometry.Sample.Permission.PUBLIC
                     || !supportsStanding.test(column.support().block()))
                 throw new IllegalArgumentException("selected excavation violates current support, access or terrace limits");
-            int height = selection.clearanceTopY(station, floor) - floor.y();
+            int height = clearanceHeight(selection, station, floor);
             if (height < 2 || height > MAX_CLEARANCE_HEIGHT || column.clearance().size() != height)
                 throw new IllegalArgumentException("selected excavation has a changed cut height");
             for (int y = 1; y <= height; y++) {
@@ -120,7 +121,7 @@ public final class AdjacentExcavationPlanner {
                         || lower.get().permission() != KnownBlockGeometry.Sample.Permission.PUBLIC
                         || upper.get().permission() != KnownBlockGeometry.Sample.Permission.PUBLIC
                         || !supportsStanding.test(support.get().block()) || !mineable.test(lower.get().block()) || !mineable.test(upper.get().block())) continue;
-                int height = selection.clearanceTopY(station, new SurfaceAnchor(floor)) - floor.y();
+                int height = clearanceHeight(selection, station, new SurfaceAnchor(floor));
                 if (height < 2 || height > MAX_CLEARANCE_HEIGHT) continue;
                 var overburden = new ArrayList<KnownBlockGeometry.Sample<B>>();
                 boolean knownCut = true;
@@ -148,5 +149,10 @@ public final class AdjacentExcavationPlanner {
     private static boolean removes(Column<?> column, BlockPosition position) {
         return position.x() == column.floor().x() && position.z() == column.floor().z()
                 && position.y() > column.floor().y() && position.y() <= column.floor().y() + column.clearance().size();
+    }
+    private static int clearanceHeight(FrontSelection selection, SurfaceAnchor station, SurfaceAnchor floor) {
+        // A content strategy may request MORE clearance, never less than the
+        // swept pedestrian edge. Enforce this in admission and replay alike.
+        return Math.max(selection.clearanceTopY(station, floor), Math.max(station.y(), floor.y()) + 2) - floor.y();
     }
 }

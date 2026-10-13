@@ -54,7 +54,10 @@ final class FrontierV3TestPilotPresentation {
                 .stream().sorted(java.util.Comparator.comparingDouble((Entity entity) -> entity.distanceToSqr(minecraft.player))
                         .thenComparing(Entity::getUUID)).limit(8).map(entity -> entity.getUUID() + "@"
                         + entity.getBlockX() + "," + entity.getBlockY() + "," + entity.getBlockZ() + "/los="
-                        + minecraft.player.hasLineOfSight(entity) + "/distance=" + Math.round(eye.distanceTo(entity.getEyePosition())))
+                        + minecraft.player.hasLineOfSight(entity) + "/nameVisible=" + entity.isCustomNameVisible()
+                        + "/distance=" + Math.round(eye.distanceTo(entity.getEyePosition()))
+                        + "/viewDot=" + Math.round(minecraft.player.getViewVector(1.0F).normalize()
+                                .dot(entity.position().subtract(eye).normalize()) * 100.0D))
                 .collect(java.util.stream.Collectors.joining(";"));
     }
 }

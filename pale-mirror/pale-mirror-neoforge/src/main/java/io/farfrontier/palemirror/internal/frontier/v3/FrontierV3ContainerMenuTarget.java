@@ -15,7 +15,8 @@ import net.minecraft.world.level.block.entity.ChestBlockEntity;
 record FrontierV3ContainerMenuTarget(ContainerRecord record, FrontierV3PhysicalContainer physical,
                                      int firstCargoMenuSlot, int equipmentSlotCount) {
     static boolean supported(AbstractContainerMenu menu) {
-        return menu instanceof ChestMenu || menu instanceof HorseInventoryMenu;
+        return menu instanceof ChestMenu || menu instanceof HorseInventoryMenu
+                || menu instanceof io.farfrontier.palemirror.internal.production.ProductionBenchMenu;
     }
 
     int cargoSlot(int menuSlot) {
@@ -63,6 +64,15 @@ record FrontierV3ContainerMenuTarget(ContainerRecord record, FrontierV3PhysicalC
     }
 
     static FrontierV3ContainerMenuTarget resolve(ServerPlayer player, AbstractContainerMenu menu, FrontierWorldState state) {
+        if (menu instanceof io.farfrontier.palemirror.internal.production.ProductionBenchMenu benchMenu
+                && benchMenu.inventory() instanceof io.farfrontier.palemirror.internal.production.ProductionBenchBlockEntity bench) {
+            var record = FrontierV3ContainerClickExecutor.ownedContainer(state, bench.getBlockPos());
+            if (record == null) return null;
+            var physical = FrontierV3PhysicalContainer.loaded(player.serverLevel(), state, record.id()).orElse(null);
+            if (physical == null || physical.inventory() != bench || record.productionStation().isEmpty())
+                throw new IllegalArgumentException("station menu lacks its exact registered physical provider");
+            return new FrontierV3ContainerMenuTarget(record, physical, 0, 0);
+        }
         if (menu instanceof ChestMenu chestMenu && chestMenu.getContainer() instanceof ChestBlockEntity chest) {
             var record = FrontierV3ContainerClickExecutor.ownedContainer(state, chest.getBlockPos());
             if (record == null) return null;

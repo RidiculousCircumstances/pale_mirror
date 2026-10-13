@@ -25,6 +25,27 @@ class ExcavationTerracesTest {
         assertThrows(IllegalArgumentException.class, () -> new ExcavationTerraces(0, 4));
         assertThrows(IllegalArgumentException.class, () -> new ExcavationTerraces(2, 1));
     }
+    @Test void descentRequiresTheSweptCeilingEvenWithoutAnOpenPitStrategy() {
+        var station = SurfaceAnchor.at(0, 60, 0);
+        var sample = new KnownBlockGeometry.Sample<>("rock", 1, KnownBlockGeometry.Sample.Permission.PUBLIC);
+        var selection = new AdjacentExcavationPlanner.FrontSelection() {
+            @Override public List<SurfaceAnchor> order(Collection<SurfaceAnchor> surfaces) { return List.copyOf(surfaces); }
+            @Override public List<Integer> floorOffsets(SurfaceAnchor start, int dx, int dz) { return List.of(-1); }
+        };
+        var columns = AdjacentExcavationPlanner.propose(List.of(station), p -> Optional.of(sample), p -> true, p -> true,
+                "rock"::equals, "rock"::equals, 1, selection);
+        assertEquals(3, columns.getFirst().clearance().size());
+        assertTrue(AdjacentExcavationPlanner.propose(List.of(station), p -> p.y() == 62 ? Optional.empty() : Optional.of(sample),
+                p -> true, p -> true, "rock"::equals, "rock"::equals, 1, selection).isEmpty());
+        var protectedRoof = new KnownBlockGeometry.Sample<>("rock", 1, KnownBlockGeometry.Sample.Permission.PROTECTED);
+        assertTrue(AdjacentExcavationPlanner.propose(List.of(station), p -> Optional.of(p.y() == 62 ? protectedRoof : sample),
+                p -> true, p -> true, "rock"::equals, "rock"::equals, 1, selection).isEmpty());
+        var shortCut = columns.getFirst();
+        var obsolete = new AdjacentExcavationPlanner.Column<>(shortCut.station(), shortCut.floor(), shortCut.support(),
+                shortCut.upper(), shortCut.lower());
+        assertThrows(IllegalArgumentException.class, () -> AdjacentExcavationPlanner.requireSelection(List.of(station), List.of(obsolete),
+                p -> Optional.of(sample), p -> true, "rock"::equals, "rock"::equals, 1, selection));
+    }
     @Test void exteriorColumnsRequireTheirWholeKnownPublicClearanceAndRespectPhysicalReach() {
         var bench = java.util.stream.IntStream.range(0, 4).mapToObj(x -> SurfaceAnchor.at(x, 0, 0)).toList();
         var sample = new KnownBlockGeometry.Sample<>("rock", 1, KnownBlockGeometry.Sample.Permission.PUBLIC);

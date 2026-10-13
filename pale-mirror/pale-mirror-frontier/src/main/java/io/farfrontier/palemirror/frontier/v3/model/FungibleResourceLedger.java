@@ -294,6 +294,15 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
     }
 
     /** Releases named allocations across their current HOT layout after an observed physical loss. */
+    public FungibleResourceLedger transferClaimOwner(ClaimAllocation previous, ClaimAllocation next) {
+        if (!previous.equals(claims.get(previous.id())) || !previous.id().equals(next.id())
+                || !previous.economicOwnerId().equals(next.economicOwnerId()) || !previous.itemKind().equals(next.itemKind())
+                || previous.quantity() != next.quantity() || !previous.lotQuantities().equals(next.lotQuantities()))
+            throw new IllegalArgumentException("claim-owner transfer cannot alter a resource allocation");
+        var changed = new HashMap<>(claims); changed.put(next.id(), next);
+        return new FungibleResourceLedger(lots, changed, accounts, bindings);
+    }
+
     public FungibleResourceLedger releaseClaims(java.util.Set<SubjectId> claimIds) {
         Objects.requireNonNull(claimIds, "released claim ids");
         if (claimIds.isEmpty() || claimIds.stream().anyMatch(id -> !claims.containsKey(id))) {
@@ -779,6 +788,25 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
                 lotQuantities, claimQuantities, remaining);
     }
 
+    /** Owner-authorized machine/resource sink over unclaimed stock, not an external withdrawal. */
+    public FungibleResourceLedger consumeUnclaimedObserved(SubjectId accountId, long authorityEpoch,
+            Map<SubjectId, Integer> portions, List<FungiblePhysicalObservation.Stack> remaining) {
+        var account = requireAccount(accountId);
+        requireSubset(account.lotQuantities(), portions, "unclaimed consumption");
+        for (var entry : portions.entrySet()) {
+            int reserved = account.claimQuantities().keySet().stream().map(claims::get)
+                    .mapToInt(claim -> claim.lotQuantities().getOrDefault(entry.getKey(), 0)).sum();
+            if (account.lotQuantities().get(entry.getKey()) - reserved < entry.getValue())
+                throw new IllegalArgumentException("unclaimed consumption would spend reserved resources");
+        }
+        var reduced = releaseBindings(accountId, authorityEpoch).destroy(accountId, portions, Map.of());
+        if (!reduced.accounts().containsKey(accountId)) {
+            if (!remaining.isEmpty()) throw new IllegalArgumentException("consumed empty account retains physical stock");
+            return reduced;
+        }
+        return reduced.rebind(accountId, authorityEpoch, FungiblePhysicalObservation.bind(reduced, accountId, authorityEpoch, remaining));
+    }
+
     /**
      * Accounts an observed external stock exit after the owning process has released every
      * affected claim. Unlike recipe consumption, no claim or player-inventory binding is
@@ -816,8 +844,11 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         requireSubset(account.lotQuantities(), inputLots, "recipe input lots");
         requireOptionalSubset(account.claimQuantities(), inputClaims, "recipe input claims");
         requireClaimsCoveredByLots(inputLots, inputClaims, "recipe transformation");
-        if (lots.containsKey(output.id()) || sum(inputLots) != output.quantity()) {
-            throw new IllegalArgumentException("recipe transformation does not preserve its exact quantity");
+        // Accounting conserves the declared input delta, not the number of unlike
+        // items. The recipe owner validates its conversion ratio before this atomic
+        // consume/create boundary (three ingredients need not make three products).
+        if (lots.containsKey(output.id()) || inputLots.isEmpty()) {
+            throw new IllegalArgumentException("transformation needs consumed inputs and a fresh output identity");
         }
         if (inputLots.entrySet().stream().map(entry -> requireLot(entry.getKey()).economicOwnerId()).distinct().count() != 1
                 || !requireLot(inputLots.keySet().iterator().next()).economicOwnerId().equals(output.economicOwnerId())) {

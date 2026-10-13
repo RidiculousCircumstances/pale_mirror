@@ -407,7 +407,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 : FrontierV3PhysicalContainer.observedChest(lease.objectId(), chest));
     }
 
-    private static boolean reconcilePreparedProjection(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    static boolean reconcilePreparedProjection(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                        FrontierWorldState state, PhysicalCustodyLease lease,
                                                        FrontierV3PhysicalContainer physical) {
         return confirmProjectionObservation(runtime, state, lease, observedContainer(state, lease.objectId(), physical));

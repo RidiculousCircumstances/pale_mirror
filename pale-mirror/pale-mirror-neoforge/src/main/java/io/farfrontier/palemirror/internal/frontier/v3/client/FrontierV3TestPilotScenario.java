@@ -16,7 +16,7 @@ final class FrontierV3TestPilotScenario {
             "release_fast_forward_hold", "command", "inspect", "look", "look_nearest_entity",
             "walk", "break", "place", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board",
             "observe_entity_motion", "observe_settlement_population", "open_container", "quick_move_from_inventory",
-            "quick_move_from_container", "split_move_from_container", "move_within_container",
+            "quick_move_from_container", "split_move_from_container", "move_within_container", "click_menu_button", "close_container",
             "wait_until_container_item", "interact_board", "interact_nearest_entity", "attack_nearest_entity", "assert_visible_entity");
     record Parsed(JsonArray setup, JsonArray actions, JsonArray frames) {
         int setupCount() { return setup.size(); }
@@ -83,6 +83,9 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("fast_forward") && !validRelativeFastForward(action)) ||
                     (type.equals("fast_forward_to_instant") && (!wholeTarget(action) || !positiveTimeout(action, 180_000L))) ||
                     (type.equals("open_container") && (!resolvablePosition(action, "position") || !timeout(action, 120_000L))) ||
+                    (type.equals("click_menu_button") && !wholeWithin(action, "button", 0, 255)) ||
+                    (type.equals("close_container") && action.keySet().stream()
+                            .anyMatch(key -> !key.equals("type") && !key.equals("causalMilestone"))) ||
                     (type.equals("place") && (!placePosition(action) || !itemKind(action) || !timeout(action, 120_000L))) ||
                     ((type.equals("quick_move_from_inventory") || type.equals("quick_move_from_container")) && !validQuickMove(action)) ||
                     (type.equals("split_move_from_container") && !validSplitMove(action)) ||

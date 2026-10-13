@@ -10,6 +10,106 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class InternalShipmentTest {
+    private RetargetFixture machineSupplyFixture() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:machine-supply"),
+                20260918065L, FrontierRulesets.fuelledQuarryGraybox()));
+        var home = state.bootstrap().settlements().getFirst();
+        var station = ProductionStationSpec.grayboxBakery(home.structures().stream()
+                .filter(value -> value.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow());
+        var source = GoodsParticipantDeclarations.endpoint(home);
+        var account = FungibleResourceCustodySupport.accountAtContainer(state, source.containerId()).orElseThrow();
+        var lots = FungibleResourceCustodySupport.selectAtAccount(state.inventory().fungibleResources(),
+                account.id(), home.id(), "minecraft:coal", 3).orElseThrow().lotQuantities();
+        var facility = home.structures().stream().filter(value -> value.id().equals(station.facilityId())).findFirst().orElseThrow();
+        var receiver = new ShipmentEndpoint.ProductionPort(home.id(), station, ActorContainerItemOrder.StationPort.FUEL,
+                SettlementWorkshopServicePort.forWorkshop(facility).exteriorApproach());
+        var worker = SettlementWorkforce.candidates(state, home.id(), ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS).getFirst();
+        var id = new SubjectId("shipment:test-machine-supply"); var claim = new SubjectId("claim:test-machine-supply");
+        var shipment = new Shipment(id, new ResourceClaimDelegation(ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT,
+                claim, home.id(), id, 1), state.actorExecutions().next(worker.id(), ActorActivityKind.COURIER, id),
+                source, receiver, account.id(), new SubjectId("custody:test-machine-supply-carrier"),
+                ReferenceContainerCustody.scopeId(station.containerId()), "minecraft:coal", lots, Shipment.Status.AWAITING_LOAD, 1);
+        state = InternalShipmentStateSupport.dispatch(state, home.id(), new InternalShipmentDispatched(shipment,
+                new ClaimAllocation(claim, home.id(), home.id(), shipment.itemKind(), 3, lots, ClaimPurpose.INTERNAL_LOGISTICS)));
+        return new RetargetFixture(state, shipment);
+    }
+    @Test void machineSupplyKeepsItsExactPortAndExecutesInsteadOfSeekingAnotherWarehouse() {
+        var fixture = machineSupplyFixture(); var state = fixture.state(); var shipment = fixture.shipment();
+        var id = shipment.id(); var actor = shipment.execution().actorId(); var source = shipment.sender();
+        var receiver = (ShipmentEndpoint.ProductionPort) shipment.receiver(); var station = receiver.spec();
+        var codec = new FrontierWorldStateCodec();
+        state = codec.decode(codec.encode(state));
+        assertTrue(ShipmentStorageRetargeted.retainedAvailable(state, shipment), "a surviving machine remains the exact supply destination");
+        assertTrue(ShipmentStorageRetargeted.eligible(state, shipment).isEmpty());
+        assertTrue(io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.plan(state,
+                io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.progress(id, 1), 1).stream()
+                .anyMatch(event -> event.payload() instanceof ActorMovementStarted), "fuel courier must begin its ordinary pickup journey");
+        state = state.withActorBody(actor, source.station().standingBody());
+        state = ShipmentStateSupport.transferCold(state, id, id, 1, Shipment.Status.AWAITING_LOAD);
+        state = codec.decode(codec.encode(state));
+        assertTrue(ShipmentStorageRetargeted.retainedAvailable(state, state.shipments().shipments().get(id)));
+        state = state.withActorBody(actor, receiver.station().standingBody());
+        state = ShipmentStateSupport.transferCold(state, id, id, 2, Shipment.Status.CARRYING);
+        var delivered = state.shipments().shipments().get(id);
+        state = InternalShipmentStateSupport.receive(state, id,
+                new InternalShipmentReceived(id, delivered.revision(), delivered.reception().orElseThrow().id()));
+        assertEquals(3, state.inventory().fungibleResources().unclaimedQuantity(
+                ReferenceContainerCustody.scopeId(station.containerId()), receiver.settlementId(), shipment.itemKind()));
+        assertEquals(state, codec.decode(codec.encode(state)));
+    }
+
+    @Test void machineReplacementRetargetsUnpickedOrCarriedSupplyOnlyToTheSameFacilityPortAndReplaysWithoutSearching() throws Exception {
+        for (boolean carried : List.of(false, true)) {
+            var fixture = machineSupplyFixture(); var state = fixture.state(); var shipment = fixture.shipment();
+            var old = (ShipmentEndpoint.ProductionPort) shipment.receiver(); var actor = shipment.execution().actorId();
+            state = state.withActorBody(actor, shipment.sender().station().standingBody());
+            if (carried) {
+                state = ShipmentStateSupport.transferCold(state, shipment.id(), shipment.id(), 1, Shipment.Status.AWAITING_LOAD);
+                shipment = state.shipments().shipments().get(shipment.id());
+            }
+            var cargoBefore = state.inventory().fungibleResources();
+            var replacementPolicy = ShipmentEndpointComposition.replacementPolicy(old);
+            assertFalse(replacementPolicy.admits(state, shipment, GoodsParticipantDeclarations.endpoint(
+                    FrontierWorldStateSupport.settlement(state.bootstrap(), old.settlementId()))));
+            var position = state.inventory().surfaces().get(old.containerId()).position();
+            state = state.withInventory(state.inventory().withSurfaceStatus(old.containerId(), ContainerSurfaceStatus.PREPARED)
+                    .withSurfaceStatus(old.containerId(), ContainerSurfaceStatus.ACTIVE).withSurfaceStatus(old.containerId(), ContainerSurfaceStatus.RETIRED));
+            state = new ProductionStationRetired(old.spec().id(), 1).apply(state, old.spec().id());
+            assertFalse(ShipmentStorageRetargeted.retainedAvailable(state, shipment));
+            assertTrue(ShipmentStorageRetargeted.eligible(state, shipment).isEmpty(), "absence waits without discarding in-flight fuel");
+            var spec = new ProductionStationSpec(new SubjectId("station:resupplied-machine"), old.spec().facilityId(),
+                    new SubjectId("container:resupplied-machine"), old.spec().equipmentType(), old.spec().capability(),
+                    old.station(), old.spec().socketSurface(), 0, 1, 2);
+            var record = new ContainerRecord(spec.containerId(), old.settlementId(), 3, ContainerPurpose.PRODUCTION_STATION,
+                    Optional.of(spec), Optional.empty());
+            state = new ProductionStationInstalled(record, position, List.of()).apply(state, spec.id(), BakeryStationInstallation::installed);
+            state = state.withInventory(state.inventory().withSurfaceStatus(spec.containerId(), ContainerSurfaceStatus.ACTIVE));
+            var event = ShipmentStorageRetargeted.eligible(state, shipment).orElseThrow();
+            var payloads = FrontierWorldPayloadCodecs.create();
+            var decoded = (ShipmentStorageRetargeted) payloads.decode(event.type(), payloads.encode(event));
+            var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
+            try (var ignored = PedestrianRoutePlanning.bind((geometry, origin, target) -> {
+                fail("receiver replacement replay must not search"); return null;
+            })) { state = decoded.apply(state, shipment.id()); }
+            shipment = state.shipments().shipments().get(shipment.id());
+            var next = (ShipmentEndpoint.ProductionPort) shipment.receiver();
+            assertEquals(spec, next.spec()); assertEquals(old.port(), next.port());
+            assertEquals(cargoBefore, state.inventory().fungibleResources());
+            if (!carried) {
+                state = ShipmentStateSupport.transferCold(state, shipment.id(), shipment.id(), shipment.revision(), Shipment.Status.AWAITING_LOAD);
+                shipment = state.shipments().shipments().get(shipment.id());
+            }
+            state = state.withActorBody(actor, next.station().standingBody());
+            state = ShipmentStateSupport.transferCold(state, shipment.id(), shipment.id(), shipment.revision(), Shipment.Status.CARRYING);
+            shipment = state.shipments().shipments().get(shipment.id());
+            state = InternalShipmentStateSupport.receive(state, shipment.id(), new InternalShipmentReceived(shipment.id(),
+                    shipment.revision(), shipment.reception().orElseThrow().id()));
+            assertEquals(3, state.inventory().fungibleResources().unclaimedQuantity(
+                    shipment.receivingAccountId(), old.settlementId(), shipment.itemKind()));
+            assertEquals(state, codec.decode(codec.encode(state)));
+        }
+    }
+
     private record RetargetFixture(FrontierWorldState state, Shipment shipment) { }
     private RetargetFixture retargetFixture() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:haul-retarget"),

@@ -26,6 +26,18 @@ public final class ServiceAreaDestinations {
     public static Optional<SurfaceAnchor> select(List<ServiceAccessPoint> points, SubjectId actorId,
             SurfaceAnchor start, KnownPedestrianRouteKnowledge knowledge, Set<SurfaceAnchor> excluded,
             java.util.function.Predicate<SurfaceAnchor> available) {
+        // Local traffic clearance must not wait for a whole-world hierarchical
+        // route when the same geometry already proves a bounded sidestep.
+        var local = knowledge.localMovementRoutes(start);
+        var nearby = local.keySet().stream().filter(candidate -> !candidate.equals(start))
+                .sorted(java.util.Comparator.comparingLong((SurfaceAnchor candidate) ->
+                        Math.abs((long) candidate.x() - start.x()) + Math.abs((long) candidate.y() - start.y())
+                                + Math.abs((long) candidate.z() - start.z()))
+                        .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z)).toList();
+        for (var candidate : nearby)
+            if (hasStandingClearance(candidate, excluded) && points.stream().noneMatch(point -> temporary(point, candidate))
+                    && points.stream().allMatch(point -> point.boundary().allowsWaitingRoute(local.get(candidate)))
+                    && available.test(candidate)) return Optional.of(candidate);
         var candidates = new java.util.PriorityQueue<Candidate>(java.util.Comparator.comparingLong(Candidate::distance)
                 .thenComparingInt(Candidate::ordinal));
         int ordinal = 0;
@@ -43,12 +55,13 @@ public final class ServiceAreaDestinations {
             }
             while (!candidates.isEmpty() && candidates.peek().distance() <= distance) {
                 var candidate = candidates.remove().surface();
-                if (!hasStandingClearance(candidate, excluded) || points.stream().anyMatch(point -> temporary(point, candidate))) continue;
+                if (local.containsKey(candidate) || !hasStandingClearance(candidate, excluded)
+                        || points.stream().anyMatch(point -> temporary(point, candidate)) || !available.test(candidate)) continue;
                 MovementOrder order = new MovementOrder(actorId, actorId, 0, 1L, List.of(candidate),
                         TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
                 try {
                     List<SurfaceAnchor> route = knowledge.plannedPath(start, order);
-                    if (points.stream().allMatch(point -> point.boundary().allowsWaitingRoute(route)) && available.test(candidate))
+                    if (points.stream().allMatch(point -> point.boundary().allowsWaitingRoute(route)))
                         return Optional.of(candidate);
                 } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
                     if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)

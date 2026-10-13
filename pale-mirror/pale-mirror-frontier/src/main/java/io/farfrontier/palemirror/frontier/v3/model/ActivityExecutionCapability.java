@@ -6,7 +6,7 @@ public interface ActivityExecutionCapability {
     ActivityExecutionCheckpoint checkpoint(FrontierWorldState state, HumanAssignment assignment);
     /** Mission owners can prohibit an independent home-food detour while retaining local self-care. */
     default boolean permitsHomeFood(FrontierWorldState state, HumanAssignment assignment) { return true; }
-    /** Owner says whether a resource wait may relinquish a temporary service position. */
+    /** Owner says whether the wait belongs to the currently occupied temporary service point. */
     default boolean waitingForServiceResource(FrontierWorldState state, HumanAssignment assignment) { return false; }
     default FrontierWorldState pauseLabour(FrontierWorldState state, HumanAssignment assignment, long tick) {
         throw new IllegalStateException("owner has no declared labour suspension strategy");

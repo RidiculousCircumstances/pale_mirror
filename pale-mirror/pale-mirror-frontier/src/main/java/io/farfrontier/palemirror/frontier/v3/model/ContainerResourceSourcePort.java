@@ -11,7 +11,11 @@ final class ContainerResourceSourcePort implements ResourceSourcePort {
     @Override public List<ShipmentEndpoint> journeyEndpoints(ResourceSourceEndpoint source, ShipmentEndpoint receiver) {
         return List.of(ResourceSourceComposition.requireContainer(source), receiver);
     }
-    @Override public void admit(FrontierWorldState state, ResourceSourceEndpoint source) { validate(state, source); }
+    @Override public void admit(FrontierWorldState state, ResourceSourceEndpoint source) {
+        validate(state, source);
+        if (source instanceof ShipmentEndpoint.ProductionPort)
+            throw new IllegalArgumentException("declared machine receiving port cannot serve as a haul source");
+    }
     @Override public boolean coldAvailable(FrontierWorldState state, ResourceSourceEndpoint source) {
         var id = ResourceSourceComposition.requireContainer(source).containerId();
         return !ReferenceContainerCustody.hasLiveCustody(state, id) && !ReferenceContainerCustody.blocksCanonicalUse(state, id);

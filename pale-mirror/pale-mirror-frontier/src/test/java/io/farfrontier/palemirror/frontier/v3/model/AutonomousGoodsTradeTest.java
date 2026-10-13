@@ -232,6 +232,7 @@ class AutonomousGoodsTradeTest {
         assertFalse(state.inventory().economics().accounts().containsKey(job.workerId()));
         boolean recoveredAtStation = false;
         for (long tick = 300, count = 0; state.productionJobs().containsKey(job.id()) && count < 700; tick += 20, count++) {
+            tick = BakeryTestClock.due(state, job, tick);
             var events = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, tick));
             assertTrue(events.stream().anyMatch(event -> event.payload() instanceof BakeryColdStep), "bakery stalled: " + events);
             state = apply(state, events, tick, "economy");

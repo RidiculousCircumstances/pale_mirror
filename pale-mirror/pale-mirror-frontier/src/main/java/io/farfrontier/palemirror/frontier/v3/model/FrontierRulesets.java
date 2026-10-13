@@ -40,6 +40,7 @@ public final class FrontierRulesets {
     private static final FrontierRuleset TERRACED_QUARRY_GRAYBOX = terracedQuarry(QUARRY_GRAYBOX);
     private static final FrontierRuleset AVAILABLE_FRONT_QUARRY_GRAYBOX = availableFrontQuarry(TERRACED_QUARRY_GRAYBOX);
     private static final FrontierRuleset HIGH_RESERVE_QUARRY_GRAYBOX = quarryReserve(AVAILABLE_FRONT_QUARRY_GRAYBOX);
+    private static final FrontierRuleset FUELLED_QUARRY_GRAYBOX = fuelledQuarry(HIGH_RESERVE_QUARRY_GRAYBOX);
     /** Existing worlds retain their exact selector and timing; they are never silently retuned. */
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R6 = ruleset("frontier-v3-production-r6", 8, 1L, 20L, 1L);
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R4 = ruleset("frontier-v3-production-r4", 6, 1L, 20L, 1L);
@@ -56,6 +57,7 @@ public final class FrontierRulesets {
             Map.entry(TERRACED_QUARRY_GRAYBOX.id(), TERRACED_QUARRY_GRAYBOX),
             Map.entry(AVAILABLE_FRONT_QUARRY_GRAYBOX.id(), AVAILABLE_FRONT_QUARRY_GRAYBOX),
             Map.entry(HIGH_RESERVE_QUARRY_GRAYBOX.id(), HIGH_RESERVE_QUARRY_GRAYBOX),
+            Map.entry(FUELLED_QUARRY_GRAYBOX.id(), FUELLED_QUARRY_GRAYBOX),
             Map.entry(QUARRY_GRAYBOX.id(), QUARRY_GRAYBOX),
             Map.entry(PREVIOUS_QUARRY_GRAYBOX_R3.id(), PREVIOUS_QUARRY_GRAYBOX_R3),
             Map.entry(PREVIOUS_QUARRY_GRAYBOX_R2.id(), PREVIOUS_QUARRY_GRAYBOX_R2),
@@ -74,6 +76,28 @@ public final class FrontierRulesets {
     private FrontierRulesets() { }
 
     public static FrontierRuleset production() { return PRODUCTION; }
+    public static FrontierRuleset fuelledQuarryGraybox() { return FUELLED_QUARRY_GRAYBOX; }
+
+    private static FrontierRuleset fuelledQuarry(FrontierRuleset base) {
+        var coal = new io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Definition(
+                "pale_mirror:coal_extraction", new io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block("minecraft:coal_ore", Map.of()),
+                new io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block("minecraft:air", Map.of()),
+                base.extraction().source().toolKind(), "minecraft:blocks/coal_ore",
+                java.util.List.of(new io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Output("minecraft:coal", 1)));
+        var extraction = base.extraction().withPocket(new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionPocketProfile(2, 1, 2, 2, 2, coal));
+        var stocks = new java.util.ArrayList<InitialSettlementStock>();
+        for (int home = 1; home <= 12; home++) {
+            var id = new io.farfrontier.palemirror.frontier.v3.api.SubjectId("settlement:" + home);
+            stocks.add(new InitialSettlementStock(id, "minecraft:bread", 128));
+            stocks.add(new InitialSettlementStock(id, "minecraft:coal", 4));
+        }
+        var trade = base.goodsTrade().withCommodity(GoodsPolicyKind.PUBLIC_SETTLEMENT,
+                new GoodsTradeRules.Commodity("minecraft:coal", 0, 8, FixedScalar.whole(2), FixedScalar.whole(3)));
+        return new FrontierRuleset("frontier-v3-quarry-graybox-r9", 25, base.cadence(), base.spatial(), base.rates(),
+                base.facilityCapacity(), base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
+                base.workCatalog().withDefinition(new WorkCatalog.Definition("minecraft:coal_ore", WorkOperation.EXTRACT, HumanCapability.EXTRACTION, 140)),
+                trade, stocks, base.labour(), base.expedition(), extraction, base.execution(), ProductionCatalog.fuelledGraybox(), new FieldBalance(16, 8));
+    }
 
     private static FrontierRuleset expandingQuarry(FrontierRuleset base) {
         return new FrontierRuleset("frontier-v3-quarry-graybox-r3", 20, base.cadence(), base.spatial(), base.rates(), base.facilityCapacity(),

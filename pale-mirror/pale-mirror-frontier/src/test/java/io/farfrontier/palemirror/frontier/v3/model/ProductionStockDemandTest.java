@@ -60,6 +60,7 @@ class ProductionStockDemandTest {
         boolean recipe = false;
         var job = started.job();
         for (long due = 300, steps = 0; state.productionJobs().containsKey(job.id()) && steps < 700; due += 20, steps++) {
+            due = BakeryTestClock.due(state, job, due);
             var step = ProductionProcess.planCompletion(state, ProductionProcess.complete(state.productionJobs().get(job.id()), due))
                     .stream().map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
                     .map(BakeryColdStep.class::cast).findFirst().orElseThrow();

@@ -35,7 +35,7 @@ public record ExcavationTerraces(int maximumDepth, int minimumBenchRun) {
             this.columns = columns; this.open = Objects.requireNonNull(open);
         }
         @Override public int clearanceTopY(SurfaceAnchor station, SurfaceAnchor floor) {
-            return openingTopY.orElse(floor.y() + 2);
+            return Math.max(openingTopY.orElse(floor.y() + 2), Math.max(station.y(), floor.y()) + 2);
         }
         @Override public List<SurfaceAnchor> order(Collection<SurfaceAnchor> stations) {
             return stations.stream().distinct().sorted(Comparator.comparingInt(SurfaceAnchor::y)

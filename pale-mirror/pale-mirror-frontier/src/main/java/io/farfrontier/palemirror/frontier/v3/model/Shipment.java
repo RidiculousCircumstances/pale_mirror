@@ -144,7 +144,7 @@ public record Shipment(SubjectId id, ResourceClaimDelegation authorization, Acto
                 .orElseGet(() -> new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN));
         return take ? ResourceSourceComposition.pickup(sender, id, execution.actorId(), portion, slot, 0, revision)
                 : new ActorContainerItemOrder(id, execution.actorId(), ActorContainerItemOrder.Direction.PLACE, portion,
-                    new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(receiver.containerId()), receiver.station(), slot, 1, revision);
+                    receiver.receivingPort(), receiver.station(), slot, 1, revision);
     }
     public Shipment unloaded(ShipmentReception receipt) {
         if (status != Status.CARRYING || reception.isPresent()

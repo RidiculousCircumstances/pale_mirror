@@ -207,8 +207,14 @@ public final class KnownPedestrianRouteKnowledge {
     }
     /** Bounded local access proofs; this small placement envelope is not a world route search. */
     public java.util.Map<SurfaceAnchor, List<SurfaceAnchor>> localPlacementRoutes(SurfaceAnchor origin) {
+        return localRoutes(origin, LocalNavigationEnvelope.around(origin.standingBody(), origin.standingBody()));
+    }
+    /** Small exact known-geometry escape proofs; no cooperative/global route queue or movement authority. */
+    public java.util.Map<SurfaceAnchor, List<SurfaceAnchor>> localMovementRoutes(SurfaceAnchor origin) {
+        return localRoutes(origin, LocalNavigationEnvelope.localLeg(List.of(origin), origin));
+    }
+    private java.util.Map<SurfaceAnchor, List<SurfaceAnchor>> localRoutes(SurfaceAnchor origin, LocalNavigationEnvelope scope) {
         var geometry = geometryFrom(origin);
-        var scope = LocalNavigationEnvelope.around(origin.standingBody(), origin.standingBody());
         var queue = new java.util.ArrayDeque<SurfaceAnchor>();
         var routes = new java.util.LinkedHashMap<SurfaceAnchor, List<SurfaceAnchor>>();
         queue.add(origin); routes.put(origin, List.of(origin));

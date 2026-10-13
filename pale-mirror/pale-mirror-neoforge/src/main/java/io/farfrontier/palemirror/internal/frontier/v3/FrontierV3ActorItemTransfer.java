@@ -134,7 +134,7 @@ final class FrontierV3ActorItemTransfer {
                         || !address.slot().containerId().equals(attachedContainer.containerId()) || address.slot().slot() >= attached.getContainerSize()))
                     || destinationSlot < 0 || destinationSlot >= chest.getContainerSize()
                     || order.containerEndpoint() instanceof ActorContainerItemOrder.ContainerEndpoint.FungibleStation station
-                    && destinationSlot != station.spec().inputSlot()) {
+                    && destinationSlot != station.spec().slot(station.port())) {
                 throw new IllegalArgumentException("fungible PLACE has a foreign declared actor resource source or destination port");
             }
         }

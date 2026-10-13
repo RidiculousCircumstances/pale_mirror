@@ -99,8 +99,9 @@ public final class FrontierV3SettlementServiceDeathGameTests {
 
     private static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> fixtureRuntime(BlockPos source, boolean applied, boolean startedEffect) {
         var base = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:service-death-native-" + applied + "-" + startedEffect), 211L);
+        var declaredSource = base.initialState().inventory().surfaces().get(new SubjectId("container:9-depot")).position();
         var initial = FrontierWorldState.initial(FrontierV3BootstrapGameTestFixtures.translatedBootstrap(base.initialState().bootstrap(),
-                source.getX(), source.getY() - base.initialState().bootstrap().terrain().baselineSupportY(), source.getZ()));
+                source.getX() - declaredSource.x(), source.getY() - declaredSource.y(), source.getZ() - declaredSource.z()));
         var settlement = initial.bootstrap().settlements().stream().filter(s -> s.id().value().equals("settlement:9")).findFirst().orElseThrow();
         var infirmary = settlement.structures().stream().filter(s -> s.kind() == StructureKind.INFIRMARY).findFirst().orElseThrow();
         InfectionCell cell = null;
@@ -118,11 +119,8 @@ public final class FrontierV3SettlementServiceDeathGameTests {
         var inventory = initial.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE).store(new ExactItemStack(new SubjectId("item:service-death-native"),
                         settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, 1)));
-        // Translate only this isolated resource source, not any production scene or route.
-        var surfaces = new LinkedHashMap<>(inventory.surfaces());
-        surfaces.put(depot, new ContainerSurface(depot, new BlockPosition(source.getX(), source.getY(), source.getZ()), ContainerSurfaceStatus.ACTIVE));
-        inventory = new ExactInventory(inventory.containers(), inventory.items(), inventory.cargo(), inventory.playerItems(),
-                inventory.worldCarrierItems(), inventory.conflicts(), surfaces, inventory.economics(), inventory.fungibleResources());
+        // Whole fixture translation keeps the source and its declared access port together.
+        // Moving only the chest surface would produce an impossible retained relationship.
         var pending = task.withStatus(StrategicTaskStatus.PENDING);
         var state = initial.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory)
                 .strategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(pending))).withInfection(cell, new FixedRatio(new FixedScalar(750_000L)));

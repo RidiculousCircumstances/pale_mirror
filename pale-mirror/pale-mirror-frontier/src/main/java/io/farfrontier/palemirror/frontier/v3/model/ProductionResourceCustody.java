@@ -42,7 +42,7 @@ public final class ProductionResourceCustody {
         var account = resources.accounts().get(accountId);
         if (account == null) throw new IllegalArgumentException("new production hold has no retained input account");
         var input = new FungibleResourceCustodySupport.LotSelection(accountId, job.inputQuantities());
-        if (!job.inputHold().equals(holdForStart(state, input, claimId, job.outputCount()))) {
+        if (!job.inputHold().equals(holdForStart(state, input, claimId, job.inputCount()))) {
             throw new IllegalArgumentException("new production hold does not match current physical custody");
         }
     }

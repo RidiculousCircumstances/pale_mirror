@@ -43,7 +43,11 @@ class ExtractionAreaPlanningTest {
                             FrontierWorldRuntimeDefinition.payloadCodecs().encode(event).length - 1)));
         }
         var next = deposit(after);
-        assertEquals(512, old.cells().size()); assertEquals(528, next.cells().size());
+        assertEquals(512, old.cells().size());
+        int added = event.columns().stream().mapToInt(column -> (int) column.clearance().stream()
+                .filter(sample -> !sample.block().kind().equals("minecraft:air")).count()).sum();
+        assertEquals(old.cells().size() + added, next.cells().size());
+        assertTrue(added > 0 && added <= before.bootstrap().ruleset().extraction().developmentBatchCells());
         assertEquals(old.cells(), next.cells().entrySet().stream().filter(entry -> old.cells().containsKey(entry.getKey()))
                 .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
         assertEquals(before.inventory(), after.inventory()); assertEquals(before.actorLocations(), after.actorLocations());
@@ -157,10 +161,10 @@ class ExtractionAreaPlanningTest {
                 ignored -> false).isEmpty());
         KnownBlockGeometry<String> nonFlat = position -> Optional.of(new KnownBlockGeometry.Sample<>(
                 position.y() == 2 ? "protected-cap" : "stone", 7, KnownBlockGeometry.Sample.Permission.PUBLIC));
-        var descent = AdjacentExcavationPlanner.propose(List.of(station), nonFlat, ignored -> true, ignored -> true, "stone"::equals, "stone"::equals, 1).getFirst();
-        assertEquals(station.y() - 1, descent.floor().y(), "legal one-block descent is excavated, not a built stair");
+        assertTrue(AdjacentExcavationPlanner.propose(List.of(station), nonFlat, ignored -> true, ignored -> true,
+                "stone"::equals, "stone"::equals, 1).isEmpty(), "a protected swept ceiling cannot be bypassed by lowering the floor");
         var elevatedAccess = SurfaceAnchor.at(0, 3, -1);
-        var noUndermining = AdjacentExcavationPlanner.propose(List.of(station, elevatedAccess), nonFlat,
+        var noUndermining = AdjacentExcavationPlanner.propose(List.of(station, elevatedAccess), position -> Optional.of(sample),
                 surface -> surface.equals(station), ignored -> true, "stone"::equals, "stone"::equals, 8);
         assertFalse(noUndermining.isEmpty());
         assertTrue(noUndermining.stream().noneMatch(column -> column.floor().x() == elevatedAccess.x()

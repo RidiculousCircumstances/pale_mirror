@@ -46,6 +46,9 @@ public final class FrontierWorldProcessCodecs {
         result.put("actor-execution", ActorExecutionPayloadCodecs.create());
         result.put("actor-body", ActorBodyPayloadCodecs.create());
         result.put("economy", FrontierWorldPayloadCodecs.economyCodecs());
+        result.put("production-stations", PayloadCodecs.merge(new PayloadCodecs(java.util.List.of(new ProductionStationFuelCodec(),
+                new ProductionStationProgressCodec(), new ProductionStationOperatorCodec(), new ProductionStationRecipeCodec())),
+                new PayloadCodecs(ProductionStationLifecycleCodecs.codecs())));
         result.put("goods-trade", GoodsTradePayloadCodecs.create());
         result.put("shipments", ShipmentPayloadCodecs.create());
         result.put("extraction", ExtractionPayloadCodecs.create());

@@ -13,7 +13,6 @@ import java.util.Set;
 
 /** Pure immutable source-site geometry derived from the stable fresh-world bootstrap. */
 public final class FrontierResourceSitePlan {
-    private static final int FIELD_SIDE = 16;
     /** Leaves a two-cell field edge clear of the Farm shell and the three-wide public route. */
     private static final int FIELD_CLEARANCE = 2;
     /**
@@ -50,12 +49,15 @@ public final class FrontierResourceSitePlan {
     private static Map<SubjectId, ResourceSite> compileFresh(FrontierBootstrap bootstrap) {
         Map<SubjectId, ResourceSite> sites = new LinkedHashMap<>();
         Set<BlockPosition> occupied = immutableReservations(bootstrap);
+        var extractiveHomes = java.util.Set.copyOf(GrayboxQuarryPlan.producerSettlements(bootstrap));
         for (Settlement settlement : bootstrap.settlements()) {
             SettlementStructure farm = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.FARM).findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("settlement lacks a farm: " + settlement.id().value()));
             String suffix = settlement.id().value().substring("settlement:".length()); SubjectId id = new SubjectId("site:" + suffix + "-wheat-field");
             ResourceFieldLayout authored = bootstrap.initialFieldLayouts().get(id);
-            ResourceSite site = authored == null ? availableField(bootstrap.bounds(), id, settlement, farm, occupied)
+            int side = extractiveHomes.contains(settlement) ? bootstrap.ruleset().fields().extractiveSide()
+                    : bootstrap.ruleset().fields().ordinarySide();
+            ResourceSite site = authored == null ? availableField(bootstrap.bounds(), id, settlement, farm, occupied, side)
                     : new ResourceSite(id, settlement.id(), farm.id(), ResourceSiteKind.WHEAT_FIELD, authored);
             if (site.layout().cells().isEmpty() || site.managedSlots().stream().anyMatch(slot -> !bootstrap.bounds().contains(slot)
                     || occupied.contains(slot)) || site.layout().cells().stream().anyMatch(cell ->
@@ -95,9 +97,11 @@ public final class FrontierResourceSitePlan {
     }
 
     private static ResourceSite availableField(WorldBounds bounds, SubjectId id, Settlement settlement, SettlementStructure farm,
-                                               Set<BlockPosition> occupied) {
+                                               Set<BlockPosition> occupied, int fieldSide) {
         for (FacilityFacing side : candidateSides(farm.facing())) {
-            ResourceSite candidate = new ResourceSite(id, settlement.id(), farm.id(), ResourceSiteKind.WHEAT_FIELD, initialLargeGrayboxLayout(cropSlots(farm, side)));
+            var footprint = cropSlots(farm, side, fieldSide);
+            var layout = fieldSide == 8 ? initialGrayboxLayout(footprint) : initialLargeGrayboxLayout(footprint);
+            ResourceSite candidate = new ResourceSite(id, settlement.id(), farm.id(), ResourceSiteKind.WHEAT_FIELD, layout);
             if (candidate.managedSlots().stream().allMatch(bounds::contains) && candidate.managedSlots().stream().noneMatch(occupied::contains)) {
                 return candidate;
             }
@@ -158,7 +162,7 @@ public final class FrontierResourceSitePlan {
         };
     }
 
-    private static List<BlockPosition> cropSlots(SettlementStructure farm, FacilityFacing side) {
+    private static List<BlockPosition> cropSlots(SettlementStructure farm, FacilityFacing side, int FIELD_SIDE) {
         java.util.ArrayList<BlockPosition> slots = new java.util.ArrayList<>(FIELD_SIDE * FIELD_SIDE);
         int halfWidth = SettlementStructureFootprint.width(farm.kind()) / 2;
         int halfDepth = SettlementStructureFootprint.depth(farm.kind()) / 2;

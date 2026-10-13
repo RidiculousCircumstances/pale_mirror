@@ -29,13 +29,25 @@ public final class MaterialSourceSelection {
         ActorContainerItemOrder.Portion.Fungible portion = (ActorContainerItemOrder.Portion.Fungible) order.portion();
         if (portion.claimId().isPresent() && portion.delegation().isEmpty())
             return select(ledger, portion.sourceAccountId(), portion.itemKind(), portion.quantity(), portion.claimId());
+        return select(ledger, portion.sourceAccountId(), portion.itemKind(), portion.lotQuantities());
+    }
+
+    /** Non-actor machine effects select exact retained lots without inventing an actor/order. */
+    public static List<Slice> select(FungibleResourceLedger ledger, SubjectId accountId, String itemKind,
+                                    Map<SubjectId, Integer> lotQuantities) {
+        var account = ledger.accounts().get(Objects.requireNonNull(accountId));
+        if (account == null || lotQuantities.isEmpty() || lotQuantities.values().stream().reduce(0, Math::addExact) > 64
+                || lotQuantities.entrySet().stream().anyMatch(entry -> entry.getValue() < 1
+                    || account.lotQuantities().getOrDefault(entry.getKey(), 0) < entry.getValue()
+                    || !ledger.lots().get(entry.getKey()).itemKind().equals(itemKind)))
+            throw new IllegalArgumentException("material source lacks the exact current declared portion");
         List<PhysicalStackBinding> bindings = ledger.bindings().values().stream()
-                .filter(value -> value.accountId().equals(portion.sourceAccountId()))
+                .filter(value -> value.accountId().equals(accountId))
                 .sorted(Comparator.comparing(PhysicalStackBinding::id)).toList();
-        Map<SubjectId, Integer> remaining = new HashMap<>(portion.lotQuantities());
+        Map<SubjectId, Integer> remaining = new HashMap<>(lotQuantities);
         List<Slice> slices = new ArrayList<>();
         for (PhysicalStackBinding binding : bindings) {
-            if (!binding.itemKind().equals(portion.itemKind())) continue;
+            if (!binding.itemKind().equals(itemKind)) continue;
             int moved = 0;
             for (SubjectId lot : remaining.keySet().stream().sorted().toList()) {
                 int take = Math.min(remaining.get(lot), binding.lotQuantities().getOrDefault(lot, 0));

@@ -43,10 +43,12 @@ public final class FrontierV3FixtureCatalog {
     private static final Map<String, FrontierRuleset> RULESETS = Map.of("production", FrontierRulesets.production(),
             "expedition-candidate", FrontierRulesets.installed("frontier-v3-expedition-candidate-r2"),
             "quarry-graybox", FrontierRulesets.installed("frontier-v3-quarry-graybox-r4"),
-            "quarry-front", FrontierRulesets.installed("frontier-v3-quarry-graybox-r7"));
+            "quarry-front", FrontierRulesets.installed("frontier-v3-quarry-graybox-r7"),
+            "fuelled-quarry", FrontierRulesets.fuelledQuarryGraybox());
     private static final Map<String, BiFunction<WorldId, Long, FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>>> PROVIDERS = Map.ofEntries(
             Map.entry("world", FrontierWorldRuntimeDefinition::configuration),
             Map.entry("quarryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("quarry-graybox"))),
+            Map.entry("fuelledQuarryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("fuelled-quarry"))),
             Map.entry("quarryFront", QuarryFrontFixture::configuration),
             Map.entry("storageGround", StorageGroundFixture::configuration),
             Map.entry("goodsShipment", FrontierV3FixtureCatalog::goodsShipmentConfiguration),
@@ -350,7 +352,8 @@ public final class FrontierV3FixtureCatalog {
             if (current.productionJobs().size() == 1 && current.productionJobs().values().iterator().next()
                     .bakeryWork().filter(work -> freshJob ? work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
                             : work.phase() == BakeryWorkState.Phase.PROCESSING
-                            && work.labour().filter(progress -> progress.running() && !progress.complete()).isPresent()).isPresent()) {
+                            && BakeryLabour.progress(current, current.productionJobs().values().iterator().next())
+                                .filter(progress -> progress.running() && !progress.complete()).isPresent()).isPresent()) {
                 var boundary = engine.checkpoint();
                 return configured(worldId, current, boundary.instant(), boundary.schedules());
             }

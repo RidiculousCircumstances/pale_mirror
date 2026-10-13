@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.model.geometry.BlockInteractionReac
 /** Registered ordinary storage geometry; the logistics coordinator does not interpret buildings. */
 final class StorageShipmentEndpointPort implements ShipmentEndpointPort {
     @Override public ShipmentEndpoint.Kind kind() { return ShipmentEndpoint.Kind.DECLARED_STORAGE; }
+    @Override public ShipmentReceiverReplacement replacementPolicy() { return StorageShipmentReceiverReplacement.INSTANCE; }
     private ShipmentEndpoint.Storage declaration(FrontierWorldState state, ShipmentEndpoint endpoint) {
         if (!(endpoint instanceof ShipmentEndpoint.Storage storage))
             throw new IllegalArgumentException("storage endpoint has a foreign nominal schema");

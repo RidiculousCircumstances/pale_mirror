@@ -9,7 +9,6 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import java.util.*;
 
 /** Vanilla drop adapter: the exact source slot and actual spawned entity, not proximity matching. */
@@ -19,16 +18,17 @@ public final class FrontierV3ContainerDrops {
     private FrontierV3ContainerDrops() { }
     /** Persist the actual old provider before vanilla disperses any of its slots. */
     public static void prepareRemoval(Level level, Container container) {
-        if (!(level instanceof ServerLevel server) || !(container instanceof ChestBlockEntity chest)
+        if (!(level instanceof ServerLevel server)
                 || !FrontierV3PhysicalWorld.isPhysical(server)) return;
         var runtime = FrontierV3ServerLifecycle.runtimeFor(server.getServer());
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
-        String declared = chest.getPersistentData().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY);
-        if (declared.isBlank()) return;
-        var id = new SubjectId(declared); var state = runtime.decodedState().orElseThrow();
+        var state = runtime.decodedState().orElseThrow();
+        var physical = FrontierV3PhysicalContainer.observedFixed(server, state, container).orElse(null);
+        if (physical == null) return;
+        var id = physical.containerId();
         if (!ReferenceContainerCustody.isReferenceContainer(state, id)) return;
         var record = state.inventory().containers().get(id);
-        if (record == null || !FrontierV3PhysicalContainer.observedChest(id, chest).declared())
+        if (record == null || !physical.declared())
             throw new IllegalStateException("container removal has a foreign provider declaration");
         var surface = state.inventory().surfaces().get(id);
         var lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(id));
@@ -49,15 +49,14 @@ public final class FrontierV3ContainerDrops {
         finally { if (previous == null) ACTIVE.remove(); else ACTIVE.set(previous); }
     }
     private static Source source(Level level, Container container, ItemStack stack) {
-        if (!(level instanceof ServerLevel server) || !(container instanceof ChestBlockEntity chest)
+        if (!(level instanceof ServerLevel server)
                 || !FrontierV3PhysicalWorld.isPhysical(server)) return null;
         var runtime = FrontierV3ServerLifecycle.runtimeFor(server.getServer());
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return null;
-        String declared = chest.getPersistentData().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY);
-        if (declared.isBlank()) return null;
-        var id = new SubjectId(declared); var state = runtime.decodedState().orElseThrow();
-        if (!state.inventory().containers().containsKey(id)
-                || !FrontierV3PhysicalContainer.observedChest(id, chest).declared()) return null;
+        var state = runtime.decodedState().orElseThrow();
+        var physical = FrontierV3PhysicalContainer.observedFixed(server, state, container).orElse(null);
+        if (physical == null) return null;
+        var id = physical.containerId();
         for (int slot = 0; slot < container.getContainerSize(); slot++) if (container.getItem(slot) == stack) return new Source(server, id, slot);
         return null;
     }

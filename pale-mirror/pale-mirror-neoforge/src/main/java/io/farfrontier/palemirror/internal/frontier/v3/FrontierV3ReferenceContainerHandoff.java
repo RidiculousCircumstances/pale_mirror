@@ -35,8 +35,9 @@ final class FrontierV3ReferenceContainerHandoff {
                 continue;
             }
             var block = new BlockPos(pos.x(), pos.y(), pos.z());
-            if (level.hasChunkAt(block) && level.getBlockEntity(block) instanceof ChestBlockEntity chest) {
-                var observed = FrontierV3ReferenceContainerCustodyExecutor.observed(state, surface.containerId(), chest);
+            var physical = FrontierV3PhysicalContainer.inspect(level, state, surface.containerId()).orElse(null);
+            if (physical != null) {
+                var observed = FrontierV3ReferenceContainerCustodyExecutor.observedContainer(state, surface.containerId(), physical);
                 if (observed.fingerprint().equals(ReferenceContainerCustody.canonicalFingerprint(state, surface.containerId()))
                         && observed.provenance().equals(ReferenceContainerCustody.provenance(surface.containerId()))) {
                     status = READY; reason = "current_container";

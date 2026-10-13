@@ -19,9 +19,11 @@ class ExtractionLandValidationTest {
         assertDoesNotThrow(() -> ExtractionLandValidation.require(layout, bootstrap.bounds()));
         var blocks = new HashMap<>(layout.fixedBlocks());
         blocks.put(new BlockPosition(10000, 60, 10000), new BlockExtraction.Block("minecraft:stone", java.util.Map.of()));
-        var foreign = new ExtractionLayout(layout.cells(), blocks, layout.accessSurfaces(),
-                layout.entrance(), layout.container(), layout.storagePort());
-        assertThrows(IllegalArgumentException.class, () -> ExtractionLandValidation.require(foreign, bootstrap.bounds()));
+        assertThrows(IllegalArgumentException.class, () -> {
+            var foreign = new ExtractionLayout(layout.cells(), blocks, layout.accessSurfaces(),
+                    layout.entrance(), layout.container(), layout.storagePort());
+            ExtractionLandValidation.require(foreign, bootstrap.bounds());
+        });
         assertDoesNotThrow(() -> ExtractionLandValidation.require(layout, bootstrap.bounds()));
     }
 }

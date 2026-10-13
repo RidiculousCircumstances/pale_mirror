@@ -8,7 +8,7 @@ public final class SourceStockClaimLoss {
     private static final Map<ClaimPurpose, SourceStockClaimLossOwner> OWNERS = register(List.of(
             new ResidentMealPlayerStockLoss(), new InternalShipmentPlayerStockLoss(),
             allocation(ClaimPurpose.GOODS_TRADE), allocation(ClaimPurpose.EXPEDITION_SUPPLY),
-            allocation(ClaimPurpose.PRODUCTION_WORK)));
+            allocation(ClaimPurpose.PRODUCTION_WORK), allocation(ClaimPurpose.STATION_PROCESSING), allocation(ClaimPurpose.STATION_OUTPUT)));
     private SourceStockClaimLoss() { }
 
     private static SourceStockClaimLossOwner allocation(ClaimPurpose purpose) {

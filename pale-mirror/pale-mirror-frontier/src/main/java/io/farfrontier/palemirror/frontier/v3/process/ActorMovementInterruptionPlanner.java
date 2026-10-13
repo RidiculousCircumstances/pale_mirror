@@ -19,6 +19,11 @@ final class ActorMovementInterruptionPlanner implements ActivityInterruptionPlan
         if (body.isEmpty()) return false;
         var retained = new ActorMovementInterrupted(residentId, movement.order().goalRevision(), atTick,
                 body.orElseThrow(), movement.executionId());
+        // A work owner may quite correctly refuse release while this route still exists.
+        // That refusal cannot prevent asking the movement owner to prove its interruption;
+        // actual work/meal admission is checked again against the resulting state.
+        if (ActorMovementProviders.require(movement).permitsReplacement(ResidentActivityChoice.Kind.EAT)
+                && ResidentActivityCoordinator.requestsFoodAtMovementCheckpoint(state, retained)) return true;
         var choice = ResidentActivityCoordinator.assessMovementInterruptionEligibility(state, retained);
         return (choice.kind() == ResidentActivityChoice.Kind.WORK || choice.kind() == ResidentActivityChoice.Kind.EAT)
                 && ActorMovementProviders.require(movement).permitsReplacement(choice.kind());

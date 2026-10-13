@@ -163,7 +163,7 @@ public final class FrontierWorldProcessCatalog {
     private static final Set<String> ALL_WORLD = union(PHYSICAL, REPLICA_CUSTODY, AMBIENT, SCENES, POPULATION, ACTOR_MOVEMENT, ACTOR_EXECUTION, ACTOR_BODY, ECONOMY, RESOURCE_SITES,
             HIVE, INFRASTRUCTURE, SETTLEMENT_SERVICE_WORK, STRATEGY, GoodsTradeProcessModule.TYPES, ShipmentProcessModule.TYPES,
             UnitGroupProcessModule.TYPES, TransportMissionProcessModule.TYPES, UnitInventoryProcessModule.TYPES, ExpeditionSupplyProcessModule.TYPES, ExtractionWorkProcessModule.TYPES,
-            DefenderEquipmentReturnVisitProcessModule.TYPES);
+            DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.TYPES);
     private static final Map<String, FrontierWorldProcessModule> MODULES = Map.ofEntries(
             Map.entry("defender-equipment-return-visit", new DefenderEquipmentReturnVisitProcessModule()),
             Map.entry("extraction", new ExtractionWorkProcessModule()),
@@ -177,6 +177,7 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("actor-body", new FrontierActorBodyProcessModule(io.farfrontier.palemirror.frontier.v3.model.FrontierActorDeathConsequences.INSTANCE,
                     FrontierActorDeathFollowUps::plan)),
             Map.entry("economy", new FrontierEconomyProcessModule()),
+            Map.entry("production-stations", new ProductionStationProcessModule()),
             Map.entry("goods-trade", new GoodsTradeProcessModule()),
             Map.entry("shipments", new ShipmentProcessModule()),
             Map.entry("unit-groups", new UnitGroupProcessModule()),
@@ -226,6 +227,7 @@ public final class FrontierWorldProcessCatalog {
     }
 
     private static final Map<String, ScheduledPlanner> SCHEDULED_PLANNERS = Map.ofEntries(
+            Map.entry(ProductionStationProcessModule.REVIEW, atExecutionTime(ProductionStationProcessModule::plan)),
             Map.entry(ResourceHaulingPolicy.REVIEW, coalescedReview(withPlanningRecovery(atExecutionTime(ResourceHaulingPolicy::plan)))),
             Map.entry(ExtractionContinuation.REVIEW, withPlanningRecovery(atExecutionTime((state, action, instant) -> ExtractionWorkProcess.review(state, action, instant.ticks())))),
             Map.entry(ExtractionContinuation.PROGRESS, withPlanningRecovery(new ScheduledPlanner() {
@@ -440,7 +442,7 @@ public final class FrontierWorldProcessCatalog {
                 descriptor("settlement-service-work", serviceWorkCommands(), serviceWorkSchedules(), SETTLEMENT_SERVICE_WORK,
                         emissions("settlement-service-work"), SETTLEMENT_SERVICE_WORK),
                 descriptor("strategy", strategyCommands(), strategySchedules(), STRATEGY, emissions("strategy"), STRATEGY),
-                GoodsTradeProcessModule.DESCRIPTOR, ShipmentProcessModule.DESCRIPTOR, UnitGroupProcessModule.DESCRIPTOR, ExtractionWorkProcessModule.DESCRIPTOR,
+                ProductionStationProcessModule.DESCRIPTOR, GoodsTradeProcessModule.DESCRIPTOR, ShipmentProcessModule.DESCRIPTOR, UnitGroupProcessModule.DESCRIPTOR, ExtractionWorkProcessModule.DESCRIPTOR,
                 DefenderEquipmentReturnVisitProcessModule.DESCRIPTOR,
                 TransportMissionProcessModule.DESCRIPTOR, UnitInventoryProcessModule.DESCRIPTOR, ExpeditionSupplyProcessModule.DESCRIPTOR,
                 PedestrianPlanningProcessModule.DESCRIPTOR);

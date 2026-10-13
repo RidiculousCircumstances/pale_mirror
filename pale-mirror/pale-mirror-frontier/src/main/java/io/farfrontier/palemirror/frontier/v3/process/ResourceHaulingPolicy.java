@@ -13,6 +13,8 @@ final class ResourceHaulingPolicy {
                 home.value().getBytes(java.nio.charset.StandardCharsets.UTF_8))), new SimInstant(tick), 12, home, REVIEW, 1);
     }
     static Optional<InternalShipmentDispatched> offer(FrontierWorldState state, ResidentProfile worker, long tick) {
+        var stationSupply = ProductionStationSupply.offer(state, worker, tick);
+        if (stationSupply.isPresent()) return stationSupply;
         var resources = state.inventory().fungibleResources();
         for (var source : ResourceSourceDiscovery.localHaulSources(state, worker.settlementId())) {
             if (source.container().filter(id -> ReferenceContainerCustody.blocksCanonicalUse(state, id)).isPresent()) continue;

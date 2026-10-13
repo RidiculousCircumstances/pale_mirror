@@ -18,15 +18,16 @@ final class FrontierProductionInputHoldValidation {
         if (account == null || claim == null || !(account.custody() instanceof ResourceCustody.Container container)
                 || !container.containerId().equals(job.bakeryWork().isPresent()
                     ? job.bakeryWork().orElseThrow().sourceContainerId() : job.rights().destinationContainerId())
-                || inputLots.values().stream().mapToInt(Integer::intValue).sum() != job.outputCount()
+                || inputLots.values().stream().mapToInt(Integer::intValue).sum() != job.inputCount()
                 || inputLots.entrySet().stream().anyMatch(entry -> {
                     ResourceLot lot = resources.lots().get(entry.getKey());
-                    return lot == null || !lot.economicOwnerId().equals(job.rights().resourceOwner().id()) || !"minecraft:wheat".equals(lot.itemKind())
+                    return lot == null || !lot.economicOwnerId().equals(job.rights().resourceOwner().id())
+                            || !job.bakeryWork().map(BakeryWorkState::inputItemKind).orElse("minecraft:wheat").equals(lot.itemKind())
                             || account.lotQuantities().getOrDefault(lot.id(), 0) < entry.getValue();
                 })
                 || claim.purpose() != ClaimPurpose.PRODUCTION_WORK || !claim.claimantId().equals(job.id())
                 || !claim.economicOwnerId().equals(job.rights().resourceOwner().id())
-                || !"minecraft:wheat".equals(claim.itemKind()) || claim.quantity() != job.outputCount()
+                || !job.bakeryWork().map(BakeryWorkState::inputItemKind).orElse("minecraft:wheat").equals(claim.itemKind()) || claim.quantity() != job.inputCount()
                 || !claim.lotQuantities().equals(inputLots)
                 || account.claimQuantities().getOrDefault(claim.id(), 0) != claim.quantity()) {
             throw new IllegalArgumentException("fungible production job must retain its exact depot lot allocation");

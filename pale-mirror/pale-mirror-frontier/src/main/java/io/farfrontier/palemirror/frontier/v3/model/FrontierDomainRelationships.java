@@ -188,6 +188,9 @@ public final class FrontierDomainRelationships {
         }
     }
     private static final List<Family> INVENTORY = List.of(
+            new Family("production-machine-operations", FamilyDisposition.OWNER_EXPLICIT_UNCHANGED, "ProductionStations/ProductionOperation",
+                    "explicit instance/facility/container and operation/client/allocation; bidirectional registered-owner validation; "
+                            + "output claim ends at pickup; retire only after disposed effects and retired container"),
             new Family("unit-groups-transport-missions", FamilyDisposition.RELATION_LAYER_CURRENT, "UnitGroupState/ShipmentState",
                     "explicit roster, nominal mission port and bidirectional exact shipment binding; retire only after crew return and receipt closure"),
             new Family("recipient-neutral-shipments", FamilyDisposition.RELATION_LAYER_CURRENT, "ShipmentState",
@@ -245,6 +248,14 @@ public final class FrontierDomainRelationships {
             surface(io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Journey.class, "stations"),
             surface(ShipmentEndpoint.Depot.class, "settlementId", "facilityId", "containerId"),
             surface(ShipmentEndpoint.ExtractiveSite.class, "settlementId", "siteId", "containerId"),
+            surface(ShipmentEndpoint.ProductionPort.class, "settlementId"),
+            surface(ProductionStationSpec.class, "id", "facilityId", "containerId"),
+            surface(ProductionOperation.class, "stationId", "orderId", "outputId"),
+            surface(ProductionOperation.Id.class, "value"),
+            surface(ProductionOperation.OrderInitiator.class, "orderId"),
+            surface(ProductionOperation.ExactInput.class, "itemId"),
+            surface(ProductionOperation.FungibleInput.class, "accountId", "lots", "claims"),
+            surface(ProductionStations.Machine.class, "stationId"),
             surface(ResourceClaimDelegation.class, "claimId", "claimantId", "executorId"),
             surface(GoodsTradeParty.class, "id"),
             surface(GoodsTradeOrder.class, "id", "containerId"),

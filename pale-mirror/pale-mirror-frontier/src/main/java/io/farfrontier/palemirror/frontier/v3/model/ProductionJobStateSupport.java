@@ -103,11 +103,13 @@ final class ProductionJobStateSupport {
         FungibleResourceLedger reserved;
         if (hold instanceof ProductionInputHold.FungibleCold cold) {
             ProductionResourceCustody.requireNewHold(state, job, cold.accountId(), cold.claimId());
-            claim = new ClaimAllocation(cold.claimId(), job.id(), job.rights().resourceOwner().id(), "minecraft:wheat", job.outputCount(), cold.inputLots(), ClaimPurpose.PRODUCTION_WORK);
+            claim = new ClaimAllocation(cold.claimId(), job.id(), job.rights().resourceOwner().id(),
+                    job.bakeryWork().map(BakeryWorkState::inputItemKind).orElse("minecraft:wheat"), job.inputCount(), cold.inputLots(), ClaimPurpose.PRODUCTION_WORK);
             reserved = resources.reserve(claim, cold.accountId());
         } else if (hold instanceof ProductionInputHold.FungibleBound bound) {
             ProductionResourceCustody.requireNewHold(state, job, bound.accountId(), bound.claimId());
-            claim = new ClaimAllocation(bound.claimId(), job.id(), job.rights().resourceOwner().id(), "minecraft:wheat", job.outputCount(), bound.inputLots(), ClaimPurpose.PRODUCTION_WORK);
+            claim = new ClaimAllocation(bound.claimId(), job.id(), job.rights().resourceOwner().id(),
+                    job.bakeryWork().map(BakeryWorkState::inputItemKind).orElse("minecraft:wheat"), job.inputCount(), bound.inputLots(), ClaimPurpose.PRODUCTION_WORK);
             reserved = resources.reserveBound(claim, bound.accountId(), bound.authorityEpoch());
         } else {
             throw new IllegalArgumentException("fungible production job has no fungible input hold");

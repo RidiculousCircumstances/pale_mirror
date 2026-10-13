@@ -40,7 +40,8 @@ public final class GoodsParticipantPolicies {
                 int missing = target - Math.addExact(stock.unclaimedAtEndpoint(), stock.expectedIncoming());
                 int surplus = stock.unclaimedAtEndpoint() - target;
                 if (missing > 0) {
-                    int quantity = Math.min(rules.maximumBatch(), missing);
+                    int quantity = Math.min(rules.maximumBatch(), Math.min(missing,
+                            view.purchaseLimits().getOrDefault(commodity.itemKind(), Integer.MAX_VALUE)));
                     long affordable = view.availableMoney().raw() / commodity.maximumBuyPrice().raw();
                     quantity = (int) Math.min(quantity, affordable);
                     if (quantity > 0) result.add(new Intent(commodity.itemKind(), GoodsTradeOrder.Side.BUY, quantity, commodity.maximumBuyPrice()));

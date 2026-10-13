@@ -11,6 +11,21 @@ import net.minecraft.world.inventory.Slot;
 final class FrontierV3PilotInventoryActions {
     private FrontierV3PilotInventoryActions() { }
 
+    static void clickMenuButton(Minecraft minecraft, JsonObject action) {
+        if (minecraft.player.containerMenu == minecraft.player.inventoryMenu)
+            throw new IllegalStateException("ordinary menu button requires an open container");
+        minecraft.gameMode.handleInventoryButtonClick(minecraft.player.containerMenu.containerId, action.get("button").getAsInt());
+    }
+
+    static Result openContainer(Minecraft minecraft, net.minecraft.core.BlockPos target, boolean attempted) {
+        if (minecraft.player.containerMenu != minecraft.player.inventoryMenu) return Result.finished();
+        if (attempted) return Result.waiting();
+        minecraft.gameMode.useItemOn(minecraft.player, net.minecraft.world.InteractionHand.MAIN_HAND,
+                new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(target),
+                        net.minecraft.core.Direction.UP, target, false));
+        return Result.afterClick();
+    }
+
     static Result splitMoveFromContainer(Minecraft minecraft, JsonObject action, boolean attempted) {
         if (minecraft.player.containerMenu == minecraft.player.inventoryMenu) return Result.waiting();
         ResourceLocation item = ResourceLocation.parse(action.get("item").getAsString());

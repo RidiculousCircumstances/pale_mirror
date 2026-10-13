@@ -1,0 +1,107 @@
+{
+  "schema": 1,
+  "id": "disposable_fuelled_quarry_production_restart",
+  "isolation": { "mode": "disposable_lite", "seed": 20260918065 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "fuelled-quarry-world", "viewDistance": 6 },
+  "pilot": { "username": "PMFuelChain" },
+  "setup": [
+    { "type": "command", "command": "/gamemode creative" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "expect": {
+        "status": "ok", "result": { "resourceStocks": { "minecraft:coal": { "totalCells": 8, "extractedCells": 0, "homeQuantity": 4 } } }
+      } },
+      { "view": "process", "id": "station:structure-1-workshop-bakery", "expect": {
+        "status": "ok", "result": { "storedHeat": 0, "operation": null }
+      } }
+    ] }
+  ],
+  "actions": [
+    { "type": "inspect", "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": {
+      "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "position" }
+    }, "offset": { "x": -8, "y": 3, "z": -6 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "expect": {
+      "status": "ok", "surface": "ACTIVE", "custody": { "status": "ACQUIRED" }
+    }, "timeoutMs": 90000 },
+    { "type": "look", "at": {
+      "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "firstSource" }
+    } },
+    { "type": "fast_forward_to_instant", "targetInstant": 6000, "timeoutMs": 180000 },
+    { "type": "release_fast_forward_hold" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": {
+      "diagnostic": { "view": "container", "id": "container:structure-1-workshop-bakery-station", "field": "position" }
+    }, "offset": { "x": -3, "y": -1, "z": -3 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "station:structure-1-workshop-bakery", "expect": {
+      "status": "ok", "result": { "operation": { "recipe": "pale_mirror:bread", "mode": "ATTENDED", "transformed": false } }
+    }, "timeoutMs": 120000, "causalMilestone": "autonomous_baker_created_its_exact_station_operation" },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "station:structure-1-workshop-bakery", "expect": {
+      "status": "ok", "result": { "operation": { "recipe": "pale_mirror:bread", "mode": "ATTENDED", "transformed": false } }
+    }, "requireIncreaseAt": "result.operation.elapsedCompletedMilliWork", "timeoutMs": 120000, "causalMilestone": "autonomous_baker_supplied_station_and_operates_its_clock" },
+    { "type": "look", "at": {
+      "diagnostic": { "view": "container", "id": "container:structure-1-workshop-bakery-station", "field": "position" }
+    } },
+    { "type": "assert_visible_entity", "entityType": "minecraft:villager", "nameContains": {
+      "diagnostic": { "view": "actor", "id": "resident:1-9", "field": "name" }
+    }, "maxDistance": 32, "maxAngleDeg": 75, "timeoutMs": 30000 },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 24, "y": 64, "z": -132 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "expect": {
+      "status": "ok", "result": { "liveSourceRegions": 0, "workersCold": true }
+    }, "timeoutMs": 90000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": {
+      "diagnostic": { "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "field": "position" }
+    }, "offset": { "x": -8, "y": 3, "z": -6 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "expect": {
+      "status": "ok", "result": { "workersCold": false, "resourceStocks": { "minecraft:coal": { "hasExtraction": true } } }
+    }, "timeoutMs": 180000, "causalMilestone": "finite_coal_cells_mined_by_actual_workers" },
+    { "type": "look", "at": {
+      "diagnostic": { "view": "actor", "id": "resident:1-10", "field": "position" }
+    } },
+    { "type": "assert_visible_entity", "entityType": "minecraft:villager", "nameContains": {
+      "diagnostic": { "view": "actor", "id": "resident:1-10", "field": "name" }
+    }, "maxDistance": 48, "maxAngleDeg": 75, "timeoutMs": 30000 },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 24, "y": 64, "z": -132 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "expect": {
+      "status": "ok", "result": { "liveSourceRegions": 0, "workersCold": true }
+    }, "timeoutMs": 90000 },
+    { "type": "fast_forward", "ticks": 2000, "timeoutMs": 180000 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "task:objective-workforce-6cda9be3cbb4cefbb62c5d1d1ab50adc-1", "expect": {
+      "status": "ok", "family": "frontier.strategic-task", "result": { "kind": "PRODUCE_BREAD", "taskStatus": "COMPLETED" }
+    }, "timeoutMs": 120000, "causalMilestone": "exact_bakery_task_delivered_output_before_history_compaction" },
+    { "type": "fast_forward", "ticks": 6000, "timeoutMs": 180000 },
+    { "type": "fast_forward", "ticks": 6000, "timeoutMs": 180000 },
+    { "type": "fast_forward", "ticks": 6000, "timeoutMs": 180000 },
+    { "type": "fast_forward", "ticks": 6000, "timeoutMs": 180000 },
+    { "type": "inspect", "view": "process", "id": "settlement:2" },
+    { "type": "inspect", "view": "process", "id": "settlement:11" },
+    { "type": "inspect", "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": {
+      "diagnostic": { "view": "container", "id": "container:structure-1-workshop-bakery-station", "field": "position" }
+    }, "offset": { "x": -3, "y": -1, "z": -3 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:structure-1-workshop-bakery-station", "expect": {
+      "status": "ok", "custody": { "status": "ACQUIRED" }, "replica": { "state": "OBSERVED_CURRENT", "conflict": "" }
+    }, "timeoutMs": 90000 },
+    { "type": "look", "at": {
+      "diagnostic": { "view": "container", "id": "container:structure-1-workshop-bakery-station", "field": "position" }
+    } },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "restart": { "mode": "graceful", "afterAction": 13 },
+  "assertions": [
+    { "after": 15, "view": "process", "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571", "expect": {
+      "status": "ok", "result": { "resourceStocks": { "minecraft:coal": { "hasExtraction": true } } }
+    } },
+    { "after": 21, "view": "process", "id": "task:objective-workforce-6cda9be3cbb4cefbb62c5d1d1ab50adc-1", "expect": {
+      "status": "ok", "family": "frontier.strategic-task", "result": { "kind": "PRODUCE_BREAD", "taskStatus": "COMPLETED" }
+    } },
+    { "after": 26, "view": "process", "id": "settlement:2", "expect": {
+      "status": "ok", "family": "frontier.goods-participant", "acceptedCommodities": { "minecraft:coal": true }
+    } },
+    { "after": 32, "view": "summary", "id": "", "expect": { "status": "ok", "inventoryConflicts": 0, "sceneConflicts": 0, "replicaCustodyDiagnostics": 0 } }
+  ],
+  "frames": [
+    { "after": 4, "name": "mixed-quarry-before-work" },
+    { "after": 11, "name": "autonomous-baker-at-fuelled-station" },
+    { "after": 17, "name": "mixed-quarry-mined-by-workers" },
+    { "after": 31, "name": "recovered-current-station" }
+  ]
+}

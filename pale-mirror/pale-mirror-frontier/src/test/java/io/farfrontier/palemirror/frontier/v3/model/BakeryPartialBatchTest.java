@@ -169,8 +169,9 @@ class BakeryPartialBatchTest {
         var owner = state.bootstrap().settlements().getFirst().id();
         assertTrue(BakeryBatchSelection.available(state, owner).isEmpty());
         assertTrue(BakeryBatchSelection.admissible(state, owner).isEmpty());
-        assertThrows(IllegalArgumentException.class, () -> ProductionStationRecipe.breadOutputQuantity(0));
-        assertThrows(IllegalArgumentException.class, () -> ProductionStationRecipe.breadOutputQuantity(65));
+        var recipe = ProductionCatalog.initial().require(BakeryRecipes.BREAD);
+        assertThrows(IllegalArgumentException.class, () -> recipe.outputForInput(0));
+        assertThrows(IllegalArgumentException.class, () -> recipe.outputForInput(65));
     }
 
     @Test void outputCapacityLimitsTheBatchWithoutConsumingAnotherOwnersReservation() {
@@ -209,8 +210,11 @@ class BakeryPartialBatchTest {
     }
 
     static FrontierWorldState fixture(int stock) {
+        return fixture(stock, FrontierRulesets.production());
+    }
+    static FrontierWorldState fixture(int stock, FrontierRuleset rules) {
         var state = ProductionProcessTest.productionTask(FrontierWorldState.initial(FrontierBootstrapper.create(
-                new WorldId("frontier:partial-bakery"), 41L)), StrategicTaskStatus.PENDING);
+                new WorldId("frontier:partial-bakery"), 41L, rules)), StrategicTaskStatus.PENDING);
         var owner = state.bootstrap().settlements().getFirst().id();
         var depot = FrontierWorldState.depotId(owner);
         var accountId = ReferenceContainerCustody.scopeId(depot);

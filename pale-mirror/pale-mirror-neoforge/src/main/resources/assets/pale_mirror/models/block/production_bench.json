@@ -1,0 +1,1 @@
+{"parent":"minecraft:block/cube","textures":{"particle":"minecraft:block/bricks","down":"minecraft:block/bricks","up":"minecraft:block/smooth_stone","north":"minecraft:block/furnace_front","south":"minecraft:block/bricks","west":"minecraft:block/bricks","east":"minecraft:block/bricks"}}

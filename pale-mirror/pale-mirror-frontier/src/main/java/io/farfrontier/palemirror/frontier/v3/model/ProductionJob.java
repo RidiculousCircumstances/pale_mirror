@@ -62,10 +62,10 @@ public record ProductionJob(
             case ProductionInputHold.FungibleCold cold -> cold.inputLots().values().stream().mapToInt(Integer::intValue).sum();
             case ProductionInputHold.FungibleBound bound -> bound.inputLots().values().stream().mapToInt(Integer::intValue).sum();
             case ProductionInputHold.Cold cold -> cold.item().count();
-            case ProductionInputHold.Materialized ignored -> outputCount; // Checked against inventory at admission.
+            case ProductionInputHold.Materialized ignored -> bakeryWork.map(BakeryWorkState::inputQuantity).orElse(outputCount);
         };
-        if (outputCount != retainedInput)
-            throw new IllegalArgumentException("bread job output must match its retained input allocation");
+        if (bakeryWork.isEmpty() ? outputCount != retainedInput : bakeryWork.orElseThrow().inputQuantity() != retainedInput)
+            throw new IllegalArgumentException("production job differs from its retained input allocation");
         if (!workTraversal.provenance().equals(facilityId) || workTraversal.edges().stream().anyMatch(edge -> edge.kind() != TraversalKind.PEDESTRIAN
                 || !edge.traversableBy(TraversalCapability.PEDESTRIAN)) || traversalCursor < 0
                 || traversalCursor >= workTraversal.linearCorridorSurfaces().size()) {
@@ -144,9 +144,12 @@ public record ProductionJob(
         return switch (inputHold) {
             case ProductionInputHold.FungibleCold cold -> cold.inputLots();
             case ProductionInputHold.FungibleBound bound -> bound.inputLots();
-            default -> java.util.Map.of(consumedItemId, outputCount);
+            case ProductionInputHold.Cold cold -> java.util.Map.of(consumedItemId, cold.item().count());
+            case ProductionInputHold.Materialized ignored -> java.util.Map.of(consumedItemId,
+                    bakeryWork.map(BakeryWorkState::inputQuantity).orElse(outputCount));
         };
     }
+    public int inputCount() { return inputQuantities().values().stream().mapToInt(Integer::intValue).sum(); }
     /** Resource representation cannot bypass labor or a live physical custodian. */
     public void requireColdCompletion(FrontierWorldState state) {
         var actor = state.actorLocations().get(workerId);

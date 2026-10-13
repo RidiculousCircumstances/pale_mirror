@@ -6,7 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 import java.util.*;
 
-/** Owner-local replacement before effect preparation; no receipt, title or carried stock is forgotten. */
+/** Receiver-approved substitution before effect preparation; no receipt, title or carried stock is forgotten. */
 public record ShipmentStorageRetargeted(SubjectId shipmentId, long expectedRevision,
         ActorExecutionId execution, SurfaceAnchor origin, ShipmentEndpoint destination,
         Optional<PedestrianRouteReceipt> route)
@@ -31,8 +31,7 @@ public record ShipmentStorageRetargeted(SubjectId shipmentId, long expectedRevis
         state.actorExecutions().requireCurrent(execution);
         if (destination.containerId().equals(current.receiver().containerId())
                 || current.sender().container().filter(destination.containerId()::equals).isPresent()
-                || !ResourceStorageSelection.receivesAt(state, destination, current.receiver().settlementId(), current.itemKind(),
-                    current.quantity(), Set.of(ResourceStorageRole.WAREHOUSE), Optional.empty()))
+                || !ShipmentEndpointComposition.replacementPolicy(current.receiver()).admits(state, current, destination))
             throw new IllegalArgumentException("replacement storage has stale capacity, filter or owner");
         ResourceSourceComposition.knowledge(state, current.sender(), destination).requireRoute(
                 route.map(PedestrianRouteReceipt::route).orElseGet(() -> List.of(origin)));
@@ -45,17 +44,12 @@ public record ShipmentStorageRetargeted(SubjectId shipmentId, long expectedRevis
                 && shipment.pendingPhysicalStep().isEmpty() && shipment.reception().isEmpty();
     }
     public static boolean retainedAvailable(FrontierWorldState state, Shipment shipment) {
-        var container = state.inventory().containers().get(shipment.receiver().containerId());
-        return container != null && container.storage().map(policy -> policy.endpoint().equals(shipment.receiver())
-                && policy.filter().accepts(shipment.itemKind())).orElse(false)
-                && !ReferenceContainerCustody.blocksCanonicalUse(state, container.id())
-                && ContainerStorageAdmission.receive(state, container.id(), shipment.itemKind(), shipment.quantity(), Optional.of(shipment.id()));
+        return ShipmentEndpointComposition.replacementPolicy(shipment.receiver()).retainedAvailable(state, shipment);
     }
     public static Optional<ShipmentStorageRetargeted> eligible(FrontierWorldState state, Shipment shipment) {
         if (!unbegun(shipment)) return Optional.empty();
         var actor = shipment.execution().actorId(); var origin = state.actorLocations().get(actor).supportingSurface();
-        for (var endpoint : ResourceStorageSelection.receivingCandidates(state, shipment.receiver().settlementId(), shipment.itemKind(),
-                shipment.quantity(), origin, Set.of(ResourceStorageRole.WAREHOUSE), Optional.empty())) {
+        for (var endpoint : ShipmentEndpointComposition.replacementPolicy(shipment.receiver()).candidates(state, shipment, origin)) {
                     if (endpoint.containerId().equals(shipment.receiver().containerId()) || shipment.sender().container().filter(endpoint.containerId()::equals).isPresent()) continue;
                     var order = new MovementOrder(shipment.id(), actor, 1, shipment.revision(), List.of(endpoint.station()),
                             TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);

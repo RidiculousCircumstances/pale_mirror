@@ -41,7 +41,12 @@ class ExtractionDevelopmentReplayTest {
         })) {
             var planning = PedestrianRoutePlanning.observe(() -> new ExtractionWorkProcessModule().planCommand(before, command));
             var accepted = assertInstanceOf(CommandPlan.Accepted.class, planning.result());
-            assertEquals(1, calls.get()); assertEquals(1, planning.requests().size());
+            // A blocked opened landing can leave several independent access alternatives.
+            // Only these site-local requests may be retained; no staff/source admission follows.
+            assertFalse(planning.requests().isEmpty());
+            assertEquals(calls.get(), planning.requests().size());
+            assertTrue(calls.get() <= deposit.site().layout().cells().stream()
+                    .map(ExtractionLayout.Cell::workstation).distinct().count());
             assertEquals(observed, accepted.events().getFirst().payload());
             assertTrue(accepted.events().stream().noneMatch(event -> event.payload() instanceof ExtractionFrontierOpened
                     || event.payload() instanceof ExtractionAreaExtended));
@@ -51,8 +56,8 @@ class ExtractionDevelopmentReplayTest {
             calls.set(0);
             var action = ExtractionContinuation.review(site, 6000);
             var review = PedestrianRoutePlanning.observe(() -> ExtractionWorkProcess.review(after, action, 6000));
-            assertEquals(1, calls.get(), "pending development must stop before staff/source admission fans out");
-            assertEquals(1, review.requests().size());
+            assertEquals(planning.requests().size(), calls.get(), "pending development must stop before staff/source admission fans out");
+            assertEquals(Set.copyOf(planning.requests()), Set.copyOf(review.requests()));
             assertEquals(1, review.result().size()); assertInstanceOf(ScheduleEffect.Rescheduled.class, review.result().getFirst().payload());
             var index = new PedestrianPlanningWakeIndex();
             var registry = new DeterministicProcessRegistry(FrontierWorldProcessCatalog.descriptors(), FrontierWorldRuntimeDefinition.payloadCodecs());

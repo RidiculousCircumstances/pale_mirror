@@ -32,18 +32,27 @@ public final class ExtractionAreaPlanning {
                 || ExtractionDevelopment.proposal(state, siteId).isPresent()) return Optional.empty();
         var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state);
         var access = knowledge.accessSelection(layout.storagePort());
-        if (deposit.available(Set.of()).stream().anyMatch(cell -> access.reachable(cell.workstation()))) return Optional.empty();
+        var needed = ExtractionStockDemand.requiredCells(state, deposit, Optional.empty());
+        if (deposit.available(Set.of()).stream().filter(cell -> needed.contains(cell.id()))
+                .anyMatch(cell -> access.reachable(cell.workstation()))) return Optional.empty();
         access.awaitUnresolved();
         var front = new ExtractionAvailableFront(state, deposit);
         if (front.stations().isEmpty()) return Optional.empty();
         int count = columnLimit(rules, layout);
         if (count < 1) return Optional.empty();
         var ground = ExtractionGroundKnowledge.forSite(state, deposit);
-        var columns = AdjacentExcavationPlanner.propose(front.stations(), ground,
+        var proposed = AdjacentExcavationPlanner.propose(front.stations(), ground,
                 access::reachable, floor -> !declarationHeld(state, siteId, floor.support()),
                 block -> rules.definitionFor(block).isPresent(),
                 block -> block.kind().equals("minecraft:air") || rules.definitionFor(block).isPresent(), count,
                 front.selection(), front::executable);
+        var columns = new ArrayList<AdjacentExcavationPlanner.Column<BlockExtraction.Block>>();
+        int remaining = Math.min(rules.developmentBatchCells(), ExtractionLayout.MAX_CELLS - layout.cells().size());
+        for (var column : proposed) {
+            int cost = sourceCells(column);
+            if (cost > remaining) continue;
+            columns.add(column); remaining -= cost;
+        }
         if (columns.isEmpty()) { access.awaitUnresolved(); return Optional.empty(); }
         return Optional.of(new ExtractionAreaExtended(siteId, deposit.development().revision(), columns,
                 access.receipt(columns.stream().map(AdjacentExcavationPlanner.Column::station).collect(java.util.stream.Collectors.toSet()))));
@@ -51,6 +60,9 @@ public final class ExtractionAreaPlanning {
     private static int columnLimit(ExtractionRules rules, ExtractionLayout layout) {
         return Math.min(AdjacentExcavationPlanner.MAX_COLUMNS,
                 Math.min(rules.developmentBatchCells() / 2, (ExtractionLayout.MAX_CELLS - layout.cells().size()) / 2));
+    }
+    private static int sourceCells(AdjacentExcavationPlanner.Column<BlockExtraction.Block> column) {
+        return (int) column.clearance().stream().filter(sample -> !sample.block().kind().equals("minecraft:air")).count();
     }
     private static boolean declarationHeld(FrontierWorldState state, SubjectId siteId, BlockPosition position) {
         var region = new ExtractionRegion(siteId, Math.floorDiv(position.x(), 16), Math.floorDiv(position.z(), 16));
@@ -70,6 +82,9 @@ public final class ExtractionAreaPlanning {
                 || SettlementWorkPolicy.permissions(state, prior.site().settlementId()).workers(ResidentWorkKind.EXTRACTION).isEmpty())
             throw new IllegalArgumentException("stale, foreign, protected or unavailable excavation plan");
         var layout = prior.site().layout(); var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state);
+        int added = event.columns().stream().mapToInt(ExtractionAreaPlanning::sourceCells).sum();
+        if (added > rules.developmentBatchCells() || added > ExtractionLayout.MAX_CELLS - layout.cells().size())
+            throw new IllegalArgumentException("selected excavation exceeds its actual source-cell budget");
         var front = new ExtractionAvailableFront(state, prior);
         AdjacentExcavationPlanner.requireSelection(front.stations(), event.columns(), ExtractionGroundKnowledge.forSite(state, prior),
                 floor -> !declarationHeld(state, subject, floor.support()), block -> rules.definitionFor(block).isPresent(),

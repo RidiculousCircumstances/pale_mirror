@@ -47,8 +47,8 @@ final class FrontierV3ProductionProcessDiagnosticJson {
                         ? "null" : FrontierV3DiagnosticJson.position(goal.station().standingBody()))
                     + ",\"clearServiceAccess\":" + (work.phase() == io.farfrontier.palemirror.frontier.v3.model.BakeryWorkState.Phase.DELIVERED)
                     + "},\"result\":{\"workStage\":\"" + work.phase()
-                    + "\",\"labourPermille\":" + work.labourPermille()
-                    + ",\"labour\":" + work.labour().map(progressValue ->
+                    + "\",\"labourPermille\":" + io.farfrontier.palemirror.frontier.v3.model.BakeryLabour.permille(state, job)
+                    + ",\"labour\":" + io.farfrontier.palemirror.frontier.v3.model.BakeryLabour.progress(state, job).map(progressValue ->
                         "{\"requiredMilliWork\":" + progressValue.requiredMilliWork()
                         + ",\"completedMilliWork\":" + progressValue.completedMilliWork()
                         + ",\"elapsedCompletedMilliWork\":" + progressValue.completedAt(checkpoint.instant().ticks())
@@ -80,7 +80,8 @@ final class FrontierV3ProductionProcessDiagnosticJson {
                 + ",\"result\":{\"workStage\":\"" + job.workProgress().stage() + "\",\"completedTicks\":" + job.workProgress().completedTicks()
                 + ",\"terminalEffectEligible\":" + job.workProgress().terminalEffectEligible());
         return FrontierV3DiagnosticJson.base("process", job.id().value(), checkpoint) + ",\"status\":\"ok\",\"family\":\"frontier.production-work\""
-                + ",\"identity\":{\"job\":\"" + FrontierV3DiagnosticJson.quote(job.id().value()) + "\",\"worker\":\"" + FrontierV3DiagnosticJson.quote(job.workerId().value())
+                + ",\"identity\":{\"job\":\"" + FrontierV3DiagnosticJson.quote(job.id().value())
+                + "\",\"task\":\"" + FrontierV3DiagnosticJson.quote(job.taskId().value()) + "\",\"worker\":\"" + FrontierV3DiagnosticJson.quote(job.workerId().value())
                 + "\",\"workerPresentation\":\"" + FrontierV3DiagnosticJson.quote(FrontierSceneLabels.actor(state, job.workerId(), false))
                 + "\",\"outputItem\":\"" + FrontierV3DiagnosticJson.quote(job.outputItemId().value()) + "\"}"
                 + ",\"claims\":{\"settlement\":\"" + FrontierV3DiagnosticJson.quote(job.settlementId().value()) + "\",\"facility\":\"" + FrontierV3DiagnosticJson.quote(job.facilityId().value())

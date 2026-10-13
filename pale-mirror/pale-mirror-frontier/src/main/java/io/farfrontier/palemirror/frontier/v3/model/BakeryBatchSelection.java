@@ -61,6 +61,7 @@ public record BakeryBatchSelection(Optional<ExactItemStack> exactInput,
                                                          java.util.function.BiPredicate<SubjectId, Integer> capacity, boolean requireAccess) {
         var home = FrontierWorldStateSupport.settlement(state.bootstrap(), rights.employer().settlementId());
         var workshop = home.structures().stream().filter(value -> value.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
+        if (ProductionStationSelection.usable(state, workshop.id(), BakeryRecipes.BREAD).isEmpty()) return Optional.empty();
         var origin = SettlementWorkshopServicePort.forWorkshop(workshop).exteriorApproach();
         for (var storage : ResourceStorageSelection.candidates(state, rights.employer().settlementId(), "minecraft:wheat",
                 origin, java.util.Set.of(ResourceStorageRole.WAREHOUSE))) {
@@ -84,6 +85,7 @@ public record BakeryBatchSelection(Optional<ExactItemStack> exactInput,
                 .filter(item -> item.itemKind().equals("minecraft:wheat") && item.economicOwnerId().equals(resourceOwner)
                         && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)
                         && !ResourceSiteHarvestLineage.hasPendingOutputReceipt(state.resourceSites().sites().values(), item.id())
+                        && item.count() % BakeryRecipes.bread(state).ingredient().quantity() == 0
                         && capacity.test(depot, item.count()))
                 .sorted(Comparator.comparingInt(ExactItemStack::count).reversed().thenComparing(ExactItemStack::id))
                 .findFirst().map(item -> new BakeryBatchSelection(Optional.of(item), Optional.empty()));
@@ -93,6 +95,7 @@ public record BakeryBatchSelection(Optional<ExactItemStack> exactInput,
                 .unclaimedQuantity(value.id(), resourceOwner, "minecraft:wheat"))).orElse(0);
         // A bounded stack-sized search also handles a nearly full output container.
         for (int quantity = maximum; quantity >= 1; quantity--) {
+            if (quantity % BakeryRecipes.bread(state).ingredient().quantity() != 0) continue;
             if (!capacity.test(depot, quantity)) continue;
             var input = FungibleResourceCustodySupport.selectAtContainer(state, depot, resourceOwner, "minecraft:wheat", quantity);
             if (input.isPresent()) return Optional.of(new BakeryBatchSelection(Optional.empty(), input));

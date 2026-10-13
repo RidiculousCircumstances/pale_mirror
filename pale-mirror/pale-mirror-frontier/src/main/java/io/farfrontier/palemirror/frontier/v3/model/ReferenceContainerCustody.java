@@ -246,10 +246,11 @@ public final class ReferenceContainerCustody {
 
     /** One immutable image per container observation, not one full layout compilation per slot. */
     public static Map<Integer, ProjectedFungibleSlot> expectedFungibleSlots(FrontierWorldState state, SubjectId containerId) {
-        return expectedFungibleSlots(state.inventory(), Objects.requireNonNull(containerId), state.reservedContainerSlots(containerId));
+        return expectedFungibleSlots(state.inventory(), state.bootstrap().ruleset().production(),
+                Objects.requireNonNull(containerId), state.reservedContainerSlots(containerId));
     }
 
-    private static Map<Integer, ProjectedFungibleSlot> expectedFungibleSlots(ExactInventory inventory, SubjectId containerId,
+    private static Map<Integer, ProjectedFungibleSlot> expectedFungibleSlots(ExactInventory inventory, ProductionCatalog catalog, SubjectId containerId,
                                                                               java.util.Set<Integer> reservedSlots) {
         ContainerRecord container = inventory.containers().get(containerId);
         if (container == null) throw new IllegalArgumentException("reference container is not declared");
@@ -276,7 +277,7 @@ public final class ReferenceContainerCustody {
         if (container.productionStation().isPresent()) {
             ProductionStationSpec station = container.productionStation().orElseThrow();
             for (Map.Entry<String, Integer> entry : quantities.entrySet()) {
-                int slot = ProductionStationRecipe.portForItemKind(station, entry.getKey());
+                int slot = ProductionStationRecipe.portForItemKind(catalog, station, entry.getKey());
                 if (entry.getValue() > 64 || inventory.itemAt(containerId, slot).isPresent()
                         || slots.putIfAbsent(slot, new ProjectedFungibleSlot(entry.getKey(), entry.getValue())) != null)
                     throw new IllegalStateException("station custody does not fit its declared recipe port");

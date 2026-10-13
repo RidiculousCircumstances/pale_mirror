@@ -56,13 +56,13 @@ final class FrontierV3BakeryHandProjection {
             if (account == null || !account.custody().equals(new ResourceCustody.Actor(job.workerId()))
                     || state.inventory().fungibleResources().bindings().values().stream()
                     .anyMatch(binding -> binding.accountId().equals(account.id()))) return false;
-            String kind = work.phase() == BakeryWorkState.Phase.STATION_LOAD ? "minecraft:wheat" : "minecraft:bread";
-            if (account.lotQuantities().values().stream().mapToInt(Integer::intValue).sum() != job.outputCount()
+            String kind = BakeryCargo.kind(job);
+            if (account.lotQuantities().values().stream().mapToInt(Integer::intValue).sum() != BakeryCargo.quantity(job)
                     || account.lotQuantities().keySet().stream().anyMatch(id ->
                     !state.inventory().fungibleResources().lots().get(id).itemKind().equals(kind))) return false;
             Item item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(kind));
             if (item == Items.AIR) return false;
-            held = new ItemStack(item, job.outputCount());
+            held = new ItemStack(item, BakeryCargo.quantity(job));
         }
         body.setItemSlot(EquipmentSlot.MAINHAND, held);
         return true;
@@ -86,9 +86,9 @@ final class FrontierV3BakeryHandProjection {
             return item != null && item.custody().equals(new InventoryCustody.Actor(job.workerId()))
                     && FrontierV3ExactItemPresentation.exactMatch(observed, item);
         }
-        String kind = work.phase() == BakeryWorkState.Phase.STATION_LOAD ? "minecraft:wheat" : "minecraft:bread";
+        String kind = BakeryCargo.kind(job);
         Item item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(kind));
-        return item != Items.AIR && observed.getCount() == job.outputCount()
-                && ItemStack.isSameItemSameComponents(observed, new ItemStack(item, job.outputCount()));
+        return item != Items.AIR && observed.getCount() == BakeryCargo.quantity(job)
+                && ItemStack.isSameItemSameComponents(observed, new ItemStack(item, BakeryCargo.quantity(job)));
     }
 }

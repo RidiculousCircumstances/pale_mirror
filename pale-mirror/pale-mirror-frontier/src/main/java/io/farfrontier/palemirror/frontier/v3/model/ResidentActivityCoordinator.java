@@ -94,6 +94,19 @@ public final class ResidentActivityCoordinator {
         return assess(state, checkpoint.actorId(), checkpoint.atTick(), true, Optional.of(candidate.isPresent()));
     }
 
+    /** Food intent at an owner-proved route checkpoint is not permission to release work.
+     * The interruption planner still validates the following owner's actual safe boundary. */
+    public static boolean requestsFoodAtMovementCheckpoint(FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementInterrupted checkpoint) {
+        var resident = Objects.requireNonNull(state.humanPopulation().resident(checkpoint.actorId()), "movement resident");
+        var rules = state.bootstrap().ruleset().residentLife();
+        return state.humanPopulation().nutrition(resident.id()).accrueThrough(checkpoint.atTick(), rules,
+                resident.characteristics().effectiveMetabolismPermille(checkpoint.atTick())).wantsFood(rules)
+                && ResidentActivityPreferences.Priority.FOOD.outranks(ResidentActivityPreferences.work(
+                    state.humanPopulation().schedule(resident.settlementId()), checkpoint.atTick()))
+                && ResidentMealOpportunity.candidateForMovementInterruption(state, checkpoint).isPresent();
+    }
+
     private static ResidentActivityChoice assess(FrontierWorldState state,
             io.farfrontier.palemirror.frontier.v3.api.SubjectId residentId, long canonicalTick,
             boolean eligibilityOnly) {

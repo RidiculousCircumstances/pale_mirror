@@ -55,7 +55,8 @@ public final class FrontierWorldStateUpdate {
         SHIPMENTS,
         UNIT_GROUPS,
         TRANSPORT_FLEET,
-        EXTRACTION_SITES
+        EXTRACTION_SITES,
+        PRODUCTION_STATIONS
     }
 
     private final EnumSet<Component> changed = EnumSet.noneOf(Component.class);
@@ -89,6 +90,7 @@ public final class FrontierWorldStateUpdate {
     private io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState unitGroups;
     private io.farfrontier.palemirror.frontier.v3.model.expedition.TransportFleet transportFleet;
     private io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState extractionSites;
+    private ProductionStations productionStations;
 
     private FrontierWorldStateUpdate() { }
 
@@ -142,6 +144,7 @@ public final class FrontierWorldStateUpdate {
                 case UNIT_GROUPS -> unitGroups(contribution.unitGroups);
                 case TRANSPORT_FLEET -> transportFleet(contribution.transportFleet);
                 case EXTRACTION_SITES -> extractionSites(contribution.extractionSites);
+                case PRODUCTION_STATIONS -> productionStations(contribution.productionStations);
             }
         }
         return this;
@@ -236,6 +239,12 @@ public final class FrontierWorldStateUpdate {
     }
     public FrontierWorldStateUpdate extractionSites(io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState next) {
         mark(Component.EXTRACTION_SITES); extractionSites = require(next, "extraction sites"); return this;
+    }
+    public FrontierWorldStateUpdate productionStations(ProductionStations next) {
+        mark(Component.PRODUCTION_STATIONS); productionStations = require(next, "installed-machine runtime"); return this;
+    }
+    ProductionStations productionStations(FrontierWorldState state) {
+        return changed(Component.PRODUCTION_STATIONS, productionStations, state.productionStations());
     }
 
     Map<SubjectId, ActorLocation> actorLocations(FrontierWorldState state) { return changed(Component.ACTOR_LOCATIONS, actorLocations, state.actorLocations()); }

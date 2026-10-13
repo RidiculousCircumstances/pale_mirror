@@ -44,6 +44,10 @@ public final class FrontierProductionWorkSceneSupport {
                 || job.bakeryWork().isEmpty() && job.workProgress().terminalEffectEligible()) return Optional.empty();
         if (job.bakeryWork().isPresent()) {
             var phase = job.bakeryWork().orElseThrow().phase();
+            if ((phase == BakeryWorkState.Phase.STATION_LOAD || phase == BakeryWorkState.Phase.PROCESSING
+                    || phase == BakeryWorkState.Phase.STATION_UNLOAD)
+                    && ReferenceContainerCustody.blocksCanonicalUse(state,
+                        ProductionStationEnergy.record(state, job.bakeryWork().orElseThrow().stationId()).id())) return Optional.empty();
             if (phase == BakeryWorkState.Phase.DEPOT_PICKUP || phase == BakeryWorkState.Phase.DEPOT_DELIVERY) {
                 var container = BakeryStorage.current(job);
                 if (ReferenceContainerCustody.hasLiveCustody(state, container) && !ReferenceContainerCustody.hasOperationalCustody(state, container)) return Optional.empty();
@@ -106,7 +110,8 @@ public final class FrontierProductionWorkSceneSupport {
                 || !current.outputItemId().equals(replacement.outputItemId())) {
             throw new IllegalArgumentException("production job replacement may not change exact identity, owners or item identities");
         }
-        Map<SubjectId, ProductionJob> jobs = new java.util.LinkedHashMap<>(state.productionJobs()); jobs.put(replacement.id(), replacement);
+        Map<SubjectId, ProductionJob> jobs = new java.util.LinkedHashMap<>(state.productionJobs());
+        jobs.put(replacement.id(), BakeryStationInstallation.afterCheckpoint(state, replacement));
         return state.withChanges(FrontierWorldStateUpdate.begin().productionJobs(jobs));
     }
     /**

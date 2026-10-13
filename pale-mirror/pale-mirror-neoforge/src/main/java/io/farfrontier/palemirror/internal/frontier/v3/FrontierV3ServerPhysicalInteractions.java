@@ -150,8 +150,9 @@ final class FrontierV3ServerPhysicalInteractions {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(position, "position"); Objects.requireNonNull(player, "player");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerLifecycle.runtimeFor(level.getServer());
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return PlayerBreakDisposition.UNMANAGED;
-        if (level.getBlockEntity(position) instanceof net.minecraft.world.level.block.entity.ChestBlockEntity chest) {
-            String declared = chest.getPersistentData().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY);
+        if (level.getBlockEntity(position) instanceof net.minecraft.world.Container) {
+            var entity = level.getBlockEntity(position);
+            String declared = entity.getPersistentData().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY);
             if (!declared.isBlank()) {
                 var id = new SubjectId(declared); var state = runtime.decodedState().orElseThrow();
                 if (io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody.isReferenceContainer(state, id)

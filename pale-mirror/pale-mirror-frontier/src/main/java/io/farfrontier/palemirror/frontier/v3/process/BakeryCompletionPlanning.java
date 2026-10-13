@@ -36,7 +36,7 @@ final class BakeryCompletionPlanning {
             long interval = job.bakeryWork().orElseThrow().phase() != BakeryWorkState.Phase.DELIVERED
                     && ProductionOutputCapacity.depotDeliveryUnavailable(state, job)
                     ? state.bootstrap().ruleset().cadence().strategicReviewInterval() : 20L;
-            return List.of(reschedule(action, complete(job, job.bakeryWork().orElseThrow().labour()
+            return List.of(reschedule(action, complete(job, BakeryLabour.progress(state, job)
                     .filter(work -> work.running() && work.activeUntilTick() > now)
                     .map(WorkProgress::activeUntilTick).orElseGet(() -> Math.addExact(now, interval)))));
         }

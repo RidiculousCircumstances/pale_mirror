@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
@@ -70,9 +71,17 @@ final class FrontierV3BakeryWorkSceneExecutor {
                     && BakeryWorkGoal.current(current, retained).equals(goal);
         }));
         if (!actuation.current(worker)) return;
+        if (job.bakeryWork().orElseThrow().pendingPhysicalStep().isEmpty()
+                && state.inventory().surfaces().get(ProductionStationEnergy.record(state,
+                    job.bakeryWork().orElseThrow().stationId()).id()).status() == ContainerSurfaceStatus.RETIRED) {
+            FrontierV3GoalNavigation.stop(worker, actuation);
+            FrontierV3CommandSubmission.submit(runtime, "bakery-machine-retired", lease.id().value(),
+                    new SceneLeaseTransition(lease.id(), SceneLeaseStatus.DRAINING));
+            return;
+        }
         var supportedExit = FrontierV3SupportedBodyCapture.observe(level, worker);
-        var labour = job.bakeryWork().orElseThrow().labour();
-        if (labour.filter(WorkProgress::running).isPresent()
+        var labour = BakeryLabour.progress(state, job);
+        if (BakeryLabour.attended(state, job) && labour.filter(WorkProgress::running).isPresent()
                 && !FrontierV3SemanticMovement.arrived(level, worker, goal.station())) {
             if (supportedExit.isEmpty()) return; // No fabricated physical pose or work boundary.
             if (!lease.memberBody(state.actorLocations(), job.workerId()).equals(supportedExit.orElseThrow())) {
@@ -116,17 +125,36 @@ final class FrontierV3BakeryWorkSceneExecutor {
             return; // Access completion is witnessed above, never arrival at one preferred cell.
         }
         if ((goal.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
-                || goal.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY)
+                || goal.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY
+                || goal.phase() == BakeryWorkState.Phase.STATION_LOAD
+                || goal.phase() == BakeryWorkState.Phase.STATION_UNLOAD)
                 // A durable prepared transfer settles under its original witness;
                 // only a new transfer can yield to a later service contender.
                 && job.bakeryWork().orElseThrow().pendingPhysicalStep().isEmpty()
                 && !ProductionServiceAccess.available(state, job)) {
-            FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "depot-service-unavailable");
-            var waiting = FrontierV3ServiceClearanceNavigation.waitForAccess(level, runtime, worker, state,
-                    job.settlementId(), BakeryStorage.current(job), job.id(), job.workerId(),
-                    goal.phase().wireTag(), 1L, actuation);
-            if (waiting.status() == FrontierV3GoalNavigation.Status.BLOCKED)
-                FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "service-wait-clearance:" + waiting.reason());
+            var point = ProductionServiceAccess.point(state, job);
+            var boundary = ServiceAccessCoordinator.boundary(state, point);
+            FrontierV3GoalNavigation.Result waiting;
+            if (boundary.occupied(FrontierV3SurfaceObservation.observedBody(worker))) {
+                waiting = FrontierV3ServiceClearanceNavigation.waitForAccess(level, runtime, worker, state,
+                        job.settlementId(), point, job.id(), job.workerId(), goal.phase().wireTag(), 1L, actuation);
+            } else {
+                // Waiting for fuel/space at the destination cannot pin a loaded
+                // worker at the source depot and prevent the supply courier's take.
+                List<SurfaceAnchor> route;
+                try {
+                    route = BakeryKnownNavigation.pathFrom(state, job,
+                            FrontierV3SurfaceObservation.observedBody(worker).supportingSurface());
+                } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                    FrontierV3PhysicalWaitTrace.bakery(worker, state, job, "service-approach-route:" + unavailable.getMessage());
+                    return;
+                }
+                waiting = FrontierV3ServiceApproachNavigation.pursueOutside(level, worker, route, boundary,
+                        state.bootstrap().bounds(), actuation, Optional.empty());
+            }
+            FrontierV3PhysicalWaitTrace.bakery(worker, state, job,
+                    waiting.status() == FrontierV3GoalNavigation.Status.ARRIVED
+                            ? "service-access:waiting-outside" : "service-access:" + waiting.reason());
             return;
         }
         if (FrontierV3SemanticMovement.arrived(level, worker, goal.station())) {
@@ -142,9 +170,10 @@ final class FrontierV3BakeryWorkSceneExecutor {
                 return;
             }
             BakeryWorkState work = job.bakeryWork().orElseThrow();
-            if (work.phase() == BakeryWorkState.Phase.PROCESSING && !work.labourComplete()) {
+            if (work.phase() == BakeryWorkState.Phase.PROCESSING && !BakeryLabour.complete(state, job)) {
+                if (!BakeryLabour.attended(state, job)) return;
                 long tick = runtime.canonicalState().orElseThrow().instant().ticks();
-                var prior = work.labour();
+                var prior = BakeryLabour.progress(state, job);
                 if (prior.filter(progress -> progress.running() && tick < progress.activeUntilTick()).isPresent()) {
                     // Vanilla bounds the swing animation; no per-frame custom broadcast or work credit.
                     worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
@@ -156,6 +185,9 @@ final class FrontierV3BakeryWorkSceneExecutor {
                                 new BakeryLabourChange(prior, BakeryLabour.next(state, job, tick, run))));
                 return;
             }
+            if (work.phase() == BakeryWorkState.Phase.PROCESSING
+                    && BakeryStationOperation.require(state, job).inputCustody() instanceof ProductionOperation.FungibleInput)
+                return; // The machine effect owner completes and acknowledges this order atomically.
             if (worker instanceof Villager baker)
                 FrontierV3BakeryPhysicalEffect.tick(level, runtime, state, lease, job, baker);
             return;

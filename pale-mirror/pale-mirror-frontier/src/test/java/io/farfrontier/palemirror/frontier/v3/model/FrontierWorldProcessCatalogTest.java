@@ -305,6 +305,11 @@ class FrontierWorldProcessCatalogTest {
                                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.SERVICE_EXIT,
                                 new SubjectId("resident:representative"), 1L))),
                 Map.entry("economy", new MarketDemandExpired(new SubjectId("demand:representative"))),
+                Map.entry("production-stations", new ProductionStationFuelChanged(ProductionStationFuelChanged.Stage.COLD_CONSUMED,
+                        new ProductionStationFuelBurn(new SubjectId("station:representative"), new SubjectId("container:representative"),
+                                new SubjectId("account:representative"), 1, 0, "minecraft:coal",
+                                Map.of(new SubjectId("lot:representative"), 1), 1600, List.of()), List.of())),
+                Map.entry("defender-equipment-return-visit", returnVisitRepresentative()),
                 Map.entry("goods-trade", new GoodsTradeRetired(java.util.Set.of(new SubjectId("order:representative")), java.util.Set.of())),
                 Map.entry("shipments", new ShipmentRetired(new SubjectId("shipment:representative"), 1L)),
                 Map.entry("unit-groups", new io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupAdvanced(
@@ -345,6 +350,19 @@ class FrontierWorldProcessCatalogTest {
         TransactionRecord wal = new TransactionRecord(transactionId, worldId, new Revision(1L), new SimInstant(1L),
                 walEvents, Optional.empty());
         assertEquals(wal, KernelCodec.decodeTransaction(KernelCodec.encodeTransaction(wal, codecs), codecs));
+    }
+
+    private static DefenderEquipmentReturnVisitChanged returnVisitRepresentative() {
+        SubjectId owner = new SubjectId("assault:representative"), actor = new SubjectId("defender:representative"),
+                item = new SubjectId("equipment:representative"), container = new SubjectId("container:representative");
+        var station = new SurfaceAnchor(new BlockPosition(1, 64, 1));
+        var access = new ResourceStorageAccess(new ShipmentEndpoint.Storage(new SubjectId("settlement:representative"),
+                container, station, Optional.empty(), station), List.of(station), new ServiceAccessBoundary(java.util.Set.of(station)));
+        var visit = new DefenderEquipmentReturnVisit(new PhysicalIntentId("intent:representative-return"),
+                io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.assaultEquipmentReturn(owner, actor, item, container), access,
+                new io.farfrontier.palemirror.frontier.v3.api.PhysicalContainerSlot(container, 0), new EquipmentServiceRequest(new ServiceAccessDemand.Identity(
+                        ServiceAccessDemand.Kind.DEFENDER_EQUIPMENT, owner, actor, container), 1));
+        return new DefenderEquipmentReturnVisitChanged(owner, Optional.of(visit), Optional.empty());
     }
 
     private static SettlementServiceWorkStarted serviceWorkRepresentative() {

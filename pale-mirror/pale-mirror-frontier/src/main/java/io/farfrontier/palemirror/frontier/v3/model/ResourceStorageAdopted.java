@@ -21,27 +21,12 @@ public record ResourceStorageAdopted(ResourceStorageDeclared declaration, List<R
         if (!SettlementStorageTerritory.owner(state, declaration.position()).map(Settlement::id)
                 .filter(owner::equals).isPresent())
             throw new IllegalArgumentException("default storage admission lacks one exact territorial owner");
-        var declared = declaration.apply(state, owner);
-        var inventory = declared.inventory(); var ledger = inventory.fungibleResources();
-        var lots = new LinkedHashMap<>(ledger.lots()); var accounts = new LinkedHashMap<>(ledger.accounts());
-        var quantities = new LinkedHashMap<SubjectId, Integer>();
-        for (var lot : contents) {
-            if (lots.putIfAbsent(lot.id(), lot) != null) throw new IllegalArgumentException("adoption cannot reissue an existing lot");
-            quantities.put(lot.id(), lot.quantity());
-        }
-        if (!quantities.isEmpty()) {
-            var id = ReferenceContainerCustody.scopeId(declaration.container().id());
-            if (accounts.putIfAbsent(id, new CustodyAccount(id, new ResourceCustody.Container(declaration.container().id()),
-                    quantities, Map.of())) != null) throw new IllegalArgumentException("adoption account is already owned");
-        }
-        var surfaces = new LinkedHashMap<>(inventory.surfaces());
-        surfaces.put(declaration.container().id(), new ContainerSurface(declaration.container().id(), declaration.position(), ContainerSurfaceStatus.ADOPTING));
-        var recovery = declared.fencedRecovery(); var binding = FencedRecoveryContainerSupport.bindingId(declaration.container());
-        recovery = recovery.prepare(FencedRecoveryBinding.prepared(binding, FencedRecoveryAsset.CONTAINER, owner, 0L,
-                recovery.nextEpoch(binding), true));
-        return declared.withChanges(FrontierWorldStateUpdate.begin().inventory(new ExactInventory(inventory.containers(), inventory.items(),
-                inventory.cargo(), inventory.playerItems(), inventory.worldCarrierItems(), inventory.conflicts(), surfaces,
-                inventory.economics(), new FungibleResourceLedger(lots, ledger.claims(), accounts, ledger.bindings())))
-                .fencedRecovery(recovery));
+        if (!declaration.container().ownerId().equals(owner) || !state.bootstrap().bounds().contains(declaration.position()))
+            throw new IllegalArgumentException("storage adoption has foreign declaration ownership or position");
+        var next = state.withChanges(FrontierWorldStateUpdate.begin()
+                .inventory(FixedContainerAdoption.adopt(state.inventory(), declaration.container(), declaration.position(), contents))
+                .fencedRecovery(FixedContainerAdoption.prepare(state.fencedRecovery(), declaration.container())));
+        ShipmentEndpointComposition.validate(next, declaration.container().storage().orElseThrow().endpoint());
+        return next;
     }
 }

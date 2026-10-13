@@ -22,7 +22,31 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                               SettlementLabourRules labour,
                               io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionRules expedition,
                               io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRules extraction,
-                              Execution execution) {
+                              Execution execution, ProductionCatalog production, FieldBalance fields) {
+    public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
+                           FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
+                           ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog,
+                           GoodsTradeRules goodsTrade, java.util.List<InitialSettlementStock> initialSettlementStocks,
+                           SettlementLabourRules labour,
+                           io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionRules expedition,
+                           io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRules extraction,
+                           Execution execution, ProductionCatalog production) {
+        this(id, schemaVersion, cadence, spatial, rates, facilityCapacity, combat, hiveCommand, residentLife,
+                resourceHarvestColdTravelTicksPerEdge, workCatalog, goodsTrade, initialSettlementStocks, labour,
+                expedition, extraction, execution, production, FieldBalance.uniform());
+    }
+    public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
+                           FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
+                           ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog,
+                           GoodsTradeRules goodsTrade, java.util.List<InitialSettlementStock> initialSettlementStocks,
+                           SettlementLabourRules labour,
+                           io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionRules expedition,
+                           io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRules extraction,
+                           Execution execution) {
+        this(id, schemaVersion, cadence, spatial, rates, facilityCapacity, combat, hiveCommand, residentLife,
+                resourceHarvestColdTravelTicksPerEdge, workCatalog, goodsTrade, initialSettlementStocks, labour,
+                expedition, extraction, execution, ProductionCatalog.initial());
+    }
     public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
                            FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
                            ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog,
@@ -111,6 +135,9 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
     }
 
     public FrontierRuleset {
+        java.util.Objects.requireNonNull(fields);
+        if (schemaVersion < 25 && (!fields.equals(FieldBalance.uniform()) || extraction.pocket().isPresent()))
+            throw new IllegalArgumentException("specialized authored deposits/fields require the explicit production profile");
         if (id == null || id.isBlank() || !id.matches("[a-z0-9][a-z0-9._-]*")) {
             throw new IllegalArgumentException("ruleset id must be a stable lowercase identifier");
         }
@@ -121,6 +148,11 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
         expedition = Objects.requireNonNull(expedition, "expedition rules");
         extraction = Objects.requireNonNull(extraction, "extraction rules");
         execution = Objects.requireNonNull(execution, "execution policy");
+        production = Objects.requireNonNull(production, "production catalog");
+        if (schemaVersion < 25 && !production.equals(ProductionCatalog.initial()))
+            throw new IllegalArgumentException("custom production catalog requires hashed schema25");
+        for (var recipe : production.recipes())
+            workCatalog.require(recipe.product().itemKind(), WorkOperation.PRODUCE);
         if (schemaVersion < 19 && !execution.equals(Execution.previous()))
             throw new IllegalArgumentException("custom execution budgets require hashed schema19");
         if (schemaVersion < 18 && !extraction.equals(
@@ -177,7 +209,8 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                 + (schemaVersion >= 16 ? "|" + labour.canonicalText() : "")
                 + (schemaVersion >= 17 ? "|" + expedition.canonicalText() : "")
                 + (schemaVersion >= 18 ? "|" + extraction.canonicalText() : "")
-                + (schemaVersion >= 19 ? "|" + execution.canonicalText() : "");
+                + (schemaVersion >= 19 ? "|" + execution.canonicalText() : "")
+                + (schemaVersion >= 25 ? "|" + production.canonicalText() + "|fields=" + fields.canonicalText() : "");
     }
 
     /** Balance and settlement policy for exact resident activities. No competing due-time queue. */

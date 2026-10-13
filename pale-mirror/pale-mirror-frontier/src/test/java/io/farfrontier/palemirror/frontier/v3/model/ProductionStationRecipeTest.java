@@ -12,6 +12,45 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ProductionStationRecipeTest {
     @Test
+    void declaredConversionRatioBelongsToRecipeNotInventoryAccounting() {
+        var recipe = new ProductionRecipe(BakeryRecipes.BREAD, ProductionStationSpec.Capability.BAKING,
+                new ProductionRecipe.Ingredient(java.util.Set.of("minecraft:wheat"), 3),
+                new ProductionRecipe.Product("minecraft:bread", 1), 0, ProductionRecipe.ProcessingMode.ATTENDED);
+        var base = FrontierRulesets.production();
+        var rules = new FrontierRuleset("frontier-v3-recipe-ratio-test", 25, base.cadence(), base.spatial(),
+                base.rates(), base.facilityCapacity(), base.combat(), base.hiveCommand(), base.residentLife(),
+                base.resourceHarvestColdTravelTicksPerEdge(), base.workCatalog(), base.goodsTrade(),
+                base.initialSettlementStocks(), base.labour(), base.expedition(), base.extraction(), base.execution(),
+                new ProductionCatalog(List.of(recipe), List.of(), List.of(ProductionEquipment.bench())));
+        var genesis = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:ratio-test"), 91L, rules));
+        var container = genesis.inventory().containers().values().stream()
+                .filter(value -> value.productionStation().isPresent()).findFirst().orElseThrow();
+        var station = container.productionStation().orElseThrow();
+        var input = new ResourceLot(new SubjectId("lot:ratio-input"), container.ownerId(), "minecraft:wheat", 6,
+                "fixture:ratio", List.of());
+        var account = new SubjectId("custody:ratio-station");
+        var claim = new SubjectId("claim:ratio-input");
+        var resources = genesis.inventory().fungibleResources().issue(input,
+                new CustodyAccount(account, new ResourceCustody.Container(container.id()), Map.of(input.id(), 6), Map.of()))
+                .reserve(new ClaimAllocation(claim, new SubjectId("job:ratio"), container.ownerId(), input.itemKind(),
+                        6, Map.of(input.id(), 6), ClaimPurpose.PRODUCTION_WORK), account);
+        var state = genesis.withInventory(genesis.inventory().withFungibleResources(resources));
+        var output = new ResourceLot(new SubjectId("lot:ratio-output"), container.ownerId(), "minecraft:bread", 2,
+                "recipe:ratio", List.of(input.id()));
+        var result = ProductionStationRecipe.transformCold(state, station, recipe.id(), account,
+                Map.of(input.id(), 6), Map.of(claim, 6), output);
+        assertEquals(0, result.fungibleResources().totalQuantity(container.ownerId(), "minecraft:wheat")
+                - genesis.inventory().fungibleResources().totalQuantity(container.ownerId(), "minecraft:wheat"));
+        assertEquals(Map.of(output.id(), 2), result.fungibleResources().accounts().get(account).lotQuantities());
+        assertEquals(false, result.fungibleResources().claims().containsKey(claim));
+        assertThrows(IllegalArgumentException.class, () -> ProductionStationRecipe.transformCold(state, station,
+                new ProductionRecipe.Id("pale_mirror:unknown"), account, Map.of(input.id(), 6), Map.of(claim, 6), output));
+        assertThrows(IllegalArgumentException.class, () -> ProductionStationRecipe.transformCold(state, station,
+                recipe.id(), account, Map.of(input.id(), 6), Map.of(claim, 6), output.withQuantity(6)),
+                "same-count output is not legal when the declared recipe is three-to-one");
+    }
+
+    @Test
     void coldAndObservedBreadRecipesConsumeOnlyTheMachineInputAndRetainOutputAtThatMachine() {
         FrontierWorldState genesis = FrontierWorldState.initial(
                 FrontierBootstrapper.create(new WorldId("frontier:station-recipe"), 91L));
@@ -33,7 +72,7 @@ class ProductionStationRecipeTest {
                 .reserve(new ClaimAllocation(claimId, jobId, container.ownerId(), "minecraft:wheat", 64,
                         Map.of(wheatId, 64), ClaimPurpose.PRODUCTION_WORK), accountId);
         FrontierWorldState cold = genesis.withInventory(genesis.inventory().withFungibleResources(resources));
-        ExactInventory cooked = ProductionStationRecipe.transformCold(cold, machine, accountId,
+        ExactInventory cooked = ProductionStationRecipe.transformCold(cold, machine, BakeryRecipes.BREAD, accountId,
                 Map.of(wheatId, 64), Map.of(claimId, 64), bread);
         assertEquals(Map.of(breadId, 64), cooked.fungibleResources().accounts().get(accountId).lotQuantities());
         assertEquals(new ResourceCustody.Container(machine.containerId()),
@@ -54,13 +93,13 @@ class ProductionStationRecipeTest {
                         new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(input), "minecraft:wheat", 64))));
         FrontierWorldState hot = ReferenceContainerCustodyFixtures.observedAndHeld(
                 genesis.withInventory(genesis.inventory().withFungibleResources(bound)), machine.containerId());
-        assertThrows(IllegalArgumentException.class, () -> ProductionStationRecipe.transformCold(hot, machine,
+        assertThrows(IllegalArgumentException.class, () -> ProductionStationRecipe.transformCold(hot, machine, BakeryRecipes.BREAD,
                 accountId, Map.of(wheatId, 64), Map.of(claimId, 64), bread));
-        assertThrows(IllegalArgumentException.class, () -> ProductionStationRecipe.transformObserved(hot, machine,
+        assertThrows(IllegalArgumentException.class, () -> ProductionStationRecipe.transformObserved(hot, machine, BakeryRecipes.BREAD,
                 accountId, 7, Map.of(wheatId, 64), Map.of(claimId, 64), bread,
                 List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(input), "minecraft:bread", 64))),
                 "a machine cannot report finished output in its input port");
-        ExactInventory observed = ProductionStationRecipe.transformObserved(hot, machine,
+        ExactInventory observed = ProductionStationRecipe.transformObserved(hot, machine, BakeryRecipes.BREAD,
                 accountId, 7, Map.of(wheatId, 64), Map.of(claimId, 64), bread,
                 List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(output), "minecraft:bread", 64)));
         assertEquals(Map.of(breadId, 64), observed.fungibleResources().accounts().get(accountId).lotQuantities());

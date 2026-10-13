@@ -32,6 +32,44 @@ public final class FrontierV3LocalNavigationGameTests {
 
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
             template = "bastion/treasure/big_air_full", timeoutTicks = 160)
+    public static void quarryDescentNeedsSweptHeadroomNotJustTwoEmptyStandingCells(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var high = helper.absolutePos(new BlockPos(4, 31, 4));
+        var low = helper.absolutePos(new BlockPos(5, 30, 4));
+        for (var floor : List.of(high, low)) {
+            level.setBlock(floor, Blocks.STONE.defaultBlockState(), 3);
+            level.setBlock(floor.above(), Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(floor.above(2), Blocks.AIR.defaultBlockState(), 3);
+        }
+        level.setBlock(low.above(3), Blocks.STONE.defaultBlockState(), 3);
+        var start = SurfaceAnchor.at(high.getX(), high.getY(), high.getZ());
+        var target = SurfaceAnchor.at(low.getX(), low.getY(), low.getZ());
+        // Hard scope covers the actual 3-D step volume, including intermediate
+        // feet height while descending; it is not merely two arrival supports.
+        var scope = new FrontierV3NavigationScope.Restricted(new LocalNavigationEnvelope(Set.of(start.support(), target.support(),
+                new BlockPosition(low.getX(), high.getY(), low.getZ()), new BlockPosition(high.getX(), low.getY(), high.getZ()))));
+        Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(4.5, 32, 4.5));
+        helper.runAfterDelay(1, () -> {
+            FrontierV3BodyObservation.refreshGroundContact(level, worker);
+            helper.assertTrue(!FrontierV3GoalNavigation.canReach(level, worker, FrontierV3GoalNavigation.Goal.station(target, scope)),
+                    "the actual reported two-cell niche cannot be entered from the higher neighbour");
+            // This fixture exposes the exact extra clearance in the new excavation
+            // declaration; it does not pretend that the block was mined here.
+            level.setBlock(low.above(3), Blocks.AIR.defaultBlockState(), 3);
+            helper.assertTrue(FrontierV3GoalNavigation.canReach(level, worker, FrontierV3GoalNavigation.Goal.station(target, scope)),
+                    "swept headroom restores the same native route without enlarging scope");
+            for (int turn = 0; turn < 100 && !FrontierV3SemanticMovement.arrived(level, worker, target); turn++) {
+                var result = FrontierV3GoalNavigation.pursue(level, worker, FrontierV3GoalNavigation.Goal.station(target, scope));
+                helper.assertTrue(result.status() != FrontierV3GoalNavigation.Status.BLOCKED, "the descent remains executable: " + result);
+                FrontierV3GoalNavigation.advanceAtEntityBoundary(worker); worker.aiStep();
+            }
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(level, worker, target), "the same physical body arrives at the lower station");
+            FrontierV3GoalNavigation.stop(worker); worker.discard(); helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/treasure/big_air_full", timeoutTicks = 160)
     public static void nativeSearchFindsALegalDetourInsteadOfRejectingTheUnconstrainedShortestPath(GameTestHelper helper) {
         var level = helper.getLevel(); var supports = new LinkedHashSet<BlockPosition>();
         for (int x = 4; x <= 12; x++) for (int z = 3; z <= 8; z++) {

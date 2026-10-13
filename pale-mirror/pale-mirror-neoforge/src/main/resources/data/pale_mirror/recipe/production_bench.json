@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": ["CCC", "CFC", "PPP"],
+  "key": {
+    "C": {"item": "minecraft:cobblestone"},
+    "F": {"item": "minecraft:furnace"},
+    "P": {"tag": "minecraft:planks"}
+  },
+  "result": {"id": "pale_mirror:production_bench", "count": 1}
+}

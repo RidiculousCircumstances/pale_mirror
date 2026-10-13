@@ -103,12 +103,12 @@ final class FrontierV3ContainerSurfaceExecutor {
                 state = state(runtime);
                 if (state == null) return;
             } else if (!transition(runtime, surface.containerId(), ContainerSurfaceStatus.PREPARED)) return;
-            ChestBlockEntity chest = claimFreshChest(level, target, surface.containerId(), FrontierContainerSocketPlan.declaredSupport(state, surface).orElseThrow());
-            if (chest == null || !writeCanonicalSlots(chest, state, surface.containerId())) {
+            var physical = claimFreshFixed(level, target, state, surface);
+            if (physical == null || !writeCanonicalSlots(physical.inventory(), state, surface.containerId())) {
                 transition(runtime, surface.containerId(), ContainerSurfaceStatus.CONFLICT);
                 return;
             }
-            activateAndConfirm(runtime, surface, chest);
+            activateAndConfirm(runtime, surface, physical);
             return;
         }
         // PREPARED can survive a restart both before and after the physical chest write.  Its
@@ -122,32 +122,52 @@ final class FrontierV3ContainerSurfaceExecutor {
             reportConflict(runtime, surface.containerId());
             return;
         }
-        ChestBlockEntity chest = activeChest(level, target, surface.containerId());
-        if (chest != null) {
+        var physical = FrontierV3PhysicalContainer.loaded(level, state, surface.containerId()).orElse(null);
+        if (physical != null) {
+            var chest = physical.inventory();
             // PREPARED is durable before the initial slot write.  An owned empty chest is the
             // exact pre-write recovery state; populate it once.  A nonempty mismatch remains
             // player/world evidence and is never overwritten.
             if (chest.isEmpty()) {
                 if (!restorePreparedOwnedEmptyChest(chest, state, surface.containerId())) reportConflict(runtime, surface.containerId());
-                else activateAndConfirm(runtime, surface, chest);
+                else activateAndConfirm(runtime, surface, physical);
             } else if (!matchesCanonicalSlotsOrPendingProductionOutput(chest, state, surface.containerId())) reportConflict(runtime, surface.containerId());
-            else activateAndConfirm(runtime, surface, chest);
+            else activateAndConfirm(runtime, surface, physical);
             return;
         }
-        chest = claimFreshChest(level, target, surface.containerId(), FrontierContainerSocketPlan.declaredSupport(state, surface).orElseThrow());
-        if (chest == null || !writeCanonicalSlots(chest, state, surface.containerId())) reportConflict(runtime, surface.containerId());
-        else activateAndConfirm(runtime, surface, chest);
+        physical = claimFreshFixed(level, target, state, surface);
+        if (physical == null || !writeCanonicalSlots(physical.inventory(), state, surface.containerId())) reportConflict(runtime, surface.containerId());
+        else activateAndConfirm(runtime, surface, physical);
     }
 
     /** Retire our exact observed write fence before this same loaded chest can disappear. */
     static void activateAndConfirm(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                           ContainerSurface surface, ChestBlockEntity chest) {
+        activateAndConfirm(runtime, surface, FrontierV3PhysicalContainer.observedChest(surface.containerId(), chest));
+    }
+    private static void activateAndConfirm(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                           ContainerSurface surface, FrontierV3PhysicalContainer physical) {
         if (!transition(runtime, surface.containerId(), ContainerSurfaceStatus.ACTIVE)) return;
         FrontierWorldState current = state(runtime);
         if (current == null || !ReferenceContainerCustody.isReferenceContainer(current, surface.containerId())) return;
         var lease = current.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(surface.containerId()));
         if (lease != null && lease.status() == io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLeaseStatus.PREPARING)
-            FrontierV3ReferenceContainerCustodyExecutor.reconcilePreparedProjection(runtime, current, lease, chest);
+            FrontierV3ReferenceContainerCustodyExecutor.reconcilePreparedProjection(runtime, current, lease, physical);
+    }
+
+    /** Initial installation uses the exact declared provider and existing durable projection. */
+    private static FrontierV3PhysicalContainer claimFreshFixed(ServerLevel level, BlockPos target,
+                                                              FrontierWorldState state, ContainerSurface surface) {
+        if (!level.getBlockState(target).isAir() || level.getBlockState(target.below()).isAir()) return null;
+        var record = state.inventory().containers().get(surface.containerId());
+        var block = FrontierV3FixedContainerProviders.block(record).defaultBlockState();
+        var support = FrontierContainerSocketPlan.declaredSupport(state, surface).orElseThrow();
+        if (!FrontierV3ContainerSocketProvenance.openingWrite(support, () -> level.setBlock(target, block, 3))) return null;
+        var physical = FrontierV3PhysicalContainer.inspect(level, state, surface.containerId()).orElse(null);
+        if (physical == null || !physical.inventory().isEmpty()
+                || !physical.declaration().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY).isBlank()) return null;
+        physical.stampPreparedProjection();
+        return physical;
     }
 
     /** Bounded fair drift inspection for retained active surfaces; it does not mutate blocks. */
@@ -192,7 +212,7 @@ final class FrontierV3ContainerSurfaceExecutor {
         return containerId.value().equals(chest.getPersistentData().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY)) ? chest : null;
     }
 
-    static boolean writeCanonicalSlots(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
+    static boolean writeCanonicalSlots(net.minecraft.world.Container chest, FrontierWorldState state, SubjectId containerId) {
         if (!chest.isEmpty()) return false;
         Optional<List<ItemStack>> planned = plannedCanonicalSlots(state, containerId, chest.getContainerSize());
         if (planned.isEmpty()) return false;
@@ -202,7 +222,7 @@ final class FrontierV3ContainerSurfaceExecutor {
     }
 
     /** The sole safe PREPARED recovery write: an already-owned chest must still be empty. */
-    static boolean restorePreparedOwnedEmptyChest(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
+    static boolean restorePreparedOwnedEmptyChest(net.minecraft.world.Container chest, FrontierWorldState state, SubjectId containerId) {
         return chest.isEmpty() && writeCanonicalSlots(chest, state, containerId);
     }
 
@@ -234,7 +254,7 @@ final class FrontierV3ContainerSurfaceExecutor {
      * replayed.  That is not player drift.  Accept only this exact pending output; every other
      * slot (and every approximate/foreign output) remains strict conflict evidence.
      */
-    static boolean matchesCanonicalSlotsOrPendingProductionOutput(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
+    static boolean matchesCanonicalSlotsOrPendingProductionOutput(net.minecraft.world.Container chest, FrontierWorldState state, SubjectId containerId) {
         if (matchesCanonicalSlots(chest, state, containerId)) return true;
         if (state.inventory().containers().get(containerId) == null) return false;
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
@@ -397,8 +417,9 @@ final class FrontierV3ContainerSurfaceExecutor {
         }
         io.farfrontier.palemirror.frontier.v3.model.ContainerSocketSupport support = FrontierContainerSocketPlan.declaredSupport(state, surface).orElse(null);
         SocketReadiness supportStatus = supportReadiness(level, FrontierV3GrayboxLedger.get(level), target, support);
-        ChestBlockEntity owned = activeChest(level, target, containerId);
-        ChestBlockEntity chest = level.getBlockEntity(target) instanceof ChestBlockEntity value ? value : null;
+        var physical = FrontierV3PhysicalContainer.inspect(level, state, containerId).orElse(null);
+        var owned = physical == null || !physical.declared() ? null : physical.inventory();
+        var chest = physical == null ? null : physical.inventory();
         SocketReadiness fresh = socketReadiness(level, FrontierV3GrayboxLedger.get(level), target, support);
         String chestStatus = chest == null ? "NO_CHEST" : owned != null ? "OWNED" : "FOREIGN_OR_UNTAGGED";
         String slots = owned == null ? "UNAVAILABLE" : matchesCanonicalSlots(owned, state, containerId) ? "CURRENT"
@@ -416,7 +437,7 @@ final class FrontierV3ContainerSurfaceExecutor {
         return ownedChestPresent ? "NOT_APPLICABLE_OWNED" : fresh.name();
     }
 
-    private static String firstMismatch(ChestBlockEntity chest, FrontierWorldState state, SubjectId containerId) {
+    private static String firstMismatch(net.minecraft.world.Container chest, FrontierWorldState state, SubjectId containerId) {
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
             ExactItemStack expected = state.inventory().itemAt(containerId, slot).orElse(null); ItemStack actual = chest.getItem(slot);
             if (expected == null ? actual.isEmpty() : FrontierV3ExactItemPresentation.exactMatch(actual, expected)) continue;

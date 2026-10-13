@@ -90,13 +90,8 @@ final class FrontierV3ActorMovementNavigation {
         }
         if (waitingForService) {
             var boundary = ServiceAccessCoordinator.boundary(state, service.orElseThrow().pointId());
-            var approach = FrontierV3ServiceApproachNavigation.outsideGoal(route.waypoints(), boundary, state.bootstrap().bounds());
-            if (approach.isEmpty()) {
-                FrontierV3GoalNavigation.stop(body, actuation);
-                blocked(body, movement, "service-access:no-outside-approach");
-                return;
-            }
-            var result = FrontierV3GoalNavigation.pursue(level, body, approach.orElseThrow(), actuation, permission.pace());
+            var result = FrontierV3ServiceApproachNavigation.pursueOutside(level, body, route.waypoints(),
+                    boundary, state.bootstrap().bounds(), actuation, permission.pace());
             blocked(body, movement, result.status() == FrontierV3GoalNavigation.Status.ARRIVED
                     ? "service-access:waiting-outside" : "service-approach:" + result.reason());
             return; // Arrival at this temporary outside point is never the retained semantic arrival.

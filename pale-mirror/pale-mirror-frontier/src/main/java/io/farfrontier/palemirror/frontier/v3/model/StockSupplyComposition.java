@@ -8,6 +8,10 @@ public final class StockSupplyComposition {
             new BakeryStockSupply(), new HarvestStockSupply(), new ExtractionStockSupply(), new TradeStockSupply()));
     private static final ImmutableInputView<List<StockSupplyPort.Commitment>> VIEW = new ImmutableInputView<>();
     private StockSupplyComposition() { }
+    /** Read one producer's promises without re-entering commercial consent/reserve calculations. */
+    public static List<StockSupplyPort.Commitment> pending(FrontierWorldState state, StockSupplyPort.Key owner) {
+        return PORTS.get(Objects.requireNonNull(owner)).pending(state);
+    }
     static long inputDemand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner, String itemKind) {
         long quantity = 0;
         for (var key : StockSupplyPort.Key.values()) quantity = Math.addExact(quantity, PORTS.get(key).inputDemand(state, owner, itemKind));

@@ -5,7 +5,10 @@ import java.util.*;
 
 /** Read-only economic projection for one participant. A policy receives no mutable world or other stocks. */
 public record GoodsParticipantView(GoodsParticipant participant, int residents, FixedScalar availableMoney,
-                                   Map<String, Stock> stocks) {
+                                   Map<String, Stock> stocks, Map<String, Integer> purchaseLimits) {
+    public GoodsParticipantView(GoodsParticipant participant, int residents, FixedScalar availableMoney, Map<String, Stock> stocks) {
+        this(participant, residents, availableMoney, stocks, Map.of());
+    }
     public record Stock(int ownedAtEndpoint, int unclaimedAtEndpoint, int expectedIncoming, int protectedMinimum) {
         public Stock(int ownedAtEndpoint, int unclaimedAtEndpoint, int expectedIncoming) {
             this(ownedAtEndpoint, unclaimedAtEndpoint, expectedIncoming, 0);
@@ -17,6 +20,8 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
     }
     public GoodsParticipantView {
         Objects.requireNonNull(participant); Objects.requireNonNull(availableMoney); stocks = Map.copyOf(stocks);
+        purchaseLimits = Map.copyOf(purchaseLimits);
+        if (purchaseLimits.values().stream().anyMatch(value -> value < 0)) throw new IllegalArgumentException("negative purchase limit");
         if (residents < 0 || availableMoney.raw() < 0) throw new IllegalArgumentException("invalid participant economic view");
     }
     public static GoodsParticipantView read(FrontierWorldState state, GoodsParticipant participant) {
@@ -37,13 +42,20 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
             incoming = Math.addExact(incoming, InternalShipmentIncomingStock.quantity(state.shipments(), participant.party().id(),
                     participant.endpoint().containerId(), commodity.itemKind()));
             int protectedMinimum = participant.policy() == GoodsPolicyKind.PUBLIC_SETTLEMENT
-                    && commodity.itemKind().equals(SettlementFoodPolicy.BREAD)
-                    ? SettlementFoodPolicy.reserveRequirement(state, participant.party().id()) : 0;
+                    ? PublicStockProtection.minimum(state, participant.party().id(), commodity.itemKind()) : 0;
             result.put(commodity.itemKind(), new Stock(owned, unclaimed, incoming, protectedMinimum));
         }
         int residents = (int) state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(participant.endpoint().settlementId())
                         && state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE).count();
-        return new GoodsParticipantView(participant, residents, state.inventory().economics().availableToReserve(participant.party().id()), result);
+        var advice = participant.policy() == GoodsPolicyKind.PUBLIC_SETTLEMENT
+                ? SettlementFoodPurchases.assess(state, participant.party().id(), residents, result)
+                : new SettlementFoodPurchases.Advice(Map.of(), Map.of());
+        advice.protectedInputs().forEach((kind, minimum) -> {
+            var stock = result.get(kind);
+            result.put(kind, new Stock(stock.ownedAtEndpoint(), stock.unclaimedAtEndpoint(), stock.expectedIncoming(),
+                    Math.max(minimum, stock.protectedMinimum())));
+        });
+        return new GoodsParticipantView(participant, residents, state.inventory().economics().availableToReserve(participant.party().id()), result, advice.limits());
     }
 }

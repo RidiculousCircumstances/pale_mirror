@@ -19,6 +19,8 @@ final class ContainerStorageAdmission {
         var record = state.inventory().containers().get(container);
         if (record == null || ReferenceContainerCustody.blocksCanonicalUse(state, container)
                 || record.storage().filter(policy -> !policy.filter().accepts(kind)).isPresent()) return false;
+        if (record.productionStation().isPresent()) return ProductionStationInventoryCapacity.receive(state,
+                record.productionStation().orElseThrow(), kind, quantity, inbound(state, container, completing));
         return state.inventory().canReceiveFungible(container, kind, quantity, ContainerPhysicalReservations.slots(state, container, completing),
                 inbound(state, container, completing));
     }

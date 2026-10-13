@@ -29,10 +29,24 @@ public final class FungibleResourceCustodySupport {
         var bindings = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(input.accountId())).toList();
         if (!ReferenceContainerCustody.hasLiveCustody(state, container.containerId())) return bindings.isEmpty();
         if (!ReferenceContainerCustody.hasOperationalCustody(state, container.containerId())) return false;
+        return hasCurrentPhysicalPortion(state, input.accountId(), input.lotQuantities());
+    }
+
+    /** Acquiring container custody precedes material binding. Claimed and unclaimed
+     * consumers must await the exact portion's binding, not substitute a COLD effect. */
+    public static boolean hasCurrentPhysicalPortion(FrontierWorldState state, SubjectId accountId,
+                                                   Map<SubjectId, Integer> portion) {
+        var resources = state.inventory().fungibleResources();
+        var account = resources.accounts().get(accountId);
+        if (account == null || !(account.custody() instanceof ResourceCustody.Container container)
+                || portion.isEmpty() || !ReferenceContainerCustody.hasOperationalCustody(state, container.containerId())
+                || ReferenceContainerCustody.blocksCanonicalUse(state, container.containerId())) return false;
+        var bindings = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(accountId)).toList();
         long epoch = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(container.containerId())).authorityEpoch();
         return !bindings.isEmpty() && bindings.stream().allMatch(binding -> binding.authorityEpoch() == epoch)
-                && input.lotQuantities().entrySet().stream().allMatch(entry -> bindings.stream()
-                    .mapToInt(binding -> binding.lotQuantities().getOrDefault(entry.getKey(), 0)).sum() >= entry.getValue());
+                && portion.entrySet().stream().allMatch(entry -> entry.getValue() > 0
+                    && account.lotQuantities().getOrDefault(entry.getKey(), 0) >= entry.getValue()
+                    && bindings.stream().mapToInt(binding -> binding.lotQuantities().getOrDefault(entry.getKey(), 0)).sum() >= entry.getValue());
     }
 
     public static Optional<LotAtContainer> firstAtContainer(FrontierWorldState state, SubjectId containerId, String itemKind, int minimumQuantity) {

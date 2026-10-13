@@ -80,7 +80,7 @@ final class ShipmentStateCodec {
         };
     }
     static void endpoint(DataOutputStream out, ShipmentEndpoint endpoint) throws IOException {
-        switch (endpoint.kind()) { case SETTLEMENT_DEPOT -> out.writeByte(1); case EXTRACTIVE_SITE -> out.writeByte(2); case DECLARED_STORAGE -> out.writeByte(3); }
+        switch (endpoint.kind()) { case SETTLEMENT_DEPOT -> out.writeByte(1); case EXTRACTIVE_SITE -> out.writeByte(2); case DECLARED_STORAGE -> out.writeByte(3); case PRODUCTION_PORT -> out.writeByte(4); }
         id(out, endpoint.settlementId());
         switch (endpoint) {
             case ShipmentEndpoint.Depot depot -> id(out, depot.facilityId());
@@ -89,6 +89,11 @@ final class ShipmentStateCodec {
                 out.writeBoolean(storage.facilityId().isPresent());
                 if (storage.facilityId().isPresent()) id(out, storage.facilityId().orElseThrow());
                 FrontierWorldStateCodec.writePosition(out, storage.exteriorApproach().support());
+            }
+            case ShipmentEndpoint.ProductionPort machine -> {
+                ProductionStationSpecCodec.write(out, machine.spec());
+                out.writeByte(machine.port() == ActorContainerItemOrder.StationPort.INPUT ? 1 : 2);
+                FrontierWorldStateCodec.writePosition(out, machine.exteriorApproach().support());
             }
         }
         id(out, endpoint.containerId());
@@ -116,8 +121,20 @@ final class ShipmentStateCodec {
     }
     static ShipmentEndpoint endpoint(DataInputStream in) throws IOException {
         int tag = in.readUnsignedByte();
-        if (tag != 1 && tag != 2 && tag != 3) throw new IllegalArgumentException("unknown shipment endpoint tag");
+        if (tag != 1 && tag != 2 && tag != 3 && tag != 4) throw new IllegalArgumentException("unknown shipment endpoint tag");
         var home = id(in);
+        if (tag == 4) {
+            var spec = ProductionStationSpecCodec.read(in);
+            var port = switch (in.readUnsignedByte()) {
+                case 1 -> ActorContainerItemOrder.StationPort.INPUT; case 2 -> ActorContainerItemOrder.StationPort.FUEL;
+                default -> throw new IllegalArgumentException("unknown shipment machine port tag");
+            };
+            var exterior = new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in));
+            var container = id(in); var station = new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in));
+            if (!spec.containerId().equals(container) || !spec.workerStation().equals(station))
+                throw new IllegalArgumentException("shipment machine endpoint contradicts its retained declaration");
+            return new ShipmentEndpoint.ProductionPort(home, spec, port, exterior);
+        }
         if (tag == 3) {
             var facility = in.readBoolean() ? java.util.Optional.of(id(in)) : java.util.Optional.<SubjectId>empty();
             var exterior = new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in));

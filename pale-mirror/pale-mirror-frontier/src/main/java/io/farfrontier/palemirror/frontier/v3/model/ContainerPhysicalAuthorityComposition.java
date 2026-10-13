@@ -7,6 +7,7 @@ import java.util.function.BiPredicate;
 /** Closed composition of owner-supplied before-effect fences; never inspects a family's work. */
 public final class ContainerPhysicalAuthorityComposition {
     private static final List<BiPredicate<FrontierWorldState, SubjectId>> OWNERS = List.of(
+            ProductionStationEnergy::pendingForContainer, ProductionStationTransformation::pendingForContainer,
             BakeryPhysicalAuthority::pendingForContainer, ResidentMealPhysicalAuthority::pendingForContainer,
             ShipmentPhysicalAuthority::pendingForContainer, ExtractionPhysicalAuthority::pendingForContainer,
             MedicalPhysicalAuthority::pendingForContainer,

@@ -8,8 +8,12 @@ import java.util.Map;
 final class BakeryWorkValidation {
     private BakeryWorkValidation() { }
 
-    static void validate(ExactInventory inventory, ProductionJob job, Settlement settlement) {
+    static void validate(ExactInventory inventory, ProductionJob job, Settlement settlement, ProductionCatalog catalog) {
         BakeryWorkState work = job.bakeryWork().orElseThrow();
+        var recipe = catalog.require(work.recipeId());
+        if (!work.recipeId().equals(BakeryRecipes.BREAD) || !recipe.product().itemKind().equals(job.outputItemKind())
+                || !recipe.ingredient().accepts(work.inputItemKind()) || recipe.outputForInput(work.inputQuantity()) != job.outputCount())
+            throw new IllegalArgumentException("bakery work has a foreign declared recipe or output");
         var sourceStorage = inventory.containers().get(work.sourceContainerId());
         if (sourceStorage == null || !sourceStorage.ownerId().equals(job.settlementId()) || sourceStorage.storage().isEmpty())
             throw new IllegalArgumentException("bakery source lost its retained owned storage capability");
@@ -24,7 +28,7 @@ final class BakeryWorkValidation {
             station = candidate.orElseThrow();
         }
         if (station == null) throw new IllegalArgumentException("bakery work has no current declared station");
-        if (!station.facilityId().equals(job.facilityId()) || station.capability() != ProductionStationSpec.Capability.BAKING)
+        if (!station.facilityId().equals(job.facilityId()) || station.capability() != recipe.capability())
             throw new IllegalArgumentException("bakery work station differs from the job facility or capability");
         if (job.inputHold() instanceof ProductionInputHold.Materialized) validateExact(inventory, job, station, work);
         else validateFungible(inventory, job, settlement, station, work);
@@ -37,7 +41,7 @@ final class BakeryWorkValidation {
             // bring its worker home; another resident may take or consume the bread.
             ExactItemStack output = inventory.items().get(job.outputItemId());
             if (inventory.items().containsKey(job.consumedItemId())
-                    || output != null && (!output.itemKind().equals("minecraft:bread")
+                    || output != null && (!output.itemKind().equals(job.outputItemKind())
                         || output.custody() instanceof InventoryCustody.Actor actor
                         && actor.actorId().equals(job.workerId())
                         || output.custody() instanceof InventoryCustody.ContainerSlot slot
@@ -72,8 +76,8 @@ final class BakeryWorkValidation {
             case DELIVERED -> throw new IllegalStateException("delivered bakery resources are public stock");
         };
         if (stack == null || !stack.custody().equals(expected) || !stack.economicOwnerId().equals(job.rights().resourceOwner().id())
-                || !stack.itemKind().equals(outputPhase ? "minecraft:bread" : "minecraft:wheat")
-                || stack.count() != job.outputCount()
+                || !stack.itemKind().equals(outputPhase ? job.outputItemKind() : work.inputItemKind())
+                || stack.count() != (outputPhase ? job.outputCount() : job.inputCount())
                 || inventory.items().containsKey(outputPhase ? job.consumedItemId() : job.outputItemId()))
             throw new IllegalArgumentException("bakery exact input/output has no sole phase-correct custodian");
     }
@@ -96,7 +100,7 @@ final class BakeryWorkValidation {
             CustodyAccount stationAccount = ledger.accounts().get(work.stationAccountId());
             ResourceLot output = ledger.lots().get(job.outputItemId());
             if (ledger.claims().containsKey(claimId)
-                    || output != null && !output.itemKind().equals("minecraft:bread")
+                    || output != null && !output.itemKind().equals(job.outputItemKind())
                     || actor != null && actor.lotQuantities().containsKey(job.outputItemId())
                     || stationAccount != null && stationAccount.lotQuantities().containsKey(job.outputItemId()))
                 throw new IllegalArgumentException("delivered bakery job still holds its input claim or output");
@@ -118,18 +122,21 @@ final class BakeryWorkValidation {
             case DELIVERED -> throw new IllegalStateException("delivered bakery resources are public stock");
         };
         Map<SubjectId, Integer> expectedLots = outputPhase ? Map.of(job.outputItemId(), job.outputCount()) : input;
-        Map<SubjectId, Integer> expectedClaim = outputPhase ? Map.of() : Map.of(claimId, job.outputCount());
+        Map<SubjectId, Integer> expectedClaim = work.phase() == BakeryWorkState.Phase.STATION_UNLOAD
+                ? Map.of(ProductionOperation.outputClaimId(BakeryStationOperation.operationId(job)), job.outputCount())
+                : outputPhase ? Map.of() : Map.of(claimId, job.inputCount());
         if (account == null || !account.custody().equals(custody)
                 || expectedLots.entrySet().stream().anyMatch(entry -> account.lotQuantities().getOrDefault(entry.getKey(), 0) < entry.getValue())
                 || expectedClaim.entrySet().stream().anyMatch(entry -> account.claimQuantities().getOrDefault(entry.getKey(), 0) < entry.getValue())
                 || (work.phase() != BakeryWorkState.Phase.DEPOT_PICKUP
+                    && work.phase() != BakeryWorkState.Phase.PROCESSING && work.phase() != BakeryWorkState.Phase.STATION_UNLOAD
                     && (!account.lotQuantities().equals(expectedLots) || !account.claimQuantities().equals(expectedClaim)))
                 || outputPhase == ledger.claims().containsKey(claimId))
             throw new IllegalArgumentException("bakery resource has no sole phase-correct account and claim");
         for (SubjectId lotId : expectedLots.keySet()) {
             ResourceLot lot = ledger.lots().get(lotId);
             if (lot == null || !lot.economicOwnerId().equals(job.rights().resourceOwner().id())
-                    || !lot.itemKind().equals(outputPhase ? "minecraft:bread" : "minecraft:wheat"))
+                    || !lot.itemKind().equals(outputPhase ? job.outputItemKind() : work.inputItemKind()))
                 throw new IllegalArgumentException("bakery resource lot changed economic owner or recipe kind");
         }
         // A selected batch may leave a lawful remainder in the source lot.

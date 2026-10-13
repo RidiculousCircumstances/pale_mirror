@@ -33,6 +33,7 @@ final class FrontierV3StorageAdoption {
         if (state == null || !FrontierV3PhysicalWorld.isPhysical(level)) return;
         for (var surface : state.inventory().surfaces().values().stream()
                 .filter(s -> s.status() == ContainerSurfaceStatus.ADOPTING).sorted(Comparator.comparing(ContainerSurface::containerId)).toList()) {
+            if (state.inventory().containers().get(surface.containerId()).purpose() != ContainerPurpose.RESOURCE_STORAGE) continue;
             var p = surface.position(); var pos = new BlockPos(p.x(), p.y(), p.z());
             if (level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4) == null) continue;
             finish(level, runtime, state, surface); return;

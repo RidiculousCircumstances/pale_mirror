@@ -19,7 +19,9 @@ class ExtractionSiteTest {
         io.farfrontier.palemirror.frontier.v3.api.SubjectId firstJob = null, firstTool = null;
         boolean recoveredDelivery = false;
         FrontierWorldState continuation = null;
-        for (int boundary = 0; boundary < 5000; boundary++) {
+        // Two real work windows, not a quota of unrelated settlements' internal events.
+        long deadline = Math.multiplyExact(2L, initial.bootstrap().ruleset().residentLife().dayTicks());
+        for (int boundary = 0; boundary < 100_000 && engine.executionView().instant().ticks() < deadline; boundary++) {
             var current = engine.canonicalState().state();
             if (firstJob == null) {
                 var started = current.extractionSites().work().values().stream().filter(job -> job.siteId().equals(site.id()))
@@ -62,7 +64,12 @@ class ExtractionSiteTest {
         var state = engine.canonicalState().state();
         var retainedFirst = firstJob;
         assertTrue(deliveredHome, () -> "mining output did not reach its home depot; tick=" + engine.executionView().instant()
-                + " site=" + site.id() + " first=" + state.extractionSites().work().get(retainedFirst));
+                + " site=" + site.id() + " first=" + state.extractionSites().work().get(retainedFirst)
+                + " demand=" + ProductionStockDemand.read(state, site.settlementId(), "minecraft:cobblestone")
+                + " pending local stone shipments=" + state.shipments().shipments().values().stream()
+                    .filter(shipment -> shipment.receiver().settlementId().equals(site.settlementId())
+                            && shipment.itemKind().equals("minecraft:cobblestone") && !shipment.terminal())
+                    .map(shipment -> shipment.id().value() + ":" + shipment.status() + ":" + shipment.lotQuantities()).toList());
         assertTrue(state.extractionSites().deposits().get(site.id()).development().revision() > 1,
                 "actual miners must exhaust and open adjacent fronts, not work an initially fully admitted deposit");
         assertNotNull(state.inventory().items().get(firstTool));

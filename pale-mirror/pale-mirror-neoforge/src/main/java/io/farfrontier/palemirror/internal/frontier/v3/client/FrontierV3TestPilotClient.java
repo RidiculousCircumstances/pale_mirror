@@ -304,6 +304,8 @@ public final class FrontierV3TestPilotClient {
                     if (target != null) openContainer(minecraft, target, action.get("timeoutMs").getAsLong());
                 }
                 case "quick_move_from_inventory" -> quickMoveFromInventory(minecraft, action);
+                case "click_menu_button" -> { FrontierV3PilotInventoryActions.clickMenuButton(minecraft, action); advance(type); }
+                case "close_container" -> { minecraft.player.closeContainer(); advance(type); }
                 case "quick_move_from_container" -> quickMoveFromContainer(minecraft, action);
                 case "split_move_from_container" -> splitMoveFromContainer(minecraft, action);
                 case "move_within_container" -> moveWithinContainer(minecraft, action);
@@ -351,12 +353,9 @@ public final class FrontierV3TestPilotClient {
         timeout(minecraft, action, "ordinary placement did not produce " + itemId + " at " + target);
     }
     private static void openContainer(Minecraft minecraft, BlockPos target, long timeoutMs) {
-        if (minecraft.player.containerMenu != minecraft.player.inventoryMenu) { advance("open_container"); return; }
-        if (!containerOpenAttempted) {
-            minecraft.gameMode.useItemOn(minecraft.player, InteractionHand.MAIN_HAND,
-                    new BlockHitResult(Vec3.atCenterOf(target), Direction.UP, target, false));
-            containerOpenAttempted = true;
-        }
+        var result = FrontierV3PilotInventoryActions.openContainer(minecraft, target, containerOpenAttempted);
+        containerOpenAttempted |= result.attempted();
+        if (result.complete()) { advance("open_container"); return; }
         if ((minecraft.level.getGameTime() - actionStartedTick) * 50L >= timeoutMs) {
             throw new IllegalStateException("timed out opening ordinary container at " + target);
         }

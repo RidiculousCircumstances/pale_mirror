@@ -51,8 +51,8 @@ class FungibleResourceLedgerTest {
         SubjectId station = new SubjectId("container:bakery-station");
         SubjectId stationAccount = new SubjectId("custody:bakery-station");
         ProductionStationSpec machine = new ProductionStationSpec(new SubjectId("station:bakery-one"),
-                new SubjectId("structure:bakery-one"), station, ProductionStationSpec.Capability.BAKING,
-                SurfaceAnchor.at(2, 64, 2), SurfaceAnchor.at(3, 64, 2), 0, 1);
+                new SubjectId("structure:bakery-one"), station, ProductionEquipment.BENCH, ProductionStationSpec.Capability.BAKING,
+                SurfaceAnchor.at(2, 64, 2), SurfaceAnchor.at(3, 64, 2), 0, 1, 2);
         SubjectId wheatId = new SubjectId("lot:bakery-wheat");
         SubjectId claimId = new SubjectId("claim:bakery-wheat");
         SubjectId breadId = new SubjectId("lot:bakery-bread");
@@ -106,6 +106,59 @@ class FungibleResourceLedgerTest {
                 "a completed delivery cannot spend the actor-held output again");
     }
 
+    @Test void observedMachineTransferPreservesOtherPortsButRejectsAWrongTransferPort() {
+        var worker = new SubjectId("resident:port-carrier"); var job = new SubjectId("job:port-supply");
+        var handAccount = new SubjectId("custody:port-hand"); var stationAccount = new SubjectId("custody:port-machine");
+        var container = new SubjectId("container:port-machine");
+        var machine = new ProductionStationSpec(new SubjectId("station:port-machine"), new SubjectId("structure:port-machine"),
+                container, ProductionEquipment.BENCH, ProductionStationSpec.Capability.BAKING,
+                SurfaceAnchor.at(2, 64, 2), SurfaceAnchor.at(3, 64, 2), 0, 1, 2);
+        var wheat = new ResourceLot(new SubjectId("lot:port-wheat"), OWNER, "minecraft:wheat", 3, "fixture:wheat", List.of());
+        var coal = new ResourceLot(new SubjectId("lot:port-coal"), OWNER, "minecraft:coal", 3, "fixture:coal", List.of());
+        var claim = new SubjectId("claim:port-wheat");
+        var hand = new PhysicalStackAddress.ActorHand(worker, uuid(6), ActorContainerItemOrder.Hand.MAIN);
+        var input = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(container, machine.inputSlot()));
+        var fuel = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(container, machine.fuelSlot()));
+        var output = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(container, machine.outputSlot()));
+        var ledger = FungibleResourceLedger.empty()
+                .issue(wheat, new CustodyAccount(stationAccount, new ResourceCustody.Container(container), Map.of(wheat.id(), 3), Map.of()))
+                .issue(coal, new CustodyAccount(handAccount, new ResourceCustody.Actor(worker), Map.of(coal.id(), 3), Map.of()))
+                .reserve(new ClaimAllocation(claim, job, OWNER, wheat.itemKind(), 3, Map.of(wheat.id(), 3),
+                        ClaimPurpose.STATION_PROCESSING), stationAccount);
+        ledger = ledger.rebind(stationAccount, 4, FungiblePhysicalObservation.bind(ledger, stationAccount, 4,
+                List.of(new FungiblePhysicalObservation.Stack(input, wheat.itemKind(), 3))));
+        ledger = ledger.rebind(handAccount, 7, FungiblePhysicalObservation.bind(ledger, handAccount, 7,
+                List.of(new FungiblePhysicalObservation.Stack(hand, coal.itemKind(), 3))));
+        var supply = new ActorContainerItemOrder(job, worker, ActorContainerItemOrder.Direction.PLACE,
+                new ActorContainerItemOrder.Portion.Fungible(handAccount, new ResourceCustody.Actor(worker), stationAccount,
+                        new ResourceCustody.Container(container), Optional.empty(), coal.itemKind(), Map.of(coal.id(), 3)),
+                new ActorContainerItemOrder.ContainerEndpoint.FungibleStation(machine, ActorContainerItemOrder.StationPort.FUEL),
+                machine.workerStation(), ActorContainerItemOrder.Hand.MAIN, 0, 1);
+        var before = ledger;
+        var wheatStack = new FungiblePhysicalObservation.Stack(input, wheat.itemKind(), 3);
+        assertThrows(IllegalArgumentException.class, () -> before.transferActorOrderObservedStacks(supply, 7, 4, List.of(),
+                List.of(wheatStack, new FungiblePhysicalObservation.Stack(output, coal.itemKind(), 3))));
+        assertThrows(IllegalArgumentException.class, () -> before.transferActorOrderObservedStacks(supply, 7, 4, List.of(),
+                List.of(wheatStack, new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                        new InventoryCustody.ContainerSlot(container, 9)), coal.itemKind(), 3))));
+        var supplied = ledger.transferActorOrderObservedStacks(supply, 7, 4, List.of(),
+                List.of(wheatStack, new FungiblePhysicalObservation.Stack(fuel, coal.itemKind(), 3)));
+        var bread = new ResourceLot(new SubjectId("lot:port-bread"), OWNER, "minecraft:bread", 1, "recipe:bread", List.of(wheat.id()));
+        var baked = supplied.transformObserved(stationAccount, 4, Map.of(wheat.id(), 3), Map.of(claim, 3), bread,
+                List.of(new FungiblePhysicalObservation.Stack(output, bread.itemKind(), 1),
+                        new FungiblePhysicalObservation.Stack(fuel, coal.itemKind(), 3)));
+        var take = new ActorContainerItemOrder(job, worker, ActorContainerItemOrder.Direction.TAKE,
+                new ActorContainerItemOrder.Portion.Fungible(stationAccount, new ResourceCustody.Container(container), handAccount,
+                        new ResourceCustody.Actor(worker), Optional.empty(), bread.itemKind(), Map.of(bread.id(), 1)),
+                new ActorContainerItemOrder.ContainerEndpoint.FungibleStation(machine, ActorContainerItemOrder.StationPort.OUTPUT),
+                machine.workerStation(), ActorContainerItemOrder.Hand.MAIN, 1, 1);
+        var collected = baked.transferActorOrderObservedStacks(take, 4, 9,
+                List.of(new FungiblePhysicalObservation.Stack(fuel, coal.itemKind(), 3)),
+                List.of(new FungiblePhysicalObservation.Stack(hand, bread.itemKind(), 1)));
+        assertEquals(Map.of(coal.id(), 3), collected.accounts().get(stationAccount).lotQuantities());
+        assertEquals(Map.of(bread.id(), 1), collected.accounts().get(handAccount).lotQuantities());
+    }
+
     @Test
     void bakerObservedOrderFencesSourceAndHandEpochs() {
         SubjectId worker = new SubjectId("resident:hot-baker");
@@ -114,8 +167,8 @@ class FungibleResourceLedgerTest {
         SubjectId station = new SubjectId("container:hot-bakery-station");
         SubjectId stationAccount = new SubjectId("custody:hot-bakery-station");
         ProductionStationSpec machine = new ProductionStationSpec(new SubjectId("station:hot-bakery"),
-                new SubjectId("structure:hot-bakery"), station, ProductionStationSpec.Capability.BAKING,
-                SurfaceAnchor.at(2, 64, 2), SurfaceAnchor.at(3, 64, 2), 0, 1);
+                new SubjectId("structure:hot-bakery"), station, ProductionEquipment.BENCH, ProductionStationSpec.Capability.BAKING,
+                SurfaceAnchor.at(2, 64, 2), SurfaceAnchor.at(3, 64, 2), 0, 1, 2);
         SubjectId wheatId = new SubjectId("lot:hot-bakery-wheat");
         SubjectId claimId = new SubjectId("claim:hot-bakery-wheat");
         ResourceLot wheat = new ResourceLot(wheatId, OWNER, "minecraft:wheat", 64, "harvest:hot", List.of());

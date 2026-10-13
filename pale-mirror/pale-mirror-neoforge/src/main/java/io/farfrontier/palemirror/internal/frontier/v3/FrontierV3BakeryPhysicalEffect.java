@@ -13,7 +13,7 @@ import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.Container;
 
 import java.util.List;
 import java.util.Optional;
@@ -25,6 +25,8 @@ final class FrontierV3BakeryPhysicalEffect {
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                      FrontierWorldState state, SceneLease lease, ProductionJob job, Villager worker) {
         BakeryWorkState work = job.bakeryWork().orElseThrow();
+        if (work.phase() == BakeryWorkState.Phase.STATION_LOAD && work.pendingPhysicalStep().isEmpty()
+                && !ProductionStationProcessing.canStart(state, work.stationId(), work.recipeId(), job.inputCount())) return;
         if (work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
                 && work.block().map(value -> value.reason() == BakeryWorkBlock.Reason.SOURCE_CHANGED).orElse(false)
                 && state.inventory().fungibleResources().claims().values().stream()
@@ -38,9 +40,9 @@ final class FrontierV3BakeryPhysicalEffect {
                 || ReferenceContainerCustody.blocksCanonicalUse(state, containerId)) return;
         ContainerSurface surface = state.inventory().surfaces().get(containerId);
         if (surface == null || !level.hasChunkAt(new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()))) return;
-        ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.activeChest(level,
-                new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()), containerId);
-        if (chest == null) return;
+        var physical = FrontierV3PhysicalContainer.loaded(level, state, containerId).orElse(null);
+        if (physical == null) return;
+        var chest = physical.inventory();
         if (materializeColdHand(level, runtime, state, lease, job, worker)) return;
         int destinationSlot = switch (work.phase()) {
             case DEPOT_PICKUP, STATION_UNLOAD -> -1;
@@ -58,7 +60,7 @@ final class FrontierV3BakeryPhysicalEffect {
             return;
         }
         Shape shape;
-        try { shape = shape(state, lease, job, worker, chest, containerId, destinationSlot); }
+        try { shape = shape(state, lease, job, worker, physical, containerId, destinationSlot); }
         catch (UnboundContainerSource waitingForObservation) { return; }
         catch (IllegalArgumentException invalid) {
             block(level, runtime, lease, job, new BakeryWorkBlock(BakeryWorkBlock.Reason.MACHINE_UNAVAILABLE,
@@ -105,7 +107,7 @@ final class FrontierV3BakeryPhysicalEffect {
 
     private static void observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 SceneLease lease, ProductionJob job, SubjectId containerId,
-                                ChestBlockEntity chest, BakeryHotEffectObserved receipt) {
+                                Container chest, BakeryHotEffectObserved receipt) {
         CommandResult result = FrontierV3CommandSubmission.submitResult(runtime, "bakery-effect-observed", lease.id().value(), receipt);
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "bakery_effect_observed", lease, result);
         if (result instanceof CommandResult.Rejected) {
@@ -117,13 +119,15 @@ final class FrontierV3BakeryPhysicalEffect {
                     "minecraft:air", 0));
             return;
         }
-        closeObservedContainerMutation(runtime, containerId, chest, result);
+        closeObservedContainerMutation(level, runtime, containerId, chest, result);
     }
 
-    private static void closeObservedContainerMutation(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                                       SubjectId containerId, ChestBlockEntity chest, CommandResult result) {
-        if (result instanceof CommandResult.Accepted
-                && !FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedMutation(runtime, containerId, chest))
+    private static void closeObservedContainerMutation(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                                       SubjectId containerId, Container chest, CommandResult result) {
+        if (!(result instanceof CommandResult.Accepted)) return;
+        var physical = FrontierV3PhysicalContainer.loaded(level, runtime.decodedState().orElseThrow(), containerId).orElse(null);
+        if (physical == null || physical.inventory() != chest
+                || !FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime, containerId, physical))
             throw new IllegalStateException("observed bakery transfer lacks its next reference-container replica boundary");
     }
 
@@ -158,11 +162,11 @@ final class FrontierV3BakeryPhysicalEffect {
         FungibleResourceLedger ledger = state.inventory().fungibleResources();
         if (ledger.bindings().values().stream().anyMatch(binding -> binding.accountId().equals(work.actorAccountId())))
             return false;
-        String kind = work.phase() == BakeryWorkState.Phase.STATION_LOAD ? "minecraft:wheat" : "minecraft:bread";
+        String kind = BakeryCargo.kind(job);
         Item item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(kind));
         ItemStack hand = worker.getItemBySlot(EquipmentSlot.MAINHAND);
-        if (item == Items.AIR || hand.getCount() != job.outputCount()
-                || !ItemStack.isSameItemSameComponents(hand, new ItemStack(item, job.outputCount()))) {
+        if (item == Items.AIR || hand.getCount() != BakeryCargo.quantity(job)
+                || !ItemStack.isSameItemSameComponents(hand, new ItemStack(item, BakeryCargo.quantity(job)))) {
             block(level, runtime, lease, job, observedBlock(BakeryWorkBlock.Reason.HAND_MISMATCH,
                     work.phase() == BakeryWorkState.Phase.STATION_LOAD
                             ? station(state, work).containerId() : BakeryStorage.current(job), -1, hand));
@@ -173,7 +177,7 @@ final class FrontierV3BakeryPhysicalEffect {
             return true;
         }
         var stack = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(job.workerId(),
-                lease.members().getFirst().entityId(), ActorContainerItemOrder.Hand.MAIN), kind, job.outputCount());
+                lease.members().getFirst().entityId(), ActorContainerItemOrder.Hand.MAIN), kind, BakeryCargo.quantity(job));
         var observed = new BakeryHotHandMaterialized(job.id(), lease.id(), work.actorAccountId(),
                 Math.max(1L, lease.revision()), stack);
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "bakery_cold_hand_materialized", lease,
@@ -182,17 +186,16 @@ final class FrontierV3BakeryPhysicalEffect {
     }
 
     private static Shape shape(FrontierWorldState state, SceneLease lease, ProductionJob job, Villager worker,
-                               ChestBlockEntity chest, SubjectId containerId, int destinationSlot) {
+                               FrontierV3PhysicalContainer physical, SubjectId containerId, int destinationSlot) {
         BakeryWorkState work = job.bakeryWork().orElseThrow();
         boolean exact = job.inputHold() instanceof ProductionInputHold.Materialized;
         ActorContainerItemOrder order = work.phase() == BakeryWorkState.Phase.PROCESSING
                 ? null : io.farfrontier.palemirror.frontier.v3.process.BakeryProcess.currentItemOrder(state, job);
-        String kind = work.phase() == BakeryWorkState.Phase.STATION_UNLOAD
-                || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY ? "minecraft:bread" : "minecraft:wheat";
+        String kind = BakeryCargo.kind(job);
         ExactItemStack exactSource = exact ? state.inventory().items().get(work.phase() == BakeryWorkState.Phase.STATION_UNLOAD
                 || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY ? job.outputItemId() : job.consumedItemId()) : null;
         ExactItemStack exactOutput = exact && work.phase() == BakeryWorkState.Phase.PROCESSING
-                ? new ExactItemStack(job.outputItemId(), job.rights().resourceOwner().id(), "minecraft:bread", job.outputCount(),
+                ? new ExactItemStack(job.outputItemId(), job.rights().resourceOwner().id(), job.outputItemKind(), job.outputCount(),
                 new InventoryCustody.ContainerSlot(containerId, destinationSlot)) : null;
         if (exact && exactSource == null) throw new IllegalArgumentException("bakery physical source item absent");
         List<MaterialSourceSelection.Slice> slices = exact ? List.of() : sourceSlices(state, lease, job, order, kind);
@@ -200,7 +203,7 @@ final class FrontierV3BakeryPhysicalEffect {
         long destinationEpoch = exact ? 0L : (work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
                 || work.phase() == BakeryWorkState.Phase.STATION_UNLOAD ? Math.max(1L, lease.revision())
                 : state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(containerId)).authorityEpoch());
-        return new Shape(state, lease, job, worker, chest, containerId, destinationSlot, order,
+        return new Shape(state, lease, job, worker, physical, containerId, destinationSlot, order,
                 kind, exactSource, exactOutput, slices, sourceEpoch, destinationEpoch);
     }
 
@@ -223,7 +226,7 @@ final class FrontierV3BakeryPhysicalEffect {
         }
         List<MaterialSourceSelection.Slice> slices = order == null
                 ? MaterialSourceSelection.select(state.inventory().fungibleResources(),
-                        account, kind, job.outputCount(), Optional.empty())
+                        account, kind, job.inputQuantities())
                 : MaterialSourceSelection.select(state.inventory().fungibleResources(), order);
         for (MaterialSourceSelection.Slice source : slices) {
             switch (source.address()) {
@@ -255,15 +258,16 @@ final class FrontierV3BakeryPhysicalEffect {
     }
 
     private record Shape(FrontierWorldState state, SceneLease lease, ProductionJob job, Villager worker,
-                         ChestBlockEntity chest, SubjectId containerId, int destinationSlot,
+                         FrontierV3PhysicalContainer physical, SubjectId containerId, int destinationSlot,
                          ActorContainerItemOrder order, String kind,
                          ExactItemStack exactSource, ExactItemStack exactOutput,
                          List<MaterialSourceSelection.Slice> slices, long sourceEpoch, long destinationEpoch) {
         BakeryWorkState.Phase phase() { return job.bakeryWork().orElseThrow().phase(); }
+        Container chest() { return physical.inventory(); }
         ItemStack hand() { return worker.getItemBySlot(EquipmentSlot.MAINHAND); }
         ItemStack source(MaterialSourceSelection.Slice slice) {
             return switch (slice.address()) {
-                case PhysicalStackAddress.ContainerSlot address -> chest.getItem(address.slot().slot());
+                case PhysicalStackAddress.ContainerSlot address -> chest().getItem(address.slot().slot());
                 case PhysicalStackAddress.ActorHand ignored -> hand();
                 default -> throw new IllegalArgumentException("bakery source is not a chest or hand");
             };
@@ -272,8 +276,26 @@ final class FrontierV3BakeryPhysicalEffect {
             return slice.address() instanceof PhysicalStackAddress.ContainerSlot address ? address.slot().slot() : -1;
         }
         FrontierV3ActorItemTransfer.FungibleStep transfer() {
-            return new FrontierV3ActorItemTransfer.FungibleStep(order, chest, worker,
-                    lease.members().getFirst().entityId(), slices, destinationSlot);
+            return new FrontierV3ActorItemTransfer.FungibleStep(order, physical, worker,
+                    lease.members().getFirst().entityId(), slices, destinationSlot, 0);
+        }
+        FrontierV3StationRecipeEffect recipeEffect() {
+            var station = station(state, job.bakeryWork().orElseThrow());
+            ItemStack input, output;
+            if (exactSource != null) {
+                if (!exactSource.custody().equals(new InventoryCustody.ContainerSlot(containerId, station.inputSlot())))
+                    throw new IllegalArgumentException("station input lacks its declared physical port");
+                input = FrontierV3ExactItemPresentation.materializedStack(exactSource);
+                output = FrontierV3ExactItemPresentation.materializedStack(exactOutput);
+            } else {
+                if (slices.size() != 1 || sourceSlot(slices.getFirst()) != station.inputSlot())
+                    throw new IllegalArgumentException("station recipe input must occupy its declared port");
+                input = new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(kind)), slices.getFirst().before());
+                output = new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(job.outputItemKind())), job.outputCount());
+            }
+            return new FrontierV3StationRecipeEffect(chest(), station,
+                    state.bootstrap().ruleset().production().require(job.bakeryWork().orElseThrow().recipeId()),
+                    input, job.inputCount(), output);
         }
         boolean plain(ItemStack stack, String itemKind, int quantity) {
             Item item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(itemKind));
@@ -291,7 +313,7 @@ final class FrontierV3BakeryPhysicalEffect {
             if (exactSource != null) return exactBefore();
             return switch (phase()) {
                 case DEPOT_PICKUP, STATION_UNLOAD, STATION_LOAD, DEPOT_DELIVERY -> transfer().before();
-                case PROCESSING -> sourceMatches(false) && chest.getItem(destinationSlot).isEmpty();
+                case PROCESSING -> recipeEffect().before();
                 case DELIVERED -> false;
             };
         }
@@ -303,8 +325,8 @@ final class FrontierV3BakeryPhysicalEffect {
                     return observedBlock(BakeryWorkBlock.Reason.HAND_MISMATCH, containerId, -1, hand());
                 if (!sourceInHand) {
                     int slot = ((InventoryCustody.ContainerSlot) exactSource.custody()).slot();
-                    if (!FrontierV3ExactItemPresentation.exactMatch(chest.getItem(slot), exactSource))
-                        return observedBlock(BakeryWorkBlock.Reason.SOURCE_CHANGED, containerId, slot, chest.getItem(slot));
+                    if (!FrontierV3ExactItemPresentation.exactMatch(chest().getItem(slot), exactSource))
+                        return observedBlock(BakeryWorkBlock.Reason.SOURCE_CHANGED, containerId, slot, chest().getItem(slot));
                 }
             } else for (MaterialSourceSelection.Slice slice : slices) {
                 int slot = sourceSlot(slice);
@@ -315,18 +337,18 @@ final class FrontierV3BakeryPhysicalEffect {
             if (phase() == BakeryWorkState.Phase.DEPOT_PICKUP || phase() == BakeryWorkState.Phase.STATION_UNLOAD)
                 return observedBlock(BakeryWorkBlock.Reason.HAND_MISMATCH, containerId, -1, hand());
             return observedBlock(BakeryWorkBlock.Reason.DESTINATION_OCCUPIED, containerId,
-                    destinationSlot, chest.getItem(destinationSlot));
+                    destinationSlot, chest().getItem(destinationSlot));
         }
         boolean after() {
             if (exactSource != null) return exactAfter();
             return switch (phase()) {
                 case DEPOT_PICKUP, STATION_UNLOAD, STATION_LOAD, DEPOT_DELIVERY -> transfer().after();
-                case PROCESSING -> sourceMatches(true) && plain(chest.getItem(destinationSlot), "minecraft:bread", job.outputCount());
+                case PROCESSING -> recipeEffect().after();
                 case DELIVERED -> false;
             };
         }
         boolean canAbortUnappliedDelivery() {
-            return phase() == BakeryWorkState.Phase.DEPOT_DELIVERY && !chest.getItem(destinationSlot).isEmpty()
+            return phase() == BakeryWorkState.Phase.DEPOT_DELIVERY && !chest().getItem(destinationSlot).isEmpty()
                     && (exactSource != null ? FrontierV3ExactItemPresentation.exactMatch(hand(), exactSource)
                         : transfer().unappliedDestinationOccupied());
         }
@@ -336,27 +358,25 @@ final class FrontierV3BakeryPhysicalEffect {
                     new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(job.workerId(),
                             lease.members().getFirst().entityId(), ActorContainerItemOrder.Hand.MAIN), kind, job.outputCount()),
                     exactSource == null ? Optional.empty() : Optional.of(exactSource.id()),
-                    observedBlock(BakeryWorkBlock.Reason.DESTINATION_OCCUPIED, containerId, destinationSlot, chest.getItem(destinationSlot)));
+                    observedBlock(BakeryWorkBlock.Reason.DESTINATION_OCCUPIED, containerId, destinationSlot, chest().getItem(destinationSlot)));
         }
         boolean exactBefore() {
             return switch (phase()) {
-                case DEPOT_PICKUP, STATION_UNLOAD -> FrontierV3ExactItemPresentation.exactMatch(chest.getItem(((InventoryCustody.ContainerSlot) exactSource.custody()).slot()), exactSource)
+                case DEPOT_PICKUP, STATION_UNLOAD -> FrontierV3ExactItemPresentation.exactMatch(chest().getItem(((InventoryCustody.ContainerSlot) exactSource.custody()).slot()), exactSource)
                         && hand().isEmpty();
                 case STATION_LOAD, DEPOT_DELIVERY -> FrontierV3ExactItemPresentation.exactMatch(hand(), exactSource)
-                        && chest.getItem(destinationSlot).isEmpty();
-                case PROCESSING -> FrontierV3ExactItemPresentation.exactMatch(chest.getItem(((InventoryCustody.ContainerSlot) exactSource.custody()).slot()), exactSource)
-                        && chest.getItem(destinationSlot).isEmpty();
+                        && chest().getItem(destinationSlot).isEmpty();
+                case PROCESSING -> recipeEffect().before();
                 case DELIVERED -> false;
             };
         }
         boolean exactAfter() {
             return switch (phase()) {
-                case DEPOT_PICKUP, STATION_UNLOAD -> chest.getItem(((InventoryCustody.ContainerSlot) exactSource.custody()).slot()).isEmpty()
+                case DEPOT_PICKUP, STATION_UNLOAD -> chest().getItem(((InventoryCustody.ContainerSlot) exactSource.custody()).slot()).isEmpty()
                         && FrontierV3ExactItemPresentation.exactMatch(hand(), exactSource);
                 case STATION_LOAD, DEPOT_DELIVERY -> hand().isEmpty()
-                        && FrontierV3ExactItemPresentation.exactMatch(chest.getItem(destinationSlot), exactSource);
-                case PROCESSING -> chest.getItem(((InventoryCustody.ContainerSlot) exactSource.custody()).slot()).isEmpty()
-                        && FrontierV3ExactItemPresentation.exactMatch(chest.getItem(destinationSlot), exactOutput);
+                        && FrontierV3ExactItemPresentation.exactMatch(chest().getItem(destinationSlot), exactSource);
+                case PROCESSING -> recipeEffect().after();
                 case DELIVERED -> false;
             };
         }
@@ -364,14 +384,11 @@ final class FrontierV3BakeryPhysicalEffect {
             if (!before()) throw new IllegalStateException("bakery physical precondition disappeared before effect");
             if (exactSource != null) {
                 switch (phase()) {
-                    case DEPOT_PICKUP, STATION_UNLOAD -> FrontierV3ActorItemTransfer.take(chest, worker, exactSource,
+                    case DEPOT_PICKUP, STATION_UNLOAD -> FrontierV3ActorItemTransfer.take(chest(), worker, exactSource,
                             (InventoryCustody.ContainerSlot) exactSource.custody(), EquipmentSlot.MAINHAND);
-                    case STATION_LOAD, DEPOT_DELIVERY -> FrontierV3ActorItemTransfer.place(chest, worker, exactSource,
+                    case STATION_LOAD, DEPOT_DELIVERY -> FrontierV3ActorItemTransfer.place(chest(), worker, exactSource,
                             new InventoryCustody.ContainerSlot(containerId, destinationSlot), EquipmentSlot.MAINHAND);
-                    case PROCESSING -> {
-                        chest.setItem(((InventoryCustody.ContainerSlot) exactSource.custody()).slot(), ItemStack.EMPTY);
-                        chest.setItem(destinationSlot, FrontierV3ExactItemPresentation.materializedStack(exactOutput)); chest.setChanged();
-                    }
+                    case PROCESSING -> recipeEffect().apply();
                     case DELIVERED -> throw new IllegalStateException("delivered bakery work has no effect");
                 }
             } else {
@@ -379,10 +396,7 @@ final class FrontierV3BakeryPhysicalEffect {
                     case DEPOT_PICKUP, STATION_UNLOAD, STATION_LOAD, DEPOT_DELIVERY -> {
                         if (!transfer().apply()) throw new IllegalStateException("declared actor material transfer lost its physical postcondition");
                     }
-                    case PROCESSING -> {
-                        chest.setItem(sourceSlot(slices.getFirst()), ItemStack.EMPTY);
-                        chest.setItem(destinationSlot, new ItemStack(Items.BREAD, job.outputCount())); chest.setChanged();
-                    }
+                    case PROCESSING -> recipeEffect().apply();
                     case DELIVERED -> throw new IllegalStateException("delivered bakery work has no effect");
                 }
             }
@@ -392,15 +406,14 @@ final class FrontierV3BakeryPhysicalEffect {
             List<FungiblePhysicalObservation.Stack> remaining = List.of(), destination = List.of();
             if (exactSource == null) {
                 if (phase() == BakeryWorkState.Phase.DEPOT_PICKUP || phase() == BakeryWorkState.Phase.STATION_UNLOAD)
-                    remaining = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, state, containerId);
+                    remaining = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest(), state, containerId);
                 if (phase() == BakeryWorkState.Phase.STATION_LOAD || phase() == BakeryWorkState.Phase.DEPOT_DELIVERY)
-                    destination = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, state, containerId);
+                    destination = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest(), state, containerId);
                 else if (phase() == BakeryWorkState.Phase.PROCESSING)
-                    destination = List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                            new InventoryCustody.ContainerSlot(containerId, destinationSlot)), "minecraft:bread", job.outputCount()));
+                    destination = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest(), state, containerId);
                 else destination = List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(
                         job.workerId(), lease.members().getFirst().entityId(), ActorContainerItemOrder.Hand.MAIN),
-                        kind, job.outputCount()));
+                        kind, BakeryCargo.quantity(job)));
             }
             return new BakeryHotEffectObserved(job.id(), lease.id(), phase(),
                     BakeryWorkGoal.current(state, job).station().standingBody(), sourceEpoch, destinationEpoch,

@@ -18,6 +18,7 @@ public final class ExtractionLayout {
     private final Map<BlockPosition, Long> terrainIds;
     // Derived once from this immutable declaration; not durable state or a history cache.
     private final Map<Long, Cell> cellsById;
+    private final Set<String> outputKinds;
     public static final int MAX_CELLS = 8_192;
     public ExtractionLayout(List<Cell> cells, Map<BlockPosition, BlockExtraction.Block> fixedBlocks,
             List<SurfaceAnchor> accessSurfaces, SurfaceAnchor entrance, BlockPosition container, SurfaceAnchor storagePort) {
@@ -120,6 +121,8 @@ public final class ExtractionLayout {
         this.terrainSupports = terrainSupports;
         this.terrainIds = terrainIds;
         this.cellsById = cells.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(Cell::id, cell -> cell));
+        this.outputKinds = cells.stream().flatMap(cell -> cell.definition().coldOutput().stream())
+                .map(BlockExtraction.Output::itemKind).collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
     public Cell require(long id) {
         var cell = cellsById.get(id);
@@ -127,6 +130,8 @@ public final class ExtractionLayout {
         return cell;
     }
     public List<Cell> cells() { return cells; }
+    /** Read-only products of this exact immutable source declaration, compiled once. */
+    public Set<String> outputKinds() { return outputKinds; }
     public Map<BlockPosition, BlockExtraction.Block> fixedBlocks() { return fixedBlocks; }
     public List<SurfaceAnchor> accessSurfaces() { return accessSurfaces; }
     public SurfaceAnchor entrance() { return entrance; }

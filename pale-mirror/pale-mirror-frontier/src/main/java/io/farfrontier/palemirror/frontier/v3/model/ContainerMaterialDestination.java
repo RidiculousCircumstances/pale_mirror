@@ -24,6 +24,8 @@ public record ContainerMaterialDestination(int slot, int before, Map<SubjectId, 
         var record = state.inventory().containers().get(container);
         if (record == null) throw new IllegalArgumentException("placement has no declared container");
         for (int slot = 0; allowed > 0 && slot < record.slotCount(); slot++) {
+            if (record.productionStation().isPresent() && slot != ProductionStationRecipe.portForItemKind(
+                    state.bootstrap().ruleset().production(), record.productionStation().orElseThrow(), kind)) continue;
             if (state.reservedContainerSlots(container).contains(slot)
                     || state.inventory().occupiedSlots().containsKey(new InventoryCustody.ContainerSlot(container, slot))) continue;
             var stack = ReferenceContainerCustody.expectedFungibleSlot(state, container, slot);

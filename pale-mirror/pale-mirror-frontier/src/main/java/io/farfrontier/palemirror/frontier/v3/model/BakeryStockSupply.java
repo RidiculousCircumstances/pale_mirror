@@ -6,9 +6,10 @@ import java.util.*;
 final class BakeryStockSupply implements StockSupplyPort {
     @Override public Key key() { return Key.BAKERY; }
     @Override public long inputDemand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner, String itemKind) {
-        // This recipe consumes one wheat per bread. Its own retained batches are already in the output view.
-        return itemKind.equals("minecraft:wheat")
-                ? ProductionStockDemand.readSupply(state, owner, SettlementFoodPolicy.BREAD, Optional.empty()).missing() : 0;
+        var recipe = BakeryRecipes.bread(state);
+        return recipe.ingredient().accepts(itemKind) ? Math.multiplyExact(
+                Math.ceilDiv(ProductionStockDemand.readSupply(state, owner, recipe.product().itemKind(), Optional.empty()).missing(),
+                        recipe.product().quantity()), recipe.ingredient().quantity()) : 0;
     }
     @Override public List<Commitment> pending(FrontierWorldState state) {
         var result = new ArrayList<Commitment>();
@@ -25,7 +26,7 @@ final class BakeryStockSupply implements StockSupplyPort {
                 case ProductionInputHold.FungibleCold cold -> cold.inputLots().values().stream().mapToLong(Integer::longValue).sum();
                 case ProductionInputHold.FungibleBound bound -> bound.inputLots().values().stream().mapToLong(Integer::longValue).sum();
             };
-            result.add(new Commitment(job.id(), owner, "minecraft:wheat", 0, input));
+            result.add(new Commitment(job.id(), owner, job.bakeryWork().map(BakeryWorkState::inputItemKind).orElse("minecraft:wheat"), 0, input));
         }
         return List.copyOf(result);
     }

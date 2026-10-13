@@ -41,8 +41,10 @@ public final class ExtractionExternalChanges {
             }
             state = ExtractionWorkTargets.withdrawTargetRoute(state, job);
             var reserved = new HashSet<>(sites.reservedCells(job.siteId())); reserved.remove(target.key().cell());
+            var needed = ExtractionStockDemand.requiredCells(state, changed, Optional.of(job.id()));
             var nextCell = ExtractionWorkTargets.spatialSelection(state, changed, job.execution().actorId(),
-                    changed.available(reserved).stream().filter(value -> ExtractionWorkPolicy.matchingOutput(value, job)).toList(),
+                    changed.available(reserved).stream().filter(value -> needed.contains(value.id()))
+                        .filter(value -> ExtractionWorkPolicy.matchingOutput(value, job)).toList(),
                     AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION);
             if (job.phase() == ExtractionWork.Phase.TAKE_TOOL && nextCell.isEmpty()) {
                 jobs.remove(job.id()); executions = ActorExecutionComposition.LIFECYCLE

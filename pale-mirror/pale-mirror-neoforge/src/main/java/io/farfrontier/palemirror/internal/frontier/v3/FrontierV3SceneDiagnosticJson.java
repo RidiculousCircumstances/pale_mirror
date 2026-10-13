@@ -96,7 +96,7 @@ final class FrontierV3SceneDiagnosticJson {
                     + ",\"productionNext\":null,\"productionNextBody\":"
                     + (work.phase() == io.farfrontier.palemirror.frontier.v3.model.BakeryWorkState.Phase.DELIVERED
                         ? "null" : FrontierV3DiagnosticJson.position(goal.station().standingBody()))
-                    + ",\"productionFutureBody\":null,\"bakeryLabourPermille\":" + work.labourPermille()
+                    + ",\"productionFutureBody\":null,\"bakeryLabourPermille\":" + io.farfrontier.palemirror.frontier.v3.model.BakeryLabour.permille(state, job)
                     + ",\"bakeryPendingPhysicalEffect\":" + work.pendingPhysicalStep().isPresent();
         }
         var corridor = job.workTraversal().linearCorridorSurfaces();
