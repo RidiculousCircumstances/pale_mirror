@@ -16,10 +16,14 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
     private final Predicate<BlockPosition> occupied;
     private final Object version;
     private final Optional<PedestrianGeometryRevision> revision;
+    private final double[] poseOffsets;
 
     public ProfiledPedestrianGeometry(PedestrianRouteGeometry terrain, UnitNavigationProfile profile,
                                       Predicate<BlockPosition> occupied) {
         this.terrain = Objects.requireNonNull(terrain); this.profile = Objects.requireNonNull(profile);
+        double overhang = Math.max(0, (profile.width() - 1.0) / 2.0);
+        double shift = Math.min(0.499999, overhang + 0.000001);
+        this.poseOffsets = overhang == 0 ? new double[]{0.5} : new double[]{0.5, 0.5 - shift, 0.5 + shift};
         this.occupied = Objects.requireNonNull(occupied); this.version = new Version(terrain.version(), profile);
         this.revision = terrain.regionalRevision().map(source -> {
             // A body at a region edge also observes the neighbouring region's obstacles.
@@ -44,7 +48,9 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
         return !clearBody(surface);
     }
     @Override public boolean clearBody(SurfaceAnchor surface) {
-        return profile.footprintRadius() == 0 ? clearVolume(surface.x() + 0.5, surface.z() + 0.5, surface.y() + 1) : !poses(surface).isEmpty();
+        for (double x : poseOffsets) for (double z : poseOffsets)
+            if (clearVolume(surface.x() + x, surface.z() + z, surface.y() + 1)) return true;
+        return false;
     }
     /** Interaction stations require the named centre; transit may use a clear sub-cell position.
      * A wide actor can approach a one-block rise without pretending its body overlaps the rise. */
@@ -57,11 +63,8 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
                 && knowsSupport(target) && clearStation(target);
     }
     private java.util.List<double[]> poses(SurfaceAnchor surface) {
-        double overhang = Math.max(0, (profile.width() - 1.0) / 2.0);
-        double shift = Math.min(0.499999, overhang + 0.000001);
-        var offsets = overhang == 0 ? new double[]{0.5} : new double[]{0.5, 0.5 - shift, 0.5 + shift};
         var result = new java.util.ArrayList<double[]>();
-        for (double x : offsets) for (double z : offsets)
+        for (double x : poseOffsets) for (double z : poseOffsets)
             if (clearVolume(surface.x() + x, surface.z() + z, surface.y() + 1))
                 result.add(new double[]{surface.x() + x, surface.z() + z});
         return result;
@@ -89,11 +92,17 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
     @Override public boolean canTraverse(SurfaceAnchor from, SurfaceAnchor to) {
         long dy = (long) to.y() - from.y();
         if (Math.abs((long) from.x() - to.x()) + Math.abs((long) from.z() - to.z()) != 1
-                || dy > profile.stepUpBlocks() || -dy > profile.dropBlocks() || blocked(from) || blocked(to)) return false;
+                || dy > profile.stepUpBlocks() || -dy > profile.dropBlocks()
+                || !terrain.supportAvailable(from) || !terrain.supportAvailable(to)) return false;
         int feet = Math.max(from.y(), to.y()) + 1;
         if (profile.footprintRadius() == 0)
-            return clearVolume(from.x() + 0.5, from.z() + 0.5, feet) && clearVolume(to.x() + 0.5, to.z() + 0.5, feet);
-        for (var origin : poses(from)) for (var target : poses(to)) {
+            return clearBody(from) && clearBody(to)
+                    && clearVolume(from.x() + 0.5, from.z() + 0.5, feet) && clearVolume(to.x() + 0.5, to.z() + 0.5, feet);
+        // Evaluate each endpoint once. Java otherwise rebuilds every target pose for
+        // every origin, multiplying identical footprint checks in regional searches.
+        var origins = poses(from);
+        var targets = poses(to);
+        for (var origin : origins) for (var target : targets) {
             boolean clear = true;
             for (int sample = 0; sample <= 4; sample++) {
                 double fraction = sample / 4.0;
