@@ -61,8 +61,7 @@ public final class FungibleResourceCustodySupport {
 
     public static Optional<CustodyAccount> accountAtContainer(FrontierWorldState state, SubjectId containerId) {
         Objects.requireNonNull(state, "resource state"); Objects.requireNonNull(containerId, "resource container");
-        return state.inventory().fungibleResources().accounts().values().stream().filter(account -> account.custody() instanceof ResourceCustody.Container container
-                && container.containerId().equals(containerId)).findFirst();
+        return FungibleResourceReadIndex.container(state.inventory().fungibleResources(), containerId);
     }
 
     /**

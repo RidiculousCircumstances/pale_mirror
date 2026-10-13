@@ -911,17 +911,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
     }
 
     private int unclaimedQuantity(CustodyAccount account, SubjectId economicOwnerId, String itemKind) {
-        Objects.requireNonNull(economicOwnerId, "resource economic owner");
-        Objects.requireNonNull(itemKind, "resource item kind");
-        int available = account.lotQuantities().entrySet().stream().filter(entry -> {
-            ResourceLot lot = requireLot(entry.getKey());
-            return lot.economicOwnerId().equals(economicOwnerId) && lot.itemKind().equals(itemKind);
-        }).mapToInt(Map.Entry::getValue).sum();
-        int claimed = account.claimQuantities().entrySet().stream().filter(entry -> {
-            ClaimAllocation current = claims.get(entry.getKey());
-            return current.economicOwnerId().equals(economicOwnerId) && current.itemKind().equals(itemKind);
-        }).mapToInt(Map.Entry::getValue).sum();
-        return Math.subtractExact(available, claimed);
+        return FungibleResourceReadIndex.available(this, account.id(), economicOwnerId, itemKind);
     }
 
     private Reservation reserve(CustodyAccount account, ClaimAllocation claim) {

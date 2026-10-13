@@ -18,6 +18,20 @@ public final class ResidentActivityProcess {
     // Unavailable owners are held without a WAL retry. A one-tick due fence
     // lets the exact waiter run promptly after source/work state changes.
     private static final long PENDING_RETRY_TICKS = 1L;
+    private record AdmissionImage(FrontierWorldState state,
+            java.util.Map<ScheduledAction, ResidentActivityAdmission> values,
+            java.util.Map<SubjectId, Set<SubjectId>> wakeKeys) { }
+    private static final int MAX_ADMISSION_QUERIES = 4_096;
+    private static final ThreadLocal<AdmissionImage> ADMISSIONS = new ThreadLocal<>();
+
+    private static AdmissionImage admissionImage(FrontierWorldState state) {
+        var image = ADMISSIONS.get();
+        if (image == null || image.state() != state) {
+            image = new AdmissionImage(state, new java.util.HashMap<>(), new java.util.HashMap<>());
+            ADMISSIONS.set(image);
+        }
+        return image;
+    }
     private ResidentActivityProcess() { }
 
     public static ScheduledAction review(SubjectId residentId, long dueAt) {
@@ -40,7 +54,23 @@ public final class ResidentActivityProcess {
 
     /** Evaluate actual admission once when due/woken, never turn an unchanged refusal into WAL work. */
     public static ResidentActivityAdmission admission(FrontierWorldState state, ScheduledAction action) {
-        try { return currentAdmission(state, action); }
+        // Only canonical no-stock/retained-meal refusals are memoized. Clearance
+        // admission can depend on external calculation evidence, so it is never
+        // retained here. A new immutable state or exact schedule invalidates the
+        // refusal, even if a causal wake was missed.
+        var image = admissionImage(state);
+        var retained = image.values().get(action);
+        if (retained != null) return retained;
+        try {
+            var result = currentAdmission(state, action);
+            if (result instanceof ResidentActivityAdmission.Waiting waiting
+                    && (waiting.reason() == ResidentActivityAdmission.Reason.FOOD_STOCK
+                        || waiting.reason() == ResidentActivityAdmission.Reason.RETAINED_MEAL)) {
+                if (image.values().size() >= MAX_ADMISSION_QUERIES) image.values().clear();
+                image.values().put(action, result);
+            }
+            return result;
+        }
         catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
             if (unavailable.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
                 throw unavailable;
@@ -93,17 +123,21 @@ public final class ResidentActivityProcess {
 
     /** No route search here: queue indexing and operator diagnostics share these causal addresses. */
     public static Set<SubjectId> wakeDependencies(FrontierWorldState state, SubjectId residentId) {
+        var image = admissionImage(state);
+        var retained = image.wakeKeys().get(residentId);
+        if (retained != null) return retained;
         ResidentProfile resident = state.humanPopulation().resident(residentId);
         if (resident == null) return Set.of(residentId);
         var keys = new java.util.HashSet<SubjectId>();
         keys.add(residentId);
-        state.inventory().containers().values().stream()
-                .filter(container -> container.ownerId().equals(resident.settlementId()))
-                .filter(container -> container.storage().map(policy -> policy.role() == ResourceStorageRole.WAREHOUSE).orElse(false))
-                .map(ContainerRecord::id).forEach(keys::add);
+        keys.addAll(ResourceStorageSelection.declaredContainers(state.inventory(), resident.settlementId(),
+                Set.of(ResourceStorageRole.WAREHOUSE)));
         keys.add(resident.settlementId());
         HumanAssignmentProjection.compile(state).assignment(residentId).ownerId().ifPresent(keys::add);
-        return Set.copyOf(keys);
+        var result = Set.copyOf(keys);
+        if (image.wakeKeys().size() >= MAX_ADMISSION_QUERIES) image.wakeKeys().clear();
+        image.wakeKeys().put(residentId, result);
+        return result;
     }
 
     private static ResidentActivityAdmission.Waiting waiting(FrontierWorldState state, SubjectId residentId,

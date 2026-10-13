@@ -19,6 +19,8 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
     private static final int MAX_CACHED_REVISIONS = 128;
     private static final Map<Dependencies, HumanAssignmentProjection> CACHE =
             Collections.synchronizedMap(new HashMap<>());
+    private record Current(FrontierWorldState state, HumanAssignmentProjection projection) { }
+    private static final ThreadLocal<Current> CURRENT = new ThreadLocal<>();
     /** Identity comparisons of exactly the immutable sources read by compileFresh; no world-state hashing. */
     private record Dependencies(List<Object> sources) {
         static Dependencies of(FrontierWorldState state) {
@@ -47,13 +49,19 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
 
     public static HumanAssignmentProjection compile(FrontierWorldState state) {
         Objects.requireNonNull(state, "assignment state");
+        var current = CURRENT.get();
+        if (current != null && current.state() == state) return current.projection();
         synchronized (CACHE) {
             Dependencies dependencies = Dependencies.of(state);
             HumanAssignmentProjection cached = CACHE.get(dependencies);
-            if (cached != null) return cached;
+            if (cached != null) {
+                CURRENT.set(new Current(state, cached));
+                return cached;
+            }
             if (CACHE.size() >= MAX_CACHED_REVISIONS) CACHE.clear();
             HumanAssignmentProjection compiled = compileFresh(state);
             CACHE.put(dependencies, compiled);
+            CURRENT.set(new Current(state, compiled));
             return compiled;
         }
     }

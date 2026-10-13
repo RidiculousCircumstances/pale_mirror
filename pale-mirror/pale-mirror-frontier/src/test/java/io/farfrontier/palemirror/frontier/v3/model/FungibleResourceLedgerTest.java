@@ -352,11 +352,21 @@ class FungibleResourceLedgerTest {
 
     @Test
     void reservedPortionMovesExactlyAndCannotBeDoubleAllocatedOrOverConsumed() {
-        FungibleResourceLedger reserved = issue(10).reserve(new ClaimAllocation(new SubjectId("claim:provision"), new SubjectId("process:provision"), OWNER,
+        var source = issue(10);
+        assertEquals(10, source.unclaimedQuantity(DEPOT_ACCOUNT, OWNER, "minecraft:bread"));
+        FungibleResourceLedger reserved = source.reserve(new ClaimAllocation(new SubjectId("claim:provision"), new SubjectId("process:provision"), OWNER,
                 "minecraft:bread", 4, Map.of(), ClaimPurpose.EXTERNAL_RESERVATION), DEPOT_ACCOUNT);
+        assertEquals(6, reserved.unclaimedQuantity(DEPOT_ACCOUNT, OWNER, "minecraft:bread"));
+        assertEquals(10, source.unclaimedQuantity(DEPOT_ACCOUNT, OWNER, "minecraft:bread"), "immutable predecessor remains exact");
         CustodyAccount player = new CustodyAccount(new SubjectId("custody:player"), new ResourceCustody.Player(uuid(3)), Map.of(LOT, 4),
                 Map.of(new SubjectId("claim:provision"), 4));
         FungibleResourceLedger stolen = reserved.transferToNewAccount(DEPOT_ACCOUNT, player);
+        assertEquals(6, stolen.unclaimedQuantity(DEPOT_ACCOUNT, OWNER, "minecraft:bread"));
+        assertEquals(0, stolen.unclaimedQuantity(player.id(), OWNER, "minecraft:bread"), "claimed stock is never spare food");
+        assertEquals(0, stolen.unclaimedQuantity(DEPOT_ACCOUNT, OWNER, "minecraft:wheat"));
+        assertEquals(0, stolen.unclaimedQuantity(DEPOT_ACCOUNT, new SubjectId("settlement:foreign"), "minecraft:bread"));
+        assertThrows(IllegalArgumentException.class, () ->
+                stolen.unclaimedQuantity(new SubjectId("custody:missing"), OWNER, "minecraft:bread"));
 
         assertEquals(10, stolen.totalQuantity(OWNER, "minecraft:bread"));
         assertEquals(4, stolen.accounts().get(player.id()).claimQuantities().get(new SubjectId("claim:provision")));
@@ -670,6 +680,8 @@ class FungibleResourceLedgerTest {
         CustodyAccount destination = new CustodyAccount(new SubjectId("custody:hive-store"), new ResourceCustody.Container(receiver), Map.of(child.id(), 4), Map.of());
 
         FungibleResourceLedger delivered = loaded.deliverCargoToContainer(cargoAccountId, destination, hive);
+        assertEquals(4, delivered.unclaimedQuantity(destination.id(), hive, "minecraft:bread"));
+        assertEquals(0, delivered.unclaimedQuantity(destination.id(), OWNER, "minecraft:bread"), "title changes invalidate availability");
 
         assertEquals(hive, delivered.lots().get(child.id()).economicOwnerId());
         assertEquals(Map.of(child.id(), 4), delivered.accounts().get(destination.id()).lotQuantities());

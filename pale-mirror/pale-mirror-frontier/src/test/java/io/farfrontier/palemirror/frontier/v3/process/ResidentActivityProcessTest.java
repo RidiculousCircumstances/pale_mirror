@@ -266,6 +266,9 @@ class ResidentActivityProcessTest {
         SubjectId resident = settlement.residents().getFirst().id();
         var action = ResidentActivityProcess.review(resident, 24_000L);
         assertTrue(FrontierWorldRuntimeDefinition.scheduledHeld(initial, action));
+        assertTrue(FrontierWorldRuntimeDefinition.scheduledHeld(initial, action), "repeat exact no-stock admission");
+        assertFalse(FrontierWorldRuntimeDefinition.scheduledHeld(initial, ResidentActivityProcess.review(resident, 1L)),
+                "a different exact need deadline cannot inherit the hungry refusal");
 
         SubjectId account = ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(settlement.id()));
         FungibleResourceLedger resources = initial.inventory().fungibleResources().transformCold(account,
@@ -275,6 +278,10 @@ class ResidentActivityProcessTest {
         FrontierWorldState restocked = initial.withInventory(initial.inventory().withFungibleResources(resources));
         assertFalse(FrontierWorldRuntimeDefinition.scheduledHeld(restocked, action),
                 "stock change makes the same retained exact due action runnable");
+        assertTrue(FrontierWorldRuntimeDefinition.scheduledHeld(initial, action),
+                "revisiting an immutable older image must not inherit a newer image's stock");
+        assertFalse(FrontierWorldRuntimeDefinition.scheduledHeld(restocked, action),
+                "a missed derived wake cannot preserve a refusal across an actual source change");
 
         var planned = FrontierWorldRuntimeDefinition.planScheduled(restocked, action, new SimInstant(50_000L));
         ResidentMealStarted started = assertInstanceOf(ResidentMealStarted.class, planned.getFirst().payload());

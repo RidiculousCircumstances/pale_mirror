@@ -10,8 +10,12 @@ import java.util.Optional;
 
 /** Derives bounded slot presentation; no physical slot becomes resource identity or stock authority. */
 public final class UnitInventoryPresentation {
+    private static final List<ActorItemSlot> SLOTS = declaredSlots();
     private UnitInventoryPresentation() { }
     public static List<ActorItemSlot> slots() {
+        return SLOTS;
+    }
+    private static List<ActorItemSlot> declaredSlots() {
         var slots = new ArrayList<ActorItemSlot>();
         for (int i = 0; i < 8; i++) slots.add(new ActorItemSlot.Pocket(i));
         slots.add(new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.OFF));
@@ -20,6 +24,19 @@ public final class UnitInventoryPresentation {
     }
 
     public static Map<SubjectId, ActorCarriedResources.Presentation> inventory(FrontierWorldState state, SubjectId actor) {
+        return view(state, actor).inventory();
+    }
+
+    /** One current query supplies both the presentation and its capacity assessment. */
+    public record View(Map<SubjectId, ActorCarriedResources.Presentation> inventory,
+                       java.util.Set<ActorItemSlot> occupied) {
+        public View { inventory = Map.copyOf(inventory); occupied = java.util.Set.copyOf(occupied); }
+        public Optional<ActorItemSlot> freeSlot() {
+            return slots().stream().filter(slot -> !occupied.contains(slot)).findFirst();
+        }
+    }
+
+    public static View view(FrontierWorldState state, SubjectId actor) {
         var result = new LinkedHashMap<SubjectId, ActorCarriedResources.Presentation>();
         var used = new HashSet<>(UnitInventorySlotReservations.reserved(state, actor));
         if (!state.inventory().actorItems(actor).isEmpty())
@@ -67,7 +84,8 @@ public final class UnitInventoryPresentation {
         }
         if (meal != null && meal.portable() && !result.get(meal.actorAccountId()).slot().equals(meal.inventorySlot()))
             throw new IllegalArgumentException("portable meal differs from its retained inventory presentation");
-        return Map.copyOf(result);
+        if (meal != null) used.add(meal.inventorySlot());
+        return new View(result, used);
     }
 
     public static Optional<ActorItemSlot> freeSlot(FrontierWorldState state, SubjectId actor) {
@@ -80,14 +98,7 @@ public final class UnitInventoryPresentation {
     }
 
     private static java.util.Set<ActorItemSlot> occupiedSlots(FrontierWorldState state, SubjectId actor) {
-        var used = inventory(state, actor).values().stream().map(ActorCarriedResources.Presentation::slot)
-                .collect(java.util.stream.Collectors.toSet());
-        used.addAll(UnitInventorySlotReservations.reserved(state, actor));
-        if (!state.inventory().actorItems(actor).isEmpty())
-            used.add(new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN));
-        var meal = state.humanPopulation().meals().get(actor);
-        if (meal != null) used.add(meal.inventorySlot());
-        return used;
+        return view(state, actor).occupied();
     }
 
     private static void add(Map<SubjectId, ActorCarriedResources.Presentation> result,

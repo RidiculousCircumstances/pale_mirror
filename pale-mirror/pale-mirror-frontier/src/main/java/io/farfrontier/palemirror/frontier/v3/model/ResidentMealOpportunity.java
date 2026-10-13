@@ -178,7 +178,8 @@ public final class ResidentMealOpportunity {
         int wanted = state.humanPopulation().nutrition(residentId).accrueThrough(atTick, rules,
                 resident.characteristics().effectiveMetabolismPermille(atTick)).nutritionWanted(rules);
         var resources = state.inventory().fungibleResources();
-        var presentation = UnitInventoryPresentation.inventory(state, residentId);
+        var inventoryView = UnitInventoryPresentation.view(state, residentId);
+        var presentation = inventoryView.inventory();
         for (var account : UnitInventory.personalAccounts(state, residentId)) {
             if (!account.claimQuantities().isEmpty()) continue;
             var carry = presentation.get(account.id());
@@ -194,7 +195,7 @@ public final class ResidentMealOpportunity {
         }
         if (!ActivityExecutionCapabilities.permitsHomeFood(state, HumanAssignmentProjection.compile(state).assignment(residentId)))
             return Search.waiting(Wait.MISSION_SUPPLY);
-        var portionSlot = UnitInventoryPresentation.freeSlot(state, residentId);
+        var portionSlot = inventoryView.freeSlot();
         if (portionSlot.isEmpty()) return Search.waiting(Wait.INVENTORY_CAPACITY);
         var alternatives = new java.util.ArrayList<Candidate>();
         boolean serviceUnavailable = false;

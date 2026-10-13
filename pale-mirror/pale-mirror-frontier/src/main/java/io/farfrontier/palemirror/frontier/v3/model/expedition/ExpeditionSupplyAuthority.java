@@ -8,6 +8,8 @@ import java.util.*;
 
 /** Supply owner retains promises and accepts resource receipts; it does not own stock or actor motion. */
 public final class ExpeditionSupplyAuthority {
+    private record SlotImage(Map<SubjectId, TransportMission> source, Map<SubjectId, Set<ActorItemSlot>> slots) { }
+    private static final ThreadLocal<SlotImage> SLOT_IMAGE = new ThreadLocal<>();
     private ExpeditionSupplyAuthority() { }
     public static Optional<ActorExecutionId> execution(FrontierWorldState state, TransportMission mission,
                                                        ExpeditionSupplyLoad.Allocation allocation) {
@@ -34,10 +36,21 @@ public final class ExpeditionSupplyAuthority {
         return owners.stream().findFirst();
     }
     public static Set<ActorItemSlot> reservedSlots(FrontierWorldState state, SubjectId actor) {
-        return state.shipments().missions().values().stream().flatMap(m -> java.util.stream.Stream.concat(
-                m.supplies().stream().flatMap(load -> load.allocations().stream()).filter(a -> !a.loaded() && !a.withdrawn() && a.actorId().equals(actor)).map(ExpeditionSupplyLoad.Allocation::slot),
-                m.replenishment().stream().filter(t -> t.actorId().equals(actor)).map(UnitResourceTransfer::slot)))
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        var source = state.shipments().missions();
+        var image = SLOT_IMAGE.get();
+        if (image == null || image.source() != source) {
+            var slots = new HashMap<SubjectId, Set<ActorItemSlot>>();
+            for (var mission : source.values()) {
+                mission.supplies().ifPresent(load -> load.allocations().stream()
+                    .filter(a -> !a.loaded() && !a.withdrawn()).forEach(a ->
+                        slots.computeIfAbsent(a.actorId(), ignored -> new HashSet<>()).add(a.slot())));
+                mission.replenishment().ifPresent(t -> slots.computeIfAbsent(t.actorId(), ignored -> new HashSet<>()).add(t.slot()));
+            }
+            slots.replaceAll((id, values) -> Set.copyOf(values));
+            image = new SlotImage(source, Map.copyOf(slots));
+            SLOT_IMAGE.set(image);
+        }
+        return image.slots().getOrDefault(Objects.requireNonNull(actor), Set.of());
     }
     public static FungibleResourceLedger reserveDeclaration(FrontierWorldState state, TransportMission mission, UnitGroup group) {
         if (mission.supplies().isEmpty()) {

@@ -6,6 +6,32 @@ import java.util.function.Predicate;
 
 /** Read-only discovery. The caller must retain the endpoint and commit its existing capacity demand. */
 public final class ResourceStorageSelection {
+    private record DeclarationImage(Map<SubjectId, ContainerRecord> source,
+                                    Map<SubjectId, List<ContainerRecord>> owners) { }
+    private static final ThreadLocal<DeclarationImage> DECLARATIONS = new ThreadLocal<>();
+
+    private static List<ContainerRecord> owned(ExactInventory inventory, SubjectId owner) {
+        var image = DECLARATIONS.get();
+        if (image == null || image.source() != inventory.containers()) {
+            var owners = new HashMap<SubjectId, List<ContainerRecord>>();
+            for (var record : inventory.containers().values())
+                owners.computeIfAbsent(record.ownerId(), ignored -> new ArrayList<>()).add(record);
+            owners.replaceAll((id, values) -> List.copyOf(values));
+            image = new DeclarationImage(inventory.containers(), Map.copyOf(owners));
+            DECLARATIONS.set(image);
+        }
+        return image.owners().getOrDefault(Objects.requireNonNull(owner), List.of());
+    }
+
+    /** Declaration addresses only, including currently blocked custody for causal wake indexing. */
+    public static Set<SubjectId> declaredContainers(ExactInventory inventory, SubjectId owner, Set<ResourceStorageRole> roles) {
+        roles = Set.copyOf(Objects.requireNonNull(roles));
+        if (roles.isEmpty()) throw new IllegalArgumentException("storage request must declare its permitted tiers");
+        var requested = roles;
+        return owned(inventory, owner).stream().filter(record -> record.storage()
+                .filter(policy -> requested.contains(policy.role())).isPresent()).map(ContainerRecord::id)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
     public record Placement(ShipmentEndpoint endpoint, int quantity) {
         public Placement {
             Objects.requireNonNull(endpoint);
@@ -120,8 +146,7 @@ public final class ResourceStorageSelection {
     private static java.util.stream.Stream<ResourceStoragePolicy> declared(FrontierWorldState state, SubjectId owner,
             String itemKind, Set<ResourceStorageRole> roles) {
         if (roles.isEmpty()) throw new IllegalArgumentException("storage request must declare its permitted tiers");
-        return state.inventory().containers().values().stream()
-                .filter(record -> record.ownerId().equals(owner)).flatMap(record -> record.storage().stream())
+        return owned(state.inventory(), owner).stream().flatMap(record -> record.storage().stream())
                 .filter(policy -> roles.contains(policy.role()))
                 .filter(policy -> policy.filter().accepts(itemKind));
     }
