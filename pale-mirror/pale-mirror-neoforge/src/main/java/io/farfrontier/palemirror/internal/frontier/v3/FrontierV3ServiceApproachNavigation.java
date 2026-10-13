@@ -26,11 +26,9 @@ final class FrontierV3ServiceApproachNavigation {
 
     /** Travel does not acquire service: reserve a local waiting target, never the shared egress. */
     static FrontierV3GoalNavigation.Result waitOutside(ServerLevel level, Mob body, FrontierWorldState state,
-            SubjectId pointId, SubjectId ownerId, SubjectId actorId, int phase, long generation,
+            SubjectId pointId, SubjectId actorId, int phase, long generation,
             FrontierV3ActorActuation actuation) {
-        if (!actuation.id().execution().actorId().equals(actorId)
-                || !actuation.id().execution().activityOwnerId().equals(ownerId))
-            throw new IllegalArgumentException("service waiting lost its exact execution owner/actor");
+        requireWaitingAuthority(state, actorId, actuation.id());
         var declared = ServiceBoundaryComposition.declaration(state, pointId);
         var point = ServiceBoundaryComposition.geometry(state, declared.identity());
         var excluded = new HashSet<>(ServiceDestinationClaims.excludedFor(state, actorId));
@@ -81,6 +79,20 @@ final class FrontierV3ServiceApproachNavigation {
                 ? new FrontierV3GoalNavigation.Result(FrontierV3GoalNavigation.Status.IN_PROGRESS,
                     "service-access:waiting-outside target=" + prior.target(), Optional.empty(), Optional.empty())
                 : result; // Never return semantic ARRIVED to a work owner.
+    }
+
+    /**
+     * The owning provider validates its service/order relation before calling us.
+     * A parcel can legitimately be serviced by a GROUP_MEMBER execution whose
+     * owner is the group, not the parcel. Waiting only exercises that actor's
+     * exact captured body/execution; it cannot acquire or complete service.
+     */
+    static void requireWaitingAuthority(FrontierWorldState state, SubjectId actorId,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId authority) {
+        if (!authority.execution().actorId().equals(actorId))
+            throw new IllegalArgumentException("service waiting addresses a foreign actor: actor="
+                    + actorId + "; authority=" + authority);
+        ActorBodyAuthority.requireActuation(state, authority);
     }
 
     static FrontierV3GoalNavigation.Goal waitingGoal(ServiceAccessPoint point, SurfaceAnchor target, WorldBounds bounds) {

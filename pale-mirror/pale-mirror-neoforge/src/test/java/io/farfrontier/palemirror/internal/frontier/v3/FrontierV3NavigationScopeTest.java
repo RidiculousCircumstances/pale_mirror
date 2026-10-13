@@ -10,6 +10,57 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3NavigationScopeTest {
+    @Test void serviceWaitingUsesExactGroupActuationNotParcelOwnershipAndRejectsStaleOrForeignAuthority() {
+        var state = ConsolidatedTradeFixture.initial(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:group-service-wait"), 20260918065L, false);
+        var seller = new SubjectId("settlement:1");
+        var buyer = state.companies().goodsTrade().participants().participants().get(seller).known().getFirst().party().id();
+        state = tradeReview(state, seller, 400L);
+        state = tradeReview(state, buyer, 401L);
+        var shipment = state.shipments().shipments().values().iterator().next();
+        var execution = shipment.execution();
+        var actor = execution.actorId();
+        var parcel = shipment.id();
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.GROUP_MEMBER, execution.activityKind());
+        state = ActorBodyAuthority.demand(state, actor);
+        var body = ActorBodyAuthority.current(state, actor);
+        state = ActorBodyAuthority.running(state, body);
+        var authority = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(body, execution);
+        assertNotEquals(parcel, execution.activityOwnerId(), "service order and execution owners are separate relations");
+        FrontierV3ServiceApproachNavigation.requireWaitingAuthority(state, actor, authority);
+        final var exact = state;
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3ServiceApproachNavigation.requireWaitingAuthority(
+                exact, new SubjectId("resident:foreign"), authority));
+        var forged = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(body,
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(actor,
+                        execution.activityKind(), parcel, execution.generation()));
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3ServiceApproachNavigation.requireWaitingAuthority(exact, actor, forged));
+        var stale = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(body,
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(actor,
+                        execution.activityKind(), execution.activityOwnerId(), execution.generation() + 1L));
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3ServiceApproachNavigation.requireWaitingAuthority(exact, actor, stale));
+        var wrongBody = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(actor, body.physicalEpoch() + 1L), execution);
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3ServiceApproachNavigation.requireWaitingAuthority(exact, actor, wrongBody));
+    }
+
+    private static FrontierWorldState tradeReview(FrontierWorldState state, SubjectId party, long tick) {
+        for (var proposed : io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.plan(state,
+                io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(party, tick),
+                new io.farfrontier.palemirror.frontier.v3.api.SimInstant(tick))) {
+            if (proposed.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect) continue;
+            var event = new io.farfrontier.palemirror.frontier.v3.api.FrontierEvent(1,
+                    new io.farfrontier.palemirror.frontier.v3.api.EventId("event:service-wait-test"),
+                    new io.farfrontier.palemirror.frontier.v3.api.TransactionId("transaction:service-wait-test"),
+                    state.bootstrap().worldId(), new io.farfrontier.palemirror.frontier.v3.api.Revision(1),
+                    new io.farfrontier.palemirror.frontier.v3.api.SimInstant(tick), proposed.subject(),
+                    io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(
+                            new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:service-wait-test")), proposed.payload());
+            state = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.reduce(state, event);
+        }
+        return state;
+    }
+
     @Test void busyServiceRestrictsOnlyEntryNotTheWholeApproachOrItsDetours() {
         var start = SurfaceAnchor.at(1, 63, 1);
         var waiting = SurfaceAnchor.at(4, 63, 1);

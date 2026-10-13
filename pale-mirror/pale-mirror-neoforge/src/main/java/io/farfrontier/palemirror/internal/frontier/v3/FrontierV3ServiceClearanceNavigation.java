@@ -31,11 +31,15 @@ final class FrontierV3ServiceClearanceNavigation {
             // Release the occupied turn on witnessed exit, not at a later work goal.
             if (supported.isPresent() && boundary.occupied(state.actorLocations().get(actorId).body()))
                 FrontierV3ActorBodyController.inspectCurrent(level, runtime, body);
+            state = runtime.decodedState().orElseThrow();
+            if (!actuation.current(body))
+                return new FrontierV3GoalNavigation.Result(FrontierV3GoalNavigation.Status.AMBIGUOUS,
+                        "stale-body-or-execution-authority", java.util.Optional.empty(), java.util.Optional.empty());
             // Being outside is not a parking instruction: the exit must remain available.
             // A normal jump on the way to a buffer must not switch back to an egress goal;
             // only the occupancy receipt above requires supported-ground evidence.
             return FrontierV3ServiceApproachNavigation.waitOutside(level, body, state, depotId,
-                    ownerId, actorId, phase, generation, actuation);
+                    actorId, phase, generation, actuation);
         }
         return pursue(level, body, state, settlementId, depotId, ownerId, actorId, phase, generation, actuation);
     }
