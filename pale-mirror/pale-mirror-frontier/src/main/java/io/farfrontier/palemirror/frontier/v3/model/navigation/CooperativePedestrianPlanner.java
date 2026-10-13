@@ -73,9 +73,12 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
             var request = ready.removeFirst();
             var search = pending.get(request);
             long previous = search.workUnits();
-            PedestrianRouteResult result = search.advance(Math.min(remaining, HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2));
+            int slice = Math.min(remaining, HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            PedestrianRouteResult result = search.advance(slice);
             int spent = Math.toIntExact(result.workUnits() - previous);
-            if (spent < 0 || spent > remaining) throw new IllegalStateException("pedestrian search exceeded its shared work budget");
+            if (spent < 0 || spent > slice) throw new IllegalStateException("pedestrian search exceeded its shared work budget"
+                    + ": spent=" + spent + ", slice=" + slice + ", remaining=" + remaining
+                    + ", start=" + request.start() + ", target=" + request.target());
             workUnits += spent; remaining -= spent;
             if (spent > 0) progressRevision++;
             if (result.status() == PedestrianRouteResult.Status.PLANNING) { ready.addLast(request); continue; }

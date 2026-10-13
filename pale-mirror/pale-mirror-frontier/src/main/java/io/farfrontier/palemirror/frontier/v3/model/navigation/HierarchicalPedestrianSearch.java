@@ -114,6 +114,9 @@ public final class HierarchicalPedestrianSearch {
                 expanding = candidate; expansionNode = expansionEdge = expansionOffset = expansionExit = expansionEntrance = 0;
                 expansionDirection = -1; expansionExits.clear(); publishingExits = null; publication = 0;
             }
+            // Selecting a candidate is itself charged work. Retain that candidate
+            // when it consumes the last unit; expansion belongs to the next slice.
+            if (work >= limit) break;
             expandStep();
             if (terminal != null) return terminal;
         }

@@ -8,6 +8,26 @@ import java.util.function.Predicate;
 import static org.junit.jupiter.api.Assertions.*;
 
 class HierarchicalPedestrianNavigationTest {
+    @Test void selectingACandidateAtTheExactBudgetBoundaryDefersExpansionWithoutLosingTheRoute() {
+        var ground = geometry(new WorldBounds(0, 0, 256, 256), (x, z) -> SurfaceAnchor.at(x, 63, z), s -> false);
+        var start = SurfaceAnchor.at(2, 63, 2); var target = SurfaceAnchor.at(250, 63, 250);
+        // This slice reproduces the old 12,105-unit expansion in a 12,104-unit grant.
+        int budget = 12_104;
+        try (var planner = new CooperativePedestrianPlanner()) {
+            planner.query(ground, start, target);
+            for (int turn = 0; turn < 200 && planner.pendingCount() > 0; turn++) {
+                long before = planner.workUnits();
+                assertDoesNotThrow(() -> planner.advance(budget));
+                assertTrue(planner.workUnits() - before <= budget);
+            }
+            var result = planner.peek(ground, start, target).orElseThrow();
+            assertEquals(PedestrianRouteResult.Status.FOUND, result.status());
+            assertEquals(start, result.route().getFirst());
+            assertEquals(target, result.route().getLast());
+            KnownPedestrianNavigation.requireRoute(ground, result.route());
+        }
+    }
+
     @Test void aLowCeilingInvalidatesAStepEvenWhenBothStationsAreClear() {
         var bootstrap = FrontierBootstrapper.create(new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:step-clearance"),
                 20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r7"));
