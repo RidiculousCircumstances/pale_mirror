@@ -7,7 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.model.*;
 /** Versioned owner declaration for a read-only monitor; no second process or pose authority. */
 public record ShipmentProgressObligation(SubjectId subject, ActorExecutionId execution, long revision,
         String fingerprint, long budgetTicks, Disposition disposition, Next next) {
-    public enum Disposition { ELIGIBLE, HIGHER_PRIORITY_ACTIVITY, RECEIVER_CAPACITY, SERVICE_ACCESS, COURIER_CASUALTY, RECOVERY_UNKNOWN, TERMINAL }
+    public enum Disposition { ELIGIBLE, HIGHER_PRIORITY_ACTIVITY, RECEIVER_CAPACITY, SERVICE_ACCESS, COURIER_CASUALTY, RECOVERY_UNKNOWN, MANIFEST_COORDINATION, TERMINAL }
     public enum Next { LOAD, UNLOAD, RECEIVER_ACKNOWLEDGEMENT, CLOSED }
     public static ShipmentProgressObligation describe(FrontierWorldState state, Shipment shipment) {
         var actor = shipment.execution().actorId();
@@ -18,6 +18,7 @@ public record ShipmentProgressObligation(SubjectId subject, ActorExecutionId exe
                 : state.actorLocations().get(actor).condition().status() == ActorLifeStatus.DEAD ? Disposition.COURIER_CASUALTY
                 : authority.suspended().filter(shipment.execution()::equals).isPresent() ? Disposition.HIGHER_PRIORITY_ACTIVITY
                 : lease != null && lease.status() != AmbientLeaseStatus.CLOSED && lease.status() != AmbientLeaseStatus.HOT ? Disposition.RECOVERY_UNKNOWN
+                : !shipment.terminal() && !TransportCargoExecution.selected(state, shipment) ? Disposition.MANIFEST_COORDINATION
                 : !shipment.terminal() && shipment.movementOrder().arrivedAt(state.actorLocations().get(actor).supportingSurface())
                     && !ShipmentStateSupport.serviceAvailable(state, shipment) ? Disposition.SERVICE_ACCESS
                 : shipment.status() == Shipment.Status.CARRYING && shipment.reception().isEmpty()

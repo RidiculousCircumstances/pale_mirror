@@ -41,7 +41,10 @@ final class ShipmentExecutionCapability implements ActorActivityCapability {
             throw new IllegalArgumentException("shipment presentation retains an unsettled hand/effect");
     }
     static void validateReferences(ShipmentState shipments, ActorExecutionState executions) {
-        for (Shipment shipment : shipments.shipments().values()) if (!shipment.terminal()) executions.requireRetained(shipment.execution());
+        for (Shipment shipment : shipments.shipments().values()) if (!shipment.terminal()) {
+            if (TransportCargoExecution.shared(shipment)) TransportCargoExecution.require(shipments, shipment);
+            executions.requireRetained(shipment.execution());
+        }
         for (ActorExecutionId execution : executions.current(ActorActivityKind.COURIER).values()) {
             Shipment shipment = shipments.shipments().get(execution.activityOwnerId());
             if (shipment == null || shipment.terminal() || !shipment.execution().equals(execution))

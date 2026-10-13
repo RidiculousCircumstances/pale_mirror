@@ -71,7 +71,7 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
             return FrontierWorldPhysicalObservationProcess.planFungibleLayout(state, observed);
         }
         if (command.payload() instanceof FungibleResourceHandoffObserved observed) {
-            return FrontierWorldPhysicalObservationProcess.planFungibleHandoff(state, observed);
+            return FrontierWorldPhysicalObservationProcess.planFungibleHandoff(state, observed, command.submittedAt().ticks());
         }
         if (command.payload() instanceof FungibleStockDepartureObserved observed) {
             return FrontierWorldPhysicalObservationProcess.planFungibleStockDeparture(state, observed,

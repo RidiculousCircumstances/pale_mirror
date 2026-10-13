@@ -106,11 +106,15 @@ final class FrontierV3PedestrianTraffic {
     }
 
     static Query query(ServerLevel level, Mob actor, BlockPos target, FrontierV3NavigationScope scope) {
+        return query(level, actor, target, scope, java.util.Optional.empty());
+    }
+    static Query query(ServerLevel level, Mob actor, BlockPos target, FrontierV3NavigationScope scope,
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> profile) {
         Path unconstrained = actor.getNavigation().createPath(target, 0);
         // A rejected unconstrained shortest path does not prove no legal scoped detour.
         // Failed terrain evidence cannot, however, be attributed to other bodies.
-        Path ordinary = FrontierV3PhysicalPathPolicy.reject(level, unconstrained, scope).isPresent()
-                ? search(level, actor, target, scope, List.of()) : unconstrained;
+        Path ordinary = FrontierV3PhysicalPathPolicy.reject(level, unconstrained, scope).isPresent() || !permitsProfile(unconstrained, profile)
+                ? search(level, actor, target, scope, List.of(), profile) : unconstrained;
         if (FrontierV3PhysicalPathPolicy.reject(level, ordinary, scope).isPresent())
             return new Query(ordinary, List.of(), List.of());
         java.util.Map<java.util.UUID, Body> blockers = new java.util.LinkedHashMap<>();
@@ -140,17 +144,26 @@ final class FrontierV3PedestrianTraffic {
                 other -> other != actor && other.isAlive() && !other.isSpectator() && !following(actor, other, ordinary))
                 .stream().limit(MAX_BODIES + 1L).map(LivingEntity::getBoundingBox).toList();
         if (bodies.size() > MAX_BODIES) return new Query(null, List.of(), List.of(), true);
-        return new Query(search(level, actor, target, scope, bodies), List.copyOf(blockers.values()), passage);
+        return new Query(search(level, actor, target, scope, bodies, profile), List.copyOf(blockers.values()), passage);
     }
 
     /** The same native step/door semantics, with hard scope applied during expansion. */
-    private static Path search(ServerLevel level, Mob actor, BlockPos target, FrontierV3NavigationScope scope, List<AABB> bodies) {
+    private static Path search(ServerLevel level, Mob actor, BlockPos target, FrontierV3NavigationScope scope, List<AABB> bodies,
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> profile) {
         int radius = MAX_QUERY_RADIUS;
         BlockPos origin = actor.blockPosition();
         if (Math.abs((long) target.getX() - origin.getX()) > radius
                 || Math.abs((long) target.getY() - origin.getY()) > radius
                 || Math.abs((long) target.getZ() - origin.getZ()) > radius) return null;
         WalkNodeEvaluator evaluator = new WalkNodeEvaluator() {
+            @Override public int getNeighbors(net.minecraft.world.level.pathfinder.Node[] neighbours, net.minecraft.world.level.pathfinder.Node from) {
+                int count = super.getNeighbors(neighbours, from), retained = 0;
+                for (int index = 0; index < count; index++) {
+                    var next = neighbours[index];
+                    if (profile.isEmpty() || profile.orElseThrow().permitsGrade(from.y, next.y)) neighbours[retained++] = next;
+                }
+                return retained;
+            }
             @Override public PathType getPathTypeOfMob(PathfindingContext context, int x, int y, int z, Mob mob) {
                 BlockPos feet = new BlockPos(x, y, z);
                 if (!level.hasChunkAt(feet) || !scope.permits(new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(x, y - 1, z)))
@@ -166,6 +179,13 @@ final class FrontierV3PedestrianTraffic {
         return new PathFinder(evaluator, MAX_VISITED_NODES).findPath(
                 new PathNavigationRegion(level, origin.offset(-radius, -radius, -radius), origin.offset(radius, radius, radius)),
                 actor, Set.of(target), radius, 0, 1.0F);
+    }
+    static boolean permitsProfile(Path path, java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> profile) {
+        if (path == null) return false;
+        if (profile.isEmpty()) return true; // Explicit unmodeled physical query, not a resident-profile fallback.
+        for (int index = 1; index < path.getNodeCount(); index++)
+            if (!profile.orElseThrow().permitsGrade(path.getNode(index - 1).y, path.getNode(index).y)) return false;
+        return true;
     }
 
     private static boolean following(Mob actor, LivingEntity other, Path path) {

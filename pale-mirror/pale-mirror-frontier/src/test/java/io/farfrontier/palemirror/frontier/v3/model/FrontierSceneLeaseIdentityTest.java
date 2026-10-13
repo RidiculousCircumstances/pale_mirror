@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile;
+
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
@@ -20,7 +22,7 @@ class FrontierSceneLeaseIdentityTest {
                 new BlockPosition(0, 64, 0), io.farfrontier.palemirror.frontier.v3.api.SimInstant.ZERO, 1L,
                 SceneLeaseStatus.PREPARED, java.util.List.of(new SceneMember(actor, SceneLease.deterministicEntityId(world, actor))),
                 java.util.Set.of(), java.util.Optional.empty());
-        var initial = new ActorLocation(new BodyPosition(0, 65, 0), ActorCondition.HEALTHY, ActorKind.RESIDENT);
+        var initial = new ActorLocation(new BodyPosition(0, 65, 0), ActorCondition.HEALTHY, ActorKind.RESIDENT, UnitNavigationProfile.VILLAGER);
         var observed = initial.withBody(new BodyPosition(4, 65, 3));
         assertEquals(initial.body(), lease.memberBody(java.util.Map.of(actor, initial), actor));
         assertEquals(observed.body(), lease.memberBody(java.util.Map.of(actor, observed), actor));

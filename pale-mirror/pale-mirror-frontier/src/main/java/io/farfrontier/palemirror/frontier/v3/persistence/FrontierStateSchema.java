@@ -4,8 +4,9 @@ import java.io.*;
 
 /** Sole header grammar for early installed-world selection and complete aggregate hydration. */
 final class FrontierStateSchema {
-    // Explicit player consent is independent of the expiring machine attendance interval.
-    static final int VERSION = 282;
+    // A declared group execution can retain several stack-sized shipment obligations.
+    // Older disposable worlds cannot inherit this new cargo authority/food-budget contract.
+    static final int VERSION = 284;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

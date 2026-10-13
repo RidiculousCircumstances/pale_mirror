@@ -79,10 +79,15 @@ public final class GoodsParticipantProcess {
             state = GoodsTradeStateSupport.place(state, participant.party().id(), order, now);
             events.add(new ProposedEvent(participant.party().id(), new GoodsTradeOrderPlaced(order))); published++;
         }
+        String decision;
+        if (rules.supplyPlanning().enabled()) {
+            var trip = GoodsTripPlanning.plan(state, participant, now);
+            state = trip.state(); events.addAll(trip.events()); decision = trip.decision() + "; published=" + published;
+        } else {
         var search = state.companies().goodsTrade().contracts().size() < GoodsTradeState.MAX_CONTRACTS
                 ? GoodsOrderMatching.first(state, participant, now) : new GoodsOrderMatching.Search(Optional.empty(), "CONTRACT_RETENTION_LIMIT", 0);
         var match = search.match();
-        String decision = search.disposition() + "; pairs=" + search.checkedPairs() + "; published=" + published;
+        decision = search.disposition() + "; pairs=" + search.checkedPairs() + "; published=" + published;
         if (participant.known().isEmpty()) decision = "NO_KNOWN_COUNTERPARTY";
         if (match.isPresent()) {
             var value = match.orElseThrow();
@@ -97,6 +102,7 @@ public final class GoodsParticipantProcess {
                 if (!value.contract().sourceContainerId().equals(value.contract().receiverContainerId()) && dispatch.isEmpty()) decision = "RESERVED_AWAITING_AVAILABLE_COURIER";
             } else decision = "NAVIGATION_" + routeStatus.name();
         } else events.addAll(GoodsShipmentPlanning.dispatch(state, participant, now));
+        }
         decision += "; withdrawn=" + commitments.events().stream().mapToInt(event ->
                     ((GoodsTradeCancelled) event.payload()).disposition().quantity()).sum()
                 + "; reasons=" + commitments.events().stream().map(event ->

@@ -58,6 +58,7 @@ public final class KnownPedestrianNavigation {
             @Override public io.farfrontier.palemirror.frontier.v3.model.WorldBounds bounds() { return bootstrap.bounds(); }
             @Override public SurfaceAnchor supportAt(int x, int z) { return surveyed.at(x, z); }
             @Override public boolean blocked(SurfaceAnchor surface) { return KnownPedestrianNavigation.blocked(surface, hard); }
+            @Override public boolean supportAvailable(SurfaceAnchor surface) { return !hard.contains(surface.support()); }
         };
     }
 

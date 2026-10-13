@@ -314,7 +314,7 @@ public final class RouteConstructionStateSupport {
         if (advanced.hotArrival().isEmpty()) {
             Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
             ActorLocation prior = actors.get(moved);
-            actors.put(moved, new ActorLocation(advanced.assembly().members().get(moved).currentSurface().standingBody(), prior.condition(), prior.kind()));
+            actors.put(moved, new ActorLocation(advanced.assembly().members().get(moved).currentSurface().standingBody(), prior.condition(), prior.kind(), prior.navigationProfile()));
             update.actorLocations(actors);
         }
         Map<SubjectId, RouteConstruction> projects = new LinkedHashMap<>(state.routeConstructions());

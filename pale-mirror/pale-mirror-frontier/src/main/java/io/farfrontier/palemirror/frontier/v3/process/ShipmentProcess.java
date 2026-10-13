@@ -34,6 +34,7 @@ public final class ShipmentProcess {
     public static boolean held(FrontierWorldState state, ScheduledAction action) {
         Shipment shipment = state.shipments().shipments().get(action.subject());
         if (shipment == null || shipment.terminal()) return false;
+        if (!TransportCargoExecution.selected(state, shipment)) return true;
         if (shipment.transportMissionId().map(state.shipments().missions()::get).flatMap(TransportMission::supplies)
                 .filter(load -> !load.complete()).isPresent()) return true;
         if (shipment.transportMissionId().isPresent() && shipment.status() == Shipment.Status.CARRYING) {
@@ -60,6 +61,17 @@ public final class ShipmentProcess {
         return shipment.movementOrder().arrivedAt(state.actorLocations().get(actor).supportingSurface())
                 && (!ActorExecutionCoordinator.coldAvailable(state, actor)
                     || shipment.status() == Shipment.Status.AWAITING_LOAD && !ResourceSourceComposition.coldAvailable(state, shipment.sender()));
+    }
+    public static java.util.Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) {
+        var shipment = state.shipments().shipments().get(action.subject());
+        if (shipment == null) return java.util.Set.of(action.subject());
+        var keys = new java.util.HashSet<SubjectId>(); keys.add(shipment.id()); keys.add(shipment.execution().actorId());
+        shipment.sender().container().ifPresent(keys::add); keys.add(shipment.receiver().containerId());
+        shipment.transportMissionId().ifPresent(id -> {
+            var mission = state.shipments().missions().get(id);
+            keys.add(id); keys.add(mission.groupId()); keys.addAll(mission.shipmentIds());
+        });
+        return java.util.Set.copyOf(keys);
     }
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, long currentTick) {
         if (!action.kind().equals(PROGRESS) || !action.id().equals(progress(action.subject(), action.dueAt().ticks()).id()))

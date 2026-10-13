@@ -123,14 +123,15 @@ final class FrontierV3MinecraftGoalNavigation {
             if (following > 0 && level.getGameTime() - current.lastProgressAt()
                     - current.followingWait().duration(level.getGameTime()) >= progressBudget) {
                 stopPath(actor);
-                return new Result(Status.BLOCKED, "minecraft-path-stalled",
+                var alignment = FrontierV3NativeStationAlignment.rejection(level, actor, current.target(), current.progressPath(), current.scope());
+                return new Result(Status.BLOCKED, "minecraft-path-stalled;alignment=" + alignment.map(Enum::name).orElse("CLEAR"),
                         Optional.of(FrontierV3GoalNavigation.BlockReason.PATH_STALLED));
             }
             if (settleObservedStation(level, actor, current)) {
                 // Native graph nodes offset their wanted point for wide bodies.
-                // Once exact support/clearance is physically observed, finish at
-                // the semantic station centre even if that last native node is
-                // not marked done. Retain this same provider permission/control.
+                // Finish the accepted last node at the semantic station centre
+                // under an observed collision/support sweep. Exact arrival remains
+                // a separate physical observation; retain the same permission/control.
                 actor.getNavigation().stop();
                 ACTIVE.put(actor, current.refreshed(level.getGameTime(), permission));
                 return new Result(Status.IN_PROGRESS, "minecraft-final-station-settling");
@@ -173,7 +174,7 @@ final class FrontierV3MinecraftGoalNavigation {
         for (SurfaceAnchor station : legalStations) {
             BlockPos feet = new BlockPos(station.x(), station.y() + 1, station.z());
             if (!level.hasChunkAt(feet)) { unloaded = true; continue; }
-            var query = FrontierV3PedestrianTraffic.query(level, actor, feet, scope);
+            var query = FrontierV3PedestrianTraffic.query(level, actor, feet, scope, permission.navigationProfile());
             Path candidate = query.path();
             var refused = FrontierV3PhysicalPathPolicy.reject(level, candidate, scope);
             if (refused.isPresent()) {
@@ -250,6 +251,9 @@ final class FrontierV3MinecraftGoalNavigation {
             return true;
         }
         Path path = actor.getNavigation().getPath();
+        if (!FrontierV3PedestrianTraffic.permitsProfile(path, control.permission().navigationProfile())) {
+            stopPath(actor); return true;
+        }
         if (FrontierV3PhysicalPathInspection.inspect(level, actor, path, control.scope()).isPresent()) {
             stopPath(actor);
             return true;
@@ -278,12 +282,10 @@ final class FrontierV3MinecraftGoalNavigation {
         return true;
     }
 
-    /** Native steering inside the already observed station, never another route/arrival writer. */
+    /** Native endpoint centering under the retained path, never another route/arrival writer. */
     private static boolean settleObservedStation(ServerLevel level, Mob actor, Control control) {
         if (FrontierV3SemanticMovement.arrived(level, actor, control.target())
-                || FrontierV3SemanticMovement.at(level, actor, control.target())
-                    != io.farfrontier.palemirror.frontier.v3.model.SemanticTraversalArrival.Disposition.ARRIVED
-                || !FrontierV3SemanticMovement.targetIsNavigable(level, actor, control.target())) return false;
+                || !FrontierV3NativeStationAlignment.safe(level, actor, control.target(), control.progressPath(), control.scope())) return false;
         Vec3 point = FrontierV3SemanticMovement.point(level, control.target());
         actor.getMoveControl().setWantedPosition(point.x, point.y, point.z, speed(actor, control.permission()));
         return true;
@@ -337,10 +339,16 @@ final class FrontierV3MinecraftGoalNavigation {
                 && actor.level().getGameTime() - crossing.since() < RETRY_TICKS
                 && FrontierV3PedestrianTraffic.nearby((ServerLevel) actor.level(), actor, crossing.path()).crossing())
             return new Observation("WAITING_FOR_CROSSING", "bounded-native-crossing-wait", control.legalStations(), List.of());
-        if (control != null && control.permission().current(actor))
+        if (control != null && control.permission().current(actor)) {
+            String alignment = "";
+            if (actor.level() instanceof ServerLevel level && level.hasChunkAt(new BlockPos(control.target().x(), control.target().y(), control.target().z()))
+                    && actor.position().distanceToSqr(FrontierV3SemanticMovement.point(level, control.target())) <= 9.0D)
+                alignment = ";endpoint-alignment=" + FrontierV3NativeStationAlignment.rejection(level, actor, control.target(),
+                        control.progressPath(), control.scope()).map(Enum::name).orElse("CLEAR");
             return new Observation("MOVING", control.permission().pace().map(pace -> "pace-blocks-per-tick="
-                    + pace.blocksPerTick() + ";native-speed-modifier=" + speed(actor, control.permission())).orElse(""),
+                    + pace.blocksPerTick() + ";native-speed-modifier=" + speed(actor, control.permission())).orElse("") + alignment,
                     control.legalStations(), List.of());
+        }
         var failure = FAILURES.get(actor);
         return failure != null && failure.permission().current(actor)
                 ? new Observation(failure.blockReason().name(), failure.reason(), failure.legalStations(),
@@ -348,11 +356,17 @@ final class FrontierV3MinecraftGoalNavigation {
     }
 
     static boolean canReach(ServerLevel level, Mob actor, List<SurfaceAnchor> stations, FrontierV3NavigationScope scope) {
+        return canReach(level, actor, stations, scope, java.util.Optional.empty());
+    }
+    static boolean canReach(ServerLevel level, Mob actor, List<SurfaceAnchor> stations, FrontierV3NavigationScope scope,
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> profile) {
         if (actor.level() != level || !actor.isAlive() || actor.isRemoved()) return false;
         for (SurfaceAnchor station : stations) {
             BlockPos feet = new BlockPos(station.x(), station.y() + 1, station.z());
             if (!scope.permits(station.support()) || !level.hasChunkAt(feet)) continue;
-            if (FrontierV3PhysicalPathPolicy.reject(level, FrontierV3PedestrianTraffic.createPath(level, actor, feet, scope), scope).isEmpty()) return true;
+            var path = FrontierV3PedestrianTraffic.query(level, actor, feet, scope, profile).path();
+            if (FrontierV3PhysicalPathPolicy.reject(level, path, scope).isEmpty()
+                    && FrontierV3PedestrianTraffic.permitsProfile(path, profile)) return true;
         }
         return false;
     }

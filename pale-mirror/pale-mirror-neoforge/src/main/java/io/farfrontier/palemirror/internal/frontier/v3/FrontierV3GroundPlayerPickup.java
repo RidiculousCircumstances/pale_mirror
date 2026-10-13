@@ -14,12 +14,15 @@ public final class FrontierV3GroundPlayerPickup {
         if (!(entity.level() instanceof ServerLevel level) || !FrontierV3PhysicalWorld.isPhysical(level)) return inventory.add(stack);
         var runtime = FrontierV3ServerLifecycle.runtimeFor(level.getServer());
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return inventory.add(stack);
+        var journal = FrontierV3ResourceHandoffLedger.get(level);
+        // A newly spawned managed drop can still precede its canonical account.
+        // Absence of that account is not permission to bypass its causal witness.
+        if (journal.blocks(entity.getUUID())) return false;
         var state = runtime.decodedState().orElseThrow(); var resources = state.inventory().fungibleResources();
         var account = resources.accounts().values().stream().filter(value -> value.custody() instanceof ResourceCustody.Ground ground
                 && ground.entityId().equals(entity.getUUID())).findFirst().orElse(null);
         if (account == null) return inventory.add(stack);
-        var journal = FrontierV3ResourceHandoffLedger.get(level);
-        if (journal.blocks(entity.getUUID()) || journal.blocksAccount(account.id())) return false;
+        if (journal.blocksAccount(account.id())) return false;
         var bindings = resources.bindings().values().stream().filter(value -> value.accountId().equals(account.id())).toList();
         if (bindings.size() != 1 || stack != entity.getItem() || stack.getComponentsPatch().size() != 0
                 || stack.getCount() != bindings.getFirst().quantity()

@@ -39,6 +39,7 @@ public final class ShipmentServiceAccess implements ServiceAccessCapability {
                 .map(point -> ServiceAccessCoordinator.available(state, identity(shipment, point))).orElse(true);
     }
     private static boolean operationEligible(FrontierWorldState state, Shipment shipment) {
+        if (!TransportCargoExecution.selected(state, shipment)) return false;
         var execution = state.actorExecutions().actors().get(shipment.execution().actorId());
         if (execution == null || !execution.current().equals(java.util.Optional.of(shipment.execution()))) return false;
         if (shipment.transportMissionId().isPresent()) {

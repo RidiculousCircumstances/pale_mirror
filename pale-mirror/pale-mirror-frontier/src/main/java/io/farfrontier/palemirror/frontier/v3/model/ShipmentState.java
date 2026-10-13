@@ -17,13 +17,23 @@ public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, T
         for (var entry : missions.entrySet()) if (!entry.getKey().equals(entry.getValue().id()))
             throw new IllegalArgumentException("foreign transport mission key");
         if (shipments.size() > MAX_SHIPMENTS) throw new IllegalArgumentException("shipment retention capacity reached");
-        var claims = new HashSet<SubjectId>(); var actors = new HashSet<SubjectId>(); var carriedAccounts = new HashSet<SubjectId>();
+        var claims = new HashSet<SubjectId>();
+        var actors = new java.util.HashMap<SubjectId, Shipment>();
+        var carriedAccounts = new java.util.HashMap<SubjectId, Shipment>();
         for (var entry : shipments.entrySet()) {
             Shipment value = entry.getValue();
-            if (!entry.getKey().equals(value.id()) || !value.terminal()
-                    && (!claims.add(value.authorization().claimId()) || !actors.add(value.execution().actorId())
-                        || !carriedAccounts.add(value.carriedAccountId())))
+            if (!entry.getKey().equals(value.id()) || !value.terminal() && !claims.add(value.authorization().claimId()))
                 throw new IllegalArgumentException("shipment identity, allocation or courier has competing owners");
+            if (!value.terminal()) {
+                var actorPrior = actors.putIfAbsent(value.execution().actorId(), value);
+                var accountPrior = carriedAccounts.putIfAbsent(value.carriedAccountId(), value);
+                for (var prior : java.util.stream.Stream.of(actorPrior, accountPrior).filter(Objects::nonNull).toList())
+                    if (!TransportCargoExecution.shared(value) || !TransportCargoExecution.shared(prior)
+                            || !value.execution().equals(prior.execution()) || !value.transportMissionId().equals(prior.transportMissionId())
+                            || value.mobileContainerId().isEmpty() || !value.mobileContainerId().equals(prior.mobileContainerId())
+                            || !value.carriedAccountId().equals(prior.carriedAccountId()))
+                        throw new IllegalArgumentException("shared cargo lacks one exact asset/mission/execution");
+            }
         }
     }
     public ShipmentState(Map<SubjectId, Shipment> shipments) { this(shipments, Map.of()); }
@@ -61,6 +71,17 @@ public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, T
     }
     public boolean holds(SubjectId claimId) {
         return shipments.values().stream().anyMatch(s -> !s.terminal() && s.authorization().claimId().equals(claimId));
+    }
+    public ShipmentState resumeManifest(java.util.List<Shipment> parcels,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId predecessor,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId successor) {
+        var next = new LinkedHashMap<>(shipments);
+        for (var parcel : parcels) if (!parcel.terminal()) {
+            if (!parcel.equals(shipments.get(parcel.id())) || !parcel.execution().equals(predecessor)
+                    || !TransportCargoExecution.shared(parcel)) throw new IllegalArgumentException("manifest resumption has stale parcel authority");
+            next.put(parcel.id(), parcel.resumed(successor));
+        }
+        return new ShipmentState(next, missions);
     }
     public ShipmentState admitMission(TransportMission mission) {
         if (missions.containsKey(mission.id()) || mission.stage() != TransportMission.Stage.LOADING || mission.revision() != 1)

@@ -10,6 +10,8 @@ public sealed interface ShipmentEndpoint extends ResourceSourceEndpoint permits 
     SubjectId settlementId();
     SubjectId containerId();
     SurfaceAnchor station();
+    /** A service capability validates this candidate; selecting it creates no container or ownership. */
+    ShipmentEndpoint withStation(SurfaceAnchor selected);
     default ActorContainerItemOrder.ContainerEndpoint receivingPort() {
         return new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(containerId());
     }
@@ -22,6 +24,7 @@ public sealed interface ShipmentEndpoint extends ResourceSourceEndpoint permits 
             Objects.requireNonNull(containerId); Objects.requireNonNull(station);
         }
         @Override public Kind kind() { return Kind.SETTLEMENT_DEPOT; }
+        @Override public Depot withStation(SurfaceAnchor selected) { return new Depot(settlementId, facilityId, containerId, selected); }
     }
     record ExtractiveSite(SubjectId settlementId, SubjectId siteId, SubjectId containerId, SurfaceAnchor station) implements ShipmentEndpoint {
         public ExtractiveSite {
@@ -29,6 +32,7 @@ public sealed interface ShipmentEndpoint extends ResourceSourceEndpoint permits 
             Objects.requireNonNull(containerId); Objects.requireNonNull(station);
         }
         @Override public Kind kind() { return Kind.EXTRACTIVE_SITE; }
+        @Override public ExtractiveSite withStation(SurfaceAnchor selected) { return new ExtractiveSite(settlementId, siteId, containerId, selected); }
     }
     /** User/planner declared storage. Access geometry is explicit, not inferred from container purpose. */
     record Storage(SubjectId settlementId, SubjectId containerId, SurfaceAnchor station,
@@ -38,6 +42,7 @@ public sealed interface ShipmentEndpoint extends ResourceSourceEndpoint permits 
             facilityId = Objects.requireNonNull(facilityId); Objects.requireNonNull(exteriorApproach);
         }
         @Override public Kind kind() { return Kind.DECLARED_STORAGE; }
+        @Override public Storage withStation(SurfaceAnchor selected) { return new Storage(settlementId, containerId, selected, facilityId, exteriorApproach); }
     }
     /** Producer-declared machine port, not an ordinary free-slot warehouse. */
     record ProductionPort(SubjectId settlementId, ProductionStationSpec spec,
@@ -51,6 +56,10 @@ public sealed interface ShipmentEndpoint extends ResourceSourceEndpoint permits 
         @Override public Kind kind() { return Kind.PRODUCTION_PORT; }
         @Override public SubjectId containerId() { return spec.containerId(); }
         @Override public SurfaceAnchor station() { return spec.workerStation(); }
+        @Override public ProductionPort withStation(SurfaceAnchor selected) {
+            if (!station().equals(selected)) throw new IllegalArgumentException("machine has no alternative declared worker station");
+            return this;
+        }
         @Override public ActorContainerItemOrder.ContainerEndpoint receivingPort() {
             return new ActorContainerItemOrder.ContainerEndpoint.FungibleStation(spec, port);
         }

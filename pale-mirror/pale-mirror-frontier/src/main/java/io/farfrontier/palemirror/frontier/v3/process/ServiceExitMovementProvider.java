@@ -46,7 +46,7 @@ public final class ServiceExitMovementProvider implements ActorMovementProvider 
     @Override public KnownPedestrianRouteKnowledge placementKnowledge(FrontierWorldState state, ActorMovement movement) {
         validate(state, movement);
         var exit = exit(movement);
-        return ServiceBoundaryComposition.knowledge(state, exit.point());
+        return ServiceBoundaryComposition.knowledge(state, exit.point()).forActor(state, movement.order().actorId());
     }
     @Override public List<SurfaceAnchor> route(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start) {
         validate(state, movement);
@@ -67,7 +67,7 @@ public final class ServiceExitMovementProvider implements ActorMovementProvider 
     @Override public void requireRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
         validate(state, movement);
         var exit = exit(movement);
-        ServiceBoundaryComposition.knowledge(state, exit.point()).requireRoute(route);
+        ServiceBoundaryComposition.knowledge(state, exit.point()).forActor(state, movement.order().actorId()).requireRoute(route);
         if (!movement.order().arrivedAt(route.getLast())
                 && !(ServiceAccessCoordinator.boundary(state, exit.depotId()).occupied(route.getFirst().standingBody())
                     && ServiceAccessCoordinator.boundary(state, exit.depotId()).cleared(route.getLast().standingBody())))

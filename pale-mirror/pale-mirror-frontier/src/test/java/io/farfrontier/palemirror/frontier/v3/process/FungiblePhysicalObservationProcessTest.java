@@ -229,7 +229,7 @@ class FungiblePhysicalObservationProcessTest {
         FungibleResourceHandoffObserved unstamped = FungiblePhysicalHandoff.departToNew(resources, account, 7L,
                 resources.bindings().values().iterator().next(), 0, playerAccount, new ResourceCustody.Player(player), 1L,
                 new PhysicalStackAddress.PlayerSlot(player, 0)).forfeitAffectedClaims(resources);
-        assertInstanceOf(CommandPlan.Rejected.class, FrontierWorldPhysicalObservationProcess.planFungibleHandoff(bound, unstamped));
+        assertInstanceOf(CommandPlan.Rejected.class, FrontierWorldPhysicalObservationProcess.planFungibleHandoff(bound, unstamped, 1L));
         assertFalse(FungibleClaimForfeitureStateSupport.supports(bound, unstamped));
         assertThrows(IllegalArgumentException.class,
                 () -> FungibleClaimForfeitureStateSupport.stampOwnerDiagnostic(bound, unstamped));
@@ -373,7 +373,7 @@ class FungiblePhysicalObservationProcessTest {
 
         assertEquals(theft, FrontierWorldRuntimeDefinition.payloadCodecs().decode(theft.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(theft)));
-        assertInstanceOf(CommandPlan.Accepted.class, FrontierWorldPhysicalObservationProcess.planFungibleHandoff(active, theft));
+        assertInstanceOf(CommandPlan.Accepted.class, FrontierWorldPhysicalObservationProcess.planFungibleHandoff(active, theft, 1L));
         FrontierWorldState afterTheft = FrontierWorldPhysicalObservationProcess.reduceFungibleHandoff(active, hive, theft);
 
         assertFalse(afterTheft.hiveColony().growthJobs().containsKey(started.job().id()));
@@ -389,7 +389,7 @@ class FungiblePhysicalObservationProcessTest {
                 new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(afterTheft)));
         FungibleResourceHandoffObserved bypass = new FungibleResourceHandoffObserved(theft.sourceAccountId(), theft.destinationAccount(),
                 theft.sourceEpoch(), theft.destinationEpoch(), theft.lotQuantities(), theft.claimQuantities(), theft.remainingSource(), theft.destinationBindings());
-        assertInstanceOf(CommandPlan.Rejected.class, FrontierWorldPhysicalObservationProcess.planFungibleHandoff(active, bypass));
+        assertInstanceOf(CommandPlan.Rejected.class, FrontierWorldPhysicalObservationProcess.planFungibleHandoff(active, bypass, 1L));
         assertEquals(Map.of(lotId, 32), afterTheft.inventory().fungibleResources().accounts().get(theft.destinationAccount().id()).lotQuantities());
     }
 

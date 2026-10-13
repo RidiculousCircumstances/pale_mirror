@@ -5,20 +5,24 @@ import java.util.OptionalLong;
 
 /** Bakery-owned conservative supply estimate. No route search, assignment mutation or market recursion. */
 final class BakeryProcessingForecast {
+    record Capacity(SubjectId station, long firstOutputDelay, long batchTicks) { }
     static OptionalLong firstOutputDelay(FrontierWorldState state, SubjectId home) {
+        return capacity(state, home).map(c -> OptionalLong.of(c.firstOutputDelay())).orElseGet(OptionalLong::empty);
+    }
+    static java.util.Optional<Capacity> capacity(FrontierWorldState state, SubjectId home) {
         var recipe = BakeryRecipes.bread(state);
         var facility = FrontierWorldStateSupport.settlement(state.bootstrap(), home).structures().stream()
                 .filter(value -> value.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
-        if (state.structureConditions().get(facility.id()) != StructureCondition.INTACT) return OptionalLong.empty();
+        if (state.structureConditions().get(facility.id()) != StructureCondition.INTACT) return java.util.Optional.empty();
         var selected = ProductionStationSelection.usable(state, facility.id(), recipe.id());
-        if (selected.isEmpty()) return OptionalLong.empty();
+        if (selected.isEmpty()) return java.util.Optional.empty();
         var station = selected.orElseThrow(); var machine = state.productionStations().require(station.id());
         if (machine.pendingFuel().isPresent() || machine.pendingRecipe().isPresent()
                 || machine.operation().filter(operation -> operation.initiator() instanceof ProductionOperation.PlayerInitiator).isPresent())
-            return OptionalLong.empty();
+            return java.util.Optional.empty();
         var definition = state.bootstrap().ruleset().workCatalog().require(recipe.product().itemKind(), WorkOperation.PRODUCE);
         if (recipe.processingMode() == ProductionRecipe.ProcessingMode.AUTOMATIC)
-            return OptionalLong.of(definition.workUnits());
+            return java.util.Optional.of(new Capacity(station.id(), definition.workUnits(), definition.workUnits()));
         var assignments = HumanAssignmentProjection.compile(state);
         int speed = SettlementWorkPolicy.permissions(state, home).workers(ResidentWorkKind.BAKING).stream()
                 .map(id -> state.humanPopulation().resident(id))
@@ -34,14 +38,15 @@ final class BakeryProcessingForecast {
                 })
                 .mapToInt(resident -> ResidentWorkStatistics.speedPermille(resident, definition, state.bootstrap().ruleset().workCatalog()))
                 .max().orElse(0);
-        if (speed == 0) return OptionalLong.empty();
+        if (speed == 0) return java.util.Optional.empty();
         var schedule = state.humanPopulation().schedule(home);
         long dailyWork = schedule.segments().stream().filter(segment -> segment.window() == SettlementDailySchedule.Window.WORK)
                 .mapToLong(segment -> segment.endExclusive() - segment.startInclusive()).sum();
         long workTicks = Math.ceilDiv(Math.multiplyExact(definition.workUnits(), 1_000L), speed);
         // Include the worst daily phase and one preceding batch; actual admission still proves travel/access.
         long days = Math.addExact(1L, Math.ceilDiv(Math.multiplyExact(workTicks, 2L), dailyWork));
-        return OptionalLong.of(Math.multiplyExact(days, schedule.dayTicks()));
+        long batchTicks = Math.ceilDiv(Math.multiplyExact(workTicks, schedule.dayTicks()), dailyWork);
+        return java.util.Optional.of(new Capacity(station.id(), Math.multiplyExact(days, schedule.dayTicks()), batchTicks));
     }
     private BakeryProcessingForecast() { }
 }

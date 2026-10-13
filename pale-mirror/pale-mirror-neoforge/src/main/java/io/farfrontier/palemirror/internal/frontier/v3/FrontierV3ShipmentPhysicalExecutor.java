@@ -50,7 +50,7 @@ final class FrontierV3ShipmentPhysicalExecutor {
             return accepted(level, runtime, shipment, "shipment-hand-materialized", new ShipmentHandCustodyObserved(
                     shipment.id(), actuation.id(), ShipmentHandCustodyObserved.Boundary.MATERIALIZED, hand(shipment, worker.getUUID())));
         }
-        if (shipment.reception().isPresent() || state.actorMovements().containsKey(actor)
+        if (!TransportCargoExecution.selected(state, shipment) || shipment.reception().isPresent() || state.actorMovements().containsKey(actor)
                 || !FrontierV3SurfaceObservation.at(worker, shipment.itemOrder().station())) return false;
         var container = ShipmentServiceAccess.point(shipment).orElse(null);
         var attached = shipment.mobileContainerId().isPresent()

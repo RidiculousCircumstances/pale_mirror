@@ -10,6 +10,14 @@ final class GoodsOrderMatching {
     record Search(Optional<Match> match, String disposition, int checkedPairs) { }
     private record Pair(GoodsTradeParty seller, GoodsTradeParty buyer, String commodity) { }
     static Search first(FrontierWorldState state, GoodsParticipant reviewer, long now) {
+        return first(state, reviewer, now, Optional.empty(), Optional.empty());
+    }
+    static Search first(FrontierWorldState state, GoodsParticipant reviewer, long now,
+                        Optional<GoodsTradeParty> selectedSeller, Optional<GoodsTradeParty> selectedBuyer) {
+        return first(state, reviewer, now, selectedSeller, selectedBuyer, Set.of());
+    }
+    static Search first(FrontierWorldState state, GoodsParticipant reviewer, long now,
+                        Optional<GoodsTradeParty> selectedSeller, Optional<GoodsTradeParty> selectedBuyer, Set<String> excludedCommodities) {
         var trade = state.companies().goodsTrade();
         var candidates = trade.orders().values().stream().filter(order -> order.expiresAtTick() >= now
                 && order.availableQuantity() > 0 && (order.party().equals(reviewer.party()) || order.counterparty().equals(reviewer.party())))
@@ -23,6 +31,9 @@ final class GoodsOrderMatching {
         String disposition = "NO_MUTUAL_KNOWN_QUOTE"; int checked = 0;
         for (var sell : offers) {
             if (sell.side() != GoodsTradeOrder.Side.SELL) continue;
+            if (excludedCommodities.contains(sell.itemKind())) continue;
+            if (selectedSeller.filter(party -> !party.equals(sell.party())).isPresent()
+                    || selectedBuyer.filter(party -> !party.equals(sell.counterparty())).isPresent()) continue;
             var seller = trade.participants().participants().get(sell.party().id());
             if (seller == null || !seller.party().equals(sell.party())) continue;
             var compatibleBids = new ArrayList<>(bids.getOrDefault(new Pair(sell.party(), sell.counterparty(), sell.itemKind()), List.of()));

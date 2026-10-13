@@ -157,7 +157,7 @@ class FrontierV3FixtureCatalogTest {
         for (int index = 0; index < profiles.size(); index++) {
             FrontierV3FixtureCatalog.Profile profile = profiles.get(index);
             assertTrue(profile.provider().length() > 0);
-            assertTrue(java.util.Set.of("production", "expedition-candidate", "quarry-graybox", "quarry-front", "fuelled-quarry").contains(profile.rulesetId()));
+            assertTrue(java.util.Set.of("production", "expedition-candidate", "quarry-graybox", "quarry-front", "fuelled-quarry", "supply-quarry").contains(profile.rulesetId()));
             assertTrue(profile.sourceProfile().length() > 0);
             assertTrue(profile.requiredAssertion().length() > 0);
             String world = "frontier:catalog-" + profile.id();
@@ -169,6 +169,7 @@ class FrontierV3FixtureCatalogTest {
                 case "quarry-graybox" -> FrontierRulesets.installed("frontier-v3-quarry-graybox-r4");
                 case "quarry-front" -> FrontierRulesets.installed("frontier-v3-quarry-graybox-r7");
                 case "fuelled-quarry" -> FrontierRulesets.fuelledQuarryGraybox();
+                case "supply-quarry" -> FrontierRulesets.supplyQuarryGraybox();
                 default -> throw new AssertionError("undeclared fixture ruleset " + profile.rulesetId());
             };
             assertEquals(expected, configuration.initialState().bootstrap().ruleset(),

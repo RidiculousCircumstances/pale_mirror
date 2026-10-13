@@ -37,8 +37,15 @@ public final class ProductionStockDemand {
             incoming = Math.addExact(incoming, commitment.incoming());
             outgoing = Math.addExact(outgoing, commitment.outgoing());
         }
-        return new StockTargetDemand(StockTargetDemand.target(commodity, residents, minimum),
-                held(state.inventory()).getOrDefault(new Resource(settlement, itemKind), 0L), incoming, outgoing);
+        long stock = held(state.inventory()).getOrDefault(new Resource(settlement, itemKind), 0L);
+        long target = StockTargetDemand.target(commodity, residents, minimum);
+        if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().enabled()) {
+            var demand = GoodsParticipantView.read(state, participant).supplyPlan().orElseThrow().require(itemKind);
+            // Existing export demand remains in outgoing. Replenishment advice alone
+            // must not restart production for every one-item drop above the lower mark.
+            if (demand.production() == 0 && demand.purchase() == 0) target = Math.min(target, Math.addExact(stock, incoming));
+        }
+        return new StockTargetDemand(target, stock, incoming, outgoing);
     }
     private static Map<Resource, Long> held(ExactInventory inventory) {
         return STOCK.get(List.of(inventory), () -> {

@@ -25,8 +25,10 @@ final class GroupAssignmentCapability implements ActivityExecutionCapability {
         var execution = retained.current().orElseThrow();
         if (execution.activityKind() == ActorActivityKind.GROUP_MEMBER && execution.activityOwnerId().equals(group.id())) {
             var owner = ActorExecutionComposition.CAPABILITIES.require(execution.activityKind());
-            owner.checkpoint(state, execution).validate(state, execution);
-            return new ActivityExecutionCheckpoint(state, assignment, ResidentWorkYield.Status.READY);
+            var checkpoint = owner.checkpoint(state, execution);
+            checkpoint.validate(state, execution);
+            return new ActivityExecutionCheckpoint(state, assignment, checkpoint.ready() ? ResidentWorkYield.Status.READY
+                    : ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT);
         }
         var owner = ActorExecutionComposition.CAPABILITIES.require(execution.activityKind());
         var safeVacancy = retained.suspended().isEmpty() && owner.interruption()

@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model.group;
 
+import io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile;
+
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup;
 import io.farfrontier.palemirror.frontier.v3.model.execution.*;
@@ -42,6 +44,20 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
                         && member.role() == UnitGroup.Role.CARRIER))
                 throw new IllegalArgumentException("transport group names an undeclared human or finite transport participant");
             if (member.role() == UnitGroup.Role.CARRIER) {
+                if (member.activityKind() == ActorActivityKind.GROUP_MEMBER) {
+                    if (!member.activityOwnerId().equals(group.id())) throw new IllegalArgumentException("manifest carrier has a foreign group owner");
+                    var assigned = mission.shipmentIds().stream().map(shipments::get)
+                            .filter(s -> s.execution().actorId().equals(member.actorId())).toList();
+                    if (assigned.isEmpty() || assigned.size() > 1 && !mission.transportAssetId().equals(Optional.of(member.actorId())))
+                        throw new IllegalArgumentException("manifest carrier exceeds its declared personal capacity");
+                    for (var parcel : assigned) {
+                        if (!TransportCargoExecution.shared(parcel) || !parcel.execution().activityOwnerId().equals(group.id())
+                                || !parcel.transportMissionId().equals(Optional.of(mission.id()))
+                                || !parcel.sender().equals(mission.sender()) || !parcel.receiver().equals(mission.receiver())
+                                || !carriers.add(parcel.id())) throw new IllegalArgumentException("manifest cargo has a foreign responsibility");
+                    }
+                    continue;
+                }
                 var shipment = shipments.get(member.activityOwnerId());
                 if (member.activityKind() != ActorActivityKind.COURIER || shipment == null
                         || !mission.shipmentIds().contains(shipment.id()) || !shipment.execution().actorId().equals(member.actorId())
@@ -72,7 +88,8 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
                 // Still reject a retained execution of THIS closed group (including suspended work).
                 if (group.phase() == UnitGroup.Phase.CLOSED && !execution.activityOwnerId().equals(group.id())) continue;
                 if (!execution.activityOwnerId().equals(group.id()) || group.phase() == UnitGroup.Phase.CLOSED
-                        || member.role() == UnitGroup.Role.CARRIER && !shipments.shipments().get(member.activityOwnerId()).terminal())
+                        || member.role() == UnitGroup.Role.CARRIER && member.activityKind() == ActorActivityKind.COURIER
+                            && !shipments.shipments().get(member.activityOwnerId()).terminal())
                     throw new IllegalArgumentException("group execution has a foreign or prematurely released participant responsibility: group="
                             + group.id().value() + " phase=" + group.phase() + " actor=" + member.actorId().value()
                             + " executionOwner=" + execution.activityOwnerId().value());
@@ -81,7 +98,9 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
     }
     @Override public KnownPedestrianRouteKnowledge knowledge(FrontierWorldState state, UnitGroup group) {
         validate(state, group); var mission = mission(state, group);
-        return knowledgeForEndpoints(state, mission.sender(), mission.receiver());
+        return knowledgeForEndpoints(state, mission.sender(), mission.receiver()).forProfile(
+                UnitNavigationProfile.enclosing(
+                        group.members().stream().map(member -> state.actorLocations().get(member.actorId()).navigationProfile()).toList()));
     }
     public static KnownPedestrianRouteKnowledge knowledgeForEndpoints(FrontierWorldState state,
             ShipmentEndpoint sender, ShipmentEndpoint receiver) {
@@ -96,6 +115,12 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
     public static SurfaceAnchor rendezvous(FrontierWorldState state, ShipmentEndpoint endpoint, int members) {
         return io.farfrontier.palemirror.frontier.v3.model.group.GroupRendezvous.select(
                 ShipmentEndpointComposition.knowledge(state, List.of(endpoint)), ShipmentEndpointComposition.exteriorApproach(state, endpoint),
+                ServiceAccessCoordinator.boundary(state, endpoint.containerId()).occupiedSurfaces(), members);
+    }
+    public static SurfaceAnchor rendezvous(FrontierWorldState state, ShipmentEndpoint endpoint, int members,
+            UnitNavigationProfile profile) {
+        var knowledge = ShipmentEndpointComposition.knowledge(state, List.of(endpoint)).forProfile(profile);
+        return GroupRendezvous.select(knowledge, endpoint.station(),
                 ServiceAccessCoordinator.boundary(state, endpoint.containerId()).occupiedSurfaces(), members);
     }
     public static void validateRendezvous(FrontierWorldState state, ShipmentEndpoint endpoint, SurfaceAnchor target, int members) {
@@ -118,7 +143,8 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
         validate(state, group); group.member(member.actorId());
         if (state.actorLocations().get(member.actorId()).condition().status() != ActorLifeStatus.ALIVE
                 || state.humanPopulation().meals().containsKey(member.actorId())) return Optional.empty();
-        if (member.role() == UnitGroup.Role.CARRIER && !state.shipments().shipments().get(member.activityOwnerId()).terminal()) {
+        if (member.role() == UnitGroup.Role.CARRIER && member.activityKind() == ActorActivityKind.COURIER
+                && !state.shipments().shipments().get(member.activityOwnerId()).terminal()) {
             var shipment = state.shipments().shipments().get(member.activityOwnerId());
             if (shipment.pendingPhysicalStep().isPresent()) return Optional.empty();
             var current = state.actorExecutions().actors().get(member.actorId());
@@ -128,7 +154,8 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
         var current = state.actorExecutions().actors().get(member.actorId());
         if (current != null && current.current().isPresent()) {
             var id = current.current().orElseThrow();
-            if (id.activityKind() == ActorActivityKind.GROUP_MEMBER && id.activityOwnerId().equals(group.id())) return Optional.of(id);
+            if (id.activityKind() == ActorActivityKind.GROUP_MEMBER && id.activityOwnerId().equals(group.id()))
+                return checkpoint(state, group, id).ready() ? Optional.of(id) : Optional.empty();
         }
         if (ActorExecutionCoordinator.groupWorkAdmission(state, member.actorId(), group.id()).permitted())
             return Optional.of(state.actorExecutions().next(member.actorId(), ActorActivityKind.GROUP_MEMBER, group.id()));
@@ -156,5 +183,29 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
         return mission(state, group).stage() == TransportMission.Stage.RETURNING
                 && (group.phase() == UnitGroup.Phase.AT_GOAL && group.goalOrdinal() == 2
                     || group.members().stream().allMatch(member -> state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.DEAD));
+    }
+    @Override public ActorActivityCheckpoint checkpoint(FrontierWorldState state, UnitGroup group, ActorExecutionId execution) {
+        var pending = TransportCargoExecution.parcels(state, group, execution).stream().filter(s -> s.pendingPhysicalStep().isPresent()).findFirst();
+        return new ActorActivityCheckpoint(state, execution, pending.map(s ->
+                new ActorActivityCheckpoint.Wait(ActorActivityCheckpoint.Reason.PHYSICAL_OPERATION, s.id())));
+    }
+    @Override public void requireBodyRelease(FrontierWorldState state, UnitGroup group, ActorExecutionId execution) {
+        for (var parcel : TransportCargoExecution.parcels(state, group, execution))
+            if (parcel.pendingPhysicalStep().isPresent() || state.inventory().fungibleResources().bindings().values().stream()
+                    .anyMatch(binding -> binding.accountId().equals(parcel.carriedAccountId())))
+                throw new IllegalArgumentException("transport body release retains a bound cargo/effect");
+    }
+    @Override public FrontierWorldStateUpdate resumption(FrontierWorldState state, UnitGroup group, ActorExecutionId predecessor, ActorExecutionId successor) {
+        return FrontierWorldStateUpdate.begin().shipments(state.shipments().resumeManifest(
+                TransportCargoExecution.parcels(state, group, predecessor), predecessor, successor));
+    }
+    @Override public Optional<ActorCarriedResources.Presentation> workCargo(FrontierWorldState state, UnitGroup group, UnitGroup.Member member) {
+        var mission = mission(state, group); group.member(member.actorId());
+        var carried = mission.shipmentIds().stream().map(state.shipments().shipments()::get)
+                .filter(s -> TransportCargoExecution.shared(s) && s.execution().actorId().equals(member.actorId())
+                        && s.mobileContainerId().isEmpty() && !s.terminal() && s.status() == Shipment.Status.CARRYING).toList();
+        if (carried.size() > 1) throw new IllegalArgumentException("resident manifest exceeds one work hand");
+        return carried.isEmpty() ? Optional.empty() : Optional.of(new ActorCarriedResources.Presentation(member.actorId(),
+                carried.getFirst().carriedAccountId(), new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN)));
     }
 }

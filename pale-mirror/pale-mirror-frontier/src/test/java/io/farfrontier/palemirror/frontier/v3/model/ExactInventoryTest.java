@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import org.junit.jupiter.api.Test;
 
@@ -20,7 +22,7 @@ class ExactInventoryTest {
         var inventory = new ExactInventory(Map.of(), Map.of(item, new ExactItemStack(item,
                 new SubjectId("settlement:one"), "minecraft:saddle", 1, new InventoryCustody.Actor(actor))),
                 Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
-        var locations = Map.of(actor, ActorLocation.standingOn(new SurfaceAnchor(new BlockPosition(0, 64, 0)), ActorKind.PACK_ANIMAL));
+        var locations = Map.of(actor, ActorLocation.standingOn(new SurfaceAnchor(new BlockPosition(0, 64, 0)), ActorKind.PACK_ANIMAL, UnitNavigationProfile.DONKEY));
         var world = new io.farfrontier.palemirror.frontier.v3.api.WorldId("test:equipment-registry");
         assertDoesNotThrow(() -> FrontierWorldStateSupport.validateActorItemCustody(world, locations, inventory, FencedRecoveryState.empty()));
         assertEquals(List.of(item), inventory.actorItems(actor).stream().map(ExactItemStack::id).toList());

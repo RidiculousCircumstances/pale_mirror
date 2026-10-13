@@ -25,7 +25,7 @@ public final class DefenderEquipmentReturnMovementProvider implements ActorMovem
         validate(state, movement); return state.withChanges(update);
     }
     @Override public KnownPedestrianRouteKnowledge placementKnowledge(FrontierWorldState state, ActorMovement movement) {
-        return ResourceStorageNavigation.forEndpoint(state, visit(state, movement).access().endpoint());
+        return ResourceStorageNavigation.forEndpoint(state, visit(state, movement).access().endpoint()).forActor(state, movement.order().actorId());
     }
     @Override public List<SurfaceAnchor> route(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start) {
         return placementKnowledge(state, movement).plannedPath(start, movement.order());

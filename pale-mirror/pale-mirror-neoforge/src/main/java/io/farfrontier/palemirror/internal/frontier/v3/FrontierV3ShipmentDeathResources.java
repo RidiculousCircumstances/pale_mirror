@@ -20,10 +20,14 @@ final class FrontierV3ShipmentDeathResources {
         var state = runtime.decodedState().orElseThrow();
         var authority = state.actorExecutions().actors().get(id.actorId());
         if (authority == null || !ActorBodyAuthority.current(state, id.actorId()).equals(id)) return () -> { };
-        var execution = authority.current().filter(e -> e.activityKind() == ActorActivityKind.COURIER)
-                .or(() -> authority.suspended().filter(e -> e.activityKind() == ActorActivityKind.COURIER));
+        var execution = authority.current().filter(e -> e.activityKind() == ActorActivityKind.COURIER || e.activityKind() == ActorActivityKind.GROUP_MEMBER)
+                .or(() -> authority.suspended().filter(e -> e.activityKind() == ActorActivityKind.COURIER || e.activityKind() == ActorActivityKind.GROUP_MEMBER));
         if (execution.isEmpty()) return () -> { };
-        var shipment = state.shipments().shipments().get(execution.orElseThrow().activityOwnerId());
+        var retainedExecution = execution.orElseThrow();
+        var shipment = retainedExecution.activityKind() == ActorActivityKind.COURIER
+                ? state.shipments().shipments().get(retainedExecution.activityOwnerId())
+                : TransportCargoExecution.parcels(state, state.unitGroups().groups().get(retainedExecution.activityOwnerId()), retainedExecution)
+                    .stream().filter(s -> !s.terminal() && s.status() == Shipment.Status.CARRYING).findFirst().orElse(null);
         if (shipment == null || shipment.mobileContainerId().isPresent() || shipment.status() != Shipment.Status.CARRYING || shipment.pendingPhysicalStep().isPresent()
                 || shipment.reception().isPresent()) return () -> { }; // Possibly applied endpoint effects retain their exact owner.
         ItemStack witness = body.getMainHandItem().copy();

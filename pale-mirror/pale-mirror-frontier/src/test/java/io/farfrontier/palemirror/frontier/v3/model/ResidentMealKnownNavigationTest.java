@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import org.junit.jupiter.api.Test;
@@ -370,7 +372,7 @@ class ResidentMealKnownNavigationTest {
         SurfaceAnchor side = port.stations().get(3);
         assertEquals(SurfaceAnchor.at(134, 64, 13), side);
         var actors = new java.util.LinkedHashMap<>(initial.actorLocations());
-        actors.put(resident, ActorLocation.standingOn(side, ActorKind.RESIDENT));
+        actors.put(resident, ActorLocation.standingOn(side, ActorKind.RESIDENT, UnitNavigationProfile.VILLAGER));
         FrontierWorldState state = initial.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
         ResidentMeal meal = new ResidentMeal(resident, settlement.id(), depot, side,
                 ReferenceContainerCustody.scopeId(depot), new SubjectId("custody:resident-meal-side"),
@@ -403,7 +405,7 @@ class ResidentMealKnownNavigationTest {
                 .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow());
         assertTrue(port.accessBoundary().cleared(route.getLast().standingBody()));
         var waitingActors = new java.util.LinkedHashMap<>(state.actorLocations());
-        waitingActors.put(resident, ActorLocation.standingOn(route.getLast(), ActorKind.RESIDENT));
+        waitingActors.put(resident, ActorLocation.standingOn(route.getLast(), ActorKind.RESIDENT, UnitNavigationProfile.VILLAGER));
         List<SurfaceAnchor> shortEntry = ResidentMealKnownNavigation.path(
                 state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(waitingActors)), meal);
         assertEquals(port.serviceSurface(), shortEntry.getLast());
@@ -436,7 +438,7 @@ class ResidentMealKnownNavigationTest {
                 meal.retainedWorkOwner(), ResidentMeal.Phase.CLEAR_ACCESS, meal.startedAtTick(), Optional.empty(),
                 new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(resident, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, meal.claimId(), 1L));
         var serviceActors = new java.util.LinkedHashMap<>(state.actorLocations());
-        serviceActors.put(resident, ActorLocation.standingOn(service, ActorKind.RESIDENT));
+        serviceActors.put(resident, ActorLocation.standingOn(service, ActorKind.RESIDENT, UnitNavigationProfile.VILLAGER));
         List<SurfaceAnchor> exit = ResidentMealKnownNavigation.returnPath(
                 state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(serviceActors)), returning);
         assertEquals(service, exit.getFirst());

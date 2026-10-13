@@ -35,15 +35,15 @@ public final class GroupMovementProvider implements ActorMovementProvider {
     }
     @Override public KnownPedestrianRouteKnowledge placementKnowledge(FrontierWorldState state, ActorMovement movement) {
         var group = group(state, movement);
-        return UnitGroupMissionPorts.require(group).knowledge(state, group);
+        return UnitGroupMissionPorts.require(group).knowledge(state, group).forActor(state, movement.order().actorId());
     }
     @Override public List<SurfaceAnchor> route(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start) {
         var group = group(state, movement);
-        return UnitGroupMissionPorts.require(group).knowledge(state, group).plannedPath(start, movement.order(),
+        return UnitGroupMissionPorts.require(group).knowledge(state, group).forActor(state, movement.order().actorId()).plannedPath(start, movement.order(),
                 group.journey().orElseThrow().route());
     }
     @Override public void requireRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
-        var group = group(state, movement); UnitGroupMissionPorts.require(group).knowledge(state, group).requireRoute(route);
+        var group = group(state, movement); UnitGroupMissionPorts.require(group).knowledge(state, group).forActor(state, movement.order().actorId()).requireRoute(route);
         if (!movement.order().arrivedAt(route.getLast()) && route.size() != TimedKnownRoute.MAX_SURFACES)
             throw new IllegalArgumentException("group route is neither a bounded prefix nor its formation goal");
     }
@@ -65,7 +65,7 @@ public final class GroupMovementProvider implements ActorMovementProvider {
     }
     @Override public void requireColdRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route,
                                           long tick, ActorPositionView positions) {
-        var group = group(state, movement); UnitGroupMissionPorts.require(group).knowledge(state, group).requireRoute(route);
+        var group = group(state, movement); UnitGroupMissionPorts.require(group).knowledge(state, group).forActor(state, movement.order().actorId()).requireRoute(route);
         if (!UnitGroupMissionPorts.require(group).movementPermission(state, group).allowed()
                 || route.size() > TimedKnownRoute.MAX_SURFACES
                 || !io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.permits(state, group,

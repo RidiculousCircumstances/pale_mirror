@@ -5,7 +5,12 @@ import java.util.*;
 
 /** Read-only economic projection for one participant. A policy receives no mutable world or other stocks. */
 public record GoodsParticipantView(GoodsParticipant participant, int residents, FixedScalar availableMoney,
-                                   Map<String, Stock> stocks, Map<String, Integer> purchaseLimits) {
+                                   Map<String, Stock> stocks, Map<String, Integer> purchaseLimits,
+                                   Optional<io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Plan> supplyPlan) {
+    public GoodsParticipantView(GoodsParticipant participant, int residents, FixedScalar availableMoney,
+                                Map<String, Stock> stocks, Map<String, Integer> purchaseLimits) {
+        this(participant, residents, availableMoney, stocks, purchaseLimits, Optional.empty());
+    }
     public GoodsParticipantView(GoodsParticipant participant, int residents, FixedScalar availableMoney, Map<String, Stock> stocks) {
         this(participant, residents, availableMoney, stocks, Map.of());
     }
@@ -20,6 +25,7 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
     }
     public GoodsParticipantView {
         Objects.requireNonNull(participant); Objects.requireNonNull(availableMoney); stocks = Map.copyOf(stocks);
+        supplyPlan = Objects.requireNonNull(supplyPlan);
         purchaseLimits = Map.copyOf(purchaseLimits);
         if (purchaseLimits.values().stream().anyMatch(value -> value < 0)) throw new IllegalArgumentException("negative purchase limit");
         if (residents < 0 || availableMoney.raw() < 0) throw new IllegalArgumentException("invalid participant economic view");
@@ -48,7 +54,10 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
         int residents = (int) state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(participant.endpoint().settlementId())
                         && state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE).count();
-        var advice = participant.policy() == GoodsPolicyKind.PUBLIC_SETTLEMENT
+        var plan = participant.policy() == GoodsPolicyKind.PUBLIC_SETTLEMENT && state.bootstrap().ruleset().goodsTrade().supplyPlanning().enabled()
+                ? Optional.of(SettlementSupplyPlanning.read(state, participant.party().id(), residents, result))
+                : Optional.<io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Plan>empty();
+        var advice = plan.isPresent() ? planningAdvice(plan.orElseThrow()) : participant.policy() == GoodsPolicyKind.PUBLIC_SETTLEMENT
                 ? SettlementFoodPurchases.assess(state, participant.party().id(), residents, result)
                 : new SettlementFoodPurchases.Advice(Map.of(), Map.of());
         advice.protectedInputs().forEach((kind, minimum) -> {
@@ -56,6 +65,14 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
             result.put(kind, new Stock(stock.ownedAtEndpoint(), stock.unclaimedAtEndpoint(), stock.expectedIncoming(),
                     Math.max(minimum, stock.protectedMinimum())));
         });
-        return new GoodsParticipantView(participant, residents, state.inventory().economics().availableToReserve(participant.party().id()), result, advice.limits());
+        return new GoodsParticipantView(participant, residents, state.inventory().economics().availableToReserve(participant.party().id()), result, advice.limits(), plan);
+    }
+    private static SettlementFoodPurchases.Advice planningAdvice(io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Plan plan) {
+        var limits = new HashMap<String, Integer>(); var protection = new HashMap<String, Integer>();
+        plan.demands().forEach((item, demand) -> {
+            limits.put(item, Math.toIntExact(demand.purchase()));
+            protection.put(item, Math.toIntExact(demand.protectedInput()));
+        });
+        return new SettlementFoodPurchases.Advice(limits, protection);
     }
 }

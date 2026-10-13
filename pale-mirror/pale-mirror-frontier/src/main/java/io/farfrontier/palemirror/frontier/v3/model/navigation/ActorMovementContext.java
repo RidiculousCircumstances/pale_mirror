@@ -112,7 +112,7 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
     }
     record ShipmentLeg(SubjectId shipmentId, long shipmentRevision) implements ActorMovementContext {
         @Override public Provider provider() { return Provider.SHIPMENT; }
-        @Override public java.util.Optional<SubjectId> delegatedGoalOwner() { return java.util.Optional.empty(); }
+        @Override public java.util.Optional<SubjectId> delegatedGoalOwner() { return java.util.Optional.of(shipmentId); }
         public ShipmentLeg {
             Objects.requireNonNull(shipmentId, "movement shipment");
             if (shipmentRevision < 1) throw new IllegalArgumentException("movement shipment revision is invalid");

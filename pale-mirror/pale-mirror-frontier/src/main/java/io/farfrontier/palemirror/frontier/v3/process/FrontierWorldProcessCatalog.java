@@ -317,6 +317,7 @@ public final class FrontierWorldProcessCatalog {
                     return ShipmentProcess.plan(state, action, currentInstant.ticks());
                 }
                 @Override public boolean held(FrontierWorldState state, ScheduledAction action) { return ShipmentProcess.held(state, action); }
+                @Override public Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) { return ShipmentProcess.wakeDependencies(state, action); }
             })),
             Map.entry(UnitGroupProcess.PROGRESS, withPlanningRecovery(atExecutionTime((state, action, instant) -> UnitGroupProcess.plan(state, action, instant.ticks())))),
             Map.entry(TransportMissionProcess.PROGRESS, withPlanningRecovery(new ScheduledPlanner() {

@@ -23,4 +23,9 @@ public interface UnitGroupMissionPort {
     boolean requestsJourneyStop(FrontierWorldState state, UnitGroup group);
     boolean mayClose(FrontierWorldState state, UnitGroup group);
     java.util.List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> reconsider(FrontierWorldState state, UnitGroup group, long tick);
+    io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityCheckpoint checkpoint(
+            FrontierWorldState state, UnitGroup group, ActorExecutionId execution);
+    void requireBodyRelease(FrontierWorldState state, UnitGroup group, ActorExecutionId execution);
+    FrontierWorldStateUpdate resumption(FrontierWorldState state, UnitGroup group, ActorExecutionId predecessor, ActorExecutionId successor);
+    Optional<ActorCarriedResources.Presentation> workCargo(FrontierWorldState state, UnitGroup group, UnitGroup.Member member);
 }

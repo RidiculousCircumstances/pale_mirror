@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.persistence;
 
+import io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile;
+
 import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
 
 import io.farfrontier.palemirror.frontier.v3.api.*;
@@ -181,6 +183,12 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         for (Map.Entry<SubjectId, ActorLocation> entry : values.entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             writeString(output, entry.getKey().value()); output.writeByte(entry.getValue().kind().wireTag()); writeBody(output, entry.getValue().body());
             output.writeByte(entry.getValue().condition().status().wireTag()); output.writeLong(entry.getValue().condition().health().raw());
+            var profile = entry.getValue().navigationProfile();
+            output.writeInt(profile.widthMicros()); output.writeInt(profile.heightMicros());
+            output.writeByte(profile.stepUpBlocks()); output.writeByte(profile.dropBlocks());
+            output.writeByte(profile.capabilities().size());
+            for (var capability : profile.capabilities().stream().sorted(java.util.Comparator.comparingInt(FrontierWireTags::tag)).toList())
+                output.writeByte(FrontierWireTags.tag(capability));
         }
     }
     private static Map<SubjectId, ActorLocation> readActors(DataInputStream input) throws IOException {
@@ -189,8 +197,17 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             SubjectId id = new SubjectId(readString(input));
             ActorKind kind = FrontierWireTags.require(ActorKind.class, input.readUnsignedByte());
             BodyPosition body = readBody(input); int status = input.readUnsignedByte();
+            ActorCondition condition = new ActorCondition(FrontierWireTags.require(ActorLifeStatus.class, status), new FixedScalar(input.readLong()));
+            int width = input.readInt(), height = input.readInt(), stepUp = input.readUnsignedByte(), drop = input.readUnsignedByte();
+            int size = input.readUnsignedByte();
+            if (size < 1 || size > TraversalCapability.values().length) throw new IllegalArgumentException("invalid navigation capabilities");
+            var capabilities = java.util.EnumSet.noneOf(TraversalCapability.class);
+            for (int capability = 0; capability < size; capability++)
+                if (!capabilities.add(FrontierWireTags.require(TraversalCapability.class, input.readUnsignedByte())))
+                    throw new IllegalArgumentException("duplicate navigation capability");
+            var profile = new UnitNavigationProfile(width, height, stepUp, drop, capabilities);
             if (status >= ActorLifeStatus.values().length
-                    || values.put(id, new ActorLocation(body, new ActorCondition(FrontierWireTags.require(ActorLifeStatus.class, status), new FixedScalar(input.readLong())), kind)) != null) {
+                    || values.put(id, new ActorLocation(body, condition, kind, profile)) != null) {
                 throw new IllegalArgumentException("invalid or duplicate actor state id: " + id.value());
             }
         }

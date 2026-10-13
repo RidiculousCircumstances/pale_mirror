@@ -16,7 +16,7 @@ import java.util.WeakHashMap;
 final class FrontierV3ResidentMealNavigation {
     private record Route(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId actuation,
                          long leaseRevision, long mealStart, ResidentMeal.Phase phase, boolean admitted,
-                         List<SurfaceAnchor> waypoints, long plannedAt) { }
+                         List<SurfaceAnchor> waypoints, long plannedAt, boolean physicalOnly) { }
 
     private static final Map<Mob, Route> ROUTES = new WeakHashMap<>();
     private static final Map<Mob, String> BLOCKED = new WeakHashMap<>();
@@ -69,12 +69,29 @@ final class FrontierV3ResidentMealNavigation {
                         meal.phase() == ResidentMeal.Phase.MOVE
                                 ? approach(level, state, body, meal)
                                 : ResidentMealKnownNavigation.clearancePathFrom(state, meal,
-                                    FrontierV3SurfaceObservation.observedBody(body).supportingSurface()), level.getGameTime());
+                                    FrontierV3SurfaceObservation.observedBody(body).supportingSurface()), level.getGameTime(), false);
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
-                if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING)
-                    blocked(body, meal, "known_route:" + unavailable.status() + ":" + unavailable.getMessage());
-                FrontierV3GoalNavigation.stop(body, actuation);
-                return;
+                // Missing COLD departure knowledge is not a native path verdict.
+                // Keep the same source/access turn and ask the common provider to
+                // prove an ordinary loaded-world path under the exact actuator.
+                var destination = unavailable.status() == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.UNKNOWN_GEOMETRY
+                        && meal.phase() == ResidentMeal.Phase.MOVE
+                        ? ResidentMealKnownNavigation.approachStations(state, meal,
+                            FrontierV3SurfaceObservation.observedBody(body).supportingSurface(), station -> available(level, body, station))
+                            .stream().limit(MovementOrder.MAX_LEGAL_STATIONS)
+                            .filter(station -> FrontierV3GoalNavigation.canReach(level, body,
+                                FrontierV3GoalNavigation.Goal.station(station,
+                                    new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())), actuation)).findFirst()
+                        : java.util.Optional.<SurfaceAnchor>empty();
+                if (destination.isPresent()) {
+                    route = new Route(actuation.id(), lease.revision(), meal.startedAtTick(), meal.phase(), admitted,
+                            List.of(destination.orElseThrow()), level.getGameTime(), true);
+                } else {
+                    if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING)
+                        blocked(body, meal, "known_route:" + unavailable.status() + ":" + unavailable.getMessage());
+                    FrontierV3GoalNavigation.stop(body, actuation);
+                    return;
+                }
             }
         }
         ROUTES.put(body, route);
@@ -87,7 +104,7 @@ final class FrontierV3ResidentMealNavigation {
                 FrontierWireTags.tag(meal.phase()), meal.startedAtTick() + 1L, List.of(route.waypoints().getLast()),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         FrontierV3GoalNavigation.Result result = FrontierV3GoalNavigation.pursue(level, body,
-                FrontierV3GoalNavigation.Goal.routed(order, route.waypoints(), state.bootstrap().bounds()), actuation);
+                FrontierV3GoalNavigation.Goal.routed(order, route.physicalOnly() ? List.of() : route.waypoints(), state.bootstrap().bounds()), actuation);
         if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED)
             blocked(body, meal, "minecraft_path:" + result.reason());
         else BLOCKED.remove(body);

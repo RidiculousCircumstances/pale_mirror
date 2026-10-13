@@ -502,6 +502,12 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"name\":\"" + quote(resident == null ? "" : resident.name())
                 + "\",\"healthRaw\":" + location.condition().health().raw() + ",\"position\":" + position(
                     io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.bodyAt(state, subject, checkpoint.instant().ticks()))
+                + ",\"navigationProfile\":{\"widthMicros\":" + location.navigationProfile().widthMicros()
+                + ",\"heightMicros\":" + location.navigationProfile().heightMicros()
+                + ",\"stepUpBlocks\":" + location.navigationProfile().stepUpBlocks()
+                + ",\"dropBlocks\":" + location.navigationProfile().dropBlocks() + ",\"capabilities\":["
+                + location.navigationProfile().capabilities().stream().sorted(java.util.Comparator.comparingInt(io.farfrontier.palemirror.frontier.v3.model.FrontierWireTags::tag))
+                    .map(value -> "\"" + value.name() + "\"").collect(java.util.stream.Collectors.joining(",")) + "]}"
                 + ",\"nutrition\":\"" + quote(nutrition) + "\",\"ambientLease\":\""
                 + quote(lease == null ? "NONE" : lease.status().name()) + "\",\"ambientGoal\":\"" + quote(ambientGoal)
                 + "\",\"goalPosition\":" + goalPosition

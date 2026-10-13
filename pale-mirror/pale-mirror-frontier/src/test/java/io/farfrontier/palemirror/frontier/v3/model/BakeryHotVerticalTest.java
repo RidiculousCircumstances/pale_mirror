@@ -120,7 +120,7 @@ class BakeryHotVerticalTest {
 
         ActorLocation actor = state.actorLocations().get(job.workerId());
         Map<SubjectId, ActorLocation> locations = new java.util.LinkedHashMap<>(state.actorLocations());
-        locations.put(job.workerId(), new ActorLocation(actor.body(), ActorCondition.dead(), actor.kind()));
+        locations.put(job.workerId(), new ActorLocation(actor.body(), ActorCondition.dead(), actor.kind(), actor.navigationProfile()));
         FrontierWorldState deadWorker = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations));
         List<ProposedEvent> deathEvents = ProductionProcess.failPreEffectWorkForDeath(deadWorker, job.workerId());
         assertEquals(2, deathEvents.size());

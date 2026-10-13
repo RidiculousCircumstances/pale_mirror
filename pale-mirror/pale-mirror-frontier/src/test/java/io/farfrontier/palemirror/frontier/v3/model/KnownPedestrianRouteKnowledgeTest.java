@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation;
@@ -21,6 +23,26 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KnownPedestrianRouteKnowledgeTest {
+    @Test void incompatibleDepartureHeightIsMissingKnowledgeButKnownHardScopeStillDeniesDeparture() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:meal-departure-height"), 20260918065L));
+        var home = state.bootstrap().settlements().getFirst();
+        var actor = home.residents().getFirst().id();
+        var known = KnownPedestrianGround.forFrontier(state).at(home.anchor().x() + 22, home.anchor().z() + 22);
+        var start = SurfaceAnchor.at(known.x(), known.y() + 5, known.z());
+        var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state).forActor(state, actor);
+        var missing = assertThrows(KnownPedestrianNavigation.RouteUnavailable.class,
+                () -> knowledge.plannedBetween(start, known));
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.UNKNOWN_GEOMETRY,
+                missing.status(), "a missing COLD origin cannot deny a path in the real loaded world");
+        assertEquals(known, knowledge.supportAt(known.x(), known.z()), "uncertainty cannot rewrite COLD terrain");
+        var outside = SurfaceAnchor.at(state.bootstrap().bounds().maxXExclusive(), known.y(), known.z());
+        var denied = assertThrows(KnownPedestrianNavigation.RouteUnavailable.class,
+                () -> knowledge.plannedBetween(outside, known));
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH,
+                denied.status(), "a known hard boundary must not opt into physical-only navigation");
+    }
+
     @Test void authoredQuarryChestUsesTheSameDepartureGeometryAsDeclaredWarehouses() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:quarry-chest-departure"),
                 20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r6")));
@@ -419,7 +441,7 @@ class KnownPedestrianRouteKnowledgeTest {
         int index = 1;
         for (Resident resident : settlement.residents()) {
             if (resident.id().equals(actorId)) continue;
-            actors.put(resident.id(), ActorLocation.standingOn(baseline.get(index), ActorKind.RESIDENT));
+            actors.put(resident.id(), ActorLocation.standingOn(baseline.get(index), ActorKind.RESIDENT, UnitNavigationProfile.VILLAGER));
             index = index + 1 < baseline.size() - 1 ? index + 1 : 1;
         }
         FrontierWorldState crowded = atService.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));

@@ -11,6 +11,20 @@ import java.util.Objects;
 public final class ResidentMealKnownNavigation {
     private ResidentMealKnownNavigation() { }
 
+    /** Access policy names destinations independently of the availability of a COLD route hint. */
+    public static List<SurfaceAnchor> approachStations(FrontierWorldState state, ResidentMeal meal, SurfaceAnchor start,
+            java.util.function.Predicate<SurfaceAnchor> availableWaitingStation) {
+        var port = ResourceStorageAccess.at(state, meal.depotId());
+        var exterior = ShipmentEndpointComposition.exteriorApproach(state, port.endpoint());
+        var point = point(state, meal);
+        boolean admitted = ResidentMealServiceAccess.available(state, meal.depotId(), meal.residentId());
+        boolean near = start.equals(port.interactionStation(state))
+                || Math.abs((long) start.x() - exterior.x()) + Math.abs((long) start.z() - exterior.z()) <= 3
+                || point.waitingSurfaces().contains(start);
+        return admitted && near ? List.of(port.interactionStation(state))
+                : waitingSurfaces(state, meal, point).stream().filter(availableWaitingStation).toList();
+    }
+
     public static List<SurfaceAnchor> path(FrontierWorldState state, ResidentMeal meal) {
         Objects.requireNonNull(state, "meal navigation state");
         Objects.requireNonNull(meal, "meal navigation owner");
@@ -74,7 +88,7 @@ public final class ResidentMealKnownNavigation {
 
         List<SurfaceAnchor> prefix = PedestrianLocalDeparture.exitToPublic(state, meal.residentId(), start);
         SurfaceAnchor outdoorStart = prefix.getLast();
-        KnownPedestrianRouteKnowledge routeKnowledge = ShipmentEndpointComposition.knowledge(state, List.of(port.endpoint()));
+        KnownPedestrianRouteKnowledge routeKnowledge = ShipmentEndpointComposition.knowledge(state, List.of(port.endpoint())).forActor(state, meal.residentId());
         // A distant applicant is not an occupant and does not own the service
         // turn. Route it to a side pocket first, then reconsider the short
         // entrance from there. A legitimate pocket can be farther than three
@@ -180,6 +194,6 @@ public final class ResidentMealKnownNavigation {
                 FrontierWireTags.tag(meal.phase()), 1L,
                 List.of(port.interactionStation(state)),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-        return ShipmentEndpointComposition.knowledge(state, List.of(port.endpoint())).plannedPath(start, order);
+        return ShipmentEndpointComposition.knowledge(state, List.of(port.endpoint())).forActor(state, meal.residentId()).plannedPath(start, order);
     }
 }

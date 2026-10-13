@@ -40,7 +40,7 @@ public final class ShipmentCargoDisposition {
         movements.remove(shipment.execution().actorId());
         var changes = ShipmentAuthorizationComposition.allocationDisposed(state, shipment, state.inventory().withFungibleResources(resources))
                 .shipments(state.shipments().replace(shipment, shipment.withStatus(Shipment.Status.CARGO_DISPOSED)))
-                .actorExecutions(ActorExecutionComposition.LIFECYCLE.retire(state, shipment.execution().actorId(), shipment.execution().activityKind(), shipment.id()))
+                .actorExecutions(TransportCargoExecution.afterParcelClosed(state, shipment))
                 .actorMovements(movements);
         return state.withChanges(changes);
     }

@@ -80,7 +80,7 @@ public final class ProductionProcess {
                     job.withSpatial(ProductionJourneyKnowledge.checkpoint(job, capture.body().supportingSurface())));
         }
         TraversalTopology rebased = ProductionWorkTraversal.compile(state, workshop, job.workerId(),
-                new ActorLocation(capture.body(), current.condition(), current.kind()), job.id());
+                new ActorLocation(capture.body(), current.condition(), current.kind(), current.navigationProfile()), job.id());
         return FrontierProductionWorkSceneSupport.replaceJob(state, job.rebaseUnstartedTraversal(rebased));
     }
 

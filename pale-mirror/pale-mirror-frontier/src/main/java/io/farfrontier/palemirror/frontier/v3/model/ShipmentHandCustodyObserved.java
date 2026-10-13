@@ -12,8 +12,17 @@ public record ShipmentHandCustodyObserved(SubjectId shipmentId, ActorActuationId
     public ShipmentHandCustodyObserved {
         Objects.requireNonNull(shipmentId); Objects.requireNonNull(identity);
         Objects.requireNonNull(boundary); Objects.requireNonNull(hand);
-        if (!identity.execution().activityOwnerId().equals(shipmentId))
-            throw new IllegalArgumentException("shipment hand has a foreign execution owner");
+        // A parcel is not necessarily the actuator owner: consolidated transport
+        // explicitly retains the group's execution. The reducer validates its
+        // exact shipment -> mission -> group relationship before touching stock.
+        switch (identity.execution().activityKind()) {
+            case COURIER -> {
+                if (!identity.execution().activityOwnerId().equals(shipmentId))
+                    throw new IllegalArgumentException("courier hand has a foreign shipment execution owner");
+            }
+            case GROUP_MEMBER -> { }
+            default -> throw new IllegalArgumentException("shipment hand has an unsupported execution capability");
+        }
     }
     @Override public String type() { return "frontier.shipment_hand_custody_observed"; }
 }

@@ -156,7 +156,7 @@ public final class AmbientPlacementPolicy {
         var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), resident.settlementId());
         var facility = settlement.structures().stream().filter(value -> value.id().equals(point.facilityId())).findFirst().orElseThrow();
         return KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), List.of(
-                new KnownPedestrianRouteKnowledge.Passage(facility, KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
+                new KnownPedestrianRouteKnowledge.Passage(facility, KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS))).forActor(state, lease.actorId());
     }
     private static Optional<PedestrianRouteReceipt> selectedServiceRoute(FrontierWorldState state, AmbientActorLease lease, SurfaceAnchor surface) {
         var point = requireServicePoint(state, lease, surface);

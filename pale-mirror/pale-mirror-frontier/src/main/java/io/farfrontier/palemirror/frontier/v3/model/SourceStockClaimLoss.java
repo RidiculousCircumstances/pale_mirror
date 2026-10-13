@@ -6,7 +6,7 @@ import java.util.*;
 /** One atomic source loss, composed with explicit allocation-owner dispositions. */
 public final class SourceStockClaimLoss {
     private static final Map<ClaimPurpose, SourceStockClaimLossOwner> OWNERS = register(List.of(
-            new ResidentMealPlayerStockLoss(), new InternalShipmentPlayerStockLoss(),
+            allocation(ClaimPurpose.RESIDENT_MEAL), new InternalShipmentPlayerStockLoss(),
             allocation(ClaimPurpose.GOODS_TRADE), allocation(ClaimPurpose.EXPEDITION_SUPPLY),
             allocation(ClaimPurpose.PRODUCTION_WORK), allocation(ClaimPurpose.STATION_PROCESSING), allocation(ClaimPurpose.STATION_OUTPUT)));
     private SourceStockClaimLoss() { }
@@ -71,7 +71,7 @@ public final class SourceStockClaimLoss {
         var transaction = new SourceStockClaimLossOwner.Settlement(FungibleForfeitureSettlement.from(state,
                 state.inventory().withFungibleResources(departed)), state.humanPopulation());
         for (var claim : claims) transaction = require(claim).settle(state, claim, transaction);
-        return state.withChanges(transaction.resources().contribution().humanPopulation(transaction.population()));
+        return state.withChanges(transaction.resources().withPopulation(transaction.population()).contribution());
     }
 
     public record ReleasedActivity(SubjectId actor, Optional<io.farfrontier.palemirror.frontier.v3.api.ScheduleId> cancelledProgress,

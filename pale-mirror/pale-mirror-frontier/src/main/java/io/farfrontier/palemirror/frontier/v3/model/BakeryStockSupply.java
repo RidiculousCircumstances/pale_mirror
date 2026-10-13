@@ -6,6 +6,11 @@ import java.util.*;
 final class BakeryStockSupply implements StockSupplyPort {
     @Override public Key key() { return Key.BAKERY; }
     @Override public long inputDemand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner, String itemKind) {
+        if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().enabled()) {
+            var participant = state.companies().goodsTrade().participants().participants().get(owner);
+            var plan = GoodsParticipantView.read(state, participant).supplyPlan().orElseThrow();
+            return plan.require(itemKind).protectedInput();
+        }
         var recipe = BakeryRecipes.bread(state);
         return recipe.ingredient().accepts(itemKind) ? Math.multiplyExact(
                 Math.ceilDiv(ProductionStockDemand.readSupply(state, owner, recipe.product().itemKind(), Optional.empty()).missing(),

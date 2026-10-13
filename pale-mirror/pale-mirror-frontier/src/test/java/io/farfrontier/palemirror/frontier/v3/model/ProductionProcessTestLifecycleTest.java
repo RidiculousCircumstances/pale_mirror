@@ -688,7 +688,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         SurfaceAnchor observedSurface = job.workTraversal().linearCorridorSurfaces().get(1);
         BodyPosition observedBody = observedSurface.standingBody();
         Map<SubjectId, ActorLocation> locations = new LinkedHashMap<>(initial.actorLocations());
-        locations.put(job.workerId(), new ActorLocation(observedBody, initial.actorLocations().get(job.workerId()).condition(), initial.actorLocations().get(job.workerId()).kind()));
+        locations.put(job.workerId(), new ActorLocation(observedBody, initial.actorLocations().get(job.workerId()).condition(), initial.actorLocations().get(job.workerId()).kind(), initial.actorLocations().get(job.workerId()).navigationProfile()));
         FrontierWorldState state = initial.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations));
         var leaseId = new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:production-observed-handoff-anchor");
         SceneLease staleAnchor = SceneLease.forCause(leaseId, state.bootstrap().worldId(), new ProductionWorkSceneCause(job.id()),

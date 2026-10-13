@@ -27,6 +27,25 @@ public final class FrontierV3RouteNavigationGameTests {
     private FrontierV3RouteNavigationGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 110)
+    public static void wideBodyCentersFromAdjacentNativeEndpointWithoutFictionalArrival(GameTestHelper helper) {
+        floor(helper); var level = helper.getLevel(); var target = anchor(helper, 4, 4);
+        var animal = helper.spawnWithNoFreeWill(EntityType.DONKEY,
+                new Vec3(4.7088D, 1.0D, 5.3651D));
+        var goal = FrontierV3GoalNavigation.Goal.routed(order(target), List.of(target), bounds(helper));
+        helper.runAfterDelay(1, () -> {
+            helper.assertTrue(!FrontierV3SemanticMovement.arrived(level, animal, target), "native endpoint is not semantic arrival");
+            for (int turn = 0; turn < 180 && !FrontierV3SemanticMovement.arrived(level, animal, target); turn++) {
+                FrontierV3GoalNavigation.pursue(level, animal, goal);
+                FrontierV3GoalNavigation.advanceAtEntityBoundary(animal); animal.aiStep();
+            }
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(level, animal, target),
+                    "wide body must actually enter and centre on its named support: " + animal.position());
+            FrontierV3GoalNavigation.stop(animal); animal.discard(); helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void widePedestrianObservesBlockerAtActualNativeNodeOffset(GameTestHelper helper) {
         floor(helper);
@@ -44,6 +63,41 @@ public final class FrontierV3RouteNavigationGameTests {
             helper.assertTrue(FrontierV3PhysicalPathPolicy.reject(level, query.path(), scope).isEmpty(),
                     "the same provider must find the available physical detour");
             animal.discard(); occupant.discard(); helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 110)
+    public static void wideBodyCentersFromOverhangingRaisedApron(GameTestHelper helper) {
+        floor(helper); var level = helper.getLevel();
+        for (int x = 1; x <= 6; x++) for (int z = 1; z <= 6; z++)
+            level.setBlock(helper.absolutePos(new BlockPos(x, 3, z)), Blocks.AIR.defaultBlockState(), 3);
+        for (int x = 3; x <= 5; x++) for (int z = 2; z <= 4; z++)
+            level.setBlock(helper.absolutePos(new BlockPos(x, 1, z)), Blocks.STONE.defaultBlockState(), 3);
+        var support = helper.absolutePos(new BlockPos(4, 1, 4));
+        var target = SurfaceAnchor.at(support.getX(), support.getY(), support.getZ());
+        var animal = helper.spawnWithNoFreeWill(EntityType.DONKEY, new Vec3(4.7088D, 2.0D, 5.3651D));
+        var goal = FrontierV3GoalNavigation.Goal.routed(order(target), List.of(target), bounds(helper));
+        helper.runAfterDelay(1, () -> {
+            helper.assertTrue(level.noCollision(animal, animal.getBoundingBox()), "fixture has actual body clearance");
+            helper.assertTrue(level.getBlockState(BlockPos.containing(animal.getX(), animal.getY() - 0.000001D,
+                    animal.getZ())).getCollisionShape(level, animal.blockPosition().below()).isEmpty(),
+                    "the centre overhangs: this is not a flat-floor reproduction");
+            helper.assertTrue(FrontierV3BodyObservation.hasDryContact(level, animal.getBoundingBox()),
+                    "the physical footprint still contacts the raised apron");
+            helper.assertTrue(!FrontierV3SemanticMovement.arrived(level, animal, target), "contact is not arrival");
+            for (int turn = 0; turn < 180 && !FrontierV3SemanticMovement.arrived(level, animal, target); turn++) {
+                FrontierV3GoalNavigation.pursue(level, animal, goal);
+                FrontierV3GoalNavigation.advanceAtEntityBoundary(animal); animal.aiStep();
+            }
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(level, animal, target),
+                    "the same native provider must actually centre the supported wide body: " + animal.position()
+                            + "; support=" + FrontierV3BodyObservation.capture(animal)
+                            + "; navigation=" + FrontierV3MinecraftGoalNavigation.observation(animal)
+                            + "; collisions=" + java.util.stream.StreamSupport.stream(level.getBlockCollisions(animal,
+                            animal.getBoundingBox().expandTowards(FrontierV3SemanticMovement.point(level, target)
+                            .subtract(animal.position())).deflate(0.000001D)).spliterator(), false).toList());
+            FrontierV3GoalNavigation.stop(animal); animal.discard(); helper.succeed();
         });
     }
 

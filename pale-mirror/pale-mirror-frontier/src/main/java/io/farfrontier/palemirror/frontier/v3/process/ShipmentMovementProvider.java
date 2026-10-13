@@ -13,7 +13,8 @@ public final class ShipmentMovementProvider implements ActorMovementProvider {
         if (!(movement.context() instanceof ActorMovementContext.ShipmentLeg leg))
             throw new IllegalArgumentException("shipment movement has a foreign context declaration");
         Shipment shipment = state.shipments().shipments().get(leg.shipmentId());
-        if (shipment == null || shipment.terminal() || shipment.revision() != leg.shipmentRevision()
+        if (shipment == null || shipment.terminal() || !TransportCargoExecution.selected(state, shipment)
+                || shipment.revision() != leg.shipmentRevision()
                 || !shipment.execution().equals(movement.executionId()) || !shipment.movementOrder().equals(movement.order()))
             throw new IllegalArgumentException("shipment movement lacks its exact current leg");
         state.actorExecutions().requireCurrent(shipment.execution());
@@ -22,12 +23,12 @@ public final class ShipmentMovementProvider implements ActorMovementProvider {
     }
     @Override public FrontierWorldState start(FrontierWorldState state, ActorMovement movement, FrontierWorldStateUpdate update) {
         validate(state, movement);
-        return state.withChanges(update); // Same retained COURIER generation; movement is not a new job.
+        return state.withChanges(update); // Same retained activity generation; movement is not a new job.
     }
     @Override public KnownPedestrianRouteKnowledge placementKnowledge(FrontierWorldState state, ActorMovement movement) {
         validate(state, movement);
         Shipment shipment = state.shipments().shipments().get(movement.order().ownerId());
-        return ResourceSourceComposition.knowledge(state, shipment.sender(), shipment.receiver());
+        return ResourceSourceComposition.knowledge(state, shipment.sender(), shipment.receiver()).forActor(state, movement.order().actorId());
     }
     @Override public List<SurfaceAnchor> route(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start) {
         return placementKnowledge(state, movement).plannedPath(start, movement.order());
@@ -35,7 +36,7 @@ public final class ShipmentMovementProvider implements ActorMovementProvider {
     @Override public void requireRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
         validate(state, movement);
         Shipment shipment = state.shipments().shipments().get(movement.order().ownerId());
-        ResourceSourceComposition.knowledge(state, shipment.sender(), shipment.receiver()).requireRoute(route);
+        ResourceSourceComposition.knowledge(state, shipment.sender(), shipment.receiver()).forActor(state, movement.order().actorId()).requireRoute(route);
         if (!movement.order().arrivedAt(route.getLast()) && route.size() != TimedKnownRoute.MAX_SURFACES)
             throw new IllegalArgumentException("shipment segment is neither a bounded prefix nor its declared goal");
     }
@@ -59,7 +60,7 @@ public final class ShipmentMovementProvider implements ActorMovementProvider {
     @Override public void requireColdRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route, long tick) {
         validate(state, movement);
         var shipment = state.shipments().shipments().get(movement.order().ownerId());
-        ResourceSourceComposition.knowledge(state, shipment.sender(), shipment.receiver()).requireRoute(route);
+        ResourceSourceComposition.knowledge(state, shipment.sender(), shipment.receiver()).forActor(state, movement.order().actorId()).requireRoute(route);
         var access = serviceApproach(state, movement).orElse(null);
         boolean waitingOutside = access != null && !ServiceAccessCoordinator.available(state, access)
                 && ServiceAccessCoordinator.boundary(state, access.pointId()).cleared(route.getLast().standingBody())

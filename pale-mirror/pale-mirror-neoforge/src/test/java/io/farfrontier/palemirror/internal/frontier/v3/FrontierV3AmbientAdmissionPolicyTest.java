@@ -863,7 +863,7 @@ class FrontierV3AmbientAdmissionPolicyTest {
                 }).findFirst().orElseThrow();
         Map<SubjectId, ActorLocation> locations = new LinkedHashMap<>(state.actorLocations());
         ActorLocation original = locations.get(attacker);
-        locations.put(attacker, new ActorLocation(BodyPosition.above(new SurfaceAnchor(substitute)), original.condition(), original.kind()));
+        locations.put(attacker, new ActorLocation(BodyPosition.above(new SurfaceAnchor(substitute)), original.condition(), original.kind(), original.navigationProfile()));
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations));
     }
 
@@ -936,7 +936,7 @@ class FrontierV3AmbientAdmissionPolicyTest {
         assertEquals(members.size(), floors.size(), "fixture must retain declared perimeter floors for every named assault member");
         for (int index = 0; index < members.size(); index++) {
             SubjectId actor = members.get(index);
-            locations.put(actor, new ActorLocation(BodyPosition.above(new SurfaceAnchor(floors.get(index))), locations.get(actor).condition(), locations.get(actor).kind()));
+            locations.put(actor, new ActorLocation(BodyPosition.above(new SurfaceAnchor(floors.get(index))), locations.get(actor).condition(), locations.get(actor).kind(), locations.get(actor).navigationProfile()));
         }
     }
 }

@@ -175,7 +175,7 @@ public final class ActorBodyAuthority {
         FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), observed.observedBody().supportingSurface().support());
         var actors = new java.util.LinkedHashMap<>(state.actorLocations());
         actors.put(observed.body().actorId(), new ActorLocation(observed.observedBody(),
-                actor.condition().withHealth(observed.observedHealth()), actor.kind()));
+                actor.condition().withHealth(observed.observedHealth()), actor.kind(), actor.navigationProfile()));
         var recovery = binding.phase() == FencedRecoveryPhase.AMBIGUOUS
                 && observed.source() == io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.Source.INDEXED_LIVING
                 ? state.fencedRecovery().inspectedRunning(binding.bindingId(), observed.body().physicalEpoch())
@@ -208,7 +208,7 @@ public final class ActorBodyAuthority {
         FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), observed.observedBody().supportingSurface().support());
         var actors = new java.util.LinkedHashMap<>(state.actorLocations());
         actors.put(observed.body().actorId(), new ActorLocation(observed.observedBody(),
-                actor.condition().withHealth(observed.observedHealth()), actor.kind()));
+                actor.condition().withHealth(observed.observedHealth()), actor.kind(), actor.navigationProfile()));
         var recovery = binding.phase() == FencedRecoveryPhase.PREPARED
                 ? state.fencedRecovery().running(binding.bindingId(), observed.body().physicalEpoch())
                 : state.fencedRecovery().inspectedRunning(binding.bindingId(), observed.body().physicalEpoch());
@@ -261,7 +261,7 @@ public final class ActorBodyAuthority {
         FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), observed.observedBody().supportingSurface().support());
         var actors = new java.util.LinkedHashMap<>(state.actorLocations());
         actors.put(observed.body().actorId(), new ActorLocation(observed.observedBody(),
-                actor.condition().withHealth(observed.observedHealth()), actor.kind()));
+                actor.condition().withHealth(observed.observedHealth()), actor.kind(), actor.navigationProfile()));
         // Exact saved-absence evidence may resolve body ambiguity, never a resource effect.
         // There is no published RUNNING intermediate or permission to actuate a saved body.
         var checkpoint = ActorExecutionComposition.LIFECYCLE.checkpointBodyDeparture(state, observed.body(), observed.observedBody());

@@ -14,8 +14,17 @@ final class GroupMemberActivityCapability implements ActorActivityCapability {
                 .permitsHomeFood(state, group);
     }
     @Override public Interruption interruption() { return Interruption.RETAIN_CONTINUATION; }
-    @Override public ActorActivityBodyCheckpoint bodyCheckpoint() { return new ActorMovementBodyCheckpoint(); }
-    @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) { validateReference(state, execution); }
+    @Override public ActorActivityBodyCheckpoint bodyCheckpoint() {
+        return request -> {
+            validateAmbientRelease(request.expectedState(), request.execution());
+            return new ActorMovementBodyCheckpoint().acknowledge(request);
+        };
+    }
+    @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) {
+        validateReference(state, execution);
+        var group = state.unitGroups().groups().get(execution.activityOwnerId());
+        io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupMissionPorts.require(group).requireBodyRelease(state, group, execution);
+    }
     @Override public void validateReference(FrontierWorldState state, ActorExecutionId execution) {
         var group = state.unitGroups().groups().get(execution.activityOwnerId());
         if (execution.activityKind() != kind() || group == null || group.phase() == UnitGroup.Phase.CLOSED)
@@ -24,11 +33,15 @@ final class GroupMemberActivityCapability implements ActorActivityCapability {
     }
     @Override public ActorActivityCheckpoint checkpoint(FrontierWorldState state, ActorExecutionId execution) {
         validateReference(state, execution);
-        return new ActorActivityCheckpoint(state, execution, Optional.empty());
+        var group = state.unitGroups().groups().get(execution.activityOwnerId());
+        return io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupMissionPorts.require(group).checkpoint(state, group, execution);
     }
     @Override public ActorActivityResumption resumptionReference() {
         return request -> { validateReference(request.expectedState(), request.suspended());
-            return new ActorActivityResumption.Acknowledgement(request, FrontierWorldStateUpdate.begin()); };
+            var group = request.expectedState().unitGroups().groups().get(request.suspended().activityOwnerId());
+            return new ActorActivityResumption.Acknowledgement(request,
+                    io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupMissionPorts.require(group)
+                        .resumption(request.expectedState(), group, request.suspended(), request.successor())); };
     }
     @Override public Optional<ActorActivityDeath> deathAcknowledgement() {
         return Optional.of((state, execution, tick) -> {
@@ -43,7 +56,7 @@ final class GroupMemberActivityCapability implements ActorActivityCapability {
                 && movement.order().legalStations().contains(lease.goalBody().supportingSurface());
     }
     @Override public FrontierWorldState pause(FrontierWorldState state, ActorExecutionId execution, long tick) {
-        validateReference(state, execution);
+        if (!checkpoint(state, execution).ready()) throw new IllegalArgumentException("group pause retains an unresolved owner effect");
         if (state.actorMovements().containsKey(execution.actorId())) throw new IllegalArgumentException("group movement must acknowledge its interruption first");
         return state;
     }
@@ -52,7 +65,11 @@ final class GroupMemberActivityCapability implements ActorActivityCapability {
             FrontierWorldState state, ActorExecutionId successor, long tick) {
         validateReference(state, successor);
         state.actorExecutions().requireCurrent(successor);
-        return java.util.List.of(UnitGroupContinuation.wake(successor.activityOwnerId(), tick));
+        var group = state.unitGroups().groups().get(successor.activityOwnerId());
+        var events = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent>();
+        events.add(UnitGroupContinuation.wake(group.id(), tick));
+        events.addAll(io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupMissionPorts.require(group).reconsider(state, group, tick));
+        return java.util.List.copyOf(events);
     }
     @Override public FrontierWorldState release(FrontierWorldState state, ActorExecutionId execution) {
         throw new IllegalArgumentException("group purpose ends only through the group completion protocol");

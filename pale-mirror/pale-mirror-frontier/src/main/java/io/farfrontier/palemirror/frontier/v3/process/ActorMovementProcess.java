@@ -32,6 +32,8 @@ public final class ActorMovementProcess {
                 || ActorExecutionCoordinator.sceneOwns(state, subject))
             throw new IllegalArgumentException("movement start lacks exclusive living actor authority");
         // Admission retains an exact goal, not an assertion that a route has already executed.
+        if (!actor.navigationProfile().capabilities().contains(movement.order().capability()))
+            throw new IllegalArgumentException("movement requires a capability absent from the actor's declared navigation profile");
         ActorMovementProviders.require(movement).validate(state, movement);
         var movements = new LinkedHashMap<>(state.actorMovements());
         movements.put(subject, movement);

@@ -43,6 +43,6 @@ class ActorHandObservationGateTest {
                 binding, 0, new SubjectId("custody:generic-gate-player"), new ResourceCustody.Player(player),
                 1L, new PhysicalStackAddress.PlayerSlot(player, 0));
         assertInstanceOf(CommandPlan.Rejected.class,
-                FrontierWorldPhysicalObservationProcess.planFungibleHandoff(state, attempted));
+                FrontierWorldPhysicalObservationProcess.planFungibleHandoff(state, attempted, 1L));
     }
 }

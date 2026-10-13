@@ -62,10 +62,12 @@ public final class ExpeditionSupplyAuthority {
     }
     private static boolean mayReconsider(FrontierWorldState state, TransportMission mission) {
         var load = mission.supplies().orElseThrow();
-        if (mission.stage() != TransportMission.Stage.LOADING || load.allocations().stream().anyMatch(a -> a.pending().isPresent())
-                || load.foodTargets().keySet().stream().anyMatch(actor -> state.actorMovements().containsKey(actor)
-                    || state.humanPopulation().meals().containsKey(actor))) return false;
         var group = state.unitGroups().groups().get(mission.groupId());
+        if (mission.stage() != TransportMission.Stage.LOADING || load.allocations().stream().anyMatch(a -> a.pending().isPresent())
+                || group.members().stream().anyMatch(member -> state.actorMovements().containsKey(member.actorId())
+                    || state.humanPopulation().meals().containsKey(member.actorId()))) return false;
+        // Assembly orders carry this load's revision, including the transport asset
+        // which has no personal food target. Never replace their predecessor in flight.
         if (group.members().stream().filter(member -> state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.ALIVE)
                 .anyMatch(member -> UnitGroupMissionPorts.require(group).execution(state, group, member).isEmpty()))
             return false;

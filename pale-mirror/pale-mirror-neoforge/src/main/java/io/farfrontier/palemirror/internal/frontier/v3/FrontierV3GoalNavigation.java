@@ -20,17 +20,23 @@ final class FrontierV3GoalNavigation {
     abstract static sealed class ProviderPermission permits CapturedPermission, UnmodeledPermission {
         private ProviderPermission() { }
         abstract boolean current(Mob actor);
+        abstract Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> navigationProfile();
         Optional<TravelPace> pace() { return Optional.empty(); }
     }
     private static final class CapturedPermission extends ProviderPermission {
         private final Mob actor;
         private final FrontierV3ActorActuation actuation;
         private final Optional<TravelPace> pace;
+        private final io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile profile;
         private CapturedPermission(Mob actor, FrontierV3ActorActuation actuation, Optional<TravelPace> pace) {
             this.actor = Objects.requireNonNull(actor); this.actuation = Objects.requireNonNull(actuation);
             this.pace = Objects.requireNonNull(pace);
+            this.profile = actuation.navigationProfile().orElseThrow(() -> new IllegalArgumentException("navigation lost its declared profile"));
         }
-        @Override boolean current(Mob candidate) { return candidate == actor && actuation.current(candidate); }
+        @Override boolean current(Mob candidate) {
+            return candidate == actor && actuation.current(candidate) && actuation.navigationProfile().equals(Optional.of(profile));
+        }
+        @Override Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> navigationProfile() { return Optional.of(profile); }
         @Override Optional<TravelPace> pace() { return pace; }
     }
     /** Unmodeled physical fixtures have no canonical identity and cannot acquire one through this permission. */
@@ -40,6 +46,7 @@ final class FrontierV3GoalNavigation {
         @Override boolean current(Mob candidate) {
             return candidate == actor && permitsUnmodeledNavigation(candidate.getPersistentData(), ACTUATIONS.containsKey(candidate));
         }
+        @Override Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> navigationProfile() { return Optional.empty(); }
     }
     enum Status { IN_PROGRESS, ARRIVED, BLOCKED, AMBIGUOUS }
     enum BlockReason { PATH_UNAVAILABLE, PATH_STALLED, TRAFFIC_BLOCKED, TARGET_CHUNK_UNLOADED, OFF_CONTRACT,
@@ -164,7 +171,8 @@ final class FrontierV3GoalNavigation {
         Objects.requireNonNull(level, "navigation level");
         Objects.requireNonNull(actor, "navigation actor");
         Objects.requireNonNull(goal, "navigation goal");
-        if (goal.capability() != TraversalCapability.PEDESTRIAN) {
+        if (goal.capability() != TraversalCapability.PEDESTRIAN
+                || permission.navigationProfile().filter(profile -> !profile.capabilities().contains(goal.capability())).isPresent()) {
             clearProvider(actor);
             return new Result(Status.BLOCKED, "no-registered-provider-for-" + goal.capability(),
                     Optional.of(BlockReason.UNSUPPORTED_CAPABILITY), Optional.empty());
@@ -186,6 +194,11 @@ final class FrontierV3GoalNavigation {
     static boolean canReach(ServerLevel level, Mob actor, Goal goal) {
         return goal.capability() == TraversalCapability.PEDESTRIAN
                 && FrontierV3MinecraftGoalNavigation.canReach(level, actor, goal.legalStations(), goal.scope());
+    }
+    static boolean canReach(ServerLevel level, Mob actor, Goal goal, FrontierV3ActorActuation actuation) {
+        return actuation.current(actor) && goal.capability() == TraversalCapability.PEDESTRIAN
+                && FrontierV3MinecraftGoalNavigation.canReach(level, actor, goal.legalStations(), goal.scope(),
+                    actuation.navigationProfile());
     }
     static boolean controls(Mob actor) {
         return validateRetainedActuation(actor) && FrontierV3MinecraftGoalNavigation.controls(actor);

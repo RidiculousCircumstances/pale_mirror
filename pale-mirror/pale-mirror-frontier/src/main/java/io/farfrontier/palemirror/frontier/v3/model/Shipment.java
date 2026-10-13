@@ -25,8 +25,10 @@ public record Shipment(SubjectId id, ResourceClaimDelegation authorization, Acto
         transportMissionId = Objects.requireNonNull(transportMissionId);
         mobileContainerId = Objects.requireNonNull(mobileContainerId, "explicit carried storage");
         lotQuantities = Map.copyOf(Objects.requireNonNull(lotQuantities));
-        if (!authorization.executorId().equals(id) || !execution.activityOwnerId().equals(id)
-                || execution.activityKind() != ActorActivityKind.COURIER || sender.container().filter(receiver.containerId()::equals).isPresent()
+        boolean ownExecution = execution.activityKind() == ActorActivityKind.COURIER && execution.activityOwnerId().equals(id);
+        boolean groupExecution = execution.activityKind() == ActorActivityKind.GROUP_MEMBER && transportMissionId.isPresent();
+        if (!authorization.executorId().equals(id) || !(ownExecution || groupExecution)
+                || sender.container().filter(receiver.containerId()::equals).isPresent()
                 || sourceAccountId.equals(carriedAccountId) || carriedAccountId.equals(receivingAccountId)
                 || sourceAccountId.equals(receivingAccountId) || revision < 1 || !itemKind.matches("[a-z][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9_./-]{0,127}")
                 || lotQuantities.isEmpty() && status != Status.DELIVERED || lotQuantities.size() > 64
@@ -102,7 +104,7 @@ public record Shipment(SubjectId id, ResourceClaimDelegation authorization, Acto
     }
     public Shipment resumed(ActorExecutionId successor) {
         if (terminal() || pendingPhysicalStep.isPresent() || !execution.actorId().equals(successor.actorId())
-                || execution.activityKind() != successor.activityKind() || !id.equals(successor.activityOwnerId())
+                || execution.activityKind() != successor.activityKind() || !execution.activityOwnerId().equals(successor.activityOwnerId())
                 || successor.generation() <= execution.generation())
             throw new IllegalArgumentException("shipment continuation has a foreign or stale successor");
         return new Shipment(id, authorization, successor, sender, receiver, sourceAccountId, carriedAccountId,

@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile;
+
 import io.farfrontier.palemirror.frontier.v3.api.FixedRatio;
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
@@ -14,20 +16,20 @@ final class FrontierWorldInitialState {
 
     static FrontierWorldState create(FrontierBootstrap bootstrap) {
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(); HumanPopulation population = HumanPopulation.bootstrap(bootstrap);
-        bootstrap.settlements().forEach(settlement -> settlement.residents().forEach(resident -> actors.put(resident.id(), ActorLocation.standingOn(new SurfaceAnchor(resident.home()), ActorKind.RESIDENT))));
+        bootstrap.settlements().forEach(settlement -> settlement.residents().forEach(resident -> actors.put(resident.id(), ActorLocation.standingOn(new SurfaceAnchor(resident.home()), ActorKind.RESIDENT, UnitNavigationProfile.VILLAGER))));
         HiveColony colony = HiveColony.empty().withBioformLifecycles(initialBioformLifecycles(bootstrap));
         bootstrap.hive().bioforms().forEach(bioform -> {
             BioformLifecycle lifecycle = colony.bioformLifecycles().get(bioform.id());
             if (lifecycle.phase().occupiesCocoon()) {
                 HiveCocoonSlot slot = lifecycle.homeSlot().orElseThrow();
-                actors.put(bioform.id(), ActorLocation.standingOn(new SurfaceAnchor(HiveCocoonPlan.cocoonCell(organ(bootstrap, slot.hibernaculumId()), slot)), ActorKind.BIOFORM));
+                actors.put(bioform.id(), ActorLocation.standingOn(new SurfaceAnchor(HiveCocoonPlan.cocoonCell(organ(bootstrap, slot.hibernaculumId()), slot)), ActorKind.BIOFORM, UnitNavigationProfile.ZOMBIE));
             } else {
-                actors.put(bioform.id(), ActorLocation.standingOn(new SurfaceAnchor(bioform.position()), ActorKind.BIOFORM));
+                actors.put(bioform.id(), ActorLocation.standingOn(new SurfaceAnchor(bioform.position()), ActorKind.BIOFORM, UnitNavigationProfile.ZOMBIE));
             }
         });
         var fleet = TransportFleetBootstrap.initial(bootstrap);
         fleet.assets().values().forEach(asset -> actors.put(asset.actorId(),
-                ActorLocation.standingOn(asset.homeStation(), ActorKind.PACK_ANIMAL)));
+                ActorLocation.standingOn(asset.homeStation(), ActorKind.PACK_ANIMAL, UnitNavigationProfile.DONKEY)));
         Map<SubjectId, StructureCondition> structures = new LinkedHashMap<>();
         bootstrap.settlements().forEach(settlement -> settlement.structures().forEach(structure -> structures.put(structure.id(), StructureCondition.INTACT)));
         Map<SubjectId, ContainerRecord> containers = new LinkedHashMap<>();

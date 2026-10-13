@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 
 import java.util.LinkedHashMap;
@@ -137,7 +139,7 @@ public final class HumanPopulationStateSupport {
         if (SettlementFacilityCapability.livingResidents(state, job.settlementId()) >= SettlementFacilityCapability.housingCapacity(state, job.settlementId())) {
             throw new IllegalArgumentException("resident birth lost required housing before completion");
         }
-        var actors = new LinkedHashMap<>(state.actorLocations()); actors.put(job.resident().id(), ActorLocation.standingOn(new SurfaceAnchor(job.position()), ActorKind.RESIDENT));
+        var actors = new LinkedHashMap<>(state.actorLocations()); actors.put(job.resident().id(), ActorLocation.standingOn(new SurfaceAnchor(job.position()), ActorKind.RESIDENT, UnitNavigationProfile.VILLAGER));
         return copy(state, actors, state.humanPopulation().completeBirth(job.id(), state.bootstrap().ruleset().residentLife()));
     }
 

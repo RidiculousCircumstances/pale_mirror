@@ -8,6 +8,7 @@ final class FungibleClaimForfeitureComposition {
             ClaimPurpose.GOODS_TRADE, new GoodsTradeForfeitureOwner(),
             ClaimPurpose.EXPEDITION_SUPPLY, new ExpeditionSupplyForfeitureOwner(),
             ClaimPurpose.INTERNAL_LOGISTICS, new InternalShipmentForfeitureOwner(),
+            ClaimPurpose.RESIDENT_MEAL, new ResidentMealForfeitureOwner(),
             ClaimPurpose.PRODUCTION_WORK, new ProductionClaimForfeitureOwner(),
             ClaimPurpose.STATION_PROCESSING, new StationClaimForfeitureOwner(),
             ClaimPurpose.STATION_OUTPUT, new StationOutputForfeitureOwner(),

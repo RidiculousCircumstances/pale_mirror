@@ -13,6 +13,12 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                         + ",\"unclaimed\":" + entry.getValue().unclaimedAtEndpoint() + ",\"incoming\":" + entry.getValue().expectedIncoming()
                         + ",\"protectedMinimum\":" + entry.getValue().protectedMinimum() + "}").collect(Collectors.joining(","));
         var trade = state.companies().goodsTrade();
+        var supply = view.supplyPlan().map(plan -> plan.demands().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
+                .map(e -> "{\"commodity\":" + string(e.getKey()) + ",\"purchase\":" + e.getValue().purchase()
+                        + ",\"production\":" + e.getValue().production() + ",\"protectedInput\":" + e.getValue().protectedInput()
+                        + ",\"deadlineTicks\":" + (e.getValue().deadlineTicks() == Long.MAX_VALUE ? "null" : e.getValue().deadlineTicks())
+                        + ",\"causes\":[" + e.getValue().reasons().stream().sorted().map(r -> string(r.name())).collect(Collectors.joining(",")) + "]}")
+                .collect(Collectors.joining(","))).orElse("");
         var known = participant.known().stream().sorted(java.util.Comparator.comparing(value -> value.party().id()))
                 .map(value -> "{\"participant\":" + string(value.party().id().value())
                         + ",\"container\":" + string(value.endpoint().containerId().value()) + "}").collect(Collectors.joining(","));
@@ -56,7 +62,7 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                     .explain(view, state.bootstrap().ruleset().goodsTrade())) + ",\"availableMoneyRaw\":" + view.availableMoney().raw()
                 + ",\"nextReviewTick\":" + (reviews.isPresent() ? Long.toString(reviews.orElseThrow()) : "null")
                 + ",\"knownCounterparties\":[" + known + "],\"stocks\":[" + stocks
-                + "],\"orders\":[" + orders + "],\"contracts\":[" + contracts + "]"
+                + "],\"supplyPlan\":[" + supply + "],\"orders\":[" + orders + "],\"contracts\":[" + contracts + "]"
                 + ",\"acceptedCommodities\":{" + acceptedCommodities + "}"
                 + ",\"expeditions\":" + FrontierV3ExpeditionDiagnosticJson.render(checkpoint, state, participant) + "}";
     }

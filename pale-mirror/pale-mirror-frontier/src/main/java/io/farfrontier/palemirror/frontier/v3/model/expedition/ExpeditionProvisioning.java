@@ -97,7 +97,8 @@ public final class ExpeditionProvisioning {
             int freeSlots = Math.max(0, policy.personalStackSlots() - member.occupiedStackSlots());
             int existing = Math.min(required, member.existingFoodItems());
             int foodSlots = Math.ceilDiv(Math.max(0, required - existing - member.existingFoodStackRoom()), 64);
-            walkingFoodFits &= Math.addExact(foodSlots, member.cargoStackSlots()) <= freeSlots;
+            walkingFoodFits &= Math.addExact(foodSlots, member.cargoStackSlots()) <= freeSlots
+                    && required <= Math.max(policy.personalFoodItems(), member.existingFoodItems());
             supplies.put(member.actorId(), new PersonalSupply(member.actorId(), required, required, existing));
         }
         Transport transport = walkingFoodFits && !carriedByAnimal ? Transport.WALKING : Transport.PACK_ANIMAL;

@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
+import io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile;
+
 import io.farfrontier.palemirror.frontier.v3.model.HarvestFixtureOwners;
 
 import io.farfrontier.palemirror.frontier.v3.api.*;
@@ -131,7 +133,7 @@ class FrontierProcessSceneSdkTest {
     private static java.util.Map<SubjectId, ActorLocation> budgetLocations(SceneLease lease) {
         var actors = new java.util.LinkedHashMap<SubjectId, ActorLocation>();
         for (int index = 0; index < lease.members().size(); index++) actors.put(lease.members().get(index).actorId(),
-                new ActorLocation(new BodyPosition(index * 16, 65, 0), ActorCondition.HEALTHY, ActorKind.RESIDENT));
+                new ActorLocation(new BodyPosition(index * 16, 65, 0), ActorCondition.HEALTHY, ActorKind.RESIDENT, UnitNavigationProfile.VILLAGER));
         return actors;
     }
 

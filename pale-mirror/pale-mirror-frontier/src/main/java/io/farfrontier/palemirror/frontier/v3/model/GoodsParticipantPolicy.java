@@ -8,7 +8,7 @@ public interface GoodsParticipantPolicy {
     record Intent(String itemKind, GoodsTradeOrder.Side side, int quantity, FixedScalar limit) {
         public Intent {
             java.util.Objects.requireNonNull(itemKind); java.util.Objects.requireNonNull(side); java.util.Objects.requireNonNull(limit);
-            if (quantity < 1 || quantity > 64 || limit.raw() <= 0) throw new IllegalArgumentException("invalid goods policy intent");
+            if (quantity < 1 || quantity > ResourceLot.MAX_QUANTITY || limit.raw() <= 0) throw new IllegalArgumentException("invalid goods policy intent");
         }
     }
     GoodsPolicyKind kind();

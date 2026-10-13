@@ -25,6 +25,7 @@ record FrontierV3ActorActuation(ActorActuationId id, Supplier<Optional<FrontierW
         var actuation = new FrontierV3ActorActuation(new ActorActuationId(
                 new ActorBodyId(declaration.actorId(), declaration.epoch()), execution), currentState);
         actuation.require(basis, declaration);
+        requireEnvelope(basis, declaration.actorId(), body);
         return actuation;
     }
 
@@ -43,7 +44,25 @@ record FrontierV3ActorActuation(ActorActuationId id, Supplier<Optional<FrontierW
     boolean current(Mob body) {
         if (body == null || body.isRemoved() || !body.isAlive()) return false;
         var declaration = FrontierV3ActorCarrierComposition.declaredBy(body);
-        return declaration.isPresent() && current(declaration.orElseThrow());
+        var state = currentState.get();
+        if (declaration.isEmpty() || state.isEmpty()) return false;
+        try { require(state.orElseThrow(), declaration.orElseThrow()); }
+        catch (IllegalArgumentException stale) { return false; }
+        requireEnvelope(state.orElseThrow(), declaration.orElseThrow().actorId(), body);
+        return true;
+    }
+
+    private static void requireEnvelope(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId actorId, Mob body) {
+        var profile = state.actorLocations().get(actorId).navigationProfile();
+        if (!profile.matchesDimensions(body.getBbWidth(), body.getBbHeight()))
+            throw new IllegalStateException("navigation envelope mismatch for " + actorId + ": declared=" + profile
+                    + "; observed=" + body.getBbWidth() + "x" + body.getBbHeight());
+    }
+    Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> navigationProfile() {
+        return currentState.get().map(state -> {
+            ActorBodyAuthority.requireActuation(state, id);
+            return state.actorLocations().get(id.body().actorId()).navigationProfile();
+        });
     }
 
     boolean current(FrontierV3ActorCarrierComposition.Declaration declaration) {

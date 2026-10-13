@@ -48,16 +48,16 @@ public final class ExpeditionSupplyMovementProvider implements ActorMovementProv
     @Override public void validate(FrontierWorldState state, ActorMovement movement) { mission(state, movement); }
     @Override public KnownPedestrianRouteKnowledge placementKnowledge(FrontierWorldState state, ActorMovement movement) {
         var m = mission(state, movement);
-        return TransportGroupMissionPort.knowledgeForEndpoints(state, m.sender(), m.receiver());
+        return TransportGroupMissionPort.knowledgeForEndpoints(state, m.sender(), m.receiver()).forActor(state, movement.order().actorId());
     }
     @Override public FrontierWorldState start(FrontierWorldState state, ActorMovement movement, FrontierWorldStateUpdate update) {
         validate(state, movement); state.actorExecutions().requireCurrent(movement.executionId()); return state.withChanges(update);
     }
     @Override public List<SurfaceAnchor> route(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start) {
-        var m = mission(state, movement); return TransportGroupMissionPort.knowledgeForEndpoints(state, m.sender(), m.receiver()).plannedPath(start, movement.order());
+        var m = mission(state, movement); return TransportGroupMissionPort.knowledgeForEndpoints(state, m.sender(), m.receiver()).forActor(state, movement.order().actorId()).plannedPath(start, movement.order());
     }
     @Override public void requireRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
-        var m = mission(state, movement); TransportGroupMissionPort.knowledgeForEndpoints(state, m.sender(), m.receiver()).requireRoute(route);
+        var m = mission(state, movement); TransportGroupMissionPort.knowledgeForEndpoints(state, m.sender(), m.receiver()).forActor(state, movement.order().actorId()).requireRoute(route);
         if (!movement.order().arrivedAt(route.getLast()) && route.size() != TimedKnownRoute.MAX_SURFACES)
             throw new IllegalArgumentException("supply route is neither a bounded prefix nor its declared station");
     }

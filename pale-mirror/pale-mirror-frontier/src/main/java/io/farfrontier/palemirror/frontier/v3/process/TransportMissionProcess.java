@@ -69,7 +69,8 @@ public final class TransportMissionProcess {
             if (!shipment.transportMissionId().equals(Optional.of(mission.id()))) throw new IllegalArgumentException("shipment has a foreign mission binding");
             ShipmentStateSupport.validateDispatch(state, value.senderId(), shipment);
             shipments = shipments.admit(shipment);
-            declarations.add(shipment.execution());
+            if (shipment.execution().activityKind() == io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.COURIER)
+                declarations.add(shipment.execution());
         }
         // One atomic publication, including supporting purposes; no intermediate dangling references.
         for (var member : group.members()) if (member.activityKind() == io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.GROUP_MEMBER) {
@@ -92,7 +93,9 @@ public final class TransportMissionProcess {
             case OUTBOUND -> value.departure().map(proof -> io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(state, mission, now, proof))
                     .orElse(mission.supplies().isEmpty() && state.bootstrap().ruleset().schemaVersion() < 17)
                     && (mission.supplies().isEmpty() || ExpeditionSupplyProcess.assembled(state, mission))
-                    && shipments.stream().allMatch(s -> s.status() == Shipment.Status.CARRYING && s.pendingPhysicalStep().isEmpty() && s.reception().isEmpty());
+                    && shipments.stream().anyMatch(s -> s.status() == Shipment.Status.CARRYING)
+                    && shipments.stream().allMatch(s -> (s.terminal() || s.status() == Shipment.Status.CARRYING)
+                        && s.pendingPhysicalStep().isEmpty() && s.reception().isEmpty());
             case UNLOADING -> group.phase() == UnitGroup.Phase.AT_GOAL && group.goalOrdinal() == 1;
             case RETURNING -> mayReturn(state, mission, group);
             case COMPLETE -> group.phase() == UnitGroup.Phase.CLOSED && (group.goalOrdinal() == 2
@@ -168,15 +171,20 @@ public final class TransportMissionProcess {
         if (refill.isPresent()) return List.of(new ProposedEvent(mission.id(), new ExpeditionReplenishmentStarted(mission.id(), refill.orElseThrow())),
                 new ProposedEvent(mission.id(), new ScheduleEffect.Rescheduled(action.id(), progress(mission.id(), now + 1))));
         boolean allCargoTerminal = mission.shipmentIds().stream().allMatch(id -> state.shipments().shipments().get(id).terminal());
+        boolean cargoLoaded = mission.shipmentIds().stream().allMatch(id -> {
+            var shipment = state.shipments().shipments().get(id);
+            return shipment.terminal() || shipment.status() == Shipment.Status.CARRYING;
+        });
         if (mission.stage() == TransportMission.Stage.LOADING && !allCargoTerminal && mission.supplies().isPresent()
-                && (!ExpeditionSupplyProcess.assembled(state, mission)
-                    || !io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(state, mission, now)))
+                && (!mission.supplies().orElseThrow().complete()
+                    || cargoLoaded && (!ExpeditionSupplyProcess.assembled(state, mission)
+                        || !io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(state, mission, now))))
             return ExpeditionSupplyProcess.plan(state, mission, action, now);
         TransportMission.Stage next = switch (mission.stage()) {
             case LOADING -> allCargoTerminal
                     ? (mayReturn(state, mission, group) ? TransportMission.Stage.RETURNING : null) : mission.shipmentIds().stream().allMatch(id -> {
                 var shipment = state.shipments().shipments().get(id);
-                return shipment.status() == Shipment.Status.CARRYING && shipment.pendingPhysicalStep().isEmpty() && shipment.reception().isEmpty()
+                return (shipment.terminal() || shipment.status() == Shipment.Status.CARRYING) && shipment.pendingPhysicalStep().isEmpty() && shipment.reception().isEmpty()
                         && !state.actorMovements().containsKey(shipment.execution().actorId());
             }) && io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(state, mission, now)
                     ? TransportMission.Stage.OUTBOUND : null;

@@ -69,7 +69,7 @@ public final class BakeryKnownNavigation {
         var passages = new ArrayList<>(ShipmentEndpointComposition.passages(state, depotPort.endpoint()));
         passages.add(new KnownPedestrianRouteKnowledge.SettlementPassage(job.settlementId(),
                 new KnownPedestrianRouteKnowledge.Passage(facility, KnownPedestrianRouteKnowledge.Passage.Reach.EXTERIOR)));
-        KnownPedestrianRouteKnowledge routeKnowledge = KnownPedestrianRouteKnowledge.forJourney(state, passages);
+        KnownPedestrianRouteKnowledge routeKnowledge = KnownPedestrianRouteKnowledge.forJourney(state, passages).forActor(state, job.workerId());
         List<SurfaceAnchor> route = retainedOnly ? routeKnowledge.retainedPath(outdoorStart, outdoor)
                 : routeKnowledge.plannedPath(outdoorStart, outdoor);
         List<SurfaceAnchor> result = new ArrayList<>(prefix);
@@ -108,7 +108,7 @@ public final class BakeryKnownNavigation {
             if (!point.boundary().cleared(route.getLast().standingBody())
                     || ServiceDestinationClaims.forImmediateExit(state, job.workerId()).contains(route.getLast()))
                 throw new IllegalArgumentException("bakery route does not clear an available service boundary");
-            ServiceBoundaryComposition.knowledge(state, point.identity()).requireRoute(route);
+            ServiceBoundaryComposition.knowledge(state, point.identity()).forActor(state, job.workerId()).requireRoute(route);
             return;
         }
         if (!route.getLast().equals(BakeryWorkGoal.current(state, job).station()))
@@ -118,7 +118,7 @@ public final class BakeryKnownNavigation {
         var passages = new ArrayList<>(ShipmentEndpointComposition.passages(state, BakeryStorage.access(state, job).endpoint()));
         passages.add(new KnownPedestrianRouteKnowledge.SettlementPassage(job.settlementId(),
                 new KnownPedestrianRouteKnowledge.Passage(facility, KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS)));
-        KnownPedestrianRouteKnowledge.forJourney(state, passages).requireRoute(route);
+        KnownPedestrianRouteKnowledge.forJourney(state, passages).forActor(state, job.workerId()).requireRoute(route);
     }
 
     private static List<SurfaceAnchor> workshopExit(SettlementWorkshopServicePort port, SurfaceAnchor start) {

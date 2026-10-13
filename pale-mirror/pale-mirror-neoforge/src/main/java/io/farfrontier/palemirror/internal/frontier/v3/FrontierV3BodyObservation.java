@@ -101,7 +101,26 @@ final class FrontierV3BodyObservation {
 
     /** GroundPathNavigation requires current contact even for a newly created NoAI body. */
     static void refreshGroundContact(ServerLevel level, net.minecraft.world.entity.Mob body) {
-        body.setOnGround(!level.noCollision(body, body.getBoundingBox().move(0.0D, -0.01D, 0.0D)));
+        body.setOnGround(hasDryContact(level, body.getBoundingBox()));
+    }
+
+    /** Physical support belongs to the footprint, not necessarily its centre column.
+     * Reads already loaded terrain only; side walls and blocks below a gap are not contact. */
+    static boolean hasDryContact(ServerLevel level, net.minecraft.world.phys.AABB bounds) {
+        int y = (int) Math.floor(bounds.minY - 0.000001D);
+        boolean contact = false;
+        for (int x = (int) Math.floor(bounds.minX + 0.000001D); x <= (int) Math.floor(bounds.maxX - 0.000001D); x++)
+            for (int z = (int) Math.floor(bounds.minZ + 0.000001D); z <= (int) Math.floor(bounds.maxZ - 0.000001D); z++) {
+                var chunk = level.getChunkSource().getChunkNow(x >> 4, z >> 4);
+                if (chunk == null) return false;
+                var support = new net.minecraft.core.BlockPos(x, y, z);
+                if (!chunk.getFluidState(support).isEmpty() || !chunk.getFluidState(support.above()).isEmpty()) return false;
+                for (var box : chunk.getBlockState(support).getCollisionShape(chunk, support).toAabbs())
+                    if (bounds.maxX > x + box.minX && bounds.minX < x + box.maxX
+                            && bounds.maxZ > z + box.minZ && bounds.minZ < z + box.maxZ
+                            && Math.abs(bounds.minY - (y + box.maxY)) <= 0.01D) contact = true;
+            }
+        return contact;
     }
 
     record Observation(BodyPosition position, Optional<SurfaceAnchor> support) {

@@ -601,6 +601,10 @@ final class FrontierV3ActorBodyController {
         Mob body = FrontierV3ActorCarrierFactory.create(
                 FrontierV3ActorCarrierComposition.InventoryEntry.ACTOR_BODY, level, declaration,
                 state.actorLocations().get(declaration.actorId()).condition());
+        var navigationProfile = state.actorLocations().get(declaration.actorId()).navigationProfile();
+        if (!navigationProfile.matchesDimensions(body.getBbWidth(), body.getBbHeight()))
+            throw new IllegalStateException("declared navigation profile differs from Minecraft body: " + declaration.actorId()
+                    + "; declared=" + navigationProfile + "; actual=" + body.getBbWidth() + "x" + body.getBbHeight());
         var surfaces = request.surfaces();
         var permission = request.placementPermission();
         if (admission == Admission.RECONSTRUCTION && request.retainedSpatialPose().isPresent()) {
@@ -627,6 +631,13 @@ final class FrontierV3ActorBodyController {
         body.setPersistenceRequired();
         body.setNoAi(true);
         request.binding().stamp(body);
+        if (ticket == null) {
+            // Family initializers may prepare independent attached-inventory custody.
+            // Do not open that dependent boundary while the insertion permit still
+            // waits for disk: loss of HOT demand must remain safely cancellable.
+            ticket = FrontierV3BodyInsertionJournal.prepare(level, state, ledger, request.binding(), admission);
+            return Result.DEFERRED; // No server-thread wait or dependent projection.
+        }
         if (!request.projection().initialize(body)) return Result.CONFLICT;
         // Every managed body uses the witnessed resource-transfer port, never autonomous Vanilla pickup.
         body.setCanPickUpLoot(false);
@@ -638,10 +649,6 @@ final class FrontierV3ActorBodyController {
                 || !FrontierV3ActorOwnerBinding.from(body).filter(request.binding()::equals).isPresent())
             return Result.CONFLICT;
         if (!FrontierV3BodyPlacement.available(level, body, body.getBoundingBox())) return Result.DEFERRED;
-        if (ticket == null) {
-            ticket = FrontierV3BodyInsertionJournal.prepare(level, state, ledger, request.binding(), admission);
-            return Result.DEFERRED; // No server-thread wait, even if the disk completed quickly.
-        }
         body.getPersistentData().putLong(RESIDENCE_KEY, ticket.residence());
         if (!FrontierV3BodyInsertionJournal.consume(level, ticket)) throw new IllegalStateException("body insertion lost its durable ticket");
         boolean added = level.addFreshEntity(body);

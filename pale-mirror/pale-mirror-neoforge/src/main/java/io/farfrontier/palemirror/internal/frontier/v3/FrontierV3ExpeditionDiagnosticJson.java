@@ -23,6 +23,7 @@ final class FrontierV3ExpeditionDiagnosticJson {
             return "{\"id\":" + string(m.id().value()) + ",\"group\":" + string(m.groupId().value())
                     + ",\"stage\":" + string(m.stage().name()) + ",\"revision\":" + m.revision()
                     + ",\"goalOrdinal\":" + group.goalOrdinal() + ",\"groupPhase\":" + string(group.phase().name())
+                    + ",\"memberCount\":" + group.members().size() + ",\"parcelCount\":" + m.shipmentIds().size()
                     + ",\"plannedPersonalFood\":" + planned + ",\"loadedFood\":" + loaded
                     + ",\"provisioned\":" + m.supplies().map(s -> s.complete()).orElse(false)
                     + ",\"refillPending\":" + m.replenishment().isPresent()
@@ -47,7 +48,16 @@ final class FrontierV3ExpeditionDiagnosticJson {
         int accepted = state.companies().goodsTrade().contracts().values().stream()
                 .filter(c -> c.seller().equals(participant.party())).mapToInt(GoodsTradeContract::acceptedQuantity).sum();
         long budgets = state.inventory().economics().budgets().values().stream().filter(b -> b.payerId().equals(home)).count();
+        var manifestGoods = new java.util.TreeMap<String, Integer>();
+        for (var mission : missions) for (var id : mission.shipmentIds()) {
+            var parcel = state.shipments().shipments().get(id);
+            manifestGoods.merge(parcel.itemKind(), parcel.quantity(), Math::addExact);
+        }
+        String cargo = manifestGoods.entrySet().stream().map(e -> string(e.getKey()) + ":" + e.getValue())
+                .collect(Collectors.joining(","));
         return "{\"activeMissions\":" + missions.size() + ",\"reservedAnimals\":" + assets.stream().filter(a -> a.missionId().isPresent()).count()
+                + ",\"activeMembers\":" + missions.stream().mapToInt(m -> state.unitGroups().groups().get(m.groupId()).members().size()).sum()
+                + ",\"manifestGoods\":{" + cargo + "}"
                 + ",\"provisionedOutbound\":" + missions.stream().filter(m -> m.stage() == TransportMission.Stage.OUTBOUND
                     && m.supplies().map(s -> s.complete()).orElse(false)).count()
                 + ",\"returningMissions\":" + missions.stream().filter(m -> m.stage() == TransportMission.Stage.RETURNING).count()

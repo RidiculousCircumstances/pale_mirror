@@ -17,15 +17,17 @@ final class FrontierV3ShipmentDiagnosticJson {
         var contract = state.companies().goodsTrade().contracts().get(shipment.authorization().claimantId());
         var obligation = ShipmentProgressObligation.describe(state, shipment);
         var mission = shipment.transportMissionId().map(state.shipments().missions()::get);
+        boolean selected = !shipment.terminal() && TransportCargoExecution.selected(state, shipment);
         var admission = lease != null && lease.status() == AmbientLeaseStatus.HOT
-                && !shipment.terminal() && shipment.reception().isEmpty() && movement == null
+                && selected && shipment.reception().isEmpty() && movement == null
                 ? ShipmentPhysicalStateSupport.preparationAdmission(state, shipment) : null;
         String phase = shipment.status().name();
         String wait = shipment.terminal() ? "TERMINAL" : shipment.reception().isPresent() ? "RECEIVER_ACKNOWLEDGEMENT"
                 : shipment.pendingPhysicalStep().isPresent() ? "PHYSICAL_EFFECT_RECEIPT"
                 : state.actorLocations().get(actor).condition().status() != ActorLifeStatus.ALIVE ? "COURIER_CASUALTY"
                 : state.actorExecutions().actors().get(actor).suspended().filter(shipment.execution()::equals).isPresent() ? "HIGHER_PRIORITY_ACTIVITY"
-                : movement != null ? "JOURNEY" : mission.filter(value -> value.stage() == TransportMission.Stage.OUTBOUND).isPresent()
+                : movement != null ? "JOURNEY" : !selected ? "MANIFEST_COORDINATION"
+                : mission.filter(value -> value.stage() == TransportMission.Stage.OUTBOUND).isPresent()
                     ? "GROUP_COORDINATION" : admission != null && admission != ShipmentPhysicalStateSupport.PreparationAdmission.READY
                     ? admission.name() : shipment.status() == Shipment.Status.CARRYING
                     && ShipmentStateSupport.coldTransferLots(state, shipment).isEmpty() ? "RECEIVER_CAPACITY" : "ENDPOINT_HANDOFF";
@@ -45,7 +47,7 @@ final class FrontierV3ShipmentDiagnosticJson {
                 + ",\"dutyPhase\":" + string(movement == null ? phase : "TRAVELLING")
                 + ",\"pendingPhysicalEffect\":" + shipment.pendingPhysicalStep().isPresent() + "},\"actorBody\":" + FrontierV3DiagnosticJson.position(body)
                 + ",\"materialPreparation\":" + (shipment.terminal() || shipment.reception().isPresent()
-                    || shipment.pendingPhysicalStep().isPresent() ? "null"
+                    || shipment.pendingPhysicalStep().isPresent() || !selected ? "null"
                     : FrontierV3MaterialPreparationDiagnosticJson.render(state, shipment.itemOrder()))
                 + ",\"goal\":" + (shipment.terminal() ? "null" : FrontierV3DiagnosticJson.position(
                     (movement == null ? shipment.movementOrder() : movement.order()).legalStations().getFirst().standingBody()))

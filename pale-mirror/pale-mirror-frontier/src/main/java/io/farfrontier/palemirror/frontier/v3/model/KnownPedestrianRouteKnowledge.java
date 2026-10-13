@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
@@ -39,6 +41,9 @@ public final class KnownPedestrianRouteKnowledge {
     private final Object scopeKey;
     private final java.util.Map<TerrainColumn, SurfaceAnchor> overlay;
     private final io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry geometry;
+    private final io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry terrainGeometry;
+    private final UnitNavigationProfile profile;
+    private final java.util.Map<UnitNavigationProfile, KnownPedestrianRouteKnowledge> profiles = new java.util.LinkedHashMap<>();
     private final java.util.Map<SurfaceAnchor, io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry> departures = new java.util.LinkedHashMap<>();
     private record JourneyKey(List<SettlementPassage> passages) { }
     private static final java.util.Map<JourneyKey, KnownPedestrianRouteKnowledge> JOURNEYS = new java.util.LinkedHashMap<>();
@@ -100,12 +105,44 @@ public final class KnownPedestrianRouteKnowledge {
         this.scopeKey = Objects.requireNonNull(scopeKey); this.overlay = java.util.Map.copyOf(overlay);
         var revision = KnownPedestrianGeometryScopes.revision(scopeKey, this.hard, this.overlay);
         this.geometry = KnownPedestrianNavigation.geometry(bootstrap, this.hard, surveyed, revision, Optional.of(revision));
+        this.terrainGeometry = geometry; this.profile = null; // Unbound terrain knowledge grants no actor profile.
+    }
+
+    private KnownPedestrianRouteKnowledge(KnownPedestrianRouteKnowledge source,
+            UnitNavigationProfile profile) {
+        this.bootstrap = source.bootstrap; this.hard = source.hard; this.raisedDepartureSupports = source.raisedDepartureSupports;
+        this.surveyed = source.surveyed; this.scopeKey = source.scopeKey; this.overlay = source.overlay;
+        this.terrainGeometry = source.terrainGeometry; this.profile = Objects.requireNonNull(profile);
+        this.geometry = profiled(terrainGeometry);
+    }
+    /** Bind the exact producer declaration, never infer an envelope from activity or kind. */
+    public KnownPedestrianRouteKnowledge forActor(FrontierWorldState state, SubjectId actorId) {
+        var actor = Objects.requireNonNull(state.actorLocations().get(actorId), "navigation actor declaration");
+        return forProfile(actor.navigationProfile());
+    }
+    public synchronized KnownPedestrianRouteKnowledge forProfile(UnitNavigationProfile requested) {
+        Objects.requireNonNull(requested);
+        if (!requested.capabilities().contains(TraversalCapability.PEDESTRIAN))
+            throw new IllegalArgumentException("known pedestrian geometry requires an explicitly declared walking capability");
+        if (requested.equals(profile)) return this;
+        if (profiles.size() >= 16) profiles.clear();
+        return profiles.computeIfAbsent(requested, value -> new KnownPedestrianRouteKnowledge(this, value));
+    }
+    public KnownPedestrianRouteKnowledge forActors(FrontierWorldState state, List<SubjectId> actorIds) {
+        if (actorIds.isEmpty() || actorIds.size() > 32 || actorIds.stream().distinct().count() != actorIds.size())
+            throw new IllegalArgumentException("navigation group needs a bounded exact roster");
+        return forProfile(UnitNavigationProfile.enclosing(actorIds.stream()
+                .map(id -> Objects.requireNonNull(state.actorLocations().get(id), "navigation group actor").navigationProfile()).toList()));
+    }
+    private io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry profiled(
+            io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry terrain) {
+        return profile == null ? terrain : new io.farfrontier.palemirror.frontier.v3.model.navigation.ProfiledPedestrianGeometry(terrain, profile, hard::contains);
     }
 
     public static List<SurfaceAnchor> path(FrontierWorldState state, SubjectId settlementId,
                                            SurfaceAnchor start, MovementOrder order,
                                            List<Passage> passages) {
-        return forSettlement(state, settlementId, passages).path(start, order);
+        return forSettlement(state, settlementId, passages).forActor(state, order.actorId()).path(start, order);
     }
 
     /** Reuse one immutable view while trying several legal destinations in one planning turn. */
@@ -177,7 +214,14 @@ public final class KnownPedestrianRouteKnowledge {
     }
 
     public boolean traversable(List<SurfaceAnchor> remainingPath) {
-        return remainingPath.stream().allMatch(surface -> bootstrap.bounds().contains(surface.support()) && !blocked(surface, hard));
+        return remainingPath.stream().allMatch(surface -> bootstrap.bounds().contains(surface.support()) && !geometry.blocked(surface));
+    }
+    /** Transit knowledge does not imply that a complete body can centre at a service station. */
+    public boolean clearStation(SurfaceAnchor surface) {
+        return geometry.clearStation(surface);
+    }
+    public int formationSpacing(int requested) {
+        return profile == null ? requested : Math.max(requested, (int) Math.ceil(profile.width()));
     }
 
     public List<SurfaceAnchor> plannedPath(SurfaceAnchor start, MovementOrder order) {
@@ -270,27 +314,35 @@ public final class KnownPedestrianRouteKnowledge {
         boolean raisedContact = known != null && start.y() == known.y() + 1
                 && raisedDepartureSupports.contains(start.support())
                 && !hard.contains(start.support().offset(0, 1, 0)) && !hard.contains(start.support().offset(0, 2, 0));
-        if (known == null || !bootstrap.bounds().contains(start.support()) || blocked(start, hard) && !raisedContact
-                || Math.abs((long) start.y() - known.y()) > 1L)
-            throw new KnownPedestrianNavigation.RouteUnavailable("retained departure is not on compatible known support: " + start);
+        if (!bootstrap.bounds().contains(start.support()) || blocked(start, hard) && !raisedContact)
+            throw new KnownPedestrianNavigation.RouteUnavailable(
+                    io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH,
+                    "retained departure violates known hard scope: " + start);
+        if (known == null || Math.abs((long) start.y() - known.y()) > 1L)
+            throw new KnownPedestrianNavigation.RouteUnavailable(
+                    io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.UNKNOWN_GEOMETRY,
+                    "retained departure is not on compatible known support: " + start);
         var previous = departures.get(start);
         if (previous != null) return previous;
         var refinedOverlay = new java.util.LinkedHashMap<>(overlay);
         refinedOverlay.put(new TerrainColumn(start.x(), start.z()), start);
         var revision = KnownPedestrianGeometryScopes.revision(new RefinedScope(scopeKey, start), hard, refinedOverlay);
         var refined = new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry() {
-            @Override public WorldBounds bounds() { return geometry.bounds(); }
+            @Override public WorldBounds bounds() { return terrainGeometry.bounds(); }
             @Override public Object version() { return revision; }
             @Override public Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision> regionalRevision() {
                 return Optional.of(revision);
             }
             @Override public SurfaceAnchor supportAt(int x, int z) { return x == start.x() && z == start.z() ? start : surveyed.at(x, z); }
             @Override public boolean blocked(SurfaceAnchor surface) {
-                return !(raisedContact && surface.equals(start)) && geometry.blocked(surface);
+                return !(raisedContact && surface.equals(start)) && terrainGeometry.blocked(surface);
+            }
+            @Override public boolean supportAvailable(SurfaceAnchor surface) {
+                return raisedContact && surface.equals(start) || terrainGeometry.supportAvailable(surface);
             }
         };
         if (departures.size() >= 32) departures.remove(departures.keySet().iterator().next());
-        departures.put(start, refined); return refined;
+        var result = profiled(refined); departures.put(start, result); return result;
     }
 
     private static Set<BlockPosition> occupied(FrontierWorldState state, Settlement settlement,

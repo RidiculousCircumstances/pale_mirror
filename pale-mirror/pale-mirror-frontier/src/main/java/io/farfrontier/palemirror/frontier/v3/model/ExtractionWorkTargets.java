@@ -122,6 +122,6 @@ public final class ExtractionWorkTargets {
     }
     public static KnownPedestrianRouteKnowledge knowledge(FrontierWorldState state, ExtractionWork job) {
         return ResourceStorageNavigation.forJourney(state, ExtractionWorkAuthority.site(state, job).settlementId(),
-                List.of(job.toolSource(), job.storageTarget()));
+                List.of(job.toolSource(), job.storageTarget())).forActor(state, job.execution().actorId());
     }
 }

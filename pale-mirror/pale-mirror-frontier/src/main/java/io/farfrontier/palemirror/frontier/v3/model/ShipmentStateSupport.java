@@ -44,6 +44,7 @@ public final class ShipmentStateSupport {
                 || !shipment.itemOrder(portion.lotQuantities()).equals(order))
             throw new IllegalArgumentException("delegated item order does not equal its current shipment declaration");
         state.actorExecutions().requireCurrent(shipment.execution());
+        if (!TransportCargoExecution.selected(state, shipment)) throw new IllegalArgumentException("parcel is not the asset's current declared handling turn");
         ShipmentAuthorizationComposition.validate(state, shipment, false);
     }
     static ActorItemTransferPreparation prepareTransfer(FrontierWorldState state, ActorResourceItemOrder order) {
@@ -81,8 +82,7 @@ public final class ShipmentStateSupport {
         Shipment replacement = shipment.status() == Shipment.Status.AWAITING_LOAD ? shipment.withStatus(Shipment.Status.CARRYING)
                 : shipment.unloaded(ShipmentReception.unloaded(shipment, lots));
         var changes = transfer.shipments(state.shipments().replace(shipment, replacement));
-        if (replacement.terminal()) changes.actorExecutions(ActorExecutionComposition.LIFECYCLE.retire(state,
-                shipment.execution().actorId(), shipment.execution().activityKind(), shipment.id()));
+        if (replacement.terminal()) changes.actorExecutions(TransportCargoExecution.afterParcelClosed(state, shipment));
         return state.withChanges(changes);
     }
     public static boolean coldTransferAvailable(FrontierWorldState state, Shipment shipment) {
@@ -205,13 +205,12 @@ public final class ShipmentStateSupport {
             shipments = shipments.replace(shipment, shipment.withStatus(shipment.status() == Shipment.Status.CARRYING
                     ? Shipment.Status.CARGO_DISPOSED : Shipment.Status.ALLOCATION_WITHDRAWN));
             var movement = movements.get(shipment.execution().actorId());
-            if (movement != null) {
+            if (movement != null && movement.order().ownerId().equals(shipment.id())) {
                 if (!movement.executionId().equals(shipment.execution()))
                     throw new IllegalArgumentException("withdrawn shipment cannot retire a foreign movement");
                 movements.remove(shipment.execution().actorId());
             }
-            executions = ActorExecutionComposition.LIFECYCLE.retire(executions, shipment.execution().actorId(),
-                    shipment.execution().activityKind(), shipment.id());
+            executions = TransportCargoExecution.afterParcelClosed(executions, shipment);
             changed = true;
         }
         return changed ? transaction.withShipments(shipments, executions, movements) : transaction;

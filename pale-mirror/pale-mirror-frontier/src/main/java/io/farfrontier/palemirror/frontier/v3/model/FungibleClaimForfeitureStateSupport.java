@@ -15,6 +15,15 @@ public final class FungibleClaimForfeitureStateSupport {
         catch (IllegalArgumentException rejected) { return false; }
     }
 
+    /** Consequences come from the same owner that acknowledges the lost allocation. */
+    public static List<SourceStockClaimLoss.ReleasedActivity> released(FrontierWorldState state,
+                                                                    FungibleResourceHandoffObserved observed) {
+        return plan(state, observed).stream()
+                .flatMap(claim -> owner(claim.purpose()).released(state, claim).stream())
+                .map(value -> new SourceStockClaimLoss.ReleasedActivity(value.actor(), value.cancelledProgress(), value.retargetAtTick()))
+                .toList();
+    }
+
     public static FungibleResourceHandoffObserved stampOwnerDiagnostic(FrontierWorldState state,
                                                                       FungibleResourceHandoffObserved observed) {
         plan(state, observed);

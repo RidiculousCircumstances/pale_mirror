@@ -41,6 +41,7 @@ public final class FrontierRulesets {
     private static final FrontierRuleset AVAILABLE_FRONT_QUARRY_GRAYBOX = availableFrontQuarry(TERRACED_QUARRY_GRAYBOX);
     private static final FrontierRuleset HIGH_RESERVE_QUARRY_GRAYBOX = quarryReserve(AVAILABLE_FRONT_QUARRY_GRAYBOX);
     private static final FrontierRuleset FUELLED_QUARRY_GRAYBOX = fuelledQuarry(HIGH_RESERVE_QUARRY_GRAYBOX);
+    private static final FrontierRuleset SUPPLY_QUARRY_GRAYBOX = supplyQuarry(FUELLED_QUARRY_GRAYBOX);
     /** Existing worlds retain their exact selector and timing; they are never silently retuned. */
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R6 = ruleset("frontier-v3-production-r6", 8, 1L, 20L, 1L);
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R4 = ruleset("frontier-v3-production-r4", 6, 1L, 20L, 1L);
@@ -54,6 +55,7 @@ public final class FrontierRulesets {
      */
     private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L, 200L);
     private static final Map<String, FrontierRuleset> INSTALLED = Map.ofEntries(
+            Map.entry(SUPPLY_QUARRY_GRAYBOX.id(), SUPPLY_QUARRY_GRAYBOX),
             Map.entry(TERRACED_QUARRY_GRAYBOX.id(), TERRACED_QUARRY_GRAYBOX),
             Map.entry(AVAILABLE_FRONT_QUARRY_GRAYBOX.id(), AVAILABLE_FRONT_QUARRY_GRAYBOX),
             Map.entry(HIGH_RESERVE_QUARRY_GRAYBOX.id(), HIGH_RESERVE_QUARRY_GRAYBOX),
@@ -77,6 +79,24 @@ public final class FrontierRulesets {
 
     public static FrontierRuleset production() { return PRODUCTION; }
     public static FrontierRuleset fuelledQuarryGraybox() { return FUELLED_QUARRY_GRAYBOX; }
+    public static FrontierRuleset supplyQuarryGraybox() { return SUPPLY_QUARRY_GRAYBOX; }
+
+    private static FrontierRuleset supplyQuarry(FrontierRuleset base) {
+        var planning = new io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanningRules(Map.of(
+                "minecraft:bread", new io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPolicy(500, 32, 64, 12000, 12000, true),
+                "minecraft:wheat", new io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPolicy(500, 32, 64, 12000, 12000, false),
+                "minecraft:coal", new io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPolicy(500, 4, 8, 12000, 12000, false),
+                "minecraft:cobblestone", new io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPolicy(500, 64, 128, 12000, 12000, false)),
+                512, 1, 8, 4);
+        var expedition = base.expedition();
+        var bounded = new io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionRules(expedition.personalStackSlots(), planning.personalFoodItems(),
+                6, expedition.ticksPerRouteEdge(), expedition.destinationWorkTicks(),
+                expedition.durationMarginPermille(), expedition.replenishmentBudget(), expedition.formationSpacing(), expedition.maxFormationStretch());
+        return new FrontierRuleset("frontier-v3-quarry-graybox-r10", 26, base.cadence(), base.spatial(), base.rates(),
+                base.facilityCapacity(), base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
+                base.workCatalog(), base.goodsTrade().withSupplyPlanning(planning), base.initialSettlementStocks(), base.labour(),
+                bounded, base.extraction(), base.execution(), base.production(), base.fields());
+    }
 
     private static FrontierRuleset fuelledQuarry(FrontierRuleset base) {
         var coal = new io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Definition(

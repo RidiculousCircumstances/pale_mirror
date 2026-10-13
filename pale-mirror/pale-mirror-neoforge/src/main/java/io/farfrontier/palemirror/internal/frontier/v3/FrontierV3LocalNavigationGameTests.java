@@ -28,6 +28,30 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @GameTestHolder(PaleMirrorMod.MOD_ID)
 @PrefixGameTestTemplate(false)
 public final class FrontierV3LocalNavigationGameTests {
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/treasure/big_air_full", timeoutTicks = 40)
+    public static void declaredStepProfileFindsNativeDetourInsteadOfTheForbiddenRise(GameTestHelper helper) {
+        var level = helper.getLevel();
+        for (int x = 0; x <= 12; x++) for (int z = 0; z <= 12; z++)
+            helper.setBlock(new BlockPos(x, 0, z), Blocks.STONE);
+        for (int z = 2; z <= 9; z++) helper.setBlock(new BlockPos(5, 1, z), Blocks.STONE);
+        Villager actor = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(3.5, 1, 5.5));
+        var corner = helper.absolutePos(BlockPos.ZERO);
+        var scope = new FrontierV3NavigationScope.ObservedWorld(new io.farfrontier.palemirror.frontier.v3.model.WorldBounds(
+                corner.getX(), corner.getZ(), 13, 13));
+        var profile = new io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile(600_000, 1_950_000, 0, 1,
+                Set.of(TraversalCapability.PEDESTRIAN));
+        var path = FrontierV3PedestrianTraffic.query(level, actor, helper.absolutePos(new BlockPos(8, 1, 5)), scope, Optional.of(profile)).path();
+        helper.assertTrue(path != null && path.canReach(), "a forbidden rise must trigger native detour search, not false no-path");
+        helper.assertTrue(FrontierV3PedestrianTraffic.permitsProfile(path, Optional.of(profile)), "every native edge respects declared step/drop");
+        boolean around = false;
+        for (int index = 0; index < path.getNodeCount(); index++) {
+            var node = path.getNode(index);
+            if (node.z < corner.getZ() + 2 || node.z > corner.getZ() + 9) around = true;
+        }
+        helper.assertTrue(around, "the actual Minecraft path goes around the wall");
+        actor.discard(); helper.succeed();
+    }
     private FrontierV3LocalNavigationGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
@@ -110,7 +134,9 @@ public final class FrontierV3LocalNavigationGameTests {
                 helper.assertTrue(result.status() != FrontierV3GoalNavigation.Status.BLOCKED, "the descent remains executable: " + result);
                 FrontierV3GoalNavigation.advanceAtEntityBoundary(worker); worker.aiStep();
             }
-            helper.assertTrue(FrontierV3SemanticMovement.arrived(level, worker, target), "the same physical body arrives at the lower station");
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(level, worker, target), "the same physical body arrives at the lower station: position="
+                    + worker.position() + "; support=" + FrontierV3BodyObservation.capture(worker).support()
+                    + "; target=" + target + "; path=" + worker.getNavigation().getPath());
             FrontierV3GoalNavigation.stop(worker); worker.discard(); helper.succeed();
         });
     }

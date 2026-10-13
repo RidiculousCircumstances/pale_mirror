@@ -27,7 +27,7 @@ class ProductionResumedHandoffTest {
             if (processing) job = job.withWorkProgress(ProductionWorkProgress.processing(17));
             BodyPosition body = job.workTraversal().linearCorridorSurfaces().get(cursor).standingBody();
             Map<SubjectId, ActorLocation> locations = new LinkedHashMap<>(initial.actorLocations());
-            locations.put(job.workerId(), new ActorLocation(body, locations.get(job.workerId()).condition(), locations.get(job.workerId()).kind()));
+            locations.put(job.workerId(), new ActorLocation(body, locations.get(job.workerId()).condition(), locations.get(job.workerId()).kind(), locations.get(job.workerId()).navigationProfile()));
             var now = new SimInstant(100L);
             AmbientActorLease ambient = new AmbientActorLease(job.workerId(), body, now, 1L,
                     AmbientLeaseStatus.HOT, AmbientGoalKind.WORK, body);
@@ -46,7 +46,7 @@ class ProductionResumedHandoffTest {
             SubjectId owner = job.settlementId();
             assertThrows(IllegalArgumentException.class, () -> ProductionProcess.rebaseForAmbientHandoff(state, owner, staleCapture));
             Map<SubjectId, ActorLocation> staleLocations = new LinkedHashMap<>(locations);
-            staleLocations.put(job.workerId(), new ActorLocation(stale, locations.get(job.workerId()).condition(), locations.get(job.workerId()).kind()));
+            staleLocations.put(job.workerId(), new ActorLocation(stale, locations.get(job.workerId()).condition(), locations.get(job.workerId()).kind(), locations.get(job.workerId()).navigationProfile()));
             FrontierWorldState staleCanonical = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(staleLocations));
             assertThrows(IllegalArgumentException.class, () -> ProductionProcess.rebaseForAmbientHandoff(staleCanonical, owner, handoff));
             var base = FrontierWorldRuntimeDefinition.configuration(state.bootstrap().worldId(), 41L);

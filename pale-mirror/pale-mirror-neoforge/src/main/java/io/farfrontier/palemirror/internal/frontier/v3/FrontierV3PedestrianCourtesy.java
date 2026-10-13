@@ -141,7 +141,7 @@ final class FrontierV3PedestrianCourtesy {
             var start = observed.orElseThrow().supportingSurface();
             var points = state.bootstrap().settlements().stream()
                     .flatMap(settlement -> SettlementServiceAccessPoints.forSettlement(state, settlement.id()).stream()).toList();
-            var knowledge = PedestrianLocalDeparture.departure(state, start);
+            var knowledge = PedestrianLocalDeparture.departure(state, start).forActor(state, actor);
             var excluded = new HashSet<>(ServiceDestinationClaims.excludedFor(state, actor));
             TARGETS.keySet().stream().filter(other -> !TARGETS.get(other).authority().current(other)).toList()
                     .forEach(FrontierV3PedestrianCourtesy::cancel);
@@ -155,7 +155,7 @@ final class FrontierV3PedestrianCourtesy {
                     station -> PedestrianLocalDeparture.publicPosition(state, station) && !passage.contains(station.support())
                             && FrontierV3SemanticMovement.targetIsNavigable(level, body, station)
                             && queries[0]++ < MAX_PHYSICAL_CANDIDATES
-                            && FrontierV3GoalNavigation.canReach(level, body, FrontierV3GoalNavigation.Goal.station(station, scope))); }
+                            && FrontierV3GoalNavigation.canReach(level, body, FrontierV3GoalNavigation.Goal.station(station, scope), actuation)); }
             catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 FrontierV3PhysicalWaitTrace.actor(body, state, actor,
                         "courtesy:" + unavailable.status() + ":" + unavailable.getMessage());
@@ -186,6 +186,9 @@ final class FrontierV3PedestrianCourtesy {
                     actor.value(), target.station());
         } else if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED
                 || result.status() == FrontierV3GoalNavigation.Status.AMBIGUOUS) {
+            io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info(
+                    "PMV3_TRAFFIC_YIELD_FAILED actor={} target={} status={} reason={}",
+                    actor.value(), target.station(), result.status(), result.reason());
             cancel(body);
             NEXT_QUERY.put(body, level.getGameTime() + FrontierV3MinecraftGoalNavigation.retryIntervalTicks());
         }

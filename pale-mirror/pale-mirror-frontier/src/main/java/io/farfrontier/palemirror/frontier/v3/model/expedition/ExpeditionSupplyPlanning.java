@@ -22,9 +22,9 @@ public final class ExpeditionSupplyPlanning {
         var rules = state.bootstrap().ruleset(); var life = rules.residentLife();
         var source = FungibleResourceCustodySupport.accountAtContainer(state, mission.sender().containerId()).orElse(null);
         if (source == null || ReferenceContainerCustody.blocksCanonicalUse(state, mission.sender().containerId())) return Optional.empty();
-        var knowledge = TransportGroupMissionPort.knowledgeForEndpoints(state, mission.sender(), mission.receiver());
+        var knowledge = TransportGroupMissionPort.knowledgeForEndpoints(state, mission.sender(), mission.receiver()).forActors(state, group.members().stream().map(UnitGroup.Member::actorId).toList());
         ExpeditionJourneyProof journey;
-        try { journey = ExpeditionJourneyProof.select(state, mission); }
+        try { journey = ExpeditionJourneyProof.select(state, mission, group); }
         catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
             if (unavailable.status() != PedestrianRouteResult.Status.NO_PATH) throw unavailable;
             return Optional.empty();
@@ -98,7 +98,7 @@ public final class ExpeditionSupplyPlanning {
     /** Pure departure validation: recompute needs from actual stock/time, never rediscover route geometry. */
     public static Optional<ExpeditionProvisioning.Plan> retainedForecast(FrontierWorldState state, TransportMission mission,
             UnitGroup group, long now, String foodKind, ExpeditionJourneyProof proof) {
-        proof.require(state, mission);
+        proof.require(state, mission, group);
         var food = state.bootstrap().ruleset().residentLife().foods().require(foodKind);
         return walkingInputs(state, mission, group, now, food, state.inventory().fungibleResources(),
                 proof.outward().size() - 1L, proof.returning().size() - 1L).map(input ->
@@ -109,7 +109,7 @@ public final class ExpeditionSupplyPlanning {
         var rules = state.bootstrap().ruleset();
         if (mission.transportAssetId().isPresent()) {
             var asset = state.transportFleet().require(mission.transportAssetId().orElseThrow());
-            int cargoSlots = (int) group.members().stream().filter(m -> m.role() == UnitGroup.Role.CARRIER).count();
+            int cargoSlots = mission.shipmentIds().size();
             return ExpeditionProvisioning.planWithAsset(input.roster(), input.outward(), input.returning(), cargoSlots,
                     foodAvailable == Integer.MAX_VALUE ? foodAvailable : Math.addExact(foodAvailable, ExpeditionSupplyAuthority.sharedFood(state, mission, food.itemKind())),
                     asset.stackSlots(), food, rules.residentLife(), rules.expedition());
@@ -120,7 +120,7 @@ public final class ExpeditionSupplyPlanning {
     /** Check one selected loading declaration without ranking food, lots or routes again. */
     public static void requireSelectedLoad(FrontierWorldState state, TransportMission mission, UnitGroup group,
             ExpeditionSupplyLoad load, FungibleResourceLedger resources) {
-        load.journey().require(state, mission);
+        load.journey().require(state, mission, group);
         var source = FungibleResourceCustodySupport.accountAtContainer(state, mission.sender().containerId()).orElseThrow();
         if (ReferenceContainerCustody.blocksCanonicalUse(state, mission.sender().containerId()))
             throw new IllegalArgumentException("selected supply source is physically unavailable");
@@ -152,7 +152,7 @@ public final class ExpeditionSupplyPlanning {
                 throw new IllegalArgumentException("selected shared supply has a foreign transport holder");
         }
         var living = group.members().stream().filter(m -> state.actorLocations().get(m.actorId()).condition().status() == ActorLifeStatus.ALIVE).toList();
-        var knowledge = TransportGroupMissionPort.knowledgeForEndpoints(state, mission.sender(), mission.receiver());
+        var knowledge = TransportGroupMissionPort.knowledgeForEndpoints(state, mission.sender(), mission.receiver()).forActors(state, group.members().stream().map(UnitGroup.Member::actorId).toList());
         if (!GroupFormation.stations(living, List.of(mission.homeRendezvous()), 0, knowledge,
                 state.bootstrap().ruleset().expedition().formationSpacing()).equals(load.assemblyStations()))
             throw new IllegalArgumentException("selected supply assembly has foreign local geometry");
@@ -161,7 +161,7 @@ public final class ExpeditionSupplyPlanning {
                                  long outward, long returning) { }
     private static Optional<WalkingInputs> walkingInputs(FrontierWorldState state, TransportMission mission, UnitGroup group,
                                                         long now, FoodCatalog.Food food, FungibleResourceLedger resources) {
-        var knowledge = TransportGroupMissionPort.knowledgeForEndpoints(state, mission.sender(), mission.receiver());
+        var knowledge = TransportGroupMissionPort.knowledgeForEndpoints(state, mission.sender(), mission.receiver()).forActors(state, group.members().stream().map(UnitGroup.Member::actorId).toList());
         long outward, returning;
         try {
             outward = edges(knowledge, group.id(), mission.homeRendezvous(), mission.destinationRendezvous());
@@ -186,8 +186,9 @@ public final class ExpeditionSupplyPlanning {
             if (!state.inventory().actorItems(member.actorId()).isEmpty()) used.add(main);
             var meal = state.humanPopulation().meals().get(member.actorId()); if (meal != null) used.add(meal.inventorySlot());
             int cargoSlots = member.role() == UnitGroup.Role.CARRIER ? 1 : 0;
-            boolean cargoAlreadyCounted = cargoSlots != 0 && Optional.ofNullable(state.shipments().shipments().get(member.activityOwnerId()))
-                    .filter(shipment -> presentations.containsKey(shipment.carriedAccountId())).isPresent();
+            boolean cargoAlreadyCounted = cargoSlots != 0 && mission.shipmentIds().stream().map(state.shipments().shipments()::get)
+                    .filter(Objects::nonNull).filter(shipment -> shipment.execution().actorId().equals(member.actorId()))
+                    .anyMatch(shipment -> presentations.containsKey(shipment.carriedAccountId()));
             if (cargoSlots != 0 && used.contains(main) && !cargoAlreadyCounted) return Optional.empty();
             free.put(member.actorId(), UnitInventoryPresentation.slots().stream().filter(slot -> !used.contains(slot)
                     && (cargoSlots == 0 || !slot.equals(main))).toList());

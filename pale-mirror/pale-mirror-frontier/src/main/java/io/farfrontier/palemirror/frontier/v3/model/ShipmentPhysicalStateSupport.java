@@ -29,6 +29,7 @@ public final class ShipmentPhysicalStateSupport {
                 || shipment.pendingPhysicalStep().isPresent() || !shipment.execution().equals(observed.identity().execution()))
             throw new IllegalArgumentException("shipment hand boundary has no exact carrying obligation");
         state.actorExecutions().requireRetained(shipment.execution());
+        if (TransportCargoExecution.shared(shipment)) TransportCargoExecution.require(state.shipments(), shipment);
         var body = observed.identity().body();
         var fence = ActorBodyAuthority.require(state, body);
         if (!body.equals(ActorBodyAuthority.current(state, shipment.execution().actorId()))
@@ -131,8 +132,7 @@ public final class ShipmentPhysicalStateSupport {
         Shipment replacement = shipment.status() == Shipment.Status.AWAITING_LOAD ? shipment.withStatus(Shipment.Status.CARRYING)
                 : shipment.unloaded(ShipmentReception.unloaded(shipment, receipt.step().lotQuantities()));
         var changes = transfer.shipments(state.shipments().replace(shipment, replacement));
-        if (replacement.terminal()) changes.actorExecutions(ActorExecutionComposition.LIFECYCLE.retire(state,
-                shipment.execution().actorId(), shipment.execution().activityKind(), shipment.id()));
+        if (replacement.terminal()) changes.actorExecutions(TransportCargoExecution.afterParcelClosed(state, shipment));
         return state.withChanges(changes);
     }
     public static long destinationEpoch(FrontierWorldState state, Shipment shipment, long bodyEpoch) {

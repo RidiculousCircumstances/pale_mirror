@@ -961,7 +961,8 @@ class FrontierV3DiagnosticJsonTest {
             completedMembers.put(member, completed);
             completedLocations.put(member, new io.farfrontier.palemirror.frontier.v3.model.ActorLocation(io.farfrontier.palemirror.frontier.v3.model.BodyPosition.above(
                     new io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor(completed.currentPosition())),
-                    sourceState.actorLocations().get(member).condition(), sourceState.actorLocations().get(member).kind()));
+                    sourceState.actorLocations().get(member).condition(), sourceState.actorLocations().get(member).kind(),
+                    sourceState.actorLocations().get(member).navigationProfile()));
         });
         assembly = new io.farfrontier.palemirror.frontier.v3.model.EngineeringWorkAssembly(
                 io.farfrontier.palemirror.frontier.v3.model.EngineeringJourneyPurpose.WORKSITE, completedMembers);

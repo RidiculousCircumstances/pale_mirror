@@ -56,7 +56,7 @@ final class ContainerPlayerEditProcess {
                 case FungibleStackLayoutObserved value -> FrontierWorldPhysicalObservationProcess.planFungibleLayout(next, value);
                 case FungibleStockDepartureObserved value -> FrontierWorldPhysicalObservationProcess.planFungibleStockDeparture(next, value, now);
                 case FungibleStockContributionObserved value -> FrontierWorldPhysicalObservationProcess.planFungibleStockContribution(next, value, now);
-                case FungibleResourceHandoffObserved value -> FrontierWorldPhysicalObservationProcess.planFungibleHandoff(next, value);
+                case FungibleResourceHandoffObserved value -> FrontierWorldPhysicalObservationProcess.planFungibleHandoff(next, value, now);
                 default -> throw new IllegalArgumentException("unsupported composed accounting fact");
             };
             if (!(planned instanceof CommandPlan.Accepted accepted))

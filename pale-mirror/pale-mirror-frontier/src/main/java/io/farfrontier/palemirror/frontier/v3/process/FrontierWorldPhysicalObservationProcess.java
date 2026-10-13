@@ -197,14 +197,23 @@ public final class FrontierWorldPhysicalObservationProcess {
         return ProductionResourceCustody.bind(state, account.id(), observed.authorityEpoch(), bindings);
     }
 
-    static CommandPlan planFungibleHandoff(FrontierWorldState state, FungibleResourceHandoffObserved observed) {
+    static CommandPlan planFungibleHandoff(FrontierWorldState state, FungibleResourceHandoffObserved observed, long now) {
         CustodyAccount source = state.inventory().fungibleResources().accounts().get(observed.sourceAccountId());
         if (source == null) return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY,
                 "fungible handoff has an unknown source account"));
         SubjectId owner = owner(state, source);
         try { reduceFungibleHandoff(state, owner, observed); }
         catch (IllegalArgumentException invalid) { return new CommandPlan.Rejected(new CommandRejection(RejectionCode.REJECTED_BY_POLICY, invalid.getMessage())); }
-        return new CommandPlan.Accepted(List.of(new ProposedEvent(owner, observed)));
+        List<ProposedEvent> events = new java.util.ArrayList<>();
+        events.add(new ProposedEvent(owner, observed));
+        if (!observed.forfeitedClaimIds().isEmpty()) {
+            for (var activity : FungibleClaimForfeitureStateSupport.released(state, observed)) {
+                activity.cancelledProgress().ifPresent(id -> events.add(new ProposedEvent(activity.actor(),
+                        new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled(id))));
+                events.add(ResidentActivityProcess.wakeAfterActivity(activity.actor(), now));
+            }
+        }
+        return new CommandPlan.Accepted(List.copyOf(events));
     }
 
     static CommandPlan planFungibleStockDeparture(FrontierWorldState state, FungibleStockDepartureObserved observed,

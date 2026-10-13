@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile;
+
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import org.junit.jupiter.api.Test;
@@ -16,7 +18,7 @@ class ActorIdentityDeclarationsTest {
                 moved.actorLocations(), moved.transportFleet()));
         var forged = new java.util.LinkedHashMap<>(moved.actorLocations());
         var person = forged.get(resident);
-        forged.put(resident, new ActorLocation(person.body(), person.condition(), ActorKind.BIOFORM));
+        forged.put(resident, new ActorLocation(person.body(), person.condition(), ActorKind.BIOFORM, UnitNavigationProfile.ZOMBIE));
         assertThrows(IllegalArgumentException.class, () -> ActorIdentityDeclarations.validate(moved.bootstrap(),
                 moved.hiveColony(), moved.humanPopulation(), forged, moved.transportFleet()));
         var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
@@ -38,10 +40,10 @@ class ActorIdentityDeclarationsTest {
         var codec = new FrontierWorldStateCodec();
         assertEquals(state.actorLocations(), codec.decode(codec.encode(state)).actorLocations());
         var forged = new java.util.LinkedHashMap<>(state.actorLocations());
-        forged.put(resident, new ActorLocation(person.body(), person.condition(), ActorKind.BIOFORM));
+        forged.put(resident, new ActorLocation(person.body(), person.condition(), ActorKind.BIOFORM, UnitNavigationProfile.ZOMBIE));
         assertThrows(IllegalArgumentException.class, () -> state.withChanges(
                 FrontierWorldStateUpdate.begin().actorLocations(forged)));
-        assertThrows(NullPointerException.class, () -> new ActorLocation(person.body(), person.condition(), null));
+        assertThrows(NullPointerException.class, () -> new ActorLocation(person.body(), person.condition(), null, person.navigationProfile()));
         assertThrows(IllegalArgumentException.class, () -> FrontierWireTags.require(ActorKind.class, 127));
     }
 }

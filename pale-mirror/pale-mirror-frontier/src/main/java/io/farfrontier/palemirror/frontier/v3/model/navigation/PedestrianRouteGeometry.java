@@ -12,6 +12,10 @@ public interface PedestrianRouteGeometry {
     WorldBounds bounds();
     SurfaceAnchor supportAt(int x, int z);
     boolean blocked(SurfaceAnchor surface);
+    /** Support exclusion is separate from a particular reference body's clearance. */
+    default boolean supportAvailable(SurfaceAnchor surface) { return !blocked(surface); }
+    /** A transit node is not necessarily a place where the complete body can centre. */
+    default boolean clearStation(SurfaceAnchor surface) { return !blocked(surface); }
 
     /** Shared adult-pedestrian edge policy; both endpoints must independently be clear supports.
      * A one-block step also needs the upper body clearance over its lower support.

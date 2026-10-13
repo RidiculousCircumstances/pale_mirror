@@ -205,7 +205,7 @@ public final class HiveSettlementAssaultProcess {
             ActorLocation current = actors.get(body.getKey());
             if (!current.body().equals(assault.formationBodies().get(body.getKey())))
                 throw new IllegalArgumentException("COLD expedition body diverges from its retained continuation");
-            actors.put(body.getKey(), new ActorLocation(body.getValue(), current.condition(), current.kind()));
+            actors.put(body.getKey(), new ActorLocation(body.getValue(), current.condition(), current.kind(), current.navigationProfile()));
         }
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors)
                 .strategicPlans(state.strategicPlans().replaceSettlementAssault(next)));
@@ -248,7 +248,7 @@ public final class HiveSettlementAssaultProcess {
         FixedScalar remaining = target.condition().health().minus(strike.damage());
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
         actors.put(strike.targetId(), remaining.compareTo(FixedScalar.ZERO) <= 0 ? target.deadAt(target.body())
-                : new ActorLocation(target.body(), target.condition().withHealth(remaining), target.kind()));
+                : new ActorLocation(target.body(), target.condition().withHealth(remaining), target.kind(), target.navigationProfile()));
         return copy(state, actors, state.strategicPlans().replaceSettlementAssault(assault.afterStrike(strike.epoch())));
     }
 

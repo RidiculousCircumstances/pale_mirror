@@ -17,7 +17,8 @@ record FungibleAllocationSourceStockLoss(ClaimPurpose purpose, FungibleClaimForf
         owner.validate(state, claim, source);
     }
     @Override public Settlement settle(FrontierWorldState before, ClaimAllocation claim, Settlement transaction) {
-        return new Settlement(owner.settle(before, List.of(claim), transaction.resources()), transaction.population());
+        var next = owner.settle(before, List.of(claim), transaction.resources().withPopulation(transaction.population()));
+        return new Settlement(next, next.population());
     }
     @Override public List<ReleasedActivity> released(FrontierWorldState before, ClaimAllocation claim) {
         return owner.released(before, claim);

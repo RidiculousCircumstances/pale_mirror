@@ -99,6 +99,7 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
         state.humanPopulation().migrations().values().stream().sorted(Comparator.comparing(ResidentMigrationJourney::residentId))
                 .forEach(journey -> claim(values, journey.residentId(), HumanAssignmentKind.TRANSIT, journey.residentId()));
         state.shipments().shipments().values().stream().filter(shipment -> !shipment.terminal())
+                .filter(shipment -> !TransportCargoExecution.shared(shipment))
                 .filter(shipment -> state.actorLocations().get(shipment.execution().actorId()).kind() == ActorKind.RESIDENT)
                 .sorted(Comparator.comparing(Shipment::id))
                 .forEach(shipment -> claim(values, shipment.execution().actorId(), HumanAssignmentKind.COURIER, shipment.id()));

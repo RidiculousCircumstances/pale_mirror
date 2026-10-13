@@ -1,4 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.model;
+
+import io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile;
 import io.farfrontier.palemirror.frontier.v3.process.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
@@ -44,11 +46,14 @@ public final class FrontierV3FixtureCatalog {
             "expedition-candidate", FrontierRulesets.installed("frontier-v3-expedition-candidate-r2"),
             "quarry-graybox", FrontierRulesets.installed("frontier-v3-quarry-graybox-r4"),
             "quarry-front", FrontierRulesets.installed("frontier-v3-quarry-graybox-r7"),
-            "fuelled-quarry", FrontierRulesets.fuelledQuarryGraybox());
+            "fuelled-quarry", FrontierRulesets.fuelledQuarryGraybox(),
+            "supply-quarry", FrontierRulesets.supplyQuarryGraybox());
     private static final Map<String, BiFunction<WorldId, Long, FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>>> PROVIDERS = Map.ofEntries(
             Map.entry("world", FrontierWorldRuntimeDefinition::configuration),
             Map.entry("quarryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("quarry-graybox"))),
             Map.entry("fuelledQuarryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("fuelled-quarry"))),
+            Map.entry("supplyQuarryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("supply-quarry"))),
+            Map.entry("consolidatedTrade", FrontierV3FixtureCatalog::consolidatedTradeConfiguration),
             Map.entry("quarryFront", QuarryFrontFixture::configuration),
             Map.entry("storageGround", StorageGroundFixture::configuration),
             Map.entry("goodsShipment", FrontierV3FixtureCatalog::goodsShipmentConfiguration),
@@ -121,6 +126,16 @@ public final class FrontierV3FixtureCatalog {
 
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> autonomousGoodsConfiguration(WorldId worldId, long seed) {
         return autonomousGoodsConfiguration(worldId, seed, FrontierRulesets.production());
+    }
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> consolidatedTradeConfiguration(WorldId worldId, long seed) {
+        var state = ConsolidatedTradeFixture.initial(worldId, seed, true);
+        var seller = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
+        var schedules = new ArrayList<>(tradeSchedules(state, List.of(GoodsParticipantProcess.review(seller.party().id(), 400),
+                GoodsParticipantProcess.review(seller.known().getFirst().party().id(), 401))));
+        for (var resident : state.humanPopulation().residents().values()) schedules.add(ResidentNeedProcess.review(resident.id(),
+                state.humanPopulation().nutrition(resident.id()).nextThresholdTick(state.bootstrap().ruleset().residentLife(),
+                        resident.characteristics().effectiveMetabolismPermille(0))));
+        return configured(worldId, state, SimInstant.ZERO, schedules);
     }
 
     /** Finite native preconditions only: no pre-created mission, cargo receipt or journey. */
@@ -490,7 +505,7 @@ public final class FrontierV3FixtureCatalog {
                 .filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
         SurfaceAnchor service = SettlementDepotServicePort.forDepot(depot).serviceSurface();
         Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(initial.actorLocations());
-        actors.put(residentId, ActorLocation.standingOn(service, ActorKind.RESIDENT));
+        actors.put(residentId, ActorLocation.standingOn(service, ActorKind.RESIDENT, UnitNavigationProfile.VILLAGER));
         long hungryAt = initial.humanPopulation().nutrition(residentId).nextThresholdTick(
                 initial.bootstrap().ruleset().residentLife(),
                 initial.humanPopulation().resident(residentId).characteristics().effectiveMetabolismPermille(0L));

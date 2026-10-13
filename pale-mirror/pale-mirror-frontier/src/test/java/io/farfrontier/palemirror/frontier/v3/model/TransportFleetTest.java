@@ -66,7 +66,7 @@ class TransportFleetTest {
                 new PhysicalReplicaCustodyPayloads.ReferenceProjectionPrepared(asset.containerId(), 2, 0, "", "")));
         assertArrayEquals(checkpoint.canonicalState(), engine.checkpoint().canonicalState());
         var actors = new LinkedHashMap<>(before.actorLocations()); var body = actors.get(asset.actorId());
-        actors.put(asset.actorId(), new ActorLocation(body.body(), ActorCondition.dead(), body.kind()));
+        actors.put(asset.actorId(), new ActorLocation(body.body(), ActorCondition.dead(), body.kind(), body.navigationProfile()));
         var retired = ActorExecutionComposition.LIFECYCLE.retire(before, asset.actorId(), execution.activityKind(), asset.actorId());
         var lost = before.withChanges(FrontierWorldStateUpdate.begin().actorExecutions(retired).actorLocations(actors));
         assertTrue(ReferenceContainerCustody.blocksCanonicalUse(lost, asset.containerId()));
@@ -96,7 +96,7 @@ class TransportFleetTest {
         assertEquals(asset.homeStation().support().offset(0, 1, 0), surface.position(state));
         var actors = new LinkedHashMap<>(state.actorLocations());
         var previous = actors.get(asset.actorId());
-        actors.put(asset.actorId(), new ActorLocation(previous.body(), ActorCondition.dead(), previous.kind()));
+        actors.put(asset.actorId(), new ActorLocation(previous.body(), ActorCondition.dead(), previous.kind(), previous.navigationProfile()));
         var lost = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
         var codec = new FrontierWorldStateCodec(); var recovered = codec.decode(codec.encode(lost));
         assertEquals(lost, recovered);

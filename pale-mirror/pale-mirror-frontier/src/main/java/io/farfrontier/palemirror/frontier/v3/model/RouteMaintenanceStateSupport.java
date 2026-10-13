@@ -143,7 +143,7 @@ public final class RouteMaintenanceStateSupport {
         if (advanced.hotArrival().isEmpty()) {
             Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
             ActorLocation prior = actors.get(moved);
-            actors.put(moved, new ActorLocation(advanced.assembly().members().get(moved).currentSurface().standingBody(), prior.condition(), prior.kind()));
+            actors.put(moved, new ActorLocation(advanced.assembly().members().get(moved).currentSurface().standingBody(), prior.condition(), prior.kind(), prior.navigationProfile()));
             update.actorLocations(actors);
         }
         Map<SubjectId, RouteMaintenance> next = new LinkedHashMap<>(state.routeMaintenances()); next.put(maintenance.id(), maintenance.withAdvancedAssembly(advanced.assembly()));

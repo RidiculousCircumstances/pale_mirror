@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
+import io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile;
+
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
@@ -119,7 +121,7 @@ class ProductionStationSpecTest {
         FungibleResourceLedger resources = initial.inventory().fungibleResources().issue(wheat,
                 new CustodyAccount(actorAccount, new ResourceCustody.Actor(actorId), Map.of(wheatId, 64), Map.of()));
         java.util.Map<SubjectId, ActorLocation> actors = new java.util.LinkedHashMap<>(initial.actorLocations());
-        actors.put(actorId, ActorLocation.standingOn(machine.workerStation(), ActorKind.RESIDENT));
+        actors.put(actorId, ActorLocation.standingOn(machine.workerStation(), ActorKind.RESIDENT, UnitNavigationProfile.VILLAGER));
         FrontierWorldState atStation = initial.withChanges(FrontierWorldStateUpdate.begin()
                 .inventory(initial.inventory().withFungibleResources(resources)).actorLocations(actors));
         ActorContainerItemOrder order = new ActorContainerItemOrder(new SubjectId("job:bakery-loading"), actorId,

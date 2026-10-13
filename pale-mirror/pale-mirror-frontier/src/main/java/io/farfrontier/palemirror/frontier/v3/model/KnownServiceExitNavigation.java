@@ -105,7 +105,7 @@ public final class KnownServiceExitNavigation {
                     order.capability(), order.arrivalPolicy());
         }
         if (order.legalStations().contains(start)) return List.of(start);
-        var knowledge = ServiceBoundaryComposition.knowledge(state, point.identity());
+        var knowledge = ServiceBoundaryComposition.knowledge(state, point.identity()).forActor(state, order.actorId());
         return retainedOnly ? knowledge.retainedPath(start, order)
                 : knowledge.plannedPath(start, order);
     }

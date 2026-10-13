@@ -5,7 +5,13 @@ import java.util.*;
 
 /** Persisted balance choices. Commodity names belong here, not to the market or carrier. */
 public record GoodsTradeRules(long reviewInterval, long orderLifetime, int maximumBatch, int maximumPairReviews,
-                             Map<GoodsPolicyKind, List<Commodity>> policies) {
+                             Map<GoodsPolicyKind, List<Commodity>> policies,
+                             io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanningRules supplyPlanning) {
+    public GoodsTradeRules(long reviewInterval, long orderLifetime, int maximumBatch, int maximumPairReviews,
+                           Map<GoodsPolicyKind, List<Commodity>> policies) {
+        this(reviewInterval, orderLifetime, maximumBatch, maximumPairReviews, policies,
+                io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanningRules.disabled());
+    }
     public record Commodity(String itemKind, int targetPerResident, int targetFixed,
                             FixedScalar minimumSellPrice, FixedScalar maximumBuyPrice) {
         public Commodity {
@@ -18,6 +24,7 @@ public record GoodsTradeRules(long reviewInterval, long orderLifetime, int maxim
         public int target(int residents) { return Math.addExact(targetFixed, Math.multiplyExact(targetPerResident, residents)); }
     }
     public GoodsTradeRules {
+        Objects.requireNonNull(supplyPlanning);
         var copy = new EnumMap<GoodsPolicyKind, List<Commodity>>(GoodsPolicyKind.class);
         policies.forEach((kind, commodities) -> {
             var values = List.copyOf(commodities);
@@ -31,6 +38,11 @@ public record GoodsTradeRules(long reviewInterval, long orderLifetime, int maxim
                 || maximumPairReviews < 1 || maximumPairReviews > 2048
                 || policies.size() != GoodsPolicyKind.values().length)
             throw new IllegalArgumentException("incomplete or invalid goods policy rules");
+        if (supplyPlanning.commodities().values().stream().anyMatch(policy -> policy.maximumWaitTicks() + reviewInterval >= orderLifetime))
+            throw new IllegalArgumentException("quote lifetime must cover bounded batch waiting and one review");
+        if (supplyPlanning.enabled() && !supplyPlanning.commodities().keySet().equals(policies.get(GoodsPolicyKind.PUBLIC_SETTLEMENT)
+                .stream().map(Commodity::itemKind).collect(java.util.stream.Collectors.toUnmodifiableSet())))
+            throw new IllegalArgumentException("supply planning must declare exactly the public commodity catalog");
     }
     public static GoodsTradeRules standard() {
         return new GoodsTradeRules(400, 24000, 64, 64, Map.of(
@@ -49,7 +61,11 @@ public record GoodsTradeRules(long reviewInterval, long orderLifetime, int maxim
         if (values.stream().anyMatch(value -> value.itemKind().equals(commodity.itemKind())))
             throw new IllegalArgumentException("goods commodity already declared for this policy");
         values.add(commodity); next.put(policy, List.copyOf(values));
-        return new GoodsTradeRules(reviewInterval, orderLifetime, maximumBatch, maximumPairReviews, next);
+        return new GoodsTradeRules(reviewInterval, orderLifetime, maximumBatch, maximumPairReviews, next, supplyPlanning);
+    }
+    public GoodsTradeRules withSupplyPlanning(io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanningRules planning) {
+        policies.get(GoodsPolicyKind.PUBLIC_SETTLEMENT).forEach(c -> planning.require(c.itemKind()));
+        return new GoodsTradeRules(reviewInterval, orderLifetime, maximumBatch, maximumPairReviews, policies, planning);
     }
     public String canonicalText() {
         var result = new StringBuilder(reviewInterval + "," + orderLifetime + "," + maximumBatch + "," + maximumPairReviews);
@@ -60,6 +76,7 @@ public record GoodsTradeRules(long reviewInterval, long orderLifetime, int maxim
                             .append(',').append(value.targetFixed()).append(',').append(value.minimumSellPrice().raw())
                             .append(',').append(value.maximumBuyPrice().raw()));
         });
+        if (supplyPlanning.enabled()) result.append("|supply:").append(supplyPlanning.canonicalText());
         return result.toString();
     }
 }

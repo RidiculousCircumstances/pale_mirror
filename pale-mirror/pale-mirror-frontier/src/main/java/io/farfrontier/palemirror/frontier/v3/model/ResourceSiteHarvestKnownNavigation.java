@@ -102,6 +102,6 @@ public final class ResourceSiteHarvestKnownNavigation {
         }
         SurfaceAnchor start = actor.supportingSurface();
         ResourceStorageAccess port = ResourceSiteHarvestGoal.depotPort(state, routingJob);
-        return new Context(start, goal, KnownPedestrianRouteKnowledge.forField(state, site, cycle, port, start));
+        return new Context(start, goal, KnownPedestrianRouteKnowledge.forField(state, site, cycle, port, start).forActor(state, job.workerId()));
     }
 }
