@@ -33,7 +33,12 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
             // A body at a region edge also observes the neighbouring region's obstacles.
             var expanded = new java.util.LinkedHashMap<PedestrianGeometryRevision.Region, Object>();
             int margin = profile.footprintRadius() == 0 ? 0 : 1;
-            source.revisions().forEach((region, token) -> {
+            // Equal footprint dependencies must compose in coordinate order,
+            // not MapN iteration order that changes after an unrelated insert.
+            source.revisions().entrySet().stream().sorted(java.util.Comparator
+                    .comparingInt((java.util.Map.Entry<PedestrianGeometryRevision.Region, Object> entry) -> entry.getKey().x())
+                    .thenComparingInt(entry -> entry.getKey().z())).forEach(entry -> {
+                var region = entry.getKey(); var token = entry.getValue();
                 for (int x = -margin; x <= margin; x++) for (int z = -margin; z <= margin; z++)
                     expanded.merge(new PedestrianGeometryRevision.Region(region.x() + x, region.z() + z), token,
                             (left, right) -> java.util.List.of(left, right));

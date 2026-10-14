@@ -9,7 +9,7 @@ record PedestrianRegionDependencies(WorldBounds bounds, Object scope, Map<Pedest
     boolean matches(PedestrianRouteGeometry geometry) {
         var current = geometry.regionalRevision();
         return bounds.equals(geometry.bounds()) && current.isPresent() && current.orElseThrow().scope().equals(scope)
-                && revisions.entrySet().stream().allMatch(entry -> entry.getValue()
-                == current.orElseThrow().at(entry.getKey().x(), entry.getKey().z()));
+                && revisions.entrySet().stream().allMatch(entry -> java.util.Objects.equals(entry.getValue(),
+                        current.orElseThrow().at(entry.getKey().x(), entry.getKey().z())));
     }
 }

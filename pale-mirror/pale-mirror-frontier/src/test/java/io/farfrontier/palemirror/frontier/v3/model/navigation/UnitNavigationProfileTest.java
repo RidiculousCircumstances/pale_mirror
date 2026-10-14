@@ -7,6 +7,30 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class UnitNavigationProfileTest {
+    @Test void rebuildingWideFootprintTokensCannotDiscardAnUnchangedAcceptedRouteButRealLocalDamageDoes() {
+        var source = PedestrianGeometryRevision.initial().changed(Set.of(new PedestrianGeometryRevision.Region(0, 0)))
+                .changed(Set.of(new PedestrianGeometryRevision.Region(1, 0)));
+        var distant = source.changed(Set.of(new PedestrianGeometryRevision.Region(20, 20)));
+        var original = new ProfiledPedestrianGeometry(terrain(Set.of(), source, UnitNavigationProfileTest::floor),
+                UnitNavigationProfile.DONKEY, ignored -> false);
+        var rebuilt = new ProfiledPedestrianGeometry(terrain(Set.of(), distant, UnitNavigationProfileTest::floor),
+                UnitNavigationProfile.DONKEY, ignored -> false);
+        assertFalse(rebuilt.regionalRevision().orElseThrow().changesSince(original.regionalRevision().orElseThrow())
+                .contains(new PedestrianGeometryRevision.Region(0, 0)));
+        var start = floor(0, 0); var target = floor(2, 0);
+        try (var planner = new CooperativePedestrianPlanner()) {
+            planner.query(original, start, target);
+            while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            long work = planner.workUnits();
+            assertEquals(PedestrianRouteResult.Status.FOUND, planner.query(rebuilt, start, target).status());
+            assertEquals(work, planner.workUnits(), "unchanged composite evidence must not start the same search again");
+            var wall = Set.of(new BlockPosition(2, 65, 0));
+            var changed = new ProfiledPedestrianGeometry(terrain(wall,
+                    distant.changed(Set.of(new PedestrianGeometryRevision.Region(0, 0))), UnitNavigationProfileTest::floor),
+                    UnitNavigationProfile.DONKEY, wall::contains);
+            assertNotEquals(PedestrianRouteResult.Status.FOUND, planner.query(changed, start, target).status());
+        }
+    }
     @Test void repeatedSweptBodyQueriesReuseOnlyTheirCapturedGeometryAndChangedKnowledgeClosesTheEdge() {
         var reads = new java.util.concurrent.atomic.AtomicInteger();
         var raw = terrain(Set.of(), PedestrianGeometryRevision.initial(), (x, z) -> {

@@ -33,7 +33,10 @@ public record PedestrianGeometryRevision(Object scope, Object baseline, Map<Regi
         if (!scope.equals(prior.scope) || baseline != prior.baseline)
             throw new IllegalArgumentException("regional comparison needs the same declared knowledge scope");
         var regions = new java.util.HashSet<>(revisions.keySet()); regions.addAll(prior.revisions.keySet());
-        regions.removeIf(region -> at(region.x(), region.z()) == prior.at(region.x(), region.z()));
+        // Profile envelopes combine several immutable terrain tokens. Rebuilding
+        // an equal tuple is not a changed region; plain Object epochs still use
+        // their identity equality. This is calculation evidence, not actor custody.
+        regions.removeIf(region -> Objects.equals(at(region.x(), region.z()), prior.at(region.x(), region.z())));
         return Set.copyOf(regions);
     }
 }

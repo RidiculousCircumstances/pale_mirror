@@ -86,8 +86,8 @@ public final class HierarchicalPedestrianSearch {
         var oldRevision = geometry.regionalRevision(); var nextRevision = current.regionalRevision();
         return geometry.bounds().equals(current.bounds()) && oldRevision.isPresent() && nextRevision.isPresent()
                 && oldRevision.orElseThrow().scope().equals(nextRevision.orElseThrow().scope())
-                && dependencies.entrySet().stream().allMatch(entry -> entry.getValue()
-                == nextRevision.orElseThrow().at(entry.getKey().x(), entry.getKey().z()));
+                && dependencies.entrySet().stream().allMatch(entry -> Objects.equals(entry.getValue(),
+                        nextRevision.orElseThrow().at(entry.getKey().x(), entry.getKey().z())));
     }
 
     public synchronized PedestrianRouteResult advance(int budget) {

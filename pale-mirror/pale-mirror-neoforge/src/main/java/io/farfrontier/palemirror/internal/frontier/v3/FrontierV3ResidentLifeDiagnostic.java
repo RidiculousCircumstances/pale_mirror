@@ -123,6 +123,7 @@ final class FrontierV3ResidentLifeDiagnostic {
                 + ",\"mealTravelArrivalAt\":" + (meal == null ? "null" : meal.coldTravel()
                     .map(route -> Long.toString(route.arrivalTick())).orElse("null"))
                 + ",\"mealAtWaitingPocket\":" + (meal != null && ResidentMealKnownNavigation.atWaitingPocket(state, meal))
+                + ",\"mealKnownRoute\":\"" + quote(mealKnownRoute(state, meal)) + "\""
                 + ",\"mealSource\":\"" + (meal == null ? "NONE" : meal.portable() ? "PERSONAL_INVENTORY" : "DEPOT") + "\""
                 + ",\"mealServiceAvailable\":" + (meal != null && !meal.portable() && ResidentMealServiceAccess.available(
                     state, meal.depotId(), meal.residentId()))
@@ -141,6 +142,24 @@ final class FrontierV3ResidentLifeDiagnostic {
                 + ",\"depotBread\":" + bread + ",\"depotBreadClaimed\":" + claimed
                 + ",\"settlementBreadStock\":" + SettlementFoodPolicy.breadStock(state, resident.settlementId())
                 + ",\"settlementBreadUsable\":" + SettlementFoodPolicy.usableBread(state, resident.settlementId()) + "}";
+    }
+
+    /** Operator-only retained evidence; a diagnostic must not initialize a route search. */
+    private static String mealKnownRoute(FrontierWorldState state, ResidentMeal meal) {
+        if (meal == null || meal.portable()) return "none";
+        if (meal.coldTravel().isPresent()) return "retained";
+        if (meal.phase() != ResidentMeal.Phase.MOVE && meal.phase() != ResidentMeal.Phase.CLEAR_ACCESS) return "no_route_stage";
+        String[] result = {"unavailable"};
+        io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.inspectAvailability(() -> {
+            try {
+                var route = meal.phase() == ResidentMeal.Phase.MOVE ? ResidentMealKnownNavigation.path(state, meal)
+                        : ResidentMealKnownNavigation.returnPath(state, meal);
+                result[0] = "available:" + route.size(); return true;
+            } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                result[0] = unavailable.status() + ":" + unavailable.getMessage(); return false;
+            }
+        });
+        return result[0];
     }
 
     /** Operator-only retained evidence; a diagnostic must not initialize a route search. */
