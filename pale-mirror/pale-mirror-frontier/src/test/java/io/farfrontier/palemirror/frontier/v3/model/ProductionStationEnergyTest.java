@@ -100,6 +100,7 @@ class ProductionStationEnergyTest {
         var resting = state.withActorBody(actor, goal.standingBody()).withChanges(FrontierWorldStateUpdate.begin()
                 .actorMovements(Map.of()).actorExecutions(state.actorExecutions().finish(execution)));
         assertTrue(resting.actorExecutions().actors().get(actor).suspended().isPresent());
+        assertSuspendedWorkCannotAdmitScene(resting, job, 10_002);
         assertTrue(ResidentMealOpportunity.candidate(resting, actor, 10_002).isEmpty());
         assertFalse(ActivityExecutionCapabilities.mayResumeWork(resting, HumanAssignmentProjection.compile(resting).assignment(actor)));
         assertTrue(ResidentActivityProcess.plan(resting, ResidentActivityProcess.review(actor, 10_002)).stream()
@@ -117,6 +118,53 @@ class ProductionStationEnergyTest {
         assertEquals(1, ResidentActivityProcess.plan(resting, ResidentActivityProcess.review(actor, 10_003)).stream()
                 .filter(event -> event.payload() instanceof io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionResumed).count(),
                 "fuel releases the retained executable work exactly once");
+        var retained = resting.actorExecutions().actors().get(actor).suspended().orElseThrow();
+        var resumed = resting.actorExecutions().next(actor, retained.activityKind(), retained.activityOwnerId());
+        var working = ActorExecutionComposition.LIFECYCLE.prepareResume(resting, retained, resumed, Optional.empty(), 10_004)
+                .commit(resting, FrontierWorldStateUpdate.begin());
+        assertTrue(FrontierProductionWorkSceneSupport.candidate(working, working.productionJobs().get(job.id())).isPresent(),
+                "the actual owner resumption restores HOT eligibility without losing the job");
+    }
+    private static void assertSuspendedWorkCannotAdmitScene(FrontierWorldState paused, ProductionJob job, long tick) {
+        var presence = paused.actorExecutions().next(job.workerId(),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRESENCE, job.workerId());
+        var idle = ActorExecutionComposition.LIFECYCLE.prepareBegin(paused, presence, tick)
+                .commit(paused, FrontierWorldStateUpdate.begin());
+        for (var state : List.of(paused, idle)) {
+            assertEquals(job, state.productionJobs().get(job.id()), "assignment/cargo survive suspension");
+            assertTrue(FrontierProductionWorkSceneSupport.candidate(state, job).isEmpty(),
+                    "a retained job cannot adopt the body from idle or vacant current execution");
+            assertThrows(IllegalArgumentException.class, () -> ProductionJourneyKnowledge.atScopeAdmission(state, job),
+                    "the reducer's strict ownership guard must remain");
+            var instant = new SimInstant(tick);
+            var body = state.actorLocations().get(job.workerId()).body();
+            var leaseId = new SceneLeaseId("lease:paused-production");
+            var lease = SceneLease.forCause(leaseId, state.bootstrap().worldId(), new ProductionWorkSceneCause(job.id()),
+                    body.supportingSurface().support(), instant, 0L, SceneLeaseStatus.PREPARED,
+                    List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state.bootstrap().worldId(), leaseId, job.workerId()))),
+                    Set.of(), Optional.empty());
+            var ambient = new AmbientActorLease(job.workerId(), body, instant, 1L, AmbientLeaseStatus.HOT, AmbientGoalKind.WORK, body);
+            var presented = state.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(Map.of(job.workerId(), ambient)));
+            var handoff = new ProductionWorkSceneLeaseHandoff(lease.withAmbientHandoff(Set.of(job.workerId())),
+                    List.of(new SceneMemberPosition(job.workerId(), body, state.actorLocations().get(job.workerId()).condition().health())));
+            assertThrows(IllegalArgumentException.class, () -> ProductionProcess.rebaseForAmbientHandoff(presented, job.settlementId(), handoff));
+            for (var payload : List.of(new ProductionWorkSceneLeasePrepared(lease), handoff)) {
+                var input = payload instanceof ProductionWorkSceneLeaseHandoff ? presented : state;
+                var base = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.configuration(state.bootstrap());
+                var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.create(
+                        new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(state.bootstrap().worldId(), input, instant,
+                                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(),
+                                base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter()));
+                var id = new CommandId("command:paused-production");
+                var result = engine.submit(new FrontierCommand(1, id, state.bootstrap().worldId(), Revision.ZERO, instant,
+                        io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), payload));
+                var rejection = assertInstanceOf(CommandResult.Rejected.class, result);
+                assertNotEquals(RejectionCode.INVARIANT_FAILURE, rejection.rejection().code());
+                assertEquals(EngineStatus.Kind.ACTIVE, engine.status().kind(),
+                        "normal stale scene admission rejects before an event can quarantine the world");
+                assertEquals(Revision.ZERO, engine.checkpoint().revision());
+            }
+        }
     }
     @Test void fuelledBatchConsumesRealFuelAndIngredientsAndSurvivesEverySnapshotBoundary() {
         var state = BakeryPartialBatchTest.fixture(64, FrontierRulesets.fuelledQuarryGraybox());

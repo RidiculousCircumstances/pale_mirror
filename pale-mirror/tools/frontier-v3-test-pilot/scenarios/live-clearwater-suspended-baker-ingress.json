@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "id": "live_clearwater_suspended_baker_ingress",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 10000, "checks": [
+      { "view": "summary", "id": "", "expect": { "status": "ok", "requiredConflicts": 0, "sceneConflicts": 0, "inventoryConflicts": 0 } },
+      { "view": "process", "id": "job:production-settlement-7-settlement_produce_bread-364", "expect": {
+        "status": "ok", "claims": { "worker": "resident:7-15", "lease": null }, "result": { "workStage": "STATION_LOAD" }
+      } }
+    ] }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 140, "y": 68, "z": -2 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "resident:7-15", "expect": { "status": "ok", "life": "ALIVE", "ambientLease": "HOT" }, "timeoutMs": 30000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "actor", "id": "resident:7-15", "field": "position" } }, "offset": { "x": 4, "y": 2, "z": 4 }, "settleMs": 0 },
+    { "type": "look", "at": { "diagnostic": { "view": "actor", "id": "resident:7-15", "field": "position" } } },
+    { "type": "assert_visible_entity", "entityType": "minecraft:villager", "nameContains": { "diagnostic": { "view": "actor", "id": "resident:7-15", "field": "name" } }, "maxDistance": 16, "maxAngleDeg": 75, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "process", "id": "job:production-settlement-7-settlement_produce_bread-364" },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": -6, "y": 68, "z": 0 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "resident:7-15", "expect": { "status": "ok", "life": "ALIVE", "ambientLease": "CLOSED" }, "timeoutMs": 30000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 140, "y": 68, "z": -2 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "actor", "id": "resident:7-15", "expect": { "status": "ok", "life": "ALIVE", "ambientLease": "HOT" }, "timeoutMs": 30000 },
+    { "type": "inspect", "view": "process", "id": "job:production-settlement-7-settlement_produce_bread-364" },
+    { "type": "inspect", "view": "summary", "id": "" },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": -6, "y": 68, "z": 0 }, "settleMs": 0 }
+  ],
+  "assertions": [
+    { "after": 2, "view": "actor", "id": "resident:7-15", "expect": { "life": "ALIVE", "ambientLease": "HOT" } },
+    { "after": 6, "view": "process", "id": "job:production-settlement-7-settlement_produce_bread-364", "expect": { "status": "ok", "claims": { "worker": "resident:7-15", "lease": null }, "result": { "workStage": "STATION_LOAD" } } },
+    { "after": 8, "view": "actor", "id": "resident:7-15", "expect": { "life": "ALIVE", "ambientLease": "CLOSED" } },
+    { "after": 10, "view": "actor", "id": "resident:7-15", "expect": { "life": "ALIVE", "ambientLease": "HOT" } },
+    { "after": 11, "view": "process", "id": "job:production-settlement-7-settlement_produce_bread-364", "expect": { "status": "ok", "claims": { "worker": "resident:7-15", "lease": null }, "result": { "workStage": "STATION_LOAD" } } },
+    { "after": 12, "view": "summary", "id": "", "expect": { "status": "ok", "diagnosticVerdict": "green", "requiredConflicts": 0, "sceneConflicts": 0, "inventoryConflicts": 0 } }
+  ],
+  "frames": [ { "after": 5, "name": "paused-baker-retains-ambient-body" } ]
+}

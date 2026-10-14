@@ -38,7 +38,7 @@ public final class FrontierProductionWorkSceneSupport {
                 .map(job -> candidate(state, job)).flatMap(Optional::stream).toList();
     }
     public static Optional<Candidate> candidate(FrontierWorldState state, ProductionJob job) {
-        if (hasScene(state, job.id()) || !hasPhysicalInput(state, job)
+        if (!ownsCurrentWorker(state, job) || hasScene(state, job.id()) || !hasPhysicalInput(state, job)
                 || state.humanPopulation().meals().containsKey(job.workerId())
                 || state.actorMovements().containsKey(job.workerId())
                 || job.bakeryWork().isEmpty() && job.workProgress().terminalEffectEligible()) return Optional.empty();
@@ -76,6 +76,15 @@ public final class FrontierProductionWorkSceneSupport {
         ProductionJob job = state.productionJobs().get(cause.jobId());
         if (job == null) throw new IllegalArgumentException("production-work scene has no active job");
         return job;
+    }
+    /** Retained/suspended work does not own the person's current physical activity. */
+    public static boolean ownsCurrentWorker(FrontierWorldState state, ProductionJob job) {
+        return state.actorExecutions().owns(job.workerId(),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION, job.id());
+    }
+    public static void requireCurrentWorker(FrontierWorldState state, ProductionJob job) {
+        if (!ownsCurrentWorker(state, job))
+            throw new IllegalArgumentException("production scope admission lost its exact worker execution");
     }
     /** Requires the sole live lease that may turn a Minecraft body observation into this job's fact. */
     public static SceneLease requireHotLease(FrontierWorldState state, ProductionJob job, io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId leaseId) {

@@ -44,9 +44,7 @@ public final class ProductionJourneyKnowledge {
     }
     /** Scope is presentation only: its return may occur while the same physical body is still held. */
     public static FrontierWorldState atScopeAdmission(FrontierWorldState state, ProductionJob job) {
-        var execution = state.actorExecutions().current(ActorActivityKind.PRODUCTION).get(job.workerId());
-        if (execution == null || !execution.activityOwnerId().equals(job.id()))
-            throw new IllegalArgumentException("production scope admission lost its exact worker execution");
+        FrontierProductionWorkSceneSupport.requireCurrentWorker(state, job);
         if (job.bakeryWork().isPresent()) return state;
         var actor = state.actorLocations().get(job.workerId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)

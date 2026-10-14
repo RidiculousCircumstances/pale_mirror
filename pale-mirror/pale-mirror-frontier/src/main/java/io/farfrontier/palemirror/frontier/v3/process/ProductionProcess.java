@@ -61,6 +61,7 @@ public final class ProductionProcess {
     public static FrontierWorldState rebaseForAmbientHandoff(FrontierWorldState state, SubjectId subject,
                                                                ProductionWorkSceneLeaseHandoff handoff) {
         ProductionJob job = FrontierProductionWorkSceneSupport.require(state, FrontierSceneBehaviors.productionWork(handoff.lease()));
+        FrontierProductionWorkSceneSupport.requireCurrentWorker(state, job);
         Settlement settlement = settlement(state, job.settlementId()); SettlementStructure workshop = workshop(settlement);
         if (!subject.equals(job.settlementId()) || !workshop.id().equals(job.facilityId()) || handoff.ambientMembers().size() != 1
                 || !handoff.ambientMembers().getFirst().actorId().equals(job.workerId())) {

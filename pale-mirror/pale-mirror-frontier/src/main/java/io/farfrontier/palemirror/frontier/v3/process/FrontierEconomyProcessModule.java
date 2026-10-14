@@ -143,13 +143,20 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
     }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof ProductionWorkSceneLeasePrepared prepared) {
-            try { return new CommandPlan.Accepted(java.util.List.of(new ProposedEvent(FrontierProductionWorkSceneSupport.owner(state,
-                    FrontierSceneBehaviors.productionWork(prepared.lease())), prepared))); }
+            try {
+                var job = FrontierProductionWorkSceneSupport.require(state, FrontierSceneBehaviors.productionWork(prepared.lease()));
+                ProductionJourneyKnowledge.atScopeAdmission(state, job).prepareSceneLease(prepared.lease());
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), prepared)));
+            }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
         if (command.payload() instanceof ProductionWorkSceneLeaseHandoff handoff) {
-            try { return new CommandPlan.Accepted(java.util.List.of(new ProposedEvent(FrontierProductionWorkSceneSupport.owner(state,
-                    FrontierSceneBehaviors.productionWork(handoff.lease())), handoff))); }
+            try {
+                var owner = FrontierProductionWorkSceneSupport.owner(state, FrontierSceneBehaviors.productionWork(handoff.lease()));
+                ProductionProcess.rebaseForAmbientHandoff(state, owner, handoff)
+                        .handoffAmbientScene(new SceneLeaseHandoff(handoff.lease(), handoff.ambientMembers()));
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(owner, handoff)));
+            }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
         if (command.payload() instanceof ProductionWorkProgressed progressed) return planHotProgress(state, command, progressed);
