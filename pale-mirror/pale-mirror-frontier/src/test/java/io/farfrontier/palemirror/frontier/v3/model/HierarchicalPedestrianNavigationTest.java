@@ -8,6 +8,33 @@ import java.util.function.Predicate;
 import static org.junit.jupiter.api.Assertions.*;
 
 class HierarchicalPedestrianNavigationTest {
+    @Test void rebuildingAnUnchangedViewPreservesRotationUnderTheHostYieldFence() {
+        var revision = PedestrianGeometryRevision.initial();
+        java.util.function.Supplier<PedestrianRouteGeometry> rebuild = () -> new PedestrianRouteGeometry() {
+            public WorldBounds bounds() { return new WorldBounds(0, 0, 3_200, 32); }
+            public SurfaceAnchor supportAt(int x, int z) { return SurfaceAnchor.at(x, 63, z); }
+            public boolean blocked(SurfaceAnchor surface) { return false; }
+            public Object version() { return revision; }
+            public java.util.Optional<PedestrianGeometryRevision> regionalRevision() { return java.util.Optional.of(revision); }
+        };
+        var start = SurfaceAnchor.at(1, 63, 1); var near = SurfaceAnchor.at(3, 63, 1);
+        var far = SurfaceAnchor.at(2_000, 63, 1); var farther = SurfaceAnchor.at(2_100, 63, 1);
+        try (var planner = new CooperativePedestrianPlanner()) {
+            var ground = rebuild.get();
+            planner.query(ground, start, far); planner.query(ground, start, farther); planner.query(ground, start, near);
+            for (int turn = 0; turn < 32 && planner.peek(ground, start, near).orElseThrow().status() == PedestrianRouteResult.Status.PLANNING; turn++) {
+                ground = rebuild.get();
+                planner.query(ground, start, far); planner.query(ground, start, farther); planner.query(ground, start, near);
+                var admission = new java.util.concurrent.atomic.AtomicInteger();
+                planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2, () -> admission.incrementAndGet() < 200);
+            }
+            var result = planner.peek(ground, start, near).orElseThrow();
+            assertEquals(PedestrianRouteResult.Status.FOUND, result.status(), "rebase must not repeatedly promote the first long calculation");
+            KnownPedestrianNavigation.requireRoute(ground, result.route());
+            assertEquals(2, planner.pendingCount());
+            assertTrue(planner.waitingDiagnostics(8).stream().allMatch(wait -> wait.searchWorkUnits() > 0));
+        }
+    }
     @Test void aFullyKnownIsolatedNearbyGoalDoesNotFloodTheWholeWorldAndOpeningItInvalidatesTheFailure() {
         var start = SurfaceAnchor.at(1, 63, 1); var goal = SurfaceAnchor.at(18, 63, 18);
         var closed = geometry(new WorldBounds(0, 0, 1024, 1024), (x, z) -> SurfaceAnchor.at(x, 63, z),

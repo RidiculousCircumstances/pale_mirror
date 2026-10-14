@@ -133,12 +133,18 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     private void synchronizeScope(PedestrianRouteGeometry geometry) {
         for (var request : java.util.List.copyOf(pending.keySet())) if (request.geometry() != geometry && sameScope(request, geometry)) {
             long since = admittedAt.get(request);
-            var search = pending.remove(request); ready.remove(request); invalidated(request);
+            var search = pending.remove(request); invalidated(request);
             if (search.rebase(geometry)) {
                 var replacement = PedestrianRouteRequest.of(geometry, request.start(), request.target());
-                pending.put(replacement, search); ready.addLast(replacement);
+                pending.put(replacement, search);
+                // Replacing an immutable view is not a new calculation turn.
+                // Preserve round-robin position: rebuilding views every tick
+                // must not reset rotation and starve all but its first search.
+                var rotation = new ArrayDeque<PedestrianRouteRequest>();
+                for (var queued : ready) rotation.addLast(queued.equals(request) ? replacement : queued);
+                ready.clear(); ready.addAll(rotation);
                 admittedAt.put(replacement, since);
-            }
+            } else ready.remove(request);
             progressRevision++;
         }
         for (var request : java.util.List.copyOf(completed.keySet())) if (request.geometry() != geometry && sameScope(request, geometry)) {
