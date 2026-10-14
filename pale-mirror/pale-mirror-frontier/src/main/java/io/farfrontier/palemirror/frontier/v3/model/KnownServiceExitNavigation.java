@@ -13,7 +13,7 @@ public final class KnownServiceExitNavigation {
     public static List<SurfaceAnchor> exitStations(FrontierWorldState state, SubjectId settlementId,
             SubjectId depotId, SubjectId actorId, SurfaceAnchor start) {
         return exitStations(state, settlementId, depotId, start,
-                ServiceDestinationClaims.forImmediateExit(state, actorId));
+                ServiceDestinationClaims.forImmediateExit(state, actorId, depotId));
     }
 
     /**
@@ -50,7 +50,7 @@ public final class KnownServiceExitNavigation {
             SubjectId depotId, SubjectId ownerId, SubjectId actorId, int phase, long generation, SurfaceAnchor start,
             boolean retainedOnly) {
         var stations = exitStations(state, settlementId, depotId, actorId, start);
-        var excluded = ServiceDestinationClaims.forImmediateExit(state, actorId);
+        var excluded = ServiceDestinationClaims.forImmediateExit(state, actorId, depotId);
         for (int offset = 0; offset < stations.size(); offset += MovementOrder.MAX_LEGAL_STATIONS) {
             var batch = stations.subList(offset, Math.min(stations.size(), offset + MovementOrder.MAX_LEGAL_STATIONS));
             var order = new MovementOrder(ownerId, actorId, phase, generation, batch,
@@ -97,7 +97,7 @@ public final class KnownServiceExitNavigation {
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
             throw new IllegalArgumentException("service exit has no living actor body");
         if (ActorExecutionCoordinator.coldAvailable(state, order.actorId())) {
-            var excluded = ServiceDestinationClaims.forImmediateExit(state, order.actorId());
+            var excluded = ServiceDestinationClaims.forImmediateExit(state, order.actorId(), depotId);
             var available = order.legalStations().stream().filter(target -> !excluded.contains(target)).toList();
             if (available.isEmpty()) throw new io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable(
                     "service clearance region is currently occupied or reserved");

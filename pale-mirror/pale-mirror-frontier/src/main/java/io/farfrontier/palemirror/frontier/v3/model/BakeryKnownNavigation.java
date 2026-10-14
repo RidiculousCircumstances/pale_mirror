@@ -106,7 +106,7 @@ public final class BakeryKnownNavigation {
         if (work.phase() == BakeryWorkState.Phase.DELIVERED) {
             var point = ServiceBoundaryComposition.declaration(state, BakeryStorage.destination(job));
             if (!point.boundary().cleared(route.getLast().standingBody())
-                    || ServiceDestinationClaims.forImmediateExit(state, job.workerId()).contains(route.getLast()))
+                    || ServiceDestinationClaims.forImmediateExit(state, job.workerId(), point.pointId()).contains(route.getLast()))
                 throw new IllegalArgumentException("bakery route does not clear an available service boundary");
             ServiceBoundaryComposition.knowledge(state, point.identity()).forActor(state, job.workerId()).requireRoute(route);
             return;

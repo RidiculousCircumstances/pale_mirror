@@ -172,16 +172,17 @@ class ResidentMealKnownNavigationTest {
         state = state.withActorBody(actor, route.getLast().standingBody());
         assertTrue(ResidentMealServiceAccess.available(state, depot, settlement.residents().getFirst().id()),
                 "a witnessed exit, not home arrival, releases the turn");
-        // Actual bodies remain exclusive even though deferred preferred targets do not.
+        // COLD applicants waiting for this incumbent are transit, not physical
+        // occupants or final parking claims. Otherwise this is a circular wait.
         var blocked = state.withActorBody(actor, port.serviceSurface().standingBody());
         for (int i = 0; i < actualExits.size(); i++) {
             var waiter = settlement.residents().stream().map(Resident::id).filter(id -> !id.equals(actor)).toList().get(i);
             blocked = blocked.withActorBody(waiter, actualExits.get(i).standingBody());
         }
-        assertTrue(KnownServiceExitNavigation.exitStations(blocked, settlement.id(), depot, actor, port.serviceSurface()).isEmpty());
+        assertTrue(!KnownServiceExitNavigation.exitStations(blocked, settlement.id(), depot, actor, port.serviceSurface()).isEmpty());
         assertEquals(actualExits, KnownServiceExitNavigation.supportedExitStations(blocked,
                 settlement.id(), depot, port.serviceSurface()),
-                "HOT must expose supported occupied goals to traffic/courtesy; COLD may not enter them");
+                "HOT exposes supported goals to traffic/courtesy; incoming COLD transit cannot reserve the incumbent's exit");
         var damaged = blocked;
         for (var exit : actualExits) {
             damaged = damaged.recordPhysicalDelta(new PhysicalDelta(exit.support(), PhysicalDeltaKind.UNKNOWN_SCAR,

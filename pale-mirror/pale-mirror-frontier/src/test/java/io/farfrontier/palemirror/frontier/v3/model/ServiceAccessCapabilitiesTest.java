@@ -7,6 +7,33 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ServiceAccessCapabilitiesTest {
+    @Test void coldIncomingWorkCannotDeadlockAnIncumbentsExitButParkingAndPhysicalBodiesRemainExclusive() {
+        var fixture = ResourceSiteHarvestProcessTest.fullBatchAtDepotWithoutFutureCapacity();
+        var job = fixture.job(); var state = fixture.state(); var pointId = job.outputSlot().containerId();
+        var point = ServiceBoundaryComposition.geometry(state, ServiceBoundaryComposition.declaration(state, pointId).identity());
+        var exit = point.egressSurfaces().stream().sorted(java.util.Comparator.comparingInt(SurfaceAnchor::x)
+                .thenComparingInt(SurfaceAnchor::z)).findFirst().orElseThrow();
+        var actor = state.humanPopulation().residents().values().stream()
+                .filter(resident -> !resident.id().equals(job.workerId())).findFirst().orElseThrow().id();
+        state = state.withActorBody(job.workerId(), exit.standingBody());
+        assertTrue(ServiceAccessCapabilities.current(state, pointId).stream().anyMatch(demand ->
+                demand.identity().actorId().equals(job.workerId()) && demand.presence() == ServiceAccessDemand.Presence.APPROACH));
+        assertTrue(ServiceDestinationClaims.excludedFor(state, actor).contains(exit), "parking still reserves distinct final places");
+        assertFalse(ServiceDestinationClaims.forImmediateExit(state, actor, pointId).contains(exit),
+                "an incoming COLD worker waiting for the incumbent is transit, not a physical wall");
+        var stationary = state.withActorBody(actor, exit.standingBody());
+        assertTrue(ServiceDestinationClaims.forImmediateExit(stationary, job.workerId(), pointId).contains(exit),
+                "unassigned stationary occupants are not incoming service transit");
+        var lease = ResourceSiteHarvestProcessTest.newHarvestLease(state, job.siteId(), job, "incoming-physical-body")
+                .withHandoffPosition(FrontierResourceSiteHarvestSceneSupport.candidate(state, job).orElseThrow().cropSlot());
+        var physical = state.prepareSceneLease(lease);
+        assertFalse(ActorExecutionCoordinator.coldAvailable(physical, job.workerId()));
+        assertTrue(ServiceDestinationClaims.forImmediateExit(physical, actor, pointId).contains(exit),
+                "physical or unresolved authority cannot be bypassed by abstract COLD clearance");
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        var recovered = codec.decode(codec.encode(state));
+        assertFalse(ServiceDestinationClaims.forImmediateExit(recovered, actor, pointId).contains(exit));
+    }
     @Test void temporaryFootprintIndexMatchesDeclaredGeometryAndTracksDamageWithoutCachingActors() {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:temporary-footprint-index"), 91L));

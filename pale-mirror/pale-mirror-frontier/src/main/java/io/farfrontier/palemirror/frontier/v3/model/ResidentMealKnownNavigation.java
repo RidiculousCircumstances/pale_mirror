@@ -178,7 +178,7 @@ public final class ResidentMealKnownNavigation {
         // boundary. That transient approach is not a waiting/parking claim.
         if ((point.egressSurfaces().contains(surface) || point.boundary().occupied(surface.standingBody()))
                 && ResidentMealServiceAccess.available(state, meal.depotId(), meal.residentId()))
-            return !ServiceDestinationClaims.forImmediateExit(state, meal.residentId()).contains(surface);
+            return !ServiceDestinationClaims.forImmediateExit(state, meal.residentId(), meal.depotId()).contains(surface);
         return point.waitingSurfaces().contains(surface)
                 && !ServiceDestinationClaims.excludedFor(state, meal.residentId()).contains(surface);
     }

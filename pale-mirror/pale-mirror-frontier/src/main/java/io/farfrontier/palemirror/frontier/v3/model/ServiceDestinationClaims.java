@@ -22,9 +22,26 @@ public final class ServiceDestinationClaims {
      * service exit; clearance itself accepts any supported exit, not that spot.
      */
     public static Set<SurfaceAnchor> forImmediateExit(FrontierWorldState state, SubjectId actorId) {
+        return exclusions(state, actorId, Set.of());
+    }
+
+    /** COLD arrivals may share transit space, but may not turn an incumbent's only
+     * exit into a permanent waiting permit. HOT/unresolved bodies, idle occupants
+     * and committed final destinations remain exclusive. The point is supplied
+     * by the caller; the registered owners declare their incoming access demand. */
+    public static Set<SurfaceAnchor> forImmediateExit(FrontierWorldState state, SubjectId actorId, SubjectId pointId) {
+        var incoming = ServiceAccessCapabilities.current(state, pointId).stream()
+                .filter(demand -> demand.presence() != ServiceAccessDemand.Presence.OCCUPIED && !demand.physicallyAdmitted())
+                .map(demand -> demand.identity().actorId())
+                .filter(id -> ActorExecutionCoordinator.coldAvailable(state, id))
+                .collect(java.util.stream.Collectors.toSet());
+        return exclusions(state, actorId, incoming);
+    }
+
+    private static Set<SurfaceAnchor> exclusions(FrontierWorldState state, SubjectId actorId, Set<SubjectId> incoming) {
         Set<SurfaceAnchor> excluded = new HashSet<>();
         state.actorLocations().forEach((id, actor) -> {
-            if (!id.equals(actorId) && actor.condition().status() == ActorLifeStatus.ALIVE)
+            if (!id.equals(actorId) && !incoming.contains(id) && actor.condition().status() == ActorLifeStatus.ALIVE)
                 excluded.add(actor.supportingSurface());
         });
         state.humanPopulation().meals().values().stream()
