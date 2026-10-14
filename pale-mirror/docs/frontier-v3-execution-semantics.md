@@ -1177,6 +1177,55 @@ remain canonical; the coordinator supplies no strategic purpose of its own.
 
 ## 6. Confirmation and crash recovery have an explicit boundary
 
+### Dependency-valid runtime work and ordered persistence — accepted 2026-10-14
+
+Scheduler hold proofs are owner-issued read evidence for one exact retained
+action, never canonical status or authority inferred from wake-key membership.
+They cover the refusal's immutable canonical, temporal and external dependencies;
+unproved dependencies require reevaluation. Canonical head reconciliation remains
+mandatory even when a derived wake was missed. Expensive admission calculations
+have their own deterministic bound under the existing work budget. An unknown
+earlier admission defers later work without consuming or reordering an action;
+the original deadline and actual deferred predecessor remain diagnostic facts.
+
+A safe interruption checkpoint is not an executable successor opportunity.
+The registered activity owner separately declares whether retained work can
+resume and supplies its causal resource/station wake addresses. Common activity
+arbitration validates that exact assignment and capability; it never reads a
+concrete recipe, job phase or delivery rule. Both movement interruption and
+post-clearance resumption must use that same owner availability port. A worker
+waiting for fuel/capacity must finish its service-zone exit without repeatedly
+canceling/recreating it or returning to unavailable work. Completing independent
+machine processing can release the worker through the owner's normal wake;
+missing food alone must not suppress newly executable retained work.
+
+Invariant owners may reuse successful checks only against their complete exact
+immutable inputs. Changed rows and incoming references are revalidated before
+WAL admission. Retiring a subject must reject unchanged scheduled references to
+it as well as invalid newly retained actions. Full bootstrap/recovery audits do
+not reuse those validation receipts. Read maps, hold proofs and existence indices
+are bounded reconstructible accelerators, not second sources of domain truth.
+
+The canonical and physical append adapters share one bounded ordered I/O lane.
+Canonical BATCHABLE bytes may be staged during an unpublished durability turn;
+closing that turn submits one prefix group, not a confirmation. Until its exact
+disk receipt arrives, the next ordinary canonical/physical executor turn remains
+pending while Minecraft's host continues serving/ticking normally. The operator
+diagnostic reports buffered bytes/records, pending duration and actual flush cost.
+Required commands, physical effects, snapshots and shutdown join the complete
+preceding prefix before acknowledging their boundary. DURABLE_BEFORE_EFFECT
+never means queued memory, and executor completion order never changes canonical
+revision/event order. Backpressure retains the bounded original byte group for
+retry; a failed writer preserves the original cause and stops execution visibly.
+This explicitly replaces synchronous host-thread turn-exit force with a pending
+logical-turn receipt, not with a larger acknowledged data-loss window. Abrupt
+failure before that receipt may lose only an unacknowledged batchable tail;
+physical/player-save ambiguity retains the existing separate recovery protocol.
+Full disk recovery is not a flush command and does not adopt a currently queued
+owner tail. Startup/recovery, payload grammar and ruleset semantics are unchanged.
+Implementation, scope of cached owner proofs and evidence are recorded in the
+active ledger; this amendment alone is not a runtime-performance claim.
+
 Distinguish prepared intent, physically observed result, recoverably confirmed
 consequence and ambiguous crash window. A flushed intent establishes authority
 to attempt an effect, not proof that the effect occurred or was saved everywhere.
