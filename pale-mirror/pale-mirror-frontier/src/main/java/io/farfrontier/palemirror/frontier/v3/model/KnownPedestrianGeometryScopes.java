@@ -9,6 +9,9 @@ final class KnownPedestrianGeometryScopes {
     private record Scope(Set<BlockPosition> hard, Map<TerrainColumn, List<SurfaceAnchor>> overlay,
                          PedestrianGeometryRevision ground, PedestrianGeometryRevision revision) { }
     private record ScopeIdentity(Object epoch, Object view) { }
+    /** Reconstructible facts: cache eviction cannot manufacture a terrain change. */
+    private record RegionFacts(Object ground, Set<BlockPosition> hard,
+                               Map<TerrainColumn, List<SurfaceAnchor>> overlay) { }
     private static Object bootstrap;
     private static Set<BlockPosition> obstacles = Set.of();
     private static Map<TerrainColumn, List<SurfaceAnchor>> supports = Map.of();
@@ -33,12 +36,31 @@ final class KnownPedestrianGeometryScopes {
                                                             Map<TerrainColumn, List<SurfaceAnchor>> overlay) {
         var prior = SCOPES.get(key);
         PedestrianGeometryRevision revision;
-        if (prior == null) revision = PedestrianGeometryRevision.initial(new ScopeIdentity(ground.scope(), key));
-        else {
+        if (prior != null) {
             var changed = new HashSet<>(ground.changesSince(prior.ground()));
             changedBlocks(prior.hard(), hard, changed); changedSupports(prior.overlay(), overlay, changed);
-            revision = prior.revision().changed(changed);
+            if (changed.isEmpty()) return prior.revision();
         }
+        // Facts are chunk-indexed once per changed view. A reconstructed view
+        // has equal regional tokens even when its bounded cache entry was lost.
+        // The bootstrap epoch still fences worlds; current ground tokens fence
+        // genuine support/obstacle changes, including changes outside overlays.
+        var blocks = new HashMap<PedestrianGeometryRevision.Region, Set<BlockPosition>>();
+        for (var position : hard) blocks.computeIfAbsent(PedestrianGeometryRevision.Region.at(position),
+                ignored -> new HashSet<>()).add(position);
+        var levels = new HashMap<PedestrianGeometryRevision.Region, Map<TerrainColumn, List<SurfaceAnchor>>>();
+        overlay.forEach((column, surfaces) -> levels.computeIfAbsent(new PedestrianGeometryRevision.Region(
+                Math.floorDiv(column.x(), 16), Math.floorDiv(column.z(), 16)), ignored -> new HashMap<>()).put(column, surfaces));
+        var regions = new HashSet<>(ground.revisions().keySet()); regions.addAll(blocks.keySet()); regions.addAll(levels.keySet());
+        var tokens = new HashMap<PedestrianGeometryRevision.Region, Object>();
+        for (var region : regions) {
+            var localBlocks = Set.copyOf(blocks.getOrDefault(region, Set.of()));
+            var localLevels = Map.copyOf(levels.getOrDefault(region, Map.of()));
+            tokens.put(region, localBlocks.isEmpty() && localLevels.isEmpty()
+                    ? ground.at(region.x(), region.z())
+                    : new RegionFacts(ground.at(region.x(), region.z()), localBlocks, localLevels));
+        }
+        revision = new PedestrianGeometryRevision(new ScopeIdentity(ground.scope(), key), ground.baseline(), tokens);
         if (SCOPES.size() >= MAX_SCOPES && !SCOPES.containsKey(key)) SCOPES.remove(SCOPES.keySet().iterator().next());
         SCOPES.put(key, new Scope(Set.copyOf(hard), Map.copyOf(overlay), ground, revision)); return revision;
     }

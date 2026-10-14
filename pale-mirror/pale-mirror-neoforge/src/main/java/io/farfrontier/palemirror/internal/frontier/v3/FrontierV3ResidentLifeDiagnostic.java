@@ -109,6 +109,11 @@ final class FrontierV3ResidentLifeDiagnostic {
                 + "\",\"mealClaim\":\"" + (meal == null ? "" : quote(meal.claimId().value()))
                 + "\",\"mealActionDueAt\":" + (mealAction.isPresent() ? mealAction.orElseThrow().dueAt().ticks() : "null")
                 + ",\"mealActionHeld\":" + mealAction.map(action -> ResidentMealProcess.held(state, action)).orElse(false)
+                + ",\"mealScheduledHeld\":" + mealAction.map(action ->
+                    io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog.scheduledHeld(
+                        io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.processRegistry(),
+                        state, action)).orElse(false)
+                + ",\"executionColdAvailable\":" + ActorExecutionCoordinator.coldAvailable(state, subject)
                 + ",\"mealFood\":\"" + (meal == null ? "" : quote(meal.portion().itemKind())) + "\""
                 + ",\"mealQuantity\":" + (meal == null ? 0 : meal.portion().quantity())
                 + ",\"mealResourceObligation\":" + (mealResources == null ? "null" : "{\"custodyState\":\""
