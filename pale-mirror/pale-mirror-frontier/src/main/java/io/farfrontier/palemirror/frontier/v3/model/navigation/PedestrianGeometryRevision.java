@@ -37,6 +37,7 @@ public record PedestrianGeometryRevision(Object scope, Object geometryScope, Obj
         return new PedestrianGeometryRevision(scope, geometryScope, baseline, next);
     }
     public Set<Region> changesSince(PedestrianGeometryRevision prior) {
+        if (this == prior) return Set.of();
         if (!scope.equals(prior.scope) || !geometryScope.equals(prior.geometryScope) || baseline != prior.baseline)
             throw new IllegalArgumentException("regional comparison needs the same declared knowledge scope");
         var regions = new java.util.HashSet<>(revisions.keySet()); regions.addAll(prior.revisions.keySet());
@@ -45,5 +46,11 @@ public record PedestrianGeometryRevision(Object scope, Object geometryScope, Obj
         // their identity equality. This is calculation evidence, not actor custody.
         regions.removeIf(region -> Objects.equals(at(region.x(), region.z()), prior.at(region.x(), region.z())));
         return Set.copyOf(regions);
+    }
+    /** A bounded derived consumer may retain its value when all queried regional facts match. */
+    public boolean matches(PedestrianGeometryRevision prior, Set<Region> dependencies) {
+        if (this == prior) return true;
+        if (!scope.equals(prior.scope) || !geometryScope.equals(prior.geometryScope) || baseline != prior.baseline) return false;
+        return dependencies.stream().allMatch(region -> Objects.equals(at(region.x(), region.z()), prior.at(region.x(), region.z())));
     }
 }

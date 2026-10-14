@@ -24,11 +24,13 @@ class FrontierV3ActorCarrierCompositionTest {
     @Test void reconstructionContactDistinguishesSpatialPoseFromKnownGroundWithoutHorizontalRelocation() {
         var pose = new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(0, 65, 0);
         var ground = io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor.at(0, 63, 0);
+        var levels = new java.util.ArrayList<>(java.util.List.of(
+                io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor.at(0, 58, 0), ground));
         var geometry = new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry() {
             public io.farfrontier.palemirror.frontier.v3.model.WorldBounds bounds() { return new io.farfrontier.palemirror.frontier.v3.model.WorldBounds(-8, -8, 16, 16); }
             public io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor supportAt(int x, int z) { return ground; }
             public java.util.List<io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor> surfacesAt(int x, int z) {
-                return java.util.List.of(io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor.at(0, 58, 0), ground);
+                return java.util.List.copyOf(levels);
             }
             public boolean blocked(io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor surface) { return false; }
         };
@@ -43,6 +45,9 @@ class FrontierV3ActorCarrierCompositionTest {
                 "a larger unknown fall cannot turn into relocation permission");
         assertTrue(FrontierV3ActorBodyController.reconstructionContact(new io.farfrontier.palemirror.frontier.v3.model.BodyPosition(1, 65, 0), geometry).isEmpty(),
                 "the contact must retain the exact column, even from a malformed provider");
+        levels.add(pose.supportingSurface());
+        assertTrue(FrontierV3ActorBodyController.reconstructionContact(pose, geometry).isEmpty(),
+                "known road/floor contact takes precedence over natural ground one block below it");
     }
     @Test
     void commonReadinessCannotPromoteAnUnobservedOrStaleBody() {

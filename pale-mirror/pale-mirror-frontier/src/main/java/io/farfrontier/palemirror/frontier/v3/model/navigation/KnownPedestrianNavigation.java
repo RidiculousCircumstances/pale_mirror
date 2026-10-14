@@ -50,7 +50,7 @@ public final class KnownPedestrianNavigation {
     public static PedestrianRouteGeometry geometry(FrontierBootstrap bootstrap, Set<BlockPosition> occupied,
             BoundedPedestrianApproach.SurveyedSurface surveyed, Object version,
             java.util.Optional<PedestrianGeometryRevision> regionalRevision) {
-        var hard = Set.copyOf(occupied);
+        var hard = io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockSet.copyOf(occupied);
         Objects.requireNonNull(regionalRevision);
         return new PedestrianRouteGeometry() {
             @Override public Object version() { return version; }

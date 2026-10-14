@@ -17,15 +17,26 @@ public final class SettlementServiceAccessPoints {
     private static final Map<SubjectId, Integer> POPULATION = new LinkedHashMap<>();
     private static final int MAX_CACHED_FACILITIES = 64;
     private static final class Geometry {
-        final KnownPedestrianRouteKnowledge knowledge;
+        KnownPedestrianRouteKnowledge knowledge;
         final ServiceAccessBoundary boundary;
         final Set<SurfaceAnchor> egress;
+        final Set<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region> dependencies;
         ServiceAccessPoint point;
         int population = -1;
-        Geometry(KnownPedestrianRouteKnowledge knowledge, ServiceAccessBoundary boundary) {
+        Geometry(KnownPedestrianRouteKnowledge knowledge, ServiceAccessBoundary boundary, Settlement settlement,
+                 SettlementDepotServicePort port) {
             this.knowledge = knowledge;
             this.boundary = boundary;
             this.egress = ServiceClearanceTargets.egressRegion(boundary, knowledge);
+            var apron = port.facing().step(port.exteriorApproach(), -1);
+            int radius = Math.max(16, Math.max(4, (settlement.residents().size() + 1) / 2)) + 1;
+            var regions = new java.util.HashSet<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region>();
+            for (int x = (apron.x() - radius) >> 4; x <= (apron.x() + radius) >> 4; x++)
+                for (int z = (apron.z() - radius) >> 4; z <= (apron.z() + radius) >> 4; z++)
+                    regions.add(new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region(x, z));
+            for (var surface : boundary.occupiedSurfaces()) for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++)
+                regions.add(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region.at(surface.support().offset(dx, 0, dz)));
+            dependencies = Set.copyOf(regions);
         }
     }
     private SettlementServiceAccessPoints() { }
@@ -89,8 +100,13 @@ public final class SettlementServiceAccessPoints {
                 new KnownPedestrianRouteKnowledge.Passage(depot, KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
         Geometry prior = GEOMETRY.get(depot.id());
         if (prior != null && prior.knowledge == knowledge) return prior;
+        if (prior != null && knowledge.geometry().regionalRevision().orElseThrow().matches(
+                prior.knowledge.geometry().regionalRevision().orElseThrow(), prior.dependencies)) {
+            prior.knowledge = knowledge; return prior;
+        }
         if (GEOMETRY.size() >= MAX_CACHED_FACILITIES) GEOMETRY.clear();
-        Geometry result = new Geometry(knowledge, SettlementDepotServicePort.forDepot(depot).accessBoundary());
+        var port = SettlementDepotServicePort.forDepot(depot);
+        Geometry result = new Geometry(knowledge, port.accessBoundary(), settlement, port);
         GEOMETRY.put(depot.id(), result);
         return result;
     }

@@ -14,7 +14,6 @@ public final class KnownPedestrianGround {
     private static ChunkSurfaceIndex bootstrapRoads;
     private static ChunkSurfaceIndex frontierLocal;
     private static final Map<SubjectId, ChunkSurfaceIndex> LOCAL = new LinkedHashMap<>();
-    private static final ImmutableInputView<ChunkSurfaceIndex> SITE_SUPPORTS = new ImmutableInputView<>();
     private KnownPedestrianGround() { }
 
     public static BoundedPedestrianApproach.SurveyedSurface forSettlement(FrontierWorldState state,
@@ -44,8 +43,7 @@ public final class KnownPedestrianGround {
         // Sparse site columns need the same direct chunk index as roads. MapN's
         // clustered probing of coordinate hashes made absent-column queries costly
         // for every body-volume sample in long-distance region construction.
-        var siteIndex = SITE_SUPPORTS.get(java.util.List.of(sites.supports()), () -> ChunkSurfaceIndex.of(
-                sites.supports().values().stream().flatMap(java.util.Collection::stream).toList()));
+        var siteIndex = io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalSurfaceMap.copyOf(sites.supports());
         return new BoundedPedestrianApproach.SurveyedSurface() {
             @Override public boolean excluded(SurfaceAnchor surface) { return sites.withdrawnSupports().contains(surface.support()); }
             @Override public SurfaceAnchor at(int x, int z) {
@@ -54,7 +52,7 @@ public final class KnownPedestrianGround {
             @Override public java.util.List<SurfaceAnchor> surfacesAt(int x, int z) {
                 var natural = SurfaceAnchor.at(x, bootstrap.terrain().supportYAt(x, z), z);
                 var road = roads.surfacesAt(x, z); var floor = local.surfacesAt(x, z);
-                var site = siteIndex.surfacesAt(x, z);
+                var site = siteIndex.getOrDefault(new TerrainColumn(x, z), java.util.List.of());
                 if (road.isEmpty() && floor.isEmpty() && site.isEmpty())
                     return sites.withdrawnSupports().contains(natural.support()) ? java.util.List.of() : java.util.List.of(natural);
                 var result = new java.util.TreeSet<SurfaceAnchor>(java.util.Comparator.comparingInt(SurfaceAnchor::y));

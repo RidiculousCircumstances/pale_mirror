@@ -1,6 +1,9 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import java.util.*;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.geometry.*;
+import io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionDeposit;
 
 /** The extraction owner contributes only retained geometry/depletion, not worker-specific obstacle policy. */
 final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
@@ -9,6 +12,11 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
     private Set<BlockPosition> priorQueries;
     private io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockExclusions priorExclusions;
     private Set<BlockPosition> relevantExclusions = Set.of();
+    private Object projectedBootstrap;
+    private final Map<SubjectId, ImmutableInputView<KnownSiteGeometry.View>> deposits = new HashMap<>();
+    private RegionalSurfaceContributions<SubjectId> surfaceParts = new RegionalSurfaceContributions<>();
+    private RegionalBlockContributions<SubjectId> obstacleParts = new RegionalBlockContributions<>();
+    private RegionalBlockContributions<SubjectId> withdrawnParts = new RegionalBlockContributions<>();
     @Override public KnownSiteGeometry.Owner owner() { return KnownSiteGeometry.Owner.EXTRACTION; }
     @Override public Object version(FrontierWorldState state) {
         var declarations = new ArrayList<Object>();
@@ -47,10 +55,32 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
                 relevantExclusions), Object::new);
     }
     @Override public KnownSiteGeometry.View project(FrontierWorldState state) {
+        if (projectedBootstrap != state.bootstrap()) {
+            deposits.clear(); surfaceParts = new RegionalSurfaceContributions<>();
+            obstacleParts = new RegionalBlockContributions<>(); withdrawnParts = new RegionalBlockContributions<>();
+            projectedBootstrap = state.bootstrap();
+        }
+        var current = state.extractionSites().deposits();
+        for (var removed : Set.copyOf(deposits.keySet())) if (!current.containsKey(removed)) {
+            deposits.remove(removed); surfaceParts.replace(removed, RegionalSurfaceMap.copyOf(Map.of()));
+            obstacleParts.replace(removed, RegionalBlockSet.copyOf(Set.of())); withdrawnParts.replace(removed, RegionalBlockSet.copyOf(Set.of()));
+        }
+        for (var entry : current.entrySet()) {
+            var deposit = entry.getValue();
+            var view = deposits.computeIfAbsent(entry.getKey(), ignored -> new ImmutableInputView<>())
+                    .get(List.of(deposit.site().layout(), deposit.cells(), deposit.geometry(), relevantExclusions),
+                            () -> projectDeposit(state, deposit));
+            surfaceParts.replace(entry.getKey(), RegionalSurfaceMap.copyOf(view.supports()));
+            obstacleParts.replace(entry.getKey(), RegionalBlockSet.copyOf(view.obstacles()));
+            withdrawnParts.replace(entry.getKey(), RegionalBlockSet.copyOf(view.withdrawnSupports()));
+        }
+        return new KnownSiteGeometry.View(surfaceParts.snapshot(), obstacleParts.snapshot(), withdrawnParts.snapshot());
+    }
+    private KnownSiteGeometry.View projectDeposit(FrontierWorldState state, ExtractionDeposit deposit) {
         var supports = new LinkedHashMap<TerrainColumn, List<SurfaceAnchor>>();
         var obstacles = new HashSet<BlockPosition>();
         var withdrawn = new HashSet<BlockPosition>();
-        for (var deposit : state.extractionSites().deposits().values()) {
+        {
             var layout = deposit.site().layout();
             var working = new ExtractionWorkingSurfaces(state, deposit);
             var active = working.allCurrent();

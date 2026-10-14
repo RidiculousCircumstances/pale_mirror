@@ -387,6 +387,10 @@ class KnownPedestrianRouteKnowledgeTest {
         var resident = settlement.residents().getFirst().id();
         var moved = state.withActorBody(resident, port.serviceSurface().standingBody());
         org.junit.jupiter.api.Assertions.assertSame(point, SettlementServiceAccessPoints.forDepot(moved, settlement, depot));
+        var remoteChange = moved.recordPhysicalDelta(new PhysicalDelta(new BlockPosition(490, 64, 490),
+                PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:remote-obstruction"));
+        org.junit.jupiter.api.Assertions.assertSame(point, SettlementServiceAccessPoints.forDepot(remoteChange, settlement, depot),
+                "a distant change must not recompute this service area's targets");
         org.junit.jupiter.api.Assertions.assertSame(SettlementPedestrianGround.localSupports(state.bootstrap(), settlement.id()),
                 SettlementPedestrianGround.localSupports(moved.bootstrap(), settlement.id()));
         assertEquals(point.egressSurfaces(), SettlementServiceAccessPoints.egress(moved, port));
