@@ -2,12 +2,54 @@ package io.farfrontier.palemirror.frontier.v3.process;
 
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
+import io.farfrontier.palemirror.frontier.v3.model.extraction.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import org.junit.jupiter.api.Test;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ExtractionStockDemandTest {
+    @Test void anAdmittedCoalSourceCoversOnlyItsOwnYieldAndLeavesTheNextMinerForNeededStone() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:assigned-mining-demand"), 41,
+                FrontierRulesets.fuelledQuarryGraybox()));
+        var home = new SubjectId("settlement:1");
+        // Fill peer reserves too: an actual export opportunity is additional
+        // demand, so it would invalidate a fixture claiming a one-unit deficit.
+        for (var settlement : state.bootstrap().settlements()) for (var entry : Map.of(
+                "minecraft:coal", settlement.id().equals(home) ? 3 : 4,
+                "minecraft:cobblestone", settlement.id().equals(home) ? 191 : 192).entrySet()) {
+            var lot = new SubjectId("lot:test-priority-" + settlement.id().value().replace(':', '-') + "-" + entry.getKey().replace(':', '-'));
+            var account = new SubjectId("custody:test-priority-" + settlement.id().value().replace(':', '-') + "-" + entry.getKey().replace(':', '-'));
+            var ledger = state.inventory().fungibleResources().issue(new ResourceLot(lot, settlement.id(), entry.getKey(), entry.getValue(),
+                    "fixture:owned-stock", List.of()), new CustodyAccount(account,
+                            new ResourceCustody.Container(FrontierWorldState.depotId(settlement.id())), Map.of(lot, entry.getValue()), Map.of()));
+            state = state.withInventory(state.inventory().withFungibleResources(ledger.transfer(account,
+                    ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(settlement.id())), Map.of(lot, entry.getValue()), Map.of())));
+        }
+        var deposit = state.extractionSites().deposits().values().stream().filter(value -> value.site().settlementId().equals(home)).findFirst().orElseThrow();
+        var coal = deposit.site().layout().cells().stream().filter(cell -> cell.definition().before().kind().equals("minecraft:coal_ore")).findFirst().orElseThrow();
+        var opened = new ExtractionDeposit(deposit.site(), deposit.cells(), deposit.geometry(), new WorkAreaDevelopment(2, deposit.cells().keySet()));
+        // Prior excavation geometry is input only; clearing access cannot mint stock.
+        var access = new HashSet<>(coal.prerequisites()); var queue = new ArrayDeque<>(access);
+        while (!queue.isEmpty()) for (long id : deposit.site().layout().require(queue.removeFirst()).prerequisites())
+            if (access.add(id)) queue.add(id);
+        for (long id : access) opened = opened.extracted(id, 1, "fixture:prior-access-" + id);
+        state = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(opened)));
+        var worker = state.humanPopulation().resident(new SubjectId("resident:1-10"));
+        var event = new ExtractionWorkAdmission(deposit.site().id()).discover(state, worker, 100).orElseThrow().execution();
+        assertEquals("minecraft:coal", event.work().outputKind());
+        var admitted = ExtractionWorkAdmission.start(state, event, 100);
+        assertEquals(state.inventory(), admitted.inventory(), "assignment is neither a resource grant nor a transfer");
+        var priorities = ExtractionPriorities.read(admitted, opened, Optional.empty());
+        assertEquals(0, priorities.products().get("minecraft:coal").missing());
+        assertEquals(1, priorities.products().get("minecraft:cobblestone").missing());
+        assertEquals(1, ExtractionPriorities.read(admitted, opened, Optional.of(event.work().id()))
+                .products().get("minecraft:coal").missing(), "an execution cannot count its own target as already completed");
+        var successor = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(admitted));
+        var second = successor.humanPopulation().resident(new SubjectId("resident:1-11"));
+        assertEquals("minecraft:cobblestone", ExtractionWorkAdmission.opportunity(successor, second, deposit.site().id()).orElseThrow()
+                .cell().definition().coldOutput().getFirst().itemKind());
+    }
     @Test void toolAdmissionRejectsPhysicallyUnreachableStorageWithoutAcquiringWorkerOrStock() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:tool-route"), 41,
                 FrontierRulesets.installed("frontier-v3-quarry-graybox-r4")));

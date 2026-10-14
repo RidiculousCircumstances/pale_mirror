@@ -32,9 +32,10 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
         var slot = (InventoryCustody.ContainerSlot) tool.item().custody();
         var source = state.inventory().containers().get(slot.containerId()).storage().orElseThrow().endpoint();
         var knowledge = sourceKnowledge(state, source);
+        var priorities = ExtractionPriorities.read(state, deposit, Optional.empty());
         while (!cells.isEmpty()) {
             var candidate = ExtractionWorkTargets.spatialSelection(state, deposit, resident.id(), cells,
-                    AreaWorkSelection.SpatialPolicy.SPREAD_STARTS);
+                    AreaWorkSelection.SpatialPolicy.SPREAD_STARTS, priorities);
             if (candidate.isEmpty()) return Optional.empty();
             var cell = candidate.orElseThrow();
             cells.remove(cell);

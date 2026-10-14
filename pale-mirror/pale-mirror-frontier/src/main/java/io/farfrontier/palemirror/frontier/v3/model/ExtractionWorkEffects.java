@@ -60,10 +60,13 @@ public final class ExtractionWorkEffects {
         var next = carried < ActorCarriedResources.MAX_STACK_ITEMS && ExtractionWorkPolicy.requested(state, job)
                 ? ExtractionWorkTargets.spatialSelection(state, nextDeposit, job.execution().actorId(),
                     nextDeposit.available(reserved).stream().filter(cell -> required.contains(cell.id()))
-                            .filter(cell -> ExtractionWorkPolicy.matchingOutput(cell, job)).toList(),
-                    AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION)
+                            .filter(cell -> ExtractionWorkPolicy.supportsTool(state, cell, job)).toList(),
+                    AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION, Optional.of(job.id()))
                 : Optional.<ExtractionLayout.Cell>empty();
-        return next.map(cell -> job.transition(ExtractionWork.Phase.EXTRACT, Optional.of(target(nextDeposit, cell))))
+        // A more important different product switches only after this exact block
+        // settles. Store the homogeneous carried part before selecting that source.
+        return next.filter(cell -> ExtractionWorkPolicy.matchingOutput(cell, job))
+                .map(cell -> job.transition(ExtractionWork.Phase.EXTRACT, Optional.of(target(nextDeposit, cell))))
                 .orElseGet(() -> job.transition(carried < ActorCarriedResources.MAX_STACK_ITEMS
                         && ExtractionWorkPolicy.requested(state, job) && ExtractionWorkPolicy.remaining(nextDeposit)
                         && nextDeposit.available(reserved).stream().noneMatch(cell -> !ExtractionWorkPolicy.matchingOutput(cell, job))

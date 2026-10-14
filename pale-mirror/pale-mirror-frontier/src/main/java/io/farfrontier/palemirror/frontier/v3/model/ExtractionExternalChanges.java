@@ -45,7 +45,7 @@ public final class ExtractionExternalChanges {
             var nextCell = ExtractionWorkTargets.spatialSelection(state, changed, job.execution().actorId(),
                     changed.available(reserved).stream().filter(value -> needed.contains(value.id()))
                         .filter(value -> ExtractionWorkPolicy.matchingOutput(value, job)).toList(),
-                    AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION);
+                    AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION, Optional.of(job.id()));
             if (job.phase() == ExtractionWork.Phase.TAKE_TOOL && nextCell.isEmpty()) {
                 jobs.remove(job.id()); executions = ActorExecutionComposition.LIFECYCLE
                         .retire(executions, job.execution().actorId(), job.execution().activityKind(), job.id());

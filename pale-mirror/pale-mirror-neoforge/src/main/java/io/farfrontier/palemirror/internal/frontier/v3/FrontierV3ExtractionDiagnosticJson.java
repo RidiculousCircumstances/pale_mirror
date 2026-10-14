@@ -75,18 +75,24 @@ final class FrontierV3ExtractionDiagnosticJson {
     private static String resourceStocks(FrontierWorldState state, ExtractionDeposit deposit, io.farfrontier.palemirror.frontier.v3.api.SubjectId home) {
         var layout = deposit.site().layout();
         var kinds = layout.outputKinds().stream().sorted().toList();
+        var priorities = ExtractionPriorities.read(state, deposit, Optional.empty());
         return "{" + kinds.stream().map(kind -> {
             var cells = layout.cells().stream().filter(cell -> cell.definition().coldOutput().stream()
                     .anyMatch(output -> output.itemKind().equals(kind))).toList();
             long extracted = cells.stream().filter(cell -> deposit.cells().get(cell.id()).disposition() == ExtractionDeposit.Disposition.EXTRACTED).count();
             long external = cells.stream().filter(cell -> deposit.cells().get(cell.id()).disposition() == ExtractionDeposit.Disposition.EXTERNALLY_CHANGED).count();
             var demand = ProductionStockDemand.read(state, deposit.site().settlementId(), kind);
+            var priority = priorities.products().get(kind);
             return string(kind) + ":{\"totalCells\":" + cells.size() + ",\"extractedCells\":" + extracted
                     + ",\"externalCells\":" + external + ",\"remainingCells\":" + (cells.size() - extracted - external)
                     + ",\"hasExtraction\":" + (extracted > 0) + ",\"firstSource\":" + FrontierV3DiagnosticJson.position(cells.getFirst().source())
                     + ",\"siteQuantity\":" + quantityAt(state, deposit.site().containerId(), kind)
                     + ",\"homeQuantity\":" + quantityAt(state, home, kind)
-                    + ",\"stockTarget\":" + demand.target() + ",\"productionRequested\":" + demand.requested() + "}";
+                    + ",\"stockTarget\":" + demand.target() + ",\"productionRequested\":" + demand.requested()
+                    + ",\"priority\":" + string(priority == null ? "NONE" : priority.tier().name())
+                    + ",\"unassignedDeficit\":" + (priority == null ? 0 : priority.missing())
+                    + ",\"deadlineTicks\":" + (priority == null || priority.deadlineTicks() == Long.MAX_VALUE
+                        ? "null" : Long.toString(priority.deadlineTicks())) + "}";
         }).collect(java.util.stream.Collectors.joining(",")) + "}";
     }
     private static int quantityAt(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId container, String kind) {

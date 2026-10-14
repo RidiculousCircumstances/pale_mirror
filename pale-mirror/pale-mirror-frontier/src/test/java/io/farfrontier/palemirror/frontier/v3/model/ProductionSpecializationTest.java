@@ -8,6 +8,38 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ProductionSpecializationTest {
+    @Test void demandedFuelAndItsStoneAccessOutrankUnrelatedStoneThroughTheRealSelectionAfterRecovery() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:source-priority"),
+                41, FrontierRulesets.marketQuarryGraybox()));
+        var deposit = state.extractionSites().deposits().values().stream()
+                .filter(value -> value.site().settlementId().equals(new SubjectId("settlement:1"))).findFirst().orElseThrow();
+        var home = deposit.site().settlementId();
+        // Stock fixture creates real replenishment demand, not an assertion that
+        // an empty fuel reserve is automatically an emergency with full food stores.
+        var account = FungibleResourceCustodySupport.accountAtContainer(state, FrontierWorldState.depotId(home)).orElseThrow();
+        var bread = account.lotQuantities().entrySet().stream().filter(entry -> state.inventory().fungibleResources().lots()
+                .get(entry.getKey()).itemKind().equals("minecraft:bread")).findFirst().orElseThrow();
+        var demandedState = state.withInventory(state.inventory().withFungibleResources(state.inventory().fungibleResources()
+                .destroy(account.id(), Map.of(bread.getKey(), bread.getValue() - 64), Map.of())));
+        var priorities = ExtractionPriorities.read(demandedState, deposit, Optional.empty());
+        assertTrue(priorities.products().get("minecraft:coal").compareTo(priorities.products().get("minecraft:cobblestone")) < 0);
+        var coal = deposit.site().layout().cells().stream()
+                .filter(cell -> cell.definition().before().kind().equals("minecraft:coal_ore")).findFirst().orElseThrow();
+        for (long prerequisite : coal.prerequisites())
+            assertTrue(priorities.require(prerequisite).compareTo(priorities.require(coal.id())) <= 0);
+        var resident = state.humanPopulation().residents().values().stream().filter(value -> value.settlementId().equals(home))
+                .findFirst().orElseThrow();
+        var available = deposit.available(Set.of());
+        var selected = ExtractionWorkTargets.spatialSelection(demandedState, deposit, resident.id(), available,
+                AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION, Optional.empty()).orElseThrow();
+        var best = available.stream().filter(cell -> ExtractionWorkSafety.available(demandedState, deposit, cell))
+                .map(cell -> priorities.require(cell.id())).min(io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPriority::compareTo).orElseThrow();
+        assertEquals(0, priorities.require(selected.id()).compareTo(best));
+        var codec = new FrontierWorldStateCodec(); var recovered = codec.decode(codec.encode(demandedState));
+        assertEquals(selected, ExtractionWorkTargets.spatialSelection(recovered, recovered.extractionSites().deposits().get(deposit.site().id()),
+                resident.id(), available, AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION, Optional.empty()).orElseThrow());
+        assertEquals(demandedState.inventory(), recovered.inventory());
+    }
     private FrontierWorldState initial() {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:fuel-specialization"), 41,
                 FrontierRulesets.fuelledQuarryGraybox()));

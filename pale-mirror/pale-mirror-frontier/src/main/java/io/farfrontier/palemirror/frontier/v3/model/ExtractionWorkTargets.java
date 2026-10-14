@@ -10,11 +10,19 @@ public final class ExtractionWorkTargets {
     /** Shared area-work ranking keeps separate miners local without excluding anyone's remaining work. */
     public static Optional<ExtractionLayout.Cell> spatialSelection(FrontierWorldState state, ExtractionDeposit deposit,
             io.farfrontier.palemirror.frontier.v3.api.SubjectId actor, List<ExtractionLayout.Cell> available,
-            AreaWorkSelection.SpatialPolicy policy) {
+            AreaWorkSelection.SpatialPolicy policy, Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> completing) {
+        return spatialSelection(state, deposit, actor, available, policy, ExtractionPriorities.read(state, deposit, completing));
+    }
+    public static Optional<ExtractionLayout.Cell> spatialSelection(FrontierWorldState state, ExtractionDeposit deposit,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId actor, List<ExtractionLayout.Cell> available,
+            AreaWorkSelection.SpatialPolicy policy, ExtractionPriorities priorities) {
         var peers = peerStations(state, deposit, actor);
         var cells = available.stream().filter(cell -> ExtractionWorkSafety.available(state, deposit, cell))
                 .sorted(Comparator.comparingLong(ExtractionLayout.Cell::id)).toList();
-        var selected = AreaWorkSelection.spatiallySeparated(cells.size(), index -> true,
+        var best = cells.stream().filter(cell -> AreaWorkSelection.stationAvailable(cell.workstation(), peers))
+                .map(cell -> priorities.require(cell.id())).min(io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPriority::compareTo);
+        var selected = AreaWorkSelection.spatiallySeparated(cells.size(), index -> best.isPresent()
+                    && priorities.require(cells.get(index).id()).compareTo(best.orElseThrow()) == 0,
                 state.actorLocations().get(actor).supportingSurface(), index -> cells.get(index).workstation(), peers, policy);
         return selected.isEmpty() ? Optional.empty() : Optional.of(cells.get(selected.getAsInt()));
     }
@@ -83,9 +91,10 @@ public final class ExtractionWorkTargets {
         var deposit = state.extractionSites().deposits().get(job.siteId());
         var start = state.actorLocations().get(job.execution().actorId()).supportingSurface();
         var knowledge = knowledge(state, job);
+        var priorities = ExtractionPriorities.read(state, deposit, Optional.of(job.id()));
         var cells = new ArrayList<>(available);
         while (!cells.isEmpty()) {
-            var candidate = spatialSelection(state, deposit, job.execution().actorId(), cells, policy);
+            var candidate = spatialSelection(state, deposit, job.execution().actorId(), cells, policy, priorities);
             if (candidate.isEmpty()) return Optional.empty();
             var cell = candidate.orElseThrow();
             cells.remove(cell);

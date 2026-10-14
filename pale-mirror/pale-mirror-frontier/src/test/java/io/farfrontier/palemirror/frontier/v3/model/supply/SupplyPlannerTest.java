@@ -5,6 +5,21 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SupplyPlannerTest {
+    @Test void productionPriorityUsesDeadlineAndRelativeShortageNotACommodityNameOrRawStackSize() {
+        var urgent = new SupplyPlanner.Demand(1, 0, 1, 100,
+                Set.of(SupplyPlanner.Reason.CRITICAL_PRODUCTION_DEADLINE, SupplyPlanner.Reason.PRODUCTION_FUEL), Optional.empty());
+        var ordinary = SupplyPriority.from(192, 192, Optional.empty(), 100);
+        var critical = SupplyPriority.from(1, 8, Optional.of(urgent), 100);
+        assertTrue(critical.compareTo(ordinary) < 0);
+        assertTrue(critical.withAssigned(1).compareTo(ordinary) > 0,
+                "one already assigned unit covers this deficit without inventing a whole future batch");
+        assertTrue(SupplyPriority.from(4, 8, Optional.empty(), 0)
+                .compareTo(SupplyPriority.from(64, 192, Optional.empty(), 0)) < 0);
+        assertEquals(0, SupplyPriority.from(4, 8, Optional.empty(), 0)
+                .compareTo(SupplyPriority.from(96, 192, Optional.empty(), 0)));
+        assertDoesNotThrow(() -> SupplyPriority.from(Long.MAX_VALUE, Long.MAX_VALUE, Optional.empty(), 0)
+                .compareTo(SupplyPriority.from(Long.MAX_VALUE - 1, Long.MAX_VALUE, Optional.empty(), 0)));
+    }
     private static final SupplyPolicy FOOD = new SupplyPolicy(500, 32, 64, 100, 500, true);
     private static final SupplyPolicy MATERIAL = new SupplyPolicy(500, 4, 8, 100, 500, false);
     private static SupplyPlanner.Stock stock(long held, long incoming, long target, long use, SupplyPolicy policy) {

@@ -33,22 +33,36 @@ public final class ExtractionAreaPlanning {
         var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state);
         var access = knowledge.accessSelection(layout.storagePort());
         var needed = ExtractionStockDemand.requiredCells(state, deposit, Optional.empty());
-        if (deposit.available(Set.of()).stream().filter(cell -> needed.contains(cell.id()))
-                .anyMatch(cell -> access.reachable(cell.workstation()))) return Optional.empty();
+        var priorities = ExtractionPriorities.read(state, deposit, Optional.empty());
+        var bestExisting = deposit.available(Set.of()).stream().filter(cell -> needed.contains(cell.id()))
+                .filter(cell -> access.reachable(cell.workstation())).map(cell -> priorities.require(cell.id()))
+                .min(io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPriority::compareTo);
+        var levels = new TreeSet<io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPriority>(priorities.products().values());
+        // Existing work of equal or higher importance wins; do not expand merely
+        // to duplicate it. Lower-priority stone cannot hide an urgent known fuel front.
+        if (bestExisting.isPresent() && (levels.isEmpty() || bestExisting.orElseThrow().compareTo(levels.first()) <= 0))
+            return Optional.empty();
         access.awaitUnresolved();
         var front = new ExtractionAvailableFront(state, deposit);
         if (front.stations().isEmpty()) return Optional.empty();
         int count = columnLimit(rules, layout);
         if (count < 1) return Optional.empty();
         var ground = ExtractionGroundKnowledge.forSite(state, deposit);
-        var products = ExtractionStockDemand.demandedProducts(state, deposit, Optional.empty());
-        var proposed = AdjacentExcavationPlanner.propose(front.stations(), ground,
-                access::reachable, floor -> !declarationHeld(state, siteId, floor.support()),
-                block -> rules.definitionFor(block).isPresent(),
-                block -> block.kind().equals("minecraft:air") || rules.definitionFor(block).isPresent(), count,
-                front.selection(), column -> front.executable(column) && column.clearance().stream()
-                        .map(KnownBlockGeometry.Sample::block).flatMap(block -> rules.definitionFor(block).stream())
-                        .flatMap(material -> material.coldOutput().stream()).anyMatch(output -> products.contains(output.itemKind())));
+        List<AdjacentExcavationPlanner.Column<BlockExtraction.Block>> proposed = List.of();
+        for (var priority : levels) {
+            if (bestExisting.isPresent() && priority.compareTo(bestExisting.orElseThrow()) >= 0) break;
+            // The generic geometry planner knows neither products nor urgency. The
+            // extraction adapter admits the best executable demand band before quota.
+            proposed = AdjacentExcavationPlanner.propose(front.stations(), ground,
+                    access::reachable, floor -> !declarationHeld(state, siteId, floor.support()),
+                    block -> rules.definitionFor(block).isPresent(),
+                    block -> block.kind().equals("minecraft:air") || rules.definitionFor(block).isPresent(), count,
+                    front.selection(), column -> front.executable(column) && column.clearance().stream()
+                            .map(KnownBlockGeometry.Sample::block).flatMap(block -> rules.definitionFor(block).stream())
+                            .flatMap(material -> material.coldOutput().stream()).map(output -> priorities.products().get(output.itemKind()))
+                            .filter(Objects::nonNull).anyMatch(value -> value.compareTo(priority) == 0));
+            if (!proposed.isEmpty()) break;
+        }
         var columns = new ArrayList<AdjacentExcavationPlanner.Column<BlockExtraction.Block>>();
         int remaining = Math.min(rules.developmentBatchCells(), ExtractionLayout.MAX_CELLS - layout.cells().size());
         for (var column : proposed) {
