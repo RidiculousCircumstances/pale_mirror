@@ -13,6 +13,57 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Real opportunity producer, accepted durable proof and the closed runtime's restart wait. */
 class ExtractionAdmissionReplayTest {
+    @Test void suspendedMinerCanEatThenResumeTheSameWorkAndRejectForeignCheckpointEvidence() throws Exception {
+        var f = fixture();
+        var state = ExtractionWorkAdmission.start(f.state(), f.start(), f.tick());
+        var job = f.start().work(); var actor = job.execution().actorId();
+        var assignment = HumanAssignmentProjection.compile(state).assignment(actor);
+        var presence = state.actorExecutions().next(actor,
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRESENCE, actor);
+        state = ActorExecutionComposition.LIFECYCLE.prepareBegin(state, presence, f.tick())
+                .commit(state, FrontierWorldStateUpdate.begin());
+        assertEquals(Optional.of(job.execution()), state.actorExecutions().actors().get(actor).suspended());
+        var suspendedState = state;
+        var checkpoint = ActorExecutionComposition.CAPABILITIES.require(job.execution().activityKind()).checkpoint(state, job.execution());
+        checkpoint.validateRetained(state, job.execution());
+        assertThrows(IllegalArgumentException.class, () -> checkpoint.validate(suspendedState, job.execution()),
+                "advisory retained readiness cannot grant current physical execution");
+        var forged = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(actor,
+                job.execution().activityKind(), job.id(), job.execution().generation() + 10);
+        assertThrows(IllegalArgumentException.class, () -> checkpoint.validateRetained(suspendedState, forged));
+        assertEquals(ResidentWorkYield.Status.READY, ResidentWorkYield.assess(state, assignment).status());
+        assertTrue(ActivityExecutionCapabilities.mayResumeWork(state, assignment));
+
+        var home = state.humanPopulation().resident(actor).settlementId();
+        var account = new SubjectId("custody:miner-personal-food"); var lot = new SubjectId("lot:miner-personal-food");
+        // Isolated fixture provision; no claim that this is physical provisioning evidence.
+        var ledger = state.inventory().fungibleResources().issue(
+                new ResourceLot(lot, home, FoodCatalog.BREAD, 8, "test", List.of()),
+                new CustodyAccount(account, new ResourceCustody.Actor(actor), Map.of(lot, 8), Map.of(),
+                        Optional.of(new ActorItemSlot.Pocket(3))));
+        state = state.withChanges(FrontierWorldStateUpdate.begin()
+                .inventory(state.inventory().withFungibleResources(ledger))
+                .humanPopulation(state.humanPopulation().accrueHunger(actor, 27_000)));
+        state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        assertEquals(ResidentActivityChoice.Kind.EAT, ResidentActivityCoordinator.assess(state, actor, 27_000).kind());
+        var start = ResidentMealProcess.selectSourceAtYield(state, actor, 27_000).orElseThrow();
+        state = ResidentMealProcess.reduceStarted(state, actor, start);
+        assertEquals(job.execution(), state.actorExecutions().actors().get(actor).suspended().orElseThrow());
+        var step = ResidentMealProcess.planColdStep(state, actor, 27_001).orElseThrow();
+        state = ResidentMealProcess.reduceColdStep(state, actor, step);
+        assertFalse(state.humanPopulation().nutrition(actor).wantsFood(state.bootstrap().ruleset().residentLife()));
+        var resume = ResidentActivityProcess.plan(state, ResidentActivityProcess.review(actor, 27_002), 27_002).stream()
+                .map(ProposedEvent::payload).filter(io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionResumed.class::isInstance)
+                .map(io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionResumed.class::cast).findFirst().orElseThrow();
+        state = ActorExecutionComposition.LIFECYCLE.prepareResume(state, resume.suspended(), resume.successor(), resume.releasing(), resume.atTick())
+                .commit(state, FrontierWorldStateUpdate.begin());
+        assertEquals(job.id(), state.actorExecutions().actors().get(actor).current().orElseThrow().activityOwnerId());
+        assertTrue(state.actorExecutions().actors().get(actor).suspended().isEmpty());
+        var restored = state;
+        assertThrows(IllegalArgumentException.class, () -> ActivityExecutionCapabilities.assess(restored,
+                new HumanAssignment(actor, HumanAssignmentKind.EXTRACTION, Optional.of(new SubjectId("work:foreign")))));
+    }
+
     private record Fixture(FrontierWorldState state, long tick, ExtractionWorkStarted start) { }
     private static Fixture fixture() {
         var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:extraction-admission-proof"),

@@ -42,7 +42,8 @@ public final class FrontierRulesets {
     private static final FrontierRuleset HIGH_RESERVE_QUARRY_GRAYBOX = quarryReserve(AVAILABLE_FRONT_QUARRY_GRAYBOX);
     private static final FrontierRuleset FUELLED_QUARRY_GRAYBOX = fuelledQuarry(HIGH_RESERVE_QUARRY_GRAYBOX);
     private static final FrontierRuleset SUPPLY_QUARRY_GRAYBOX = supplyQuarry(FUELLED_QUARRY_GRAYBOX);
-    private static final FrontierRuleset MARKET_QUARRY_GRAYBOX = marketQuarry(SUPPLY_QUARRY_GRAYBOX);
+    private static final FrontierRuleset PREVIOUS_MARKET_QUARRY_GRAYBOX = marketQuarry(SUPPLY_QUARRY_GRAYBOX);
+    private static final FrontierRuleset MARKET_QUARRY_GRAYBOX = longFuelReserve(PREVIOUS_MARKET_QUARRY_GRAYBOX);
     /** Existing worlds retain their exact selector and timing; they are never silently retuned. */
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R6 = ruleset("frontier-v3-production-r6", 8, 1L, 20L, 1L);
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R4 = ruleset("frontier-v3-production-r4", 6, 1L, 20L, 1L);
@@ -57,6 +58,7 @@ public final class FrontierRulesets {
     private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L, 200L);
     private static final Map<String, FrontierRuleset> INSTALLED = Map.ofEntries(
             Map.entry(MARKET_QUARRY_GRAYBOX.id(), MARKET_QUARRY_GRAYBOX),
+            Map.entry(PREVIOUS_MARKET_QUARRY_GRAYBOX.id(), PREVIOUS_MARKET_QUARRY_GRAYBOX),
             Map.entry(SUPPLY_QUARRY_GRAYBOX.id(), SUPPLY_QUARRY_GRAYBOX),
             Map.entry(TERRACED_QUARRY_GRAYBOX.id(), TERRACED_QUARRY_GRAYBOX),
             Map.entry(AVAILABLE_FRONT_QUARRY_GRAYBOX.id(), AVAILABLE_FRONT_QUARRY_GRAYBOX),
@@ -83,6 +85,33 @@ public final class FrontierRulesets {
     public static FrontierRuleset fuelledQuarryGraybox() { return FUELLED_QUARRY_GRAYBOX; }
     public static FrontierRuleset supplyQuarryGraybox() { return SUPPLY_QUARRY_GRAYBOX; }
     public static FrontierRuleset marketQuarryGraybox() { return MARKET_QUARRY_GRAYBOX; }
+
+    /** New finite-stock profile: the graybox has one shared baking station per settlement.
+     * Two bakers cannot run that single station concurrently. Historical R11 is unchanged. */
+    private static FrontierRuleset longFuelReserve(FrontierRuleset base) {
+        int reserve = Math.toIntExact(Math.multiplyExact(64L, Math.ceilDiv(ProductionFuelReserve.requiredItems(
+                base.production(), base.workCatalog(), BakeryRecipes.BREAD, "minecraft:coal", 64, 1, 100_000L), 64L)));
+        var stocks = base.initialSettlementStocks().stream().map(stock -> stock.itemKind().equals("minecraft:coal")
+                ? new InitialSettlementStock(stock.settlementId(), stock.itemKind(), reserve) : stock).toList();
+        var priorTrade = base.goodsTrade();
+        var goods = new java.util.EnumMap<GoodsPolicyKind, java.util.List<GoodsTradeRules.Commodity>>(GoodsPolicyKind.class);
+        goods.putAll(priorTrade.policies());
+        goods.put(GoodsPolicyKind.PUBLIC_SETTLEMENT, goods.get(GoodsPolicyKind.PUBLIC_SETTLEMENT).stream().map(value ->
+                value.itemKind().equals("minecraft:coal") ? new GoodsTradeRules.Commodity(value.itemKind(), 0, reserve,
+                        value.minimumSellPrice(), value.maximumBuyPrice()) : value).toList());
+        var trade = new GoodsTradeRules(priorTrade.reviewInterval(), priorTrade.orderLifetime(), priorTrade.maximumBatch(),
+                priorTrade.maximumPairReviews(), goods, priorTrade.supplyPlanning(), priorTrade.pricing());
+        var policies = new java.util.LinkedHashMap<>(trade.supplyPlanning().commodities());
+        var coal = policies.get("minecraft:coal");
+        policies.put("minecraft:coal", new io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPolicy(
+                coal.reorderPermille(), 32, 64, coal.leadTicks(), coal.maximumWaitTicks(), coal.essential()));
+        var planning = trade.supplyPlanning();
+        trade = trade.withSupplyPlanning(new io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanningRules(
+                policies, planning.maximumOrderItems(), planning.workCargoSlots(), planning.personalFoodItems(), planning.maximumTripCargoStacks()));
+        return new FrontierRuleset("frontier-v3-quarry-graybox-r12", base.schemaVersion(), base.cadence(), base.spatial(), base.rates(),
+                base.facilityCapacity(), base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
+                base.workCatalog(), trade, stocks, base.labour(), base.expedition(), base.extraction(), base.execution(), base.production(), base.fields());
+    }
 
     private static FrontierRuleset marketQuarry(FrontierRuleset base) {
         var trade = base.goodsTrade().withPricing(io.farfrontier.palemirror.frontier.v3.model.market.MarketPricingRules.initial())

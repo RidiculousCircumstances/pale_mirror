@@ -95,6 +95,27 @@ public final class ActivityExecutionCapabilities {
                 "owner checkpoint").validate(state, assignment);
     }
 
+    /** Current work can yield; exact suspended work has already yielded. Both
+     * consult their registered owner for unsettled effects, never acquire execution here. */
+    static ActivityExecutionCheckpoint retainedCheckpoint(FrontierWorldState state, HumanAssignment assignment,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId execution) {
+        if (!execution.actorId().equals(assignment.residentId())
+                || !assignment.ownerId().equals(java.util.Optional.of(execution.activityOwnerId())))
+            throw new IllegalArgumentException("assignment checkpoint has a foreign execution declaration");
+        var retained = state.actorExecutions().actors().get(assignment.residentId());
+        if (retained == null || !retained.current().equals(java.util.Optional.of(execution))
+                && !retained.suspended().equals(java.util.Optional.of(execution)))
+            return new ActivityExecutionCheckpoint(state, assignment, ResidentWorkYield.Status.OWNER_NOT_CURRENT);
+        var owner = ActorExecutionComposition.CAPABILITIES.require(execution.activityKind());
+        owner.validateReference(state, execution);
+        var checkpoint = owner.checkpoint(state, execution);
+        checkpoint.validateRetained(state, execution);
+        var status = checkpoint.waiting().map(wait -> wait.reason() == ActorActivityCheckpoint.Reason.PHYSICAL_OPERATION
+                ? ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT : ResidentWorkYield.Status.OWNER_SAFETY_HOLD)
+                .orElse(ResidentWorkYield.Status.READY);
+        return new ActivityExecutionCheckpoint(state, assignment, status);
+    }
+
     /** Assignment adapter delegates to the registered UAE owner, not a kind-wide safety hold. */
     private static ActivityExecutionCapability delegated(HumanAssignmentKind kind, ActorActivityKind... activityKinds) {
         Set<ActorActivityKind> declared = Set.of(activityKinds);
@@ -102,19 +123,15 @@ public final class ActivityExecutionCapabilities {
             var retained = state.actorExecutions().actors().get(assignment.residentId());
             var current = retained == null ? java.util.Optional.<io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId>empty()
                     : retained.current();
-            if (current.isEmpty() || !current.orElseThrow().activityOwnerId().equals(assignment.ownerId().orElseThrow()))
+            var selected = current.filter(value -> assignment.ownerId().equals(java.util.Optional.of(value.activityOwnerId())))
+                    .or(() -> retained == null ? java.util.Optional.empty() : retained.suspended()
+                        .filter(value -> assignment.ownerId().equals(java.util.Optional.of(value.activityOwnerId()))));
+            if (selected.isEmpty())
                 return new ActivityExecutionCheckpoint(state, assignment, ResidentWorkYield.Status.OWNER_NOT_CURRENT);
-            var execution = current.orElseThrow();
+            var execution = selected.orElseThrow();
             if (!declared.contains(execution.activityKind()))
                 throw new IllegalArgumentException("assignment checkpoint has a foreign declared execution kind");
-            var owner = ActorExecutionComposition.CAPABILITIES.require(execution.activityKind());
-            owner.validateReference(state, execution);
-            var checkpoint = owner.checkpoint(state, execution);
-            checkpoint.validate(state, execution);
-            var status = checkpoint.waiting().map(wait -> wait.reason() == ActorActivityCheckpoint.Reason.PHYSICAL_OPERATION
-                    ? ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT : ResidentWorkYield.Status.OWNER_SAFETY_HOLD)
-                    .orElse(ResidentWorkYield.Status.READY);
-            return new ActivityExecutionCheckpoint(state, assignment, status);
+            return retainedCheckpoint(state, assignment, execution);
         });
         return new ActivityExecutionCapability() {
             @Override public HumanAssignmentKind kind() { return kind; }

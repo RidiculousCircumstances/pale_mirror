@@ -14,15 +14,7 @@ final class ExtractionAssignmentCapability implements ActivityExecutionCapabilit
         var job = state.extractionSites().work().get(assignment.ownerId().orElseThrow());
         if (job == null || !job.execution().actorId().equals(assignment.residentId()))
             throw new IllegalArgumentException("mining assignment lost its exact work");
-        var retained = state.actorExecutions().actors().get(assignment.residentId());
-        if (retained == null || !retained.current().equals(java.util.Optional.of(job.execution())))
-            return new ActivityExecutionCheckpoint(state, assignment, ResidentWorkYield.Status.OWNER_NOT_CURRENT);
-        var checkpoint = ActorExecutionComposition.CAPABILITIES.require(ActorActivityKind.EXTRACTION).checkpoint(state, job.execution());
-        checkpoint.validate(state, job.execution());
-        return new ActivityExecutionCheckpoint(state, assignment, checkpoint.waiting()
-                .map(wait -> wait.reason() == ActorActivityCheckpoint.Reason.PHYSICAL_OPERATION
-                        ? ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT : ResidentWorkYield.Status.OWNER_SAFETY_HOLD)
-                .orElse(ResidentWorkYield.Status.READY));
+        return ActivityExecutionCapabilities.retainedCheckpoint(state, assignment, job.execution());
     }
     @Override public FrontierWorldState pauseLabour(FrontierWorldState state, HumanAssignment assignment, long tick) {
         checkpoint(state, assignment);
