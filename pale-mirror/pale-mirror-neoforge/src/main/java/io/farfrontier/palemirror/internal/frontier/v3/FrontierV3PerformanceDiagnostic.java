@@ -241,6 +241,8 @@ final class FrontierV3PerformanceDiagnostic {
         return metrics.pressure().map(value -> "{\"observedAtTicks\":" + value.observedAtTicks()
                 + ",\"fresh\":" + (value.observedAtTicks() == instant) + ",\"total\":" + value.total()
                 + ",\"ready\":" + value.ready() + ",\"held\":" + value.held() + ",\"future\":" + value.future()
+                + ",\"checking\":" + value.checking()
+                + ",\"readinessScope\":\"LAST_ASSESSED_RECHECK_BEFORE_EXECUTION\""
                 + ",\"oldestReadyLagTicks\":" + value.oldestReadyLagTicks()
                 + ",\"oldestDeadlineLagTicks\":" + value.oldestDeadlineLagTicks() + "}").orElse("null");
     }

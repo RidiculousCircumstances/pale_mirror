@@ -52,11 +52,11 @@ public interface FrontierExecutionMetrics {
     }
 
     /** One fresh cut; ready wait excludes time explicitly parked behind an owner condition. */
-    record QueuePressure(long observedAtTicks, int total, int ready, int held, int future,
+    record QueuePressure(long observedAtTicks, int total, int ready, int held, int future, int checking,
                          long oldestReadyLagTicks, long oldestDeadlineLagTicks) {
         public QueuePressure {
-            if (observedAtTicks < 0 || total < 0 || ready < 0 || held < 0 || future < 0
-                    || total != ready + held + future || oldestReadyLagTicks < 0 || oldestDeadlineLagTicks < 0)
+            if (observedAtTicks < 0 || total < 0 || ready < 0 || held < 0 || future < 0 || checking < 0
+                    || total != ready + held + future + checking || oldestReadyLagTicks < 0 || oldestDeadlineLagTicks < 0)
                 throw new IllegalArgumentException("invalid exact queue pressure cut");
         }
     }

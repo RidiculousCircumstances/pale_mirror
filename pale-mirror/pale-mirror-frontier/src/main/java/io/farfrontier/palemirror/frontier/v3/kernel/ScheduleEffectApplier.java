@@ -5,11 +5,6 @@ final class ScheduleEffectApplier {
     private ScheduleEffectApplier() {}
 
     static void apply(ScheduledActionQueue.Mutation schedules, ScheduleEffect effect) {
-        apply(schedules, effect, ignored -> false);
-    }
-
-    static void apply(ScheduledActionQueue.Mutation schedules, ScheduleEffect effect,
-                      java.util.function.Predicate<ScheduledAction> held) {
         if (effect instanceof ScheduleEffect.Created created) {
             schedules.schedule(created.action());
         } else if (effect instanceof ScheduleEffect.ReconsiderationRequested requested) {
@@ -20,34 +15,37 @@ final class ScheduleEffectApplier {
             require(schedules.cancel(rescheduled.scheduleId()), rescheduled.scheduleId());
             schedules.schedule(rescheduled.replacement());
         } else if (effect instanceof ScheduleEffect.Consumed consumed) {
-            // A HOT command may consume its own held continuation. Earlier runnable work
-            // still fences it; only explicit canonical holds may be bypassed at admission.
-            ScheduledAction head = schedules.head(action -> action.id().equals(consumed.scheduleId()) || !held.test(action));
-            if (head == null || !head.id().equals(consumed.scheduleId())) {
-                throw new IllegalStateException("schedule consumption is not the due queue head: "
-                        + consumed.scheduleId().value() + "; eligible head=" + head);
-            }
-            require(schedules.cancel(head.id()), head.id());
+            throw new IllegalStateException("schedule consumption requires explicit admitted time: " + consumed.scheduleId().value());
         } else {
             throw new IllegalStateException("unknown schedule effect: " + effect.type());
         }
     }
+    /** Live selection already checked this owner/generation. Waiting strangers are not a consumption fence. */
+    static void apply(ScheduledActionQueue.Mutation schedules, ScheduleEffect effect,
+                      io.farfrontier.palemirror.frontier.v3.api.SimInstant instant,
+                      io.farfrontier.palemirror.frontier.v3.api.SubjectId subject) {
+        if (effect instanceof ScheduleEffect.Consumed consumed) consumeExactDue(schedules, consumed, instant, subject);
+        else apply(schedules, effect);
+    }
 
     /** Replay applies already-admitted facts, not today's process eligibility policy. */
     static void applyCommitted(ScheduledActionQueue.Mutation schedules, ScheduleEffect effect,
-                               io.farfrontier.palemirror.frontier.v3.api.SimInstant instant) {
-        if (effect instanceof ScheduleEffect.Consumed consumed) {
+                               io.farfrontier.palemirror.frontier.v3.api.SimInstant instant,
+                               io.farfrontier.palemirror.frontier.v3.api.SubjectId subject) {
+        apply(schedules, effect, instant, subject);
+    }
+    private static void consumeExactDue(ScheduledActionQueue.Mutation schedules, ScheduleEffect.Consumed consumed,
+                                        io.farfrontier.palemirror.frontier.v3.api.SimInstant instant,
+                                        io.farfrontier.palemirror.frontier.v3.api.SubjectId subject) {
             ScheduledAction action = schedules.find(consumed.scheduleId());
             if (action == null) {
                 throw new IllegalStateException("committed schedule does not exist: " + consumed.scheduleId().value());
             }
+            if (!action.subject().equals(subject)) throw new IllegalArgumentException("consumed schedule belongs to a different declared subject");
             if (action.dueAt().compareTo(instant) > 0) {
                 throw new IllegalStateException("committed schedule consumed before due time: " + consumed.scheduleId().value());
             }
             require(schedules.cancel(action.id()), action.id());
-        } else {
-            apply(schedules, effect);
-        }
     }
 
     private static void require(boolean changed, io.farfrontier.palemirror.frontier.v3.api.ScheduleId id) {

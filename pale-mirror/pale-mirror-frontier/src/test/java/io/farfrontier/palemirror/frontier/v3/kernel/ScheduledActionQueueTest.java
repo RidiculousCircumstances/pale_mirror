@@ -15,6 +15,37 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ScheduledActionQueueTest {
+    @Test void aKnownReadyActionIsNotFencedByNewUncheckedOrUnaddressedWaiters() {
+        var queue = new ScheduledActionQueue();
+        var ready = action("schedule:known-ready", 2, 0, "resident:ready", 1);
+        queue.schedule(ready);
+        queue.selectDue(new SimInstant(2), new WorkBudget(1, 1));
+        for (int index = 0; index < 1_000; index++)
+            queue.schedule(action("schedule:held-" + index, 1, 0, "resident:held-" + index, 1));
+        var checks = new AtomicInteger();
+        var budget = new WorkBudget(1, 1);
+        var work = queue.selectDue(new SimInstant(2), budget, candidate -> {
+            checks.incrementAndGet(); return candidate.equals(ready);
+        });
+        assertEquals(List.of(ready), work.admitted());
+        assertTrue(checks.get() <= budget.maxAdmissionEvaluations() + 1);
+        var pressure = queue.pressure(new SimInstant(2));
+        assertEquals(1, pressure.ready()); assertTrue(pressure.checking() > 0); assertTrue(pressure.held() > 0);
+        assertEquals(1_001, queue.size(), "classification is not canonical completion");
+    }
+
+    @Test void waitingCancellationAndReplacementRemoveEveryStaleWakeAddress() {
+        var queue = new ScheduledActionQueue();
+        var old = action("schedule:replace", 1, 0, "resident:a", 1);
+        queue.schedule(old);
+        queue.selectDue(new SimInstant(1), new WorkBudget(1, 1), candidate -> false, candidate -> Set.of(old.subject()));
+        var next = action("schedule:replace", 20, 0, "resident:a", 1);
+        var mutation = queue.beginMutation(); mutation.cancel(old.id()); mutation.schedule(next); mutation.commit();
+        queue.wake(Set.of(old.subject()), 10);
+        assertTrue(queue.selectDue(new SimInstant(10), new WorkBudget(1, 1)).admitted().isEmpty());
+        assertFalse(queue.containsExact(old)); assertTrue(queue.containsExact(next));
+        assertEquals(List.of(next), queue.selectDue(new SimInstant(20), new WorkBudget(1, 1)).admitted());
+    }
     @Test void explicitHintsCoalesceByOwnerAndKindWithoutLosingASuccessorOrExactFacts() {
         var queue = new ScheduledActionQueue();
         var first = action("schedule:hint-first", 20, 0, "settlement:a", 1);
@@ -53,10 +84,12 @@ class ScheduledActionQueueTest {
         var future = action("schedule:future-pressure", 200, 0, "resident:c", 1);
         queue.schedule(held); queue.schedule(ready); queue.schedule(future);
         queue.selectDue(new SimInstant(10), new WorkBudget(1, 1), value -> !value.equals(held), value -> Set.of(held.subject()));
-        var before = queue.pressure(new SimInstant(100), value -> !value.equals(held));
+        var before = queue.pressure(new SimInstant(100));
         assertEquals(1, before.ready()); assertEquals(1, before.held()); assertEquals(1, before.future());
         queue.cancel(ready.id()); queue.wake(Set.of(held.subject()), 100);
-        var after = queue.pressure(new SimInstant(103), value -> true);
+        assertEquals(1, queue.pressure(new SimInstant(103)).checking(), "wake requests a recheck, not an execution grant");
+        queue.selectDue(new SimInstant(103), new WorkBudget(1, 1), value -> true);
+        var after = queue.pressure(new SimInstant(103));
         assertEquals(3, after.oldestReadyLagTicks());
         assertEquals(102, after.oldestDeadlineLagTicks(), "held time is semantic deadline lateness, not ready service delay");
         assertEquals(0, after.held());
@@ -133,7 +166,6 @@ class ScheduledActionQueueTest {
         assertEquals(List.of(later), queue.selectDue(new SimInstant(2), new WorkBudget(2, 2), eligible, keys).admitted());
         available.set(true);
         queue.wake(Set.of(source));
-        assertFalse(queue.isEligibleHead(later, new SimInstant(2), eligible, keys));
         assertEquals(List.of(first, later), queue.selectDue(new SimInstant(2), new WorkBudget(2, 2), eligible, keys).admitted());
     }
     @Test
@@ -157,7 +189,7 @@ class ScheduledActionQueueTest {
         queue.schedule(action("schedule:b", 10L, 0, "settlement:b", 2));
 
         ScheduledWork first = queue.selectDue(new SimInstant(10L), new WorkBudget(2, 3));
-        queue.acknowledge(first.admitted().getFirst());
+        assertTrue(queue.cancel(first.admitted().getFirst().id()));
         ScheduledWork second = queue.selectDue(new SimInstant(10L), new WorkBudget(2, 3));
 
         assertEquals(List.of("schedule:a"), first.admitted().stream().map(value -> value.id().value()).toList());
@@ -187,11 +219,11 @@ class ScheduledActionQueueTest {
         queue.schedule(held); queue.schedule(later);
         assertEquals(List.of(later), queue.selectDue(new SimInstant(10L), new WorkBudget(1, 1), eligible).admitted());
         queue.schedule(inserted);
-        assertFalse(queue.isEligibleHead(later, eligible), "snapshot membership is not execution authority");
-        assertTrue(queue.isEligibleHead(inserted, eligible));
+        assertEquals(inserted, queue.selectDue(new SimInstant(10), new WorkBudget(1, 1), eligible).admitted().getFirst(),
+                "a newly READY earlier action precedes a formerly selected later candidate");
         queue.cancel(inserted.id());
         queue.cancel(later.id());
-        assertFalse(queue.isEligibleHead(later, eligible), "cancelled snapshot entries cannot run");
+        assertFalse(queue.containsExact(later), "cancelled snapshot entries cannot run");
         assertEquals(List.of(held), queue.snapshot());
     }
 

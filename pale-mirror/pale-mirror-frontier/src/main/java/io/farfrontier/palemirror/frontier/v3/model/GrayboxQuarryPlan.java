@@ -27,6 +27,10 @@ public final class GrayboxQuarryPlan {
         var roads = FrontierRouteNetwork.footprint(bootstrap, RouteTopology.initial());
         occupied.addAll(roads.foundationCells()); occupied.addAll(roads.surfaceCells());
         occupied.addAll(FrontierGrayboxPlan.intactOrganOccupancy(bootstrap.hive().organs()));
+        // Lookup only: JDK compact SetN suffers clustered coordinate hashes.
+        // Build once and extend with each accepted site, not per facing trial.
+        var occupiedColumns = new HashSet<TerrainColumn>();
+        occupied.forEach(position -> occupiedColumns.add(new TerrainColumn(position.x(), position.z())));
         Map<SubjectId, ExtractionDeposit> deposits = new LinkedHashMap<>();
         int producerIndex = 0;
         for (Settlement home : producerSettlements(bootstrap)) {
@@ -47,15 +51,13 @@ public final class GrayboxQuarryPlan {
                 positions.addAll(layout.terrainSupports().keySet());
                 layout.cells().forEach(cell -> positions.add(cell.source()));
                 // A quarry must not overlap another owner even when its pit is vertically below it.
-                var columns = occupied.stream().map(position -> new TerrainColumn(position.x(), position.z()))
-                        .collect(java.util.stream.Collectors.toUnmodifiableSet());
                 if (positions.stream().anyMatch(position -> !bootstrap.bounds().contains(position)
-                        || columns.contains(new TerrainColumn(position.x(), position.z())))) continue;
+                        || occupiedColumns.contains(new TerrainColumn(position.x(), position.z())))) continue;
                 String identity = UUID.nameUUIDFromBytes((bootstrap.worldId().value() + "|" + home.id().value() + "|quarry")
                         .getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
                 SubjectId id = new SubjectId("extraction:quarry-" + identity);
                 selected = new ExtractionSite(id, home.id(), new SubjectId("container:quarry-" + identity), layout);
-                occupied.addAll(positions); break;
+                positions.forEach(position -> occupiedColumns.add(new TerrainColumn(position.x(), position.z()))); break;
             }
             if (selected == null) throw new IllegalArgumentException("no clear exterior quarry for " + home.id());
             var opened = rules.developmentBatchCells() == 0 ? selected.layout().cells().stream().map(ExtractionLayout.Cell::id)

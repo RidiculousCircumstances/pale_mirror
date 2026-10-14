@@ -37,6 +37,62 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class InMemoryFrontierEngineTest {
+    @Test void aThousandUnaddressedHoldsCannotPermanentlyFenceIndependentExecution() {
+        var work = new java.util.ArrayList<ScheduledAction>();
+        for (int index = 0; index < 1_000; index++) work.add(scheduled("schedule:hold-" + index, "settlement:held-" + index, 1, 1));
+        var independent = scheduled("schedule:independent", "settlement:independent", 2, 1); work.add(independent);
+        var checks = new java.util.concurrent.atomic.AtomicInteger();
+        var planner = new ScheduledActionPlanner<Counter>() {
+            public boolean held(Counter state, ScheduledAction action) { checks.incrementAndGet(); return !action.equals(independent); }
+            public List<ProposedEvent> plan(Counter state, ScheduledAction action) {
+                return List.of(new ProposedEvent(action.subject(), new Delta(1)));
+            }
+        };
+        var engine = schedulingEngine(planner, work);
+        var budget = new WorkBudget(64, 128);
+        for (int turn = 0; turn < 8 && engine.canonicalState().state().value() == 0; turn++) {
+            checks.set(0); engine.advanceTo(new SimInstant(2 + turn), budget);
+            assertTrue(checks.get() <= budget.maxAdmissionEvaluations());
+        }
+        assertEquals(1, engine.canonicalState().state().value()); assertEquals(1_000, engine.scheduledActions().size());
+        assertEquals(1, engine.transactions().size(), "holds must not emit no-op WAL retries");
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.ACTIVE, engine.status().kind());
+        var replay = TransactionReplayer.replayFrom(WORLD, new Counter(0), Revision.ZERO, SimInstant.ZERO,
+                work, engine.transactions(), (state, event) -> reduce(state, event, false),
+                state -> ByteBuffer.allocate(4).putInt(state.value()).array(), StateValidator.none());
+        assertEquals(engine.scheduledActions(), replay.schedules()); assertEquals(new Counter(1), replay.state());
+    }
+
+    @Test void anAddressedWakeBetweenTransactionsJoinsReadyOrderWithoutRewindingWalTime() {
+        var first = scheduled("schedule:first", "settlement:a", 1, 1);
+        var independent = scheduled("schedule:independent", "settlement:b", 2, 1);
+        var last = scheduled("schedule:last", "settlement:c", 3, 1);
+        var planner = new ScheduledActionPlanner<Counter>() {
+            public boolean held(Counter state, ScheduledAction action) { return action.equals(first) && state.value() == 0; }
+            public java.util.Set<SubjectId> holdWakeKeys(Counter state, ScheduledAction action) { return java.util.Set.of(first.subject()); }
+            public java.util.Set<SubjectId> wakeKeys(Counter before, Counter after, FrontierEvent event) { return java.util.Set.of(first.subject()); }
+            public List<ProposedEvent> plan(Counter state, ScheduledAction action) {
+                return List.of(new ProposedEvent(action.subject(), new Delta(1)));
+            }
+        };
+        var engine = schedulingEngine(planner, List.of(first, independent, last));
+        engine.advanceTo(new SimInstant(10), new WorkBudget(3, 3));
+        assertEquals(List.of(independent.subject(), first.subject(), last.subject()), engine.transactions().stream()
+                .map(transaction -> transaction.events().getFirst().subject()).toList());
+        assertEquals(List.of(new SimInstant(2), new SimInstant(2), new SimInstant(3)),
+                engine.transactions().stream().map(TransactionRecord::instant).toList());
+        assertEquals(new Counter(3), engine.canonicalState().state());
+    }
+
+    private static InMemoryFrontierEngine<Counter, CounterProjection> schedulingEngine(
+            ScheduledActionPlanner<Counter> planner, List<ScheduledAction> schedules) {
+        return new InMemoryFrontierEngine<>(WORLD, new Counter(0), SimInstant.ZERO,
+                (state, command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
+                planner, (state, event) -> reduce(state, event, false),
+                state -> ByteBuffer.allocate(4).putInt(state.value()).array(),
+                (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
+                new EngineLimits(4_096, 100, 4_096, 4_096), schedules);
+    }
     private static final WorldId WORLD = new WorldId("frontier:test-world");
     private static final SubjectId SUBJECT = new SubjectId("settlement:test");
 
@@ -338,7 +394,7 @@ class InMemoryFrontierEngineTest {
         assertEquals(1, engine.canonicalState().state().value(), "independent work receives the only budget slot");
         engine.advanceTo(new SimInstant(11L), new WorkBudget(1, 1));
         assertEquals(List.of(), engine.scheduledActions());
-        assertEquals(List.of(new SimInstant(6L), new SimInstant(10L)),
+        assertEquals(List.of(new SimInstant(6L), new SimInstant(11L)),
                 engine.transactions().stream().map(TransactionRecord::instant).toList());
         var replay = TransactionReplayer.replayFrom(WORLD, new Counter(0), Revision.ZERO, SimInstant.ZERO,
                 List.of(held, independent), engine.transactions(), (state, event) -> reduce(state, event, false),
@@ -364,15 +420,16 @@ class InMemoryFrontierEngineTest {
         queue.schedule(action);
         var pending = queue.beginMutation();
         var consumption = new ScheduleEffect.Consumed(action.id());
-        assertThrows(IllegalStateException.class, () -> ScheduleEffectApplier.applyCommitted(pending, consumption, new SimInstant(9L)));
+        assertThrows(IllegalStateException.class, () -> ScheduleEffectApplier.applyCommitted(pending, consumption, new SimInstant(9L), action.subject()));
+        assertThrows(IllegalArgumentException.class, () -> ScheduleEffectApplier.applyCommitted(pending, consumption, new SimInstant(10L), SUBJECT));
         assertEquals(List.of(action), pending.snapshot());
-        ScheduleEffectApplier.applyCommitted(pending, consumption, new SimInstant(10L));
-        assertThrows(IllegalStateException.class, () -> ScheduleEffectApplier.applyCommitted(pending, consumption, new SimInstant(10L)));
+        ScheduleEffectApplier.applyCommitted(pending, consumption, new SimInstant(10L), action.subject());
+        assertThrows(IllegalStateException.class, () -> ScheduleEffectApplier.applyCommitted(pending, consumption, new SimInstant(10L), action.subject()));
         assertEquals(List.of(action), queue.snapshot(), "failed/uncommitted overlay cannot alter canonical state");
     }
 
     @Test
-    void missedDerivedWakeCannotAdmitALaterActionAgainstTheCanonicalHead() {
+    void missedDerivedWakeIsAuditedWithoutFencingIndependentReadyWork() {
         ScheduledAction held = scheduled("schedule:waiting-meal", "resident:waiting", 5L, 1);
         ScheduledAction release = scheduled("schedule:release-point", "settlement:a", 6L, 1);
         ScheduledAction later = scheduled("schedule:independent", "settlement:b", 7L, 1);
@@ -395,11 +452,13 @@ class InMemoryFrontierEngineTest {
                 (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
                 new EngineLimits(8, 100L, 8), List.of(held, release, later));
         engine.advanceTo(new SimInstant(10L), new WorkBudget(2, 2));
-        assertEquals(List.of(held, later), engine.scheduledActions(),
-                "the newly eligible earlier action fences later work, without losing its identity");
-        assertEquals(1, engine.canonicalState().state().value());
+        assertEquals(List.of(held), engine.scheduledActions(), "missing signal cannot fence independent READY work");
+        assertEquals(2, engine.canonicalState().state().value());
         engine.advanceTo(new SimInstant(11L), new WorkBudget(2, 2));
-        assertTrue(engine.scheduledActions().isEmpty(), "the stale index is repaired before the audit timeout");
+        assertEquals(List.of(held), engine.scheduledActions());
+        engine.advanceTo(new SimInstant(1_210L), new WorkBudget(2, 2));
+        assertTrue(engine.scheduledActions().isEmpty(), "bounded independent audit recovers the missing wake");
+        assertEquals(new SimInstant(1_210L), engine.transactions().getLast().instant(), "audit admission cannot backdate a domain outcome");
         assertEquals(3, engine.canonicalState().state().value());
         var replay = TransactionReplayer.replayFrom(WORLD, new Counter(0), Revision.ZERO, SimInstant.ZERO,
                 List.of(held, release, later), engine.transactions(), (state, event) -> reduce(state, event, false),
