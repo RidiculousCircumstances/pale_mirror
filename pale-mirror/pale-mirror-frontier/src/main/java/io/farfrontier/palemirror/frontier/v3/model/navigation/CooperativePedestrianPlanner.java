@@ -62,6 +62,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         var request = PedestrianRouteRequest.of(geometry, start, target, extent);
         Completed result = completed.get(request);
         if (result != null) return result.result();
+        admitDeferred();
         admittedAt.putIfAbsent(request, turns);
         if (!pending.containsKey(request)) {
             if (!canAdmit(request)) {
@@ -87,6 +88,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         if (closed) throw new IllegalStateException("pedestrian planner is closed");
         if (workBudget < HierarchicalPedestrianSearch.MIN_SLICE_WORK) throw new IllegalArgumentException("planning budget is too small");
         turns++;
+        admitDeferred();
         if (executor != null) { advanceWorkers(workBudget, mayContinue); return; }
         int remaining = workBudget;
         // A bounded number of visits per turn also bounds zero-cost terminals.
@@ -139,15 +141,20 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         completed.put(request, new Completed(result, dependency)); retainedSurfaces += result.route().size();
         retainedRegions += dependency.revisions().size();
         changes.put(request, PedestrianPlanningChange.Kind.RESULT_AVAILABLE);
+        admitDeferred();
+        progressRevision++;
+    }
+    private void admitDeferred() {
         // Admission resumes the exact deferred calculation, never broadcasts a free slot to all processes.
+        // Also used after invalidation frees capacity, before a new caller can overtake retained waiters.
         while (pending.size() < MAX_PENDING && !deferred.isEmpty()) {
             var candidate = deferred.keySet().stream().filter(this::canAdmit).findFirst();
             if (candidate.isEmpty()) break;
             var admitted = candidate.orElseThrow(); deferred.remove(admitted);
             pending.put(admitted, task(admitted));
             ready.addLast(admitted);
+            progressRevision++;
         }
-        progressRevision++;
     }
     /** Long inter-region queries cannot occupy the last slot needed by local service/work goals. */
     private boolean canAdmit(PedestrianRouteRequest request) {
@@ -193,12 +200,19 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
             }
             progressRevision++;
         }
-        for (var request : java.util.List.copyOf(deferred.keySet())) if (request.geometry() != geometry && sameScope(request, geometry)) {
+        var rebasedDeferred = new LinkedHashMap<PedestrianRouteRequest, PedestrianRouteResult>();
+        for (var entry : deferred.entrySet()) {
+            var request = entry.getKey();
+            if (request.geometry() == geometry || !sameScope(request, geometry)) {
+                rebasedDeferred.put(request, entry.getValue()); continue;
+            }
             long since = admittedAt.get(request);
-            var waiting = deferred.remove(request); invalidated(request);
+            invalidated(request);
             var replacement = PedestrianRouteRequest.of(geometry, request.start(), request.target(), request.extent());
-            deferred.put(replacement, waiting); admittedAt.put(replacement, since); progressRevision++;
+            rebasedDeferred.put(replacement, entry.getValue()); admittedAt.put(replacement, since); progressRevision++;
         }
+        // A refreshed view is the same demand, not a new arrival at the end of the queue.
+        deferred.clear(); deferred.putAll(rebasedDeferred);
     }
     public synchronized java.util.List<PedestrianPlanningChange> drainChanges() {
         var result = changes.entrySet().stream().map(entry -> new PedestrianPlanningChange(entry.getKey(), entry.getValue())).toList();

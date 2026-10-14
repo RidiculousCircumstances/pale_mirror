@@ -102,6 +102,26 @@ class PedestrianWorkerPlanningTest {
         assertThrows(IllegalStateException.class, () -> planner.query(geometry, start, goal));
     }
 
+    @Test void refreshingGeometryCannotMoveAnOlderCapacityWaitBehindAnotherScope() {
+        var workers = new ManualWorkers();
+        var occupied = geometry(workers, PedestrianGeometryRevision.initial(), -1);
+        var revision = PedestrianGeometryRevision.initial();
+        var older = geometry(workers, revision, -1);
+        var newer = geometry(workers, PedestrianGeometryRevision.initial(), -1);
+        var start = SurfaceAnchor.at(1, 63, 1); var goal = SurfaceAnchor.at(12, 63, 1);
+        try (var planner = new CooperativePedestrianPlanner(workers)) {
+            for (int i = 0; i < 8; i++) planner.query(occupied, start, SurfaceAnchor.at(3 + i, 63, 1));
+            assertEquals("PLANNING_QUEUE_CAPACITY", planner.query(older, start, goal).reason());
+            assertEquals("PLANNING_QUEUE_CAPACITY", planner.query(newer, start, goal).reason());
+            var refreshed = geometry(workers, revision.changed(Set.of(new PedestrianGeometryRevision.Region(3, 0))), -1);
+            planner.query(refreshed, start, goal);
+            planner.advance(BUDGET); workers.run(0); planner.advance(BUDGET);
+            assertEquals("PLANNING_QUEUED", planner.query(refreshed, start, goal).reason(),
+                    "replacing immutable geometry must preserve admission order across task scopes");
+            assertEquals("PLANNING_QUEUE_CAPACITY", planner.query(newer, start, goal).reason());
+        }
+    }
+
     private static PedestrianRouteGeometry geometry(ManualWorkers workers, PedestrianGeometryRevision revision, int wallX) {
         return new PedestrianRouteGeometry() {
             public Object version() { return revision; }
