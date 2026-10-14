@@ -37,6 +37,31 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class InMemoryFrontierEngineTest {
+    @Test void capacityQuarantineCannotAppendAnUnrecoverableDiagnosticTransaction() {
+        var actions = List.of(scheduled("schedule:capacity-a", SUBJECT.value(), 1, 1),
+                scheduled("schedule:capacity-b", SUBJECT.value(), 1, 1));
+        var durable = new ArrayList<TransactionRecord>();
+        var configuration = new FrontierEngineConfiguration<Counter, CounterProjection>(WORLD, new Counter(0), SimInstant.ZERO,
+                (state, command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
+                (state, action) -> List.of(new ProposedEvent(action.subject(), new Delta(1))),
+                (state, event) -> reduce(state, event, false), new StateCodec<>() {
+                    public byte[] encode(Counter state) { return ByteBuffer.allocate(4).putInt(state.value()).array(); }
+                    public Counter decode(byte[] bytes) { return new Counter(ByteBuffer.wrap(bytes).getInt()); }
+                }, (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
+                new EngineLimits(8, 100, 1, 8), actions, (transaction, durability) -> durable.add(transaction))
+                .withKernelQuarantineReporter((state, world, cause, instant, boundary, failure) ->
+                        Optional.of(new ProposedEvent(SUBJECT, new Delta(999))));
+        var engine = FrontierEngines.createCanonicalStateAccess(configuration);
+        assertEquals(io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.QUARANTINED,
+                engine.advanceTo(new SimInstant(1), new WorkBudget(2, 2)).status().kind());
+        assertEquals(1, durable.size(), "failure reporting cannot bypass the bounded commit owner");
+        assertEquals(1, engine.canonicalState().state().value());
+        var recovered = FrontierEngines.recoverCanonicalStateAccess(configuration,
+                new RecoveryImage(WORLD, Optional.empty(), durable));
+        assertEquals(1, recovered.canonicalState().state().value());
+        assertEquals(1, recovered.executionView().schedules().size());
+    }
+
     @Test void aThousandUnaddressedHoldsCannotPermanentlyFenceIndependentExecution() {
         var work = new java.util.ArrayList<ScheduledAction>();
         for (int index = 0; index < 1_000; index++) work.add(scheduled("schedule:hold-" + index, "settlement:held-" + index, 1, 1));

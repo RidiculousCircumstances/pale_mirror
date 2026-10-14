@@ -312,6 +312,82 @@ class FrontierV3ServerRuntimeTest {
         assertEquals(0, new FrontierFileStore(directory, codecs()).recover(WORLD).walTail().size());
     }
 
+    @Test
+    void denseReadyTurnsAndRecoveredFullTailCompactByCapacityNotElapsedTicks(@TempDir Path directory) {
+        var configuration = denseConfiguration();
+        var codecs = PayloadCodecs.merge(codecs(), io.farfrontier.palemirror.frontier.v3.kernel.KernelPayloadCodecs.scheduleEffects());
+        var first = FrontierV3ServerRuntime.start(configuration, new FrontierFileStore(directory, codecs), 200);
+        assertEquals(2, first.tick(new WorkBudget(4, 8)).orElseThrow().transactions().size());
+        assertEquals(2, first.decodedState().orElseThrow().value());
+        var image = new FrontierFileStore(directory, codecs).recover(WORLD);
+        assertEquals(2, image.walTail().size(), "model the real restart with no free retained transaction slots");
+        var recovered = FrontierV3ServerRuntime.start(configuration, new FrontierFileStore(directory, codecs), 200);
+        for (int turn = 0; turn < 2; turn++) {
+            assertEquals(2, recovered.tick(new WorkBudget(4, 8)).orElseThrow().transactions().size());
+            assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, recovered.status().kind());
+        }
+        assertEquals(6, recovered.decodedState().orElseThrow().value());
+        assertTrue(recovered.executionView().orElseThrow().schedules().isEmpty());
+        recovered.shutdown();
+        var finalHost = FrontierV3ServerRuntime.start(configuration, new FrontierFileStore(directory, codecs), 200);
+        assertEquals(6, finalHost.decodedState().orElseThrow().value());
+        assertTrue(finalHost.executionView().orElseThrow().schedules().isEmpty());
+        finalHost.shutdown();
+    }
+
+    @Test
+    void failedCapacitySnapshotDoesNotExecuteOrForgetTheReadyTail(@TempDir Path directory) {
+        var codecs = PayloadCodecs.merge(codecs(), io.farfrontier.palemirror.frontier.v3.kernel.KernelPayloadCodecs.scheduleEffects());
+        FrontierStore disk = new FrontierFileStore(directory, codecs);
+        FrontierStore failing = new FrontierStore() {
+            public io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage recover(WorldId world) { return disk.recover(world); }
+            public io.farfrontier.palemirror.frontier.v3.persistence.AppendReceipt append(
+                    io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord record,
+                    io.farfrontier.palemirror.frontier.v3.persistence.Durability durability) { return disk.append(record, durability); }
+            public io.farfrontier.palemirror.frontier.v3.persistence.SnapshotReceipt installSnapshot(
+                    io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord snapshot) { throw new IllegalStateException("test snapshot unavailable"); }
+            public io.farfrontier.palemirror.frontier.v3.persistence.CompactionReceipt compact(WorldId world, Revision revision) {
+                throw new AssertionError("failed snapshot must never reach compaction");
+            }
+        };
+        var runtime = FrontierV3ServerRuntime.start(denseConfiguration(), failing, 200);
+        runtime.tick(new WorkBudget(4, 8)).orElseThrow();
+        assertTrue(runtime.tick(new WorkBudget(4, 8)).isEmpty());
+        assertEquals(FrontierV3RuntimeStatus.Kind.QUARANTINED, runtime.status().kind());
+        assertEquals(2, runtime.passiveOwnershipState().orElseThrow().value());
+        assertEquals(2, disk.recover(WORLD).walTail().size());
+        var recovered = FrontierV3ServerRuntime.start(denseConfiguration(), new FrontierFileStore(directory, codecs), 200);
+        assertEquals(4, recovered.executionView().orElseThrow().schedules().size());
+        recovered.tick(new WorkBudget(4, 8)).orElseThrow();
+        assertEquals(4, recovered.decodedState().orElseThrow().value());
+        recovered.shutdown();
+    }
+
+    @Test
+    void commandsAlsoCompactAFullTransactionTailWithoutChangingRevisionBindings(@TempDir Path directory) {
+        var base = configuration();
+        var bounded = new FrontierEngineConfiguration<>(base.worldId(), base.initialState(), base.initialInstant(),
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(),
+                new EngineLimits(32, 100, 2, 8), base.initialSchedules(), base.transactionCommitter());
+        var runtime = FrontierV3ServerRuntime.start(bounded, new FrontierFileStore(directory, codecs()), 200);
+        for (int index = 0; index < 3; index++) assertInstanceOf(CommandResult.Accepted.class,
+                runtime.submit(command("command:capacity-" + index, new Revision(index), SimInstant.ZERO, 1)).orElseThrow());
+        assertEquals(3, runtime.decodedState().orElseThrow().value());
+        assertEquals(1, new FrontierFileStore(directory, codecs()).recover(WORLD).walTail().size());
+        runtime.shutdown();
+    }
+
+    private static FrontierEngineConfiguration<Counter, CounterProjection> denseConfiguration() {
+        var base = configuration();
+        var schedules = java.util.stream.IntStream.range(0, 6).mapToObj(index ->
+                new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction(
+                        new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:dense-" + index), new SimInstant(1),
+                        1, SUBJECT, "test.dense", 1)).toList();
+        return new FrontierEngineConfiguration<>(base.worldId(), base.initialState(), base.initialInstant(), base.commandPlanner(),
+                (state, action) -> List.of(new ProposedEvent(action.subject(), new Delta(1))), base.reducer(),
+                base.stateCodec(), base.projectionMapper(), new EngineLimits(32, 100, 2, 8), schedules, base.transactionCommitter());
+    }
+
     /**
      * Mirrors the operator's maximum COLD interval at the actual runtime checkpoint cadence.
      * The bare kernel is intentionally allowed to exhaust its bounded transaction history when

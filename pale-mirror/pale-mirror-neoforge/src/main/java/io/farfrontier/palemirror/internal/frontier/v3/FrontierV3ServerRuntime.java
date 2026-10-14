@@ -194,6 +194,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     Optional<CommandResult> submit(FrontierCommand command) {
         Objects.requireNonNull(command, "command");
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
+        if (!ensureTransactionHeadroom(1)) return Optional.empty();
         CommandResult result;
         try (DiagnosticCaptureScope ignored = DiagnosticCaptureScope.open(diagnosticRuntimeIdentity)) {
             result = engine.submit(command);
@@ -270,9 +271,15 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         Objects.requireNonNull(budget, "budget");
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
         try {
+            // A ready backlog can fill retention well before the tick-based save deadline.
+            // Reserve the entire bounded turn, or narrow an oversized budget to the actual
+            // retention ceiling. Only a confirmed snapshot/WAL compaction releases history.
+            int actions = Math.min(budget.maxActions(), configuration.limits().maxTransactions());
+            if (!ensureTransactionHeadroom(actions)) return Optional.empty();
+            WorkBudget retainedBudget = actions == budget.maxActions() ? budget : new WorkBudget(actions, budget.maxWeight());
             AdvanceResult result;
             try (DiagnosticCaptureScope ignored = DiagnosticCaptureScope.open(diagnosticRuntimeIdentity)) {
-                result = engine.advanceTo(instant.plus(intervalTicks), budget);
+                result = engine.advanceTo(instant.plus(intervalTicks), retainedBudget);
             }
             // SimInstant advances even when no due action mutates the aggregate, so each server
             // tick has a distinct immutable checkpoint image for adapter observation.
@@ -296,6 +303,14 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             quarantine(error);
             return Optional.empty();
         }
+    }
+
+    private boolean ensureTransactionHeadroom(int required) {
+        if (engine.commandAdmissionCapacity().availableTransactions() >= required) return true;
+        if (checkpoint().isEmpty()) return false;
+        if (engine.commandAdmissionCapacity().availableTransactions() < required)
+            throw new IllegalStateException("confirmed checkpoint did not release required transaction headroom");
+        return true;
     }
 
     Optional<SnapshotReceipt> checkpoint() {

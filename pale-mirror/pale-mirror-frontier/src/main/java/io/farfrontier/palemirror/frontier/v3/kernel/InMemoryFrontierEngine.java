@@ -410,6 +410,10 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
 
     private TransactionId commitMeasured(CauseChain causes, SimInstant eventInstant, List<ProposedEvent> proposed,
                                          Optional<CommandReceipt> acceptedCommandReceipt) {
+        // All producers, including the quarantine reporter, share the same bounded WAL tail.
+        // A diagnostic must not make the next recovery exceed the configured retention cap.
+        if (transactions.size() >= limits.maxTransactions())
+            throw new IllegalStateException("transaction retention capacity exhausted before commit");
         if (eventInstant.compareTo(instant) < 0) throw new IllegalArgumentException("transaction time precedes published canonical time");
         Revision nextRevision = revision.next();
         TransactionId transactionId = new TransactionId("transaction:revision-" + nextRevision.value());
