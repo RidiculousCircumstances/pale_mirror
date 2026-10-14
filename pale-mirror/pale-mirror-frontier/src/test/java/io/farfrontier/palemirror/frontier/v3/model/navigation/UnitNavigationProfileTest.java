@@ -7,6 +7,23 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class UnitNavigationProfileTest {
+    @Test void repeatedSweptBodyQueriesReuseOnlyTheirCapturedGeometryAndChangedKnowledgeClosesTheEdge() {
+        var reads = new java.util.concurrent.atomic.AtomicInteger();
+        var raw = terrain(Set.of(), PedestrianGeometryRevision.initial(), (x, z) -> {
+            reads.incrementAndGet(); return floor(x, z);
+        });
+        var geometry = new ProfiledPedestrianGeometry(raw, UnitNavigationProfile.DONKEY, ignored -> false);
+        var from = floor(0, 0); var to = floor(1, 0);
+        assertTrue(geometry.canTraverse(from, to)); int first = reads.get();
+        for (int repeat = 0; repeat < 20; repeat++) assertTrue(geometry.canTraverse(from, to));
+        assertEquals(first, reads.get(), "identical profile volumes must not survey terrain again per graph edge");
+        var blocked = Set.of(new BlockPosition(1, 65, 0));
+        var changed = raw.regionalRevision().orElseThrow().changed(Set.of(new PedestrianGeometryRevision.Region(0, 0)));
+        var next = new ProfiledPedestrianGeometry(terrain(blocked, changed, UnitNavigationProfileTest::floor),
+                UnitNavigationProfile.DONKEY, blocked::contains);
+        assertFalse(next.canTraverse(from, to), "an old clear volume cannot authorize a changed geometry view");
+        assertTrue(geometry.canTraverse(from, to), "retained immutable evidence is not mutated in place");
+    }
     private static SurfaceAnchor floor(int x, int z) { return SurfaceAnchor.at(x, 64, z); }
     private static PedestrianRouteGeometry terrain(Set<BlockPosition> obstacles, PedestrianGeometryRevision revision,
                                                   java.util.function.BiFunction<Integer, Integer, SurfaceAnchor> supports) {

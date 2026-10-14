@@ -46,7 +46,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         if (result != null) return result.result();
         admittedAt.putIfAbsent(request, turns);
         if (!pending.containsKey(request)) {
-            if (pending.size() >= MAX_PENDING) {
+            if (!canAdmit(request)) {
                 var waiting = waiting("PLANNING_QUEUE_CAPACITY");
                 if (deferred.size() >= MAX_RESULTS && !deferred.containsKey(request)) {
                     var evicted = deferred.keySet().iterator().next();
@@ -105,11 +105,18 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         changes.put(request, PedestrianPlanningChange.Kind.RESULT_AVAILABLE);
         // Admission resumes the exact deferred calculation, never broadcasts a free slot to all processes.
         while (pending.size() < MAX_PENDING && !deferred.isEmpty()) {
-            var admitted = deferred.keySet().iterator().next(); deferred.remove(admitted);
+            var candidate = deferred.keySet().stream().filter(this::canAdmit).findFirst();
+            if (candidate.isEmpty()) break;
+            var admitted = candidate.orElseThrow(); deferred.remove(admitted);
             pending.put(admitted, new HierarchicalPedestrianSearch(admitted.geometry(), admitted.start(), admitted.target(), regions));
             ready.addLast(admitted);
         }
         progressRevision++;
+    }
+    /** Long inter-region queries cannot occupy the last slot needed by local service/work goals. */
+    private boolean canAdmit(PedestrianRouteRequest request) {
+        return pending.size() < MAX_PENDING && (PedestrianLocalSearch.nearby(request.start(), request.target())
+                || pending.keySet().stream().filter(value -> !PedestrianLocalSearch.nearby(value.start(), value.target())).count() < MAX_PENDING - 1);
     }
     /** Diagnostic counter only. Addressed changes, not this global counter, wake continuations. */
     public synchronized long progressRevision() { return progressRevision; }

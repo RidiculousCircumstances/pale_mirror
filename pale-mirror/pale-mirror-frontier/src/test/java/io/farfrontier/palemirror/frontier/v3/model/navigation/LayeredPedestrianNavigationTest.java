@@ -120,9 +120,11 @@ class LayeredPedestrianNavigationTest {
                 long before = planner.workUnits(); planner.advance(budget); assertTrue(planner.workUnits() - before <= budget);
             }
             assertEquals(PedestrianRouteResult.Status.FOUND, planner.peek(flat, flatStart, flatEnd).orElseThrow().status());
-            assertEquals(PedestrianRouteResult.Status.PLANNING, planner.query(dense, denseStart, denseEnd).status());
+            // A positive local proof may now avoid surveying unrelated levels;
+            // faster completion is valid, not an obligation to remain pending.
             for (int turn = 0; planner.pendingCount() > 0 && turn < 1000; turn++) planner.advance(budget);
             assertEquals(PedestrianRouteResult.Status.FOUND, planner.peek(dense, denseStart, denseEnd).orElseThrow().status());
+            KnownPedestrianNavigation.requireRoute(dense, planner.peek(dense, denseStart, denseEnd).orElseThrow().route());
         }
     }
 }

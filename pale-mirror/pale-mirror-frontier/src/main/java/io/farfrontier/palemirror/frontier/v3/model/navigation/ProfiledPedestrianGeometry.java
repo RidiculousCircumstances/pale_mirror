@@ -9,6 +9,10 @@ import java.util.function.Predicate;
 
 /** Physical-envelope decorator. Terrain and immutable obstacles remain owned by their provider. */
 public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry {
+    /** Rebuildable geometry-only retention ceiling, not actor positions or route authority. */
+    private static final int MAX_VOLUME_RESULTS = 8_192;
+    private record Volume(double x, double z, int feetY) { }
+    private final java.util.Map<Volume, Boolean> volumes = new java.util.LinkedHashMap<>(128, 0.75f, true);
     private record Scope(Object terrain, UnitNavigationProfile profile) { }
     private record Version(Object terrain, UnitNavigationProfile profile) { }
     private final PedestrianRouteGeometry terrain;
@@ -69,7 +73,19 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
                 result.add(new double[]{surface.x() + x, surface.z() + z});
         return result;
     }
-    private boolean clearVolume(double centerX, double centerZ, int feetY) {
+    private synchronized boolean clearVolume(double centerX, double centerZ, int feetY) {
+        // This decorator captures one immutable terrain/obstacle revision. The
+        // same standing/swept volumes recur across neighbouring graph edges and
+        // body-pose pairs; a new knowledge revision creates another decorator.
+        var key = new Volume(centerX, centerZ, feetY);
+        var prior = volumes.get(key);
+        if (prior != null) return prior;
+        boolean result = computeClearVolume(centerX, centerZ, feetY);
+        if (volumes.size() == MAX_VOLUME_RESULTS) volumes.remove(volumes.keySet().iterator().next());
+        volumes.put(key, result);
+        return result;
+    }
+    private boolean computeClearVolume(double centerX, double centerZ, int feetY) {
         double half = profile.width() / 2.0;
         int minX = (int) Math.floor(centerX - half + 0.0000001), maxX = (int) Math.ceil(centerX + half - 0.0000001) - 1;
         int minZ = (int) Math.floor(centerZ - half + 0.0000001), maxZ = (int) Math.ceil(centerZ + half - 0.0000001) - 1;

@@ -8,6 +8,44 @@ import java.util.function.Predicate;
 import static org.junit.jupiter.api.Assertions.*;
 
 class HierarchicalPedestrianNavigationTest {
+    @Test void aFullyKnownIsolatedNearbyGoalDoesNotFloodTheWholeWorldAndOpeningItInvalidatesTheFailure() {
+        var start = SurfaceAnchor.at(1, 63, 1); var goal = SurfaceAnchor.at(18, 63, 18);
+        var closed = geometry(new WorldBounds(0, 0, 1024, 1024), (x, z) -> SurfaceAnchor.at(x, 63, z),
+                surface -> Math.abs(surface.x() - goal.x()) + Math.abs(surface.z() - goal.z()) == 1);
+        var result = finish(new HierarchicalPedestrianSearch(closed, start, goal));
+        assertEquals(PedestrianRouteResult.Status.NO_PATH, result.status());
+        assertTrue(result.workUnits() < 100_000, "one known isolated target cannot force a million-column census");
+        assertTrue(result.regions() <= 6);
+        var open = geometry(closed.bounds(), (x, z) -> SurfaceAnchor.at(x, 63, z), surface -> false);
+        var route = finish(new HierarchicalPedestrianSearch(open, start, goal));
+        assertEquals(PedestrianRouteResult.Status.FOUND, route.status());
+        KnownPedestrianNavigation.requireRoute(open, route.route());
+    }
+    @Test void longDistanceCapacityCannotExcludeAShortGoalAndYieldStillPreservesAllLongSearches() {
+        var ground = geometry(new WorldBounds(0, 0, 3_200, 32), (x, z) -> SurfaceAnchor.at(x, 63, z), s -> false);
+        var start = SurfaceAnchor.at(1, 63, 1); var near = SurfaceAnchor.at(3, 63, 1);
+        try (var planner = new CooperativePedestrianPlanner()) {
+            for (int i = 0; i < 8; i++) planner.query(ground, start, SurfaceAnchor.at(2_000 + i, 63, 1));
+            assertEquals(7, planner.pendingCount()); assertEquals(1, planner.deferredCount());
+            assertEquals("PLANNING_QUEUED", planner.query(ground, start, near).reason());
+            for (int turn = 0; turn < 32 && planner.peek(ground, start, near).orElseThrow().status() == PedestrianRouteResult.Status.PLANNING; turn++) {
+                var admission = new java.util.concurrent.atomic.AtomicInteger();
+                planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2, () -> admission.incrementAndGet() < 200);
+            }
+            assertEquals(PedestrianRouteResult.Status.FOUND, planner.peek(ground, start, near).orElseThrow().status());
+            assertEquals(8, planner.pendingCount() + planner.deferredCount(), "short completion cannot erase far requests");
+            KnownPedestrianNavigation.requireRoute(ground, planner.peek(ground, start, near).orElseThrow().route());
+        }
+    }
+    @Test void unsuccessfulLocalProofStillFindsADistantDetourWithTheFullRegionalSearch() {
+        var ground = geometry(new WorldBounds(0, 0, 32, 96), (x, z) -> SurfaceAnchor.at(x, 63, z),
+                surface -> surface.x() == 8 && surface.z() < 80);
+        var start = SurfaceAnchor.at(2, 63, 2); var target = SurfaceAnchor.at(25, 63, 2);
+        var result = finish(new HierarchicalPedestrianSearch(ground, start, target));
+        assertEquals(PedestrianRouteResult.Status.FOUND, result.status());
+        assertTrue(result.route().stream().anyMatch(surface -> surface.z() >= 80));
+        KnownPedestrianNavigation.requireRoute(ground, result.route());
+    }
     @Test void selectingACandidateAtTheExactBudgetBoundaryDefersExpansionWithoutLosingTheRoute() {
         var ground = geometry(new WorldBounds(0, 0, 256, 256), (x, z) -> SurfaceAnchor.at(x, 63, z), s -> false);
         var start = SurfaceAnchor.at(2, 63, 2); var target = SurfaceAnchor.at(250, 63, 250);

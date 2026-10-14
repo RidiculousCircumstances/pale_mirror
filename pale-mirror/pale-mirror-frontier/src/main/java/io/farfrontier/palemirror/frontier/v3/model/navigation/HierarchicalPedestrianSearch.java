@@ -48,6 +48,9 @@ public final class HierarchicalPedestrianSearch {
     private List<Map.Entry<Node, Edge>> publishingExits;
     private int publication;
     private java.util.function.BooleanSupplier mayContinue = () -> true;
+    private PedestrianLocalSearch localSearch;
+    private boolean destinationChecked;
+    private int destinationNode, destinationEdge, destinationDirection = -1, destinationOffset, destinationExit, destinationEntrance;
 
     public HierarchicalPedestrianSearch(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
         this(geometry, start, target, new PedestrianRegionCache());
@@ -57,6 +60,13 @@ public final class HierarchicalPedestrianSearch {
                                  PedestrianRegionCache regionCache) {
         this.geometry = Objects.requireNonNull(geometry); this.start = Objects.requireNonNull(start); this.target = Objects.requireNonNull(target);
         this.regionCache = Objects.requireNonNull(regionCache);
+        if (geometry.bounds().contains(start.support()) && geometry.bounds().contains(target.support())
+                && PedestrianLocalSearch.nearby(start, target)) localSearch = new PedestrianLocalSearch(geometry, start, target,
+                surface -> {
+                    var tile = PedestrianRegion.Tile.at(surface);
+                    dependencies.put(tile, this.geometry.regionalRevision().map(revision -> revision.at(tile.x(), tile.z()))
+                            .orElse(this.geometry.version()));
+                });
     }
 
     public synchronized long workUnits() { return work; }
@@ -68,7 +78,9 @@ public final class HierarchicalPedestrianSearch {
     /** Rebase only untouched surveyed dependencies. Future expansion consumes the new immutable view. */
     synchronized boolean rebase(PedestrianRouteGeometry current) {
         if (!compatible(current)) return false;
-        geometry = current; return true;
+        geometry = current;
+        if (localSearch != null) localSearch.rebase(current);
+        return true;
     }
     synchronized boolean compatible(PedestrianRouteGeometry current) {
         var oldRevision = geometry.regionalRevision(); var nextRevision = current.regionalRevision();
@@ -88,6 +100,16 @@ public final class HierarchicalPedestrianSearch {
         if (terminal != null) return terminal;
         long limit = work + budget;
         turnLimit = limit;
+        if (localSearch != null) {
+            work += localSearch.advance(budget, mayContinue);
+            if (!localSearch.finished()) return result(PedestrianRouteResult.Status.PLANNING, "LOCAL_SEARCH_IN_PROGRESS");
+            if (localSearch.result() != null) {
+                route.addAll(localSearch.result()); localSearch = null;
+                return finish(PedestrianRouteResult.Status.FOUND, "EXACT_LOCAL_ROUTE");
+            }
+            localSearch = null; // No positive proof: retain full regional completeness.
+            if (work >= limit || !mayContinue.getAsBoolean()) return result(PedestrianRouteResult.Status.PLANNING, "REGIONAL_SEARCH_IN_PROGRESS");
+        }
         if (!initialized) {
             if (!geometry.bounds().contains(start.support()) || !geometry.bounds().contains(target.support()))
                 return finish(PedestrianRouteResult.Status.NO_PATH, "ENDPOINT_OUTSIDE_KNOWN_WORLD");
@@ -110,6 +132,14 @@ public final class HierarchicalPedestrianSearch {
             Node source = new Node(first.tile, sourceComponent); destination = new Node(last.tile, targetComponent);
             distance.put(source, 0); queue.add(candidate(source, 0)); initialized = true;
         }
+        // Prove a fully known isolated goal from its incoming edges, instead of
+        // flooding the entire reachable world from the source to rediscover it.
+        while (!destinationChecked && work < limit && mayContinue.getAsBoolean()) {
+            int reachable = probeDestination();
+            if (reachable > 0) destinationChecked = true;
+            if (reachable < 0) return finish(PedestrianRouteResult.Status.NO_PATH, "KNOWN_ISOLATED_TARGET_COMPONENT");
+        }
+        if (!destinationChecked) return result(PedestrianRouteResult.Status.PLANNING, "TARGET_CONNECTIVITY_IN_PROGRESS");
         while (work < limit && mayContinue.getAsBoolean() && itinerary == null && rewind == null && (expanding != null || !queue.isEmpty())) {
             if (expanding == null) {
                 Candidate candidate = queue.remove(); work++;
@@ -167,6 +197,50 @@ public final class HierarchicalPedestrianSearch {
             retainedSurfaces += built.size(); unknown |= built.unknown(); regions.put(tile, built);
         }
         return built;
+    }
+    /** 1 means possible incoming access, -1 proved isolation, 0 cooperative continuation. */
+    private int probeDestination() {
+        var local = regions.get(destination.tile());
+        if (local.unknown() || queue.peek().node().equals(destination)) { work++; return 1; }
+        if (destinationDirection < 0) {
+            work++;
+            if (destinationNode == local.size()) { destinationDirection = 0; return 0; }
+            if (local.component(local.surface(destinationNode)) == destination.component()
+                    || destinationEdge == local.outgoing(destinationNode).size()) {
+                destinationNode++; destinationEdge = 0; return 0;
+            }
+            int next = local.outgoing(destinationNode).get(destinationEdge++);
+            return local.component(local.surface(next)) == destination.component() ? 1 : 0;
+        }
+        if (destinationDirection == 4) { work++; return -1; }
+        int tileX = local.tile.x() + (destinationDirection == 0 ? 1 : destinationDirection == 2 ? -1 : 0);
+        int tileZ = local.tile.z() + (destinationDirection == 3 ? 1 : destinationDirection == 1 ? -1 : 0);
+        int minX = Math.multiplyExact(tileX, PedestrianRegion.SIDE), minZ = Math.multiplyExact(tileZ, PedestrianRegion.SIDE);
+        var bounds = geometry.bounds();
+        if (minX >= bounds.maxXExclusive() || minX + PedestrianRegion.SIDE <= bounds.minX()
+                || minZ >= bounds.maxZExclusive() || minZ + PedestrianRegion.SIDE <= bounds.minZ()) {
+            work++; nextDestinationDirection(); return 0;
+        }
+        var neighbour = region(new PedestrianRegion.Tile(tileX, tileZ));
+        if (neighbour == null || work >= turnLimit) return 0;
+        work++;
+        if (neighbour.unknown()) return 1; // Missing knowledge cannot prove isolation.
+        if (destinationOffset == PedestrianRegion.SIDE) { nextDestinationDirection(); return 0; }
+        int direction = destinationDirection, offset = destinationOffset;
+        int x = direction == 0 ? PedestrianRegion.SIDE - 1 : direction == 2 ? 0 : offset;
+        int z = direction == 3 ? PedestrianRegion.SIDE - 1 : direction == 1 ? 0 : offset;
+        int otherX = direction == 0 ? 0 : direction == 2 ? PedestrianRegion.SIDE - 1 : x;
+        int otherZ = direction == 3 ? 0 : direction == 1 ? PedestrianRegion.SIDE - 1 : z;
+        var exits = local.surfaces(x, z); var entrances = neighbour.surfaces(otherX, otherZ);
+        if (destinationExit == exits.size()) { destinationOffset++; destinationExit = destinationEntrance = 0; return 0; }
+        var exit = exits.get(destinationExit);
+        if (local.component(exit) != destination.component() || destinationEntrance == entrances.size()) {
+            destinationExit++; destinationEntrance = 0; return 0;
+        }
+        return geometry.canTraverse(entrances.get(destinationEntrance++), exit) ? 1 : 0;
+    }
+    private void nextDestinationDirection() {
+        destinationDirection++; destinationOffset = destinationExit = destinationEntrance = 0;
     }
     private void expandStep() {
         var candidate = expanding;
