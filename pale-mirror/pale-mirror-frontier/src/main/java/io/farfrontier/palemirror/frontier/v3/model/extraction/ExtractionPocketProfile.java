@@ -2,7 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model.extraction;
 
 import java.util.Objects;
 
-/** Finite connected inclusion in the authored initial face, not an infinite ore generator. */
+/** Finite connected inclusion in declared geology, independent of the initial work face. */
 public record ExtractionPocketProfile(int producerPeriod, int firstDepth, int depthCells,
                                      int firstRow, int rowCells, BlockExtraction.Definition material) {
     public ExtractionPocketProfile {

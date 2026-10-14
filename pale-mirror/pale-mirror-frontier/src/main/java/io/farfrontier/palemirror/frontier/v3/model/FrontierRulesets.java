@@ -43,7 +43,8 @@ public final class FrontierRulesets {
     private static final FrontierRuleset FUELLED_QUARRY_GRAYBOX = fuelledQuarry(HIGH_RESERVE_QUARRY_GRAYBOX);
     private static final FrontierRuleset SUPPLY_QUARRY_GRAYBOX = supplyQuarry(FUELLED_QUARRY_GRAYBOX);
     private static final FrontierRuleset PREVIOUS_MARKET_QUARRY_GRAYBOX = marketQuarry(SUPPLY_QUARRY_GRAYBOX);
-    private static final FrontierRuleset MARKET_QUARRY_GRAYBOX = longFuelReserve(PREVIOUS_MARKET_QUARRY_GRAYBOX);
+    private static final FrontierRuleset PREVIOUS_STOCKED_QUARRY_GRAYBOX = longFuelReserve(PREVIOUS_MARKET_QUARRY_GRAYBOX);
+    private static final FrontierRuleset MARKET_QUARRY_GRAYBOX = longFuelDeposits(PREVIOUS_MARKET_QUARRY_GRAYBOX);
     /** Existing worlds retain their exact selector and timing; they are never silently retuned. */
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R6 = ruleset("frontier-v3-production-r6", 8, 1L, 20L, 1L);
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R4 = ruleset("frontier-v3-production-r4", 6, 1L, 20L, 1L);
@@ -59,6 +60,7 @@ public final class FrontierRulesets {
     private static final Map<String, FrontierRuleset> INSTALLED = Map.ofEntries(
             Map.entry(MARKET_QUARRY_GRAYBOX.id(), MARKET_QUARRY_GRAYBOX),
             Map.entry(PREVIOUS_MARKET_QUARRY_GRAYBOX.id(), PREVIOUS_MARKET_QUARRY_GRAYBOX),
+            Map.entry(PREVIOUS_STOCKED_QUARRY_GRAYBOX.id(), PREVIOUS_STOCKED_QUARRY_GRAYBOX),
             Map.entry(SUPPLY_QUARRY_GRAYBOX.id(), SUPPLY_QUARRY_GRAYBOX),
             Map.entry(TERRACED_QUARRY_GRAYBOX.id(), TERRACED_QUARRY_GRAYBOX),
             Map.entry(AVAILABLE_FRONT_QUARRY_GRAYBOX.id(), AVAILABLE_FRONT_QUARRY_GRAYBOX),
@@ -85,6 +87,17 @@ public final class FrontierRulesets {
     public static FrontierRuleset fuelledQuarryGraybox() { return FUELLED_QUARRY_GRAYBOX; }
     public static FrontierRuleset supplyQuarryGraybox() { return SUPPLY_QUARRY_GRAYBOX; }
     public static FrontierRuleset marketQuarryGraybox() { return MARKET_QUARRY_GRAYBOX; }
+
+    /** Coal stays finite geology, not a warehouse grant. Ordinary mining and trade obtain it. */
+    private static FrontierRuleset longFuelDeposits(FrontierRuleset base) {
+        var prior = base.extraction().pocket().orElseThrow();
+        var extraction = base.extraction().withPocket(new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionPocketProfile(
+                prior.producerPeriod(), 0, 32, 2, 21, prior.material()));
+        var stocks = base.initialSettlementStocks().stream().filter(stock -> !stock.itemKind().equals("minecraft:coal")).toList();
+        return new FrontierRuleset("frontier-v3-quarry-graybox-r13", base.schemaVersion(), base.cadence(), base.spatial(), base.rates(),
+                base.facilityCapacity(), base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
+                base.workCatalog(), base.goodsTrade(), stocks, base.labour(), base.expedition(), extraction, base.execution(), base.production(), base.fields());
+    }
 
     /** New finite-stock profile: the graybox has one shared baking station per settlement.
      * Two bakers cannot run that single station concurrently. Historical R11 is unchanged. */

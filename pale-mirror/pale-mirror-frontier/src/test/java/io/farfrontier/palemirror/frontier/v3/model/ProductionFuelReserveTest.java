@@ -17,7 +17,7 @@ class ProductionFuelReserveTest {
     }
 
     @Test void newProfilePinsFiniteCoalStocksAndTradeTargetWithoutRetuningHistoricalWorlds() {
-        var rules = FrontierRulesets.marketQuarryGraybox();
+        var rules = FrontierRulesets.installed("frontier-v3-quarry-graybox-r12");
         assertEquals("frontier-v3-quarry-graybox-r12", rules.id());
         var coal = rules.initialSettlementStocks().stream().filter(stock -> stock.itemKind().equals("minecraft:coal")).toList();
         assertEquals(12, coal.size());

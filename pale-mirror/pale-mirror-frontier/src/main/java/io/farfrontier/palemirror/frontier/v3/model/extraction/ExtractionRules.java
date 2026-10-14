@@ -65,9 +65,10 @@ public record ExtractionRules(boolean enabled, int producerStride, int width, in
         Objects.requireNonNull(source); Objects.requireNonNull(geology); Objects.requireNonNull(terraces); Objects.requireNonNull(surfaceCut);
         Objects.requireNonNull(rockRise); Objects.requireNonNull(pocket);
         pocket.ifPresent(value -> {
-            if (!enabled || value.firstDepth() + value.depthCells() > depth || value.firstRow() + value.rowCells() > width
-                    || !value.material().toolKind().equals(source.toolKind()) || value.material().before().equals(source.before()))
-                throw new IllegalArgumentException("deposit inclusion has no finite compatible initial face");
+            if (!enabled || !value.material().toolKind().equals(source.toolKind()) || value.material().before().equals(source.before())
+                    || (value.firstDepth() + value.depthCells() > depth || value.firstRow() + value.rowCells() > width)
+                        && (geology.isEmpty() || terraces.isEmpty()))
+                throw new IllegalArgumentException("deposit inclusion has no finite compatible geological development");
         });
         if (rockRise.isPresent() && (!enabled || surfaceCut.isEmpty() || geology.isEmpty()))
             throw new IllegalArgumentException("rock rise requires an explicit contiguous terrain baseline");

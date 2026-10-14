@@ -41,11 +41,14 @@ public final class ExtractionAreaPlanning {
         int count = columnLimit(rules, layout);
         if (count < 1) return Optional.empty();
         var ground = ExtractionGroundKnowledge.forSite(state, deposit);
+        var products = ExtractionStockDemand.demandedProducts(state, deposit, Optional.empty());
         var proposed = AdjacentExcavationPlanner.propose(front.stations(), ground,
                 access::reachable, floor -> !declarationHeld(state, siteId, floor.support()),
                 block -> rules.definitionFor(block).isPresent(),
                 block -> block.kind().equals("minecraft:air") || rules.definitionFor(block).isPresent(), count,
-                front.selection(), front::executable);
+                front.selection(), column -> front.executable(column) && column.clearance().stream()
+                        .map(KnownBlockGeometry.Sample::block).flatMap(block -> rules.definitionFor(block).stream())
+                        .flatMap(material -> material.coldOutput().stream()).anyMatch(output -> products.contains(output.itemKind())));
         var columns = new ArrayList<AdjacentExcavationPlanner.Column<BlockExtraction.Block>>();
         int remaining = Math.min(rules.developmentBatchCells(), ExtractionLayout.MAX_CELLS - layout.cells().size());
         for (var column : proposed) {

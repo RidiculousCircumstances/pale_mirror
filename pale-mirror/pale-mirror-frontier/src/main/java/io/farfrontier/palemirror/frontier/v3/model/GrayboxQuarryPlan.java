@@ -88,6 +88,18 @@ public final class GrayboxQuarryPlan {
             for (int y = 1; y <= rules.pitDepth() + 2; y++) if (!(x >= 0 && z >= 0 && z < rules.width() && y <= 2))
                 fixed.put(at(anchor, facing, x, y, z), air);
         }
+        // A finite inclusion is a terrain declaration, not thousands of already
+        // admitted source cells. The common development owner later reclassifies
+        // these exact blocks into its work front; ordinary extraction consumes them.
+        rules.pocket().filter(pocket -> producerIndex % pocket.producerPeriod() == 0).ifPresent(pocket -> {
+            for (int depth = pocket.firstDepth(); depth < pocket.firstDepth() + pocket.depthCells(); depth++)
+                for (int row = pocket.firstRow(); row < pocket.firstRow() + pocket.rowCells(); row++)
+                    for (int y = 1; y <= 2; y++) {
+                        if (depth < rules.depth() && row < rules.width()) continue; // Already a declared initial source.
+                        var position = at(anchor, facing, depth, y, row);
+                        if (!fixed.containsKey(position)) natural.put(position, pocket.material().before());
+                    }
+        });
         for (int row = 0; row < rules.width(); row++) {
             Set<Long> previous = Set.of();
             for (int depth = 0; depth < rules.depth(); depth++) {
