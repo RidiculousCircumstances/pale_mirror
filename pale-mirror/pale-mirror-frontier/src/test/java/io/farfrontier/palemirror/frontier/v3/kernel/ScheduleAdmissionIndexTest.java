@@ -9,6 +9,33 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ScheduleAdmissionIndexTest {
+    @Test void commitChecksReuseTheHeldPrefixOnlyWithinTheExactImmutablePass() {
+        var checks = new AtomicInteger();
+        var planner = new ScheduledActionPlanner<Object>() {
+            public List<ProposedEvent> plan(Object s, ScheduledAction a) { return List.of(); }
+            public boolean held(Object s, ScheduledAction a) { checks.incrementAndGet(); return !a.equals(SECOND); }
+        };
+        var budget = new WorkBudget(1, 1);
+        var index = new ScheduleAdmissionIndex<>(planner, 8);
+        var queue = new ScheduledActionQueue();
+        queue.schedule(action("held-a", 1)); queue.schedule(action("held-b", 1)); queue.schedule(action("held-c", 1)); queue.schedule(SECOND);
+        var state = new Object(); index.begin(budget);
+        assertEquals(List.of(SECOND), queue.selectAdmittedDue(new SimInstant(2), budget,
+                a -> index.assess(state, a), a -> Set.of(), ScheduledAction::weight).admitted());
+        // Selection used all four evaluations. A fresh READY commit check must
+        // still defer; begin again with its independent evaluation allowance.
+        index.begin(new WorkBudget(2, 2));
+        queue.selectAdmittedDue(new SimInstant(2), new WorkBudget(2, 2), a -> index.assess(state, a), a -> Set.of(), ScheduledAction::weight);
+        int before = checks.get();
+        assertTrue(queue.isAdmittedHead(SECOND, new SimInstant(2), a -> index.assess(state, a), a -> Set.of()));
+        assertEquals(before + 1, checks.get(), "only READY is reassessed, not the three unchanged refusals");
+        var changed = new Object();
+        assertEquals(ScheduleAdmissionIndex.Decision.HELD, index.assess(changed, action("held-a", 1)));
+        assertEquals(before + 2, checks.get(), "new state cannot reuse an unproved hold");
+        index.begin(budget);
+        index.assess(changed, action("held-a", 1));
+        assertEquals(before + 3, checks.get(), "another host turn requires reevaluation without an owner proof");
+    }
     private static final ScheduledAction FIRST = action("first", 1);
     private static final ScheduledAction SECOND = action("second", 2);
     private record State(Object stock, boolean hasStock, Object unrelated) { }

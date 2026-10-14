@@ -497,7 +497,9 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
 
     private void observeQueue(SimInstant observedAt, int queueDepth, int parkedDepth,
                               Optional<ScheduledAction> deferred) {
-        deferred = deferred.filter(schedules::containsExact).filter(action -> !scheduledPlanner.held(state, action));
+        // A refused predecessor can consume admission-calculation capacity even
+        // when execution itself is held. Do not relabel that budget fence idle.
+        deferred = deferred.filter(schedules::containsExact);
         FrontierExecutionMetrics.safelyObserveQueue(executionMetrics, observedAt, queueDepth, parkedDepth, deferred);
         FrontierExecutionMetrics.safelyObserveWakeAudit(executionMetrics, schedules.auditReadyWithoutWake());
         try { executionMetrics.observePressure(schedules.pressure(observedAt, action -> !scheduledPlanner.held(state, action))); }
