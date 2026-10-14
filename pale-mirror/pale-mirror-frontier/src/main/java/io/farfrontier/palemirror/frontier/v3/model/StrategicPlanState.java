@@ -13,6 +13,7 @@ import java.util.Set;
 /** Canonical bounded owner of retained utility decisions and their durable task graphs. */
 public final class StrategicPlanState {
     static final int MAX_OBJECTIVES = 128;
+    private static final ImmutableInvariantCheck<Void> VALIDATION = new ImmutableInvariantCheck<>();
     static final int MAX_TASKS = 512;
     static final int MAX_ROUTE_PATROLS = 128;
     static final int MAX_SETTLEMENT_ASSAULTS = 32;
@@ -268,6 +269,10 @@ public final class StrategicPlanState {
     }
 
     void validate(FrontierBootstrap bootstrap, RouteTopology routeTopology, HumanPopulation humanPopulation) {
+        VALIDATION.validate(() -> validateCurrent(bootstrap, routeTopology, humanPopulation),
+                this, bootstrap, routeTopology, humanPopulation.residents());
+    }
+    private void validateCurrent(FrontierBootstrap bootstrap, RouteTopology routeTopology, HumanPopulation humanPopulation) {
         Objects.requireNonNull(routeTopology, "route topology");
         if (!decisionAuthorities.authorities().isEmpty()) {
             DecisionAuthorityState expected = DecisionAuthorityState.initial(bootstrap);

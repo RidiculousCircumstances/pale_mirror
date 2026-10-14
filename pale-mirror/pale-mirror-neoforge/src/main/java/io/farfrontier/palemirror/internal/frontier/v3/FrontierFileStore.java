@@ -35,12 +35,24 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
     private static final Pattern WAL = Pattern.compile("wal-segment-(\\d{20})\\.bin");
     /** One shared segment force, never a deferred force per old transaction file. */
     private static final int MAX_BATCHABLE_WAL_RECORDS = 64;
+    private static final long MAX_BUFFERED_WAL_BYTES = 64L * 1024 * 1024;
+    private static final long REQUIRED_IO_SAFETY_SECONDS = 30;
     private static final byte[] FORMAT = "PM-FRONTIER-STORE-2".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
     private final Map<WorldId, FrontierWalSegment> activeSegments = new HashMap<>();
     private final java.util.Set<Path> formattedDirectories = new java.util.HashSet<>();
     private int turnDepth;
     private final Path baseDirectory;
     private final PayloadCodecs payloadCodecs;
+    private final java.util.concurrent.Executor writer;
+    private record PendingRecord(WorldId world, long sequence, byte[] bytes) { }
+    private record FlushReceipt(Map<WorldId, Long> sequences, long elapsedNanos) { }
+    private final java.util.ArrayList<PendingRecord> pendingRecords = new java.util.ArrayList<>();
+    private long pendingBytes;
+    private java.util.concurrent.CompletableFuture<FlushReceipt> pendingFlush;
+    private int flushingRecords;
+    private long flushingBytes, flushGroups, lastFlushNanos, maxFlushNanos, pendingSinceNanos;
+    private RuntimeException ioFailure;
+    private boolean closed;
     /**
      * The server owns one store on one thread.  Retaining its already-verified image avoids a
      * directory scan and full snapshot decode at every periodic checkpoint; a new store created
@@ -88,14 +100,22 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
     private final Map<WorldId, DurableHead> durableHeads = new HashMap<>();
 
     public FrontierFileStore(Path baseDirectory, PayloadCodecs payloadCodecs) {
+        this(baseDirectory, payloadCodecs, FrontierPersistenceIo.writer());
+    }
+    FrontierFileStore(Path baseDirectory, PayloadCodecs payloadCodecs, java.util.concurrent.Executor writer) {
         this.baseDirectory = Objects.requireNonNull(baseDirectory, "base directory");
         this.payloadCodecs = Objects.requireNonNull(payloadCodecs, "payload codecs");
+        this.writer = Objects.requireNonNull(writer, "ordered persistence writer");
     }
 
     /** Package seam for the bounded server-turn durability contract. */
     synchronized long flushedSequence(WorldId world) { return head(world).flushedSequence(); }
 
     @Override public synchronized RecoveryImage recover(WorldId worldId) {
+        checkHealthy();
+        if (durableHeads.containsKey(worldId) && (!pendingRecords.isEmpty()
+                || pendingFlush != null && !pendingFlush.isDone()))
+            throw new IllegalStateException("disk recovery requires a settled WAL prefix; use the owner read image while durability is pending");
         Path directory = worldDirectory(worldId);
         if (!Files.exists(directory)) {
             RecoveryImage empty = new RecoveryImage(worldId, java.util.Optional.empty(), List.of());
@@ -152,6 +172,10 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
     }
 
     @Override public synchronized AppendReceipt append(TransactionRecord transaction, Durability durability) {
+        checkHealthy();
+        // Outside the normal turn gate an explicit command still joins the
+        // preceding receipt. It can never race an append/rotation on the lane.
+        finishPendingFlush(true);
         Objects.requireNonNull(transaction, "transaction"); Objects.requireNonNull(durability, "durability");
         DurableHead head = head(transaction.worldId());
         if (!transaction.revision().equals(head.revision().next())) throw new IllegalStateException("WAL append revision is not next");
@@ -159,42 +183,51 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
         image.validateAppend(transaction);
         long sequence = Math.addExact(head.lastSequence(), 1L);
         WorldId worldId = transaction.worldId();
-        appendSegment(worldId, sequence, FrontierPersistenceCodec.encodeWal(transaction, payloadCodecs));
+        byte[] bytes = FrontierPersistenceCodec.encodeWal(transaction, payloadCodecs);
+        if (bytes.length > FrontierWalSegment.MAX_RECORD_BYTES) throw new IllegalArgumentException("oversized WAL record");
+        if (pendingBytes + bytes.length > MAX_BUFFERED_WAL_BYTES) {
+            flushPendingBlocking(); head = head(worldId);
+        }
+        pendingRecords.add(new PendingRecord(worldId, sequence, bytes));
+        pendingBytes = Math.addExact(pendingBytes, bytes.length);
         DurableHead appended = head.appended(sequence, transaction.revision());
+        durableHeads.put(worldId, appended);
         if (durability == Durability.DURABLE_BEFORE_EFFECT) {
             // A durable physical boundary depends on the complete preceding canonical history,
             // not merely its own record.  Flush the bounded BATCHABLE tail before returning the
             // receipt that permits an executor to observe or invoke an external effect.
-            flushWalThrough(worldId, appended.flushedSequence(), sequence);
-            appended = appended.flushedThrough(sequence);
-        } else if (turnDepth == 0 || sequence - appended.flushedSequence() >= MAX_BATCHABLE_WAL_RECORDS) {
-            flushWalThrough(worldId, appended.flushedSequence(), sequence);
-            appended = appended.flushedThrough(sequence);
+            flushPendingBlocking();
+        } else if (turnDepth == 0 || pendingRecords.size() >= MAX_BATCHABLE_WAL_RECORDS) {
+            flushPendingBlocking();
         }
-        durableHeads.put(worldId, appended);
         image.appended(transaction);
         return new AppendReceipt(transaction.id(), transaction.revision(), durability, sequence);
     }
 
     @Override public synchronized SnapshotReceipt installSnapshot(SnapshotRecord snapshot) {
+        flushPendingBlocking();
         WorldId worldId = snapshot.checkpoint().worldId(); DurableHead head = head(worldId);
         if (snapshot.coveredWalSequence() != head.lastSequence() || !snapshot.checkpoint().revision().equals(head.revision())) {
             throw new IllegalStateException("snapshot does not cover current WAL state");
         }
-        try { ensureFormat(worldDirectory(worldId)); }
-        catch (IOException failure) { throw new IllegalStateException("unable to initialize snapshot store", failure); }
-        writeAtomically(worldDirectory(worldId).resolve(fileName("snapshot", head.lastSequence())), FrontierPersistenceCodec.encodeSnapshot(snapshot), true);
-        closeSegment(worldId);
+        byte[] bytes = FrontierPersistenceCodec.encodeSnapshot(snapshot);
+        runIoBlocking(() -> {
+            try { ensureFormat(worldDirectory(worldId)); }
+            catch (IOException failure) { throw new IllegalStateException("unable to initialize snapshot store", failure); }
+            writeAtomically(worldDirectory(worldId).resolve(fileName("snapshot", head.lastSequence())), bytes, true);
+            closeSegment(worldId);
+        });
         durableHeads.put(worldId, head.withSnapshot(head.lastSequence(), head.revision()));
         recoveredImages.put(worldId, new OwnedRecovery(new RecoveryImage(worldId, java.util.Optional.of(snapshot), List.of())));
         return new SnapshotReceipt(snapshot.checkpoint().revision(), head.lastSequence());
     }
 
     @Override public synchronized CompactionReceipt compact(WorldId worldId, Revision coveredRevision) {
+        flushPendingBlocking();
         DurableHead head = head(worldId);
         if (head.snapshotSequence() != head.lastSequence() || !head.snapshotRevision().equals(coveredRevision)
                 || !head.revision().equals(coveredRevision)) throw new IllegalStateException("snapshot does not cover all retained WAL");
-        try {
+        runIoBlocking(() -> { try {
             var segments = entries(worldDirectory(worldId), WAL);
             for (int index = 0; index < segments.size(); index++) {
                 var entry = segments.get(index);
@@ -204,8 +237,9 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
             for (var entry : entries(worldDirectory(worldId), SNAPSHOT))
                 if (entry.sequence() < head.snapshotSequence()) Files.delete(entry.path());
             forceDirectory(worldDirectory(worldId));
-            return new CompactionReceipt(coveredRevision, 0L);
         } catch (IOException error) { throw new IllegalStateException("unable to compact Frontier v3 WAL", error); }
+        });
+        return new CompactionReceipt(coveredRevision, 0L);
     }
 
     private DurableHead head(WorldId worldId) {
@@ -217,24 +251,126 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
 
     private Path worldDirectory(WorldId worldId) { return baseDirectory.resolve("frontier-v3").resolve(worldId.value().replace(':', '_')); }
     private static String fileName(String prefix, long sequence) { return "%s-%020d.bin".formatted(prefix, sequence); }
-    private void flushWalThrough(WorldId worldId, long alreadyFlushed, long throughSequence) {
-        try {
-            if (throughSequence > alreadyFlushed) Objects.requireNonNull(activeSegments.get(worldId), "active WAL prefix").force();
-        } catch (IOException error) {
-            throw new IllegalStateException("unable to flush Frontier v3 WAL batch", error);
+    /** A logical turn is settled only by its prefix receipt, not by submission. */
+    synchronized void beginTurn() { flushPendingBlocking(); turnDepth = Math.addExact(turnDepth, 1); }
+    synchronized boolean tryBeginTurn() {
+        checkHealthy();
+        if (!finishPendingFlush(false)) return false;
+        if (!pendingRecords.isEmpty()) {
+            startPendingFlush(false);
+            if (!finishPendingFlush(false) || !pendingRecords.isEmpty()) return false;
         }
+        turnDepth = Math.addExact(turnDepth, 1); return true;
     }
-
-    /** BATCHABLE records share one force at turn exit; irreversible effects flush immediately. */
-    synchronized void beginTurn() { turnDepth = Math.addExact(turnDepth, 1); }
     synchronized void endTurn() {
         if (turnDepth < 1) throw new IllegalStateException("unbalanced persistence turn");
         if (--turnDepth != 0) return;
-        for (var world : List.copyOf(durableHeads.keySet())) {
-            var head = durableHeads.get(world);
-            flushWalThrough(world, head.flushedSequence(), head.lastSequence());
-            durableHeads.put(world, head.flushedThrough(head.lastSequence()));
+        flushPendingBlocking();
+    }
+    synchronized void endTurnAsync() {
+        if (turnDepth < 1) throw new IllegalStateException("unbalanced persistence turn");
+        if (--turnDepth == 0) startPendingFlush(false);
+    }
+
+    record Pressure(int bufferedRecords, long bufferedBytes, boolean awaitingDurability,
+                    long pendingNanos, long forcedGroups, long lastFlushNanos, long maxFlushNanos) { }
+    synchronized Pressure pressure() {
+        return new Pressure(pendingRecords.size() + flushingRecords, pendingBytes + flushingBytes,
+                pendingFlush != null || !pendingRecords.isEmpty(), pendingSinceNanos == 0L ? 0L
+                    : Math.max(0L, System.nanoTime() - pendingSinceNanos), flushGroups, lastFlushNanos, maxFlushNanos);
+    }
+    private void checkHealthy() {
+        if (closed) throw new IllegalStateException("Frontier store is closed");
+        if (ioFailure != null) throw ioFailure;
+        if (pendingSinceNanos != 0L && (pendingFlush != null && !pendingFlush.isDone()
+                || pendingFlush == null && !pendingRecords.isEmpty())
+                && System.nanoTime() - pendingSinceNanos > java.util.concurrent.TimeUnit.SECONDS.toNanos(REQUIRED_IO_SAFETY_SECONDS)) {
+            ioFailure = new IllegalStateException("WAL lane made no durable progress within its safety bound; prefix remains unacknowledged");
+            throw ioFailure;
         }
+    }
+    private void flushPendingBlocking() {
+        checkHealthy(); finishPendingFlush(true);
+        if (!pendingRecords.isEmpty()) { startPendingFlush(true); finishPendingFlush(true); }
+    }
+    private boolean finishPendingFlush(boolean wait) {
+        if (pendingFlush == null) return true;
+        if (!wait && !pendingFlush.isDone()) return false;
+        try {
+            var receipt = awaitIo(pendingFlush);
+            receipt.sequences().forEach((world, sequence) -> {
+                var head = durableHeads.get(world);
+                durableHeads.put(world, head.flushedThrough(sequence));
+            });
+            flushGroups++; lastFlushNanos = receipt.elapsedNanos(); maxFlushNanos = Math.max(maxFlushNanos, lastFlushNanos);
+            pendingFlush = null; flushingRecords = 0; flushingBytes = 0; pendingSinceNanos = 0;
+            return true;
+        } catch (java.util.concurrent.CompletionException failure) {
+            ioFailure = new IllegalStateException("ordered Frontier WAL writer failed", failure.getCause());
+            throw ioFailure;
+        }
+    }
+    private void startPendingFlush(boolean required) {
+        checkHealthy();
+        if (pendingFlush != null) throw new IllegalStateException("concurrent WAL prefix submission");
+        if (pendingRecords.isEmpty()) return;
+        var records = List.copyOf(pendingRecords);
+        var future = new java.util.concurrent.CompletableFuture<FlushReceipt>();
+        Runnable task = () -> {
+            long start = System.nanoTime();
+            try {
+                var through = new java.util.LinkedHashMap<WorldId, Long>();
+                for (var record : records) {
+                    appendSegment(record.world(), record.sequence(), record.bytes());
+                    through.put(record.world(), record.sequence());
+                }
+                for (var world : through.keySet()) Objects.requireNonNull(activeSegments.get(world), "active WAL prefix").force();
+                future.complete(new FlushReceipt(Map.copyOf(through), System.nanoTime() - start));
+            } catch (Throwable failure) { future.completeExceptionally(failure); }
+        };
+        if (!submitIo(task, required)) {
+            if (pendingSinceNanos == 0L) pendingSinceNanos = System.nanoTime();
+            return; // bounded backpressure; retain every original byte for the next turn
+        }
+        pendingFlush = future; flushingRecords = records.size(); flushingBytes = pendingBytes;
+        pendingRecords.clear(); pendingBytes = 0;
+        if (pendingSinceNanos == 0L) pendingSinceNanos = System.nanoTime();
+    }
+    private boolean submitIo(Runnable task, boolean required) {
+        try { writer.execute(task); return true; }
+        catch (java.util.concurrent.RejectedExecutionException full) {
+            if (!required) return false;
+            // Required physical/save boundaries cannot acknowledge queued memory.
+            // Await capacity on the shared lane, never execute file work as a
+            // silent caller-thread fallback or create another unbounded pool.
+            if (writer instanceof java.util.concurrent.ThreadPoolExecutor pool && !pool.isShutdown()) {
+                try {
+                    if (!pool.getQueue().offer(task, REQUIRED_IO_SAFETY_SECONDS, java.util.concurrent.TimeUnit.SECONDS))
+                        throw new IllegalStateException("required WAL lane capacity safety bound exceeded");
+                    return true;
+                }
+                catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new IllegalStateException("interrupted waiting for WAL lane", interrupted); }
+            }
+            throw new IllegalStateException("required WAL lane is unavailable", full);
+        }
+    }
+    private void runIoBlocking(Runnable operation) {
+        var result = new java.util.concurrent.CompletableFuture<Void>();
+        submitIo(() -> { try { operation.run(); result.complete(null); }
+            catch (Throwable failure) { result.completeExceptionally(failure); } }, true);
+        try { awaitIo(result); }
+        catch (java.util.concurrent.CompletionException failure) {
+            ioFailure = new IllegalStateException("ordered Frontier storage operation failed", failure.getCause()); throw ioFailure;
+        }
+    }
+    private <T> T awaitIo(java.util.concurrent.CompletableFuture<T> receipt) {
+        try { return receipt.get(REQUIRED_IO_SAFETY_SECONDS, java.util.concurrent.TimeUnit.SECONDS); }
+        catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            ioFailure = new IllegalStateException("interrupted awaiting exact WAL durability", interrupted); throw ioFailure;
+        } catch (java.util.concurrent.TimeoutException timeout) {
+            ioFailure = new IllegalStateException("required WAL durability safety bound exceeded; prefix remains unacknowledged", timeout); throw ioFailure;
+        } catch (java.util.concurrent.ExecutionException failed) { throw new java.util.concurrent.CompletionException(failed.getCause()); }
     }
 
     private void appendSegment(WorldId world, long sequence, byte[] bytes) {
@@ -268,6 +404,15 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
     }
 
     @Override public synchronized void close() {
+        if (closed) return;
+        RuntimeException pendingFailure = null;
+        try { flushPendingBlocking(); } catch (RuntimeException failure) { pendingFailure = failure; }
+        try { runIoBlocking(this::closeSegments); }
+        catch (RuntimeException failure) { if (pendingFailure == null) pendingFailure = failure; else pendingFailure.addSuppressed(failure); }
+        finally { closed = true; }
+        if (pendingFailure != null) throw pendingFailure;
+    }
+    private void closeSegments() {
         RuntimeException failure = null;
         for (var world : List.copyOf(activeSegments.keySet())) {
             var segment = activeSegments.remove(world);

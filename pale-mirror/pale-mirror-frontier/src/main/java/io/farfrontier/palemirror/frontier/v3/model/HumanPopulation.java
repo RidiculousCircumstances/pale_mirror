@@ -594,8 +594,6 @@ provisions, nutrition, medicalOperations, schedules, meals, mealResourceObligati
     }
 
     private static <K, V> Map<K, V> immutable(Map<K, V> source, String name) {
-        Objects.requireNonNull(source, name); LinkedHashMap<K, V> copy = new LinkedHashMap<>();
-        source.forEach((key, value) -> copy.put(Objects.requireNonNull(key, name + " key"), Objects.requireNonNull(value, name + " value")));
-        return Map.copyOf(copy);
+        return ImmutableLookupMap.copyOf(Objects.requireNonNull(source, name));
     }
 }

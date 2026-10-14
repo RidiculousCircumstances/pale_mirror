@@ -38,6 +38,20 @@ public final class ProductionServiceAccess implements ServiceAccessCapability {
                 && ServiceAccessCoordinator.turnoverPoint(state, assignment.residentId())
                     .filter(current -> current.pointId().equals(point(state, job))).isPresent();
     }
+    public static boolean mayResumeWork(FrontierWorldState state, HumanAssignment assignment) {
+        FrontierProductionWorkSceneSupport.executionCheckpoint(state, assignment);
+        var job = state.productionJobs().get(assignment.ownerId().orElseThrow());
+        var work = job.bakeryWork().orElseThrow();
+        if (work.phase() == BakeryWorkState.Phase.PROCESSING
+                && state.bootstrap().ruleset().production().require(work.recipeId()).processingMode() == ProductionRecipe.ProcessingMode.AUTOMATIC)
+            return BakeryStationOperation.require(state, job).complete();
+        return operationEligible(state, job);
+    }
+    public static java.util.Set<SubjectId> resumeWakeKeys(FrontierWorldState state, HumanAssignment assignment) {
+        FrontierProductionWorkSceneSupport.executionCheckpoint(state, assignment);
+        var job = state.productionJobs().get(assignment.ownerId().orElseThrow());
+        return java.util.Set.of(job.id(), point(state, job));
+    }
 
     @Override public List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId pointId) {
         var boundary = ServiceAccessCoordinator.boundary(state, pointId);

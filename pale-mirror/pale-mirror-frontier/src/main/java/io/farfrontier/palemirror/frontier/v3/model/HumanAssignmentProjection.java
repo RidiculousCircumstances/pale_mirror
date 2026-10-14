@@ -41,7 +41,7 @@ public record HumanAssignmentProjection(Map<SubjectId, HumanAssignment> assignme
         }
     }
     public HumanAssignmentProjection {
-        assignments = Map.copyOf(Objects.requireNonNull(assignments, "human assignments"));
+        assignments = ImmutableLookupMap.copyOf(Objects.requireNonNull(assignments, "human assignments"));
         assignments.forEach((resident, assignment) -> {
             if (!resident.equals(assignment.residentId())) throw new IllegalArgumentException("assignment map key must match resident");
         });

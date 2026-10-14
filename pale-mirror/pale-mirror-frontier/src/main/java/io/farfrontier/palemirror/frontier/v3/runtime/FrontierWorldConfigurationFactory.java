@@ -56,6 +56,10 @@ final class FrontierWorldConfigurationFactory {
             @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
                 return FrontierWorldRuntimeDefinition.scheduledHeld(state, action);
             }
+            @Override public java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledHold<FrontierWorldState>>
+                    holdProof(FrontierWorldState state, ScheduledAction action) {
+                return FrontierWorldRuntimeDefinition.holdProof(state, action);
+            }
             @Override public int admissionWeight(FrontierWorldState state, ScheduledAction action) {
                 return FrontierWorldRuntimeDefinition.scheduledAdmissionWeight(state, action);
             }

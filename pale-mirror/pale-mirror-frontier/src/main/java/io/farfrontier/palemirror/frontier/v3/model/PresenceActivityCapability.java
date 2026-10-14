@@ -5,11 +5,16 @@ import java.util.Optional;
 
 /** Actor-owned passive presence has no job, labour or resource continuation. */
 final class PresenceActivityCapability implements ActorActivityCapability {
+    private static final ImmutableInvariantCheck<Void> CHECK = new ImmutableInvariantCheck<>();
     private final ActorPresencePolicies policies;
     PresenceActivityCapability(ActorPresencePolicies policies) {
         this.policies = java.util.Objects.requireNonNull(policies);
     }
     static void validateReferences(java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorLocation> actors,
+                                    ActorExecutionState executions) {
+        CHECK.validate(() -> validateCurrent(actors, executions), actors, executions);
+    }
+    private static void validateCurrent(java.util.Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ActorLocation> actors,
                                     ActorExecutionState executions) {
         for (var id : executions.current(ActorActivityKind.PRESENCE).values())
             if (!id.activityOwnerId().equals(id.actorId()) || !actors.containsKey(id.actorId())

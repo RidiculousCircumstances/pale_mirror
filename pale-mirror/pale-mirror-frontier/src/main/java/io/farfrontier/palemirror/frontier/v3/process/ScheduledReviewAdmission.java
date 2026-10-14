@@ -11,17 +11,19 @@ import java.util.Set;
 /** Decorates an explicitly registered review capability; the kernel knows no business families. */
 final class ScheduledReviewAdmission {
     private ScheduledReviewAdmission() { }
-    static FrontierWorldProcessCatalog.ScheduledPlanner policyReview(FrontierWorldProcessCatalog.ScheduledPlanner delegate) {
+    static FrontierScheduledPlanner policyReview(FrontierScheduledPlanner delegate) {
         return decorate(delegate, false);
     }
-    static FrontierWorldProcessCatalog.ScheduledPlanner coalescedReview(FrontierWorldProcessCatalog.ScheduledPlanner delegate) {
+    static FrontierScheduledPlanner coalescedReview(FrontierScheduledPlanner delegate) {
         return decorate(delegate, true);
     }
-    private static FrontierWorldProcessCatalog.ScheduledPlanner decorate(FrontierWorldProcessCatalog.ScheduledPlanner delegate, boolean coalescible) {
-        return new FrontierWorldProcessCatalog.ScheduledPlanner() {
+    private static FrontierScheduledPlanner decorate(FrontierScheduledPlanner delegate, boolean coalescible) {
+        return new FrontierScheduledPlanner() {
             @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) { return delegate.plan(state, action); }
             @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, SimInstant instant) { return delegate.plan(state, action, instant); }
             @Override public boolean held(FrontierWorldState state, ScheduledAction action) { return delegate.held(state, action); }
+            @Override public java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledHold<FrontierWorldState>>
+                    holdProof(FrontierWorldState state, ScheduledAction action) { return delegate.holdProof(state, action); }
             @Override public int admissionWeight(FrontierWorldState state, ScheduledAction action) {
                 return Math.max(action.weight(), state.bootstrap().ruleset().execution().policyReviewWeight());
             }

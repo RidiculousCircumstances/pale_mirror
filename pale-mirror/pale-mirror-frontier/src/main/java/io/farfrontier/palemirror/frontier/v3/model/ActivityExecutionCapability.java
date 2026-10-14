@@ -4,6 +4,11 @@ package io.farfrontier.palemirror.frontier.v3.model;
 public interface ActivityExecutionCapability {
     HumanAssignmentKind kind();
     ActivityExecutionCheckpoint checkpoint(FrontierWorldState state, HumanAssignment assignment);
+    /** Owner-declared executable successor, distinct from a safe interruption checkpoint. */
+    boolean mayResumeWork(FrontierWorldState state, HumanAssignment assignment);
+    /** Advisory causal addresses; absence never bypasses conservative admission. */
+    default java.util.Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> resumeWakeKeys(
+            FrontierWorldState state, HumanAssignment assignment) { return java.util.Set.of(); }
     /** Mission owners can prohibit an independent home-food detour while retaining local self-care. */
     default boolean permitsHomeFood(FrontierWorldState state, HumanAssignment assignment) { return true; }
     /** Owner says whether the wait belongs to the currently occupied temporary service point. */

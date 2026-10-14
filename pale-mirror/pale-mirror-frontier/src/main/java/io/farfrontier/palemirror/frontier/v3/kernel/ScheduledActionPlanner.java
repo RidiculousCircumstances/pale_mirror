@@ -26,6 +26,11 @@ public interface ScheduledActionPlanner<S> {
     /** Canonical owner-declared hold; excludes work before budget admission without changing its deadline. */
     default boolean held(S state, ScheduledAction action) { return false; }
 
+    /** Optional complete owner-declared validity proof, not an inferred dependency list. */
+    default java.util.Optional<ScheduledHold<S>> holdProof(S state, ScheduledAction action) {
+        return java.util.Optional.empty();
+    }
+
     /** Producer-owned deterministic admission cost, independent of observed host timings. */
     default int admissionWeight(S state, ScheduledAction action) { return action.weight(); }
 

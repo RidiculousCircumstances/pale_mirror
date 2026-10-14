@@ -15,10 +15,12 @@ public final class ActivityExecutionCapabilities {
             registration(HumanAssignmentKind.IDLE, (state, assignment) -> new ActivityExecutionCheckpoint(
                     state, assignment, ResidentWorkYield.Status.READY)),
             registration(HumanAssignmentKind.PRODUCTION, FrontierProductionWorkSceneSupport::executionCheckpoint,
-                    BakeryLabour::pause, BakeryLabour::workStatsChanged, ProductionServiceAccess::waitingForServiceResource),
+                    BakeryLabour::pause, BakeryLabour::workStatsChanged, ProductionServiceAccess::waitingForServiceResource,
+                    ProductionServiceAccess::mayResumeWork, ProductionServiceAccess::resumeWakeKeys),
             registration(HumanAssignmentKind.FIELD_HARVEST, FrontierResourceSiteHarvestSceneSupport::executionCheckpoint,
                     ResourceSiteHarvestLabour::pause, ResourceSiteHarvestLabour::workStatsChanged,
-                    FrontierResourceSiteHarvestSceneSupport::waitingForServiceResource),
+                    FrontierResourceSiteHarvestSceneSupport::waitingForServiceResource, FrontierResourceSiteHarvestSceneSupport::mayResumeWork,
+                    FrontierResourceSiteHarvestSceneSupport::resumeWakeKeys),
             delegated(HumanAssignmentKind.COURIER, ActorActivityKind.COURIER),
             new ExtractionAssignmentCapability(),
             delegated(HumanAssignmentKind.EQUIPMENT_SERVICE, ActorActivityKind.EQUIPMENT_SERVICE),
@@ -53,6 +55,16 @@ public final class ActivityExecutionCapabilities {
     public static boolean waitingForServiceResource(FrontierWorldState state, HumanAssignment assignment) {
         CURRENT.evaluate(state, assignment); // validate exact current assignment and owner checkpoint
         return CURRENT.capabilities.get(assignment.kind()).waitingForServiceResource(state, assignment);
+    }
+    public static boolean mayResumeWork(FrontierWorldState state, HumanAssignment assignment) {
+        return assignment.active() && CURRENT.evaluate(state, assignment).ready()
+                && CURRENT.capabilities.get(assignment.kind()).mayResumeWork(state, assignment);
+    }
+    public static Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> resumeWakeKeys(
+            FrontierWorldState state, HumanAssignment assignment) {
+        if (!HumanAssignmentProjection.compile(state).assignment(assignment.residentId()).equals(assignment))
+            throw new IllegalArgumentException("resumption wake has a stale assignment");
+        return CURRENT.capabilities.get(assignment.kind()).resumeWakeKeys(state, assignment);
     }
 
     @FunctionalInterface interface LabourPause {
@@ -106,6 +118,9 @@ public final class ActivityExecutionCapabilities {
         });
         return new ActivityExecutionCapability() {
             @Override public HumanAssignmentKind kind() { return kind; }
+            @Override public boolean mayResumeWork(FrontierWorldState state, HumanAssignment assignment) {
+                return delegate.mayResumeWork(state, assignment);
+            }
             @Override public ActivityExecutionCheckpoint checkpoint(FrontierWorldState state, HumanAssignment assignment) {
                 return delegate.checkpoint(state, assignment);
             }
@@ -132,16 +147,30 @@ public final class ActivityExecutionCapabilities {
     static ActivityExecutionCapability registration(HumanAssignmentKind kind,
             BiFunction<FrontierWorldState, HumanAssignment, ActivityExecutionCheckpoint> strategy) {
         return registration(kind, strategy, (state, assignment, tick) -> state, (state, assignment, tick) -> List.of(),
-                (state, assignment) -> false);
+                (state, assignment) -> false, (state, assignment) -> strategy.apply(state, assignment).status() == ResidentWorkYield.Status.READY,
+                (state, assignment) -> Set.of());
     }
 
     private static ActivityExecutionCapability registration(HumanAssignmentKind kind,
             BiFunction<FrontierWorldState, HumanAssignment, ActivityExecutionCheckpoint> strategy,
             LabourPause pause, WorkStatsWake wake,
-            java.util.function.BiPredicate<FrontierWorldState, HumanAssignment> serviceWait) {
+            java.util.function.BiPredicate<FrontierWorldState, HumanAssignment> serviceWait,
+            java.util.function.BiPredicate<FrontierWorldState, HumanAssignment> resumption,
+            BiFunction<FrontierWorldState, HumanAssignment, Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId>> resumeKeys) {
         Objects.requireNonNull(kind, "declared kind"); Objects.requireNonNull(strategy, "strategy"); Objects.requireNonNull(pause);
+        Objects.requireNonNull(serviceWait, "service-wait owner"); Objects.requireNonNull(resumption, "work-resumption owner");
+        Objects.requireNonNull(resumeKeys, "resumption-wake owner");
         return new ActivityExecutionCapability() {
             @Override public HumanAssignmentKind kind() { return kind; }
+            @Override public Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> resumeWakeKeys(
+                    FrontierWorldState state, HumanAssignment assignment) {
+                if (assignment.kind() != kind) throw new IllegalArgumentException("resumption wake assignment kind mismatch");
+                return Set.copyOf(resumeKeys.apply(state, assignment));
+            }
+            @Override public boolean mayResumeWork(FrontierWorldState state, HumanAssignment assignment) {
+                if (assignment.kind() != kind) throw new IllegalArgumentException("resumption assignment kind mismatch");
+                return resumption.test(state, assignment);
+            }
             @Override public boolean waitingForServiceResource(FrontierWorldState state, HumanAssignment assignment) {
                 return serviceWait.test(state, assignment);
             }

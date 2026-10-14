@@ -41,6 +41,9 @@ public final class FrontierWorldRuntimeDefinition {
     public static int scheduledAdmissionWeight(FrontierWorldState state, ScheduledAction action) {
         return FrontierWorldProcessCatalog.scheduledAdmissionWeight(PROCESS_REGISTRY, state, action);
     }
+    public static java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledHold<FrontierWorldState>> holdProof(FrontierWorldState state, ScheduledAction action) {
+        return FrontierWorldProcessCatalog.holdProof(PROCESS_REGISTRY, state, action);
+    }
     public static java.util.Set<SubjectId> holdWakeKeys(FrontierWorldState state, ScheduledAction action) {
         return FrontierWorldProcessCatalog.holdWakeKeys(state, action);
     }

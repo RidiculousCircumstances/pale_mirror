@@ -25,6 +25,14 @@ final class ActorMovementInterruptionPlanner implements ActivityInterruptionPlan
         if (ActorMovementProviders.require(movement).permitsReplacement(ResidentActivityChoice.Kind.EAT)
                 && ResidentActivityCoordinator.requestsFoodAtMovementCheckpoint(state, retained)) return true;
         var choice = ResidentActivityCoordinator.assessMovementInterruptionEligibility(state, retained);
+        // A retained assignment is not an executable successor. Resuming an
+        // owner still waiting for resources would issue the same clearance
+        // again, reset its travel and generate interruption/resume WAL forever.
+        // The registered work owner supplies feasibility; navigation knows no
+        // production phase, recipe, field or resource kind.
+        if (choice.kind() == ResidentActivityChoice.Kind.WORK
+                && !ActivityExecutionCapabilities.mayResumeWork(state,
+                    HumanAssignmentProjection.compile(state).assignment(residentId))) return false;
         return (choice.kind() == ResidentActivityChoice.Kind.WORK || choice.kind() == ResidentActivityChoice.Kind.EAT)
                 && ActorMovementProviders.require(movement).permitsReplacement(choice.kind());
     }

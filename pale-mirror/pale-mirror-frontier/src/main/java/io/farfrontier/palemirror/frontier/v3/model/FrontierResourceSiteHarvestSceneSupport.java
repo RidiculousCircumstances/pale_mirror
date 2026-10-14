@@ -10,7 +10,21 @@ import java.util.Set;
 
 /** Exact candidate and validation boundary for one actor-owned field-work scene. */
 public final class FrontierResourceSiteHarvestSceneSupport {
+    static boolean mayResumeWork(FrontierWorldState state, HumanAssignment assignment) {
+        executionCheckpoint(state, assignment);
+        ResourceSiteHarvestJob job = state.resourceSites().sites().values().stream()
+                .flatMap(site -> site.harvestJobs().values().stream())
+                .filter(value -> value.id().equals(assignment.ownerId().orElseThrow())).findFirst().orElseThrow();
+        return !job.returningForBatch() || ResourceSiteHarvestCargo.deliveryCapacityAvailable(state, job);
+    }
     private FrontierResourceSiteHarvestSceneSupport() { }
+    static Set<SubjectId> resumeWakeKeys(FrontierWorldState state, HumanAssignment assignment) {
+        executionCheckpoint(state, assignment);
+        ResourceSiteHarvestJob job = state.resourceSites().sites().values().stream()
+                .flatMap(site -> site.harvestJobs().values().stream())
+                .filter(value -> value.id().equals(assignment.ownerId().orElseThrow())).findFirst().orElseThrow();
+        return Set.of(job.id(), job.siteId(), job.outputSlot().containerId());
+    }
 
     /** Holding cargo does not entitle a capacity-blocked worker to monopolize the depot. */
     static boolean waitingForServiceResource(FrontierWorldState state, HumanAssignment assignment) {

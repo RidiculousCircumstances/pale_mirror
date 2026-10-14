@@ -35,16 +35,28 @@ final class FrontierReferenceClosure {
     }
 
     static void validateTransition(FrontierWorldState before, FrontierWorldState after, List<ScheduledAction> schedules) {
+        validateTransition(before, after, schedules, schedules);
+    }
+    static void validateTransition(FrontierWorldState before, FrontierWorldState after, List<ScheduledAction> schedules,
+                                   List<ScheduledAction> retainedChanges) {
         GoodsTradeStateSupport.validateTransition(before, after);
         ShipmentStateSupport.validateTransition(before, after);
         FrontierDomainRelationships.verifyCurrentOwnerSurfaces();
         FrontierDomainRelationships.validateTransition(before, after);
-        // Each cross-owner check uses its own exact dependency set. Scheduled subjects
-        // retain the full audit: a retired owner can invalidate an unchanged future action.
+        // Changed schedules and retired targets are independent dimensions:
+        // owner retirement must still reject unchanged incoming continuations.
         ResidentMealReferenceClosure.validateTransition(before, after);
         if (before.physicalIntents() != after.physicalIntents() || before.inventory().items() != after.inventory().items())
             validateExactPhysicalCustody(after);
-        validateScheduledSubjects(after, schedules);
+        var oldSubjects = ScheduledSubjectExistence.subjects(before);
+        var subjects = ScheduledSubjectExistence.subjects(after);
+        if (oldSubjects != subjects) {
+            var removed = new java.util.HashSet<>(oldSubjects); removed.removeAll(subjects);
+            for (var action : schedules) if (removed.contains(action.subject())
+                    && !SYSTEM_SUBJECTS.contains(action.subject().value()))
+                throw new IllegalArgumentException("scheduled action references a retired canonical subject: " + action.id().value());
+        }
+        validateScheduledSubjects(after, retainedChanges);
     }
 
     private static void validateExactPhysicalCustody(FrontierWorldState state) {
@@ -75,40 +87,8 @@ final class FrontierReferenceClosure {
         }
     }
 
-    /** Existence validation only, never owner discovery or dispatch. No whole-world ID copy. */
+    /** Existence validation only, never owner discovery or dispatch. */
     private static boolean isLiveSubject(FrontierWorldState state, SubjectId id) {
-        if (state.actorLocations().containsKey(id) || state.structureConditions().containsKey(id)
-                || state.inventory().items().containsKey(id) || state.inventory().cargo().containsKey(id)
-                || state.inventory().fungibleResources().lots().containsKey(id)
-                || state.inventory().fungibleResources().claims().containsKey(id)
-                || state.productionJobs().containsKey(id) || state.serviceWorks().containsKey(id)
-                || state.routeConstructions().containsKey(id) || state.routeMaintenances().containsKey(id)
-                || state.resourceSites().sites().containsKey(id)
-                || state.extractionSites().deposits().containsKey(id) || state.extractionSites().work().containsKey(id)
-                || state.productionStations().machines().containsKey(id)
-                || state.productionStations().machines().values().stream().flatMap(machine -> machine.operation().stream())
-                    .anyMatch(operation -> operation.id().value().equals(id))
-                || state.humanPopulation().residents().containsKey(id)
-                || state.humanPopulation().birthJobs().containsKey(id) || state.humanPopulation().migrations().containsKey(id)
-                || state.humanPopulation().provisions().containsKey(id) || state.hiveColony().growthJobs().containsKey(id)
-                || state.hiveColony().nutrientTransfers().containsKey(id)
-                || state.hiveColony().mobilizations().containsKey(id) || state.strategicPlans().objectives().containsKey(id)
-                || state.strategicPlans().tasks().containsKey(id) || state.strategicPlans().routePatrols().containsKey(id)
-                || state.strategicPlans().settlementAssaults().containsKey(id)
-                || state.companies().companies().containsKey(id)
-                || state.companies().market().demands().containsKey(id) || state.companies().market().quotes().containsKey(id)
-                || state.companies().market().workOrders().containsKey(id)) return true;
-        if (state.companies().goodsTrade().orders().containsKey(id) || state.companies().goodsTrade().contracts().containsKey(id)
-                || state.shipments().shipments().containsKey(id) || state.shipments().missions().containsKey(id)
-                || state.unitGroups().groups().containsKey(id)) return true;
-        // These fixed bootstrap/site collections have no separate subject index. Retain the
-        // same accepted owner surface as the full recovery barrier without building its union.
-        return state.bootstrap().hive().id().equals(id)
-                || state.bootstrap().settlements().stream().anyMatch(settlement -> settlement.id().equals(id)
-                    || settlement.residents().stream().anyMatch(resident -> resident.id().equals(id)))
-                || state.bootstrap().hive().bioforms().stream().anyMatch(bioform -> bioform.id().equals(id))
-                || state.bootstrap().hive().organs().stream().anyMatch(organ -> organ.id().equals(id))
-                || state.resourceSites().sites().values().stream()
-                    .anyMatch(site -> site.harvestJobs().containsKey(id) || site.preparationWork().filter(work -> work.id().equals(id)).isPresent());
+        return ScheduledSubjectExistence.subjects(state).contains(id);
     }
 }

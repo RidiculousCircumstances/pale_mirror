@@ -13,6 +13,7 @@ final class FrontierPlannerHealthValidation {
     static void validate(FrontierBootstrap bootstrap, HumanPopulation population, StrategicPlanState plans,
                          RouteTopology topology, HiveColony colony, Map<SubjectId, ActorLocation> actors,
                          FencedRecoveryState bodyRecovery) {
+        SettlementPolicyValidation.validate(bootstrap, population);
         Set<SubjectId> settlements = bootstrap.settlements().stream().map(Settlement::id)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         if (!population.quarantines().keySet().equals(settlements)) {

@@ -108,7 +108,8 @@ class FrontierV3ServerRuntimeTest {
                 "skipping only empty intervals must preserve exact events, due/backlog order and current state");
         var expected = interval.checkpointImage().orElseThrow();
         ordinary.shutdown(); interval.shutdown();
-        var recovered = FrontierV3ServerRuntime.start(definition, store, 37);
+        var recovered = FrontierV3ServerRuntime.start(definition,
+                new FrontierFileStore(directory.resolve("interval"), FrontierWorldRuntimeDefinition.payloadCodecs()), 37);
         assertEquals(expected, recovered.checkpointImage().orElseThrow());
         recovered.shutdown();
     }
@@ -186,7 +187,8 @@ class FrontierV3ServerRuntimeTest {
         var recoveredHostSession = new io.farfrontier.palemirror.frontier.v3.model.DiagnosticRuntimeIdentity(
                 "neoforge", "tree:runtime-carrier", "sha256:runtime-carrier", "server-session:recovered");
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
-                FrontierV3ServerRuntime.start(configuration, store, 10_000, recoveredHostSession);
+                FrontierV3ServerRuntime.start(configuration,
+                        new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000, recoveredHostSession);
         assertEquals(first, worldState(recovered).resourceSites().site(site).conflictDisposition().orElseThrow().incident(),
                 "the runtime WAL recovery retains the first accepted canonical source and trace join");
         assertEquals(firstContext, worldState(recovered).diagnosticIncidents().why(first.diagnostic().subject()).orElseThrow().context(),
@@ -210,7 +212,8 @@ class FrontierV3ServerRuntimeTest {
         runtime.shutdown();
 
         assertEquals(FrontierV3RuntimeStatus.Kind.STOPPED, runtime.status().kind());
-        FrontierV3ServerRuntime<Counter, CounterProjection> recovered = FrontierV3ServerRuntime.start(configuration(), store, 2);
+        FrontierV3ServerRuntime<Counter, CounterProjection> recovered = FrontierV3ServerRuntime.start(configuration(),
+                new FrontierFileStore(directory, codecs()), 2);
         CounterProjection projection = recovered.projection(ProjectionQuery.summary()).orElseThrow();
         assertEquals(5, projection.value());
         assertEquals(new Revision(1L), projection.revision());
@@ -237,7 +240,8 @@ class FrontierV3ServerRuntimeTest {
                 "each accepted canonical transaction must expose its write-ahead boundary separately from planning and reduction");
         runtime.shutdown();
 
-        FrontierV3ServerRuntime<Counter, CounterProjection> recovered = FrontierV3ServerRuntime.start(configuration(), store, 2);
+        FrontierV3ServerRuntime<Counter, CounterProjection> recovered = FrontierV3ServerRuntime.start(configuration(),
+                new FrontierFileStore(directory, codecs()), 2);
         assertEquals(new SimInstant(3L), recovered.checkpointImage().orElseThrow().instant());
         assertEquals(7, recovered.projection(ProjectionQuery.summary()).orElseThrow().value());
     }
@@ -261,12 +265,14 @@ class FrontierV3ServerRuntimeTest {
 
         FrontierV3ServerRuntime<FrontierWorldState, ?> beforeCommit = FrontierV3ServerRuntime.start(configuration, store, 10_000);
         beforeCommit.shutdown();
-        FrontierV3ServerRuntime<FrontierWorldState, ?> preserved = FrontierV3ServerRuntime.start(configuration, store, 10_000);
+        FrontierV3ServerRuntime<FrontierWorldState, ?> preserved = FrontierV3ServerRuntime.start(configuration,
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         assertEquals(Map.of(lotId, 64), worldState(preserved).inventory().fungibleResources().accounts().get(sourceId).lotQuantities(),
                 "a physical save before canonical confirmation keeps the old fenced source; it does not invent a player balance");
         preserved.shutdown();
 
-        FrontierV3ServerRuntime<FrontierWorldState, ?> committed = FrontierV3ServerRuntime.start(configuration, store, 10_000);
+        FrontierV3ServerRuntime<FrontierWorldState, ?> committed = FrontierV3ServerRuntime.start(configuration,
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         PhysicalStackBinding source = committed.decodedState().orElseThrow().inventory().fungibleResources().bindings().values().iterator().next();
         java.util.UUID player = java.util.UUID.fromString("00000000-0000-0000-0000-000000000155");
         FungibleResourceHandoffObserved handoff = FungiblePhysicalHandoff.departToNew(committed.decodedState().orElseThrow().inventory()
@@ -277,7 +283,8 @@ class FrontierV3ServerRuntimeTest {
         committed.shutdown();
 
         FrontierV3ServerRuntime<FrontierWorldState, ?> recovered = FrontierV3ServerRuntime.start(
-                FrontierWorldRuntimeDefinition.configuration(world, 91L), store, 10_000);
+                FrontierWorldRuntimeDefinition.configuration(world, 91L),
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         assertEquals(afterCommit, worldState(recovered));
         assertEquals(64, worldState(recovered).inventory().fungibleResources().totalQuantity(settlement, "minecraft:wheat"));
         CheckpointImage checkpoint = recovered.checkpointImage().orElseThrow(); CommandId commandId = new CommandId("test:fungible-partial-recovery");
@@ -449,7 +456,8 @@ class FrontierV3ServerRuntimeTest {
         runtime.shutdown();
 
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
-                FrontierV3ServerRuntime.start(configuration, store, 10_000);
+                FrontierV3ServerRuntime.start(configuration,
+                        new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         assertEquals(io.farfrontier.palemirror.frontier.v3.model.DeferredAftermathCellStatus.RUNNING,
                 worldState(recovered).deferredAftermath().entries().get(aftermathId).nextPending().status(),
                 "recovery retains the durable before-effect boundary rather than replaying the COLD cause");
@@ -544,7 +552,8 @@ class FrontierV3ServerRuntimeTest {
         runtime.shutdown();
 
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
-                FrontierV3ServerRuntime.start(configuration, store, 10_000);
+                FrontierV3ServerRuntime.start(configuration,
+                        new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         FrontierWorldState persisted = worldState(recovered);
         assertEquals(retainedWorkAction, FrontierV3ContinuationBinding.require(recovered.checkpointImage().orElseThrow(), job.id(),
                 "frontier.settlement.production.task.complete"), "restart must preserve the exact labor deadline, not only progress count");
@@ -579,7 +588,8 @@ class FrontierV3ServerRuntimeTest {
         runtime.shutdown();
 
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
-                FrontierV3ServerRuntime.start(configuration, store, 10_000);
+                FrontierV3ServerRuntime.start(configuration,
+                        new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         assertEquals(1, FrontierV3AmbientLeaseRestartSafety.quarantineActiveLeases(recovered));
         assertEquals(0, FrontierV3AmbientLeaseRestartSafety.quarantineActiveLeases(recovered));
         FrontierWorldState unknown = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
@@ -603,7 +613,8 @@ class FrontierV3ServerRuntimeTest {
         runtime.shutdown();
 
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
-                FrontierV3ServerRuntime.start(configuration, store, 10_000);
+                FrontierV3ServerRuntime.start(configuration,
+                        new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         assertEquals(0, FrontierV3AmbientLeaseRestartSafety.quarantineActiveLeases(recovered));
         FrontierWorldState prepared = new FrontierWorldStateCodec().decode(recovered.checkpointImage().orElseThrow().canonicalState());
         assertEquals(AmbientLeaseStatus.PREPARED, prepared.ambientLeases().get(resident).status());

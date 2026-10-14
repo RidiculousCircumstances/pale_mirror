@@ -181,24 +181,7 @@ public final class FrontierWorldStateSupport {
     }
 
     static void validateSettlementPolicies(FrontierBootstrap bootstrap, HumanPopulation population) {
-        Set<SubjectId> expected = bootstrap.settlements().stream().map(Settlement::id)
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        if (!population.quarantines().keySet().equals(expected)) {
-            throw new IllegalArgumentException("settlement quarantine index must own every and only canonical settlement");
-        }
-        if (population.schedules().values().stream().anyMatch(schedule -> schedule.dayTicks() != bootstrap.ruleset().residentLife().dayTicks())) {
-            throw new IllegalArgumentException("settlement schedules must use the world's canonical calendar day");
-        }
-        var rules = bootstrap.ruleset().residentLife();
-        population.nutrition().forEach((resident, need) -> {
-            var condition = population.health(resident).starvation();
-            if (condition.exposureRemainder() >= rules.starvation().gainTicksPerUnit()
-                    || condition.recoveryRemainder() >= rules.starvation().recoveryTicksPerUnit())
-                throw new IllegalArgumentException("starvation remainder contradicts world rules");
-            if (!need.equals(need.accrueThrough(need.lastEvaluatedTick(), rules,
-                    population.resident(resident).characteristics().effectiveMetabolismPermille(need.lastEvaluatedTick()))))
-                throw new IllegalArgumentException("nutrition category or empty-stomach remainder contradicts world rules");
-        });
+        SettlementPolicyValidation.validate(bootstrap, population);
     }
 
     static <K, V> Map<K, V> immutableMap(Map<K, V> input, String label) {
@@ -237,7 +220,7 @@ public final class FrontierWorldStateSupport {
             return attachment == null || attachment == trusted.attachment ? trusted : trusted.withAttachment(attachment);
         }
         // A world-state transition replaces one owned index but passes every
-        // untouched index back through this constructor.  Map.copyOf retains an
+        // untouched index back through this constructor. The lookup snapshot retains an
         // already immutable map.  Keep a private marker around that validated
         // copy so later strict audits can distinguish it from an arbitrary
         // externally supplied Map without repeating a full entry scan.
@@ -245,7 +228,7 @@ public final class FrontierWorldStateSupport {
             Objects.requireNonNull(key, label + " key");
             Objects.requireNonNull(value, label + " value");
         });
-        return new ValidatedImmutableMap<>(Map.copyOf(input), attachment);
+        return new ValidatedImmutableMap<>(ImmutableLookupMap.copyOf(input), attachment);
     }
 
     /** Immutable, validated map identity local to canonical state construction. */

@@ -219,8 +219,18 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         return advanceOne(budget, true);
     }
 
-    void beginPersistenceTurn() { if (store instanceof FrontierFileStore fileStore) fileStore.beginTurn(); }
-    void endPersistenceTurn() { if (store instanceof FrontierFileStore fileStore) fileStore.endTurn(); }
+    /** The runtime owns pairing and gating; host callers cannot acknowledge a queued prefix. */
+    void runPersistenceTurn(Runnable turn) {
+        Objects.requireNonNull(turn, "persistence turn");
+        if (store instanceof FrontierFileStore fileStore) {
+            if (!fileStore.tryBeginTurn()) return;
+            try { turn.run(); }
+            finally { fileStore.endTurnAsync(); }
+        } else turn.run();
+    }
+    Optional<FrontierFileStore.Pressure> persistencePressure() {
+        return store instanceof FrontierFileStore files ? Optional.of(files.pressure()) : Optional.empty();
+    }
 
     /**
      * Advances the ordinary ordered due-action engine by a bounded operator-requested interval.

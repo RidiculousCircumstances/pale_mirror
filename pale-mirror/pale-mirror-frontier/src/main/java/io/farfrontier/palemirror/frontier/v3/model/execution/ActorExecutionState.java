@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model.execution;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.ImmutableLookupMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -13,7 +14,7 @@ public final class ActorExecutionState {
     private final Map<ActorActivityKind, Map<SubjectId, ActorExecutionId>> currentByKind;
     private final java.util.List<ActorExecutionId> suspended;
     public ActorExecutionState(Map<SubjectId, ActorExecution> actors) {
-        this.actors = Map.copyOf(Objects.requireNonNull(actors, "actor execution records"));
+        this.actors = ImmutableLookupMap.copyOf(Objects.requireNonNull(actors, "actor execution records"));
         if (this.actors.size() > MAX_ACTORS) throw new IllegalArgumentException("actor execution retention bound exceeded");
         var current = new java.util.EnumMap<ActorActivityKind, Map<SubjectId, ActorExecutionId>>(ActorActivityKind.class);
         var continuations = new java.util.ArrayList<ActorExecutionId>();
@@ -22,7 +23,7 @@ public final class ActorExecutionState {
             execution.current().ifPresent(id -> current.computeIfAbsent(id.activityKind(), ignored -> new LinkedHashMap<>()).put(actor, id));
             execution.suspended().ifPresent(continuations::add);
         });
-        current.replaceAll((kind, values) -> Map.copyOf(values));
+        current.replaceAll((kind, values) -> ImmutableLookupMap.copyOf(values));
         currentByKind = Map.copyOf(current);
         suspended = java.util.List.copyOf(continuations);
     }

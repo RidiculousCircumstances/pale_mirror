@@ -20,6 +20,30 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResidentActivityProcessTest {
+    @Test void foodRefusalSurvivesAnotherResidentsNeedButNotItsOwnOrStockChanges() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:admission-dependencies"), 421L));
+        var home = state.bootstrap().settlements().getFirst();
+        var actor = home.residents().getFirst().id(); var other = home.residents().get(1).id();
+        var action = ResidentActivityProcess.review(actor, 24_000L);
+        var refusal = assertInstanceOf(ResidentActivityAdmission.Waiting.class,
+                ResidentActivityProcess.admission(state, action));
+        assertEquals(ResidentActivityAdmission.Reason.FOOD_STOCK, refusal.reason());
+        var proof = ResidentActivityProcess.holdProof(state, action).orElseThrow();
+        var unrelated = state.withHumanPopulation(state.humanPopulation().accrueHunger(other, 24_000L));
+        assertTrue(proof.stillHeld().test(unrelated));
+        assertSame(refusal, ResidentActivityProcess.admission(unrelated, action));
+        var changed = state.withHumanPopulation(state.humanPopulation().accrueHunger(actor, 24_000L));
+        assertFalse(proof.stillHeld().test(changed));
+        var ledger = state.inventory().fungibleResources().transformCold(
+                ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(home.id())),
+                Map.of(new SubjectId("lot:bootstrap-1-wheat"), 1), Map.of(),
+                new ResourceLot(new SubjectId("lot:admission-dependencies-bread"), home.id(), ResidentMeal.BREAD_KIND,
+                        1, "test", List.of()));
+        var stocked = state.withInventory(state.inventory().withFungibleResources(ledger));
+        assertFalse(proof.stillHeld().test(stocked));
+        assertInstanceOf(ResidentActivityAdmission.Ready.class, ResidentActivityProcess.admission(stocked, action));
+    }
     @Test void hungryWorkEligibilityDoesNotCalculateMealsAndOwnedPendingReviewParksUntilItsResult() throws Exception {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:meal-work-eligibility-planning"), 421L));

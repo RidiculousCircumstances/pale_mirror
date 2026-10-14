@@ -53,6 +53,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     private final FrontierExecutionMetrics executionMetrics;
     private final KernelQuarantineReporter<S> kernelQuarantineReporter;
     private ScheduledActionQueue schedules = new ScheduledActionQueue();
+    private final ScheduleAdmissionIndex<S> admissionIndex;
     private final Map<CommandId, CommandReceipt> receipts = new LinkedHashMap<>();
     private final List<TransactionRecord> transactions = new ArrayList<>();
     private S state;
@@ -115,6 +116,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         this.instant = Objects.requireNonNull(initialInstant, "initial instant");
         this.commandPlanner = Objects.requireNonNull(commandPlanner, "command planner");
         this.scheduledPlanner = Objects.requireNonNull(scheduledPlanner, "scheduled planner");
+        this.admissionIndex = new ScheduleAdmissionIndex<>(this.scheduledPlanner, limits.maxPendingSchedules());
         this.reducer = Objects.requireNonNull(reducer, "reducer");
         this.stateCodec = Objects.requireNonNull(stateCodec, "state codec");
         this.projectionMapper = Objects.requireNonNull(projectionMapper, "projection mapper");
@@ -226,9 +228,10 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             return advanceResult(List.of(), Optional.empty());
         }
         ScheduledWork work;
+        admissionIndex.begin(budget);
         try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.SCHEDULE_ALLOCATION, "due-actions", worldId.value())) {
-            work = schedules.selectDue(target, budget, action -> !scheduledPlanner.held(state, action),
-                    action -> safeHoldWakeKeys(state, action), action -> scheduledPlanner.admissionWeight(state, action));
+            work = schedules.selectAdmittedDue(target, budget, action -> admissionIndex.assess(state, action),
+                    action -> admissionIndex.wakeKeys(state, action), action -> scheduledPlanner.admissionWeight(state, action));
         } catch (RuntimeException error) {
             quarantine(CauseChain.root(new CommandId("scheduler:allocation")),
                     KernelQuarantineReporter.Boundary.DUE_TRANSACTION, error);
@@ -237,9 +240,10 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         List<TransactionId> completed = new ArrayList<>();
         for (ScheduledAction action : work.admitted()) {
             try {
-                if (!schedules.isEligibleHead(action, target,
-                        candidate -> !scheduledPlanner.held(state, candidate),
-                        candidate -> safeHoldWakeKeys(state, candidate))) {
+                if (!schedules.isAdmittedHead(action, target,
+                        candidate -> admissionIndex.assess(state, candidate),
+                        candidate -> admissionIndex.wakeKeys(state, candidate))) {
+                    if (admissionIndex.deferredAction().isPresent()) break;
                     continue;
                 }
                 if (transactions.size() == limits.maxTransactions()) {
@@ -276,8 +280,9 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         }
         instant = target;
         pruneReceipts();
-        observeQueue(target, schedules.size(), schedules.parkedCount(), work.blockedActionOptional());
-        return advanceResult(completed, work.blockedActionOptional());
+        var blocked = admissionIndex.deferredAction().or(work::blockedActionOptional);
+        observeQueue(target, schedules.size(), schedules.parkedCount(), blocked);
+        return advanceResult(completed, blocked);
     }
 
     @Override
@@ -441,7 +446,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         // every one-field state transition scan the entire 12-settlement world.
         if (nextState != state) {
             try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.VALIDATION, "canonical-state", worldId.value())) {
-                stateValidator.validateTransaction(state, nextState, List.copyOf(events), schedules.snapshot(), nextSchedules.snapshot());
+                stateValidator.validateTransaction(state, nextState, List.copyOf(events), schedules.snapshot(), nextSchedules.snapshot(), nextSchedules.retainedChanges());
             }
         } else {
             List<ScheduledAction> retainedChanges = nextSchedules.retainedChanges();
@@ -473,6 +478,8 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         encodedState = encoded;
         revision = nextRevision;
         nextSchedules.commit();
+        events.stream().map(FrontierEvent::payload).filter(ScheduleEffect.class::isInstance)
+                .map(ScheduleEffect.class::cast).forEach(admissionIndex::forget);
         if (wakeAll) schedules.wakeAll(eventInstant.ticks());
         else schedules.wake(wakeKeys, eventInstant.ticks());
         transactions.add(transaction);

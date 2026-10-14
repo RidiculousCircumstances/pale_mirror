@@ -11,8 +11,15 @@ final class ActorIdentityDeclarations {
                                   Set<SubjectId> expected) { }
     // One bounded immutable derived view. Position, nutrition and activity changes are not births.
     private static volatile ProducerRoster cached;
+    private static final ImmutableInvariantCheck<Set<SubjectId>> CHECK = new ImmutableInvariantCheck<>();
     private ActorIdentityDeclarations() { }
     static Set<SubjectId> validate(FrontierBootstrap bootstrap, HiveColony hive, HumanPopulation people,
+                                  Map<SubjectId, ActorLocation> actors,
+                                  io.farfrontier.palemirror.frontier.v3.model.expedition.TransportFleet fleet) {
+        return CHECK.value(() -> validateCurrent(bootstrap, hive, people, actors, fleet),
+                bootstrap, hive.spawnedBioforms(), people.residents(), actors, fleet.assets());
+    }
+    private static Set<SubjectId> validateCurrent(FrontierBootstrap bootstrap, HiveColony hive, HumanPopulation people,
                                   Map<SubjectId, ActorLocation> actors,
                                   io.farfrontier.palemirror.frontier.v3.model.expedition.TransportFleet fleet) {
         var roster = cached;

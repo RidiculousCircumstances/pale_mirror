@@ -128,7 +128,7 @@ public final class FrontierV3ServerLifecycle {
                 FAST_FORWARD_OUTCOMES.get(server), FAST_FORWARD_SLICE_TELEMETRY.get(server), fastForwardRequests(server),
                 FrontierV3PedestrianPlanning.diagnostic(runtime),
                 FrontierV3ActorProbeSchedule.diagnostic(runtime, FrontierV3PhysicalWorld.require(server).getGameTime()),
-                FrontierV3PhysicalStores.diagnostic(FrontierV3PhysicalWorld.require(server)));
+                FrontierV3PhysicalStores.diagnostic(FrontierV3PhysicalWorld.require(server)), runtime.persistencePressure().orElse(null));
     }
     static FrontierV3PilotSceneDemandSnapshot pilotSceneDemandSnapshot(ServerLevel level, SubjectId assaultId) {
         Objects.requireNonNull(level, "pilot demand level");
@@ -366,8 +366,7 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
         if (runtime == null) return;
         try (var hostTurn = FrontierV3HostTiming.beginPmTurn(runtime.executionMetrics())) {
-            runtime.beginPersistenceTurn();
-            try {
+            runtime.runPersistenceTurn(() -> {
                 boolean active = runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE;
                 if (active) FrontierV3PedestrianPlanning.tick(runtime);
                 boolean initialHold = INITIAL_CANONICAL_HOLDS.containsKey(server);
@@ -388,7 +387,7 @@ public final class FrontierV3ServerLifecycle {
                     runtime.tick(FrontierV3RuntimeBudgets.ordinaryTick(runtime.decodedState().orElseThrow().bootstrap().ruleset()));
                     if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) advanceQueuedCanonicalTime(server, runtime);
                 }
-            } finally { runtime.endPersistenceTurn(); }
+            });
         } catch (RuntimeException error) {
             PaleMirrorMod.LOGGER.error("Frontier v3 server tick failed before quarantine", error);
             runtime.quarantine(error);

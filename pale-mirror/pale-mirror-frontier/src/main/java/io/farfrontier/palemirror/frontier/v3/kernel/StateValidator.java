@@ -49,6 +49,14 @@ public interface StateValidator<S> {
         validateTransition(previous, next);
     }
 
+    /** Exact engine-owned retained delta; owner retirement must still check
+     * unchanged incoming references against the complete post-queue. */
+    default void validateTransaction(S previous, S next, List<FrontierEvent> events,
+                                     List<ScheduledAction> schedulesBefore, List<ScheduledAction> schedulesAfter,
+                                     List<ScheduledAction> retainedChanges) {
+        validateTransaction(previous, next, events, schedulesBefore, schedulesAfter);
+    }
+
     static <S> StateValidator<S> none() {
         return new StateValidator<>() {
             @Override public void validateInitial(S state) { }

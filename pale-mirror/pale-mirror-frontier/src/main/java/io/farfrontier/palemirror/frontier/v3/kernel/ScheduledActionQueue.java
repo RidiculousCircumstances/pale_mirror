@@ -84,13 +84,22 @@ public final class ScheduledActionQueue {
     public boolean isEligibleHead(ScheduledAction action, SimInstant instant,
                                   Predicate<ScheduledAction> eligible,
                                   Function<ScheduledAction, Set<SubjectId>> holdWakeKeys) {
+        return isAdmittedHead(action, instant, candidate -> eligible.test(candidate)
+                ? ScheduleAdmissionIndex.Decision.READY : ScheduleAdmissionIndex.Decision.HELD, holdWakeKeys);
+    }
+
+    boolean isAdmittedHead(ScheduledAction action, SimInstant instant,
+                          Function<ScheduledAction, ScheduleAdmissionIndex.Decision> admission,
+                          Function<ScheduledAction, Set<SubjectId>> holdWakeKeys) {
         Set<ScheduleId> audited = auditExpired(instant.ticks());
         // The runnable set accelerates allocation; it cannot define a different
         // admission order from the canonical queue used at commit. Reconcile a
         // missed wake before planning, rather than quarantining after selection.
         for (ScheduledAction candidate : ordered) {
             if (candidate.dueAt().compareTo(instant) > 0) return false;
-            if (eligible.test(candidate)) {
+            var decision = admission.apply(candidate);
+            if (decision == ScheduleAdmissionIndex.Decision.DEFERRED) return false;
+            if (decision == ScheduleAdmissionIndex.Decision.READY) {
                 countMissedWake(audited, candidate);
                 if (parked.containsKey(candidate.id())) {
                     unpark(candidate.id(), instant.ticks());
@@ -99,7 +108,10 @@ public final class ScheduledActionQueue {
                 return action.equals(candidate);
             }
             Set<SubjectId> keys = holdWakeKeys.apply(candidate);
-            if (!keys.isEmpty() && !parked.containsKey(candidate.id())) {
+            var previous = parked.get(candidate.id());
+            if (keys.isEmpty() && previous != null) unpark(candidate.id(), instant.ticks());
+            if (!keys.isEmpty() && (previous == null || !previous.keys().equals(keys))) {
+                forgetParked(candidate.id());
                 runnable.remove(candidate);
                 park(candidate, keys, instant.ticks());
             }
@@ -142,9 +154,19 @@ public final class ScheduledActionQueue {
     public ScheduledWork selectDue(SimInstant instant, WorkBudget budget, Predicate<ScheduledAction> eligible,
                                    Function<ScheduledAction, Set<SubjectId>> holdWakeKeys,
                                    java.util.function.ToIntFunction<ScheduledAction> admissionWeight) {
+        Objects.requireNonNull(eligible, "eligible");
+        return selectAdmittedDue(instant, budget, candidate -> eligible.test(candidate)
+                ? ScheduleAdmissionIndex.Decision.READY : ScheduleAdmissionIndex.Decision.HELD,
+                holdWakeKeys, admissionWeight);
+    }
+
+    ScheduledWork selectAdmittedDue(SimInstant instant, WorkBudget budget,
+                                   Function<ScheduledAction, ScheduleAdmissionIndex.Decision> admission,
+                                   Function<ScheduledAction, Set<SubjectId>> holdWakeKeys,
+                                   java.util.function.ToIntFunction<ScheduledAction> admissionWeight) {
         Objects.requireNonNull(instant, "instant");
         Objects.requireNonNull(budget, "budget");
-        Objects.requireNonNull(eligible, "eligible");
+        Objects.requireNonNull(admission, "admission");
         Objects.requireNonNull(holdWakeKeys, "hold wake keys");
         Objects.requireNonNull(admissionWeight, "admission weight");
         Set<ScheduleId> audited = auditExpired(instant.ticks());
@@ -155,7 +177,9 @@ public final class ScheduledActionQueue {
             if (next.dueAt().compareTo(instant) > 0) {
                 break;
             }
-            if (!eligible.test(next)) {
+            var decision = admission.apply(next);
+            if (decision == ScheduleAdmissionIndex.Decision.DEFERRED) return new ScheduledWork(executed, next);
+            if (decision == ScheduleAdmissionIndex.Decision.HELD) {
                 Set<SubjectId> keys = holdWakeKeys.apply(next);
                 if (!keys.isEmpty()) {
                     iterator.remove();

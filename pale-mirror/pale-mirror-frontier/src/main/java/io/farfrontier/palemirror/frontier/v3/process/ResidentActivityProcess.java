@@ -18,19 +18,67 @@ public final class ResidentActivityProcess {
     // Unavailable owners are held without a WAL retry. A one-tick due fence
     // lets the exact waiter run promptly after source/work state changes.
     private static final long PENDING_RETRY_TICKS = 1L;
-    private record AdmissionImage(FrontierWorldState state,
-            java.util.Map<ScheduledAction, ResidentActivityAdmission> values,
-            java.util.Map<SubjectId, Set<SubjectId>> wakeKeys) { }
+    private record CachedAdmission(ScheduledAction action, ResidentActivityAdmission value, ImmutableDependencies dependencies) { }
+    private record AdmissionImage(FrontierBootstrap bootstrap,
+            java.util.Map<io.farfrontier.palemirror.frontier.v3.api.ScheduleId, CachedAdmission> values) { }
     private static final int MAX_ADMISSION_QUERIES = 4_096;
     private static final ThreadLocal<AdmissionImage> ADMISSIONS = new ThreadLocal<>();
 
     private static AdmissionImage admissionImage(FrontierWorldState state) {
         var image = ADMISSIONS.get();
-        if (image == null || image.state() != state) {
-            image = new AdmissionImage(state, new java.util.HashMap<>(), new java.util.HashMap<>());
+        if (image == null || image.bootstrap() != state.bootstrap()) {
+            image = new AdmissionImage(state.bootstrap(), new java.util.HashMap<>());
             ADMISSIONS.set(image);
         }
         return image;
+    }
+
+    /** The kernel consumes a refusal proof without inspecting food, jobs or actors. */
+    public static java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledHold<FrontierWorldState>>
+            holdProof(FrontierWorldState state, ScheduledAction action) {
+        var retained = admissionImage(state).values().get(action.id());
+        if (retained == null || !retained.action().equals(action) || !retained.dependencies().matches(admissionInputs(state, action.subject())))
+            return java.util.Optional.empty();
+        var waiting = (ResidentActivityAdmission.Waiting) retained.value();
+        var bootstrap = state.bootstrap();
+        var actor = action.subject();
+        if (waiting.reason() == ResidentActivityAdmission.Reason.RETAINED_MEAL) {
+            var meal = state.humanPopulation().meals().get(actor);
+            var profile = state.humanPopulation().resident(actor);
+            var body = state.actorLocations().get(actor);
+            return java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledHold<>(action,
+                    waiting.dependencies(), current -> current.bootstrap() == bootstrap
+                        && current.humanPopulation().resident(actor) == profile
+                        && current.actorLocations().get(actor) == body
+                        && current.humanPopulation().meals().get(actor) == meal));
+        }
+        // Only IDLE has a closed, resource-free checkpoint. An assigned owner
+        // may read its own work/health/cohort and keeps the conservative proof.
+        // With FOOD_STOCK established, foreign actor motion/service turns cannot
+        // create a food candidate; geometry can still admit idle buffer turnover.
+        if (!HumanAssignmentProjection.compile(state).assignment(actor).active()) {
+            var dependencies = ImmutableDependencies.of(idleFoodInputs(state, actor));
+            boolean inventoryEffect = ActorInventoryInteractionFences.pending(state, actor);
+            return java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledHold<>(action,
+                    waiting.dependencies(), current -> current.bootstrap() == bootstrap
+                        && dependencies.matches(idleFoodInputs(current, actor))
+                        && !HumanAssignmentProjection.compile(current).assignment(actor).active()
+                        && ActorInventoryInteractionFences.pending(current, actor) == inventoryEffect));
+        }
+        return java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledHold<>(
+                action, waiting.dependencies(), current -> current.bootstrap() == bootstrap
+                        && retained.dependencies().matches(admissionInputs(current, action.subject()))));
+    }
+
+    private static Object[] idleFoodInputs(FrontierWorldState state, SubjectId actor) {
+        var people = state.humanPopulation();
+        return new Object[] { state.bootstrap(), people.resident(actor), people.nutrition().get(actor),
+                people.meals().get(actor), people.migrations().get(actor), people.schedules(), people.residents(),
+                state.actorLocations().get(actor), state.actorMovements().get(actor),
+                state.actorExecutions().actors().get(actor), state.ambientLeases().get(actor), state.sceneLeases(),
+                state.inventory(), state.replicaCustody(), state.physicalDeltas(), state.structureDamage(),
+                state.structureConditions(), state.routeTopology(), state.resourceSites(),
+                state.extractionSites().deposits(), state.productionStations().machines(), state.hiveColony().addedOrgans() };
     }
     private ResidentActivityProcess() { }
 
@@ -56,18 +104,23 @@ public final class ResidentActivityProcess {
     public static ResidentActivityAdmission admission(FrontierWorldState state, ScheduledAction action) {
         // Only canonical no-stock/retained-meal refusals are memoized. Clearance
         // admission can depend on external calculation evidence, so it is never
-        // retained here. A new immutable state or exact schedule invalidates the
-        // refusal, even if a causal wake was missed.
+        // retained here. Exact changed read dependencies invalidate the refusal,
+        // even if a causal wake was missed. An unrelated infection/diagnostic or
+        // another resident's nutrition update cannot invalidate this read set.
         var image = admissionImage(state);
-        var retained = image.values().get(action);
-        if (retained != null) return retained;
+        var retained = image.values().get(action.id());
+        if (retained != null && retained.action().equals(action) && retained.dependencies().matches(admissionInputs(state, action.subject())))
+            return retained.value();
         try {
             var result = currentAdmission(state, action);
             if (result instanceof ResidentActivityAdmission.Waiting waiting
                     && (waiting.reason() == ResidentActivityAdmission.Reason.FOOD_STOCK
                         || waiting.reason() == ResidentActivityAdmission.Reason.RETAINED_MEAL)) {
                 if (image.values().size() >= MAX_ADMISSION_QUERIES) image.values().clear();
-                image.values().put(action, result);
+                image.values().put(action.id(), new CachedAdmission(action, result,
+                        ImmutableDependencies.of(admissionInputs(state, action.subject()))));
+            } else {
+                image.values().remove(action.id());
             }
             return result;
         }
@@ -78,6 +131,26 @@ public final class ResidentActivityProcess {
             // cooperative wait under its exact continuation; queue polling cannot park it as absence.
             return new ResidentActivityAdmission.Ready();
         }
+    }
+
+    /** Complete conservative canonical read set of admission and its registered
+     * work/service/food ports. Immutable owner maps cover foreign participants
+     * and incoming occupancy; per-resident nutrition avoids a global need wake.
+     * External route evidence is deliberately outside reusable refusal kinds. */
+    private static Object[] admissionInputs(FrontierWorldState state, SubjectId resident) {
+        var people = state.humanPopulation();
+        var plans = state.strategicPlans();
+        return new Object[] { state.bootstrap(), people.resident(resident), people.nutrition().get(resident),
+                people.residents(), people.health(), people.households(), people.quarantines(), people.provisions(),
+                people.birthJobs(), people.mealResourceObligations(), people.meals(), people.migrations(), people.medicalOperations(), people.schedules(),
+                state.actorLocations(), state.actorMovements(), state.actorExecutions(), state.inventory(),
+                state.sceneLeases(), state.ambientLeases(), state.resourceSites(), state.productionJobs(),
+                state.serviceWorks(), state.routeConstructions(), state.routeMaintenances(),
+                plans, state.shipments(), state.unitGroups(),
+                state.extractionSites(), state.transportFleet(), state.fencedRecovery(), state.physicalIntents(),
+                state.physicalDeltas(), state.structureDamage(), state.structureConditions(), state.routeTopology(),
+                state.hiveColony(), state.productionStations(), state.replicaCustody(), state.companies(),
+                state.physicalObservations(), state.deferredAftermath() };
     }
 
     private static ResidentActivityAdmission currentAdmission(FrontierWorldState state, ScheduledAction action) {
@@ -94,6 +167,13 @@ public final class ResidentActivityProcess {
             return ResidentActivityExecutionComposition.INTERRUPTION.mayAttempt(state, residentId, now)
                     ? new ResidentActivityAdmission.Ready()
                     : waiting(state, residentId, ResidentActivityAdmission.Reason.MOVEMENT_HANDOFF);
+        var execution = state.actorExecutions().actors().get(residentId);
+        if (execution != null && execution.suspended().isPresent()
+                && ActivityExecutionCapabilities.mayResumeWork(state, HumanAssignmentProjection.compile(state).assignment(residentId)))
+            // Finished clearance permits one owner-controlled work resumption.
+            // Missing food cannot park the very work that can produce food;
+            // the real owner still fences resources/effects before doing it.
+            return new ResidentActivityAdmission.Ready();
         ResidentNutrition nutrition = state.humanPopulation().nutrition(residentId).accrueThrough(now,
                 state.bootstrap().ruleset().residentLife(), resident.characteristics().effectiveMetabolismPermille(now));
         if (!nutrition.wantsFood(state.bootstrap().ruleset().residentLife()))
@@ -123,20 +203,18 @@ public final class ResidentActivityProcess {
 
     /** No route search here: queue indexing and operator diagnostics share these causal addresses. */
     public static Set<SubjectId> wakeDependencies(FrontierWorldState state, SubjectId residentId) {
-        var image = admissionImage(state);
-        var retained = image.wakeKeys().get(residentId);
-        if (retained != null) return retained;
         ResidentProfile resident = state.humanPopulation().resident(residentId);
         if (resident == null) return Set.of(residentId);
         var keys = new java.util.HashSet<SubjectId>();
         keys.add(residentId);
         keys.addAll(ResourceStorageSelection.declaredContainers(state.inventory(), resident.settlementId(),
-                Set.of(ResourceStorageRole.WAREHOUSE)));
+                Set.of(ResourceStorageRole.WAREHOUSE, ResourceStorageRole.LOCAL_BUFFER)));
         keys.add(resident.settlementId());
-        HumanAssignmentProjection.compile(state).assignment(residentId).ownerId().ifPresent(keys::add);
+        ServiceAccessCoordinator.turnoverPoint(state, residentId).ifPresent(point -> keys.add(point.pointId()));
+        var assignment = HumanAssignmentProjection.compile(state).assignment(residentId);
+        assignment.ownerId().ifPresent(keys::add);
+        keys.addAll(ActivityExecutionCapabilities.resumeWakeKeys(state, assignment));
         var result = Set.copyOf(keys);
-        if (image.wakeKeys().size() >= MAX_ADMISSION_QUERIES) image.wakeKeys().clear();
-        image.wakeKeys().put(residentId, result);
         return result;
     }
 
@@ -220,6 +298,7 @@ public final class ResidentActivityProcess {
         var execution = state.actorExecutions().actors().get(action.subject());
         if (choice.kind() == ResidentActivityChoice.Kind.WORK && execution != null
                 && execution.suspended().isPresent()
+                && ActivityExecutionCapabilities.mayResumeWork(state, HumanAssignmentProjection.compile(state).assignment(action.subject()))
                 && (execution.current().isEmpty() || ActorExecutionComposition.CAPABILITIES
                     .require(execution.current().orElseThrow().activityKind()).interruption()
                         == io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityCapability.Interruption.RELEASE)) {

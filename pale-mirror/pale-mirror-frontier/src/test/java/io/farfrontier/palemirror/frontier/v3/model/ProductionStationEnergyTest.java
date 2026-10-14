@@ -58,6 +58,7 @@ class ProductionStationEnergyTest {
         var atMachine = state.withActorBody(job.workerId(), station.workerStation().standingBody());
         assertTrue(ActivityExecutionCapabilities.waitingForServiceResource(atMachine, assignment),
                 "the same fuel wait must release the machine's own temporary service footprint");
+        assertResourceWaitDoesNotRestartClearance(atMachine, current, station);
         assertTrue(new ProductionServiceAccess().demands(state, station.containerId()).isEmpty());
         assertFalse(ProductionServiceAccess.mayAdvance(state, current, station.workerStation()));
         state = fuel(state, station);
@@ -66,6 +67,56 @@ class ProductionStationEnergyTest {
         assertFalse(ActivityExecutionCapabilities.waitingForServiceResource(state, HumanAssignmentProjection.compile(state).assignment(job.workerId())));
         assertEquals(1, new ProductionServiceAccess().demands(state, station.containerId()).size());
         assertTrue(ProductionServiceAccess.available(state, current));
+    }
+    private static void assertResourceWaitDoesNotRestartClearance(FrontierWorldState state, ProductionJob job,
+                                                                  ProductionStationSpec station) {
+        var actor = job.workerId();
+        var declaration = ServiceBoundaryComposition.declaration(state, station.containerId());
+        var point = ServiceBoundaryComposition.geometry(state, declaration.identity());
+        var waiting = point.waitingSurfaces().stream().filter(surface -> point.boundary().cleared(surface.standingBody()))
+                .findFirst().orElseThrow();
+        state = state.withActorBody(actor, waiting.standingBody());
+        var points = ServiceBoundaryComposition.geometries(state);
+        var goal = ServiceAreaDestinations.select(points, actor, waiting,
+                ServiceBoundaryComposition.knowledge(state, declaration.identity()).forActor(state, actor), Set.of()).orElseThrow();
+        assertTrue(points.stream().noneMatch(candidate -> ServiceAreaDestinations.temporary(candidate, goal)),
+                "the post-clearance fixture must actually be outside every temporary footprint");
+        var execution = state.actorExecutions().next(actor,
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.SERVICE_EXIT, actor);
+        var order = new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(actor, actor, 0, 1,
+                List.of(goal), TraversalCapability.PEDESTRIAN,
+                io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION);
+        var movement = new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement(order, 10_000,
+                new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ServiceExit(declaration.identity()), execution);
+        state = ActorExecutionComposition.LIFECYCLE.prepareBegin(state, execution, 10_000).commit(state,
+                FrontierWorldStateUpdate.begin().actorMovements(Map.of(actor, movement)));
+        assertTrue(ActivityExecutionCapabilities.waitingForServiceResource(state, HumanAssignmentProjection.compile(state).assignment(actor)));
+        var action = ResidentActivityProcess.review(actor, 10_001);
+        var refusal = assertInstanceOf(ResidentActivityAdmission.Waiting.class, ResidentActivityProcess.admission(state, action));
+        assertEquals(ResidentActivityAdmission.Reason.MOVEMENT_HANDOFF, refusal.reason(),
+                "a blocked owner cannot repeatedly cancel and recreate its unfinished clearance");
+        // Construct the separate valid post-clearance precondition. This is a
+        // pure admission test, not a synthetic movement or native arrival proof.
+        var resting = state.withActorBody(actor, goal.standingBody()).withChanges(FrontierWorldStateUpdate.begin()
+                .actorMovements(Map.of()).actorExecutions(state.actorExecutions().finish(execution)));
+        assertTrue(resting.actorExecutions().actors().get(actor).suspended().isPresent());
+        assertTrue(ResidentMealOpportunity.candidate(resting, actor, 10_002).isEmpty());
+        assertFalse(ActivityExecutionCapabilities.mayResumeWork(resting, HumanAssignmentProjection.compile(resting).assignment(actor)));
+        assertTrue(ResidentActivityProcess.plan(resting, ResidentActivityProcess.review(actor, 10_002)).stream()
+                .noneMatch(event -> event.payload() instanceof io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionResumed),
+                "even an admitted ordinary review cannot resume resource-blocked work");
+        assertTrue(ResidentActivityProcess.wakeDependencies(resting, actor).contains(station.containerId()),
+                "fuel must wake the retained worker even after it leaves the station footprint");
+        resting = fuel(resting, station);
+        for (int count = 0; count < 2; count++) resting = ProductionStationEnergy.apply(resting, station.id(),
+                new ProductionStationFuelChanged(ProductionStationFuelChanged.Stage.COLD_CONSUMED,
+                        ProductionStationEnergy.next(resting, station.id()).orElseThrow(), List.of()));
+        assertTrue(ResidentMealOpportunity.candidate(resting, actor, 10_003).isEmpty());
+        assertInstanceOf(ResidentActivityAdmission.Ready.class, ResidentActivityProcess.admission(resting,
+                ResidentActivityProcess.review(actor, 10_003)), "available retained work resumes even without food");
+        assertEquals(1, ResidentActivityProcess.plan(resting, ResidentActivityProcess.review(actor, 10_003)).stream()
+                .filter(event -> event.payload() instanceof io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionResumed).count(),
+                "fuel releases the retained executable work exactly once");
     }
     @Test void fuelledBatchConsumesRealFuelAndIngredientsAndSurvivesEverySnapshotBoundary() {
         var state = BakeryPartialBatchTest.fixture(64, FrontierRulesets.fuelledQuarryGraybox());

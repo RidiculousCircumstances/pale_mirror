@@ -7,6 +7,9 @@ import java.util.List;
 
 /** A roster reservation is not unfinished labour: vacant members may eat while waiting. */
 final class GroupAssignmentCapability implements ActivityExecutionCapability {
+    @Override public boolean mayResumeWork(FrontierWorldState state, HumanAssignment assignment) {
+        return checkpoint(state, assignment).status() == ResidentWorkYield.Status.READY;
+    }
     @Override public HumanAssignmentKind kind() { return HumanAssignmentKind.GROUP_MEMBER; }
     @Override public boolean permitsHomeFood(FrontierWorldState state, HumanAssignment assignment) {
         var group = state.unitGroups().groups().get(assignment.ownerId().orElseThrow());

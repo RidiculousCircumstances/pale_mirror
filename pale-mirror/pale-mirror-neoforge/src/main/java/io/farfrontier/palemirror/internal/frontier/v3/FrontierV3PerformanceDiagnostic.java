@@ -87,6 +87,15 @@ final class FrontierV3PerformanceDiagnostic {
                          FrontierV3ServerLifecycle.FastForwardSliceTelemetry sliceTelemetry,
                          List<FrontierV3ServerLifecycle.FastForwardRequestOutcome> requests, String planningPressure,
                          String departurePressure, String journalPressure) {
+        return render(checkpoint, metrics, state, fastForwardRemaining, fastForwardTarget, fastForwardFailure,
+                outcome, sliceTelemetry, requests, planningPressure, departurePressure, journalPressure, null);
+    }
+    static String render(FrontierScheduleView checkpoint, FrontierExecutionMetrics.Snapshot metrics, FrontierWorldState state,
+                         int fastForwardRemaining, Long fastForwardTarget, String fastForwardFailure,
+                         FrontierV3ServerLifecycle.FastForwardTargetOutcome outcome,
+                         FrontierV3ServerLifecycle.FastForwardSliceTelemetry sliceTelemetry,
+                         List<FrontierV3ServerLifecycle.FastForwardRequestOutcome> requests, String planningPressure,
+                         String departurePressure, String journalPressure, FrontierFileStore.Pressure persistence) {
         if (fastForwardRemaining < 0 || fastForwardRemaining > FrontierV3ServerLifecycle.MAX_FAST_FORWARD_TICKS) {
             throw new IllegalArgumentException("bounded fast-forward remainder");
         }
@@ -108,6 +117,11 @@ final class FrontierV3PerformanceDiagnostic {
                 .append(",\"hostTickThroughPmPost\":").append(hostTiming(metrics.stages(), FrontierExecutionMetrics.Stage.HOST_TICK))
                 .append(",\"scheduleQueue\":").append(queuePressure(metrics, checkpoint.instant().ticks()));
         var details = new ArrayList<FrontierV3DiagnosticDetailBudget.Section>();
+        if (persistence != null) details.add(new FrontierV3DiagnosticDetailBudget.Section("canonicalWal",
+                "{\"bufferedRecords\":" + persistence.bufferedRecords() + ",\"bufferedBytes\":" + persistence.bufferedBytes()
+                    + ",\"awaitingDurability\":" + persistence.awaitingDurability() + ",\"pendingNanos\":" + persistence.pendingNanos()
+                    + ",\"forcedGroups\":" + persistence.forcedGroups() + ",\"lastFlushNanos\":" + persistence.lastFlushNanos()
+                    + ",\"maxFlushNanos\":" + persistence.maxFlushNanos() + "}"));
         if (state != null) details.add(new FrontierV3DiagnosticDetailBudget.Section("frontier", frontier(state, checkpoint)));
         if (planningPressure != null) details.add(new FrontierV3DiagnosticDetailBudget.Section("pedestrianPlanning", planningPressure));
         if (departurePressure != null) details.add(new FrontierV3DiagnosticDetailBudget.Section("ambientDepartureQueue", departurePressure));

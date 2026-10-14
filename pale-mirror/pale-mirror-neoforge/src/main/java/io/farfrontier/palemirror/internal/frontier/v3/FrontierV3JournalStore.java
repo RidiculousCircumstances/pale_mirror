@@ -30,10 +30,7 @@ final class FrontierV3JournalStore {
             new ArrayBlockingQueue<>(4), task -> {
                 var thread = new Thread(task, "PM physical checkpoint"); thread.setDaemon(true); return thread;
             }, new ThreadPoolExecutor.AbortPolicy());
-    private static final ExecutorService WRITES = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
-            new ArrayBlockingQueue<>(16), task -> {
-                var thread = new Thread(task, "PM physical journal"); thread.setDaemon(true); return thread;
-            }, new ThreadPoolExecutor.AbortPolicy());
+    private static final Executor WRITES = FrontierPersistenceIo.writer();
     private final Executor writer;
     private static final Map<Path, java.lang.ref.WeakReference<Object>> FILE_LOCKS = new HashMap<>();
     private final Object fileLock;

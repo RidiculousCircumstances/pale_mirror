@@ -107,6 +107,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
     public static final int MAX_PHYSICAL_INTENTS = 4_096;
     private static final int MAX_SCENE_LEASES = 1_024, MAX_AMBIENT_LEASES = 4_096, MAX_STRUCTURE_DAMAGE_CELLS = 65_536;
     private static final ThreadLocal<Integer> DEFERRED_FULL_VALIDATION_DEPTH = ThreadLocal.withInitial(() -> 0);
+    private static final ImmutableInvariantCheck<Void> BOOTSTRAP_RESIDENTS = new ImmutableInvariantCheck<>();
     public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocation> actorLocations,
                               Map<SubjectId, StructureCondition> structureConditions, Map<InfectionCell, FixedRatio> infection,
                               ExactInventory inventory, Map<SubjectId, ProductionJob> productionJobs,
@@ -263,11 +264,13 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         FrontierWorldStateSupport.validateActorItemCustody(bootstrap.worldId(), actorLocations, inventory, fencedRecovery);
         HiveLifecycleStateSupport.validateCocoonCustody(bootstrap, hiveColony, actorLocations, ambientLeases, physicalDeltas, actorExecutions);
         FrontierWorldStateSupport.validateSettlementPolicies(bootstrap, humanPopulation);
-        for (Settlement settlement : bootstrap.settlements()) for (Resident bootstrapResident : settlement.residents()) {
+        BOOTSTRAP_RESIDENTS.validate(() -> {
+          for (Settlement settlement : bootstrap.settlements()) for (Resident bootstrapResident : settlement.residents()) {
             ResidentProfile profile = humanPopulation.resident(bootstrapResident.id());
             // Bootstrap defines an exact person's immutable identity, not their permanent home.
             // A completed v3 migration deliberately changes the profile's household/settlement.
             if (profile == null) throw new IllegalArgumentException("bootstrap resident must remain in the canonical population register"); }
+        }, bootstrap, humanPopulation.residents());
         for (Company company : companies.companies().values()) {
             FrontierWorldStateSupport.settlement(bootstrap, company.settlementId());
             ResidentProfile founder = humanPopulation.resident(company.founderId());
@@ -501,6 +504,9 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         }
     }
     void validateComplete() {
+        ImmutableInvariantCheck.full(() -> { validateOwnedState(); return null; });
+    }
+    private void validateOwnedState() {
         int depth = DEFERRED_FULL_VALIDATION_DEPTH.get();
         DEFERRED_FULL_VALIDATION_DEPTH.remove();
         try {
@@ -523,7 +529,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
             FrontierPlannerHealthValidation.validate(bootstrap, humanPopulation, strategicPlans, routeTopology, hiveColony, actorLocations, fencedRecovery);
             return;
         }
-        if (!onlyInfectionChangedFrom(previous)) { validateComplete(); return; }
+        if (!onlyInfectionChangedFrom(previous)) { validateOwnedState(); return; }
         validateInfectionTransition(previous);
     }
     /** Hive infection tasks may atomically change their cell and planner state. */
@@ -548,7 +554,12 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId; import java.util.Has
         return humanPopulation.households() == previous.humanPopulation.households()
                 && humanPopulation.residents() == previous.humanPopulation.residents()
                 && humanPopulation.birthJobs() == previous.humanPopulation.birthJobs()
-                && humanPopulation.migrations() == previous.humanPopulation.migrations();
+                && humanPopulation.migrations() == previous.humanPopulation.migrations()
+                && humanPopulation.meals() == previous.humanPopulation.meals()
+                && humanPopulation.mealResourceObligations() == previous.humanPopulation.mealResourceObligations()
+                && humanPopulation.medicalOperations() == previous.humanPopulation.medicalOperations()
+                && humanPopulation.provisions() == previous.humanPopulation.provisions()
+                && humanPopulation.schedules() == previous.humanPopulation.schedules();
     }
     private void validateInfectionTransition(FrontierWorldState previous) {
         FrontierInfectionFrontier.InfectionChange change = FrontierWorldStateSupport.infectionChange(infection, bootstrap.bounds()).orElse(null);
