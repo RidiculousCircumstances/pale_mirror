@@ -51,6 +51,7 @@ final class FrontierV3ActorProbeSchedule {
         private Map<SubjectId, io.farfrontier.palemirror.frontier.v3.model.ActorLocation> observedLocations;
         private final Map<SubjectId, Long> retainedDemand = new LinkedHashMap<>();
         private final Map<SubjectId, Long> deferred = new LinkedHashMap<>();
+        private final FrontierV3ActorSpatialCandidates spatial = new FrontierV3ActorSpatialCandidates();
         private int next;
         private int nextDemanded;
 
@@ -141,14 +142,15 @@ final class FrontierV3ActorProbeSchedule {
 
         private List<SubjectId> demanded(FrontierWorldState state, ServerLevel level, long instant) {
             LinkedHashSet<SubjectId> result = new LinkedHashSet<>();
+            if (level.players().isEmpty()) return List.of();
+            spatial.synchronize(state);
             for (var player : level.players().stream().filter(value -> !value.isSpectator())
                     .sorted(Comparator.comparing(value -> value.getUUID().toString())).limit(256).toList()) {
-                BlockPos observer = player.blockPosition(); int radius = (FrontierV3SceneDemand.RADIUS_BLOCKS + 15) / 16;
-                // COLD legitimately advances exact canonical positions.  The old one-time
-                // bootstrap chunk index therefore made a returned actor invisible to the HOT
-                // scheduler after a lawful COLD interval. The synchronized canonical roster
-                // includes later births; this is deliberately not a loaded-entity scan.
-                for (SubjectId actor : actors) {
+                BlockPos observer = player.blockPosition();
+                // Index current bases and every chunk in a retained COLD segment,
+                // then project only nearby candidates at the actual simulation tick.
+                // This is not the old bootstrap-only index and does not load chunks.
+                for (SubjectId actor : spatial.near(observer.getX(), observer.getZ(), FrontierV3SceneDemand.RADIUS_BLOCKS)) {
                     var location = state.actorLocations().get(actor);
                     if (location == null) continue;
                     var body = state.actorMovements().containsKey(actor)

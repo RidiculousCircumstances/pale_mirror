@@ -42,6 +42,9 @@ public final class GroupMovementProvider implements ActorMovementProvider {
         return UnitGroupMissionPorts.require(group).knowledge(state, group).forActor(state, movement.order().actorId()).plannedPath(start, movement.order(),
                 group.journey().orElseThrow().route());
     }
+    @Override public List<SurfaceAnchor> nextSegment(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start) {
+        return placementKnowledge(state, movement).plannedSegment(start, movement.order(), group(state, movement).journey().orElseThrow().route());
+    }
     @Override public void requireRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
         var group = group(state, movement); UnitGroupMissionPorts.require(group).knowledge(state, group).forActor(state, movement.order().actorId()).requireRoute(route);
         if (!movement.order().arrivedAt(route.getLast()) && route.size() != TimedKnownRoute.MAX_SURFACES)

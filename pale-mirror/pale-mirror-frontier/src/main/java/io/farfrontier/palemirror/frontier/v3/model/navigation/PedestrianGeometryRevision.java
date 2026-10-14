@@ -6,7 +6,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /** Immutable derived regional knowledge, never task/arrival/custody authority. */
-public record PedestrianGeometryRevision(Object scope, Object baseline, Map<Region, Object> revisions) {
+public record PedestrianGeometryRevision(Object scope, Object geometryScope, Object baseline, Map<Region, Object> revisions) {
     public static final int MAX_REGIONS = 16_384;
     public record Region(int x, int z) {
         public static Region at(BlockPosition position) {
@@ -14,9 +14,16 @@ public record PedestrianGeometryRevision(Object scope, Object baseline, Map<Regi
         }
     }
     public PedestrianGeometryRevision {
-        Objects.requireNonNull(scope); Objects.requireNonNull(baseline);
+        Objects.requireNonNull(scope); Objects.requireNonNull(geometryScope); Objects.requireNonNull(baseline);
         revisions = Map.copyOf(revisions);
         if (revisions.size() > MAX_REGIONS) throw new IllegalArgumentException("regional knowledge exceeds its safety bound");
+    }
+    /** Conservative providers share only inside their exact query scope. A producer
+     * may explicitly declare a wider geometry scope when its regional tokens include
+     * every local support, obstacle and permission affecting traversal. This grants
+     * graph reuse, never another caller's access, query result or execution authority. */
+    public PedestrianGeometryRevision(Object scope, Object baseline, Map<Region, Object> revisions) {
+        this(scope, scope, baseline, revisions);
     }
     public static PedestrianGeometryRevision initial() {
         return initial(new Object());
@@ -27,10 +34,10 @@ public record PedestrianGeometryRevision(Object scope, Object baseline, Map<Regi
         if (regions.isEmpty()) return this;
         var next = new java.util.LinkedHashMap<>(revisions);
         Object revision = new Object(); regions.forEach(region -> next.put(region, revision));
-        return new PedestrianGeometryRevision(scope, baseline, next);
+        return new PedestrianGeometryRevision(scope, geometryScope, baseline, next);
     }
     public Set<Region> changesSince(PedestrianGeometryRevision prior) {
-        if (!scope.equals(prior.scope) || baseline != prior.baseline)
+        if (!scope.equals(prior.scope) || !geometryScope.equals(prior.geometryScope) || baseline != prior.baseline)
             throw new IllegalArgumentException("regional comparison needs the same declared knowledge scope");
         var regions = new java.util.HashSet<>(revisions.keySet()); regions.addAll(prior.revisions.keySet());
         // Profile envelopes combine several immutable terrain tokens. Rebuilding

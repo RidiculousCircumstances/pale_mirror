@@ -32,7 +32,7 @@ public final class ExpeditionSupplyPlanning {
         for (var food : life.foods().foods().values().stream().sorted(Comparator.comparing(FoodCatalog.Food::itemKind)).toList()) {
             var resources = availableResources; var initialResources = resources;
             var inputs = walkingInputs(state, mission, group, now, food, initialResources,
-                    journey.outward().size() - 1L, journey.returning().size() - 1L);
+                    journey.outward().edges(), journey.returning().edges());
             if (inputs.isEmpty()) return Optional.empty();
             var input = inputs.orElseThrow(); var free = input.freeSlots();
             int cargoSlots = input.roster().stream().mapToInt(ExpeditionProvisioning.Member::cargoStackSlots).sum();
@@ -101,7 +101,7 @@ public final class ExpeditionSupplyPlanning {
         proof.require(state, mission, group);
         var food = state.bootstrap().ruleset().residentLife().foods().require(foodKind);
         return walkingInputs(state, mission, group, now, food, state.inventory().fungibleResources(),
-                proof.outward().size() - 1L, proof.returning().size() - 1L).map(input ->
+                proof.outward().edges(), proof.returning().edges()).map(input ->
                 forecast(state, mission, group, input, food, Integer.MAX_VALUE));
     }
     private static ExpeditionProvisioning.Plan forecast(FrontierWorldState state, TransportMission mission, UnitGroup group,
@@ -126,7 +126,7 @@ public final class ExpeditionSupplyPlanning {
             throw new IllegalArgumentException("selected supply source is physically unavailable");
         var food = state.bootstrap().ruleset().residentLife().foods().require(load.foodKind());
         var input = walkingInputs(state, mission, group, load.calculatedAtTick(), food, resources,
-                load.journey().outward().size() - 1L, load.journey().returning().size() - 1L).orElseThrow();
+                load.journey().outward().edges(), load.journey().returning().edges()).orElseThrow();
         var plan = forecast(state, mission, group, input, food,
                 resources.unclaimedQuantity(source.id(), mission.organization().sponsor().id(), food.itemKind()));
         var targets = new LinkedHashMap<SubjectId, Integer>();

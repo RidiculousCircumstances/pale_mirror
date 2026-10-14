@@ -16,6 +16,7 @@ final class FrontierV3PedestrianPlanning {
     private static final int MAX_WAKE_COMMANDS_PER_TURN = 8;
     private static FrontierV3ServerRuntime<?, ?> owner;
     private static CooperativePedestrianPlanner planner;
+    private static java.util.concurrent.ThreadPoolExecutor workers;
     private static AutoCloseable binding;
     private static AutoCloseable continuationBinding;
     private static PedestrianPlanningWakeIndex continuations;
@@ -23,10 +24,21 @@ final class FrontierV3PedestrianPlanning {
     private FrontierV3PedestrianPlanning() { }
 
     static synchronized void tick(FrontierV3ServerRuntime<?, ?> runtime) {
+        tick(runtime, (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000L));
+    }
+    /** Host budget is operational input, independent of simulation time and test config bootstrapping. */
+    static synchronized void tick(FrontierV3ServerRuntime<?, ?> runtime, long allowance) {
+        if (allowance <= 0) throw new IllegalArgumentException("navigation host budget must be positive");
         if (owner == null) {
-            var next = new CooperativePedestrianPlanner();
+            // Host-owned bounded pool. A task captures only immutable known
+            // geometry; no worker can access ServerLevel, chunks or domain writes.
+            var nextWorkers = new java.util.concurrent.ThreadPoolExecutor(2, 2, 0L, java.util.concurrent.TimeUnit.MILLISECONDS,
+                    new java.util.concurrent.ArrayBlockingQueue<>(8),
+                    Thread.ofPlatform().daemon(true).name("pm-v3-navigation-", 0).factory(),
+                    new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
+            var next = new CooperativePedestrianPlanner(nextWorkers);
             var nextBinding = PedestrianRoutePlanning.bind(next);
-            owner = runtime; planner = next; binding = nextBinding;
+            owner = runtime; planner = next; workers = nextWorkers; binding = nextBinding;
             continuations = new PedestrianPlanningWakeIndex();
             continuationBinding = PedestrianPlanningContinuations.bind(continuations);
             FrontierWorldProcessCatalog.restorePlanningWaits(FrontierWorldRuntimeDefinition.processRegistry(),
@@ -34,7 +46,6 @@ final class FrontierV3PedestrianPlanning {
         }
         if (owner != runtime) throw new IllegalStateException("pedestrian planning has a foreign runtime owner");
         long started = System.nanoTime();
-        long allowance = (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000L);
         planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2,
                 () -> System.nanoTime() - started < allowance);
         continuations.changed(planner.drainChanges());
@@ -66,6 +77,8 @@ final class FrontierV3PedestrianPlanning {
         return "{\"waiting\":" + (owner == runtime ? continuations.waitingCount() : 0)
                 + ",\"readyDeferred\":" + (owner == runtime ? deferredReady : 0)
                 + ",\"activeSearches\":" + (owner == runtime ? planner.pendingCount() : 0)
+                + ",\"inFlightSlices\":" + (owner == runtime ? planner.inFlightCount() : 0)
+                + ",\"runningWorkers\":" + (owner == runtime ? workers.getActiveCount() : 0)
                 + ",\"deferredSearches\":" + (owner == runtime ? planner.deferredCount() : 0)
                 + ",\"oldestWaitPlanningTurns\":" + (owner == runtime ? planner.oldestWaitTurns() : 0)
                 + ",\"searchWorkUnits\":" + (owner == runtime ? planner.workUnits() : 0)
@@ -91,6 +104,6 @@ final class FrontierV3PedestrianPlanning {
         if (owner != runtime) return;
         try { continuationBinding.close(); binding.close(); }
         catch (Exception error) { throw new IllegalStateException("cannot release pedestrian planner", error); }
-        finally { planner.close(); binding = null; continuationBinding = null; continuations = null; planner = null; owner = null; deferredReady = 0; }
+        finally { planner.close(); workers.shutdownNow(); workers = null; binding = null; continuationBinding = null; continuations = null; planner = null; owner = null; deferredReady = 0; }
     }
 }

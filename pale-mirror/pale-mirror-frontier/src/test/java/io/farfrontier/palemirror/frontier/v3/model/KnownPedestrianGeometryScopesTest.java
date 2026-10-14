@@ -15,6 +15,11 @@ class KnownPedestrianGeometryScopesTest {
         var supports = Map.of(column, List.of(SurfaceAnchor.at(20, 63, 2)));
         KnownPedestrianGeometryScopes.refresh(bootstrap, Set.of(wall), supports);
         var before = KnownPedestrianGeometryScopes.revision("test:retained", Set.of(wall), supports);
+        var otherTask = KnownPedestrianGeometryScopes.revision("test:other-task", Set.of(), supports);
+        assertNotEquals(before.scope(), otherTask.scope());
+        assertEquals(before.geometryScope(), otherTask.geometryScope());
+        assertNotEquals(before.at(0, 0), otherTask.at(0, 0), "passage restrictions stay in the local geometry proof");
+        assertEquals(before.at(1, 0), otherTask.at(1, 0), "identical distant terrain can be shared across task policies");
         for (int index = 0; index < 300; index++)
             KnownPedestrianGeometryScopes.revision("test:eviction-" + index, Set.of(), Map.of());
         var reconstructed = KnownPedestrianGeometryScopes.revision("test:retained", Set.of(wall), supports);
@@ -34,5 +39,6 @@ class KnownPedestrianGeometryScopesTest {
         assertEquals(Set.of(new PedestrianGeometryRevision.Region(0, 0)), removedWall.changesSince(changed));
         KnownPedestrianGeometryScopes.refresh(new Object(), Set.of(), Map.of());
         assertNotEquals(before.scope(), KnownPedestrianGeometryScopes.revision("test:retained", Set.of(), Map.of()).scope());
+        assertNotEquals(before.geometryScope(), KnownPedestrianGeometryScopes.revision("test:retained", Set.of(), Map.of()).geometryScope());
     }
 }

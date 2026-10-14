@@ -58,6 +58,15 @@ class UnitGroupTransportTest {
             @Override public Optional<PedestrianRouteResult> peek(PedestrianRouteGeometry geometry, SurfaceAnchor origin, SurfaceAnchor target) {
                 return planner.peek(geometry, origin, target);
             }
+            @Override public PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor origin, SurfaceAnchor target,
+                                                         PedestrianRouteExtent extent) {
+                assertFalse(replaying[0], "departure replay must validate retained geometry, not request a route");
+                return planner.query(geometry, origin, target, extent);
+            }
+            @Override public Optional<PedestrianRouteResult> peek(PedestrianRouteGeometry geometry, SurfaceAnchor origin, SurfaceAnchor target,
+                                                                   PedestrianRouteExtent extent) {
+                return planner.peek(geometry, origin, target, extent);
+            }
         });
                 var waitBinding = PedestrianPlanningContinuations.bind(waits)) {
             // Binding an empty asynchronous planner invalidates the synchronous fixture's
@@ -239,9 +248,16 @@ class UnitGroupTransportTest {
         assertTrue(terminal.shipments().missions().isEmpty()); assertTrue(terminal.unitGroups().groups().isEmpty());
         for (var member : admitted.members()) {
             assertTrue(HumanAssignmentProjection.compile(terminal).idle(member.actorId()));
-            assertTrue(terminal.inventory().fungibleResources().accounts().values().stream()
+            // Retirement releases the expedition, not an independently admitted meal.
+            // The returned resident may already be eating its retained personal provisions.
+            var meal = terminal.humanPopulation().meals().get(member.actorId());
+            var remainingClaims = terminal.inventory().fungibleResources().accounts().values().stream()
                     .filter(account -> account.custody().equals(new ResourceCustody.Actor(member.actorId())))
-                    .allMatch(account -> account.claimQuantities().isEmpty()), "personal provisions may remain, but completed work cannot retain cargo claims");
+                    .flatMap(account -> account.claimQuantities().keySet().stream())
+                    .map(terminal.inventory().fungibleResources().claims()::get).toList();
+            assertTrue(remainingClaims.stream().allMatch(claim -> claim.purpose() == ClaimPurpose.RESIDENT_MEAL
+                    && meal != null && meal.claimId().equals(claim.id()) && claim.claimantId().equals(member.actorId())),
+                    () -> "completed work cannot retain cargo claims or orphan personal claims: " + remainingClaims);
             assertTrue(terminal.actorExecutions().actors().get(member.actorId()).current().stream()
                     .noneMatch(execution -> execution.activityKind() == ActorActivityKind.GROUP_MEMBER));
             assertTrue(terminal.actorExecutions().actors().get(member.actorId()).suspended().isEmpty());

@@ -9,8 +9,8 @@ final class ExpeditionSupplyLoadCodec {
     private ExpeditionSupplyLoadCodec() { }
     static void write(DataOutputStream out, ExpeditionSupplyLoad load) throws IOException {
         out.writeUTF(load.foodKind()); out.writeLong(load.forecastDurationTicks()); out.writeLong(load.calculatedAtTick()); out.writeLong(load.revision());
-        PedestrianRouteReceiptCodec.writeRoute(out, load.journey().outward());
-        PedestrianRouteReceiptCodec.writeRoute(out, load.journey().returning());
+        PedestrianPathProofCodec.write(out, load.journey().outward());
+        PedestrianPathProofCodec.write(out, load.journey().returning());
         out.writeByte(load.foodTargets().size());
         for (var entry : new TreeMap<>(load.foodTargets()).entrySet()) {
             UnitGroupStateCodec.id(out, entry.getKey()); out.writeInt(entry.getValue());
@@ -31,7 +31,7 @@ final class ExpeditionSupplyLoadCodec {
     static ExpeditionSupplyLoad read(DataInputStream in) throws IOException {
         String kind = in.readUTF(); long duration = in.readLong(), tick = in.readLong(), revision = in.readLong();
         var journey = new io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionJourneyProof(
-                PedestrianRouteReceiptCodec.readRoute(in), PedestrianRouteReceiptCodec.readRoute(in));
+                PedestrianPathProofCodec.read(in), PedestrianPathProofCodec.read(in));
         int count = in.readUnsignedByte(); if (count > 32) throw new IllegalArgumentException("invalid supply roster size");
         var targets = new LinkedHashMap<SubjectId, Integer>();
         var assembly = new LinkedHashMap<SubjectId, io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor>();

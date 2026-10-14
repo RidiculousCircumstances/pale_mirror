@@ -6,18 +6,14 @@ import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
 import java.util.List;
 
 /** Accepted round-trip geometry; the enclosing departure event owns mission, revision and time. */
-public record ExpeditionJourneyProof(List<SurfaceAnchor> outward, List<SurfaceAnchor> returning) {
+public record ExpeditionJourneyProof(PedestrianPathProof outward, PedestrianPathProof returning) {
     public ExpeditionJourneyProof {
-        outward = bounded(outward); returning = bounded(returning);
-        if (!outward.getFirst().equals(returning.getLast()) || !outward.getLast().equals(returning.getFirst()))
+        java.util.Objects.requireNonNull(outward); java.util.Objects.requireNonNull(returning);
+        if (!outward.origin().equals(returning.destination()) || !outward.destination().equals(returning.origin()))
             throw new IllegalArgumentException("expedition estimate needs matching round-trip endpoints");
     }
-    private static List<SurfaceAnchor> bounded(List<SurfaceAnchor> route) {
-        route = List.copyOf(route);
-        if (route.isEmpty() || route.size() > TimedKnownRoute.MAX_SURFACES)
-            throw new IllegalArgumentException("expedition estimate exceeds bounded known geometry");
-        if (route.size() > 1) new PedestrianRouteReceipt(route);
-        return route;
+    public ExpeditionJourneyProof(List<SurfaceAnchor> outward, List<SurfaceAnchor> returning) {
+        this(PedestrianPathProof.from(outward), PedestrianPathProof.from(returning));
     }
     public static ExpeditionJourneyProof select(FrontierWorldState state, TransportMission mission) {
         return select(state, mission, java.util.Objects.requireNonNull(state.unitGroups().groups().get(mission.groupId()), "expedition roster"));
@@ -33,10 +29,10 @@ public record ExpeditionJourneyProof(List<SurfaceAnchor> outward, List<SurfaceAn
     }
     public void require(FrontierWorldState state, TransportMission mission,
             io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup group) {
-        if (!outward.getFirst().equals(mission.homeRendezvous()) || !outward.getLast().equals(mission.destinationRendezvous()))
+        if (!outward.origin().equals(mission.homeRendezvous()) || !outward.destination().equals(mission.destinationRendezvous()))
             throw new IllegalArgumentException("expedition estimate substituted its declared rendezvous");
         var knowledge = knowledge(state, mission, group);
-        knowledge.requireRoute(outward); knowledge.requireRoute(returning);
+        knowledge.requireRoute(outward.surfaces()); knowledge.requireRoute(returning.surfaces());
     }
     private static KnownPedestrianRouteKnowledge knowledge(FrontierWorldState state, TransportMission mission,
             io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup group) {

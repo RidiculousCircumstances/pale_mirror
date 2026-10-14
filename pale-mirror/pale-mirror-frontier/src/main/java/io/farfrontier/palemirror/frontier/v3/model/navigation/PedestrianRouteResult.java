@@ -8,7 +8,7 @@ import java.util.Objects;
 public record PedestrianRouteResult(Status status, List<SurfaceAnchor> route, long workUnits,
                                     int regions, String reason) {
     public enum Status {
-        PLANNING(1), FOUND(2), NO_PATH(3), UNKNOWN_GEOMETRY(4), SAFETY_LIMIT(5);
+        PLANNING(1), FOUND(2), NO_PATH(3), UNKNOWN_GEOMETRY(4), SAFETY_LIMIT(5), SEGMENT_READY(6);
         private final int wireTag;
         Status(int wireTag) { this.wireTag = wireTag; }
         public int wireTag() { return wireTag; }
@@ -20,7 +20,7 @@ public record PedestrianRouteResult(Status status, List<SurfaceAnchor> route, lo
     public PedestrianRouteResult {
         Objects.requireNonNull(status); Objects.requireNonNull(reason);
         route = List.copyOf(route);
-        if (workUnits < 0 || regions < 0 || (status == Status.FOUND) != !route.isEmpty())
+        if (workUnits < 0 || regions < 0 || (status == Status.FOUND || status == Status.SEGMENT_READY) != !route.isEmpty())
             throw new IllegalArgumentException("route result has inconsistent readiness/evidence");
     }
 }

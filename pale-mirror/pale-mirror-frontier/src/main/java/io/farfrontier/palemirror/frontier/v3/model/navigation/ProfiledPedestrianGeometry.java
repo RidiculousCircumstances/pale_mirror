@@ -43,7 +43,8 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
                     expanded.merge(new PedestrianGeometryRevision.Region(region.x() + x, region.z() + z), token,
                             (left, right) -> java.util.List.of(left, right));
             });
-            return new PedestrianGeometryRevision(new Scope(source.scope(), profile), source.baseline(), expanded);
+            return new PedestrianGeometryRevision(new Scope(source.scope(), profile),
+                    new Scope(source.geometryScope(), profile), source.baseline(), expanded);
         });
     }
     @Override public Object version() { return version; }
@@ -78,16 +79,19 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
                 result.add(new double[]{surface.x() + x, surface.z() + z});
         return result;
     }
-    private synchronized boolean clearVolume(double centerX, double centerZ, int feetY) {
+    private boolean clearVolume(double centerX, double centerZ, int feetY) {
         // This decorator captures one immutable terrain/obstacle revision. The
         // same standing/swept volumes recur across neighbouring graph edges and
         // body-pose pairs; a new knowledge revision creates another decorator.
         var key = new Volume(centerX, centerZ, feetY);
-        var prior = volumes.get(key);
+        Boolean prior;
+        synchronized (volumes) { prior = volumes.get(key); }
         if (prior != null) return prior;
         boolean result = computeClearVolume(centerX, centerZ, feetY);
-        if (volumes.size() == MAX_VOLUME_RESULTS) volumes.remove(volumes.keySet().iterator().next());
-        volumes.put(key, result);
+        synchronized (volumes) {
+            if (volumes.size() == MAX_VOLUME_RESULTS && !volumes.containsKey(key)) volumes.remove(volumes.keySet().iterator().next());
+            volumes.put(key, result);
+        }
         return result;
     }
     private boolean computeClearVolume(double centerX, double centerZ, int feetY) {

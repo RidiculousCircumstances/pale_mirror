@@ -83,6 +83,11 @@ public final class KnownPedestrianNavigation {
         return route(geometry, start, order, true);
     }
 
+    /** A proven itinerary with only its nearest bounded part refined. The original order stays current. */
+    public static List<SurfaceAnchor> plannedSegment(PedestrianRouteGeometry geometry, SurfaceAnchor start, MovementOrder order) {
+        return route(geometry, start, order, true, false, PedestrianRouteExtent.MOVEMENT_SEGMENT);
+    }
+
     /** Geometry-only admission: no fictitious actor/order is needed to request a supported leg. */
     public static List<SurfaceAnchor> plannedBetween(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
         var result = queryBetween(geometry, start, target);
@@ -113,6 +118,14 @@ public final class KnownPedestrianNavigation {
     /** Reuse supported accepted geometry; an advisory hint grants neither movement nor arrival. */
     public static List<SurfaceAnchor> plannedRoute(PedestrianRouteGeometry geometry, SurfaceAnchor start,
                                                   MovementOrder order, List<SurfaceAnchor> hint) {
+        return plannedRoute(geometry, start, order, hint, false);
+    }
+    public static List<SurfaceAnchor> plannedSegment(PedestrianRouteGeometry geometry, SurfaceAnchor start,
+                                                    MovementOrder order, List<SurfaceAnchor> hint) {
+        return plannedRoute(geometry, start, order, hint, true);
+    }
+    private static List<SurfaceAnchor> plannedRoute(PedestrianRouteGeometry geometry, SurfaceAnchor start,
+                                                   MovementOrder order, List<SurfaceAnchor> hint, boolean segment) {
         Objects.requireNonNull(hint);
         if (order.capability() != TraversalCapability.PEDESTRIAN)
             throw new IllegalArgumentException("known pedestrian navigation cannot change actor capability");
@@ -145,7 +158,7 @@ public final class KnownPedestrianNavigation {
             if (candidate.size() > 1) new PedestrianRouteReceipt(candidate);
             if (best == null || candidate.size() < best.size()) best = List.copyOf(candidate);
         }
-        return best == null ? plannedRoute(geometry, start, order) : best;
+        return best != null ? best : segment ? plannedSegment(geometry, start, order) : plannedRoute(geometry, start, order);
     }
 
     private static List<SurfaceAnchor> route(PedestrianRouteGeometry geometry, SurfaceAnchor start, MovementOrder order, boolean deferredPlanning) {
@@ -154,6 +167,10 @@ public final class KnownPedestrianNavigation {
 
     private static List<SurfaceAnchor> route(PedestrianRouteGeometry geometry, SurfaceAnchor start, MovementOrder order,
             boolean deferredPlanning, boolean retainedOnly) {
+        return route(geometry, start, order, deferredPlanning, retainedOnly, PedestrianRouteExtent.COMPLETE);
+    }
+    private static List<SurfaceAnchor> route(PedestrianRouteGeometry geometry, SurfaceAnchor start, MovementOrder order,
+            boolean deferredPlanning, boolean retainedOnly, PedestrianRouteExtent extent) {
         Objects.requireNonNull(geometry); Objects.requireNonNull(start); Objects.requireNonNull(order);
         if (order.capability() != TraversalCapability.PEDESTRIAN)
             throw new IllegalArgumentException("known pedestrian navigation cannot change actor capability");
@@ -165,15 +182,20 @@ public final class KnownPedestrianNavigation {
         var pendingRequests = new java.util.ArrayList<PedestrianRouteRequest>();
         for (SurfaceAnchor station : order.legalStations()) {
             if (!geometry.bounds().contains(station.support()) || geometry.blocked(station)) continue;
-            PedestrianRouteResult result = retainedOnly ? PedestrianRoutePlanning.peek(geometry, start, station)
+            PedestrianRouteResult result = retainedOnly ? PedestrianRoutePlanning.peek(geometry, start, station, extent)
                     .orElseGet(() -> new PedestrianRouteResult(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY,
                             List.of(), 0, 0, "ROUTE_NOT_CALCULATED"))
-                    : deferredPlanning ? PedestrianRoutePlanning.query(geometry, start, station)
+                    : deferredPlanning ? PedestrianRoutePlanning.query(geometry, start, station, extent)
                         : PedestrianRoutePlanning.calculate(geometry, start, station);
             if (result.status() == PedestrianRouteResult.Status.PLANNING)
-                pendingRequests.add(PedestrianRouteRequest.of(geometry, start, station));
-            if (result.status() == PedestrianRouteResult.Status.FOUND) {
+                pendingRequests.add(PedestrianRouteRequest.of(geometry, start, station, extent));
+            if (result.status() == PedestrianRouteResult.Status.FOUND || result.status() == PedestrianRouteResult.Status.SEGMENT_READY) {
                 List<SurfaceAnchor> candidate = result.route();
+                if (!candidate.getFirst().equals(start) || candidate.size() > extent.maximumSurfaces()
+                        || result.status() == PedestrianRouteResult.Status.FOUND && !candidate.getLast().equals(station)
+                        || result.status() == PedestrianRouteResult.Status.SEGMENT_READY
+                            && (extent.equals(PedestrianRouteExtent.COMPLETE) || candidate.size() != extent.maximumSurfaces()))
+                    throw new IllegalArgumentException("planner returned foreign route endpoints or detail horizon");
                 if (best == null || candidate.size() < best.size()) best = candidate;
             } else {
                 failure = result;

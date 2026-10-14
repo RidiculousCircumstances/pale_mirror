@@ -60,7 +60,11 @@ final class KnownPedestrianGeometryScopes {
                     ? ground.at(region.x(), region.z())
                     : new RegionFacts(ground.at(region.x(), region.z()), localBlocks, localLevels));
         }
-        revision = new PedestrianGeometryRevision(new ScopeIdentity(ground.scope(), key), ground.baseline(), tokens);
+        // Query identity retains its declared passages. Graphs may be shared across
+        // queries only where the complete local facts (including denied passages)
+        // are equal, within the same explicit terrain epoch.
+        revision = new PedestrianGeometryRevision(new ScopeIdentity(ground.scope(), key),
+                ground.geometryScope(), ground.baseline(), tokens);
         if (SCOPES.size() >= MAX_SCOPES && !SCOPES.containsKey(key)) SCOPES.remove(SCOPES.keySet().iterator().next());
         SCOPES.put(key, new Scope(Set.copyOf(hard), Map.copyOf(overlay), ground, revision)); return revision;
     }

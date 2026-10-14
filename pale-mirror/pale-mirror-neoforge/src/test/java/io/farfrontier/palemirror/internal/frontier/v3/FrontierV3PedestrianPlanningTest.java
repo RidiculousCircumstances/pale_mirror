@@ -27,7 +27,9 @@ class FrontierV3PedestrianPlanningTest {
         for (var action : actions.subList(0, 4)) FrontierV3CommandSubmission.submitBound(runtime, "pressure-fixture", action.subject().value(),
                 new PedestrianPlanningReady(action), action);
         runtime.shutdown();
-        runtime = FrontierV3ServerRuntime.start(configuration, store, 1000);
+        runtime = FrontierV3ServerRuntime.start(configuration,
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 1000);
+        assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind(), runtime.status().detail().orElse("active"));
         try {
             var index = new io.farfrontier.palemirror.frontier.v3.process.PedestrianPlanningWakeIndex();
             var action = actions.getLast();
@@ -85,17 +87,35 @@ class FrontierV3PedestrianPlanningTest {
         try {
             var beforeRebind = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec()
                     .encode(runtime.decodedState().orElseThrow());
-            FrontierV3PedestrianPlanning.tick(runtime);
+            FrontierV3PedestrianPlanning.tick(runtime, 3_000_000L);
             assertEquals(resumedAt, runtime.canonicalState().orElseThrow().instant().ticks(), "dependency recovery cannot advance time");
             assertArrayEquals(beforeRebind, new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec()
                     .encode(runtime.decodedState().orElseThrow()), "dependency recovery/wake cannot load food, award arrival or change jobs");
-            for (int turn = 0; turn < 2000 && runtime.decodedState().orElseThrow().unitGroups().groups().get(groupId).phase() == UnitGroup.Phase.READY; turn++) {
-                FrontierV3PedestrianPlanning.tick(runtime);
+            // The fixture includes a real bakery visitor walking roughly forty
+            // cells before this carrier gets access. Use the asserted semantic
+            // deadline below, not an earlier unrelated loop cutoff.
+            for (int turn = 0; turn < 6000 && runtime.decodedState().orElseThrow().unitGroups().groups().get(groupId).phase() == UnitGroup.Phase.READY; turn++) {
+                finishCalculations(runtime);
                 runtime.tick(new WorkBudget(128, 1024));
                 assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind(), runtime.status().detail().orElse("active"));
             }
             var group = runtime.decodedState().orElseThrow().unitGroups().groups().get(groupId);
-            assertEquals(UnitGroup.Phase.TRAVELLING, group.phase());
+            assertEquals(UnitGroup.Phase.TRAVELLING, group.phase(), () ->
+                    "instant=" + runtime.canonicalState().orElseThrow().instant() + "; "
+                            + FrontierV3PedestrianPlanning.diagnostic(runtime) + "; participants="
+                            + group.members().stream().map(member -> {
+                                var state = runtime.decodedState().orElseThrow(); var move = state.actorMovements().get(member.actorId());
+                                return member.actorId() + " at=" + state.actorLocations().get(member.actorId()).body()
+                                        + "; moving=" + (move == null ? "none" : move.context().provider() + "/"
+                                            + move.coldTravel().map(TimedKnownRoute::arrivalTick) + "; goal=" + move.order().legalStations()
+                                            + "; calculation=" + io.farfrontier.palemirror.frontier.v3.process.ActorMovementProviders.require(move)
+                                                .placementKnowledge(state, move).segmentEvidence(state.actorLocations().get(member.actorId()).supportingSurface(),
+                                                    move.order().legalStations().getFirst()).map(value -> value.status() + ":" + value.reason()))
+                                        + "; access=" + (move == null ? "none" : io.farfrontier.palemirror.frontier.v3.process.ActorMovementProviders.require(move)
+                                                .serviceApproach(state, move).map(access -> "available=" + ServiceAccessCoordinator.available(state, access)
+                                                    + "; point=" + access.pointId()))
+                                        + "; meal=" + state.humanPopulation().meals().containsKey(member.actorId());
+                            }).toList());
             assertTrue(group.journey().isPresent());
             var mission = runtime.decodedState().orElseThrow().shipments().missions().get(missionId);
             assertEquals(TransportMission.Stage.OUTBOUND, mission.stage());
@@ -103,5 +123,19 @@ class FrontierV3PedestrianPlanningTest {
             assertTrue(runtime.canonicalState().orElseThrow().instant().ticks() - resumedAt < 6000,
                     "real server notification must not wait for terminal logistics review");
         } finally { FrontierV3PedestrianPlanning.forget(runtime); runtime.shutdown(); }
+    }
+
+    /** Calculation completion and the simulation clock are independent. This
+     * unpaced recovery test waits for real worker/publication progress before
+     * advancing its clock; it neither invents a route nor runs search inline. */
+    private static void finishCalculations(FrontierV3ServerRuntime<?, ?> runtime) {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+        do {
+            FrontierV3PedestrianPlanning.tick(runtime, 3_000_000L);
+            var status = com.google.gson.JsonParser.parseString(FrontierV3PedestrianPlanning.diagnostic(runtime)).getAsJsonObject();
+            if (status.get("activeSearches").getAsInt() == 0 && status.get("deferredSearches").getAsInt() == 0) return;
+            assertTrue(System.nanoTime() < deadline, () -> "navigation workers did not finish: " + status);
+            java.util.concurrent.locks.LockSupport.parkNanos(100_000L);
+        } while (true);
     }
 }

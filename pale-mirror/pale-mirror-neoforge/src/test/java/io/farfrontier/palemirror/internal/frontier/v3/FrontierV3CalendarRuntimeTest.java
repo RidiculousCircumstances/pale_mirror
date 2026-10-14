@@ -49,7 +49,9 @@ class FrontierV3CalendarRuntimeTest {
         var calendar = new SimulationCalendar(config.initialState().bootstrap().ruleset().residentLife().dayTicks());
         var before = calendar.at(runtime.calendarInstant().orElseThrow());
         runtime.shutdown();
-        var recovered = FrontierV3ServerRuntime.start(config, store, 200);
+        var recovered = FrontierV3ServerRuntime.start(config,
+                new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 200);
+        assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, recovered.status().kind(), recovered.status().detail().orElse("active"));
         assertEquals(before, calendar.at(recovered.calendarInstant().orElseThrow()));
         recovered.shutdown();
     }

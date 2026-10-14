@@ -11,11 +11,13 @@ public final class BuyerCollectionFixture {
         var seller = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
         var buyer = state.companies().goodsTrade().participants().participants().get(seller.known().getFirst().party().id());
         var ledger = state.inventory().fungibleResources();
-        var destination = FungibleResourceCustodySupport.accountAtContainer(state, buyer.endpoint().containerId()).orElseThrow();
         var lot = new SubjectId("lot:collection-provisions"); var staging = new SubjectId("custody:collection-provisions");
+        // Empty accounts retire with their last lot; an empty physical chest remains a valid destination.
+        var destination = FungibleResourceCustodySupport.accountAtContainer(state, buyer.endpoint().containerId())
+                .map(CustodyAccount::id).orElse(staging);
         ledger = ledger.issue(new ResourceLot(lot, buyer.party().id(), "minecraft:bread", 384, "fixture:collection-provisions", List.of()),
                 new CustodyAccount(staging, buyer.endpoint().custody(), Map.of(lot, 384), Map.of()));
-        ledger = ledger.transfer(staging, destination.id(), Map.of(lot, 384), Map.of());
+        if (!destination.equals(staging)) ledger = ledger.transfer(staging, destination, Map.of(lot, 384), Map.of());
         // Source stock must exceed the actual protected stone reserve; do not wait for hunger to create a different sale.
         var export = new SubjectId("lot:collection-export-stone");
         var exportStage = new SubjectId("custody:collection-export-stone");

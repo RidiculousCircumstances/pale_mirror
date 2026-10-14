@@ -10,66 +10,90 @@ final class PedestrianRegionCache {
     private record RegionalKey(PedestrianRegion.Tile tile, Object revision, io.farfrontier.palemirror.frontier.v3.model.WorldBounds bounds) { }
     private final Map<Object, Bucket<RegionalKey>> scoped = new WeakHashMap<>();
     private static final class Entry {
+        private final java.util.concurrent.locks.ReentrantLock builderLock = new java.util.concurrent.locks.ReentrantLock();
         private PedestrianRegionBuild build;
-        private PedestrianRegion region;
-        private boolean limited;
+        private volatile PedestrianRegion region;
+        private volatile boolean limited;
+        // Accounted only under the cache lock, independently of a worker's private builder.
+        private int accountedSize = PedestrianRegionBuild.MAX_SURFACES;
+        private boolean accountedBuilding = true;
         Entry(PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile) { build = new PedestrianRegionBuild(geometry, tile); }
         Lookup advance(int budget, java.util.function.BooleanSupplier mayContinue) {
             if (region != null || limited) return new Lookup(region, 1, limited);
-            int work = build.advance(budget, mayContinue); region = build.result(); limited = build.limited();
-            if (region != null || limited) build = null;
-            return new Lookup(region, work, limited);
+            if (!builderLock.tryLock()) return new Lookup(null, 1, false);
+            try {
+                if (region != null || limited) return new Lookup(region, 1, limited);
+                int work = build.advance(budget, mayContinue); region = build.result(); limited = build.limited();
+                if (region != null || limited) build = null;
+                return new Lookup(region, work, limited);
+            } finally { builderLock.unlock(); }
         }
-        int size() { return build == null ? region == null ? 0 : region.size() : PedestrianRegionBuild.MAX_SURFACES; }
-        boolean building() { return build != null; }
     }
     /** Maintain counts when entries change; a cache hit must not scan every retained region. */
     private static final class Bucket<K> {
         private final Map<K, Entry> entries = new LinkedHashMap<>(16, 0.75f, true);
         private int slots, builders;
-        Lookup advance(K key, PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile, int budget,
-                java.util.function.BooleanSupplier mayContinue) {
+        Entry acquire(K key, PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile) {
             var entry = entries.get(key);
             if (entry == null) {
                 entry = new Entry(geometry, tile); entries.put(key, entry);
-                slots += entry.size(); builders++;
+                slots += entry.accountedSize; builders++;
             }
-            int oldSize = entry.size(); boolean wasBuilding = entry.building();
-            var result = entry.advance(budget, mayContinue); slots += entry.size() - oldSize;
-            if (wasBuilding && !entry.building()) builders--;
-            return result;
+            return entry;
+        }
+        void reconcile(K key, Entry entry) {
+            if (entries.get(key) != entry || !entry.accountedBuilding) return;
+            var region = entry.region;
+            if (region == null && !entry.limited) return;
+            int size = region == null ? 0 : region.size();
+            slots += size - entry.accountedSize; entry.accountedSize = size;
+            entry.accountedBuilding = false; builders--;
         }
         void evict(boolean building) {
             var iterator = entries.entrySet().iterator();
             while (iterator.hasNext()) {
                 var entry = iterator.next().getValue();
-                if (building && !entry.building()) continue;
-                slots -= entry.size(); if (entry.building()) builders--;
+                if (building && !entry.accountedBuilding) continue;
+                slots -= entry.accountedSize; if (entry.accountedBuilding) builders--;
                 iterator.remove(); return;
             }
             throw new IllegalStateException("region cache eviction lost its counted entry");
         }
     }
     record Lookup(PedestrianRegion region, int work, boolean limited) { }
-    synchronized Lookup region(PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile, int budget) {
+    Lookup region(PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile, int budget) {
         return region(geometry, tile, budget, () -> true);
     }
-    synchronized Lookup region(PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile, int budget,
+    Lookup region(PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile, int budget,
             java.util.function.BooleanSupplier mayContinue) {
         if (budget <= 0) return new Lookup(null, 0, false);
-        Lookup result;
         if (geometry.regionalRevision().isPresent()) {
             var revision = geometry.regionalRevision().orElseThrow();
-            if (scoped.size() >= 64 && !scoped.containsKey(revision.scope())) scoped.remove(scoped.keySet().iterator().next());
-            var regions = scoped.computeIfAbsent(revision.scope(), ignored -> new Bucket<>());
+            Bucket<RegionalKey> regions;
+            synchronized (this) {
+                if (scoped.size() >= 64 && !scoped.containsKey(revision.geometryScope())) scoped.remove(scoped.keySet().iterator().next());
+                regions = scoped.computeIfAbsent(revision.geometryScope(), ignored -> new Bucket<>());
+            }
             var key = new RegionalKey(tile, revision.at(tile.x(), tile.z()), geometry.bounds());
-            result = regions.advance(key, geometry, tile, budget, mayContinue);
+            return advance(regions, key, geometry, tile, budget, mayContinue);
         } else {
-            if (views.size() >= 64 && !views.containsKey(geometry)) views.clear();
-            var regions = views.computeIfAbsent(geometry, ignored -> new Bucket<>());
-            result = regions.advance(tile, geometry, tile, budget, mayContinue);
+            Bucket<PedestrianRegion.Tile> regions;
+            synchronized (this) {
+                if (views.size() >= 64 && !views.containsKey(geometry)) views.clear();
+                regions = views.computeIfAbsent(geometry, ignored -> new Bucket<>());
+            }
+            return advance(regions, tile, geometry, tile, budget, mayContinue);
         }
-        trim(); return result;
+    }
+    private <K> Lookup advance(Bucket<K> bucket, K key, PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile,
+                                int budget, java.util.function.BooleanSupplier mayContinue) {
+        Entry entry;
+        synchronized (this) { entry = bucket.acquire(key, geometry, tile); trim(); }
+        // Different regions build concurrently; the same region has one builder.
+        // Neither a second worker nor the host blocks behind its survey.
+        var result = entry.advance(budget, mayContinue);
+        synchronized (this) { bucket.reconcile(key, entry); trim(); }
+        return result;
     }
     private void trim() {
         var buckets = new ArrayList<Bucket<?>>(); buckets.addAll(scoped.values()); buckets.addAll(views.values());

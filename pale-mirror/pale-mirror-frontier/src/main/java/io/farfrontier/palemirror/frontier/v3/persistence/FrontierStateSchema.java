@@ -4,10 +4,9 @@ import java.io.*;
 
 /** Sole header grammar for early installed-world selection and complete aggregate hydration. */
 final class FrontierStateSchema {
-    // A declared group execution can retain several stack-sized shipment obligations.
-    // Older disposable worlds cannot inherit this new cargo authority/food-budget contract.
-    // Completed market prices survive contract retirement; old snapshots have no such grammar.
-    static final int VERSION = 286;
+    // Whole-trip estimates use compact exact runs, independently of timed movement-leg bounds.
+    // Previous disposable snapshots/WAL cannot inherit the new path-proof grammar.
+    static final int VERSION = 287;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

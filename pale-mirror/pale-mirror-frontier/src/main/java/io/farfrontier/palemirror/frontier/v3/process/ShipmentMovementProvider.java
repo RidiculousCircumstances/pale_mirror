@@ -33,6 +33,9 @@ public final class ShipmentMovementProvider implements ActorMovementProvider {
     @Override public List<SurfaceAnchor> route(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start) {
         return placementKnowledge(state, movement).plannedPath(start, movement.order());
     }
+    @Override public List<SurfaceAnchor> nextSegment(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start) {
+        return placementKnowledge(state, movement).plannedSegment(start, movement.order());
+    }
     @Override public void requireRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
         validate(state, movement);
         Shipment shipment = state.shipments().shipments().get(movement.order().ownerId());

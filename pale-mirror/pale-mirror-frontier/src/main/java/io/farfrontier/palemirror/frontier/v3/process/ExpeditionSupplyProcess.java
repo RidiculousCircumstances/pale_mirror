@@ -17,8 +17,13 @@ final class ExpeditionSupplyProcess {
         var allocation = load.next().orElseThrow();
         if (allocation.pending().isPresent() || ServiceAccessCoordinator.available(state,
                 ExpeditionSupplyServiceAccess.identity(mission, allocation))) return false;
+        return !assemblyWorkPending(state, mission);
+    }
+
+    /** Finished provisioning still owns independent assembly/clearance while cargo is being loaded. */
+    static boolean assemblyWorkPending(FrontierWorldState state, TransportMission mission) {
         var group = state.unitGroups().groups().get(mission.groupId());
-        return group.members().stream().noneMatch(member -> assemblyNeeded(state, mission, member));
+        return group.members().stream().anyMatch(member -> assemblyNeeded(state, mission, member));
     }
 
     private static boolean assemblyNeeded(FrontierWorldState state, TransportMission mission,
@@ -47,13 +52,16 @@ final class ExpeditionSupplyProcess {
         var load = mission.supplies().orElseThrow();
         var events = new ArrayList<ProposedEvent>();
         var group = state.unitGroups().groups().get(mission.groupId());
-        if (load.needsReplan() || load.complete() && !ExpeditionSupplyAuthority.loadedForDeparture(state, mission, now)) {
+        if (load.needsReplan()) {
             ExpeditionSupplyAuthority.reconsider(state, mission, now).ifPresent(replacement -> events.add(new ProposedEvent(mission.id(),
                     new ExpeditionSupplyReplanned(mission.id(), load.revision(), replacement))));
             events.add(new ProposedEvent(mission.id(), new ScheduleEffect.Rescheduled(action.id(), TransportMissionProcess.progress(mission.id(),
                     now + (events.isEmpty() ? state.bootstrap().ruleset().cadence().transportReviewInterval() : 1)))));
             return List.copyOf(events);
         }
+        // Local clearance must not wait for the independent round-trip forecast.
+        // Otherwise a fully provisioned escort can hold the source station while
+        // the cargo carrier needs it to make departure possible at all.
         for (var member : group.members()) {
             var actor = member.actorId();
             if (!assemblyNeeded(state, mission, member)) continue;
@@ -68,6 +76,11 @@ final class ExpeditionSupplyProcess {
                 events.add(new ProposedEvent(actor, new ActorMovementStarted(movement)));
                 events.add(new ProposedEvent(actor, new ScheduleEffect.Created(ActorMovementProcess.progress(movement, now + 1))));
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { /* Common navigation retains the blocked goal. */ }
+        }
+        if (events.isEmpty() && assembled(state, mission)
+                && !ExpeditionSupplyAuthority.loadedForDeparture(state, mission, now)) {
+            ExpeditionSupplyAuthority.reconsider(state, mission, now).ifPresent(replacement -> events.add(new ProposedEvent(mission.id(),
+                    new ExpeditionSupplyReplanned(mission.id(), load.revision(), replacement))));
         }
         load.next().ifPresent(a -> collect(state, mission, load, a, now, events));
         events.add(new ProposedEvent(mission.id(), new ScheduleEffect.Rescheduled(action.id(), TransportMissionProcess.progress(mission.id(),

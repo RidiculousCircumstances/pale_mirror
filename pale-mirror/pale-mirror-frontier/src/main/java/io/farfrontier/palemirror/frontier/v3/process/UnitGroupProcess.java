@@ -47,8 +47,7 @@ public final class UnitGroupProcess {
         var order = new MovementOrder(group.id(), departure.actorId(), ordinal, group.revision() + 1, List.of(target),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         try {
-            var route = port.knowledge(state, group).plannedPath(origin, order);
-            route = List.copyOf(route.subList(0, Math.min(route.size(), TimedKnownRoute.MAX_SURFACES)));
+            var route = port.knowledge(state, group).plannedSegment(origin, order);
             return Optional.of(new UnitGroupAdvanced(group.id(), group.revision(), UnitGroupAdvanced.Change.START, ordinal,
                     Optional.of(GroupFormation.first(living(state, group), target, route, port.knowledge(state, group), port.travelPolicy(state, group).spacing())), Optional.of(departure.actorId())));
         } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }
@@ -71,7 +70,7 @@ public final class UnitGroupProcess {
                 .comparingLong((UnitGroup.Member member) -> distance(state.actorLocations().get(member.actorId()).supportingSurface(), target))
                 .thenComparing(UnitGroup.Member::actorId));
         if (departure.isEmpty()) return new NavigationReadiness("PARTICIPANT_WAIT", "NO_SURVIVING_PARTICIPANTS");
-        return port.knowledge(state, group).planningEvidence(state.actorLocations().get(departure.orElseThrow().actorId()).supportingSurface(), target)
+        return port.knowledge(state, group).segmentEvidence(state.actorLocations().get(departure.orElseThrow().actorId()).supportingSurface(), target)
                 .map(result -> new NavigationReadiness(result.status().name(), result.reason()))
                 .orElseGet(() -> new NavigationReadiness("NOT_REQUESTED", "NO_CURRENT_CALCULATION_EVIDENCE"));
     }

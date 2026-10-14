@@ -65,6 +65,8 @@ public final class FrontierV3AmbientPhysicsGameTests {
         FrontierV3BodyObservation.refreshGroundContact(level, peer);
         var scope = new FrontierV3NavigationScope.Restricted(new LocalNavigationEnvelope(supports));
         var goal = start.offset(6, 1, 0);
+        helper.assertTrue(peer.getNavigation().moveTo(peer.getNavigation().createPath(goal, 0), 1),
+                "the following neighbour has a real unfinished native route, not a collision impulse");
         peer.setDeltaMovement(new Vec3(.05, 0, 0));
         var following = FrontierV3PedestrianTraffic.query(level, actor, goal, scope);
         helper.assertTrue(following.path() != null && following.path().canReach() && following.blockers().isEmpty(),
@@ -75,7 +77,7 @@ public final class FrontierV3AmbientPhysicsGameTests {
                 "refresh preserves the accepted path instead of restarting around the poputchik");
         helper.assertTrue(FrontierV3PedestrianTraffic.followingPace(level, actor, following.path()) < 1,
                 "near following uses headway without path cancellation");
-        peer.setDeltaMovement(Vec3.ZERO);
+        peer.getNavigation().stop(); peer.setDeltaMovement(Vec3.ZERO);
         helper.runAfterDelay(1, () -> {
             // The common near-body observation is intentionally stable within one physical
             // turn. Stopping a peer changes the next turn, not an already observed sample.
@@ -411,7 +413,7 @@ public final class FrontierV3AmbientPhysicsGameTests {
         double[] initialY = { Double.NaN, Double.NaN };
         boolean[] exactHotBodies = { false }, movingBeforeLoss = { false }, idleBeforeLoss = { false };
         int[] lossTurn = { -1 };
-        long[] disconnectedAt = { -1 };
+        long[] lastDemandAt = { -1 };
         BodyPosition[] landed = new BodyPosition[2]; BlockPos[] supportsAtLoss = new BlockPos[2];
 
         for (int tick = 1; tick <= 365; tick++) {
@@ -480,7 +482,15 @@ public final class FrontierV3AmbientPhysicsGameTests {
                     // observes the same no-player world that a real server tick exposes.
                     observer.setGameMode(GameType.SPECTATOR);
                     observer.discard();
-                    disconnectedAt[0] = level.getGameTime();
+                    lastDemandAt[0] = level.getGameTime();
+                }
+                if (landed[0] != null && resident != null) {
+                    var current = runtime.decodedState().orElseThrow();
+                    // Other tests share this level. Their demand uses the admission radius96,
+                    // not only the smaller64-block drain safety radius. Count continuous absence.
+                    if (FrontierV3SceneExecutor.demandExists(level, current.actorLocations().get(fixture.resident()).body().supportingSurface().support())
+                            || FrontierV3SceneDemand.observerWithin(level, List.of(resident.blockPosition()),
+                                FrontierV3AmbientActorExecutor.DRAIN_SAFE_RADIUS_BLOCKS)) lastDemandAt[0] = level.getGameTime();
                 }
             });
         }
@@ -495,9 +505,7 @@ public final class FrontierV3AmbientPhysicsGameTests {
             // The shared safety hysteresis may not have elapsed yet; neighbouring tests may
             // also retain real demand. Neither case grants this fixture release authority.
             helper.assertTrue(residentClosed || retainedResident != null
-                            && (level.getGameTime() - disconnectedAt[0] < FrontierV3AmbientActorExecutor.DRAIN_HYSTERESIS_TICKS
-                                || FrontierV3SceneDemand.observerWithin(level, List.of(retainedResident.blockPosition()),
-                                    FrontierV3AmbientActorExecutor.DRAIN_SAFE_RADIUS_BLOCKS)),
+                            && level.getGameTime() - lastDemandAt[0] < FrontierV3AmbientActorExecutor.DRAIN_HYSTERESIS_TICKS,
                     "after actual observer loss and safety hysteresis, an undemanded resident must close its HOT presentation lease");
             // GameTest batches share a physical level, so independently-created mock players may
             // still be within the bioform's safety radius. That is a real HOT demand condition,

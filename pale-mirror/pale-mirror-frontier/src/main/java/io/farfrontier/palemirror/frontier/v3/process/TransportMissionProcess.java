@@ -184,6 +184,7 @@ public final class TransportMissionProcess {
         });
         if (mission.preparingSupplies() && !allCargoTerminal && mission.supplies().isPresent()
                 && (!mission.supplies().orElseThrow().complete()
+                    || ExpeditionSupplyProcess.assemblyWorkPending(state, mission)
                     || (cargoLoaded || mission.stage() == TransportMission.Stage.PREPARING) && (!ExpeditionSupplyProcess.assembled(state, mission)
                         || !io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(state, mission, now))))
             return ExpeditionSupplyProcess.plan(state, mission, action, now);

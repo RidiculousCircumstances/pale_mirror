@@ -235,6 +235,12 @@ public final class KnownPedestrianRouteKnowledge {
     public List<SurfaceAnchor> plannedPath(SurfaceAnchor start, MovementOrder order) {
         return KnownPedestrianNavigation.plannedRoute(geometryFrom(start), start, order);
     }
+    public List<SurfaceAnchor> plannedSegment(SurfaceAnchor start, MovementOrder order) {
+        return KnownPedestrianNavigation.plannedSegment(geometryFrom(start), start, order);
+    }
+    public List<SurfaceAnchor> plannedSegment(SurfaceAnchor start, MovementOrder order, List<SurfaceAnchor> hint) {
+        return KnownPedestrianNavigation.plannedSegment(geometryFrom(start), start, order, hint);
+    }
     public List<SurfaceAnchor> retainedPath(SurfaceAnchor start, MovementOrder order) {
         return KnownPedestrianNavigation.retainedRoute(geometryFrom(start), start, order);
     }
@@ -306,6 +312,10 @@ public final class KnownPedestrianRouteKnowledge {
     }
     public Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult> planningEvidence(SurfaceAnchor start, SurfaceAnchor target) {
         return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.peek(geometryFrom(start), start, target);
+    }
+    public Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult> segmentEvidence(SurfaceAnchor start, SurfaceAnchor target) {
+        return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.peek(geometryFrom(start), start, target,
+                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteExtent.MOVEMENT_SEGMENT);
     }
 
     public void requireRoute(List<SurfaceAnchor> route) {

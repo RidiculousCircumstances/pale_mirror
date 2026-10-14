@@ -279,7 +279,7 @@ public final class ActorMovementProcess {
         MovementOrder order = movement.order();
         var provider = ActorMovementProviders.require(movement);
         List<SurfaceAnchor> route = provider.coldSegment(state, movement,
-                provider.route(state, movement, state.actorLocations().get(order.actorId()).supportingSurface()), now, positions);
+                provider.nextSegment(state, movement, state.actorLocations().get(order.actorId()).supportingSurface()), now, positions);
         return timedSegment(state, movement, route, now);
     }
 

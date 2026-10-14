@@ -19,18 +19,28 @@ public final class PedestrianPathComposition {
     public static List<SurfaceAnchor> withoutLoops(List<SurfaceAnchor> path) {
         Objects.requireNonNull(path, "pedestrian composed path");
         if (path.isEmpty()) throw new IllegalArgumentException("pedestrian composed path is empty");
-        var result = new ArrayList<SurfaceAnchor>();
-        var indices = new HashMap<SurfaceAnchor, Integer>();
+        var result = new LoopErasure();
         for (SurfaceAnchor surface : path) {
+            while (!result.appendStep(surface)) { /* One bounded removal per step. */ }
+        }
+        return result.result();
+    }
+
+    /** Incremental counterpart for planners: a long loop cannot consume an uncharged slice. */
+    static final class LoopErasure {
+        private final ArrayList<SurfaceAnchor> path = new ArrayList<>();
+        private final HashMap<SurfaceAnchor, Integer> indices = new HashMap<>();
+
+        boolean appendStep(SurfaceAnchor surface) {
             Objects.requireNonNull(surface, "pedestrian composed surface");
             Integer prior = indices.get(surface);
-            if (prior != null) {
-                while (result.size() > prior + 1) indices.remove(result.removeLast());
-            } else {
-                indices.put(surface, result.size());
-                result.add(surface);
+            if (prior == null) {
+                indices.put(surface, path.size()); path.add(surface); return true;
             }
+            if (path.size() > prior + 1) { indices.remove(path.removeLast()); return false; }
+            return true;
         }
-        return List.copyOf(result);
+        int size() { return path.size(); }
+        List<SurfaceAnchor> result() { return List.copyOf(path); }
     }
 }

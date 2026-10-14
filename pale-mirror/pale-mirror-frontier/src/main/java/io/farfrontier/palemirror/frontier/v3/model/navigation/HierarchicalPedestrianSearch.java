@@ -30,9 +30,9 @@ public final class HierarchicalPedestrianSearch {
             .comparingInt(Candidate::estimate).thenComparingInt(value -> -value.distance())
             .thenComparing(value -> value.node().tile()).thenComparingInt(value -> value.node().component()));
     private Node destination;
-    private List<Edge> itinerary;
+    private List<PedestrianItineraryCache.Portal> itinerary;
     private Node rewind;
-    private final List<Edge> reverseItinerary = new ArrayList<>();
+    private final List<PedestrianItineraryCache.Portal> reverseItinerary = new ArrayList<>();
     private int refinement;
     private SurfaceAnchor refinementStart;
     private final List<SurfaceAnchor> route = new ArrayList<>();
@@ -49,6 +49,13 @@ public final class HierarchicalPedestrianSearch {
     private int publication;
     private java.util.function.BooleanSupplier mayContinue = () -> true;
     private PedestrianLocalSearch localSearch;
+    private PedestrianCorridorJoin corridorJoin;
+    private final PedestrianCorridorCache corridors;
+    private PedestrianCorridorCache.Corridor attemptedCorridor;
+    private final PedestrianRouteExtent extent;
+    private final PedestrianItineraryCache itineraries;
+    private PedestrianMacroSearch itineraryJoin;
+    private long attemptedItineraryRevision = -1;
     private boolean destinationChecked;
     private int destinationNode, destinationEdge, destinationDirection = -1, destinationOffset, destinationExit, destinationEntrance;
 
@@ -58,8 +65,24 @@ public final class HierarchicalPedestrianSearch {
 
     HierarchicalPedestrianSearch(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target,
                                  PedestrianRegionCache regionCache) {
+        this(geometry, start, target, regionCache, null);
+    }
+    HierarchicalPedestrianSearch(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target,
+                                 PedestrianRegionCache regionCache, PedestrianCorridorCache corridors) {
+        this(geometry, start, target, regionCache, corridors, PedestrianRouteExtent.COMPLETE);
+    }
+    HierarchicalPedestrianSearch(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target,
+                                 PedestrianRegionCache regionCache, PedestrianCorridorCache corridors, PedestrianRouteExtent extent) {
+        this(geometry, start, target, regionCache, corridors, extent, null);
+    }
+    HierarchicalPedestrianSearch(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target,
+                                 PedestrianRegionCache regionCache, PedestrianCorridorCache corridors,
+                                 PedestrianRouteExtent extent, PedestrianItineraryCache itineraries) {
         this.geometry = Objects.requireNonNull(geometry); this.start = Objects.requireNonNull(start); this.target = Objects.requireNonNull(target);
         this.regionCache = Objects.requireNonNull(regionCache);
+        this.corridors = corridors;
+        this.extent = Objects.requireNonNull(extent);
+        this.itineraries = itineraries;
         if (geometry.bounds().contains(start.support()) && geometry.bounds().contains(target.support())
                 && PedestrianLocalSearch.nearby(start, target)) localSearch = new PedestrianLocalSearch(geometry, start, target,
                 surface -> {
@@ -72,7 +95,8 @@ public final class HierarchicalPedestrianSearch {
     public synchronized long workUnits() { return work; }
     synchronized PedestrianRegionDependencies dependencies() {
         return new PedestrianRegionDependencies(geometry.bounds(), geometry.regionalRevision()
-                .map(PedestrianGeometryRevision::scope).orElse(geometry), dependencies);
+                .map(PedestrianGeometryRevision::scope).orElse(geometry), geometry.regionalRevision()
+                .map(PedestrianGeometryRevision::geometryScope).orElse(geometry), dependencies);
     }
 
     /** Rebase only untouched surveyed dependencies. Future expansion consumes the new immutable view. */
@@ -80,12 +104,15 @@ public final class HierarchicalPedestrianSearch {
         if (!compatible(current)) return false;
         geometry = current;
         if (localSearch != null) localSearch.rebase(current);
+        if (corridorJoin != null) corridorJoin.rebase(current);
+        if (itineraryJoin != null) itineraryJoin.rebase(current);
         return true;
     }
     synchronized boolean compatible(PedestrianRouteGeometry current) {
         var oldRevision = geometry.regionalRevision(); var nextRevision = current.regionalRevision();
         return geometry.bounds().equals(current.bounds()) && oldRevision.isPresent() && nextRevision.isPresent()
                 && oldRevision.orElseThrow().scope().equals(nextRevision.orElseThrow().scope())
+                && oldRevision.orElseThrow().geometryScope().equals(nextRevision.orElseThrow().geometryScope())
                 && dependencies.entrySet().stream().allMatch(entry -> Objects.equals(entry.getValue(),
                         nextRevision.orElseThrow().at(entry.getKey().x(), entry.getKey().z())));
     }
@@ -109,6 +136,26 @@ public final class HierarchicalPedestrianSearch {
             }
             localSearch = null; // No positive proof: retain full regional completeness.
             if (work >= limit || !mayContinue.getAsBoolean()) return result(PedestrianRouteResult.Status.PLANNING, "REGIONAL_SEARCH_IN_PROGRESS");
+        }
+        if (corridorJoin != null) {
+            work += corridorJoin.advance(Math.toIntExact(limit - work), mayContinue);
+            if (!corridorJoin.finished()) return result(PedestrianRouteResult.Status.PLANNING, "CORRIDOR_CONNECTION_IN_PROGRESS");
+            if (corridorJoin.result() != null) {
+                route.addAll(corridorJoin.result()); corridorJoin = null;
+                return finish(route.getLast().equals(target) ? PedestrianRouteResult.Status.FOUND
+                        : PedestrianRouteResult.Status.SEGMENT_READY, "SHARED_KNOWN_CORRIDOR");
+            }
+            corridorJoin = null; // A stale/incompatible hint is not a negative path proof.
+            if (work >= limit || !mayContinue.getAsBoolean()) return result(PedestrianRouteResult.Status.PLANNING, "REGIONAL_SEARCH_IN_PROGRESS");
+        }
+        if (itineraryJoin != null) {
+            work += itineraryJoin.advance(Math.toIntExact(limit - work), mayContinue);
+            if (!itineraryJoin.finished()) return result(PedestrianRouteResult.Status.PLANNING, "ITINERARY_CONNECTION_IN_PROGRESS");
+            if (itineraryJoin.result() != null) {
+                itinerary = itineraryJoin.result(); refinementStart = start;
+                initialized = destinationChecked = true;
+            }
+            itineraryJoin = null;
         }
         if (!initialized) {
             if (!geometry.bounds().contains(start.support()) || !geometry.bounds().contains(target.support()))
@@ -160,23 +207,41 @@ public final class HierarchicalPedestrianSearch {
         while (rewind != null && work < limit && mayContinue.getAsBoolean()) {
             work++;
             Edge edge = previous.get(rewind);
-            if (edge == null) { itinerary = reverseItinerary; rewind = null; refinementStart = start; }
-            else { reverseItinerary.add(edge); rewind = edge.previous(); }
+            if (edge == null) {
+                itinerary = List.copyOf(reverseItinerary.reversed()); rewind = null; refinementStart = start;
+            }
+            else { reverseItinerary.add(new PedestrianItineraryCache.Portal(edge.exit(), edge.entrance(),
+                    edge.previous().component(), rewind.component())); rewind = edge.previous(); }
         }
         while (itinerary != null && work < limit && mayContinue.getAsBoolean()) {
             SurfaceAnchor end = refinement < itinerary.size() ? forwardEdge(refinement).exit() : target;
-            if (segmentRefinement == null) segmentRefinement = regions.get(PedestrianRegion.Tile.at(refinementStart)).refine(refinementStart, end);
+            if (segmentRefinement == null) {
+                var graph = region(PedestrianRegion.Tile.at(refinementStart));
+                if (terminal != null) return terminal;
+                if (graph == null || work >= limit) break;
+                segmentRefinement = graph.refine(refinementStart, end);
+            }
             // A local refinement is itself resumable; keep each admitted piece small.
             work += segmentRefinement.advance(Math.min(256, Math.toIntExact(limit - work)));
             var segment = segmentRefinement.result();
             if (segment == null) break;
             segmentRefinement = null;
+            int offset = route.isEmpty() ? 0 : 1;
+            int remaining = extent.maximumSurfaces() - route.size();
+            if (!extent.equals(PedestrianRouteExtent.COMPLETE) && segment.size() - offset >= remaining) {
+                route.addAll(segment.subList(offset, offset + remaining));
+                return finish(route.getLast().equals(target) ? PedestrianRouteResult.Status.FOUND
+                        : PedestrianRouteResult.Status.SEGMENT_READY, "KNOWN_ITINERARY_SEGMENT");
+            }
             if (route.size() + segment.size() > MAX_ROUTE_SURFACES)
                 return finish(PedestrianRouteResult.Status.SAFETY_LIMIT, "ROUTE_OUTPUT_SAFETY_LIMIT");
             if (route.isEmpty()) route.addAll(segment); else route.addAll(segment.subList(1, segment.size()));
             if (refinement == itinerary.size()) return finish(PedestrianRouteResult.Status.FOUND, "CONNECTED_KNOWN_ROUTE");
             if (route.size() >= MAX_ROUTE_SURFACES) return finish(PedestrianRouteResult.Status.SAFETY_LIMIT, "ROUTE_OUTPUT_SAFETY_LIMIT");
-            Edge edge = forwardEdge(refinement++); route.add(edge.entrance()); refinementStart = edge.entrance();
+            var edge = forwardEdge(refinement++); route.add(edge.entrance()); refinementStart = edge.entrance();
+            if (!extent.equals(PedestrianRouteExtent.COMPLETE) && route.size() == extent.maximumSurfaces())
+                return finish(route.getLast().equals(target) ? PedestrianRouteResult.Status.FOUND
+                        : PedestrianRouteResult.Status.SEGMENT_READY, "KNOWN_ITINERARY_SEGMENT");
         }
         return result(PedestrianRouteResult.Status.PLANNING, "REGIONAL_SEARCH_IN_PROGRESS");
     }
@@ -197,6 +262,30 @@ public final class HierarchicalPedestrianSearch {
             retainedSurfaces += built.size(); unknown |= built.unknown(); regions.put(tile, built);
         }
         return built;
+    }
+    /** Called by the planning owner between slices, never against a running worker.
+     * Workers receive a fixed candidate, not a race against other workers' publications. */
+    synchronized void prepareReuse() {
+        if (terminal != null || itinerary != null || rewind != null) return;
+        if (corridorJoin == null && corridors != null) {
+            var candidate = corridors.find(geometry, start, target);
+            if (candidate != null && candidate != attemptedCorridor) {
+                attemptedCorridor = candidate;
+                corridorJoin = new PedestrianCorridorJoin(candidate, geometry, regionCache, start, target, dependencies::put, extent);
+            }
+        }
+        if (itineraryJoin == null && itineraries != null) {
+            long revision = itineraries.revision();
+            if (revision != attemptedItineraryRevision) {
+                attemptedItineraryRevision = revision;
+                var candidates = itineraries.snapshot(geometry);
+                if (!candidates.isEmpty()) itineraryJoin = new PedestrianMacroSearch(candidates, geometry, regionCache, start, target, dependencies::put);
+            }
+        }
+    }
+    /** Server publication after generation/dependency checks; never called from a worker. */
+    synchronized void publishReuse() {
+        if (itineraries != null && itinerary != null) itineraries.remember(geometry, target, itinerary, dependencies);
     }
     /** 1 means possible incoming access, -1 proved isolation, 0 cooperative continuation. */
     private int probeDestination() {
@@ -321,12 +410,13 @@ public final class HierarchicalPedestrianSearch {
     private void beginRefinement(Node node) {
         rewind = node;
     }
-    private Edge forwardEdge(int index) { return itinerary.get(itinerary.size() - 1 - index); }
+    private PedestrianItineraryCache.Portal forwardEdge(int index) { return itinerary.get(index); }
     private PedestrianRouteResult unavailable(String reason) {
         return finish(unknown ? PedestrianRouteResult.Status.UNKNOWN_GEOMETRY : PedestrianRouteResult.Status.NO_PATH, reason);
     }
-    private PedestrianRouteResult finish(PedestrianRouteResult.Status status, String reason) { terminal = result(status, reason); return terminal; }
+    private PedestrianRouteResult finish(PedestrianRouteResult.Status status, String reason) { terminal = extent.limit(result(status, reason)); return terminal; }
     private PedestrianRouteResult result(PedestrianRouteResult.Status status, String reason) {
-        return new PedestrianRouteResult(status, status == PedestrianRouteResult.Status.FOUND ? route : List.of(), work, regions.size(), reason);
+        return new PedestrianRouteResult(status, status == PedestrianRouteResult.Status.FOUND || status == PedestrianRouteResult.Status.SEGMENT_READY
+                ? route : List.of(), work, regions.size(), reason);
     }
 }

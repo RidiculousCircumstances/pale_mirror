@@ -11,6 +11,54 @@ import java.util.function.Predicate;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianRegionalInvalidationTest {
+    @Test void separateTaskScopesShareCompatibleGraphsAndLongCorridorsWithoutBorrowingChangedPassages() {
+        var terrain = new Object(); var epoch = new Object();
+        var original = new PedestrianGeometryRevision(new Object(), terrain, epoch, java.util.Map.of());
+        var bounds = new WorldBounds(0, 0, 512, 16);
+        var start = SurfaceAnchor.at(1, 63, 1); var end = SurfaceAnchor.at(480, 63, 1);
+        try (var planner = new CooperativePedestrianPlanner()) {
+            var initial = finish(planner, flat(original, bounds, s -> false), start, end);
+            assertEquals(PedestrianRouteResult.Status.FOUND, initial.status());
+            long before = planner.workUnits();
+            var other = new PedestrianGeometryRevision(new Object(), terrain, epoch, java.util.Map.of());
+            var reads = new AtomicInteger();
+            var shared = geometry(other, bounds, (x, z) -> {
+                reads.incrementAndGet(); return SurfaceAnchor.at(x, 63, z);
+            }, s -> false);
+            var neighbourStart = SurfaceAnchor.at(2, 63, 2); var neighbourEnd = SurfaceAnchor.at(481, 63, 2);
+            var joined = finish(planner, shared, neighbourStart, neighbourEnd);
+            assertEquals("SHARED_KNOWN_CORRIDOR", joined.reason());
+            assertEquals(neighbourStart, joined.route().getFirst());
+            assertEquals(neighbourEnd, joined.route().getLast());
+            assertEquals(0, reads.get(), "compatible task scopes reuse region geometry, not world surveying");
+            assertTrue(planner.workUnits() - before < initial.workUnits() / 4,
+                    "a shared long corridor needs only dependency checks and local connections");
+
+            var restricted = new PedestrianGeometryRevision(new Object(), terrain, epoch,
+                    java.util.Map.of(new PedestrianGeometryRevision.Region(6, 0), new Object()));
+            var blocked = flat(restricted, bounds, s -> s.x() == 100);
+            assertEquals(PedestrianRouteResult.Status.NO_PATH, finish(planner, blocked, neighbourStart, neighbourEnd).status(),
+                    "a corridor proven under another passage policy grants no passage through a newly denied region");
+            var reopened = flat(new PedestrianGeometryRevision(new Object(), terrain, epoch, java.util.Map.of()), bounds, s -> false);
+            assertEquals(PedestrianRouteResult.Status.FOUND, finish(planner, reopened, start, neighbourEnd).status());
+        }
+    }
+
+    @Test void sharedRegionGraphsKeepProfilesAndWorldEpochsSeparate() {
+        var terrain = new Object(); var baseline = new Object(); var bounds = new WorldBounds(0, 0, 16, 16);
+        var a = new PedestrianGeometryRevision(new Object(), terrain, baseline, java.util.Map.of());
+        var b = new PedestrianGeometryRevision(new Object(), terrain, baseline, java.util.Map.of());
+        var baseA = flat(a, bounds, s -> false); var baseB = flat(b, bounds, s -> false);
+        var villager = new ProfiledPedestrianGeometry(baseA, UnitNavigationProfile.VILLAGER, p -> false);
+        var donkey = new ProfiledPedestrianGeometry(baseB, UnitNavigationProfile.DONKEY, p -> false);
+        assertNotEquals(villager.regionalRevision().orElseThrow().geometryScope(), donkey.regionalRevision().orElseThrow().geometryScope());
+        var sameProfile = new ProfiledPedestrianGeometry(baseB, UnitNavigationProfile.VILLAGER, p -> false);
+        assertEquals(villager.regionalRevision().orElseThrow().geometryScope(), sameProfile.regionalRevision().orElseThrow().geometryScope());
+        assertNotEquals(villager.regionalRevision().orElseThrow().scope(), sameProfile.regionalRevision().orElseThrow().scope());
+        var foreign = new PedestrianGeometryRevision(a.scope(), new Object(), new Object(), java.util.Map.of());
+        assertNotEquals(a.geometryScope(), foreign.geometryScope());
+    }
+
     private static PedestrianRouteGeometry geometry(PedestrianGeometryRevision revision, WorldBounds bounds,
             BiFunction<Integer, Integer, SurfaceAnchor> supports, Predicate<SurfaceAnchor> blocked) {
         return new PedestrianRouteGeometry() {
@@ -35,7 +83,9 @@ class PedestrianRegionalInvalidationTest {
 
     @Test void remoteChangesReuseFoundResultAndComponentsWithoutAnotherSurveyButChangedRouteDoesNot() {
         var revision = PedestrianGeometryRevision.initial(); var bounds = new WorldBounds(0, 0, 256, 16);
-        var start = SurfaceAnchor.at(1, 63, 1); var end = SurfaceAnchor.at(10, 63, 1);
+        // Exercise actual regional construction; a short positive local proof
+        // intentionally does not build a region for the next query to reuse.
+        var start = SurfaceAnchor.at(1, 63, 1); var end = SurfaceAnchor.at(80, 63, 1);
         var old = flat(revision, bounds, surface -> false);
         try (var planner = new CooperativePedestrianPlanner()) {
             var found = finish(planner, old, start, end); long work = planner.workUnits(); planner.drainChanges();
@@ -48,7 +98,7 @@ class PedestrianRegionalInvalidationTest {
             var changes = planner.drainChanges();
             assertTrue(changes.contains(new PedestrianPlanningChange(PedestrianRouteRequest.of(old, start, end), PedestrianPlanningChange.Kind.INVALIDATED)));
             assertTrue(changes.contains(new PedestrianPlanningChange(PedestrianRouteRequest.of(current, start, end), PedestrianPlanningChange.Kind.RESULT_AVAILABLE)));
-            var adjacent = SurfaceAnchor.at(11, 63, 1);
+            var adjacent = SurfaceAnchor.at(81, 63, 1);
             assertEquals(PedestrianRouteResult.Status.FOUND, finish(planner, current, start, adjacent).status());
             assertEquals(0, reads.get(), "an unchanged region component is shared across different local routes");
             assertTrue(planner.workUnits() - work < PedestrianRegion.BUILD_WORK,

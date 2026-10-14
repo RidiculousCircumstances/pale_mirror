@@ -13,6 +13,10 @@ public interface ActorMovementProvider {
     /** The owner declares passages; shared placement alone selects a connected local birth surface. */
     KnownPedestrianRouteKnowledge placementKnowledge(FrontierWorldState state, ActorMovement movement);
     List<SurfaceAnchor> route(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start);
+    /** Families retaining a required itinerary may keep their route; ordinary distant goals request bounded detail. */
+    default List<SurfaceAnchor> nextSegment(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start) {
+        return route(state, movement, start);
+    }
     void requireRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route);
     List<SurfaceAnchor> coldSegment(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route);
     default List<SurfaceAnchor> coldSegment(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route, long tick) {

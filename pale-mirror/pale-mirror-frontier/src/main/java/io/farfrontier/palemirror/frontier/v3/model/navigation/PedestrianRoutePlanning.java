@@ -24,17 +24,22 @@ public final class PedestrianRoutePlanning {
         } };
     }
     public static PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
+        return query(geometry, start, target, PedestrianRouteExtent.COMPLETE);
+    }
+    public static PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target,
+                                              PedestrianRouteExtent extent) {
         var probe = inspection.get();
         if (probe != null) {
-            var result = peek(geometry, start, target).orElseGet(() -> new PedestrianRouteResult(
+            var result = peek(geometry, start, target, extent).orElseGet(() -> new PedestrianRouteResult(
                     PedestrianRouteResult.Status.PLANNING, java.util.List.of(), 0L, 0, "PLANNING_NOT_REQUESTED"));
-            if (result.status() != PedestrianRouteResult.Status.FOUND && result.status() != PedestrianRouteResult.Status.NO_PATH)
+            if (result.status() != PedestrianRouteResult.Status.FOUND && result.status() != PedestrianRouteResult.Status.SEGMENT_READY
+                    && result.status() != PedestrianRouteResult.Status.NO_PATH)
                 probe.unresolved = true;
             return result;
         }
         PedestrianRoutePlanner planner;
         synchronized (PedestrianRoutePlanning.class) { planner = current; }
-        return planner.query(geometry, start, target);
+        return planner.query(geometry, start, target, extent);
     }
 
     /** The consumer declares a dependency only when an unresolved calculation actually prevents its result. */
@@ -81,9 +86,13 @@ public final class PedestrianRoutePlanning {
 
     /** Read retained evidence without starting a search. */
     public static java.util.Optional<PedestrianRouteResult> peek(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
+        return peek(geometry, start, target, PedestrianRouteExtent.COMPLETE);
+    }
+    public static java.util.Optional<PedestrianRouteResult> peek(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target,
+                                                                PedestrianRouteExtent extent) {
         PedestrianRoutePlanner planner;
         synchronized (PedestrianRoutePlanning.class) { planner = current; }
-        return planner.peek(geometry, start, target);
+        return planner.peek(geometry, start, target, extent);
     }
 
     /** Deterministic calculation for synchronous owners and isolated replay, using the same search. */
@@ -98,12 +107,20 @@ public final class PedestrianRoutePlanning {
         private Object version;
         @Override public synchronized java.util.Optional<PedestrianRouteResult> peek(
                 PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
+            return peek(geometry, start, target, PedestrianRouteExtent.COMPLETE);
+        }
+        @Override public synchronized java.util.Optional<PedestrianRouteResult> peek(
+                PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target, PedestrianRouteExtent extent) {
             if (geometry.regionalRevision().isEmpty() && version != geometry.version()) return java.util.Optional.empty();
             var results = views.get(geometry);
             return results == null ? java.util.Optional.empty()
-                    : java.util.Optional.ofNullable(results.get(new Endpoints(start, target)));
+                    : java.util.Optional.ofNullable(results.get(new Endpoints(start, target, extent)));
         }
         @Override public synchronized PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
+            return query(geometry, start, target, PedestrianRouteExtent.COMPLETE);
+        }
+        @Override public synchronized PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target,
+                                                                 PedestrianRouteExtent extent) {
             if (geometry.regionalRevision().isEmpty() && version != geometry.version()) {
                 views.keySet().removeIf(view -> view.regionalRevision().isEmpty()); version = geometry.version();
             }
@@ -112,10 +129,10 @@ public final class PedestrianRoutePlanning {
                 if (views.size() >= 32) views.clear();
                 results = new LinkedHashMap<>(); views.put(geometry, results);
             }
-            Endpoints key = new Endpoints(start, target);
+            Endpoints key = new Endpoints(start, target, extent);
             PedestrianRouteResult previous = results.get(key);
             if (previous != null) return previous;
-            var search = new HierarchicalPedestrianSearch(geometry, start, target, regions);
+            var search = new HierarchicalPedestrianSearch(geometry, start, target, regions, null, extent);
             PedestrianRouteResult result;
             do { result = search.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2); }
             while (result.status() == PedestrianRouteResult.Status.PLANNING);
@@ -127,5 +144,5 @@ public final class PedestrianRoutePlanning {
             results.put(key, result); return result;
         }
     }
-    private record Endpoints(SurfaceAnchor start, SurfaceAnchor target) { }
+    private record Endpoints(SurfaceAnchor start, SurfaceAnchor target, PedestrianRouteExtent extent) { }
 }
