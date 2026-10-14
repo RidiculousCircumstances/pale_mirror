@@ -63,7 +63,7 @@ final class ExtractionWorkProcess {
         long now = Math.max(tick, action.dueAt().ticks());
         if (held(state, action)) throw new IllegalArgumentException("mining awaits its exact custody or continuation boundary");
         if (needsStorage(state, job)) {
-            var interrupted = new ActorMovementInterruptionPlanner().assess(state, job.execution().actorId(), now);
+            var interrupted = new ActorMovementInterruptionPlanner().assessForOwnerTransition(state, job.execution(), now);
             if (!(interrupted instanceof ActivityInterruptionPlanner.Ready ready)) return retry(state, job, now);
             Optional<ExtractionWorkDecision.Storage> selected;
             try { selected = ExtractionStorageSelection.replacement(ready.following(), job); }

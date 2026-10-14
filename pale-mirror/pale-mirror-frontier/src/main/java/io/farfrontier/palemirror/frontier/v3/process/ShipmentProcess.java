@@ -84,7 +84,7 @@ public final class ShipmentProcess {
                 now + state.bootstrap().ruleset().cadence().transportReviewInterval()))));
         if (held(state, action)) throw new IllegalArgumentException("shipment awaits its exact custody boundary");
         if (needsStorage(state, shipment)) {
-            var interrupted = new ActorMovementInterruptionPlanner().assess(state, shipment.execution().actorId(), now);
+            var interrupted = new ActorMovementInterruptionPlanner().assessForOwnerTransition(state, shipment.execution(), now);
             if (!(interrupted instanceof ActivityInterruptionPlanner.Ready ready)) return retry(state, shipment, now);
             java.util.Optional<ShipmentStorageRetargeted> replacement;
             try { replacement = ShipmentStorageRetargeted.eligible(ready.following(), shipment); }

@@ -29,6 +29,44 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @PrefixGameTestTemplate(false)
 public final class FrontierV3LocalNavigationGameTests {
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/treasure/big_air_full", timeoutTicks = 180)
+    public static void lowRoofPocketUsesTheExitBeforeClimbingTheAdjacentRiser(GameTestHelper helper) {
+        var level = helper.getLevel();
+        for (int x = 3; x <= 6; x++) for (int z = 3; z <= 6; z++) {
+            var floor = helper.absolutePos(new BlockPos(x, 30, z));
+            level.setBlock(floor, Blocks.STONE.defaultBlockState(), 3);
+            for (int y = 1; y <= 4; y++) level.setBlock(floor.above(y), Blocks.AIR.defaultBlockState(), 3);
+        }
+        var low = helper.absolutePos(new BlockPos(4, 30, 4));
+        var high = helper.absolutePos(new BlockPos(5, 31, 4));
+        level.setBlock(high, Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(low.above(3), Blocks.STONE.defaultBlockState(), 3);
+        var allowed = new java.util.HashSet<BlockPosition>();
+        // The hard volume includes native jump height as well as standing supports.
+        for (int x = 3; x <= 6; x++) for (int z = 3; z <= 6; z++) for (int y = 30; y <= 33; y++) {
+            var p = helper.absolutePos(new BlockPos(x, y, z)); allowed.add(new BlockPosition(p.getX(), p.getY(), p.getZ()));
+        }
+        var scope = new FrontierV3NavigationScope.Restricted(new LocalNavigationEnvelope(allowed));
+        var target = SurfaceAnchor.at(high.getX(), high.getY(), high.getZ());
+        Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(4.65, 31, 4.5));
+        helper.runAfterDelay(1, () -> {
+            FrontierV3BodyObservation.refreshGroundContact(level, worker);
+            helper.assertTrue(!FrontierV3PathClearance.edge(level, worker, low.above(), high.above()),
+                    "standing room must not authorize climbing through the pocket ceiling");
+            helper.assertTrue(FrontierV3GoalNavigation.canReach(level, worker, FrontierV3GoalNavigation.Goal.station(target, scope)),
+                    "a legal route through the open side remains available");
+            for (int turn = 0; turn < 140 && !FrontierV3SemanticMovement.arrived(level, worker, target); turn++) {
+                var result = FrontierV3GoalNavigation.pursue(level, worker, FrontierV3GoalNavigation.Goal.station(target, scope));
+                helper.assertTrue(result.status() != FrontierV3GoalNavigation.Status.BLOCKED, "pocket escape: " + result
+                        + "; position=" + worker.position() + "; support=" + worker.getOnPos() + "; turn=" + turn);
+                FrontierV3GoalNavigation.advanceAtEntityBoundary(worker); worker.aiStep();
+            }
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(level, worker, target), "exit then climb must physically arrive: " + worker.position());
+            FrontierV3GoalNavigation.stop(worker); worker.discard(); helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
             template = "bastion/treasure/big_air_full", timeoutTicks = 40)
     public static void pushedParkedPedestrianRemainsAnObstacleButSlowTravellerKeepsItsHeadway(GameTestHelper helper) {
         var level = helper.getLevel(); var supports = new LinkedHashSet<BlockPosition>();

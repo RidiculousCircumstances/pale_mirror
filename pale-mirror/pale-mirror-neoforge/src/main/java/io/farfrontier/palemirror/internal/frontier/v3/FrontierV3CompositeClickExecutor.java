@@ -11,6 +11,9 @@ final class FrontierV3CompositeClickExecutor {
     static boolean reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             FrontierWorldState state, FrontierV3ContainerClickTransaction transaction) {
         var ledger = FrontierV3DepotClickLedger.get(level);
+        var ingress = FrontierV3ExactContainerIngress.reconcile(level, runtime, state, transaction);
+        if (ingress != FrontierV3ExactContainerIngress.Result.NONE)
+            return ingress == FrontierV3ExactContainerIngress.Result.ADVANCED;
         var physical = new ArrayList<FrontierV3PhysicalContainer>();
         var layouts = new ArrayList<List<FungiblePhysicalObservation.Stack>>();
         for (var member : transaction.members()) {
@@ -32,7 +35,11 @@ final class FrontierV3CompositeClickExecutor {
         }
         boolean unchanged = true;
         for (int i = 0; i < layouts.size(); i++) unchanged &= layouts.get(i).equals(transaction.members().get(i).before());
-        if (unchanged && !witnessed) { ledger.retire(transaction); ledger.persist(level); return true; }
+        if (unchanged && !witnessed) {
+            for (int i = 0; i < physical.size(); i++)
+                if (!FrontierV3ContainerClickExecutor.confirmUnchangedClick(runtime, transaction.members().get(i).containerId(), physical.get(i))) return false;
+            ledger.retire(transaction); ledger.persist(level); return true;
+        }
         var observed = transaction;
         if (!witnessed) {
             Optional<Integer> remaining = Optional.empty();

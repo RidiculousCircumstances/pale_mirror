@@ -177,12 +177,13 @@ final class FrontierV3MinecraftGoalNavigation {
             var query = FrontierV3PedestrianTraffic.query(level, actor, feet, scope, permission.navigationProfile());
             Path candidate = query.path();
             var refused = FrontierV3PhysicalPathPolicy.reject(level, candidate, scope);
-            if (refused.isPresent()) {
+            if (refused.isPresent() || !FrontierV3PathClearance.path(level, actor, candidate)) {
                 if (traffic == null && query.trafficBlocked(level, scope)) traffic = query;
                 if (rejection.isEmpty()) {
                     rejection = FrontierV3PathExplanation.rejected(level, station, candidate, scope);
                     rejectionReason = query.budgetExhausted()
-                            ? FrontierV3GoalNavigation.BlockReason.SEARCH_BUDGET_EXHAUSTED : refused.orElseThrow().reason();
+                            ? FrontierV3GoalNavigation.BlockReason.SEARCH_BUDGET_EXHAUSTED
+                            : refused.map(FrontierV3PhysicalPathPolicy.Rejection::reason).orElse(FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE);
                 }
                 continue;
             }
@@ -275,7 +276,20 @@ final class FrontierV3MinecraftGoalNavigation {
         // here as well would double-integrate each HOT pedestrian turn.
         FrontierV3BodyObservation.refreshGroundContact(level, actor);
         actor.getNavigation().setSpeedModifier(speed(actor, control.permission()));
+        int previousNode = path.getNextNodeIndex();
         actor.getNavigation().tick();
+        // Vanilla waypoint tolerance/corner cutting may skip the safe exit from a low-roof
+        // pocket and aim directly at an impossible riser. Preserve the accepted native path;
+        // undo only that unsafe skip before MoveControl/JumpControl can actuate it.
+        if (actor.getNavigation().getPath() == path && !path.isDone()
+                && path.getNextNodeIndex() > previousNode
+                && !FrontierV3PathClearance.move(level, actor, actor.position(),
+                        FrontierV3PathClearance.point(level, actor, path.getNextNodePos()))) {
+            path.setNextNodeIndex(previousNode);
+            var point = FrontierV3PathClearance.point(level, actor, path.getNextNodePos());
+            if (!FrontierV3PathClearance.move(level, actor, actor.position(), point)) { stopPath(actor); return true; }
+            actor.getMoveControl().setWantedPosition(point.x, point.y, point.z, speed(actor, control.permission()));
+        }
         if (actor.getNavigation().isDone()) settleObservedStation(level, actor, control);
         actor.getMoveControl().tick();
         actor.getJumpControl().tick();
@@ -375,6 +389,7 @@ final class FrontierV3MinecraftGoalNavigation {
             if (!scope.permits(station.support()) || !level.hasChunkAt(feet)) continue;
             var path = FrontierV3PedestrianTraffic.query(level, actor, feet, scope, profile).path();
             if (FrontierV3PhysicalPathPolicy.reject(level, path, scope).isEmpty()
+                    && FrontierV3PathClearance.path(level, actor, path)
                     && FrontierV3PedestrianTraffic.permitsProfile(path, profile)) return true;
         }
         return false;

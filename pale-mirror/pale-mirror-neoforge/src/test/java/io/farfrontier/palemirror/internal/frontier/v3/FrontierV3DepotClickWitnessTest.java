@@ -14,6 +14,25 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierV3DepotClickWitnessTest {
+    @Test void witnessRecoveryRecognizesOnlyTheExactAlreadyClosedMutationNotAnOrdinaryRelease() {
+        var prior = io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaRecord.expected(DEPOT, "inventory", 0, "before", "provenance")
+                .observe(0, "before", "provenance", 0);
+        var closed = prior.reemit(2, "after", "provenance");
+        var lease = new io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLease(
+                io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody.scopeId(DEPOT), DEPOT,
+                io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody.PROVIDER_ID, 7, 0, prior.replicaRevision(),
+                io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLeaseStatus.RELEASED, null);
+        org.junit.jupiter.api.Assertions.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.confirmedMutationAlreadyClosed(
+                lease, closed, "after", "after", "provenance"));
+        org.junit.jupiter.api.Assertions.assertFalse(FrontierV3ReferenceContainerCustodyExecutor.confirmedMutationAlreadyClosed(
+                lease, prior, "before", "before", "provenance"));
+        org.junit.jupiter.api.Assertions.assertFalse(FrontierV3ReferenceContainerCustodyExecutor.confirmedMutationAlreadyClosed(
+                lease, closed, "after", "foreign", "provenance"));
+        org.junit.jupiter.api.Assertions.assertFalse(FrontierV3ReferenceContainerCustodyExecutor.confirmedMutationAlreadyClosed(
+                lease, closed, "after", "after", "foreign"));
+        org.junit.jupiter.api.Assertions.assertFalse(FrontierV3ReferenceContainerCustodyExecutor.confirmedMutationAlreadyClosed(
+                lease, closed, "changed-again", "after", "provenance"));
+    }
     @Test void composedWitnessFencesEveryMemberAndRecoversAsOneTransaction() {
         var second = new SubjectId("container:second-depot");
         var left = new FrontierV3DepotClickWitness(DEPOT, ACCOUNT, OWNER, 7, PLAYER, INTERACTION, List.of(), Optional.empty());

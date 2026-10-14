@@ -57,6 +57,10 @@ final class FrontierV3ContainerClickExecutor {
         var physical = target.physical();
         var chest = physical.inventory();
         int cargoSlot = target.cargoSlot(slot);
+        ItemStack incoming = kind == ClickType.QUICK_MOVE && slot >= 0 && slot < menu.slots.size()
+                && menu.getSlot(slot).container == player.getInventory() ? menu.getSlot(slot).getItem() : menu.getCarried();
+        if (!FrontierV3ExactContainerIngress.admissible(state, player, incoming))
+            return refused(player, target, slot, kind, "UNSUPPORTED_INCOMING_ITEM_COMPONENTS");
         if (target.equipmentSlot(slot)) return null;
         if (target.equipmentSlotCount() > 0 && kind == ClickType.QUICK_MOVE
                 && slot >= target.firstCargoMenuSlot() + owned.slotCount() && slot < menu.slots.size()
@@ -179,6 +183,10 @@ final class FrontierV3ContainerClickExecutor {
                                   FrontierV3DepotClickWitness witness) {
         var chest = physicalContainer.inventory();
         var ledger = FrontierV3DepotClickLedger.get(level);
+        var ingress = FrontierV3ExactContainerIngress.reconcile(level, runtime, state,
+                new FrontierV3ContainerClickTransaction(List.of(witness)));
+        if (ingress != FrontierV3ExactContainerIngress.Result.NONE)
+            return ingress == FrontierV3ExactContainerIngress.Result.ADVANCED;
         List<FungiblePhysicalObservation.Stack> physical = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(
                 chest, state, witness.containerId());
         if (!exactSlotsCurrent(state, witness.containerId(), chest)
@@ -204,6 +212,7 @@ final class FrontierV3ContainerClickExecutor {
             ledger.retire(witness); ledger.persist(level); REPORTED.remove(witness.interactionId()); return true;
         }
         if (physical.equals(witness.before()) && witness.after().isEmpty()) {
+            if (!confirmUnchangedClick(runtime, witness.containerId(), physicalContainer)) return false;
             ledger.retire(witness); ledger.persist(level); REPORTED.remove(witness.interactionId()); return true;
         }
         if (physical.equals(witness.before()) && witness.after().isPresent()
@@ -217,6 +226,7 @@ final class FrontierV3ContainerClickExecutor {
         // the managed chest unchanged. This is a completed physical no-op, including the
         // first click on an empty depot: it needs no account or synthetic layout event.
         if (physical.equals(witness.before())) {
+            if (!confirmUnchangedClick(runtime, witness.containerId(), physicalContainer)) return false;
             ledger.retire(witness); ledger.persist(level); REPORTED.remove(witness.interactionId());
             return true;
         }
@@ -266,6 +276,16 @@ final class FrontierV3ContainerClickExecutor {
         return false;
     }
 
+    /** A real no-op keeps its acquired epoch. Exact ingress has changed the complete
+     * canonical image even though its fungible predecessor/successor are equal. */
+    static boolean confirmUnchangedClick(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            SubjectId container, FrontierV3PhysicalContainer physical) {
+        var state = runtime.decodedState().orElseThrow();
+        var replica = state.replicaCustody().replicas().get(container);
+        return replica != null && replica.fingerprint().equals(ReferenceContainerCustody.canonicalFingerprint(state, container))
+                || FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime, container, physical);
+    }
+
     static boolean canonicalMatches(FungibleResourceLedger resources, SubjectId account, long epoch,
                                             List<FungiblePhysicalObservation.Stack> physical) {
         try {
@@ -283,6 +303,10 @@ final class FrontierV3ContainerClickExecutor {
         var bindings = state.inventory().fungibleResources().bindings().values().stream()
                 .filter(binding -> binding.address() instanceof PhysicalStackAddress.PlayerSlot address
                         && address.playerId().equals(player.getUUID())).toList();
+        var interacting = !menu.getCarried().isEmpty() ? menu.getCarried()
+                : slot >= 0 && slot < menu.slots.size() ? menu.getSlot(slot).getItem() : ItemStack.EMPTY;
+        String interactingKind = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(interacting.getItem()).toString();
+        bindings = bindings.stream().filter(binding -> binding.itemKind().equals(interactingKind)).toList();
         if (bindings.isEmpty()) return java.util.Optional.empty();
         // A tracked player portion has an explicit supported return operation, never an implicit gift.
         if (kind != ClickType.QUICK_MOVE || !menu.getCarried().isEmpty())

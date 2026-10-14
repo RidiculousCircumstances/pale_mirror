@@ -38,6 +38,21 @@ final class ActorMovementInterruptionPlanner implements ActivityInterruptionPlan
     }
 
     @Override public Assessment assess(FrontierWorldState state, SubjectId residentId, long atTick) {
+        return assess(state, residentId, atTick, true);
+    }
+
+    /** The exact activity owner is already planning its successor and owns its continuation.
+     * Interrupt movement, but do not independently wake that same owner a second time. */
+    Assessment assessForOwnerTransition(FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId execution, long atTick) {
+        state.actorExecutions().requireCurrent(execution);
+        var movement = state.actorMovements().get(execution.actorId());
+        if (movement != null && !movement.executionId().equals(execution))
+            throw new IllegalArgumentException("owner transition cannot interrupt another execution's movement");
+        return assess(state, execution.actorId(), atTick, false);
+    }
+
+    private Assessment assess(FrontierWorldState state, SubjectId residentId, long atTick, boolean notifyOwner) {
         ActorMovement movement = state.actorMovements().get(residentId);
         if (movement == null) return new Ready(residentId, state, state, List.of());
         Optional<BodyPosition> checkpoint = checkpoint(state, movement, atTick);
@@ -49,7 +64,7 @@ final class ActorMovementInterruptionPlanner implements ActivityInterruptionPlan
         events.add(new ProposedEvent(residentId, event));
         events.add(new ProposedEvent(residentId, new ScheduleEffect.Cancelled(ActorMovementProcess.progress(
                 movement, Math.addExact(movement.issuedAtTick(), 1L)).id())));
-        events.addAll(ActorMovementProviders.require(movement).interrupted(state, movement, atTick));
+        if (notifyOwner) events.addAll(ActorMovementProviders.require(movement).interrupted(state, movement, atTick));
         return new Ready(residentId, state, reduce(state, residentId, event), List.copyOf(events));
     }
 

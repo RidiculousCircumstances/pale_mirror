@@ -582,12 +582,28 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         if (state == null) return false;
         PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(containerId);
         PhysicalCustodyLease lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(containerId));
-        if (replica == null || lease == null || !ReferenceContainerCustody.hasOperationalCustody(state, containerId) || !lease.objectId().equals(containerId)
+        if (replica == null || lease == null || !lease.objectId().equals(containerId)
                 || !lease.providerId().equals(ReferenceContainerCustody.PROVIDER_ID)) return false;
         Observed observed = observedContainer(state, containerId, physical);
+        if (confirmedMutationAlreadyClosed(lease, replica, ReferenceContainerCustody.canonicalFingerprint(state, containerId),
+                observed.fingerprint(), observed.provenance())) return true;
+        if (!ReferenceContainerCustody.hasOperationalCustody(state, containerId)) return false;
         if (!ReferenceContainerCustody.canonicalFingerprint(state, containerId).equals(observed.fingerprint())
                 || !replica.provenance().equals(observed.provenance())) return retainUnresolved(runtime, lease, PhysicalCustodyUnresolvedReason.OBSERVATION_MISMATCH);
         return closeConfirmedMutation(runtime, state, containerId) || retainUnresolved(runtime, lease, PhysicalCustodyUnresolvedReason.PROVIDER_LOST);
+    }
+
+    /** Restart after closure WAL but before a producer retires its physical witness.
+     * Ordinary release alone is not a receipt: require that exact epoch's emitted successor. */
+    static boolean confirmedMutationAlreadyClosed(PhysicalCustodyLease lease, PhysicalReplicaRecord replica,
+            String canonical, String physical, String provenance) {
+        return lease.status() == PhysicalCustodyLeaseStatus.RELEASED && lease.objectId().equals(replica.objectId())
+                && lease.providerId().equals(ReferenceContainerCustody.PROVIDER_ID)
+                && replica.state() == PhysicalReplicaState.EXPECTED
+                && replica.replicaRevision() == lease.expectedReplicaRevision() + 1
+                && replica.emittedCanonicalRevision() > lease.expectedCanonicalRevision()
+                && replica.fingerprint().equals(canonical) && canonical.equals(physical)
+                && replica.provenance().equals(provenance);
     }
 
     private static boolean closeConfirmedMutation(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

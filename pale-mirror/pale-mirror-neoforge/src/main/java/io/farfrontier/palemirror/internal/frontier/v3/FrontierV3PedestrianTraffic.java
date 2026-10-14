@@ -114,8 +114,10 @@ final class FrontierV3PedestrianTraffic {
         // A rejected unconstrained shortest path does not prove no legal scoped detour.
         // Failed terrain evidence cannot, however, be attributed to other bodies.
         Path ordinary = FrontierV3PhysicalPathPolicy.reject(level, unconstrained, scope).isPresent() || !permitsProfile(unconstrained, profile)
+                || !FrontierV3PathClearance.path(level, actor, unconstrained)
                 ? search(level, actor, target, scope, List.of(), profile) : unconstrained;
-        if (FrontierV3PhysicalPathPolicy.reject(level, ordinary, scope).isPresent())
+        if (FrontierV3PhysicalPathPolicy.reject(level, ordinary, scope).isPresent()
+                || !FrontierV3PathClearance.path(level, actor, ordinary))
             return new Query(ordinary, List.of(), List.of());
         java.util.Map<java.util.UUID, Body> blockers = new java.util.LinkedHashMap<>();
         java.util.List<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> passage = new java.util.ArrayList<>();
@@ -160,7 +162,9 @@ final class FrontierV3PedestrianTraffic {
                 int count = super.getNeighbors(neighbours, from), retained = 0;
                 for (int index = 0; index < count; index++) {
                     var next = neighbours[index];
-                    if (profile.isEmpty() || profile.orElseThrow().permitsGrade(from.y, next.y)) neighbours[retained++] = next;
+                    if ((profile.isEmpty() || profile.orElseThrow().permitsGrade(from.y, next.y))
+                            && FrontierV3PathClearance.edge(level, actor, from.asBlockPos(), next.asBlockPos()))
+                        neighbours[retained++] = next;
                 }
                 return retained;
             }

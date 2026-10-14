@@ -30,6 +30,8 @@ final class FrontierV3PhysicalPathInspection {
         if (path == null || proof == null || proof.level().get() != level || !proof.matches(path, scope)) {
             var rejected = FrontierV3PhysicalPathPolicy.reject(level, path, scope);
             if (rejected.isPresent()) { PROOFS.remove(actor); return rejected; }
+            if (!FrontierV3PathClearance.path(level, actor, path)) return Optional.of(new FrontierV3PhysicalPathPolicy.Rejection(
+                    FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE, "body-clearance"));
             proof = retain(level, path, scope); PROOFS.put(actor, proof);
         }
         if (!path.canReach()) return Optional.of(new FrontierV3PhysicalPathPolicy.Rejection(
@@ -40,6 +42,9 @@ final class FrontierV3PhysicalPathInspection {
         for (int index = first; index < end; index++) {
             var rejected = currentNode(level, proof.nodes()[index], index);
             if (rejected.isPresent()) return rejected;
+            if (index > 0 && !FrontierV3PathClearance.edge(level, actor, proof.nodes()[index - 1], proof.nodes()[index]))
+                return Optional.of(new FrontierV3PhysicalPathPolicy.Rejection(
+                        FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE, "edge-clearance:" + index));
         }
         return currentNode(level, proof.nodes()[proof.nodes().length - 1], proof.nodes().length - 1);
     }

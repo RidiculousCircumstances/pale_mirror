@@ -111,6 +111,24 @@ class InternalShipmentTest {
     }
 
     private record RetargetFixture(FrontierWorldState state, Shipment shipment) { }
+    @Test void retargetDuringAnActiveJourneyOwnsExactlyOneShipmentContinuation() {
+        var fixture = retargetFixture(); var state = fixture.state(); var shipment = fixture.shipment();
+        var origin = KnownPedestrianGround.forFrontier(state).at(
+                FrontierWorldStateSupport.settlement(state.bootstrap(), shipment.receiver().settlementId()).anchor().x() + 20,
+                FrontierWorldStateSupport.settlement(state.bootstrap(), shipment.receiver().settlementId()).anchor().z() + 20);
+        state = state.withActorBody(shipment.execution().actorId(), origin.standingBody());
+        var movement = new ActorMovement(shipment.movementOrder(), 10,
+                new ActorMovementContext.ShipmentLeg(shipment.id(), shipment.revision()), shipment.execution());
+        state = io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.reduceStarted(state,
+                shipment.execution().actorId(), new ActorMovementStarted(movement));
+        var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
+        var action = io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.progress(shipment.id(), 20);
+        var events = io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.plan(state, action, 20);
+        assertEquals(1, events.stream().filter(e -> e.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled r
+                && r.scheduleId().equals(action.id())).count());
+        assertTrue(events.stream().anyMatch(e -> e.payload() instanceof ActorMovementInterrupted));
+        assertTrue(events.stream().anyMatch(e -> e.payload() instanceof ShipmentStorageRetargeted));
+    }
     private RetargetFixture retargetFixture() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:haul-retarget"),
                 20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r6")));
