@@ -42,6 +42,7 @@ class FrontierV3ActorBirthRuntimeTest {
                 new FrontierStoreTransactionCommitter(store));
         var runtime = FrontierV3ServerRuntime.startRecovered(configuration, store, store.recover(WORLD), 10000,
                 DiagnosticRuntimeIdentity.unavailable(), writer);
+        var probes = new FrontierV3ActorProbeSchedule.Cursor(stocked);
         assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind());
         assertTrue(runtime.advance(100, new WorkBudget(16, 64)).isPresent());
         var job = runtime.decodedState().orElseThrow().humanPopulation().birthJobs().values().iterator().next();
@@ -49,6 +50,9 @@ class FrontierV3ActorBirthRuntimeTest {
         assertTrue(runtime.advance(200, new WorkBudget(16, 64)).isPresent());
         assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind(), () -> runtime.status().toString());
         var born = runtime.decodedState().orElseThrow();
+        probes.synchronizeRoster(born);
+        assertEquals(born.actorLocations().keySet(), java.util.Set.copyOf(probes.next(born.actorLocations().size(), 1)),
+                "a running probe cursor must include a canonical birth without restart");
         assertEquals(job.resident(), born.humanPopulation().resident(job.resident().id()));
         assertEquals(63, born.inventory().items().get(food).count());
         var disk = readLedger(ledgerFile);
@@ -66,6 +70,9 @@ class FrontierV3ActorBirthRuntimeTest {
                         () -> fail("WAL replay must not reissue birth permission"), new FrontierStoreTransactionCommitter(recoveredStore)));
         assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, recovered.status().kind());
         assertEquals(born, recovered.decodedState().orElseThrow());
+        var recoveredProbes = new FrontierV3ActorProbeSchedule.Cursor(recovered.decodedState().orElseThrow());
+        assertEquals(born.actorLocations().keySet(), java.util.Set.copyOf(recoveredProbes.next(born.actorLocations().size(), 1)),
+                "recovery discovers the same roster without issuing a second birth");
         assertTrue(recovered.checkpoint().isPresent());
         assertTrue(recoveredStore.recover(WORLD).walTail().isEmpty());
 

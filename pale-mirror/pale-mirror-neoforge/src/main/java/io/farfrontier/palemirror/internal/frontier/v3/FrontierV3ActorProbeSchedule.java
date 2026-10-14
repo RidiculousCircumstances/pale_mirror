@@ -13,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** Volatile round-robin observation only; immutable canonical state still owns actor identity/order. */
 final class FrontierV3ActorProbeSchedule {
@@ -22,8 +23,9 @@ final class FrontierV3ActorProbeSchedule {
 
     static List<SubjectId> next(FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state, ServerLevel level, int maximum, int advance) {
         long instant = runtime.canonicalState().orElseThrow().instant().ticks();
-        return CURSORS.computeIfAbsent(runtime, ignored -> new Cursor(state))
-                .nextDemanded(state, level, instant, maximum, advance);
+        Cursor cursor = CURSORS.computeIfAbsent(runtime, ignored -> new Cursor(state));
+        cursor.synchronizeRoster(state);
+        return cursor.nextDemanded(state, level, instant, maximum, advance);
     }
 
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) { CURSORS.remove(runtime); }
@@ -44,22 +46,50 @@ final class FrontierV3ActorProbeSchedule {
     }
 
     static final class Cursor {
-        private final List<SubjectId> actors;
+        private List<SubjectId> actors;
+        private Set<SubjectId> actorIds;
+        private Map<SubjectId, io.farfrontier.palemirror.frontier.v3.model.ActorLocation> observedLocations;
         private final Map<SubjectId, Long> retainedDemand = new LinkedHashMap<>();
         private final Map<SubjectId, Long> deferred = new LinkedHashMap<>();
         private int next;
         private int nextDemanded;
 
-        Cursor(List<SubjectId> actors) { this.actors = List.copyOf(actors); }
+        Cursor(List<SubjectId> actors) {
+            this.actors = List.copyOf(actors);
+            this.actorIds = Set.copyOf(actors);
+            if (actorIds.size() != actors.size()) throw new IllegalArgumentException("duplicate probe actor");
+        }
 
         Cursor(FrontierWorldState state) {
             this(state.actorLocations().keySet().stream().sorted().toList());
+            observedLocations = state.actorLocations();
+        }
+
+        /** Canonical membership selects probes only; it never grants birth or body permission.
+         * Location-only updates preserve the cursor, queues and order without re-sorting. */
+        void synchronizeRoster(FrontierWorldState state) {
+            if (observedLocations == state.actorLocations()) return;
+            synchronizeRoster(state.actorLocations().keySet());
+            observedLocations = state.actorLocations();
+        }
+
+        void synchronizeRoster(Set<SubjectId> currentActors) {
+            if (actorIds.equals(currentActors)) return;
+            SubjectId nextActor = actors.isEmpty() ? null : actors.get(next);
+            actors = currentActors.stream().sorted().toList();
+            actorIds = Set.copyOf(currentActors);
+            // Keep the next existing actor at the admission front. If it retired,
+            // continue at its sorted successor instead of restarting at actor zero.
+            int successor = nextActor == null ? 0 : java.util.Collections.binarySearch(actors, nextActor);
+            next = actors.isEmpty() ? 0 : Math.floorMod(successor < 0 ? -successor - 1 : successor, actors.size());
+            retainedDemand.keySet().retainAll(actorIds);
+            deferred.keySet().retainAll(actorIds);
         }
 
         void defer(SubjectId actor) { defer(actor, 0L); }
 
         void defer(SubjectId actor, long gameTime) {
-            if (!actors.contains(actor)) throw new IllegalArgumentException("deferred unknown actor");
+            if (!actorIds.contains(actor)) throw new IllegalArgumentException("deferred unknown actor");
             deferred.putIfAbsent(actor, gameTime);
         }
 
@@ -116,8 +146,8 @@ final class FrontierV3ActorProbeSchedule {
                 BlockPos observer = player.blockPosition(); int radius = (FrontierV3SceneDemand.RADIUS_BLOCKS + 15) / 16;
                 // COLD legitimately advances exact canonical positions.  The old one-time
                 // bootstrap chunk index therefore made a returned actor invisible to the HOT
-                // scheduler after a lawful COLD interval.  This remains bounded by the fixed
-                // canonical actor inventory, and is deliberately not a loaded-entity scan.
+                // scheduler after a lawful COLD interval. The synchronized canonical roster
+                // includes later births; this is deliberately not a loaded-entity scan.
                 for (SubjectId actor : actors) {
                     var location = state.actorLocations().get(actor);
                     if (location == null) continue;

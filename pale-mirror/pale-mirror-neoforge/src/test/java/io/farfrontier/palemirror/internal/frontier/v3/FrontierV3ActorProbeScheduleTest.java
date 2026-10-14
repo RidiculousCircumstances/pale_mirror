@@ -4,11 +4,35 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierV3ActorProbeScheduleTest {
+    @Test void rosterChangesKeepFairnessAndDiscardOnlyRetiredDeferredActors() {
+        var first = new SubjectId("actor:1");
+        var second = new SubjectId("actor:2");
+        var born = new SubjectId("actor:0");
+        var cursor = new FrontierV3ActorProbeSchedule.Cursor(List.of(first, second));
+        cursor.defer(second, 3L);
+        assertEquals(List.of(first), cursor.next(1, 1));
+        cursor.synchronizeRoster(Set.of(first, second, born));
+        assertEquals(List.of(second), cursor.next(1, 1), "birth cannot reset existing admission progress");
+        assertEquals(List.of(born), cursor.next(1, 1), "the new actor joins the ordinary bounded round robin");
+        assertEquals("{\"depth\":1,\"oldestHostTicks\":7}", cursor.diagnostic(10L));
+        cursor.synchronizeRoster(Set.of(first, second, born));
+        assertEquals(List.of(first), cursor.next(1, 1), "unchanged membership cannot reset the cursor");
+        cursor.synchronizeRoster(Set.of(first, born));
+        assertEquals(List.of(born), cursor.next(1, 1), "retired next actor advances to its sorted successor");
+        assertEquals("{\"depth\":0,\"oldestHostTicks\":0}", cursor.diagnostic(10L));
+        assertThrows(IllegalArgumentException.class, () -> cursor.defer(second));
+        cursor.synchronizeRoster(Set.of());
+        assertEquals(List.of(), cursor.next(32, 16));
+        cursor.synchronizeRoster(Set.of(born));
+        assertEquals(List.of(born), cursor.next(32, 16));
+    }
+
     @Test void timeDeferredActorsRemainFairAndSelectionAloneCannotForgetThem() {
         var actors = java.util.stream.IntStream.range(0, 40)
                 .mapToObj(index -> new SubjectId("actor:" + index)).toList();
