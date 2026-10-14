@@ -29,9 +29,12 @@ final class StorageShipmentEndpointPort implements ShipmentEndpointPort {
     }
     @Override public List<KnownPedestrianRouteKnowledge.SettlementPassage> passages(FrontierWorldState state, ShipmentEndpoint endpoint) {
         var storage = declaration(state, endpoint);
+        // A registered in-building container grants its declared interaction passage,
+        // including threshold/interior floors. This is walking knowledge, not a machine,
+        // resource or service permit; witnessed obstructions remain hard barriers.
         return storage.facilityId().isEmpty() ? List.of() : List.of(new KnownPedestrianRouteKnowledge.SettlementPassage(
                 storage.settlementId(), new KnownPedestrianRouteKnowledge.Passage(facility(state, storage),
-                    KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
+                    KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS)));
     }
     @Override public SurfaceAnchor exteriorApproach(FrontierWorldState state, ShipmentEndpoint endpoint) {
         validate(state, endpoint); return ((ShipmentEndpoint.Storage) endpoint).exteriorApproach();

@@ -23,6 +23,41 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KnownPedestrianRouteKnowledgeTest {
+    @Test void replacementStorageAtAFacilityThresholdHasAnExecutablePassageAndBlockedServiceDoesNotInviteFoodPlanning() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:replacement-storage-threshold"),
+                20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r13")));
+        var home = new SubjectId("settlement:6"); var oldDepot = FrontierWorldState.depotId(home);
+        var facility = state.bootstrap().settlements().stream().filter(value -> value.id().equals(home)).findFirst().orElseThrow()
+                .structures().stream().filter(value -> value.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
+        var port = FrontierTraversalPlan.facilityPort(facility).orElseThrow();
+        var station = port.thresholdSurface(); var socket = state.inventory().surfaces().get(oldDepot).position();
+        state = state.withInventory(state.inventory().withSurfaceStatus(oldDepot, ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(oldDepot, ContainerSurfaceStatus.ACTIVE).withSurfaceStatus(oldDepot, ContainerSurfaceStatus.RETIRED));
+        var id = new SubjectId("container:replacement-threshold-storage");
+        var endpoint = new ShipmentEndpoint.Storage(home, id, station, Optional.of(facility.id()), station);
+        var policy = new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE);
+        state = new ResourceStorageDeclared(new ContainerRecord(id, home, 27, ContainerPurpose.RESOURCE_STORAGE,
+                Optional.empty(), Optional.of(policy)), socket).apply(state, home);
+        var knowledge = ShipmentEndpointComposition.knowledge(state, List.of(endpoint));
+        assertTrue(knowledge.traversable(List.of(station)), "the selected threshold is actual support, not a closed foundation");
+        knowledge.requireRoute(knowledge.plannedBetween(port.exteriorApproach().getFirst(), station));
+        var pointId = ServiceBoundaryComposition.declaration(state, id).identity();
+        var point = ServiceBoundaryComposition.geometry(state, pointId);
+        assertTrue(ServiceClearanceTargets.mayPlan(point, knowledge, java.util.Set.of()));
+        assertTrue(ServiceClearanceTargets.plannedSelection(point, new SubjectId("resident:6-11"), knowledge, java.util.Set.of()).isPresent());
+        var changed = state.recordPhysicalDelta(new PhysicalDelta(station.support().offset(0, 2, 0),
+                PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:replacement-threshold-head-blocked"));
+        var blockedKnowledge = ShipmentEndpointComposition.knowledge(changed, List.of(endpoint));
+        var blockedPoint = ServiceBoundaryComposition.geometry(changed, pointId);
+        assertTrue(!blockedKnowledge.traversable(List.of(station)), "a declared port never erases player obstructions");
+        assertTrue(!ServiceClearanceTargets.mayPlan(blockedPoint, blockedKnowledge, java.util.Set.of()));
+        assertTrue(ServiceClearanceTargets.plannedSelection(blockedPoint, new SubjectId("resident:6-11"),
+                blockedKnowledge, java.util.Set.of()).isEmpty());
+        var recovered = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(
+                new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().encode(state));
+        ShipmentEndpointComposition.knowledge(recovered, List.of(endpoint)).requireRoute(
+                knowledge.plannedBetween(port.exteriorApproach().getFirst(), station));
+    }
     @Test void incompatibleDepartureHeightIsMissingKnowledgeButKnownHardScopeStillDeniesDeparture() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:meal-departure-height"), 20260918065L));

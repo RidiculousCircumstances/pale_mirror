@@ -63,6 +63,7 @@ public final class ServiceClearanceTargets {
     /** Queue readiness inspects retained evidence only. Missing evidence admits planning, not walking. */
     public static boolean mayPlan(ServiceAccessPoint point, KnownPedestrianRouteKnowledge knowledge,
                                   Set<SurfaceAnchor> excluded) {
+        if (knownBlockedStation(point, knowledge)) return false;
         return point.waitingSurfaces().stream().filter(candidate -> admissible(point, candidate, excluded))
                 .anyMatch(candidate -> knowledge.planningEvidence(point.station(), candidate)
                         .map(result -> result.status()
@@ -95,6 +96,7 @@ public final class ServiceClearanceTargets {
     /** The producer serializes bounded candidate searches; unfinished work is never treated as NO_PATH. */
     public static Optional<Selection> plannedSelection(ServiceAccessPoint point, SubjectId actorId,
             KnownPedestrianRouteKnowledge knowledge, Set<SurfaceAnchor> excluded) {
+        if (knownBlockedStation(point, knowledge)) return Optional.empty();
         List<SurfaceAnchor> candidates = point.waitingSurfaces();
         if (candidates.isEmpty()) return Optional.empty();
         int first = Math.floorMod(actorId.value().hashCode(), candidates.size());
@@ -114,5 +116,11 @@ public final class ServiceClearanceTargets {
             }
         }
         return Optional.empty();
+    }
+
+    /** A known closed service origin cannot feed an executable exit. Unknown geometry
+     * still enters ordinary planning; this check neither searches nor grants access. */
+    private static boolean knownBlockedStation(ServiceAccessPoint point, KnownPedestrianRouteKnowledge knowledge) {
+        return knowledge.geometry().knowsSupport(point.station()) && !knowledge.traversable(List.of(point.station()));
     }
 }
