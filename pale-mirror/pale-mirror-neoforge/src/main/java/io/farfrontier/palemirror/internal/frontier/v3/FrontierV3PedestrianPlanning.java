@@ -33,7 +33,10 @@ final class FrontierV3PedestrianPlanning {
                     (FrontierWorldState) runtime.decodedState().orElseThrow(), runtime.executionView().orElseThrow());
         }
         if (owner != runtime) throw new IllegalStateException("pedestrian planning has a foreign runtime owner");
-        planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+        long started = System.nanoTime();
+        long allowance = (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000L);
+        planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2,
+                () -> System.nanoTime() - started < allowance);
         continuations.changed(planner.drainChanges());
         admitReady(runtime, continuations);
         deferredReady = continuations.readyCount();

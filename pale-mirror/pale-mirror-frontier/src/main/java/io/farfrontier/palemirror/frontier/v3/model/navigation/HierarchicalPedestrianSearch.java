@@ -47,6 +47,7 @@ public final class HierarchicalPedestrianSearch {
     private int retainedSurfaces;
     private List<Map.Entry<Node, Edge>> publishingExits;
     private int publication;
+    private java.util.function.BooleanSupplier mayContinue = () -> true;
 
     public HierarchicalPedestrianSearch(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
         this(geometry, start, target, new PedestrianRegionCache());
@@ -78,6 +79,11 @@ public final class HierarchicalPedestrianSearch {
     }
 
     public synchronized PedestrianRouteResult advance(int budget) {
+        return advance(budget, () -> true);
+    }
+    /** The host may yield calculation, never change route semantics or canonical time. */
+    public synchronized PedestrianRouteResult advance(int budget, java.util.function.BooleanSupplier mayContinue) {
+        this.mayContinue = Objects.requireNonNull(mayContinue);
         if (budget < MIN_SLICE_WORK) throw new IllegalArgumentException("navigation slice cannot fit one bounded regional expansion");
         if (terminal != null) return terminal;
         long limit = work + budget;
@@ -104,7 +110,7 @@ public final class HierarchicalPedestrianSearch {
             Node source = new Node(first.tile, sourceComponent); destination = new Node(last.tile, targetComponent);
             distance.put(source, 0); queue.add(candidate(source, 0)); initialized = true;
         }
-        while (work < limit && itinerary == null && rewind == null && (expanding != null || !queue.isEmpty())) {
+        while (work < limit && mayContinue.getAsBoolean() && itinerary == null && rewind == null && (expanding != null || !queue.isEmpty())) {
             if (expanding == null) {
                 Candidate candidate = queue.remove(); work++;
                 if (candidate.distance() != distance.get(candidate.node())) continue;
@@ -121,16 +127,17 @@ public final class HierarchicalPedestrianSearch {
             if (terminal != null) return terminal;
         }
         if (itinerary == null && rewind == null && expanding == null && queue.isEmpty()) return unavailable("NO_CONNECTED_KNOWN_REGION_PATH");
-        while (rewind != null && work < limit) {
+        while (rewind != null && work < limit && mayContinue.getAsBoolean()) {
             work++;
             Edge edge = previous.get(rewind);
             if (edge == null) { itinerary = reverseItinerary; rewind = null; refinementStart = start; }
             else { reverseItinerary.add(edge); rewind = edge.previous(); }
         }
-        while (itinerary != null && work < limit) {
+        while (itinerary != null && work < limit && mayContinue.getAsBoolean()) {
             SurfaceAnchor end = refinement < itinerary.size() ? forwardEdge(refinement).exit() : target;
             if (segmentRefinement == null) segmentRefinement = regions.get(PedestrianRegion.Tile.at(refinementStart)).refine(refinementStart, end);
-            work += segmentRefinement.advance(Math.toIntExact(limit - work));
+            // A local refinement is itself resumable; keep each admitted piece small.
+            work += segmentRefinement.advance(Math.min(256, Math.toIntExact(limit - work)));
             var segment = segmentRefinement.result();
             if (segment == null) break;
             segmentRefinement = null;
@@ -148,7 +155,7 @@ public final class HierarchicalPedestrianSearch {
         PedestrianRegion prior = regions.get(tile);
         if (prior != null) return prior;
         if (work >= turnLimit) return null;
-        var lookup = regionCache.region(geometry, tile, Math.toIntExact(turnLimit - work));
+        var lookup = regionCache.region(geometry, tile, Math.toIntExact(turnLimit - work), mayContinue);
         PedestrianRegion built = lookup.region();
         dependencies.put(tile, geometry.regionalRevision().map(revision -> revision.at(tile.x(), tile.z())).orElse(geometry.version()));
         work += lookup.work();

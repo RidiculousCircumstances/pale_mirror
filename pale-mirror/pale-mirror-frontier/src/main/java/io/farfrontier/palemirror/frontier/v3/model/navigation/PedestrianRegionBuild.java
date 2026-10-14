@@ -25,8 +25,11 @@ final class PedestrianRegionBuild {
         for (int i = 0; i < columns.length; i++) columns[i] = new ArrayList<>();
     }
     int advance(int budget) {
+        return advance(budget, () -> true);
+    }
+    int advance(int budget, java.util.function.BooleanSupplier mayContinue) {
         int work = 0;
-        while (work < budget && result == null && !limited) {
+        while (work < budget && result == null && !limited && mayContinue.getAsBoolean()) {
             work++;
             if (column < PedestrianRegion.CELLS) { survey(); continue; }
             if (node < surfaces.size()) { connect(); continue; }

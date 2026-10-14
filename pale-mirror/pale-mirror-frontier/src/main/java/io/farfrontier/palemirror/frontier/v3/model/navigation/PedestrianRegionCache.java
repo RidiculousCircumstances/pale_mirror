@@ -14,9 +14,9 @@ final class PedestrianRegionCache {
         private PedestrianRegion region;
         private boolean limited;
         Entry(PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile) { build = new PedestrianRegionBuild(geometry, tile); }
-        Lookup advance(int budget) {
+        Lookup advance(int budget, java.util.function.BooleanSupplier mayContinue) {
             if (region != null || limited) return new Lookup(region, 1, limited);
-            int work = build.advance(budget); region = build.result(); limited = build.limited();
+            int work = build.advance(budget, mayContinue); region = build.result(); limited = build.limited();
             if (region != null || limited) build = null;
             return new Lookup(region, work, limited);
         }
@@ -27,14 +27,15 @@ final class PedestrianRegionCache {
     private static final class Bucket<K> {
         private final Map<K, Entry> entries = new LinkedHashMap<>(16, 0.75f, true);
         private int slots, builders;
-        Lookup advance(K key, PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile, int budget) {
+        Lookup advance(K key, PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile, int budget,
+                java.util.function.BooleanSupplier mayContinue) {
             var entry = entries.get(key);
             if (entry == null) {
                 entry = new Entry(geometry, tile); entries.put(key, entry);
                 slots += entry.size(); builders++;
             }
             int oldSize = entry.size(); boolean wasBuilding = entry.building();
-            var result = entry.advance(budget); slots += entry.size() - oldSize;
+            var result = entry.advance(budget, mayContinue); slots += entry.size() - oldSize;
             if (wasBuilding && !entry.building()) builders--;
             return result;
         }
@@ -51,6 +52,10 @@ final class PedestrianRegionCache {
     }
     record Lookup(PedestrianRegion region, int work, boolean limited) { }
     synchronized Lookup region(PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile, int budget) {
+        return region(geometry, tile, budget, () -> true);
+    }
+    synchronized Lookup region(PedestrianRouteGeometry geometry, PedestrianRegion.Tile tile, int budget,
+            java.util.function.BooleanSupplier mayContinue) {
         if (budget <= 0) return new Lookup(null, 0, false);
         Lookup result;
         if (geometry.regionalRevision().isPresent()) {
@@ -58,11 +63,11 @@ final class PedestrianRegionCache {
             if (scoped.size() >= 64 && !scoped.containsKey(revision.scope())) scoped.remove(scoped.keySet().iterator().next());
             var regions = scoped.computeIfAbsent(revision.scope(), ignored -> new Bucket<>());
             var key = new RegionalKey(tile, revision.at(tile.x(), tile.z()), geometry.bounds());
-            result = regions.advance(key, geometry, tile, budget);
+            result = regions.advance(key, geometry, tile, budget, mayContinue);
         } else {
             if (views.size() >= 64 && !views.containsKey(geometry)) views.clear();
             var regions = views.computeIfAbsent(geometry, ignored -> new Bucket<>());
-            result = regions.advance(tile, geometry, tile, budget);
+            result = regions.advance(tile, geometry, tile, budget, mayContinue);
         }
         trim(); return result;
     }

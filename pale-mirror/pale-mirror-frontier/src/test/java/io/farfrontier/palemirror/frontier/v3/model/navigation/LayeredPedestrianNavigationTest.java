@@ -8,6 +8,27 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** The same production planner/profile/receipt boundary must distinguish vertically stacked routes. */
 class LayeredPedestrianNavigationTest {
+    @Test void hostYieldRetainsRegionConstructionAndFairPeerWithoutReportingNoPath() {
+        var map = geometry(new WorldBounds(0, 0, 32, 16),
+                (x, z) -> List.of(SurfaceAnchor.at(x, 63, z)), Set.of(), UnitNavigationProfile.VILLAGER);
+        var start = SurfaceAnchor.at(1, 63, 1); var target = SurfaceAnchor.at(30, 63, 1);
+        var peerStart = SurfaceAnchor.at(20, 63, 5); var peerTarget = SurfaceAnchor.at(21, 63, 5);
+        try (var planner = new CooperativePedestrianPlanner()) {
+            planner.query(map, start, target); planner.query(map, peerStart, peerTarget);
+            long previous = planner.workUnits();
+            var admitted = new java.util.concurrent.atomic.AtomicInteger();
+            planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2,
+                    () -> admitted.incrementAndGet() <= 40);
+            assertTrue(planner.workUnits() > previous);
+            assertTrue(planner.workUnits() - previous <= 40, "yield must reach the region builder, not just its outer search");
+            assertEquals(2, planner.pendingCount());
+            for (int turn = 0; planner.pendingCount() > 0 && turn < 1000; turn++)
+                planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            assertEquals(PedestrianRouteResult.Status.FOUND, planner.peek(map, start, target).orElseThrow().status());
+            assertEquals(PedestrianRouteResult.Status.FOUND, planner.peek(map, peerStart, peerTarget).orElseThrow().status());
+            KnownPedestrianNavigation.requireRoute(map, planner.peek(map, start, target).orElseThrow().route());
+        }
+    }
     private static PedestrianRouteGeometry geometry(WorldBounds bounds,
             BiFunction<Integer, Integer, List<SurfaceAnchor>> levels, Set<BlockPosition> obstacles, UnitNavigationProfile profile) {
         var revision = PedestrianGeometryRevision.initial();

@@ -61,6 +61,11 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     }
 
     public synchronized void advance(int workBudget) {
+        advance(workBudget, () -> true);
+    }
+    /** Optional host admission fence; fair queue and exact searches survive yielding. */
+    public synchronized void advance(int workBudget, java.util.function.BooleanSupplier mayContinue) {
+        java.util.Objects.requireNonNull(mayContinue);
         if (closed) throw new IllegalStateException("pedestrian planner is closed");
         if (workBudget < HierarchicalPedestrianSearch.MIN_SLICE_WORK) throw new IllegalArgumentException("planning budget is too small");
         turns++;
@@ -69,12 +74,13 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         // A long search rotates behind its peers; a short completion gives its
         // unused budget to the next peer, including a newly admitted deferred one.
         int visits = pending.size() + deferred.size();
-        while (remaining >= HierarchicalPedestrianSearch.MIN_SLICE_WORK && visits-- > 0 && !ready.isEmpty()) {
+        while (remaining >= HierarchicalPedestrianSearch.MIN_SLICE_WORK && visits-- > 0 && !ready.isEmpty()
+                && mayContinue.getAsBoolean()) {
             var request = ready.removeFirst();
             var search = pending.get(request);
             long previous = search.workUnits();
             int slice = Math.min(remaining, HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
-            PedestrianRouteResult result = search.advance(slice);
+            PedestrianRouteResult result = search.advance(slice, mayContinue);
             int spent = Math.toIntExact(result.workUnits() - previous);
             if (spent < 0 || spent > slice) throw new IllegalStateException("pedestrian search exceeded its shared work budget"
                     + ": spent=" + spent + ", slice=" + slice + ", remaining=" + remaining
