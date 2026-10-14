@@ -23,6 +23,8 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierSettlementWorkDiagnos
 import io.farfrontier.palemirror.frontier.v3.model.FrontierMarketOrderDiagnostic;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.SettlementFoodPolicy;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceStorageSelection;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceStorageRole;
 import io.farfrontier.palemirror.frontier.v3.model.DiagnosticIncident;
 import io.farfrontier.palemirror.frontier.v3.model.DiagnosticSubject;
 import io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess;
@@ -353,8 +355,9 @@ final class FrontierV3DiagnosticJson {
                 : FrontierSettlementWorkDiagnostic.inspect(checkpoint, state, subject).orElse(null);
         FrontierV3SettlementIngressGeometry.Value geometry = FrontierV3SettlementIngressGeometry.find(state, subject).orElse(null);
         if (value == null || geometry == null) return unavailable("settlement", id, checkpoint, "not_found");
-        SubjectId depot = FrontierWorldState.depotId(subject);
-        int availableFood = SettlementFoodPolicy.coldUsableBread(state, subject);
+        int availableFood = SettlementFoodPolicy.usableBread(state, subject);
+        var foodStores = ResourceStorageSelection.containers(state, subject, SettlementFoodPolicy.BREAD,
+                java.util.Set.of(ResourceStorageRole.WAREHOUSE));
         var nextNeedReview = checkpoint.schedules().stream()
                 .filter(action -> action.kind().equals("frontier.resident.need.review"))
                 .filter(action -> { ResidentProfile person = state.humanPopulation().resident(action.subject());
@@ -364,7 +367,7 @@ final class FrontierV3DiagnosticJson {
                 .filter(binding -> binding.itemKind().equals(SettlementFoodPolicy.BREAD))
                 .filter(binding -> {
                     CustodyAccount account = state.inventory().fungibleResources().accounts().get(binding.accountId());
-                    return account != null && account.custody() instanceof ResourceCustody.Container container && container.containerId().equals(depot);
+                    return account != null && account.custody() instanceof ResourceCustody.Container container && foodStores.contains(container.containerId());
                 }).mapToInt(PhysicalStackBinding::quantity).sum();
         int reservedFood = state.inventory().fungibleResources().claims().values().stream()
                 .filter(claim -> claim.itemKind().equals(SettlementFoodPolicy.BREAD))
@@ -386,12 +389,13 @@ final class FrontierV3DiagnosticJson {
                 + "\",\"depotSurface\":\"" + quote(value.depotSurface()) + "\",\"depotHasFreeSlot\":" + value.depotHasFreeSlot()
                 + ",\"quarantine\":\"" + (state.humanPopulation().quarantined(subject) ? "QUARANTINED" : "NORMAL") + "\",\"activeCases\":"
                 + state.humanPopulation().activeCases(subject) + ",\"food\":{\"status\":\""
-                + (ReferenceContainerCustody.blocksCanonicalUse(state, depot) ? "CONFLICT"
-                        : SettlementFoodPolicy.breadStock(state, subject) == 0 ? "SHORTAGE"
+                + (SettlementFoodPolicy.breadStock(state, subject) == 0 ? "SHORTAGE"
                         : hungry + starving > 0 ? "RESIDENTS_HUNGRY"
                         : SettlementFoodPolicy.breadStock(state, subject) < reserve ? "RESERVE_LOW" : "SECURE")
                 + "\",\"stock\":" + SettlementFoodPolicy.breadStock(state, subject)
-                + ",\"available\":" + availableFood + ",\"reserve\":" + reserve + ",\"held\":" + heldFood + ",\"reserved\":" + reservedFood
+                + ",\"available\":" + availableFood + ",\"coldAvailable\":" + SettlementFoodPolicy.coldUsableBread(state, subject)
+                + ",\"availabilityScope\":\"UNCLAIMED_USABLE_STOCK_NOT_SERVICE_ADMISSION\""
+                + ",\"reserve\":" + reserve + ",\"held\":" + heldFood + ",\"reserved\":" + reservedFood
                 + ",\"activeMeals\":" + activeMeals + ",\"nourished\":" + nourished + ",\"hungry\":" + hungry
                 + ",\"starving\":" + starving
                 + ",\"nextNeedReviewAt\":" + (nextNeedReview.isPresent() ? Long.toString(nextNeedReview.getAsLong()) : "null") + "}"

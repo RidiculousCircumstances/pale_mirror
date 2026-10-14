@@ -25,6 +25,7 @@ class SettlementFoodPolicyTest {
         assertEquals(0, SettlementFoodPolicy.breadStock(state, buyer));
         assertEquals(0, SettlementFoodPolicy.reserveCoverageBread(state, buyer));
         assertEquals(0, SettlementFoodPolicy.coldUsableBread(state, buyer));
+        assertEquals(0, SettlementFoodPolicy.usableBread(state, buyer));
         assertTrue(SettlementFoodPolicy.exportableFungibleBread(state, buyer).isEmpty());
     }
     @Test void exactDepotReserveAllowsOneSurplusFungibleStackToExport() {
@@ -87,5 +88,6 @@ class SettlementFoodPolicyTest {
         assertEquals(freeLot, SettlementFoodPolicy.exportableFungibleBread(state, settlement)
                 .orElseThrow().lot().id());
         assertEquals(256, SettlementFoodPolicy.breadStock(state, settlement));
+        assertEquals(192, SettlementFoodPolicy.usableBread(state, settlement));
     }
 }

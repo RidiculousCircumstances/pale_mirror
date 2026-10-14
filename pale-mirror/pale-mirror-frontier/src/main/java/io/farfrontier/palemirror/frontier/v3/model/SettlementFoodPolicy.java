@@ -102,6 +102,25 @@ public final class SettlementFoodPolicy {
         return Math.addExact(exact, fungible);
     }
 
+    /** Unclaimed usable warehouse stock, including current HOT bindings. This is a stock
+     * diagnostic, not service admission or permission to write a physically held container. */
+    public static int usableBread(FrontierWorldState state, SubjectId settlementId) {
+        var stores = stores(state, settlementId).stream()
+                .filter(container -> !ReferenceContainerCustody.blocksCanonicalUse(state, container))
+                .collect(java.util.stream.Collectors.toSet());
+        int exact = state.inventory().items().values().stream()
+                .filter(item -> BREAD.equals(item.itemKind()) && item.economicOwnerId().equals(settlementId))
+                .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && stores.contains(slot.containerId()))
+                .filter(item -> !hasUnconfirmedPhysicalCustody(state, item.id()))
+                .mapToInt(ExactItemStack::count).reduce(0, Math::addExact);
+        var resources = state.inventory().fungibleResources();
+        int fungible = resources.accounts().values().stream()
+                .filter(account -> account.custody() instanceof ResourceCustody.Container container && stores.contains(container.containerId()))
+                .mapToInt(account -> resources.unclaimedQuantity(account.id(), settlementId, BREAD))
+                .reduce(0, Math::addExact);
+        return Math.addExact(exact, fungible);
+    }
+
     public static Optional<ExactItemStack> exportableBread(FrontierWorldState state, SubjectId settlementId) {
         int reserve = reserveRequirement(state, settlementId);
         int available = coldUsableBread(state, settlementId);

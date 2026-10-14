@@ -11,6 +11,41 @@ import org.junit.jupiter.params.provider.ValueSource;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResourceSiteHarvestSceneReconciliationTest {
+    @Test void receiptValidationUsesDeclaredReplacementAccountAndRejectsForeignOrOldDepotAddresses() {
+        var fixture = ResourceSiteHarvestProcessTest.coldHarvestWithCargo(125L);
+        var state = fixture.state(); var job = fixture.job();
+        var target = new io.farfrontier.palemirror.frontier.v3.api.SubjectId("container:selected-harvest-storage");
+        var selected = job.retargetStorage(new InventoryCustody.ContainerSlot(target, 1),
+                new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:site-harvest-storage-receipt-boundary"));
+        var old = state.physicalIntents().get(job.intentId());
+        var intent = new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent(selected.intentId(), old.kind(), old.status(),
+                old.causeSubjectId(), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.siteHarvest(
+                    selected.siteId(), selected.id(), selected.workerId(), selected.actorAccountId(), selected.depotAccountId()),
+                old.origin(), old.radiusBlocks(), old.postcondition(), old.lifecycleOwner());
+        var observed = new ResourceSiteHarvestDeliveryObservation(
+                new io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId("observation:selected-harvest-storage"),
+                selected.intentId(), selected.siteId(), selected.id(), selected.workerId(), selected.actorAccountId(),
+                selected.depotAccountId(), new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:selected-storage"),
+                SceneLease.deterministicEntityId(state.bootstrap().worldId(), selected.workerId()), 1L, 1, 1L,
+                java.util.List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                        selected.outputSlot()), "minecraft:wheat", 1)), "sha256:" + "0".repeat(64), 3L, "witness:selected-storage");
+        ResourceSitePhysicalIntentStateSupport.validateHarvestDeliveryReceipt(state.bootstrap(), intent, observed);
+        var deferred = new ResourceSiteHarvestDeferredObservation(observed.id(), selected.intentId(), selected.siteId(),
+                selected.id(), target, 1L, 1L, 3L, 1L, observed.depotFingerprint(), ReferenceContainerCustody.provenance(target));
+        ResourceSitePhysicalIntentStateSupport.validateDeferredHarvestReceipt(state.bootstrap(), intent, deferred);
+        var wrong = new ResourceSiteHarvestDeliveryObservation(observed.id(), observed.intentId(), observed.siteId(),
+                observed.jobId(), observed.workerId(), observed.actorAccountId(), observed.depotAccountId(), observed.leaseId(),
+                observed.entityId(), 1L, 1, 1L, java.util.List.of(new FungiblePhysicalObservation.Stack(
+                    new PhysicalStackAddress.ContainerSlot(job.outputSlot()), "minecraft:wheat", 1)),
+                observed.depotFingerprint(), 3L, observed.witnessId());
+        assertThrows(IllegalArgumentException.class, () -> ResourceSitePhysicalIntentStateSupport
+                .validateHarvestDeliveryReceipt(state.bootstrap(), intent, wrong));
+        var wrongDeferred = new ResourceSiteHarvestDeferredObservation(deferred.id(), deferred.intentId(), deferred.siteId(),
+                deferred.jobId(), job.outputSlot().containerId(), 1L, 1L, 3L, 1L, deferred.depotFingerprint(),
+                ReferenceContainerCustody.provenance(job.outputSlot().containerId()));
+        assertThrows(IllegalArgumentException.class, () -> ResourceSitePhysicalIntentStateSupport
+                .validateDeferredHarvestReceipt(state.bootstrap(), intent, wrongDeferred));
+    }
     @ParameterizedTest @ValueSource(ints = {0, 1})
     void alreadyAppliedIsolatedCropAndHandSettleOnceThroughRegisteredCommandAndWal(int preceding) {
         var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);

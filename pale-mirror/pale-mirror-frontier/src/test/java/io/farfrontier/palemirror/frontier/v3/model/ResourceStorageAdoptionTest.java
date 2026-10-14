@@ -42,6 +42,22 @@ class ResourceStorageAdoptionTest {
             var running = adopted.inventory().withSurfaceStatus(container.id(), ContainerSurfaceStatus.ACTIVE);
             var active = adopted.withInventory(running);
             assertFalse(ReferenceContainerCustody.blocksCanonicalUse(active, container.id()));
+            if (filled) {
+                assertEquals(3, SettlementFoodPolicy.usableBread(active, container.ownerId()));
+                var accountId = ReferenceContainerCustody.scopeId(container.id());
+                var resources = active.inventory().fungibleResources();
+                var stacks = List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                        new InventoryCustody.ContainerSlot(container.id(), 0)), "minecraft:bread", 3),
+                        new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                            new InventoryCustody.ContainerSlot(container.id(), 1)), "minecraft:cobblestone", 17));
+                resources = resources.rebind(accountId, 1L, FungiblePhysicalObservation.bind(resources, accountId, 1L, stacks));
+                var hot = active.withInventory(active.inventory().withFungibleResources(resources));
+                assertEquals(0, SettlementFoodPolicy.coldUsableBread(hot, container.ownerId()));
+                assertEquals(3, SettlementFoodPolicy.usableBread(hot, container.ownerId()),
+                        "physical binding is not food absence; the HOT service retains its own admission fence");
+                var retired = hot.withInventory(hot.inventory().withSurfaceStatus(container.id(), ContainerSurfaceStatus.RETIRED));
+                assertEquals(0, SettlementFoodPolicy.usableBread(retired, container.ownerId()));
+            }
         }
     }
     @Test void defaultTerritoryIsBoundedAndForeignTitleCannotBeReissued() {

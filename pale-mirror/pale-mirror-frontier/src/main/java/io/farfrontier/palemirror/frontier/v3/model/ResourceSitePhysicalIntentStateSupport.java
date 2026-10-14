@@ -191,7 +191,6 @@ public final class ResourceSitePhysicalIntentStateSupport {
                 || !lineage.predecessorJobId().equals(receipt.jobId())
                 || lineage.completedGrowthEpoch() != receipt.completedGrowthEpoch()
                 || !lineage.outputSlot().containerId().equals(receipt.containerId())
-                || !receipt.containerId().equals(FrontierWorldState.depotId(site.settlementId()))
                 || lineage.causality().hotLeaseIds().isEmpty()
                 || state.sceneLeases().values().stream().anyMatch(lease -> FrontierSceneBehaviors.isResourceSiteHarvest(lease)
                         && FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId().equals(receipt.siteId())
@@ -349,12 +348,11 @@ public final class ResourceSitePhysicalIntentStateSupport {
                 || !intent.id().equals(receipt.intentId()) || !intent.causeSubjectId().equals(receipt.siteId())
                 || !intent.roles().equals(PhysicalIntentRoleBinding.siteHarvest(receipt.siteId(), receipt.jobId(),
                         receipt.workerId(), receipt.actorAccountId(), receipt.depotAccountId()))
-                || !receipt.depotAccountId().equals(ReferenceContainerCustody.scopeId(
-                        FrontierWorldState.depotId(site.settlementId())))
                 || receipt.depotStacks().stream().anyMatch(stack -> !(stack.address()
                         instanceof PhysicalStackAddress.ContainerSlot slot)
-                        || !slot.slot().containerId().equals(FrontierWorldState.depotId(site.settlementId())))) {
-            throw new IllegalArgumentException("field delivery receipt has a foreign intent, account or depot surface");
+                        || !ReferenceContainerCustody.scopeId(slot.slot().containerId()).equals(receipt.depotAccountId()))) {
+            throw new IllegalArgumentException("field delivery receipt does not match its declared intent and destination account: intent="
+                    + intent.id() + ", job=" + receipt.jobId() + ", account=" + receipt.depotAccountId());
         }
     }
 
@@ -365,7 +363,6 @@ public final class ResourceSitePhysicalIntentStateSupport {
                 || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED
                 || !intent.id().equals(receipt.intentId()) || !intent.causeSubjectId().equals(receipt.siteId())
                 || !intent.roles().require(PhysicalIntentSubjectRole.RESOURCE_SITE_JOB).equals(receipt.jobId())
-                || !receipt.containerId().equals(FrontierWorldState.depotId(site.settlementId()))
                 || !intent.roles().require(PhysicalIntentSubjectRole.RESOURCE_DESTINATION_ACCOUNT)
                 .equals(ReferenceContainerCustody.scopeId(receipt.containerId()))
                 || !receipt.depotProvenance().equals(ReferenceContainerCustody.provenance(receipt.containerId()))) {
