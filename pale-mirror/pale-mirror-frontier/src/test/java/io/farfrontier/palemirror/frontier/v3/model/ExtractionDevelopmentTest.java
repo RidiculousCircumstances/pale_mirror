@@ -11,6 +11,34 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Live contract: bounded adjacent opening changes admission, never physical history or resources. */
 class ExtractionDevelopmentTest {
+    @Test void aTorchInMinedClearanceNeitherSealsTheNextWorkFaceNorBecomesAResourceOrSupport() {
+        var before = initial(); var original = deposit(before);
+        var next = original.site().layout().cells().stream().filter(cell -> cell.prerequisites().stream()
+                .anyMatch(id -> original.site().layout().require(id).source().equals(cell.workstation().support().offset(0, 2, 0))))
+                .findFirst().orElseThrow();
+        long prerequisite = next.prerequisites().stream().filter(id -> original.site().layout().require(id).source()
+                .equals(next.workstation().support().offset(0, 2, 0))).findFirst().orElseThrow();
+        var source = original.site().layout().require(prerequisite).source();
+        var torch = new BlockExtraction.Block("minecraft:wall_torch", Map.of("facing", "south"));
+        var changed = original;
+        for (long id : next.prerequisites()) changed = changed.observe(id, 1,
+                id == prerequisite ? torch : new BlockExtraction.Block("minecraft:air", Map.of()));
+        var state = before.withChanges(FrontierWorldStateUpdate.begin().extractionSites(before.extractionSites().replace(changed)));
+        assertTrue(changed.accessibleSources(Set.of()).contains(next));
+        assertTrue(new ExtractionWorkingSurfaces(state, changed).standable(next.workstation()));
+        var projected = new ExtractionKnownGeometry().project(state);
+        assertFalse(projected.obstacles().contains(source));
+        assertTrue(projected.withdrawnSupports().contains(source));
+        assertFalse(KnownPedestrianRouteKnowledge.forFrontier(state).geometry().blocked(next.workstation()));
+        assertEquals(torch, changed.cells().get(prerequisite).knownBlock());
+        assertEquals(before.inventory(), state.inventory());
+        assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+        var blocked = changed.observe(prerequisite, changed.cells().get(prerequisite).revision(),
+                new BlockExtraction.Block("minecraft:stone", Map.of()));
+        assertFalse(blocked.accessibleSources(Set.of()).contains(next));
+        var obstructed = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(blocked)));
+        assertTrue(KnownPedestrianRouteKnowledge.forFrontier(obstructed).geometry().blocked(next.workstation()));
+    }
     private static FrontierWorldState initial() {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:quarry-development"),
                 20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r3")));

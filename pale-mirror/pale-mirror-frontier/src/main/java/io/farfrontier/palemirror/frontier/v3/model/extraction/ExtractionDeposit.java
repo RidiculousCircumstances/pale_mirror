@@ -61,7 +61,9 @@ public record ExtractionDeposit(ExtractionSite site, Map<Long, CellState> cells,
     public List<ExtractionLayout.Cell> accessibleSources(Set<Long> reserved) {
         return site.layout().cells().stream().filter(cell -> cells.get(cell.id()).disposition() == Disposition.PRESENT
                 && !reserved.contains(cell.id()) && cell.prerequisites().stream().allMatch(id ->
-                    cells.get(id).knownBlock().equals(site.layout().require(id).definition().after()))).toList();
+                    cells.get(id).knownBlock().equals(site.layout().require(id).definition().after())
+                    || io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockClearance
+                        .emptyCollision(cells.get(id).knownBlock().kind()))).toList();
     }
     public ExtractionDeposit observe(long cellId, long expectedRevision, BlockExtraction.Block actual) {
         return transition(cellId, expectedRevision, Disposition.EXTERNALLY_CHANGED, actual, cells.get(cellId).extractionOperation());

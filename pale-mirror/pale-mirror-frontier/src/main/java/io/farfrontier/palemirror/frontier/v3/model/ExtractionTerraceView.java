@@ -12,7 +12,8 @@ public record ExtractionTerraceView(int depthLimit, int plannedDepth, int openDe
         var geometry = KnownPedestrianRouteKnowledge.forFrontier(state).geometry();
         int planned = layout.accessSurfaces().stream().mapToInt(surface -> Math.max(0, root - surface.y())).max().orElse(0);
         var remainingSources = new java.util.HashSet<BlockPosition>();
-        for (var cell : layout.cells()) if (!deposit.cells().get(cell.id()).knownBlock().kind().equals("minecraft:air"))
+        for (var cell : layout.cells()) if (!io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockClearance
+                .emptyCollision(deposit.cells().get(cell.id()).knownBlock().kind()))
             remainingSources.add(cell.source());
         var preparation = new java.util.HashSet<BlockPosition>();
         var openSurfaces = new ExtractionWorkingSurfaces(state, deposit).current().values().stream()

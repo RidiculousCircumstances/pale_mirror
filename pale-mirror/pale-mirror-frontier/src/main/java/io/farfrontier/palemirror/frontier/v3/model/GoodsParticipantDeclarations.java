@@ -15,13 +15,11 @@ public final class GoodsParticipantDeclarations {
     public static GoodsParticipantState initial(FrontierBootstrap bootstrap) {
         var participants = GoodsParticipantState.empty();
         var settlements = bootstrap.settlements().stream().sorted(Comparator.comparing(Settlement::id)).toList();
-        // The initial acquaintance chain follows stable settlement IDs; later knowledge
-        // must be declared explicitly. This is initial knowledge, not live inventory discovery.
-        for (int i = 0; i < settlements.size(); i++) {
-            var settlement = settlements.get(i);
-            var peers = new ArrayList<GoodsParticipant.Counterparty>();
-            if (i > 0) peers.add(publicPeer(settlements.get(i - 1)));
-            if (i + 1 < settlements.size()) peers.add(publicPeer(settlements.get(i + 1)));
+        // Public settlements begin with mutual market addresses, not remote stock
+        // access or consent. Matching still requires quotes, funds and real delivery.
+        for (var settlement : settlements) {
+            var peers = settlements.stream().filter(other -> !other.id().equals(settlement.id()))
+                    .map(GoodsParticipantDeclarations::publicPeer).toList();
             participants = participants.register(new GoodsParticipant(publicParty(settlement.id()),
                     GoodsPolicyKind.PUBLIC_SETTLEMENT, endpoint(settlement), peers, 0, "NOT_REVIEWED", 0));
         }

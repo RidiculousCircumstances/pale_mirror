@@ -8,6 +8,17 @@ import java.util.function.Predicate;
 import static org.junit.jupiter.api.Assertions.*;
 
 class HierarchicalPedestrianNavigationTest {
+    @Test void isolatedGoalAcrossRegionBoundariesIsProvedWithoutFloodingTheLargeSourceComponent() {
+        var start = SurfaceAnchor.at(1, 63, 1); var goal = SurfaceAnchor.at(32, 63, 16);
+        var closed = geometry(new WorldBounds(0, 0, 1024, 1024), (x, z) -> SurfaceAnchor.at(x, 63, z),
+                s -> (s.x() == 28 || s.x() == 36) && s.z() >= 12 && s.z() <= 20
+                        || (s.z() == 12 || s.z() == 20) && s.x() >= 28 && s.x() <= 36);
+        var result = finish(new HierarchicalPedestrianSearch(closed, start, goal));
+        assertEquals(PedestrianRouteResult.Status.NO_PATH, result.status());
+        assertTrue(result.workUnits() < 100_000, "small disconnected target spans four regions, not the whole world");
+        var reverse = finish(new HierarchicalPedestrianSearch(closed, goal, start));
+        assertEquals(PedestrianRouteResult.Status.NO_PATH, reverse.status());
+    }
     @Test void rebuildingAnUnchangedViewPreservesRotationUnderTheHostYieldFence() {
         var revision = PedestrianGeometryRevision.initial();
         java.util.function.Supplier<PedestrianRouteGeometry> rebuild = () -> new PedestrianRouteGeometry() {

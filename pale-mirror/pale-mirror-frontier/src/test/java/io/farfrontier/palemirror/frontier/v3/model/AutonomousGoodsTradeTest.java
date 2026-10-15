@@ -15,6 +15,27 @@ class AutonomousGoodsTradeTest {
     private static final SubjectId COMPANY = CompanyFoundationProcess.companyId(HOME);
     private static final SubjectId DEPOT = FrontierWorldState.depotId(HOME);
 
+    @Test void remoteBuyersFuelDeficitCreatesMiningDemandBeyondTheProducersOwnReserveWithoutCreatingStock() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:remote-fuel-demand"),
+                41, FrontierRulesets.fuelledQuarryGraybox()));
+        var buyer = new SubjectId("settlement:8");
+        for (var home : state.bootstrap().settlements()) {
+            state = issueAt(state, FrontierWorldState.depotId(home.id()), home.id(), "minecraft:bread", 384,
+                    "food-" + home.id().value().replace(':', '-'));
+            if (!home.id().equals(buyer)) state = issueAt(state, FrontierWorldState.depotId(home.id()), home.id(),
+                    "minecraft:coal", 4, "fuel-" + home.id().value().replace(':', '-'));
+        }
+        var before = state.inventory();
+        var participant = state.companies().goodsTrade().participants().participants().get(buyer);
+        assertTrue(GoodsParticipantPolicies.require(participant).decide(GoodsParticipantView.read(state, participant),
+                state.bootstrap().ruleset().goodsTrade()).stream().anyMatch(intent -> intent.itemKind().equals("minecraft:coal")
+                        && intent.side() == GoodsTradeOrder.Side.BUY));
+        assertTrue(new TradeStockSupply().pending(state).stream().anyMatch(commitment -> commitment.economicOwner().equals(HOME)
+                && commitment.itemKind().equals("minecraft:coal") && commitment.outgoing() > 0));
+        assertTrue(ProductionStockDemand.read(state, HOME, "minecraft:coal", Optional.empty()).requested());
+        assertEquals(before, state.inventory(), "a potential buyer is demand, not a resource/financial reservation or output");
+    }
+
     @Test void quarryCatalogOffersItsRealDepotSurplusToANonProducerThroughOrdinaryPublicTrading() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:stone-trade-policy"),
                 20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r1")));

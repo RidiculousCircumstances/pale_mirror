@@ -49,6 +49,7 @@ public final class HierarchicalPedestrianSearch {
     private int publication;
     private java.util.function.BooleanSupplier mayContinue = () -> true;
     private PedestrianLocalSearch localSearch;
+    private PedestrianLocalSearch reverseLocalSearch;
     private PedestrianCorridorJoin corridorJoin;
     private final PedestrianCorridorCache corridors;
     private PedestrianCorridorCache.Corridor attemptedCorridor;
@@ -84,12 +85,15 @@ public final class HierarchicalPedestrianSearch {
         this.extent = Objects.requireNonNull(extent);
         this.itineraries = itineraries;
         if (geometry.bounds().contains(start.support()) && geometry.bounds().contains(target.support())
-                && PedestrianLocalSearch.nearby(start, target)) localSearch = new PedestrianLocalSearch(geometry, start, target,
-                surface -> {
+                && PedestrianLocalSearch.nearby(start, target)) {
+            java.util.function.Consumer<SurfaceAnchor> observe = surface -> {
                     var tile = PedestrianRegion.Tile.at(surface);
                     dependencies.put(tile, this.geometry.regionalRevision().map(revision -> revision.at(tile.x(), tile.z()))
                             .orElse(this.geometry.version()));
-                });
+                };
+            localSearch = new PedestrianLocalSearch(geometry, start, target, observe);
+            reverseLocalSearch = new PedestrianLocalSearch(geometry, target, start, observe, true);
+        }
     }
 
     public synchronized long workUnits() { return work; }
@@ -104,6 +108,7 @@ public final class HierarchicalPedestrianSearch {
         if (!compatible(current)) return false;
         geometry = current;
         if (localSearch != null) localSearch.rebase(current);
+        if (reverseLocalSearch != null) reverseLocalSearch.rebase(current);
         if (corridorJoin != null) corridorJoin.rebase(current);
         if (itineraryJoin != null) itineraryJoin.rebase(current);
         return true;
@@ -131,10 +136,22 @@ public final class HierarchicalPedestrianSearch {
             work += localSearch.advance(budget, mayContinue);
             if (!localSearch.finished()) return result(PedestrianRouteResult.Status.PLANNING, "LOCAL_SEARCH_IN_PROGRESS");
             if (localSearch.result() != null) {
-                route.addAll(localSearch.result()); localSearch = null;
+                route.addAll(localSearch.result()); localSearch = null; reverseLocalSearch = null;
                 return finish(PedestrianRouteResult.Status.FOUND, "EXACT_LOCAL_ROUTE");
             }
+            if (localSearch.disconnected()) return finish(PedestrianRouteResult.Status.NO_PATH, "KNOWN_ISOLATED_SOURCE_COMPONENT");
             localSearch = null; // No positive proof: retain full regional completeness.
+            if (work >= limit || !mayContinue.getAsBoolean()) return result(PedestrianRouteResult.Status.PLANNING, "REGIONAL_SEARCH_IN_PROGRESS");
+        }
+        if (reverseLocalSearch != null) {
+            work += reverseLocalSearch.advance(Math.toIntExact(limit - work), mayContinue);
+            if (!reverseLocalSearch.finished()) return result(PedestrianRouteResult.Status.PLANNING, "TARGET_LOCAL_SEARCH_IN_PROGRESS");
+            if (reverseLocalSearch.result() != null) {
+                route.addAll(reverseLocalSearch.result()); reverseLocalSearch = null;
+                return finish(PedestrianRouteResult.Status.FOUND, "EXACT_REVERSE_LOCAL_ROUTE");
+            }
+            if (reverseLocalSearch.disconnected()) return finish(PedestrianRouteResult.Status.NO_PATH, "KNOWN_ISOLATED_TARGET_COMPONENT");
+            reverseLocalSearch = null;
             if (work >= limit || !mayContinue.getAsBoolean()) return result(PedestrianRouteResult.Status.PLANNING, "REGIONAL_SEARCH_IN_PROGRESS");
         }
         if (corridorJoin != null) {

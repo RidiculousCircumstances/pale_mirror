@@ -95,31 +95,31 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
             // Exact unavailable supports cannot be resurrected by bootstrap terrain.
             for (var surface : layout.accessSurfaces()) if (!active.contains(surface)) withdrawn.add(surface.support());
             layout.cells().forEach(cell -> {
-                if (deposit.cells().get(cell.id()).knownBlock().kind().equals("minecraft:air")) withdrawn.add(cell.source());
+                if (KnownBlockClearance.emptyCollision(deposit.cells().get(cell.id()).knownBlock().kind())) withdrawn.add(cell.source());
             });
             deposit.geometry().forEach((position, observation) -> {
-                if (observation.block().kind().equals("minecraft:air")) withdrawn.add(position);
+                if (KnownBlockClearance.emptyCollision(observation.block().kind())) withdrawn.add(position);
             });
             layout.fixedBlocks().forEach((position, block) -> {
                 var observed = deposit.geometry().get(position);
                 var actual = observed == null ? block : observed.block();
-                if (actual.kind().equals("minecraft:air")) withdrawn.add(position);
-                if (!actual.kind().equals("minecraft:air") && !floorBlocks.contains(position)) obstacles.add(position);
+                if (KnownBlockClearance.emptyCollision(actual.kind())) withdrawn.add(position);
+                if (!KnownBlockClearance.emptyCollision(actual.kind()) && !floorBlocks.contains(position)) obstacles.add(position);
             });
             layout.terrainSupports().keySet().forEach(position -> {
                 var actual = working.at(position);
-                if (!floorBlocks.contains(position) && (actual.isEmpty() || !actual.orElseThrow().kind().equals("minecraft:air")))
+                if (!floorBlocks.contains(position) && (actual.isEmpty() || !KnownBlockClearance.emptyCollision(actual.orElseThrow().kind())))
                     obstacles.add(position);
             });
             for (var cell : layout.cells())
-                if (!deposit.cells().get(cell.id()).knownBlock().kind().equals("minecraft:air")
+                if (!KnownBlockClearance.emptyCollision(deposit.cells().get(cell.id()).knownBlock().kind())
                         && !floorBlocks.contains(cell.source())) obstacles.add(cell.source());
             // A clear standing pocket does not prove its incoming edge is clear.
             // Retain the known ceiling used by the common canTraverse query, even
             // when that block was never admitted as a mining resource cell.
             for (var surface : active) for (int height = 1; height <= 3; height++) {
                 var bodyBlock = surface.support().offset(0, height, 0);
-                if (working.at(bodyBlock).filter(block -> !block.kind().equals("minecraft:air")).isPresent()
+                if (working.at(bodyBlock).filter(block -> !KnownBlockClearance.emptyCollision(block.kind())).isPresent()
                         && !floorBlocks.contains(bodyBlock)) obstacles.add(bodyBlock);
             }
         }

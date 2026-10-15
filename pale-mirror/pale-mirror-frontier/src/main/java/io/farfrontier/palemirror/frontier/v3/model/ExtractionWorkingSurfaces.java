@@ -30,10 +30,11 @@ final class ExtractionWorkingSurfaces {
     boolean standable(SurfaceAnchor surface) {
         return at(surface.support()).filter(block -> state.bootstrap().ruleset().extraction().definitionFor(block).isPresent())
                 .isPresent()
-                && air(surface.support().offset(0, 1, 0)) && air(surface.support().offset(0, 2, 0));
+                && clear(surface.support().offset(0, 1, 0)) && clear(surface.support().offset(0, 2, 0));
     }
-    private boolean air(BlockPosition position) {
-        return at(position).filter(block -> block.kind().equals("minecraft:air")).isPresent();
+    private boolean clear(BlockPosition position) {
+        return at(position).filter(block -> io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockClearance
+                .emptyCollision(block.kind())).isPresent();
     }
     Map<TerrainColumn, SurfaceAnchor> current() {
         var result = new LinkedHashMap<TerrainColumn, SurfaceAnchor>();
