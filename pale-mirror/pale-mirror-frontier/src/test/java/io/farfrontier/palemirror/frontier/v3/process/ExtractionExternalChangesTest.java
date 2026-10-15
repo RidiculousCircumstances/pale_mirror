@@ -12,6 +12,34 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ExtractionExternalChangesTest {
+    @Test void occupiedSourceAtArrivedStationSelectsOtherWorkWithoutMiningUnderAResident() {
+        var admission = admitted(); var state = admission.state();
+        var job = state.extractionSites().work().values().stream().min(Comparator.comparing(ExtractionWork::id)).orElseThrow();
+        var actor = job.execution().actorId(); var site = ExtractionWorkAuthority.site(state, job);
+        state = state.withActorBody(actor, job.toolSource().station().standingBody());
+        state = ExtractionColdWork.apply(state, job.id(), new ExtractionWorkProgressed(job.id(), job.revision(),
+                ExtractionWorkProgressed.Operation.TAKE_TOOL), admission.tick());
+        job = state.extractionSites().work().get(job.id());
+        var cell = site.layout().require(job.target().orElseThrow().key().cell());
+        var peer = state.humanPopulation().residents().keySet().stream().filter(id -> !id.equals(actor)).sorted().findFirst().orElseThrow();
+        state = state.withActorBody(actor, cell.workstation().standingBody())
+                .withActorBody(peer, new SurfaceAnchor(cell.source()).standingBody());
+        var before = state; var current = job;
+        assertFalse(ExtractionWorkSafety.available(state, state.extractionSites().deposits().get(site.id()), cell));
+        var action = ExtractionContinuation.at(job.id(), admission.tick());
+        var events = ExtractionWorkProcess.progress(state, action, admission.tick());
+        var selected = events.stream().map(ProposedEvent::payload).filter(ExtractionWorkProgressed.class::isInstance)
+                .map(ExtractionWorkProgressed.class::cast).findFirst().orElseThrow();
+        assertEquals(ExtractionWorkProgressed.Operation.SELECT_REACHABLE, selected.operation());
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        var replay = (ExtractionWorkProgressed) codecs.decode(selected.type(), codecs.encode(selected));
+        var after = ExtractionColdWork.apply(before, job.id(), replay, admission.tick());
+        assertNotEquals(current.target(), after.extractionSites().work().get(job.id()).target());
+        assertEquals(before.inventory(), after.inventory()); assertEquals(before.actorLocations(), after.actorLocations());
+        assertEquals(before.extractionSites().deposits(), after.extractionSites().deposits(), "selection cannot mine or award output");
+        assertEquals(current.execution(), after.extractionSites().work().get(job.id()).execution());
+        assertTrue(after.extractionSites().work().get(job.id()).labour().isEmpty(), "new block does not inherit old work credit");
+    }
     private record Admission(FrontierWorldState state, long tick) { }
     private static Admission admitted() {
         var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:source-retarget"),

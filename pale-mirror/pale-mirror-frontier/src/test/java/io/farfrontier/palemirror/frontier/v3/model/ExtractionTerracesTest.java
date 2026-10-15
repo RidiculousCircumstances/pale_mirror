@@ -9,6 +9,32 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ExtractionTerracesTest {
+    @Test void exposedResourceTopIsPublicGroundWithoutAWorkstationAndDisappearsOnDepletion() {
+        var initial = initial(); var original = deposit(initial); var layout = original.site().layout();
+        var cell = layout.cells().stream().filter(value -> value.source().y() == value.workstation().y() + 1)
+                .filter(value -> !layout.accessSurfaces().contains(new SurfaceAnchor(value.source())))
+                .min(Comparator.comparingLong(ExtractionLayout.Cell::id)).orElseThrow();
+        var partial = new ExtractionDeposit(original.site(), original.cells(), original.geometry(),
+                new WorkAreaDevelopment(original.development().revision() + 1, original.cells().keySet()));
+        for (var other : layout.cells()) if (other.id() != cell.id()
+                && partial.cells().get(other.id()).disposition() == ExtractionDeposit.Disposition.PRESENT)
+            partial = partial.extracted(other.id(), partial.cells().get(other.id()).revision(), "fixture:exposed-" + other.id());
+        var state = initial.withChanges(FrontierWorldStateUpdate.begin().extractionSites(initial.extractionSites().replace(partial)));
+        var origin = new SurfaceAnchor(cell.source());
+        var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state);
+        assertTrue(knowledge.geometry().knowsSupport(origin), "known solid resource top is not limited to work stations");
+        assertFalse(knowledge.geometry().blocked(origin));
+        assertTrue(knowledge.geometry().blocked(new SurfaceAnchor(cell.source().offset(0, -1, 0))),
+                "a walkable top remains a solid obstacle to a body on a lower level");
+        assertEquals(layout.storagePort(), knowledge.plannedBetween(origin, layout.storagePort()).getLast());
+        var codec = new FrontierWorldStateCodec();
+        assertEquals(layout.storagePort(), KnownPedestrianRouteKnowledge.forFrontier(codec.decode(codec.encode(state)))
+                .plannedBetween(origin, layout.storagePort()).getLast(), "recovery derives the same contacts without actor exceptions");
+        var depleted = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(
+                partial.extracted(cell.id(), partial.cells().get(cell.id()).revision(), "fixture:last-source"))));
+        assertFalse(KnownPedestrianRouteKnowledge.forFrontier(depleted).geometry().knowsSupport(origin));
+        assertTrue(KnownPedestrianRouteKnowledge.forFrontier(depleted).geometry().supportExcluded(origin));
+    }
     private static FrontierWorldState initial() {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:terraced-quarry"),
                 20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r6")));

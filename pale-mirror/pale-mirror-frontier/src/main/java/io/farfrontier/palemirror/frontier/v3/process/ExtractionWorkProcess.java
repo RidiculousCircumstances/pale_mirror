@@ -109,12 +109,7 @@ final class ExtractionWorkProcess {
             try { ActorMovementProviders.require(movement).route(state, movement, state.actorLocations().get(order.actorId()).supportingSurface()); }
             catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 if (unavailable.status() != PedestrianRouteResult.Status.NO_PATH) return retry(state, job, now);
-                Optional<ExtractionWorkDecision.Source> selected;
-                try { selected = ExtractionWorkTargets.alternative(state, job); }
-                catch (KnownPedestrianNavigation.RouteUnavailable pending) { return retry(state, job, now); }
-                if (selected.isEmpty()) return retry(state, job, now);
-                return advance(state, job, new ExtractionWorkProgressed(job.id(), job.revision(),
-                        ExtractionWorkProgressed.Operation.SELECT_REACHABLE, Optional.of(selected.orElseThrow())), action, now);
+                return alternative(state, job, action, now);
             }
             return List.of(new ProposedEvent(order.actorId(), new ActorMovementStarted(movement)),
                     new ProposedEvent(order.actorId(), new ScheduleEffect.Created(ActorMovementProcess.progress(movement, Math.addExact(now, 1)))),
@@ -122,6 +117,9 @@ final class ExtractionWorkProcess {
         }
         ExtractionWorkProgressed.Operation operation;
         if (job.phase() == ExtractionWork.Phase.EXTRACT) {
+            var deposit = state.extractionSites().deposits().get(job.siteId());
+            if (!ExtractionWorkSafety.available(state, deposit, deposit.site().layout().require(job.target().orElseThrow().key().cell())))
+                return alternative(state, job, action, now);
             if (job.labour().isEmpty() || job.labour().orElseThrow().completedAt(now) < job.labour().orElseThrow().requiredMilliWork()) {
                 var labour = ExtractionWorkAuthority.labour(state, job, now, true);
                 var due = Math.max(Math.addExact(now, 1), labour.activeUntilTick());
@@ -130,9 +128,6 @@ final class ExtractionWorkProcess {
             }
             if (!ActorExecutionCoordinator.coldAvailable(state, job.execution().actorId())
                     || ExtractionSourceCustody.blocksCold(state, job.target().orElseThrow())) return retry(state, job, now);
-            var deposit = state.extractionSites().deposits().get(job.siteId());
-            if (!ExtractionWorkSafety.available(state, deposit, deposit.site().layout().require(job.target().orElseThrow().key().cell())))
-                return retry(state, job, now);
             operation = ExtractionWorkProgressed.Operation.EXTRACT_BLOCK;
         } else {
             if (!ActorExecutionCoordinator.coldAvailable(state, job.execution().actorId())
@@ -151,6 +146,14 @@ final class ExtractionWorkProcess {
                 return retry(state, job, now);
         }
         return advance(state, job, operation, action, now);
+    }
+    private static List<ProposedEvent> alternative(FrontierWorldState state, ExtractionWork job, ScheduledAction action, long now) {
+        Optional<ExtractionWorkDecision.Source> selected;
+        try { selected = ExtractionWorkTargets.alternative(state, job); }
+        catch (KnownPedestrianNavigation.RouteUnavailable pending) { return retry(state, job, now); }
+        if (selected.isEmpty()) return retry(state, job, now);
+        return advance(state, job, new ExtractionWorkProgressed(job.id(), job.revision(),
+                ExtractionWorkProgressed.Operation.SELECT_REACHABLE, Optional.of(selected.orElseThrow())), action, now);
     }
     private static List<ProposedEvent> advance(FrontierWorldState state, ExtractionWork job,
             ExtractionWorkProgressed.Operation operation, ScheduledAction action, long now) {

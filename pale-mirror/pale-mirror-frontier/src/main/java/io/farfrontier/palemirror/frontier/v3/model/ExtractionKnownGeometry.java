@@ -29,7 +29,9 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
                 var layout = deposit.site().layout();
                 // Working contact probes support, body and step headroom; projection also
                 // reads retained natural blocks. No other baseline voxel is queried.
-                for (var surface : layout.accessSurfaces()) {
+                var contacts = java.util.stream.Stream.concat(layout.accessSurfaces().stream(),
+                        layout.cells().stream().map(cell -> new SurfaceAnchor(cell.source()))).toList();
+                for (var surface : contacts) {
                     positions.add(surface.support());
                     positions.add(surface.support().offset(0, 1, 0));
                     positions.add(surface.support().offset(0, 2, 0));

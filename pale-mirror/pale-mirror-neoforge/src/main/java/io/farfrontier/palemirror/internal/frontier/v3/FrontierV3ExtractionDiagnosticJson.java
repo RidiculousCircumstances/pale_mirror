@@ -123,6 +123,9 @@ final class FrontierV3ExtractionDiagnosticJson {
                 : job.phase() == ExtractionWork.Phase.SELECT_SOURCE ? (ExtractionWorkAuthority.carried(state, job) > 0
                     ? "CARGO_DELIVERY_SELECTION" : "SOURCE_SELECTION")
                 : job.phase() == ExtractionWork.Phase.EXTRACT && sourceHeld ? "SOURCE_CUSTODY"
+                : job.phase() == ExtractionWork.Phase.EXTRACT && !ExtractionWorkSafety.available(state,
+                    state.extractionSites().deposits().get(job.siteId()), ExtractionWorkAuthority.site(state, job).layout()
+                        .require(job.target().orElseThrow().key().cell())) ? "TARGET_SUPPORT_OR_ACCESS_OCCUPIED"
                 : job.phase() == ExtractionWork.Phase.EXTRACT && job.labour().filter(labour -> labour.completedAt(now) < labour.requiredMilliWork()).isPresent() ? "LABOUR"
                 : "STATION_OPERATION";
         String disposition = suspended || wait.equals("SCHEDULE_OR_NEED") ? "HIGHER_PRIORITY_ACTIVITY"

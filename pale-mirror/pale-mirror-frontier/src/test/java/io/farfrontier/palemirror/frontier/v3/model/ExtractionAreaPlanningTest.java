@@ -66,13 +66,22 @@ class ExtractionAreaPlanningTest {
         assertThrows(IllegalArgumentException.class, () -> ExtractionAreaPlanning.apply(before, new SubjectId("extraction:foreign"), event, 1001));
         assertTrue(ExtractionAreaPlanning.proposal(after, id).isEmpty(), "an admitted live front is not depletion");
     }
-    @Test void unresolvedAlternativeDoesNotBlockAnIndependentlyAccessibleFront() throws Exception {
+    @Test void unresolvedAlternativeDoesNotBlockAnAlreadyCalculatedAccessibleFront() throws Exception {
         var before = exhausted(); var id = deposit(before).site().id();
-        var pending = new java.util.concurrent.atomic.AtomicReference<SurfaceAnchor>();
+        var retained = new LinkedHashMap<SurfaceAnchor, PedestrianRouteResult>();
         try (var ignored = PedestrianRoutePlanning.bind((geometry, from, to) -> {
-            pending.compareAndSet(null, to);
-            return to.equals(pending.get()) ? new PedestrianRouteResult(PedestrianRouteResult.Status.PLANNING,
-                    List.of(), 0, 0, "fixture:first-alternative-pending") : PedestrianRoutePlanning.calculate(geometry, from, to);
+            var result = PedestrianRoutePlanning.calculate(geometry, from, to); retained.put(to, result); return result;
+        })) { assertTrue(ExtractionAreaPlanning.proposal(before, id).isPresent()); }
+        var pending = new java.util.concurrent.atomic.AtomicReference<SurfaceAnchor>();
+        try (var ignored = PedestrianRoutePlanning.bind(new PedestrianRoutePlanner() {
+            public PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor from, SurfaceAnchor to) {
+                pending.compareAndSet(null, to);
+                return to.equals(pending.get()) ? new PedestrianRouteResult(PedestrianRouteResult.Status.PLANNING,
+                        List.of(), 0, 0, "fixture:first-alternative-pending") : retained.get(to);
+            }
+            public Optional<PedestrianRouteResult> peek(PedestrianRouteGeometry geometry, SurfaceAnchor from, SurfaceAnchor to) {
+                return to.equals(pending.get()) ? Optional.empty() : Optional.ofNullable(retained.get(to));
+            }
         })) {
             var observed = PedestrianRoutePlanning.observe(() -> ExtractionAreaPlanning.proposal(before, id));
             var event = observed.result().orElseThrow();
@@ -83,13 +92,13 @@ class ExtractionAreaPlanningTest {
             assertEquals(before.inventory(), after.inventory(), "declaring reachable rock cannot credit production");
         }
     }
-    @Test void noResolvedFrontRetainsAllRelevantCalculationWaitsWithoutDeclaringExhaustion() throws Exception {
+    @Test void noResolvedFrontRetainsOneBoundedCalculationWaitWithoutDeclaringExhaustion() throws Exception {
         var before = exhausted(); var id = deposit(before).site().id();
         try (var ignored = PedestrianRoutePlanning.bind((geometry, from, to) -> new PedestrianRouteResult(
                 PedestrianRouteResult.Status.PLANNING, List.of(), 0, 0, "fixture:alternatives-pending"))) {
             var observed = PedestrianRoutePlanning.observe(() -> ExtractionAreaPlanning.extensionAvailability(before, id));
             assertEquals(ExtractionAreaPlanning.Availability.WAITING, observed.result());
-            assertTrue(observed.requests().size() > 1, "discovery cannot serialize unrelated alternatives behind the first request");
+            assertEquals(1, observed.requests().size(), "one selector must not flood the planner with speculative alternatives");
             assertEquals(0, deposit(before).available(Set.of()).size());
             var unavailable = assertThrows(KnownPedestrianNavigation.RouteUnavailable.class,
                     () -> ExtractionAreaPlanning.proposal(before, id));

@@ -47,7 +47,13 @@ final class ExtractionWorkingSurfaces {
     }
     /** Navigation retains every independent level; mining front preference is a separate query. */
     List<SurfaceAnchor> allCurrent() {
-        return deposit.site().layout().accessSurfaces().stream().filter(surface -> at(surface.support())
+        var layout = deposit.site().layout();
+        // Resource cells are solids as well as potential work targets. An exposed
+        // top is ordinary ground even when it was never selected as a workstation.
+        // Keep authored levels (including their blocked headroom) and add only
+        // positively known clear contacts; depletion withdraws them on the next view.
+        var exposed = layout.cells().stream().map(cell -> new SurfaceAnchor(cell.source())).filter(this::standable);
+        return java.util.stream.Stream.concat(layout.accessSurfaces().stream(), exposed).distinct().filter(surface -> at(surface.support())
                 .filter(block -> state.bootstrap().ruleset().extraction().definitionFor(block).isPresent()).isPresent())
                 .sorted(Comparator.comparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z)
                         .thenComparingInt(SurfaceAnchor::y)).toList();
