@@ -300,7 +300,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         return admittedAt.values().stream().mapToLong(since -> turns - since).max().orElse(0L);
     }
     public record WaitingDiagnostic(SurfaceAnchor start, SurfaceAnchor target, boolean deferred,
-                                    long waitTurns, long searchWorkUnits) { }
+                                    long waitTurns, long searchWorkUnits, PedestrianRouteExtent extent) { }
     /** Read-only bounded oldest-first view. It cannot advance, rebase, admit or wake anything. */
     public synchronized java.util.List<WaitingDiagnostic> waitingDiagnostics(int maximum) {
         if (maximum < 0 || maximum > MAX_PENDING + MAX_RESULTS)
@@ -308,7 +308,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         return admittedAt.entrySet().stream().sorted(Map.Entry.comparingByValue()).limit(maximum).map(entry -> {
             var request = entry.getKey(); var search = pending.get(request);
             return new WaitingDiagnostic(request.start(), request.target(), search == null,
-                    turns - entry.getValue(), search == null ? 0L : search.workUnits());
+                    turns - entry.getValue(), search == null ? 0L : search.workUnits(), request.extent());
         }).toList();
     }
     public synchronized long completedCount() { return completedCount; }

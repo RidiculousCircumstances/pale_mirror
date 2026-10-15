@@ -115,7 +115,8 @@ final class FrontierV3PedestrianPlanning {
                 "{\"from\":[" + wait.start().x() + "," + wait.start().y() + "," + wait.start().z()
                 + "],\"to\":[" + wait.target().x() + "," + wait.target().y() + "," + wait.target().z()
                 + "],\"phase\":\"" + (wait.deferred() ? "CAPACITY_WAIT" : "SEARCHING")
-                + "\",\"waitPlanningTurns\":" + wait.waitTurns() + ",\"searchWorkUnits\":" + wait.searchWorkUnits() + "}")
+                + "\",\"detail\":\"" + wait.extent().detail() + "\",\"maximumSurfaces\":" + wait.extent().maximumSurfaces()
+                + ",\"waitPlanningTurns\":" + wait.waitTurns() + ",\"searchWorkUnits\":" + wait.searchWorkUnits() + "}")
                 .collect(java.util.stream.Collectors.joining(",", "[", "]"));
     }
     static synchronized void forget(FrontierV3ServerRuntime<?, ?> runtime) {

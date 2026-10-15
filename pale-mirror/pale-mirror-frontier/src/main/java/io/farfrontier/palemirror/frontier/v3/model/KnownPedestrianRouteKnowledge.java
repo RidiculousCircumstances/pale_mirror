@@ -262,6 +262,10 @@ public final class KnownPedestrianRouteKnowledge {
     public List<SurfaceAnchor> plannedBetween(SurfaceAnchor start, SurfaceAnchor target) {
         return KnownPedestrianNavigation.plannedBetween(geometryFrom(start), start, target);
     }
+    public io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteEstimate estimateBetween(
+            SurfaceAnchor start, SurfaceAnchor target) {
+        return KnownPedestrianNavigation.estimateBetween(geometryFrom(start), start, target);
+    }
     public io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianAccessSelection accessSelection(SurfaceAnchor origin) {
         return new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianAccessSelection(geometryFrom(origin), origin);
     }

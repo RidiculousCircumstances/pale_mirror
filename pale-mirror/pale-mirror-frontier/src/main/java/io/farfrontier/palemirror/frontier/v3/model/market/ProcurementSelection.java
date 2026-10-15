@@ -5,7 +5,8 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.math.BigInteger;
 import java.util.*;
 
-/** Buyer policy compares complete feasible offers. Calculation never reserves or moves anything. */
+/** Buyer policy ranks quoted alternatives. Exact logistics admission follows selection;
+ * estimates never reserve goods, assign a crew or authorize movement. */
 public final class ProcurementSelection {
     public record Requirement(String item, int quantity, long deadlineHorizonTicks) {
         public Requirement {

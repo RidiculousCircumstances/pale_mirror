@@ -34,6 +34,7 @@ public final class HierarchicalPedestrianSearch {
     private Node rewind;
     private final List<PedestrianItineraryCache.Portal> reverseItinerary = new ArrayList<>();
     private int refinement;
+    private long estimatedEdges;
     private SurfaceAnchor refinementStart;
     private final List<SurfaceAnchor> route = new ArrayList<>();
     private long work;
@@ -85,7 +86,7 @@ public final class HierarchicalPedestrianSearch {
         this.corridors = corridors;
         this.extent = Objects.requireNonNull(extent);
         this.itineraries = itineraries;
-        if (geometry.bounds().contains(start.support()) && geometry.bounds().contains(target.support())
+        if (!extent.estimateOnly() && geometry.bounds().contains(start.support()) && geometry.bounds().contains(target.support())
                 && PedestrianLocalSearch.nearby(start, target)) {
             java.util.function.Consumer<SurfaceAnchor> observe = surface -> {
                     var tile = PedestrianRegion.Tile.at(surface);
@@ -250,6 +251,20 @@ public final class HierarchicalPedestrianSearch {
         }
         while (itinerary != null && work < limit && mayContinue.getAsBoolean()) {
             SurfaceAnchor end = refinement < itinerary.size() ? forwardEdge(refinement).exit() : target;
+            if (extent.estimateOnly()) {
+                work++;
+                estimatedEdges += Math.max(Math.abs((long) refinementStart.x() - end.x())
+                        + Math.abs((long) refinementStart.z() - end.z()), Math.abs((long) refinementStart.y() - end.y()));
+                if (refinement == itinerary.size()) {
+                    terminal = new PedestrianRouteResult(PedestrianRouteResult.Status.ESTIMATED, List.of(), work,
+                            regions.size(), "CONNECTED_REGIONAL_ESTIMATE", java.util.Optional.of(
+                            new PedestrianRouteEstimate(start, target, estimatedEdges)));
+                    return terminal;
+                }
+                estimatedEdges++;
+                refinementStart = forwardEdge(refinement++).entrance();
+                continue;
+            }
             if (segmentRefinement == null) {
                 var graph = region(PedestrianRegion.Tile.at(refinementStart));
                 if (terminal != null) return terminal;
@@ -302,7 +317,7 @@ public final class HierarchicalPedestrianSearch {
      * Workers receive a fixed candidate, not a race against other workers' publications. */
     synchronized void prepareReuse() {
         if (terminal != null || itinerary != null || rewind != null) return;
-        if (corridorJoin == null && corridors != null) {
+        if (!extent.estimateOnly() && corridorJoin == null && corridors != null) {
             var candidate = corridors.find(geometry, start, target);
             if (candidate != null && candidate != attemptedCorridor) {
                 attemptedCorridor = candidate;

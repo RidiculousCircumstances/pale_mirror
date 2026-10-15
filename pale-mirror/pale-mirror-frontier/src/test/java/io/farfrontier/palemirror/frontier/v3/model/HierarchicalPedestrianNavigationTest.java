@@ -8,6 +8,47 @@ import java.util.function.Predicate;
 import static org.junit.jupiter.api.Assertions.*;
 
 class HierarchicalPedestrianNavigationTest {
+    @Test void regionalEstimateSkipsCellRefinementAndCannotSatisfyAMovementRequest() {
+        var ground = geometry(new WorldBounds(0, 0, 256, 32), (x, z) -> SurfaceAnchor.at(x, 63, z), s -> false);
+        var start = SurfaceAnchor.at(1, 63, 1); var target = SurfaceAnchor.at(250, 63, 20);
+        PedestrianRouteResult estimate;
+        try (var planner = new CooperativePedestrianPlanner()) {
+            estimate = finishQuery(planner, ground, start, target, PedestrianRouteExtent.ESTIMATE);
+            assertEquals(PedestrianRouteResult.Status.ESTIMATED, estimate.status());
+            assertTrue(estimate.route().isEmpty(), "an itinerary estimate is not a walkable list of cells");
+            assertEquals(start, estimate.estimate().orElseThrow().origin());
+            assertEquals(target, estimate.estimate().orElseThrow().destination());
+            assertTrue(planner.peek(ground, start, target).isEmpty(), "estimate cache cannot answer a full-path query");
+        }
+        try (var planner = new CooperativePedestrianPlanner()) {
+            var full = finishQuery(planner, ground, start, target, PedestrianRouteExtent.COMPLETE);
+            assertEquals(PedestrianRouteResult.Status.FOUND, full.status());
+            KnownPedestrianNavigation.requireRoute(ground, full.route());
+            assertTrue(estimate.workUnits() < full.workUnits(), "same cold graph, without full-route cell refinement");
+        }
+    }
+    @Test void regionalEstimatePreservesBlockedAndUnknownDispositions() {
+        var start = SurfaceAnchor.at(1, 63, 1); var target = SurfaceAnchor.at(62, 63, 1);
+        var bounds = new WorldBounds(0, 0, 64, 16);
+        var blocked = geometry(bounds, (x, z) -> SurfaceAnchor.at(x, 63, z), s -> s.x() == 32);
+        var unknown = geometry(bounds, (x, z) -> x == 32 ? null : SurfaceAnchor.at(x, 63, z), s -> false);
+        try (var planner = new CooperativePedestrianPlanner()) {
+            assertEquals(PedestrianRouteResult.Status.NO_PATH,
+                    finishQuery(planner, blocked, start, target, PedestrianRouteExtent.ESTIMATE).status());
+            assertEquals(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY,
+                    finishQuery(planner, unknown, start, target, PedestrianRouteExtent.ESTIMATE).status());
+        }
+    }
+    private static PedestrianRouteResult finishQuery(CooperativePedestrianPlanner planner, PedestrianRouteGeometry ground,
+            SurfaceAnchor start, SurfaceAnchor target, PedestrianRouteExtent extent) {
+        var result = planner.query(ground, start, target, extent);
+        for (int turn = 0; turn < 1000 && result.status() == PedestrianRouteResult.Status.PLANNING; turn++) {
+            planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            result = planner.query(ground, start, target, extent);
+        }
+        assertNotEquals(PedestrianRouteResult.Status.PLANNING, result.status());
+        return result;
+    }
     @Test void isolatedGoalAcrossRegionBoundariesIsProvedWithoutFloodingTheLargeSourceComponent() {
         var start = SurfaceAnchor.at(1, 63, 1); var goal = SurfaceAnchor.at(32, 63, 16);
         var closed = geometry(new WorldBounds(0, 0, 1024, 1024), (x, z) -> SurfaceAnchor.at(x, 63, z),

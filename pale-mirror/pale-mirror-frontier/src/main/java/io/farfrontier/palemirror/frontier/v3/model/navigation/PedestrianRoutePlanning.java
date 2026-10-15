@@ -35,7 +35,8 @@ public final class PedestrianRoutePlanning {
             var result = peek(geometry, start, target, extent).orElseGet(() -> new PedestrianRouteResult(
                     PedestrianRouteResult.Status.PLANNING, java.util.List.of(), 0L, 0, "PLANNING_NOT_REQUESTED"));
             if (result.status() != PedestrianRouteResult.Status.FOUND && result.status() != PedestrianRouteResult.Status.SEGMENT_READY
-                    && result.status() != PedestrianRouteResult.Status.NO_PATH)
+                    && result.status() != PedestrianRouteResult.Status.NO_PATH
+                    && result.status() != PedestrianRouteResult.Status.ESTIMATED)
                 probe.unresolved = true;
             return result;
         }

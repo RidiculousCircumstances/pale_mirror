@@ -6,9 +6,9 @@ import java.util.Objects;
 
 /** Search readiness is not arrival. Resource/permit/activity outcomes belong to their owners. */
 public record PedestrianRouteResult(Status status, List<SurfaceAnchor> route, long workUnits,
-                                    int regions, String reason) {
+                                    int regions, String reason, java.util.Optional<PedestrianRouteEstimate> estimate) {
     public enum Status {
-        PLANNING(1), FOUND(2), NO_PATH(3), UNKNOWN_GEOMETRY(4), SAFETY_LIMIT(5), SEGMENT_READY(6);
+        PLANNING(1), FOUND(2), NO_PATH(3), UNKNOWN_GEOMETRY(4), SAFETY_LIMIT(5), SEGMENT_READY(6), ESTIMATED(7);
         private final int wireTag;
         Status(int wireTag) { this.wireTag = wireTag; }
         public int wireTag() { return wireTag; }
@@ -18,9 +18,14 @@ public record PedestrianRouteResult(Status status, List<SurfaceAnchor> route, lo
         }
     }
     public PedestrianRouteResult {
-        Objects.requireNonNull(status); Objects.requireNonNull(reason);
+        Objects.requireNonNull(status); Objects.requireNonNull(reason); Objects.requireNonNull(estimate);
         route = List.copyOf(route);
         if (workUnits < 0 || regions < 0 || (status == Status.FOUND || status == Status.SEGMENT_READY) != !route.isEmpty())
             throw new IllegalArgumentException("route result has inconsistent readiness/evidence");
+        if ((status == Status.ESTIMATED) != estimate.isPresent())
+            throw new IllegalArgumentException("regional estimate has inconsistent evidence");
+    }
+    public PedestrianRouteResult(Status status, List<SurfaceAnchor> route, long workUnits, int regions, String reason) {
+        this(status, route, workUnits, regions, reason, java.util.Optional.empty());
     }
 }

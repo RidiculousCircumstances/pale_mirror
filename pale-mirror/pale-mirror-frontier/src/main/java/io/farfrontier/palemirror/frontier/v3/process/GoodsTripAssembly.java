@@ -97,7 +97,13 @@ final class GoodsTripAssembly {
             var event = new TransportMissionStarted(seller.party().id(), seller.party().kind(), mission, group, shipments);
             TransportMissionProcess.admit(state, mission.id(), event, now);
             return Optional.of(event);
-        } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }
+        } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+            // Incomplete evidence must keep the selected candidate pending, not
+            // launch the next crew/animal/quote as if this one were infeasible.
+            if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
+                throw unavailable;
+            return Optional.empty();
+        }
     }
     static List<ProposedEvent> events(TransportMissionStarted declaration, long now) {
         var events = new ArrayList<ProposedEvent>();

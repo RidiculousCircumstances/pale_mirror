@@ -11,6 +11,76 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ConsolidatedGoodsTradeTest {
+    @Test void selectedTripPendingProvisionRouteDoesNotFanOutIntoOtherCrewsOrQuotes() throws Exception {
+        var state = initial(); var home = new SubjectId("settlement:1");
+        var buyer = state.companies().goodsTrade().participants().participants().get(home).known().getFirst().party().id();
+        var before = review(state, home, 400);
+        // Establish the real selected mission endpoints, then control only the
+        // readiness of its outward provisioning query. No accepted outcome is fabricated.
+        var ready = review(before, buyer, 401);
+        var mission = ready.shipments().missions().values().iterator().next();
+        var proof = mission.supplies().orElseThrow().journey();
+        var origin = proof.outward().surfaces().getFirst();
+        var destination = proof.outward().surfaces().getLast();
+        var pending = new java.util.concurrent.atomic.AtomicInteger();
+        var planner = new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanner() {
+            public io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult query(
+                    io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry geometry,
+                    SurfaceAnchor start, SurfaceAnchor target) {
+                return query(geometry, start, target, io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteExtent.COMPLETE);
+            }
+            public io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult query(
+                    io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry geometry,
+                    SurfaceAnchor start, SurfaceAnchor target,
+                    io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteExtent extent) {
+                if (!extent.estimateOnly() && start.equals(origin) && target.equals(destination)) {
+                    pending.incrementAndGet();
+                    return new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(
+                            io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
+                            List.of(), 0, 0, "SELECTED_TRIP_TEST_PENDING");
+                }
+                return extent.limit(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.calculate(geometry, start, target));
+            }
+        };
+        try (var ignored = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind(planner)) {
+            var result = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.observe(() -> review(before, buyer, 401));
+            assertEquals(1, pending.get(), "incomplete provision proof must suspend this selected preparation");
+            assertFalse(result.requests().isEmpty());
+            assertEquals(before.inventory(), result.result().inventory());
+            assertEquals(before.actorExecutions(), result.result().actorExecutions());
+            assertTrue(result.result().shipments().missions().isEmpty());
+            assertTrue(result.result().companies().goodsTrade().contracts().isEmpty());
+        }
+    }
+    @Test void quoteComparisonRequestsOnlyRegionalEstimatesAndCannotReserveOrAssignACrew() throws Exception {
+        var state = initial(); var home = new SubjectId("settlement:1");
+        var buyer = state.companies().goodsTrade().participants().participants().get(home).known().getFirst().party().id();
+        state = review(state, home, 400); var before = state;
+        var queries = new java.util.concurrent.atomic.AtomicInteger();
+        var planner = new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanner() {
+            public io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult query(
+                    io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry geometry,
+                    SurfaceAnchor start, SurfaceAnchor target) { throw new AssertionError("economic comparison requested full path"); }
+            public io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult query(
+                    io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry geometry,
+                    SurfaceAnchor start, SurfaceAnchor target,
+                    io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteExtent extent) {
+                assertTrue(extent.estimateOnly()); queries.incrementAndGet();
+                return new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(
+                        io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
+                        List.of(), 0, 0, "REGIONAL_TEST_PENDING");
+            }
+        };
+        try (var ignored = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind(planner)) {
+            var result = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.observe(() -> review(before, buyer, 401));
+            assertTrue(queries.get() > 0); assertFalse(result.requests().isEmpty());
+            assertTrue(result.requests().stream().allMatch(request -> request.extent().estimateOnly()));
+            assertEquals(before.inventory(), result.result().inventory());
+            assertEquals(before.actorExecutions(), result.result().actorExecutions());
+            assertTrue(result.result().shipments().missions().isEmpty());
+            assertTrue(result.result().companies().goodsTrade().contracts().isEmpty());
+        }
+    }
     @Test void walkingGroupHandCustodyUsesItsExactGroupAuthorityAndRejectsForeignOrRepeatedEvidence() {
         var state = initial();
         var home = new SubjectId("settlement:1");

@@ -127,6 +127,19 @@ public final class KnownPedestrianNavigation {
         return result.route();
     }
 
+    /** Regional connectivity for alternative ranking. Never exposes cells to a movement executor. */
+    public static PedestrianRouteEstimate estimateBetween(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
+        var result = PedestrianRoutePlanning.query(geometry, start, target, PedestrianRouteExtent.ESTIMATE);
+        if (result.status() == PedestrianRouteResult.Status.PLANNING)
+            PedestrianRoutePlanning.await(PedestrianRouteRequest.of(geometry, start, target, PedestrianRouteExtent.ESTIMATE));
+        if (result.status() != PedestrianRouteResult.Status.ESTIMATED)
+            throw new RouteUnavailable(result.status(), result.reason());
+        var estimate = result.estimate().orElseThrow();
+        if (!estimate.origin().equals(start) || !estimate.destination().equals(target))
+            throw new IllegalArgumentException("planner returned an estimate with foreign endpoints");
+        return estimate;
+    }
+
     /** Calculation result only. An alternatives owner decides which unresolved requests actually block its result. */
     public static PedestrianRouteResult queryBetween(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
         if (!geometry.clearanceKnown(start) || !geometry.clearanceKnown(target))
