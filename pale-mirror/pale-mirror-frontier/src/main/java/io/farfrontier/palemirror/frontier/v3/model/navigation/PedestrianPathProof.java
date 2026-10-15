@@ -8,7 +8,7 @@ public record PedestrianPathProof(SurfaceAnchor origin, List<Run> runs) {
     public static final int MAX_EDGES = 65_534;
     public record Run(int dx, int dy, int dz, int edges) {
         public Run {
-            if (Math.abs((long) dx) + Math.abs((long) dz) != 1 || Math.abs((long) dy) > 1
+            if (!PedestrianEdge.boundedDelta(dx, dy, dz)
                     || edges < 1 || edges > MAX_EDGES)
                 throw new IllegalArgumentException("itinerary run needs bounded pedestrian edges");
         }

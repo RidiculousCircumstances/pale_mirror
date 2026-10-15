@@ -59,6 +59,7 @@ public final class DiagnosticProducerContract {
         "frontier.container_player_edit_observed", "frontier.resource_storage_adopted", "frontier.resource_storage_declared", "frontier.resource_storage_policy_changed",
         "frontier.shipment_storage_retargeted", "frontier.ground_resource_destroyed", "frontier.ground_resource_player_withdrawal",
         "frontier.pedestrian_planning_ready",
+        "frontier.navigation_geometry_observed",
         "frontier.settlement_work_policy_changed",
         "frontier.goods_order_placed", "frontier.goods_trade_reserved", "frontier.goods_trade_accepted", "frontier.goods_trade_cancelled", "frontier.goods_participant_reviewed",
         "frontier.goods_order_withdrawn", "frontier.goods_participant_prices_reviewed", "frontier.goods_trade_collected",

@@ -32,6 +32,8 @@ public final class BoundedPedestrianApproach {
         default boolean excluded(SurfaceAnchor surface) { return false; }
         default boolean clearanceKnown(SurfaceAnchor surface) { return true; }
         default boolean blockKnown(BlockPosition position) { return true; }
+        default java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell> collisionAt(BlockPosition position) { return java.util.Optional.empty(); }
+        default boolean detailedCollisionAt(int x, int z) { return false; }
     }
 
     /** An ordinary bounded-search miss, not malformed geometry or an invalid call. */
@@ -50,6 +52,8 @@ public final class BoundedPedestrianApproach {
             @Override public List<SurfaceAnchor> surfacesAt(int x, int z) { return source.surfacesAt(x, z); }
             @Override public boolean clearanceKnown(SurfaceAnchor surface) { return source.clearanceKnown(surface); }
             @Override public boolean blockKnown(BlockPosition position) { return source.blockKnown(position); }
+            @Override public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell> collisionAt(BlockPosition position) { return source.collisionAt(position); }
+            @Override public boolean detailedCollisionAt(int x, int z) { return source.detailedCollisionAt(x, z); }
             @Override public boolean excluded(SurfaceAnchor surface) {
                 return excluded.contains(surface.support()) || source.excluded(surface);
             }

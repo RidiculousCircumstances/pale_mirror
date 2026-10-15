@@ -167,6 +167,7 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("shipments", new ShipmentProcessModule()),
             Map.entry("unit-groups", new UnitGroupProcessModule()),
             Map.entry("pedestrian-planning", new PedestrianPlanningProcessModule()),
+            Map.entry("navigation-geometry", new NavigationGeometryProcessModule()),
             Map.entry("transport-missions", new TransportMissionProcessModule()),
             Map.entry("unit-inventory", new UnitInventoryProcessModule()),
             Map.entry("expedition-supplies", new ExpeditionSupplyProcessModule()),
@@ -437,7 +438,7 @@ public final class FrontierWorldProcessCatalog {
                 ProductionStationProcessModule.DESCRIPTOR, GoodsTradeProcessModule.DESCRIPTOR, ShipmentProcessModule.DESCRIPTOR, UnitGroupProcessModule.DESCRIPTOR, ExtractionWorkProcessModule.DESCRIPTOR,
                 DefenderEquipmentReturnVisitProcessModule.DESCRIPTOR,
                 TransportMissionProcessModule.DESCRIPTOR, UnitInventoryProcessModule.DESCRIPTOR, ExpeditionSupplyProcessModule.DESCRIPTOR,
-                PedestrianPlanningProcessModule.DESCRIPTOR);
+                PedestrianPlanningProcessModule.DESCRIPTOR, NavigationGeometryProcessModule.DESCRIPTOR);
     }
 
     public static Set<String> allWorldPayloadTypes() { return ALL_WORLD; }

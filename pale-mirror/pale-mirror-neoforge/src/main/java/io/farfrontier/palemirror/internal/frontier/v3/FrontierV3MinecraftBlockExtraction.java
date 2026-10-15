@@ -97,9 +97,8 @@ final class FrontierV3MinecraftBlockExtraction implements BlockExtractionPort {
     }
 
     static BlockExtraction.Block describe(BlockState state) {
-        Map<String, String> properties = new TreeMap<>();
-        state.getProperties().forEach(property -> properties.put(property.getName(), propertyName(state, property)));
-        return new BlockExtraction.Block(BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString(), properties);
+        var descriptor = FrontierV3BlockStates.describe(state);
+        return new BlockExtraction.Block(descriptor.kind(), descriptor.properties());
     }
 
     private static void requireStateless(BlockState source, BlockState successor) {
@@ -108,27 +107,8 @@ final class FrontierV3MinecraftBlockExtraction implements BlockExtractionPort {
     }
 
     static BlockState block(BlockExtraction.Block descriptor) {
-        var id = ResourceLocation.parse(descriptor.kind());
-        if (!BuiltInRegistries.BLOCK.containsKey(id)) throw new IllegalArgumentException("unknown extraction block");
-        BlockState state = BuiltInRegistries.BLOCK.get(id).defaultBlockState();
-        for (var entry : descriptor.properties().entrySet()) {
-            var property = state.getBlock().getStateDefinition().getProperty(entry.getKey());
-            if (property == null) throw new IllegalArgumentException("unknown extraction block property");
-            state = setProperty(state, property, entry.getValue());
-        }
-        if (!describe(state).equals(descriptor)) throw new IllegalArgumentException("incomplete extraction block declaration");
-        return state;
-    }
-
-    private static <T extends Comparable<T>> BlockState setProperty(BlockState state,
-            net.minecraft.world.level.block.state.properties.Property<T> property, String value) {
-        return state.setValue(property, property.getValue(value).orElseThrow(
-                () -> new IllegalArgumentException("invalid extraction block property value")));
-    }
-
-    private static <T extends Comparable<T>> String propertyName(BlockState state,
-            net.minecraft.world.level.block.state.properties.Property<T> property) {
-        return property.getName(state.getValue(property));
+        return FrontierV3BlockStates.resolve(new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBlockState(
+                descriptor.kind(), descriptor.properties()));
     }
 
     private static byte[] digest(String operationId) {

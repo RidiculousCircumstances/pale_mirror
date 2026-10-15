@@ -4,9 +4,9 @@ import java.io.*;
 
 /** Sole header grammar for early installed-world selection and complete aggregate hydration. */
 final class FrontierStateSchema {
-    // Whole-trip estimates use compact exact runs, independently of timed movement-leg bounds.
-    // Previous disposable snapshots/WAL cannot inherit the new path-proof grammar.
-    static final int VERSION = 287;
+    // Retained collision observations and native state-shape definitions. Fractional
+    // contacts do not change semantic support identity; old disposable worlds are rejected.
+    static final int VERSION = 288;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

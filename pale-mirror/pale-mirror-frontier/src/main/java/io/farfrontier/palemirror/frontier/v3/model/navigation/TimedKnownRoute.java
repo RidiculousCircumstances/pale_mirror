@@ -23,8 +23,7 @@ public record TimedKnownRoute(MovementOrder order, List<SurfaceAnchor> route,
             throw new IllegalArgumentException("timed route needs a bounded legal goal and clock");
         for (int index = 1; index < route.size(); index++) {
             SurfaceAnchor previous = route.get(index - 1), next = route.get(index);
-            int horizontal = Math.abs(next.x() - previous.x()) + Math.abs(next.z() - previous.z());
-            if (horizontal != 1 || Math.abs(next.y() - previous.y()) > 1)
+            if (!PedestrianEdge.adjacent(previous, next))
                 throw new IllegalArgumentException("timed route contains a nonadjacent pedestrian edge");
         }
         Math.addExact(departedAtTick, Math.multiplyExact(ticksPerEdge, route.size() - 1L));

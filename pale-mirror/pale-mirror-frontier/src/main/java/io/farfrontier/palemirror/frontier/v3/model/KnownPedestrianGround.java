@@ -19,8 +19,8 @@ public final class KnownPedestrianGround {
 
     public static BoundedPedestrianApproach.SurveyedSurface forSettlement(FrontierWorldState state,
                                                                        SubjectId settlementId) {
-        return restricted(state, layered(state.bootstrap(), roads(state.bootstrap(), state.routeTopology()),
-                local(state.bootstrap(), settlementId), KnownSiteGeometry.forState(state)));
+        return restricted(state, RetainedNavigationGeometry.overlay(layered(state.bootstrap(), roads(state.bootstrap(), state.routeTopology()),
+                local(state.bootstrap(), settlementId), KnownSiteGeometry.forState(state)), state.navigationGeometry(), KnownSiteGeometry.forState(state).retainedBlocks()));
     }
 
     /** Immutable admission/hydration datum, using the same authored-ground policy. */
@@ -30,22 +30,21 @@ public final class KnownPedestrianGround {
 
     /** Cross-settlement movement uses all authored local floors, not one origin's datum. */
     public static BoundedPedestrianApproach.SurveyedSurface forFrontier(FrontierWorldState state) {
-        return restricted(state, layered(state.bootstrap(), roads(state.bootstrap(), state.routeTopology()),
-                frontierLocal(state.bootstrap()), KnownSiteGeometry.forState(state)));
+        return restricted(state, RetainedNavigationGeometry.overlay(layered(state.bootstrap(), roads(state.bootstrap(), state.routeTopology()),
+                frontierLocal(state.bootstrap()), KnownSiteGeometry.forState(state)), state.navigationGeometry(), KnownSiteGeometry.forState(state).retainedBlocks()));
     }
 
     private static BoundedPedestrianApproach.SurveyedSurface restricted(FrontierWorldState state,
             BoundedPedestrianApproach.SurveyedSurface source) {
-        var missing = KnownSiteGeometry.forState(state).unknown();
-        var unknown = UNKNOWN.get(java.util.List.of(state.physicalDeltas(), missing), () -> {
-            var unavailable = new java.util.HashSet<>(state.physicalDeltas().keySet()); unavailable.addAll(missing);
-            return io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockSet.copyOf(unavailable);
-        });
+        var unknown = UNKNOWN.get(java.util.List.of(state.physicalDeltas()), () ->
+                io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockSet.copyOf(state.physicalDeltas().keySet()));
         return new BoundedPedestrianApproach.SurveyedSurface() {
             @Override public SurfaceAnchor at(int x, int z) { return source.at(x, z); }
             @Override public java.util.List<SurfaceAnchor> surfacesAt(int x, int z) { return source.surfacesAt(x, z); }
             @Override public boolean excluded(SurfaceAnchor surface) { return source.excluded(surface); }
             @Override public boolean blockKnown(BlockPosition position) { return !unknown.contains(position) && source.blockKnown(position); }
+            @Override public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell> collisionAt(BlockPosition position) { return source.collisionAt(position); }
+            @Override public boolean detailedCollisionAt(int x, int z) { return source.detailedCollisionAt(x, z); }
             @Override public boolean clearanceKnown(SurfaceAnchor surface) {
                 for (int y = 0; y <= 2; y++) if (!blockKnown(surface.support().offset(0, y, 0))) return false;
                 return source.clearanceKnown(surface);
@@ -66,6 +65,7 @@ public final class KnownPedestrianGround {
         var siteIndex = io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalSurfaceMap.copyOf(sites.supports());
         return new BoundedPedestrianApproach.SurveyedSurface() {
             @Override public boolean excluded(SurfaceAnchor surface) { return sites.withdrawnSupports().contains(surface.support()); }
+            @Override public boolean blockKnown(BlockPosition position) { return !sites.unknown().contains(position); }
             @Override public SurfaceAnchor at(int x, int z) {
                 var levels = surfacesAt(x, z); return levels.isEmpty() ? null : levels.getLast();
             }

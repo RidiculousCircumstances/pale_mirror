@@ -12,7 +12,11 @@ final class KnownSiteGeometry {
         View project(FrontierWorldState state);
     }
     record View(Map<TerrainColumn, List<SurfaceAnchor>> supports, Set<BlockPosition> obstacles,
-                Set<BlockPosition> withdrawnSupports, Set<BlockPosition> unknown) {
+                Set<BlockPosition> withdrawnSupports, Set<BlockPosition> unknown,
+                Map<BlockPosition, NavigationBlockState> retainedBlocks) {
+        View(Map<TerrainColumn, List<SurfaceAnchor>> supports, Set<BlockPosition> obstacles, Set<BlockPosition> withdrawnSupports, Set<BlockPosition> unknown) {
+            this(supports, obstacles, withdrawnSupports, unknown, Map.of());
+        }
         View(Map<TerrainColumn, List<SurfaceAnchor>> supports, Set<BlockPosition> obstacles, Set<BlockPosition> withdrawnSupports) {
             this(supports, obstacles, withdrawnSupports, Set.of());
         }
@@ -20,6 +24,7 @@ final class KnownSiteGeometry {
             supports = RegionalSurfaceMap.copyOf(supports); obstacles = RegionalBlockSet.copyOf(obstacles);
             withdrawnSupports = RegionalBlockSet.copyOf(withdrawnSupports);
             unknown = RegionalBlockSet.copyOf(unknown);
+            retainedBlocks = RegionalBlockMap.copyOf(retainedBlocks);
         }
     }
     private static final List<Provider> PROVIDERS = List.of(new ExtractionKnownGeometry());
@@ -31,6 +36,7 @@ final class KnownSiteGeometry {
     private static FrontierBootstrap cachedBootstrap;
     private static List<Object> cachedVersions = List.of();
     private static View cachedView;
+    private static RegionalBlockMapContributions<Owner, NavigationBlockState> blockParts = new RegionalBlockMapContributions<>();
     private static RegionalSurfaceContributions<Owner> surfaceParts = new RegionalSurfaceContributions<>(true);
     private static RegionalBlockContributions<Owner> obstacleParts = new RegionalBlockContributions<>();
     private static RegionalBlockContributions<Owner> withdrawnParts = new RegionalBlockContributions<>();
@@ -45,6 +51,7 @@ final class KnownSiteGeometry {
             surfaceParts = new RegionalSurfaceContributions<>(true); obstacleParts = new RegionalBlockContributions<>();
             withdrawnParts = new RegionalBlockContributions<>();
             unknownParts = new RegionalBlockContributions<>();
+            blockParts = new RegionalBlockMapContributions<>();
         }
         for (int i = 0; i < PROVIDERS.size(); i++) {
             var provider = PROVIDERS.get(i);
@@ -54,13 +61,15 @@ final class KnownSiteGeometry {
             obstacleParts.replace(provider.owner(), RegionalBlockSet.copyOf(contribution.obstacles()));
             withdrawnParts.replace(provider.owner(), RegionalBlockSet.copyOf(contribution.withdrawnSupports()));
             unknownParts.replace(provider.owner(), RegionalBlockSet.copyOf(contribution.unknown()));
+            blockParts.replace(provider.owner(), RegionalBlockMap.copyOf(contribution.retainedBlocks()));
         }
         // Retain each independent immutable component. A changed obstacle must not make
         // every unchanged road/support column look like a new ground declaration.
-        if (cachedBootstrap != state.bootstrap() || cachedView == null || cachedView.supports() != surfaceParts.snapshot()
+        var blocks = blockParts.snapshot();
+        if (cachedBootstrap != state.bootstrap() || cachedView == null || cachedView.retainedBlocks() != blocks || cachedView.supports() != surfaceParts.snapshot()
                 || cachedView.obstacles() != obstacleParts.snapshot() || cachedView.withdrawnSupports() != withdrawnParts.snapshot()
                 || cachedView.unknown() != unknownParts.snapshot())
-            cachedView = new View(surfaceParts.snapshot(), obstacleParts.snapshot(), withdrawnParts.snapshot(), unknownParts.snapshot());
+            cachedView = new View(surfaceParts.snapshot(), obstacleParts.snapshot(), withdrawnParts.snapshot(), unknownParts.snapshot(), blocks);
         cachedBootstrap = state.bootstrap(); cachedVersions = versions;
         return cachedView;
     }

@@ -56,7 +56,8 @@ public final class FrontierWorldStateUpdate {
         UNIT_GROUPS,
         TRANSPORT_FLEET,
         EXTRACTION_SITES,
-        PRODUCTION_STATIONS
+        PRODUCTION_STATIONS,
+        NAVIGATION_GEOMETRY
     }
 
     private final EnumSet<Component> changed = EnumSet.noneOf(Component.class);
@@ -91,10 +92,18 @@ public final class FrontierWorldStateUpdate {
     private io.farfrontier.palemirror.frontier.v3.model.expedition.TransportFleet transportFleet;
     private io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState extractionSites;
     private ProductionStations productionStations;
+    private io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryState navigationGeometry;
 
     private FrontierWorldStateUpdate() { }
 
     public static FrontierWorldStateUpdate begin() { return new FrontierWorldStateUpdate(); }
+
+    public FrontierWorldStateUpdate navigationGeometry(io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryState next) {
+        mark(Component.NAVIGATION_GEOMETRY); navigationGeometry = require(next, "navigation geometry"); return this;
+    }
+    io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryState navigationGeometry(FrontierWorldState state) {
+        return changed(Component.NAVIGATION_GEOMETRY, navigationGeometry, state.navigationGeometry());
+    }
 
     public Set<Component> changedComponents() { return Set.copyOf(changed); }
 
@@ -145,6 +154,7 @@ public final class FrontierWorldStateUpdate {
                 case TRANSPORT_FLEET -> transportFleet(contribution.transportFleet);
                 case EXTRACTION_SITES -> extractionSites(contribution.extractionSites);
                 case PRODUCTION_STATIONS -> productionStations(contribution.productionStations);
+                case NAVIGATION_GEOMETRY -> navigationGeometry(contribution.navigationGeometry);
             }
         }
         return this;

@@ -50,7 +50,20 @@ public final class KnownPedestrianNavigation {
             java.util.Optional<PedestrianGeometryRevision> regionalRevision) {
         var hard = io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockSet.copyOf(occupied);
         Objects.requireNonNull(regionalRevision);
+        var collisions = new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCollisionView() {
+            @Override public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell> cell(BlockPosition position) {
+                if (!bootstrap.bounds().contains(position) || !surveyed.blockKnown(position)) return java.util.Optional.empty();
+                var observed = surveyed.collisionAt(position);
+                if (observed.isPresent()) return observed;
+                boolean solid = hard.contains(position) || surveyed.surfacesAt(position.x(), position.z()).stream()
+                        .anyMatch(surface -> surface.support().equals(position));
+                return java.util.Optional.of(solid ? io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.SOLID
+                        : io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.AIR);
+            }
+            @Override public boolean detailedAt(int x, int z) { return surveyed.detailedCollisionAt(x, z); }
+        };
         return new PedestrianRouteGeometry() {
+            @Override public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCollisionView> collisions() { return java.util.Optional.of(collisions); }
             @Override public Object version() { return version; }
             @Override public java.util.Optional<PedestrianGeometryRevision> regionalRevision() { return regionalRevision; }
             @Override public io.farfrontier.palemirror.frontier.v3.model.WorldBounds bounds() { return bootstrap.bounds(); }
@@ -63,12 +76,28 @@ public final class KnownPedestrianNavigation {
                 return surveyed.excluded(surface);
             }
             @Override public boolean clearBody(SurfaceAnchor surface) {
+                if (collisions.detailedAt(surface.x(), surface.z())) return !io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBodyGeometry
+                        .contacts(collisions, surface, UnitNavigationProfile.VILLAGER, .5, .5).isEmpty();
                 return clearanceKnown(surface) && !hard.contains(surface.support().offset(0, 1, 0))
                         && !hard.contains(surface.support().offset(0, 2, 0)) && surfacesAt(surface.x(), surface.z()).stream()
                         .noneMatch(other -> other.y() > surface.y() && other.y() <= surface.y() + 2);
             }
             @Override public boolean supportAvailable(SurfaceAnchor surface) { return !surveyed.excluded(surface); }
-            @Override public boolean clearanceKnown(SurfaceAnchor surface) { return surveyed.clearanceKnown(surface); }
+            @Override public boolean clearanceKnown(SurfaceAnchor surface) {
+                return collisions.detailedAt(surface.x(), surface.z())
+                        ? io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBodyGeometry.known(collisions, surface, UnitNavigationProfile.VILLAGER)
+                        : surveyed.clearanceKnown(surface);
+            }
+            @Override public boolean canTraverse(SurfaceAnchor from, SurfaceAnchor to) {
+                if (!collisions.detailedAt(from.x(), from.z()) && !collisions.detailedAt(to.x(), to.z()))
+                    return PedestrianRouteGeometry.super.canTraverse(from, to);
+                if (Math.abs((long) from.x() - to.x()) + Math.abs((long) from.z() - to.z()) != 1
+                        || !supportAvailable(from) || !supportAvailable(to)) return false;
+                for (var origin : io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBodyGeometry.contacts(collisions, from, UnitNavigationProfile.VILLAGER, .5, .5))
+                    for (var target : io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBodyGeometry.contacts(collisions, to, UnitNavigationProfile.VILLAGER, .5, .5))
+                        if (io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBodyGeometry.traversable(collisions, UnitNavigationProfile.VILLAGER, origin, target)) return true;
+                return false;
+            }
             @Override public boolean blockKnown(BlockPosition position) { return surveyed.blockKnown(position); }
         };
     }
@@ -142,7 +171,7 @@ public final class KnownPedestrianNavigation {
             for (int index = 0; index <= goal; index++) {
                 var candidate = hint.get(index);
                 long distance = Math.abs((long) start.x() - candidate.x()) + Math.abs((long) start.z() - candidate.z());
-                if ((distance == 0 && start.equals(candidate) || distance == 1 && Math.abs((long) start.y() - candidate.y()) <= 1)
+                if ((distance == 0 && start.equals(candidate) || PedestrianEdge.adjacent(start, candidate))
                         && distance < nearest) { join = index; nearest = distance; }
             }
             if (join < 0) continue;

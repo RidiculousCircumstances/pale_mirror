@@ -28,7 +28,11 @@ class PedestrianPathProofCodecTest {
     @Test void malformedOrOversizedRunsCannotBeAcceptedAsConnectedGeometry() {
         var origin = SurfaceAnchor.at(0, 63, 0);
         assertThrows(IllegalArgumentException.class, () -> new PedestrianPathProof.Run(1, 0, 1, 2));
-        assertThrows(IllegalArgumentException.class, () -> new PedestrianPathProof.Run(1, 2, 0, 2));
+        // Serialized anchors name support blocks, not integer feet heights.
+        // Fractional/protruding shapes can connect more distant support Y values;
+        // current profile geometry, not this codec, grants traversal permission.
+        assertEquals(2, new PedestrianPathProof.Run(1, 2, 0, 2).dy());
+        assertThrows(IllegalArgumentException.class, () -> new PedestrianPathProof.Run(1, 7, 0, 2));
         assertThrows(IllegalArgumentException.class, () -> new PedestrianPathProof(origin, List.of(
                 new PedestrianPathProof.Run(1, 0, 0, 40000), new PedestrianPathProof.Run(0, 0, 1, 40000))));
         assertThrows(IllegalArgumentException.class, () -> new PedestrianPathProof(origin, List.of(

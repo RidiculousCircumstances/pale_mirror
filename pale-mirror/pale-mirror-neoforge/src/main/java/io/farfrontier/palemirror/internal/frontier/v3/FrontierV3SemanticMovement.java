@@ -104,7 +104,7 @@ final class FrontierV3SemanticMovement {
         // undo arrival or turn a prepared station effect into a new movement order.
         // Actual displacement still fails exactSupport; real block/fluid changes still
         // fail clearance. Prospective target occupancy remains checked separately below.
-        boolean actualClearance = exactSupport && hasSupport(level, block(expected))
+        boolean actualClearance = exactSupport
                 && level.getFluidState(block(expected).above()).isEmpty()
                 && !level.getBlockCollisions(worker, worker.getBoundingBox()).iterator().hasNext();
         return new SemanticTraversalArrival.Observation(actual, medium(level, worker.blockPosition()),
@@ -118,8 +118,8 @@ final class FrontierV3SemanticMovement {
     }
 
     private static boolean hasSupport(ServerLevel level, BlockPos support) {
-        BlockState state = level.getBlockState(support);
-        return !state.getCollisionShape(level, support).isEmpty() && level.getFluidState(support).isEmpty();
+        return FrontierV3NavigationShapes.capture(level, new BlockPosition(support.getX(), support.getY(), support.getZ()))
+                .filter(cell -> cell.dry() && cell.shape().topAt(.5, .5).isPresent()).isPresent();
     }
 
     /** Uses the exact target body volume, so slabs and carpets are valid only when they really support this body. */
@@ -160,10 +160,12 @@ final class FrontierV3SemanticMovement {
      * lift to the integer cell above the anchor.
      */
     static Vec3 point(ServerLevel level, SurfaceAnchor surface) {
-        BlockPos support = block(surface);
-        VoxelShape shape = level.getBlockState(support).getCollisionShape(level, support);
-        if (shape.isEmpty()) return point(surface);
-        return new Vec3(surface.x() + .5D, support.getY() + shape.max(net.minecraft.core.Direction.Axis.Y), surface.z() + .5D);
+        var cell = FrontierV3NavigationShapes.capture(level, surface.support());
+        var top = cell.isPresent() ? cell.orElseThrow().shape().topAt(.5, .5) : java.util.OptionalDouble.empty();
+        // The nominal point is only a request coordinate; target admission above
+        // rejects missing support. It must never grant an observed arrival.
+        return top.isPresent() ? new Vec3(surface.x() + .5D, surface.y() + top.orElseThrow(), surface.z() + .5D)
+                : point(surface);
     }
 
     private static BlockPos block(SurfaceAnchor surface) { return new BlockPos(surface.x(), surface.y(), surface.z()); }

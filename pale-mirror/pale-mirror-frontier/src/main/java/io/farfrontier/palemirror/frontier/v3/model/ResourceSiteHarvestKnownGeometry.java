@@ -28,6 +28,8 @@ public final class ResourceSiteHarvestKnownGeometry {
             @Override public boolean excluded(SurfaceAnchor surface) { return ground.excluded(surface); }
             @Override public boolean clearanceKnown(SurfaceAnchor surface) { return ground.clearanceKnown(surface); }
             @Override public boolean blockKnown(BlockPosition position) { return ground.blockKnown(position); }
+            @Override public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell> collisionAt(BlockPosition position) { return ground.collisionAt(position); }
+            @Override public boolean detailedCollisionAt(int x, int z) { return ground.detailedCollisionAt(x, z); }
             @Override public SurfaceAnchor at(int x, int z) {
                 var known = field.get(column(x, z)); return known != null ? known : ground.at(x, z);
             }

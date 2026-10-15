@@ -46,8 +46,10 @@ final class FrontierV3ManagedBlockWrites {
             throw new IllegalArgumentException("unbounded planned native write window");
         for (var owner : OWNERS) owner.preparePlannedWrites(level, runtime, writes);
     }
-    static void observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    static boolean observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             BlockPos position, BlockState replacement, boolean committed) {
+        if (!FrontierV3NavigationObservation.blockWrite(level, runtime, position, replacement, committed)) return false;
         for (var owner : OWNERS) owner.observe(level, runtime, position, replacement, committed);
+        return true;
     }
 }

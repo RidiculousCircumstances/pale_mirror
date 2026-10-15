@@ -23,6 +23,36 @@ final class KnownPedestrianGeometryScopes {
     private static final Map<Object, Scope> SCOPES = new LinkedHashMap<>();
     private KnownPedestrianGeometryScopes() { }
 
+    private static io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockMap<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBlockState>
+            priorShapeSources = io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockMap.copyOf(Map.of());
+    static synchronized void observeShapes(io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryState prior,
+            io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryState current,
+            Map<BlockPosition, io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBlockState> sourceBlocks) {
+        var cells = io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockMap.copyOf(current.cells());
+        var previous = io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockMap.copyOf(
+                prior == null ? java.util.Map.<BlockPosition, java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell>>of() : prior.cells());
+        var positions = new HashSet<BlockPosition>();
+        var sources = io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockMap.copyOf(sourceBlocks);
+        for (var region : sources.changesFrom(priorShapeSources)) {
+            positions.addAll(sources.in(region).keySet()); positions.addAll(priorShapeSources.in(region).keySet());
+        }
+        priorShapeSources = sources;
+        if (prior == null || !current.definitions().equals(prior.definitions()))
+            sourceBlocks.forEach((position, block) -> {
+                if (prior == null || !Objects.equals(current.definitions().get(block), prior.definitions().get(block))) positions.add(position);
+            });
+        for (var region : cells.changesFrom(previous)) {
+            positions.addAll(cells.in(region).keySet()); positions.addAll(previous.in(region).keySet());
+        }
+        var regions = new HashSet<PedestrianGeometryRevision.Region>();
+        for (var position : positions) {
+            // Shapes may protrude into the neighbouring cell and depend on neighbouring states.
+            for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++)
+                regions.add(PedestrianGeometryRevision.Region.at(position.offset(dx, 0, dz)));
+        }
+        ground = ground.changed(regions);
+    }
+
     static synchronized void refresh(Object currentBootstrap, Set<BlockPosition> obstacleInput,
                                     Map<TerrainColumn, List<SurfaceAnchor>> supportInput) {
         refresh(currentBootstrap, obstacleInput, supportInput, Set.of(), Set.of(), Set.of());

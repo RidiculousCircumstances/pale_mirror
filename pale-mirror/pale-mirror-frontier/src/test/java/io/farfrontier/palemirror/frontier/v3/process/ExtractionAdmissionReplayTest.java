@@ -66,8 +66,10 @@ class ExtractionAdmissionReplayTest {
 
     private record Fixture(FrontierWorldState state, long tick, ExtractionWorkStarted start) { }
     private static Fixture fixture() {
+        // Use the current complete terrain declaration. Historical r1 has no
+        // surrounding geology/air facts and no longer proves a known approach.
         var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:extraction-admission-proof"),
-                20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r1"));
+                20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r13"));
         var engine = FrontierEngines.createCanonicalStateAccess(configuration);
         for (int turn = 0; turn < 500; turn++) {
             var state = engine.canonicalState().state();
@@ -85,7 +87,7 @@ class ExtractionAdmissionReplayTest {
             var result = engine.advanceTo(new SimInstant(tick), new WorkBudget(128, 1024));
             assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
         }
-        throw new AssertionError("actual runtime never offered extraction work");
+        throw new AssertionError("actual runtime never offered extraction work; tick=" + engine.checkpoint().instant());
     }
     @Test void selectedAdmissionReplaysWithoutAnyPlannerAndRejectsDuplicateMissingAndChangedProof() throws Exception {
         var f = fixture(); var event = f.start(); var job = event.work();

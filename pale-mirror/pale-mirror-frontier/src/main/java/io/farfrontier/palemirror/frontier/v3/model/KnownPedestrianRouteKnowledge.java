@@ -25,6 +25,7 @@ public final class KnownPedestrianRouteKnowledge {
     private static KnownPedestrianObstacleIndex obstacleIndex = new KnownPedestrianObstacleIndex();
     private record ViewKey(SubjectId settlementId, List<Passage> passages) { }
     private static Object viewBootstrap, viewOrgans, viewDeltas, viewTopology, viewSites, viewStorageGeometry, viewDepartureSupports;
+    private static io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryState viewNavigation;
     private enum FrontierViewKey { FRONTIER }
     private record FieldScope(SubjectId site, ShipmentEndpoint storage) { }
     private record RefinedScope(Object view, SurfaceAnchor departure) { }
@@ -200,7 +201,8 @@ public final class KnownPedestrianRouteKnowledge {
         var departures = KnownStorageGeometry.fixedSupports(state);
         if (viewBootstrap != state.bootstrap() || viewOrgans != state.hiveColony().addedOrgans()
                 || viewDeltas != state.physicalDeltas() || viewTopology != state.routeTopology()
-                || viewSites != sites || viewStorageGeometry != storage || viewDepartureSupports != departures) {
+                || viewSites != sites || viewStorageGeometry != storage || viewDepartureSupports != departures
+                || viewNavigation != state.navigationGeometry()) {
             if (viewBootstrap != state.bootstrap()) {
                 obstacleIndex = new KnownPedestrianObstacleIndex(); groundSupports = new RegionalSurfaceContributions<>();
             }
@@ -223,6 +225,8 @@ public final class KnownPedestrianRouteKnowledge {
             var supports = groundSupports.replace(GroundSource.SITES, RegionalSurfaceMap.copyOf(sites.supports()));
             KnownPedestrianGeometryScopes.refresh(state.bootstrap(), obstacleIndex.groundChanges(), supports,
                     sites.withdrawnSupports(), sites.unknown(), state.physicalDeltas().keySet());
+            KnownPedestrianGeometryScopes.observeShapes(viewNavigation, state.navigationGeometry(), sites.retainedBlocks());
+            viewNavigation = state.navigationGeometry();
             JOURNEYS.clear();
             frontierView = null;
             viewBootstrap = state.bootstrap(); viewOrgans = state.hiveColony().addedOrgans();
@@ -409,6 +413,7 @@ public final class KnownPedestrianRouteKnowledge {
             @Override public boolean clearBody(SurfaceAnchor surface) { return terrainGeometry.clearBody(surface); }
             @Override public boolean clearanceKnown(SurfaceAnchor surface) { return terrainGeometry.clearanceKnown(surface); }
             @Override public boolean blockKnown(BlockPosition position) { return terrainGeometry.blockKnown(position); }
+            @Override public java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCollisionView> collisions() { return terrainGeometry.collisions(); }
             @Override public boolean supportAvailable(SurfaceAnchor surface) {
                 return raisedContact && surface.equals(start) || terrainGeometry.supportAvailable(surface);
             }

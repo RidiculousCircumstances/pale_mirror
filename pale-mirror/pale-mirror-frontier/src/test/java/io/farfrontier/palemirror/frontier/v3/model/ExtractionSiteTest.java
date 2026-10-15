@@ -11,10 +11,13 @@ import static org.junit.jupiter.api.Assertions.*;
 class ExtractionSiteTest {
     @Test void separateCouriersDeliverMiningStockAndWithdrawnMandatesDrainTheirExactCargo() {
         var configuration = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.configuration(
-                new WorldId("frontier:quarry-work-kernel"), 20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r3"));
+                new WorldId("frontier:quarry-work-kernel"), 20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r13"));
         var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(configuration);
         var initial = engine.canonicalState().state();
         var site = initial.extractionSites().deposits().values().stream().sorted(Comparator.comparing(value -> value.site().id())).findFirst().orElseThrow().site();
+        var storage = initial.inventory().containers().get(site.containerId()).storage().orElseThrow().endpoint();
+        assertFalse(ResourceStorageNavigation.plannedPath(initial, site.layout().entrance(), storage).isEmpty(),
+                "the operational fixture needs a known tool approach before advancing the whole world");
         boolean deliveredHome = false;
         io.farfrontier.palemirror.frontier.v3.api.SubjectId firstJob = null, firstTool = null;
         boolean recoveredDelivery = false;
@@ -99,13 +102,14 @@ class ExtractionSiteTest {
     }
     @Test void sixExteriorDepositsKeepTheirFiniteHistoryAndStarterToolsThroughRecovery() {
         var bootstrap = FrontierBootstrapper.create(new WorldId("frontier:quarry-test"), 20260918065L,
-                FrontierRulesets.installed("frontier-v3-quarry-graybox-r1"));
+                FrontierRulesets.installed("frontier-v3-quarry-graybox-r13"));
         var state = FrontierWorldState.initial(bootstrap);
         assertEquals(6, state.extractionSites().deposits().size());
         var deposit = state.extractionSites().deposits().values().stream()
                 .sorted(Comparator.comparing(value -> value.site().id())).findFirst().orElseThrow();
-        assertEquals(256, deposit.cells().size());
-        assertEquals(8, deposit.available(Set.of()).size());
+        int cellsPerSite = bootstrap.ruleset().extraction().width() * bootstrap.ruleset().extraction().depth() * 2;
+        assertEquals(cellsPerSite, deposit.cells().size());
+        assertEquals(bootstrap.ruleset().extraction().width(), deposit.available(Set.of()).size());
         assertEquals(2, state.inventory().items().values().stream().filter(item ->
                 item.custody() instanceof InventoryCustody.ContainerSlot slot
                     && slot.containerId().equals(deposit.site().containerId())).count());
@@ -145,19 +149,22 @@ class ExtractionSiteTest {
         var upper = deposit.available(Set.of()).getFirst();
         var extracted = deposit.extracted(upper.id(), 1, "effect:test-upper");
         assertThrows(IllegalArgumentException.class, () -> extracted.extracted(upper.id(), 2, "effect:test-upper-again"));
-        assertTrue(extracted.available(Set.of()).stream().anyMatch(cell -> cell.id() == upper.id() + 1));
+        assertTrue(extracted.accessibleSources(Set.of()).stream().anyMatch(cell -> cell.id() == upper.id() + 1));
+        // Geometric access does not grant the settlement's development permission.
+        var developed = extracted.develop(extracted.development().revision(), Set.of(upper.id() + 1));
+        assertTrue(developed.available(Set.of()).stream().anyMatch(cell -> cell.id() == upper.id() + 1));
         var next = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(extracted)));
         var geometry = new ExtractionGeometryIndex(ExtractionGeometryIndex.declarations(state.extractionSites()));
         assertEquals(ExtractionRegion.all(state.extractionSites()), geometry.regions());
         assertTrue(geometry.matches(ExtractionGeometryIndex.declarations(next.extractionSites())), "depletion must not invalidate immutable source geometry");
-        assertEquals(1536, geometry.regions().stream().mapToInt(region -> geometry.cells(region).size()).sum());
+        assertEquals(cellsPerSite * state.extractionSites().deposits().size(), geometry.regions().stream().mapToInt(region -> geometry.cells(region).size()).sum());
         assertTrue(geometry.regions(new ExtractionGeometryIndex.Chunk(10000, 10000)).isEmpty());
         for (var region : geometry.regions()) assertEquals(region.cells(state.extractionSites()), geometry.cells(region));
         var codec = new FrontierWorldStateCodec();
         assertEquals(next, codec.decode(codec.encode(next)));
         assertEquals(state.inventory(), next.inventory()); // Depletion history alone is not permission to mint output.
-        var lower = extracted.available(Set.of()).stream().filter(cell -> cell.id() == upper.id() + 1).findFirst().orElseThrow();
-        var opened = next.withChanges(FrontierWorldStateUpdate.begin().extractionSites(next.extractionSites().replace(extracted.extracted(lower.id(), 1, "effect:test-lower"))));
+        var lower = developed.available(Set.of()).stream().filter(cell -> cell.id() == upper.id() + 1).findFirst().orElseThrow();
+        var opened = next.withChanges(FrontierWorldStateUpdate.begin().extractionSites(next.extractionSites().replace(developed.extracted(lower.id(), 1, "effect:test-lower"))));
         var after = KnownPedestrianRouteKnowledge.forFrontier(opened);
         assertFalse(after.geometry().blocked(new SurfaceAnchor(lower.source().offset(0, -1, 0))));
         assertTrue(KnownPedestrianRouteKnowledge.forFrontier(state).geometry().blocked(new SurfaceAnchor(lower.source().offset(0, -1, 0))));

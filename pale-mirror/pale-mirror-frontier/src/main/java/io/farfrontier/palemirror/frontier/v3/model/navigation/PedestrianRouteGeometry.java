@@ -23,6 +23,7 @@ public interface PedestrianRouteGeometry {
     /** Missing current block facts are a wait, not proof that a route is impossible. */
     default boolean clearanceKnown(SurfaceAnchor surface) { return true; }
     default boolean blockKnown(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) { return true; }
+    default java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCollisionView> collisions() { return java.util.Optional.empty(); }
     /** Positive knowledge that this exact support was removed or forbidden, not missing knowledge. */
     default boolean supportExcluded(SurfaceAnchor surface) { return false; }
     /** Body clearance does not require a floor at the body's intermediate swept height. */

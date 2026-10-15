@@ -20,7 +20,10 @@ class ExtractionAreaPlanningTest {
     }
     /** History fixture only: these transitions are not resource-production evidence. */
     private static FrontierWorldState exhausted() {
-        var state = initial(); var prior = deposit(state);
+        return exhausted(initial());
+    }
+    private static FrontierWorldState exhausted(FrontierWorldState state) {
+        var prior = deposit(state);
         var next = new ExtractionDeposit(prior.site(), prior.cells(), prior.geometry(), new WorkAreaDevelopment(2, prior.cells().keySet()));
         for (long cell : next.cells().keySet()) next = next.extracted(cell, 1, "fixture:prior-work-" + cell);
         return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(next)));
@@ -189,7 +192,12 @@ class ExtractionAreaPlanningTest {
         assertTrue(ExtractionAreaPlanning.proposal(initial(), deposit(initial()).site().id()).isEmpty());
     }
     @Test void originalKernelWorkersMineNewBlocksThroughSharedResourceCustody() {
-        var initial = exhausted(); var site = deposit(initial).site();
+        // End-to-end work needs the current complete approach/terrain declaration,
+        // not the historical r4 fixture used above to isolate expansion semantics.
+        var initial = exhausted(FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:adjacent-quarry-workers"),
+                20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r13"))));
+        var site = deposit(initial).site();
+        var originalCells = Set.copyOf(deposit(initial).cells().keySet());
         var cfg = FrontierWorldRuntimeDefinition.configuration(initial.bootstrap());
         var configuration = new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(cfg.worldId(), initial,
                 cfg.initialInstant(), cfg.commandPlanner(), cfg.scheduledPlanner(), cfg.reducer(), cfg.stateCodec(), cfg.projectionMapper(),
@@ -198,7 +206,7 @@ class ExtractionAreaPlanningTest {
         long mined = 0;
         for (int boundary = 0; boundary < 2000 && mined == 0; boundary++) {
             var current = engine.canonicalState().state();
-            mined = current.extractionSites().deposits().get(site.id()).cells().entrySet().stream().filter(entry -> entry.getKey() > 512)
+            mined = current.extractionSites().deposits().get(site.id()).cells().entrySet().stream().filter(entry -> !originalCells.contains(entry.getKey()))
                     .filter(entry -> entry.getValue().disposition() == ExtractionDeposit.Disposition.EXTRACTED).count();
             if (mined > 0) break;
             var view = engine.executionView();
@@ -214,7 +222,7 @@ class ExtractionAreaPlanningTest {
                 + " declaration=" + end.cells().size() + " workers=" + finalState.extractionSites().work().values());
         assertTrue(finalState.extractionSites().work().values().stream().filter(job -> job.siteId().equals(site.id()))
                 .anyMatch(job -> ExtractionWorkAuthority.carried(finalState, job) > 0), "confirmed new stone must enter ordinary actor custody");
-        assertTrue(end.cells().entrySet().stream().filter(entry -> entry.getKey() > 512)
+        assertTrue(end.cells().entrySet().stream().filter(entry -> !originalCells.contains(entry.getKey()))
                 .anyMatch(entry -> entry.getValue().disposition() == ExtractionDeposit.Disposition.EXTRACTED));
         assertEquals(finalState, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(finalState)));
         assertTrue(finalState.extractionSites().work().values().stream().filter(job -> job.siteId().equals(site.id()))

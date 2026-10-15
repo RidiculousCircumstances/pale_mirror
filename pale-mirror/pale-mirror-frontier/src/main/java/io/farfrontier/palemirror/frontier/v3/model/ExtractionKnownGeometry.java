@@ -18,6 +18,7 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
     private RegionalBlockContributions<SubjectId> obstacleParts = new RegionalBlockContributions<>();
     private RegionalBlockContributions<SubjectId> withdrawnParts = new RegionalBlockContributions<>();
     private RegionalBlockContributions<SubjectId> unknownParts = new RegionalBlockContributions<>();
+    private RegionalBlockMapContributions<SubjectId, NavigationBlockState> blockParts = new RegionalBlockMapContributions<>();
     @Override public KnownSiteGeometry.Owner owner() { return KnownSiteGeometry.Owner.EXTRACTION; }
     @Override public Object version(FrontierWorldState state) {
         var declarations = new ArrayList<Object>();
@@ -44,13 +45,14 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
             priorQueries = queries; priorExclusions = exclusions;
         }
         return version.get(List.of(state.bootstrap(), state.extractionSites().deposits(),
-                relevantExclusions), Object::new);
+                relevantExclusions, state.navigationGeometry().definitions()), Object::new);
     }
     @Override public KnownSiteGeometry.View project(FrontierWorldState state) {
         if (projectedBootstrap != state.bootstrap()) {
             deposits.clear(); surfaceParts = new RegionalSurfaceContributions<>();
             obstacleParts = new RegionalBlockContributions<>(); withdrawnParts = new RegionalBlockContributions<>();
             unknownParts = new RegionalBlockContributions<>();
+            blockParts = new RegionalBlockMapContributions<>();
             projectedBootstrap = state.bootstrap();
         }
         var current = state.extractionSites().deposits();
@@ -58,24 +60,31 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
             deposits.remove(removed); surfaceParts.replace(removed, RegionalSurfaceMap.copyOf(Map.of()));
             obstacleParts.replace(removed, RegionalBlockSet.copyOf(Set.of())); withdrawnParts.replace(removed, RegionalBlockSet.copyOf(Set.of()));
             unknownParts.replace(removed, RegionalBlockSet.copyOf(Set.of()));
+            blockParts.replace(removed, RegionalBlockMap.copyOf(Map.of()));
         }
         for (var entry : current.entrySet()) {
             var deposit = entry.getValue();
             var view = deposits.computeIfAbsent(entry.getKey(), ignored -> new ImmutableInputView<>())
-                    .get(List.of(deposit.site().layout(), deposit.cells(), deposit.geometry(), relevantExclusions),
+                    .get(List.of(deposit.site().layout(), deposit.cells(), deposit.geometry(), relevantExclusions, state.navigationGeometry().definitions()),
                             () -> projectDeposit(state, deposit));
             surfaceParts.replace(entry.getKey(), RegionalSurfaceMap.copyOf(view.supports()));
             obstacleParts.replace(entry.getKey(), RegionalBlockSet.copyOf(view.obstacles()));
             withdrawnParts.replace(entry.getKey(), RegionalBlockSet.copyOf(view.withdrawnSupports()));
             unknownParts.replace(entry.getKey(), RegionalBlockSet.copyOf(view.unknown()));
+            blockParts.replace(entry.getKey(), RegionalBlockMap.copyOf(view.retainedBlocks()));
         }
-        return new KnownSiteGeometry.View(surfaceParts.snapshot(), obstacleParts.snapshot(), withdrawnParts.snapshot(), unknownParts.snapshot());
+        return new KnownSiteGeometry.View(surfaceParts.snapshot(), obstacleParts.snapshot(), withdrawnParts.snapshot(), unknownParts.snapshot(), blockParts.snapshot());
     }
     private KnownSiteGeometry.View projectDeposit(FrontierWorldState state, ExtractionDeposit deposit) {
         var working = new ExtractionWorkingSurfaces(state, deposit);
-        var projection = KnownBlockNavigationProjection.project(footprint(deposit),
-                position -> working.at(position).map(block -> KnownBlockClearance.navigationCell(block.kind())));
-        return new KnownSiteGeometry.View(projection.supports(), projection.volumes(), projection.absentSupports(), projection.unknown());
+        var blocks = new HashMap<BlockPosition, NavigationBlockState>();
+        for (var position : footprint(deposit)) working.at(position).ifPresent(block ->
+                blocks.put(position, new NavigationBlockState(block.kind(), block.properties())));
+        var projection = KnownBlockNavigationProjection.project(footprint(deposit), position -> {
+            var block = blocks.get(position); if (block == null) return Optional.empty();
+            return KnownBlockCollision.coarse(state.navigationGeometry(), block);
+        });
+        return new KnownSiteGeometry.View(projection.supports(), projection.volumes(), projection.absentSupports(), projection.unknown(), blocks);
     }
     private static Set<BlockPosition> footprint(ExtractionDeposit deposit) {
         var layout = deposit.site().layout();
