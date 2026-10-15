@@ -3,40 +3,58 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import java.util.*;
 
-/** Read-only per-container index over exact inventory and fungible custody inputs. */
+/** Derived physical capacity. Claims affect availability, never the space occupied by the same goods. */
 final class ContainerStockIndex {
-    private static final ImmutableInputView<Map<SubjectId, ContainerSlotBudget>> VIEW = new ImmutableInputView<>();
-    private static final ContainerSlotBudget EMPTY = new ContainerSlotBudget(Set.of(), Set.of(), 0, Map.of());
+    private static final int MAX_CONTAINER_VIEWS = 256;
+    private record Slots(Set<Integer> occupied, Set<Integer> bound) { }
+    private static final Slots EMPTY_SLOTS = new Slots(Set.of(), Set.of());
+    private static final ImmutableInputView<Map<SubjectId, Slots>> SLOT_VIEW = new ImmutableInputView<>();
+    private static final Map<SubjectId, ImmutableInputView<ContainerSlotBudget>> VIEWS = new LinkedHashMap<>();
+    private static Map<SubjectId, ResourceLot> currentLots;
+    private static Map<SubjectId, Slots> previousSlots = Map.of();
     private ContainerStockIndex() { }
-    static ContainerSlotBudget budget(ExactInventory inventory, SubjectId container) {
+
+    static synchronized ContainerSlotBudget budget(ExactInventory inventory, SubjectId container) {
         var ledger = inventory.fungibleResources();
-        return VIEW.get(List.of(inventory.occupiedSlots(), ledger.bindings(), ledger.accounts(), ledger.lots()),
-                () -> build(inventory)).getOrDefault(container, EMPTY);
+        // Retain one metadata epoch, not a whole historical lot map per container.
+        if (currentLots != ledger.lots()) { VIEWS.clear(); currentLots = ledger.lots(); }
+        var slots = SLOT_VIEW.get(List.of(inventory.occupiedSlots(), ledger.bindings()), () -> slots(inventory))
+                .getOrDefault(container, EMPTY_SLOTS);
+        // A draft can replace claims/accounts without changing physical stock. Only
+        // this receiver's quantities and item definitions feed its capacity view.
+        var accounts = ledger.accounts().values().stream()
+                .filter(account -> account.custody() instanceof ResourceCustody.Container holder
+                        && holder.containerId().equals(container)).sorted(Comparator.comparing(CustodyAccount::id)).toList();
+        var inputs = new ArrayList<Object>();
+        inputs.add(slots.occupied()); inputs.add(slots.bound()); inputs.add(ledger.lots());
+        for (var account : accounts) { inputs.add(account.id()); inputs.add(account.lotQuantities()); }
+        if (VIEWS.size() >= MAX_CONTAINER_VIEWS && !VIEWS.containsKey(container)) VIEWS.remove(VIEWS.keySet().iterator().next());
+        return VIEWS.computeIfAbsent(container, ignored -> new ImmutableInputView<>()).get(inputs, () -> {
+            var stock = new HashMap<String, Long>();
+            for (var account : accounts) account.lotQuantities().forEach((lot, quantity) ->
+                    stock.merge(ledger.lots().get(lot).itemKind(), quantity.longValue(), Math::addExact));
+            long packed = stock.values().stream().mapToLong(quantity -> (quantity + 63) / 64).sum();
+            return new ContainerSlotBudget(slots.occupied(), slots.bound(), packed, stock);
+        });
     }
-    private static Map<SubjectId, ContainerSlotBudget> build(ExactInventory inventory) {
+
+    private static Map<SubjectId, Slots> slots(ExactInventory inventory) {
         var occupied = new HashMap<SubjectId, Set<Integer>>(); var bound = new HashMap<SubjectId, Set<Integer>>();
-        var stock = new HashMap<SubjectId, Map<String, Long>>(); var containers = new HashSet<SubjectId>();
         inventory.occupiedSlots().keySet().forEach(slot ->
                 occupied.computeIfAbsent(slot.containerId(), ignored -> new HashSet<>()).add(slot.slot()));
-        var ledger = inventory.fungibleResources();
-        ledger.bindings().values().forEach(binding -> {
+        inventory.fungibleResources().bindings().values().forEach(binding -> {
             if (binding.address() instanceof PhysicalStackAddress.ContainerSlot address)
                 bound.computeIfAbsent(address.slot().containerId(), ignored -> new HashSet<>()).add(address.slot().slot());
         });
-        ledger.accounts().values().forEach(account -> {
-            if (account.custody() instanceof ResourceCustody.Container location) {
-                var kinds = stock.computeIfAbsent(location.containerId(), ignored -> new HashMap<>());
-                account.lotQuantities().forEach((lot, quantity) -> kinds.merge(ledger.lots().get(lot).itemKind(), quantity.longValue(), Math::addExact));
-            }
-        });
-        containers.addAll(occupied.keySet()); containers.addAll(bound.keySet()); containers.addAll(stock.keySet());
-        var result = new HashMap<SubjectId, ContainerSlotBudget>();
+        var containers = new HashSet<>(occupied.keySet()); containers.addAll(bound.keySet());
+        var result = new HashMap<SubjectId, Slots>();
         for (var container : containers) {
-            var kinds = stock.getOrDefault(container, Map.of());
-            long packed = kinds.values().stream().mapToLong(quantity -> (quantity + 63) / 64).sum();
-            result.put(container, new ContainerSlotBudget(occupied.getOrDefault(container, Set.of()),
-                    bound.getOrDefault(container, Set.of()), packed, kinds));
+            var next = new Slots(Set.copyOf(occupied.getOrDefault(container, Set.of())),
+                    Set.copyOf(bound.getOrDefault(container, Set.of())));
+            var old = previousSlots.get(container);
+            result.put(container, next.equals(old) ? old : next);
         }
-        return Map.copyOf(result);
+        previousSlots = Map.copyOf(result);
+        return previousSlots;
     }
 }

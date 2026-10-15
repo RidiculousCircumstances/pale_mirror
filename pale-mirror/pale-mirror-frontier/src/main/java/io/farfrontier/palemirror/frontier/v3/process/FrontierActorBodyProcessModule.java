@@ -18,8 +18,16 @@ import java.util.List;
 final class FrontierActorBodyProcessModule implements FrontierWorldProcessModule {
     private final ActorDeathConsequences deaths;
     private final ActorDeathFollowUpPlanner followUps;
-    FrontierActorBodyProcessModule(ActorDeathConsequences deaths, ActorDeathFollowUpPlanner followUps) {
+    private final ActorScheduleRetirement schedules;
+    FrontierActorBodyProcessModule(ActorDeathConsequences deaths, ActorDeathFollowUpPlanner followUps,
+                                  ActorScheduleRetirement schedules) {
         this.deaths = java.util.Objects.requireNonNull(deaths); this.followUps = java.util.Objects.requireNonNull(followUps);
+        this.schedules = java.util.Objects.requireNonNull(schedules);
+    }
+    @Override public List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> retiredSchedules(
+            FrontierWorldState previous, FrontierWorldState next, FrontierEvent event,
+            java.util.function.Supplier<List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction>> pending) {
+        return event.payload() instanceof ActorBodyDied ? schedules.retiredBy(previous, next, pending) : List.of();
     }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof ActorBodyInspected inspected) {

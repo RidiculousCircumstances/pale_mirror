@@ -174,9 +174,18 @@ class ActorBodyProcessTest {
         var location = state.actorLocations().get(actor);
         var death = new ActorBodyDied(body, location.body(), location.condition().health(), java.util.Optional.empty(),
                 java.util.Optional.of(execution), "environment");
+        var survivor = state.humanPopulation().residents().keySet().stream().sorted()
+                .filter(id -> !id.equals(actor)).findFirst().orElseThrow();
+        var need = io.farfrontier.palemirror.frontier.v3.process.ResidentNeedProcess.firstReviewAfter(
+                state.humanPopulation().resident(actor), 0L, state.bootstrap().ruleset().residentLife());
+        var activity = io.farfrontier.palemirror.frontier.v3.process.ResidentActivityProcess.review(actor, 1L);
+        var survivorNeed = io.farfrontier.palemirror.frontier.v3.process.ResidentNeedProcess.firstReviewAfter(
+                state.humanPopulation().resident(survivor), 0L, state.bootstrap().ruleset().residentLife());
+        var committed = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord>();
         var configuration = new FrontierEngineConfiguration<>(base.worldId(), state, base.initialInstant(),
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(),
-                base.limits(), java.util.List.of(), base.transactionCommitter(), base.stateValidator(),
+                base.limits(), java.util.List.of(need, activity, survivorNeed),
+                (transaction, durability) -> committed.add(transaction), base.stateValidator(),
                 base.executionMetrics(), base.kernelQuarantineReporter());
         var engine = FrontierEngines.create(configuration);
         var before = engine.checkpoint();
@@ -187,11 +196,19 @@ class ActorBodyProcessTest {
                 new FrontierPayload() { @Override public String type() { return "frontier.ambient_actor_died"; } })));
         assertArrayEquals(before.canonicalState(), engine.checkpoint().canonicalState());
         assertEquals(before.revision(), engine.checkpoint().revision());
+        assertEquals(before.schedules(), engine.checkpoint().schedules(), "rejected death must not cancel timers");
         assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(before, "command:body-death", death)));
         var after = base.stateCodec().decode(engine.checkpoint().canonicalState());
         assertEquals(ActorLifeStatus.DEAD, after.actorLocations().get(actor).condition().status());
         assertTrue(after.actorExecutions().actors().get(actor).current().isEmpty());
         assertFalse(ActorBodyAuthority.retainsPhysicalCustody(after, actor));
+        assertEquals(java.util.List.of(survivorNeed), engine.checkpoint().schedules(),
+                "common body death must atomically retire only the deceased resident's life timers");
+        var recovered = FrontierEngines.recover(configuration,
+                new io.farfrontier.palemirror.frontier.v3.persistence.RecoveryImage(base.worldId(),
+                        java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.persistence.SnapshotRecord(before, 0L)), committed));
+        assertEquals(engine.checkpoint().schedules(), recovered.checkpoint().schedules());
+        assertArrayEquals(engine.checkpoint().canonicalState(), recovered.checkpoint().canonicalState());
         assertEquals(EngineStatus.Kind.ACTIVE, engine.status().kind());
         assertInstanceOf(CommandResult.Rejected.class, engine.submit(command(engine.checkpoint(), "command:body-death-replayed", death)));
         assertEquals(EngineStatus.Kind.ACTIVE, engine.status().kind());

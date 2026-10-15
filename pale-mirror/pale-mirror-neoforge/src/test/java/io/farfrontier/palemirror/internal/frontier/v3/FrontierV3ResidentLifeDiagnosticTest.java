@@ -3,6 +3,9 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import com.google.gson.JsonParser;
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.ModeledActorBodyFacts;
+import io.farfrontier.palemirror.frontier.v3.model.ResidentNutritionStatus;
+import io.farfrontier.palemirror.frontier.v3.process.ResidentNeedProcess;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
 
@@ -12,6 +15,44 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3ResidentLifeDiagnosticTest {
+    @Test void settlementFoodCountsOnlyLivingResidentsAndIgnoresRetainedDeadNeedTimers() {
+        var config = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:dead-food-counts"), 47L);
+        var state = config.initialState();
+        var settlement = state.bootstrap().settlements().getFirst();
+        var residents = settlement.residents();
+        var pending = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction>();
+        var statuses = List.of(ResidentNutritionStatus.NOURISHED, ResidentNutritionStatus.HUNGRY, ResidentNutritionStatus.STARVING);
+        for (int index = 0; index < statuses.size(); index++) {
+            var resident = residents.get(index).id();
+            var nutrition = state.humanPopulation().nutrition(resident);
+            var rules = state.bootstrap().ruleset().residentLife();
+            int rate = state.humanPopulation().resident(resident).characteristics().effectiveMetabolismPermille(0L);
+            long tick = switch (statuses.get(index)) {
+                case NOURISHED -> 1L;
+                case HUNGRY -> nutrition.nextThresholdTick(rules, rate);
+                case STARVING -> nutrition.ticksUntilEmpty(rules, rate);
+            };
+            state = state.withHumanPopulation(state.humanPopulation().accrueHunger(resident, tick, rules));
+            assertEquals(statuses.get(index), state.humanPopulation().nutrition(resident).status());
+            state = ModeledActorBodyFacts.present(state, resident);
+            state = ModeledActorBodyFacts.died(state, resident, state.actorLocations().get(resident).body(), "environment", tick);
+            pending.add(ResidentNeedProcess.review(resident, 100_000L + index));
+        }
+        var livingNeed = ResidentNeedProcess.review(residents.get(3).id(), 200_000L);
+        pending.add(livingNeed);
+        var checkpoint = new CheckpointImage(config.worldId(), new Revision(3L), new SimInstant(100_000L),
+                new byte[] {1}, pending, List.of());
+        var bytes = config.stateCodec().encode(state);
+        var food = JsonParser.parseString(FrontierV3DiagnosticJson.render("settlement", settlement.id().value(),
+                checkpoint, state, Optional.empty()).substring(FrontierV3DiagnosticJson.PREFIX.length()))
+                .getAsJsonObject().getAsJsonObject("food");
+        assertEquals(residents.size() - 3, food.get("nourished").getAsInt());
+        assertEquals(0, food.get("hungry").getAsInt());
+        assertEquals(0, food.get("starving").getAsInt());
+        assertEquals(livingNeed.dueAt().ticks(), food.get("nextNeedReviewAt").getAsLong());
+        assertArrayEquals(bytes, config.stateCodec().encode(state), "diagnostics must not repair retained state");
+    }
+
     @Test void deceasedMealDiagnosticsSeparateRetainedResourcesFromActiveEating() {
         var fixture = io.farfrontier.palemirror.frontier.v3.model.FrontierV3FixtureCatalog.configuration(
                 "resident-meal-after-cold-take", new WorldId("frontier:dead-meal-diagnostic"), 41L);

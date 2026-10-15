@@ -21,6 +21,12 @@ class ContainerStockIndexTest {
         var budget = ContainerStockIndex.budget(stocked, container);
         assertEquals(2, budget.packedStacks()); assertEquals(Map.of("minecraft:wheat", 65L), budget.stockByKind());
         assertEquals(Set.of(26), budget.occupied());
+        // Capacity reads the account's stock, not its reservation metadata. Use an
+        // actual reservation below so the ledger's exact claim relations remain valid.
+        var claim = new ClaimAllocation(new SubjectId("claim:index"), owner, owner, "minecraft:wheat", 10,
+                Map.of(lot, 10), ClaimPurpose.EXTERNAL_RESERVATION);
+        var reserved = stocked.withFungibleResources(ledger.reserve(claim, account));
+        assertSame(budget, ContainerStockIndex.budget(reserved, container), "reservations do not repack physical stock");
         var removed = stocked.withoutItem(item);
         assertTrue(ContainerStockIndex.budget(removed, container).occupied().isEmpty());
         assertEquals(2, ContainerStockIndex.budget(removed, container).packedStacks());

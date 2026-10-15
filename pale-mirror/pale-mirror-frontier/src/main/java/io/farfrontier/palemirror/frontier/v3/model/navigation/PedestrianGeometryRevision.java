@@ -6,17 +6,33 @@ import java.util.Objects;
 import java.util.Set;
 
 /** Immutable derived regional knowledge, never task/arrival/custody authority. */
-public record PedestrianGeometryRevision(Object scope, Object geometryScope, Object baseline, Map<Region, Object> revisions) {
+public final class PedestrianGeometryRevision {
+    private final Object scope, geometryScope, baseline;
+    private final Map<Region, Object> revisions;
+    private final int hash;
     public static final int MAX_REGIONS = 16_384;
     public record Region(int x, int z) {
         public static Region at(BlockPosition position) {
             return new Region(Math.floorDiv(position.x(), 16), Math.floorDiv(position.z(), 16));
         }
     }
-    public PedestrianGeometryRevision {
-        Objects.requireNonNull(scope); Objects.requireNonNull(geometryScope); Objects.requireNonNull(baseline);
-        revisions = Map.copyOf(revisions);
+    public PedestrianGeometryRevision(Object scope, Object geometryScope, Object baseline, Map<Region, Object> revisions) {
+        this.scope = Objects.requireNonNull(scope); this.geometryScope = Objects.requireNonNull(geometryScope);
+        this.baseline = Objects.requireNonNull(baseline); this.revisions = Map.copyOf(revisions);
         if (revisions.size() > MAX_REGIONS) throw new IllegalArgumentException("regional knowledge exceeds its safety bound");
+        // Hash immutable facts once, not for every queue/map lookup of a route request.
+        // Equality still checks the complete facts: a hash is never route authority.
+        this.hash = Objects.hash(scope, geometryScope, baseline, this.revisions);
+    }
+    public Object scope() { return scope; }
+    public Object geometryScope() { return geometryScope; }
+    public Object baseline() { return baseline; }
+    public Map<Region, Object> revisions() { return revisions; }
+    @Override public int hashCode() { return hash; }
+    @Override public boolean equals(Object other) {
+        return this == other || other instanceof PedestrianGeometryRevision value && hash == value.hash
+                && scope.equals(value.scope) && geometryScope.equals(value.geometryScope)
+                && baseline.equals(value.baseline) && revisions.equals(value.revisions);
     }
     /** Conservative providers share only inside their exact query scope. A producer
      * may explicitly declare a wider geometry scope when its regional tokens include

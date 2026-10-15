@@ -16,22 +16,39 @@ final class KnownPedestrianGeometryScopes {
     private static Object bootstrap;
     private static RegionalBlockSet obstacles = RegionalBlockSet.copyOf(Set.of());
     private static RegionalSurfaceMap supports = RegionalSurfaceMap.copyOf(Map.of());
+    private static RegionalBlockSet withdrawn = RegionalBlockSet.copyOf(Set.of());
+    private static RegionalBlockSet unknown = RegionalBlockSet.copyOf(Set.of());
+    private static RegionalBlockSet scars = RegionalBlockSet.copyOf(Set.of());
     private static PedestrianGeometryRevision ground = PedestrianGeometryRevision.initial();
     private static final Map<Object, Scope> SCOPES = new LinkedHashMap<>();
     private KnownPedestrianGeometryScopes() { }
 
     static synchronized void refresh(Object currentBootstrap, Set<BlockPosition> obstacleInput,
                                     Map<TerrainColumn, List<SurfaceAnchor>> supportInput) {
+        refresh(currentBootstrap, obstacleInput, supportInput, Set.of(), Set.of(), Set.of());
+    }
+    static synchronized void refresh(Object currentBootstrap, Set<BlockPosition> obstacleInput,
+            Map<TerrainColumn, List<SurfaceAnchor>> supportInput, Set<BlockPosition> withdrawnInput,
+            Set<BlockPosition> unknownInput, Set<BlockPosition> scarInput) {
         var currentObstacles = RegionalBlockSet.copyOf(obstacleInput);
         var currentSupports = RegionalSurfaceMap.copyOf(supportInput);
+        var currentWithdrawn = RegionalBlockSet.copyOf(withdrawnInput);
+        var currentUnknown = RegionalBlockSet.copyOf(unknownInput);
+        var currentScars = RegionalBlockSet.copyOf(scarInput);
         if (bootstrap != currentBootstrap) {
             bootstrap = currentBootstrap; SCOPES.clear(); ground = PedestrianGeometryRevision.initial();
         } else {
             var changed = new HashSet<>(currentObstacles.changesFrom(obstacles));
             changed.addAll(currentSupports.changesFrom(supports));
+            // A change of meaning matters even when the union of occupied cells
+            // stays identical (unknown -> known solid, or support withdrawal).
+            changed.addAll(currentWithdrawn.changesFrom(withdrawn));
+            changed.addAll(currentUnknown.changesFrom(unknown));
+            changed.addAll(currentScars.changesFrom(scars));
             ground = ground.changed(changed);
         }
         obstacles = currentObstacles; supports = currentSupports;
+        withdrawn = currentWithdrawn; unknown = currentUnknown; scars = currentScars;
     }
 
     static synchronized PedestrianGeometryRevision revision(Object key, Set<BlockPosition> hard,

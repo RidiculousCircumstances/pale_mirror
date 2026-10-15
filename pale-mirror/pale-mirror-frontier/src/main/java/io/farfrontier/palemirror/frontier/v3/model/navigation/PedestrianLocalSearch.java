@@ -46,6 +46,7 @@ final class PedestrianLocalSearch {
                 observed.accept(candidate.surface());
                 var levels = geometry.surfacesAt(candidate.surface().x(), candidate.surface().z());
                 if (!levels.contains(candidate.surface()) && !geometry.supportExcluded(candidate.surface())) unknown = true;
+                if (!geometry.clearanceKnown(candidate.surface())) unknown = true;
                 if (levels.size() > PedestrianRegionBuild.MAX_LEVELS) { finished = true; break; }
                 if (levels.stream().distinct().count() != levels.size())
                     throw new IllegalArgumentException("local navigation column contains duplicate levels");
@@ -69,6 +70,7 @@ final class PedestrianLocalSearch {
             if (neighbours == null) {
                 observed.accept(SurfaceAnchor.at(x, expanding.y(), z));
                 neighbours = geometry.surfacesAt(x, z);
+                if (neighbours.stream().anyMatch(surface -> !geometry.clearanceKnown(surface))) unknown = true;
                 if (neighbours.isEmpty()) unknown = true;
                 if (neighbours.size() > PedestrianRegionBuild.MAX_LEVELS) { finished = true; break; }
                 if (neighbours.stream().distinct().count() != neighbours.size())

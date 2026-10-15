@@ -28,7 +28,8 @@ final class ExtractionWorkingSurfaces {
                 : Optional.of(natural);
     }
     boolean standable(SurfaceAnchor surface) {
-        return at(surface.support()).filter(block -> state.bootstrap().ruleset().extraction().definitionFor(block).isPresent())
+        return at(surface.support()).filter(block -> io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockClearance
+                .navigationCell(block.kind()) == io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockNavigationProjection.Cell.FULL_SUPPORT)
                 .isPresent()
                 && clear(surface.support().offset(0, 1, 0)) && clear(surface.support().offset(0, 2, 0));
     }
@@ -54,7 +55,8 @@ final class ExtractionWorkingSurfaces {
         // positively known clear contacts; depletion withdraws them on the next view.
         var exposed = layout.cells().stream().map(cell -> new SurfaceAnchor(cell.source())).filter(this::standable);
         return java.util.stream.Stream.concat(layout.accessSurfaces().stream(), exposed).distinct().filter(surface -> at(surface.support())
-                .filter(block -> state.bootstrap().ruleset().extraction().definitionFor(block).isPresent()).isPresent())
+                .filter(block -> io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockClearance.navigationCell(block.kind())
+                        == io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockNavigationProjection.Cell.FULL_SUPPORT).isPresent())
                 .sorted(Comparator.comparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z)
                         .thenComparingInt(SurfaceAnchor::y)).toList();
     }

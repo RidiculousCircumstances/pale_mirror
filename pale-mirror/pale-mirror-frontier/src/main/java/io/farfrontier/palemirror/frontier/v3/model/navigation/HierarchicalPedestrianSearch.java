@@ -143,7 +143,7 @@ public final class HierarchicalPedestrianSearch {
                 dependencies.put(tile, geometry.regionalRevision().map(value -> value.at(tile.x(), tile.z())).orElse(geometry.version()));
                 if (!geometry.bounds().contains(endpoint.support()) || geometry.supportExcluded(endpoint))
                     return finish(PedestrianRouteResult.Status.NO_PATH, "ENDPOINT_KNOWN_REMOVED_OR_FORBIDDEN");
-                if (!geometry.knowsSupport(endpoint))
+                if (!geometry.knowsSupport(endpoint) || !geometry.clearanceKnown(endpoint))
                     return finish(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY, "ENDPOINT_LEVEL_NOT_KNOWN");
                 if (geometry.blocked(endpoint))
                     return finish(PedestrianRouteResult.Status.NO_PATH, "ENDPOINT_KNOWN_BLOCKED_SUPPORT");
@@ -204,7 +204,8 @@ public final class HierarchicalPedestrianSearch {
             if (sourceComponent < 0 || targetComponent < 0) {
                 if (geometry.supportExcluded(start) || geometry.supportExcluded(target))
                     return finish(PedestrianRouteResult.Status.NO_PATH, "ENDPOINT_KNOWN_REMOVED_SUPPORT");
-                if (!geometry.knowsSupport(start) || !geometry.knowsSupport(target))
+                if (!geometry.knowsSupport(start) || !geometry.knowsSupport(target)
+                        || !geometry.clearanceKnown(start) || !geometry.clearanceKnown(target))
                     return finish(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY, "ENDPOINT_LEVEL_NOT_KNOWN");
                 if (geometry.blocked(start) || geometry.blocked(target))
                     return finish(PedestrianRouteResult.Status.NO_PATH, "ENDPOINT_KNOWN_BLOCKED_SUPPORT");

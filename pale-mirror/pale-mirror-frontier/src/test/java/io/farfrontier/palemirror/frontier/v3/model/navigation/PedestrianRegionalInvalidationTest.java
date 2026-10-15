@@ -11,6 +11,15 @@ import java.util.function.Predicate;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianRegionalInvalidationTest {
+    @Test void requestHashingDoesNotRescanImmutableRegionalFactsAndCollisionsDoNotGrantEquality() {
+        var reads = new AtomicInteger(); var scope = new Object(); var baseline = new Object();
+        class Token { @Override public int hashCode() { reads.incrementAndGet(); return 7; } }
+        var a = new PedestrianGeometryRevision(scope, baseline, java.util.Map.of(new PedestrianGeometryRevision.Region(0, 0), new Token()));
+        var b = new PedestrianGeometryRevision(scope, baseline, java.util.Map.of(new PedestrianGeometryRevision.Region(0, 0), new Token()));
+        int built = reads.get();
+        for (int i = 0; i < 100; i++) assertEquals(a.hashCode(), b.hashCode());
+        assertEquals(built, reads.get()); assertNotEquals(a, b);
+    }
     @Test void separateTaskScopesShareCompatibleGraphsAndLongCorridorsWithoutBorrowingChangedPassages() {
         var terrain = new Object(); var epoch = new Object();
         var original = new PedestrianGeometryRevision(new Object(), terrain, epoch, java.util.Map.of());

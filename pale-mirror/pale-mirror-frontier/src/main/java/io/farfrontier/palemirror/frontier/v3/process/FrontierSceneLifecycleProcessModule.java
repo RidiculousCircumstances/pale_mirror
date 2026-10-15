@@ -14,7 +14,7 @@ import java.util.Set;
 /** Shared lifecycle owner for assault and engineering presentation scopes. */
 final class FrontierSceneLifecycleProcessModule implements FrontierWorldProcessModule {
     @Override public List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> retiredSchedules(
-            FrontierWorldState previous, FrontierWorldState next,
+            FrontierWorldState previous, FrontierWorldState next, FrontierEvent event,
             java.util.function.Supplier<List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction>> pending) {
         return ResidentLifeScheduleRetirement.afterDeath(previous, next, pending);
     }

@@ -15,6 +15,7 @@ final class ResidentLifeScheduleRetirement {
 
     static List<ScheduledAction> afterDeath(FrontierWorldState before, FrontierWorldState after,
                                             Supplier<List<ScheduledAction>> pending) {
+        if (before.actorLocations() == after.actorLocations()) return List.of();
         List<SubjectId> newlyDead = before.humanPopulation().residentIds().stream().filter(id -> {
             ActorLocation prior = before.actorLocations().get(id);
             ActorLocation current = after.actorLocations().get(id);

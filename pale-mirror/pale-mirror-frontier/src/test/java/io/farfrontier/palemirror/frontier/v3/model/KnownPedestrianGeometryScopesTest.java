@@ -9,6 +9,14 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class KnownPedestrianGeometryScopesTest {
+    @Test void resolvedCollisionFactsInvalidateTheirRegionEvenWhenOccupiedUnionIsUnchanged() {
+        var bootstrap = new Object(); var position = new BlockPosition(2, 64, 2);
+        KnownPedestrianGeometryScopes.refresh(bootstrap, Set.of(position), Map.of(), Set.of(), Set.of(position), Set.of());
+        var before = KnownPedestrianGeometryScopes.groundRevision();
+        KnownPedestrianGeometryScopes.refresh(bootstrap, Set.of(position), Map.of(), Set.of(), Set.of(), Set.of());
+        var after = KnownPedestrianGeometryScopes.groundRevision();
+        assertEquals(Set.of(PedestrianGeometryRevision.Region.at(position)), after.changesSince(before));
+    }
     @Test void overlappingProducerWithdrawalPreservesOtherOwnersAndImmutableRegionalSnapshots() {
         var wall = new BlockPosition(2, 64, 2); var remote = new BlockPosition(160, 64, 160);
         var parts = new RegionalBlockContributions<String>();

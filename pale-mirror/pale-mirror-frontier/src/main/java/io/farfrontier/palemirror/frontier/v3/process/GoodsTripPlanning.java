@@ -30,6 +30,7 @@ final class GoodsTripPlanning {
             for (var mode : GoodsTradeFulfillment.Mode.values()) {
                 var seller = other;
                 var state = initial; var reservations = new ArrayList<ProposedEvent>(); var parcels = new ArrayList<GoodsTripAssembly.Parcel>();
+                var reservedPrefixes = new ArrayList<FrontierWorldState>(); reservedPrefixes.add(initial);
                 int reviews = 0; var considered = new HashSet<String>();
                 int cargoLimit = Math.min(initial.bootstrap().ruleset().goodsTrade().supplyPlanning().maximumTripCargoStacks(),
                         ShipmentState.MAX_SHIPMENTS - initial.shipments().shipments().size());
@@ -48,6 +49,7 @@ final class GoodsTripPlanning {
                     considered.add(matchContract.itemKind());
                     if (matchContract.sourceContainerId().equals(matchContract.receiverContainerId())) break;
                     state = GoodsTradeStateSupport.reserve(state, seller.party().id(), matchContract, raw.allocations(), now);
+                    reservedPrefixes.add(state);
                     reservations.add(new ProposedEvent(seller.party().id(), new GoodsTradeReserved(matchContract, raw.allocations())));
                     for (var allocation : raw.allocations()) parcels.add(new GoodsTripAssembly.Parcel(matchContract, allocation.claim(), allocation.accountId()));
                 }
@@ -58,12 +60,10 @@ final class GoodsTripPlanning {
                     var selected = List.copyOf(parcels.subList(0, count));
                     var cause = dispatchCause(initial, buyer, selected, now);
                     if (cause == TripDispatchPolicy.Cause.ACCUMULATING) { decision = "ACCUMULATING_PREFERRED_LOAD"; continue; }
-                    var selectedState = initial; var selectedEvents = new ArrayList<ProposedEvent>();
-                    for (int index = 0; index < count; index++) {
-                        var event = reservations.get(index); var reservation = (GoodsTradeReserved) event.payload();
-                        selectedState = GoodsTradeStateSupport.reserve(selectedState, seller.party().id(), reservation.contract(), reservation.allocations(), now);
-                        selectedEvents.add(event);
-                    }
+                    // Prefixes are already exact immutable reservation results for this
+                    // candidate/mode. Backtracking must not replay the same drafts.
+                    var selectedState = reservedPrefixes.get(count);
+                    var selectedEvents = new ArrayList<>(reservations.subList(0, count));
                     Optional<TransportMissionStarted> trip;
                     try { trip = GoodsTripAssembly.prepare(selectedState, seller, buyer, selected, mode, now); }
                     catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {

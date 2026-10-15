@@ -30,6 +30,8 @@ public final class BoundedPedestrianApproach {
         }
         /** An exact removed/invalid support is different from an unobserved level. */
         default boolean excluded(SurfaceAnchor surface) { return false; }
+        default boolean clearanceKnown(SurfaceAnchor surface) { return true; }
+        default boolean blockKnown(BlockPosition position) { return true; }
     }
 
     /** An ordinary bounded-search miss, not malformed geometry or an invalid call. */
@@ -38,6 +40,21 @@ public final class BoundedPedestrianApproach {
     }
 
     private BoundedPedestrianApproach() { }
+
+    /** Explicit contact restrictions never masquerade as solid block volumes. */
+    public static SurveyedSurface excluding(SurveyedSurface source, java.util.Set<BlockPosition> contacts) {
+        var excluded = io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockSet.copyOf(contacts);
+        if (excluded.isEmpty()) return source;
+        return new SurveyedSurface() {
+            @Override public SurfaceAnchor at(int x, int z) { return source.at(x, z); }
+            @Override public List<SurfaceAnchor> surfacesAt(int x, int z) { return source.surfacesAt(x, z); }
+            @Override public boolean clearanceKnown(SurfaceAnchor surface) { return source.clearanceKnown(surface); }
+            @Override public boolean blockKnown(BlockPosition position) { return source.blockKnown(position); }
+            @Override public boolean excluded(SurfaceAnchor surface) {
+                return excluded.contains(surface.support()) || source.excluded(surface);
+            }
+        };
+    }
 
     public static List<SurfaceAnchor> compile(FrontierBootstrap bootstrap, SurfaceAnchor start,
                                                SurfaceAnchor target, Set<BlockPosition> occupied,

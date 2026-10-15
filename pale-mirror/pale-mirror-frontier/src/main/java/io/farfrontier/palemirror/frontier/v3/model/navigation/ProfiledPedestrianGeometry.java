@@ -53,11 +53,22 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
     @Override public SurfaceAnchor supportAt(int x, int z) { return terrain.supportAt(x, z); }
     @Override public java.util.List<SurfaceAnchor> surfacesAt(int x, int z) { return terrain.surfacesAt(x, z); }
     @Override public boolean supportExcluded(SurfaceAnchor surface) { return terrain.supportExcluded(surface); }
+    @Override public boolean blockKnown(BlockPosition position) { return terrain.blockKnown(position); }
+    @Override public boolean clearanceKnown(SurfaceAnchor surface) {
+        int radius = profile.footprintRadius();
+        for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
+            var contact = SurfaceAnchor.at(surface.x() + dx, surface.y(), surface.z() + dz);
+            if (!terrain.clearanceKnown(contact)) return false;
+            for (int y = 0; y <= profile.bodyLayers(); y++) if (!blockKnown(contact.support().offset(0, y, 0))) return false;
+        }
+        return true;
+    }
     @Override public boolean blocked(SurfaceAnchor surface) {
         if (!terrain.supportAvailable(surface)) return true;
         return !clearBody(surface);
     }
     @Override public boolean clearBody(SurfaceAnchor surface) {
+        if (!clearanceKnown(surface)) return false;
         for (double x : poseOffsets) for (double z : poseOffsets)
             if (clearVolume(surface.x() + x, surface.z() + z, surface.y() + 1)) return true;
         return false;
@@ -95,6 +106,7 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
         return result;
     }
     private boolean computeClearVolume(double centerX, double centerZ, int feetY) {
+        if (!clearanceKnown(SurfaceAnchor.at((int) Math.floor(centerX), feetY - 1, (int) Math.floor(centerZ)))) return false;
         double half = profile.width() / 2.0;
         int minX = (int) Math.floor(centerX - half + 0.0000001), maxX = (int) Math.ceil(centerX + half - 0.0000001) - 1;
         int minZ = (int) Math.floor(centerZ - half + 0.0000001), maxZ = (int) Math.ceil(centerZ + half - 0.0000001) - 1;

@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus;
+
 import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
@@ -358,10 +360,13 @@ final class FrontierV3DiagnosticJson {
         int availableFood = SettlementFoodPolicy.usableBread(state, subject);
         var foodStores = ResourceStorageSelection.containers(state, subject, SettlementFoodPolicy.BREAD,
                 java.util.Set.of(ResourceStorageRole.WAREHOUSE));
+        var livingResidents = state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(subject))
+                .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
+                .map(ResidentProfile::id).collect(java.util.stream.Collectors.toSet());
         var nextNeedReview = checkpoint.schedules().stream()
                 .filter(action -> action.kind().equals("frontier.resident.need.review"))
-                .filter(action -> { ResidentProfile person = state.humanPopulation().resident(action.subject());
-                    return person != null && person.settlementId().equals(subject); })
+                .filter(action -> livingResidents.contains(action.subject()))
                 .mapToLong(action -> action.dueAt().ticks()).min();
         int heldFood = state.inventory().fungibleResources().bindings().values().stream()
                 .filter(binding -> binding.itemKind().equals(SettlementFoodPolicy.BREAD))
@@ -375,12 +380,12 @@ final class FrontierV3DiagnosticJson {
         int activeMeals = (int) state.humanPopulation().meals().values().stream()
                 .filter(meal -> meal.settlementId().equals(subject)).count();
         int reserve = SettlementFoodPolicy.reserveRequirement(state, subject);
-        int nourished = (int) state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(subject))
-                .filter(resident -> state.humanPopulation().nutrition(resident.id()).status() == ResidentNutritionStatus.NOURISHED).count();
-        int hungry = (int) state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(subject))
-                .filter(resident -> state.humanPopulation().nutrition(resident.id()).status() == ResidentNutritionStatus.HUNGRY).count();
-        int starving = (int) state.humanPopulation().residents().values().stream().filter(resident -> resident.settlementId().equals(subject))
-                .filter(resident -> state.humanPopulation().nutrition(resident.id()).status() == ResidentNutritionStatus.STARVING).count();
+        int nourished = (int) livingResidents.stream()
+                .filter(resident -> state.humanPopulation().nutrition(resident).status() == ResidentNutritionStatus.NOURISHED).count();
+        int hungry = (int) livingResidents.stream()
+                .filter(resident -> state.humanPopulation().nutrition(resident).status() == ResidentNutritionStatus.HUNGRY).count();
+        int starving = (int) livingResidents.stream()
+                .filter(resident -> state.humanPopulation().nutrition(resident).status() == ResidentNutritionStatus.STARVING).count();
         return base("settlement", id, checkpoint) + ",\"status\":\"ok\",\"strategic\":" + lane(value.strategic())
                 + ",\"facility\":" + lane(value.facility()) + ",\"readySites\":" + strings(value.readySites())
                 + ",\"pendingHarvestSchedules\":" + strings(value.pendingHarvestSchedules())

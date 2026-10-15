@@ -160,7 +160,7 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("actor-movement", new FrontierActorMovementProcessModule()),
             Map.entry("actor-execution", new FrontierActorExecutionProcessModule()),
             Map.entry("actor-body", new FrontierActorBodyProcessModule(io.farfrontier.palemirror.frontier.v3.model.FrontierActorDeathConsequences.INSTANCE,
-                    FrontierActorDeathFollowUps::plan)),
+                    FrontierActorDeathFollowUps::plan, ResidentLifeScheduleRetirement::afterDeath)),
             Map.entry("economy", new FrontierEconomyProcessModule()),
             Map.entry("production-stations", new ProductionStationProcessModule()),
             Map.entry("goods-trade", new GoodsTradeProcessModule()),
@@ -490,7 +490,7 @@ public final class FrontierWorldProcessCatalog {
             return List.of();
         }
         return module(owner)
-                .retiredSchedules(previous, next, pending);
+                .retiredSchedules(previous, next, event, pending);
     }
 
     /** Bootstrap is data-only; this catalog owns the finite initial process schedule. */

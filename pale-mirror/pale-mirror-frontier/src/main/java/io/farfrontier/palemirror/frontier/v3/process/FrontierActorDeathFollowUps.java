@@ -9,7 +9,6 @@ import java.util.List;
 /** Resource/effect settlement follows the already reference-closed death acknowledgement. */
 final class FrontierActorDeathFollowUps {
     private static final List<ActorDeathFollowUpPlanner> OWNERS = List.of(
-            (before, after, actor, command) -> ResidentMealProcess.cancelRetiredMealContinuation(before, after, actor),
             (before, after, actor, command) -> ProductionProcess.failPreEffectWorkForDeath(after, actor),
             MedicalTreatmentProcess::retirePreEffectForDeath);
     private FrontierActorDeathFollowUps() { }

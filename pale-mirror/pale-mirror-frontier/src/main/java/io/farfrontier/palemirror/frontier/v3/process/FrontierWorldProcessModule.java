@@ -20,7 +20,7 @@ interface FrontierWorldProcessModule {
             io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrap bootstrap) { return List.of(); }
     /** Same registered event owner closes exact scheduled references removed by its reduction. */
     default List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> retiredSchedules(
-            FrontierWorldState previous, FrontierWorldState next,
+            FrontierWorldState previous, FrontierWorldState next, FrontierEvent event,
             java.util.function.Supplier<List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction>> pending) {
         return List.of();
     }

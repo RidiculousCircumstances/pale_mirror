@@ -63,6 +63,7 @@ final class PedestrianRegionBuild {
         }
         if (level == pending.size()) { column++; pending = null; return; }
         var surface = pending.get(level++);
+        if (!geometry.clearanceKnown(surface)) unknown = true;
         if (surface.x() != x || surface.z() != z) throw new IllegalArgumentException("navigation survey returned a foreign column");
         if (!bounds.contains(surface.support()) || geometry.blocked(surface)) return;
         if (surfaces.size() >= MAX_SURFACES) { limited = true; return; }

@@ -33,8 +33,6 @@ public final class KnownPedestrianNavigation {
             throw new IllegalArgumentException("known pedestrian navigation cannot change actor capability");
         if (!bootstrap.bounds().contains(start.support()))
             throw new RouteUnavailable("known pedestrian start is outside the retained world");
-        if (blocked(start, occupied))
-            throw new RouteUnavailable("known pedestrian start has no clear support/body column");
         PedestrianRouteGeometry geometry = geometry(bootstrap, occupied, surveyed);
         return route(geometry, start, order);
     }
@@ -62,14 +60,16 @@ public final class KnownPedestrianNavigation {
                 return supportExcluded(surface) || !clearBody(surface);
             }
             @Override public boolean supportExcluded(SurfaceAnchor surface) {
-                return surveyed.excluded(surface) || hard.contains(surface.support());
+                return surveyed.excluded(surface);
             }
             @Override public boolean clearBody(SurfaceAnchor surface) {
-                return !hard.contains(surface.support().offset(0, 1, 0))
+                return clearanceKnown(surface) && !hard.contains(surface.support().offset(0, 1, 0))
                         && !hard.contains(surface.support().offset(0, 2, 0)) && surfacesAt(surface.x(), surface.z()).stream()
                         .noneMatch(other -> other.y() > surface.y() && other.y() <= surface.y() + 2);
             }
-            @Override public boolean supportAvailable(SurfaceAnchor surface) { return !surveyed.excluded(surface) && !hard.contains(surface.support()); }
+            @Override public boolean supportAvailable(SurfaceAnchor surface) { return !surveyed.excluded(surface); }
+            @Override public boolean clearanceKnown(SurfaceAnchor surface) { return surveyed.clearanceKnown(surface); }
+            @Override public boolean blockKnown(BlockPosition position) { return surveyed.blockKnown(position); }
         };
     }
 
@@ -100,6 +100,8 @@ public final class KnownPedestrianNavigation {
 
     /** Calculation result only. An alternatives owner decides which unresolved requests actually block its result. */
     public static PedestrianRouteResult queryBetween(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
+        if (!geometry.clearanceKnown(start) || !geometry.clearanceKnown(target))
+            throw new RouteUnavailable(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY, "known endpoints lack current collision facts");
         if (!geometry.bounds().contains(start.support()) || geometry.blocked(start)
                 || !geometry.bounds().contains(target.support()) || geometry.blocked(target))
             throw new RouteUnavailable("known endpoints have no clear support/body column");
@@ -174,6 +176,8 @@ public final class KnownPedestrianNavigation {
         Objects.requireNonNull(geometry); Objects.requireNonNull(start); Objects.requireNonNull(order);
         if (order.capability() != TraversalCapability.PEDESTRIAN)
             throw new IllegalArgumentException("known pedestrian navigation cannot change actor capability");
+        if (!geometry.clearanceKnown(start))
+            throw new RouteUnavailable(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY, "known departure lacks current collision facts");
         if (!geometry.bounds().contains(start.support()) || geometry.blocked(start))
             throw new RouteUnavailable("known pedestrian start has no clear support/body column");
         List<SurfaceAnchor> best = null;
@@ -181,6 +185,11 @@ public final class KnownPedestrianNavigation {
         PedestrianRouteResult failure = null;
         var pendingRequests = new java.util.ArrayList<PedestrianRouteRequest>();
         for (SurfaceAnchor station : order.legalStations()) {
+            if (!geometry.clearanceKnown(station)) {
+                deferred = new PedestrianRouteResult(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY, List.of(), 0, 0,
+                        "GOAL_COLLISION_NOT_KNOWN");
+                continue;
+            }
             if (!geometry.bounds().contains(station.support()) || geometry.blocked(station)) continue;
             // Explore one unresolved alternative at a time. Still inspect every
             // retained result: an already proven alternative must not wait for it.
@@ -216,6 +225,14 @@ public final class KnownPedestrianNavigation {
     }
 
     /** Validate accepted evidence, not optimality: replay never needs a planner/cache. */
+    public static boolean supportsRoute(PedestrianRouteGeometry geometry, List<SurfaceAnchor> route) {
+        if (route.isEmpty()) return false;
+        for (var surface : route) if (!geometry.bounds().contains(surface.support())
+                || !geometry.knowsSupport(surface) || geometry.blocked(surface)) return false;
+        for (int index = 1; index < route.size(); index++)
+            if (!geometry.canTraverse(route.get(index - 1), route.get(index))) return false;
+        return true;
+    }
     public static void requireRoute(PedestrianRouteGeometry geometry, List<SurfaceAnchor> route) {
         if (route.isEmpty()) throw new IllegalArgumentException("accepted pedestrian route is empty");
         for (SurfaceAnchor surface : route) {
@@ -228,8 +245,4 @@ public final class KnownPedestrianNavigation {
                 throw new IllegalArgumentException("accepted pedestrian route has no clear transition at " + route.get(index));
     }
 
-    private static boolean blocked(SurfaceAnchor surface, Set<BlockPosition> occupied) {
-        return occupied.contains(surface.support()) || occupied.contains(surface.support().offset(0, 1, 0))
-                || occupied.contains(surface.support().offset(0, 2, 0));
-    }
 }

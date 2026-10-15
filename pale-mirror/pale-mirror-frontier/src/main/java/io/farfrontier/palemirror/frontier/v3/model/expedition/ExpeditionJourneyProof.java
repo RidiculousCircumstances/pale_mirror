@@ -21,6 +21,15 @@ public record ExpeditionJourneyProof(PedestrianPathProof outward, PedestrianPath
     public static ExpeditionJourneyProof select(FrontierWorldState state, TransportMission mission,
             io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup group) {
         var knowledge = knowledge(state, mission, group);
+        var retained = mission.supplies().map(ExpeditionSupplyLoad::journey);
+        if (retained.isPresent()) {
+            var prior = retained.orElseThrow();
+            if (!prior.outward().origin().equals(mission.homeRendezvous())
+                    || !prior.outward().destination().equals(mission.destinationRendezvous()))
+                throw new IllegalArgumentException("retained expedition changed its rendezvous");
+            if (KnownPedestrianNavigation.supportsRoute(knowledge.geometry(), prior.outward().surfaces())
+                    && KnownPedestrianNavigation.supportsRoute(knowledge.geometry(), prior.returning().surfaces())) return prior;
+        }
         return new ExpeditionJourneyProof(knowledge.plannedBetween(mission.homeRendezvous(), mission.destinationRendezvous()),
                 knowledge.plannedBetween(mission.destinationRendezvous(), mission.homeRendezvous()));
     }

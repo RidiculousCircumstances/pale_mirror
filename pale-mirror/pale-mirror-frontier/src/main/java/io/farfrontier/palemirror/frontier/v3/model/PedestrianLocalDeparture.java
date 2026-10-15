@@ -42,14 +42,7 @@ public final class PedestrianLocalDeparture {
         if (declaredExits.isEmpty()) {
             // A compatible witnessed off-datum origin has no private facility to exit.
             // Use the common bounded geometry proof, not an invented scalar height or teleport.
-            return knowledge.localMovementRoutes(start).entrySet().stream()
-                    .filter(entry -> publicPosition(state, entry.getKey()))
-                    .min(java.util.Comparator.<java.util.Map.Entry<SurfaceAnchor, List<SurfaceAnchor>>>comparingInt(entry -> entry.getValue().size())
-                            .thenComparingInt(entry -> entry.getKey().x()).thenComparingInt(entry -> entry.getKey().z())
-                            .thenComparingInt(entry -> entry.getKey().y()))
-                    .map(java.util.Map.Entry::getValue)
-                    .orElseThrow(() -> new io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable(
-                            "retained departure has no bounded known public continuation"));
+            return knowledge.localMovementTo(start, target -> publicPosition(state, target));
         }
         for (var exit : declaredExits) {
             var target = FrontierTraversalPlan.facilityPort(exit.passage().facility()).orElseThrow()

@@ -30,6 +30,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     private long turns;
     private long completedCount;
     private final Map<PedestrianRouteRequest, Long> admittedAt = new LinkedHashMap<>();
+    private final Map<Object, PedestrianRouteGeometry> synchronizedScopes = new LinkedHashMap<>();
 
     public CooperativePedestrianPlanner() { executor = null; }
     /** The adapter owns a bounded executor. This planner owns deterministic admission/publication. */
@@ -201,6 +202,8 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     }
     /** No surveying/search here: compare at most the bounded retained regional dependency tokens. */
     private void synchronizeScope(PedestrianRouteGeometry geometry) {
+        Object scope = geometry.regionalRevision().orElseThrow().scope();
+        if (synchronizedScopes.get(scope) == geometry) return;
         for (var request : java.util.List.copyOf(pending.keySet())) if (request.geometry() != geometry && sameScope(request, geometry)) {
             long since = admittedAt.get(request);
             var replacement = PedestrianRouteRequest.of(geometry, request.start(), request.target(), request.extent());
@@ -247,6 +250,9 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         }
         // A refreshed view is the same demand, not a new arrival at the end of the queue.
         deferred.clear(); deferred.putAll(rebasedDeferred);
+        if (synchronizedScopes.size() >= MAX_RESULTS && !synchronizedScopes.containsKey(scope))
+            synchronizedScopes.remove(synchronizedScopes.keySet().iterator().next());
+        synchronizedScopes.put(scope, geometry);
     }
     public synchronized java.util.List<PedestrianPlanningChange> drainChanges() {
         var result = changes.entrySet().stream().map(entry -> new PedestrianPlanningChange(entry.getKey(), entry.getValue())).toList();
@@ -316,5 +322,6 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         suspended.values().forEach(PedestrianSearchTask::cancel); suspended.clear(); fairness.clear();
         pending.clear(); inFlight.clear(); ready.clear(); completed.clear(); deferred.clear(); admittedAt.clear(); changes.clear();
         regions.clear(); corridors.clear(); itineraries.clear(); retainedSurfaces = 0; retainedRegions = 0;
+        synchronizedScopes.clear();
     }
 }

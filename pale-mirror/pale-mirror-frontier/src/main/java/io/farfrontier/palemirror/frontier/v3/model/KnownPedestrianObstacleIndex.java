@@ -7,7 +7,7 @@ import java.util.function.Supplier;
 
 /** Geometry-only composition root. Authored passage permissions never clear witnessed physical obstacles. */
 final class KnownPedestrianObstacleIndex {
-    private enum Source { STATIC, SITES, WITHDRAWN, ORGANS, PHYSICAL, STORAGE }
+    private enum Source { STATIC, SITES, WITHDRAWN, UNKNOWN, ORGANS, PHYSICAL, STORAGE }
     private final RegionalBlockContributions<Source> physical = new RegionalBlockContributions<>();
     private final RegionalBlockContributions<Source> ground = new RegionalBlockContributions<>();
     private final Map<Source, Object> versions = new EnumMap<>(Source.class);
@@ -18,6 +18,7 @@ final class KnownPedestrianObstacleIndex {
         replace(Source.STATIC, state.bootstrap(), staticBlocks);
         replace(Source.SITES, sites.obstacles(), sites::obstacles);
         replace(Source.WITHDRAWN, sites.withdrawnSupports(), sites::withdrawnSupports);
+        replace(Source.UNKNOWN, sites.unknown(), sites::unknown);
         replace(Source.ORGANS, state.hiveColony().addedOrgans(), () -> FrontierGrayboxPlan.intactOrganOccupancy(
                 List.copyOf(state.hiveColony().addedOrgans().values())));
         replace(Source.PHYSICAL, state.physicalDeltas(), () -> state.physicalDeltas().keySet());

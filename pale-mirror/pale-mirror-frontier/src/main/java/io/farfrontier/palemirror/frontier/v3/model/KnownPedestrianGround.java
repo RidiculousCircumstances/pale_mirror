@@ -14,12 +14,13 @@ public final class KnownPedestrianGround {
     private static ChunkSurfaceIndex bootstrapRoads;
     private static ChunkSurfaceIndex frontierLocal;
     private static final Map<SubjectId, ChunkSurfaceIndex> LOCAL = new LinkedHashMap<>();
+    private static final ImmutableInputView<io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockSet> UNKNOWN = new ImmutableInputView<>();
     private KnownPedestrianGround() { }
 
     public static BoundedPedestrianApproach.SurveyedSurface forSettlement(FrontierWorldState state,
                                                                        SubjectId settlementId) {
-        return layered(state.bootstrap(), roads(state.bootstrap(), state.routeTopology()),
-                local(state.bootstrap(), settlementId), KnownSiteGeometry.forState(state));
+        return restricted(state, layered(state.bootstrap(), roads(state.bootstrap(), state.routeTopology()),
+                local(state.bootstrap(), settlementId), KnownSiteGeometry.forState(state)));
     }
 
     /** Immutable admission/hydration datum, using the same authored-ground policy. */
@@ -29,8 +30,27 @@ public final class KnownPedestrianGround {
 
     /** Cross-settlement movement uses all authored local floors, not one origin's datum. */
     public static BoundedPedestrianApproach.SurveyedSurface forFrontier(FrontierWorldState state) {
-        return layered(state.bootstrap(), roads(state.bootstrap(), state.routeTopology()),
-                frontierLocal(state.bootstrap()), KnownSiteGeometry.forState(state));
+        return restricted(state, layered(state.bootstrap(), roads(state.bootstrap(), state.routeTopology()),
+                frontierLocal(state.bootstrap()), KnownSiteGeometry.forState(state)));
+    }
+
+    private static BoundedPedestrianApproach.SurveyedSurface restricted(FrontierWorldState state,
+            BoundedPedestrianApproach.SurveyedSurface source) {
+        var missing = KnownSiteGeometry.forState(state).unknown();
+        var unknown = UNKNOWN.get(java.util.List.of(state.physicalDeltas(), missing), () -> {
+            var unavailable = new java.util.HashSet<>(state.physicalDeltas().keySet()); unavailable.addAll(missing);
+            return io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockSet.copyOf(unavailable);
+        });
+        return new BoundedPedestrianApproach.SurveyedSurface() {
+            @Override public SurfaceAnchor at(int x, int z) { return source.at(x, z); }
+            @Override public java.util.List<SurfaceAnchor> surfacesAt(int x, int z) { return source.surfacesAt(x, z); }
+            @Override public boolean excluded(SurfaceAnchor surface) { return source.excluded(surface); }
+            @Override public boolean blockKnown(BlockPosition position) { return !unknown.contains(position) && source.blockKnown(position); }
+            @Override public boolean clearanceKnown(SurfaceAnchor surface) {
+                for (int y = 0; y <= 2; y++) if (!blockKnown(surface.support().offset(0, y, 0))) return false;
+                return source.clearanceKnown(surface);
+            }
+        };
     }
 
     private static BoundedPedestrianApproach.SurveyedSurface frontierSurvey(FrontierBootstrap bootstrap, ChunkSurfaceIndex roads) {

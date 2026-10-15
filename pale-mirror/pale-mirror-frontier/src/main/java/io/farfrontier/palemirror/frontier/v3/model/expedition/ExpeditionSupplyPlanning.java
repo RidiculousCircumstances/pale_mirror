@@ -82,7 +82,10 @@ public final class ExpeditionSupplyPlanning {
                     var living = group.members().stream().filter(member -> state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.ALIVE).toList();
                     var assembly = GroupFormation.stations(living, List.of(mission.homeRendezvous()), 0, knowledge, state.bootstrap().ruleset().expedition().formationSpacing());
                     return Optional.of(new ExpeditionSupplyLoad(food.itemKind(), plan.durationTicks(), now, targets, assembly, allocations, revision, journey));
-                } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }
+                } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                    if (unavailable.status() != PedestrianRouteResult.Status.NO_PATH) throw unavailable;
+                    return Optional.empty();
+                }
             }
         }
         return Optional.empty();
@@ -161,13 +164,14 @@ public final class ExpeditionSupplyPlanning {
                                  long outward, long returning) { }
     private static Optional<WalkingInputs> walkingInputs(FrontierWorldState state, TransportMission mission, UnitGroup group,
                                                         long now, FoodCatalog.Food food, FungibleResourceLedger resources) {
-        var knowledge = TransportGroupMissionPort.knowledgeForEndpoints(state, mission.sender(), mission.receiver()).forActors(state, group.members().stream().map(UnitGroup.Member::actorId).toList());
-        long outward, returning;
+        ExpeditionJourneyProof journey;
         try {
-            outward = edges(knowledge, group.id(), mission.homeRendezvous(), mission.destinationRendezvous());
-            returning = edges(knowledge, group.id(), mission.destinationRendezvous(), mission.homeRendezvous());
-        } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }
-        return walkingInputs(state, mission, group, now, food, resources, outward, returning);
+            journey = ExpeditionJourneyProof.select(state, mission, group);
+        } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+            if (unavailable.status() != PedestrianRouteResult.Status.NO_PATH) throw unavailable;
+            return Optional.empty();
+        }
+        return walkingInputs(state, mission, group, now, food, resources, journey.outward().edges(), journey.returning().edges());
     }
     private static Optional<WalkingInputs> walkingInputs(FrontierWorldState state, TransportMission mission, UnitGroup group,
             long now, FoodCatalog.Food food, FungibleResourceLedger resources, long outward, long returning) {
@@ -207,10 +211,6 @@ public final class ExpeditionSupplyPlanning {
                     && actor.condition().status() == ActorLifeStatus.ALIVE).isPresent();
         return roster.isEmpty() && !livingAsset ? Optional.empty()
                 : Optional.of(new WalkingInputs(List.copyOf(roster), Map.copyOf(free), outward, returning));
-    }
-    private static long edges(KnownPedestrianRouteKnowledge knowledge, SubjectId owner, SurfaceAnchor start, SurfaceAnchor end) {
-        return knowledge.plannedPath(start, new MovementOrder(owner, owner, 1, 1, List.of(end),
-                TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION)).size() - 1L;
     }
     public static FungibleResourceLedger reserve(FungibleResourceLedger resources, ExpeditionSupplyLoad.Allocation allocation,
                                                   SubjectId mission, SubjectId owner, String kind) {

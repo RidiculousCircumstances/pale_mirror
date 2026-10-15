@@ -17,27 +17,17 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
     private RegionalSurfaceContributions<SubjectId> surfaceParts = new RegionalSurfaceContributions<>();
     private RegionalBlockContributions<SubjectId> obstacleParts = new RegionalBlockContributions<>();
     private RegionalBlockContributions<SubjectId> withdrawnParts = new RegionalBlockContributions<>();
+    private RegionalBlockContributions<SubjectId> unknownParts = new RegionalBlockContributions<>();
     @Override public KnownSiteGeometry.Owner owner() { return KnownSiteGeometry.Owner.EXTRACTION; }
     @Override public Object version(FrontierWorldState state) {
         var declarations = new ArrayList<Object>();
         declarations.add(state.bootstrap());
         state.extractionSites().deposits().entrySet().stream().sorted(Map.Entry.comparingByKey())
-                .forEach(entry -> declarations.add(entry.getValue().site().layout()));
+                .forEach(entry -> { declarations.add(entry.getValue().site().layout()); declarations.add(entry.getValue().geometry()); });
         var queries = queryFootprint.get(declarations, () -> {
             var positions = new HashSet<BlockPosition>();
             for (var deposit : state.extractionSites().deposits().values()) {
-                var layout = deposit.site().layout();
-                // Working contact probes support, body and step headroom; projection also
-                // reads retained natural blocks. No other baseline voxel is queried.
-                var contacts = java.util.stream.Stream.concat(layout.accessSurfaces().stream(),
-                        layout.cells().stream().map(cell -> new SurfaceAnchor(cell.source()))).toList();
-                for (var surface : contacts) {
-                    positions.add(surface.support());
-                    positions.add(surface.support().offset(0, 1, 0));
-                    positions.add(surface.support().offset(0, 2, 0));
-                    positions.add(surface.support().offset(0, 3, 0)); // Swept headroom on a one-block step.
-                }
-                positions.addAll(layout.terrainSupports().keySet());
+                positions.addAll(footprint(deposit));
             }
             return Set.copyOf(positions);
         });
@@ -60,12 +50,14 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
         if (projectedBootstrap != state.bootstrap()) {
             deposits.clear(); surfaceParts = new RegionalSurfaceContributions<>();
             obstacleParts = new RegionalBlockContributions<>(); withdrawnParts = new RegionalBlockContributions<>();
+            unknownParts = new RegionalBlockContributions<>();
             projectedBootstrap = state.bootstrap();
         }
         var current = state.extractionSites().deposits();
         for (var removed : Set.copyOf(deposits.keySet())) if (!current.containsKey(removed)) {
             deposits.remove(removed); surfaceParts.replace(removed, RegionalSurfaceMap.copyOf(Map.of()));
             obstacleParts.replace(removed, RegionalBlockSet.copyOf(Set.of())); withdrawnParts.replace(removed, RegionalBlockSet.copyOf(Set.of()));
+            unknownParts.replace(removed, RegionalBlockSet.copyOf(Set.of()));
         }
         for (var entry : current.entrySet()) {
             var deposit = entry.getValue();
@@ -75,56 +67,26 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
             surfaceParts.replace(entry.getKey(), RegionalSurfaceMap.copyOf(view.supports()));
             obstacleParts.replace(entry.getKey(), RegionalBlockSet.copyOf(view.obstacles()));
             withdrawnParts.replace(entry.getKey(), RegionalBlockSet.copyOf(view.withdrawnSupports()));
+            unknownParts.replace(entry.getKey(), RegionalBlockSet.copyOf(view.unknown()));
         }
-        return new KnownSiteGeometry.View(surfaceParts.snapshot(), obstacleParts.snapshot(), withdrawnParts.snapshot());
+        return new KnownSiteGeometry.View(surfaceParts.snapshot(), obstacleParts.snapshot(), withdrawnParts.snapshot(), unknownParts.snapshot());
     }
     private KnownSiteGeometry.View projectDeposit(FrontierWorldState state, ExtractionDeposit deposit) {
-        var supports = new LinkedHashMap<TerrainColumn, List<SurfaceAnchor>>();
-        var obstacles = new HashSet<BlockPosition>();
-        var withdrawn = new HashSet<BlockPosition>();
-        {
-            var layout = deposit.site().layout();
-            var working = new ExtractionWorkingSurfaces(state, deposit);
-            var active = working.allCurrent();
-            var floorBlocks = new HashSet<BlockPosition>();
-            for (var surface : active) {
-                var column = new TerrainColumn(surface.x(), surface.z());
-                floorBlocks.add(surface.support());
-                var levels = new ArrayList<>(supports.getOrDefault(column, List.of()));
-                if (!levels.contains(surface)) levels.add(surface);
-                levels.sort(Comparator.comparingInt(SurfaceAnchor::y)); supports.put(column, List.copyOf(levels));
-            }
-            // Exact unavailable supports cannot be resurrected by bootstrap terrain.
-            for (var surface : layout.accessSurfaces()) if (!active.contains(surface)) withdrawn.add(surface.support());
-            layout.cells().forEach(cell -> {
-                if (KnownBlockClearance.emptyCollision(deposit.cells().get(cell.id()).knownBlock().kind())) withdrawn.add(cell.source());
-            });
-            deposit.geometry().forEach((position, observation) -> {
-                if (KnownBlockClearance.emptyCollision(observation.block().kind())) withdrawn.add(position);
-            });
-            layout.fixedBlocks().forEach((position, block) -> {
-                var observed = deposit.geometry().get(position);
-                var actual = observed == null ? block : observed.block();
-                if (KnownBlockClearance.emptyCollision(actual.kind())) withdrawn.add(position);
-                if (!KnownBlockClearance.emptyCollision(actual.kind()) && !floorBlocks.contains(position)) obstacles.add(position);
-            });
-            layout.terrainSupports().keySet().forEach(position -> {
-                var actual = working.at(position);
-                if (!floorBlocks.contains(position) && (actual.isEmpty() || !KnownBlockClearance.emptyCollision(actual.orElseThrow().kind())))
-                    obstacles.add(position);
-            });
-            for (var cell : layout.cells())
-                if (!KnownBlockClearance.emptyCollision(deposit.cells().get(cell.id()).knownBlock().kind())
-                        && !floorBlocks.contains(cell.source())) obstacles.add(cell.source());
-            // A clear standing pocket does not prove its incoming edge is clear.
-            // Retain the known ceiling used by the common canTraverse query, even
-            // when that block was never admitted as a mining resource cell.
-            for (var surface : active) for (int height = 1; height <= 3; height++) {
-                var bodyBlock = surface.support().offset(0, height, 0);
-                if (working.at(bodyBlock).filter(block -> !KnownBlockClearance.emptyCollision(block.kind())).isPresent()
-                        && !floorBlocks.contains(bodyBlock)) obstacles.add(bodyBlock);
-            }
-        }
-        return new KnownSiteGeometry.View(supports, obstacles, withdrawn);
+        var working = new ExtractionWorkingSurfaces(state, deposit);
+        var projection = KnownBlockNavigationProjection.project(footprint(deposit),
+                position -> working.at(position).map(block -> KnownBlockClearance.navigationCell(block.kind())));
+        return new KnownSiteGeometry.View(projection.supports(), projection.volumes(), projection.absentSupports(), projection.unknown());
+    }
+    private static Set<BlockPosition> footprint(ExtractionDeposit deposit) {
+        var layout = deposit.site().layout();
+        var footprint = new HashSet<BlockPosition>(layout.terrainSupports().keySet());
+        footprint.addAll(layout.fixedBlocks().keySet()); footprint.addAll(deposit.geometry().keySet());
+        layout.accessSurfaces().forEach(surface -> footprint.add(surface.support()));
+        layout.cells().forEach(cell -> footprint.add(cell.source()));
+        // A ceiling above one contact can be the floor of another. Publish both
+        // from the same immutable facts, independently of mining target selection.
+        for (var position : Set.copyOf(footprint)) for (int height = 1; height <= 3; height++)
+            footprint.add(position.offset(0, height, 0));
+        return Set.copyOf(footprint);
     }
 }

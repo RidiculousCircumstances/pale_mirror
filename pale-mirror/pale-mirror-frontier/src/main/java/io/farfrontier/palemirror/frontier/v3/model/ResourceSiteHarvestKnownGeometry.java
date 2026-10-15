@@ -26,6 +26,8 @@ public final class ResourceSiteHarvestKnownGeometry {
             field.put(column(crop.x(), crop.z()), new SurfaceAnchor(crop.offset(0, -1, 0)));
         return new BoundedPedestrianApproach.SurveyedSurface() {
             @Override public boolean excluded(SurfaceAnchor surface) { return ground.excluded(surface); }
+            @Override public boolean clearanceKnown(SurfaceAnchor surface) { return ground.clearanceKnown(surface); }
+            @Override public boolean blockKnown(BlockPosition position) { return ground.blockKnown(position); }
             @Override public SurfaceAnchor at(int x, int z) {
                 var known = field.get(column(x, z)); return known != null ? known : ground.at(x, z);
             }

@@ -11,7 +11,7 @@ import java.util.List;
 /** Exact owner for ambient presentation leases, never physical body observations. */
 final class FrontierAmbientProcessModule implements FrontierWorldProcessModule {
     @Override public List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> retiredSchedules(
-            FrontierWorldState previous, FrontierWorldState next,
+            FrontierWorldState previous, FrontierWorldState next, FrontierEvent event,
             java.util.function.Supplier<List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction>> pending) {
         return ResidentLifeScheduleRetirement.afterDeath(previous, next, pending);
     }

@@ -60,7 +60,7 @@ class ExpeditionSupplyFlowTest {
         assertTrue(terminal.inventory().economics().require(seller).balance().raw() > 0, "actual acceptance pays the previously cashless seller");
         assertEquals(terminal, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(terminal)));
     }
-    @Test void actualFullPersonalInventoriesSelectAndReserveTheFiniteAnimalAndLoadItsRealCargoCustody() throws ReflectiveOperationException {
+    @Test void actualFullPersonalInventoriesSelectAndReserveTheFiniteAnimalAndLoadItsRealCargoCustody() throws Exception {
         var base = FrontierV3FixtureCatalog.autonomousGoodsConfiguration(new WorldId("frontier:expedition-pack-load"), 41,
                 FrontierRulesets.installed("frontier-v3-expedition-candidate-r1"));
         var initial = base.initialState(); var resources = initial.inventory().fungibleResources();
@@ -109,7 +109,26 @@ class ExpeditionSupplyFlowTest {
                     assertTrue(mission.supplies().orElseThrow().complete());
                     assertEquals(shipment.carriedCustody(), state.inventory().fungibleResources().accounts().get(shipment.carriedAccountId()).custody());
                     assertEquals(initialBread, bread(state), "loading only transfers actual stock");
-                    assertTrue(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(state, mission, engine.checkpoint().instant().ticks()));
+                    try (var noFreshSearch = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, start, end) -> {
+                        throw new AssertionError("valid retained round trip must not request another search");
+                    })) {
+                        assertSame(mission.supplies().orElseThrow().journey(),
+                                io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionJourneyProof.select(state, mission));
+                        assertTrue(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(state, mission, engine.checkpoint().instant().ticks()));
+                    }
+                    var acceptedPath = mission.supplies().orElseThrow().journey().outward().surfaces();
+                    var changed = state.recordPhysicalDelta(new PhysicalDelta(acceptedPath.get(acceptedPath.size() / 2).support(),
+                            PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:journey-facts-changed"));
+                    try (var pendingSearch = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, start, end) ->
+                            new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(
+                                    io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
+                                    List.of(), 0, 0, "test:replacement-pending"))) {
+                        var pending = assertThrows(io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable.class,
+                                () -> io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyPlanning.walkingForecast(
+                                        changed, mission, changed.unitGroups().groups().get(mission.groupId()),
+                                        mission.supplies().orElseThrow().calculatedAtTick(), mission.supplies().orElseThrow().foodKind()));
+                        assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING, pending.status());
+                    }
                     departed = true; break;
                 }
             }
