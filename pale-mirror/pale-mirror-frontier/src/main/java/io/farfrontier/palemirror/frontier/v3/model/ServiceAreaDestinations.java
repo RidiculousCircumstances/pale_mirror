@@ -26,6 +26,14 @@ public final class ServiceAreaDestinations {
     public static Optional<SurfaceAnchor> select(List<ServiceAccessPoint> points, SubjectId actorId,
             SurfaceAnchor start, KnownPedestrianRouteKnowledge knowledge, Set<SurfaceAnchor> excluded,
             java.util.function.Predicate<SurfaceAnchor> available) {
+        return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.withService(
+                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPlanningService.PASSAGE_CLEARANCE,
+                () -> selectClearance(points, actorId, start, knowledge, excluded, available));
+    }
+
+    private static Optional<SurfaceAnchor> selectClearance(List<ServiceAccessPoint> points, SubjectId actorId,
+            SurfaceAnchor start, KnownPedestrianRouteKnowledge knowledge, Set<SurfaceAnchor> excluded,
+            java.util.function.Predicate<SurfaceAnchor> available) {
         // Local traffic clearance must not wait for a whole-world hierarchical
         // route when the same geometry already proves a bounded sidestep.
         var local = knowledge.localMovementRoutes(start);

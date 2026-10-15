@@ -24,15 +24,21 @@ final class FrontierV3PedestrianPlanning {
     private FrontierV3PedestrianPlanning() { }
 
     static synchronized void tick(FrontierV3ServerRuntime<?, ?> runtime) {
-        tick(runtime, (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000L));
+        tick(runtime, (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000L),
+                io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.NAVIGATION_WORKERS.get(),
+                io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.NAVIGATION_SLICES_PER_TURN.get());
     }
     /** Host budget is operational input, independent of simulation time and test config bootstrapping. */
     static synchronized void tick(FrontierV3ServerRuntime<?, ?> runtime, long allowance) {
+        tick(runtime, allowance, io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.NAVIGATION_WORKERS.getDefault(),
+                io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.NAVIGATION_SLICES_PER_TURN.getDefault());
+    }
+    private static void tick(FrontierV3ServerRuntime<?, ?> runtime, long allowance, int parallelism, int slices) {
         if (allowance <= 0) throw new IllegalArgumentException("navigation host budget must be positive");
         if (owner == null) {
             // Host-owned bounded pool. A task captures only immutable known
             // geometry; no worker can access ServerLevel, chunks or domain writes.
-            var nextWorkers = new java.util.concurrent.ThreadPoolExecutor(2, 2, 0L, java.util.concurrent.TimeUnit.MILLISECONDS,
+            var nextWorkers = new java.util.concurrent.ThreadPoolExecutor(parallelism, parallelism, 0L, java.util.concurrent.TimeUnit.MILLISECONDS,
                     new java.util.concurrent.ArrayBlockingQueue<>(8),
                     Thread.ofPlatform().daemon(true).name("pm-v3-navigation-", 0).factory(),
                     new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
@@ -46,7 +52,7 @@ final class FrontierV3PedestrianPlanning {
         }
         if (owner != runtime) throw new IllegalStateException("pedestrian planning has a foreign runtime owner");
         long started = System.nanoTime();
-        planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2,
+        planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * slices,
                 () -> System.nanoTime() - started < allowance);
         continuations.changed(planner.drainChanges());
         admitReady(runtime, continuations);
@@ -79,7 +85,12 @@ final class FrontierV3PedestrianPlanning {
                 + ",\"activeSearches\":" + (owner == runtime ? planner.pendingCount() : 0)
                 + ",\"inFlightSlices\":" + (owner == runtime ? planner.inFlightCount() : 0)
                 + ",\"runningWorkers\":" + (owner == runtime ? workers.getActiveCount() : 0)
+                + ",\"workerPoolSize\":" + (owner == runtime ? workers.getPoolSize() : 0)
+                + ",\"queuedWorkerSlices\":" + (owner == runtime ? workers.getQueue().size() : 0)
+                + ",\"completedWorkerSlices\":" + (owner == runtime ? workers.getCompletedTaskCount() : 0)
                 + ",\"deferredSearches\":" + (owner == runtime ? planner.deferredCount() : 0)
+                + ",\"suspendedSearches\":" + (owner == runtime ? planner.suspendedCount() : 0)
+                + ",\"serviceQueues\":" + serviceDiagnostic(runtime)
                 + ",\"oldestWaitPlanningTurns\":" + (owner == runtime ? planner.oldestWaitTurns() : 0)
                 + ",\"searchWorkUnits\":" + (owner == runtime ? planner.workUnits() : 0)
                 + ",\"completedSearches\":" + (owner == runtime ? planner.completedCount() : 0)
@@ -90,6 +101,13 @@ final class FrontierV3PedestrianPlanning {
                 + ",\"maximumReceipts\":" + capacity.maximumReceipts()
                 + ",\"physicalAdmissionHeld\":" + !capacity.hasCausalHeadroom()
                 + ",\"availableTransactions\":" + capacity.availableTransactions() + "}";
+    }
+    private static String serviceDiagnostic(FrontierV3ServerRuntime<?, ?> runtime) {
+        if (owner != runtime) return "[]";
+        return planner.serviceDiagnostics().stream().map(service -> "{\"service\":\"" + service.service()
+                + "\",\"active\":" + service.active() + ",\"waiting\":" + service.waiting()
+                + ",\"oldestWaitPlanningTurns\":" + service.oldestWaitTurns() + "}")
+                .collect(java.util.stream.Collectors.joining(",", "[", "]"));
     }
     private static String waitingDiagnostic(FrontierV3ServerRuntime<?, ?> runtime) {
         if (owner != runtime) return "[]";

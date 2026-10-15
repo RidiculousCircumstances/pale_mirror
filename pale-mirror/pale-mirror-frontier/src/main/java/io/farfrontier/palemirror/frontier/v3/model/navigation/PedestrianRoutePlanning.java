@@ -11,6 +11,8 @@ public final class PedestrianRoutePlanning {
     private static PedestrianRoutePlanner current = DIRECT;
     private static final ThreadLocal<java.util.LinkedHashSet<PedestrianRouteRequest>> observations = new ThreadLocal<>();
     private static final ThreadLocal<Inspection> inspection = new ThreadLocal<>();
+    private static final ThreadLocal<PedestrianPlanningService> service = new ThreadLocal<>();
+    private static final ThreadLocal<java.util.LinkedHashSet<PedestrianRouteRequest>> acquired = new ThreadLocal<>();
     private static final class Inspection { private boolean unresolved; }
     public enum Readiness { READY, UNAVAILABLE, UNRESOLVED }
     private PedestrianRoutePlanning() { }
@@ -39,7 +41,20 @@ public final class PedestrianRoutePlanning {
         }
         PedestrianRoutePlanner planner;
         synchronized (PedestrianRoutePlanning.class) { planner = current; }
-        return planner.query(geometry, start, target, extent);
+        var acquisition = acquired.get();
+        boolean created = acquisition != null && !planner.hasCalculation(geometry, start, target, extent);
+        var result = planner.query(geometry, start, target, extent,
+                service.get() == null ? PedestrianPlanningService.ORDINARY : service.get());
+        if (created && result.status() == PedestrianRouteResult.Status.PLANNING)
+            acquisition.add(PedestrianRouteRequest.of(geometry, start, target, extent));
+        return result;
+    }
+
+    /** Lexically scoped operational requirement. Does not alter the calculation/cache identity. */
+    public static <T> T withService(PedestrianPlanningService requirement, java.util.function.Supplier<T> calculation) {
+        Objects.requireNonNull(requirement); var previous = service.get(); service.set(requirement);
+        try { return calculation.get(); }
+        finally { if (previous == null) service.remove(); else service.set(previous); }
     }
 
     /** The consumer declares a dependency only when an unresolved calculation actually prevents its result. */
@@ -72,10 +87,19 @@ public final class PedestrianRoutePlanning {
     /** Captures declared pending dependencies of this caller, not diagnostics or unused alternatives. */
     public static <T> Observation<T> observe(java.util.function.Supplier<T> calculation) {
         var previous = observations.get();
+        var previousAcquired = acquired.get();
+        var created = new java.util.LinkedHashSet<PedestrianRouteRequest>(); acquired.set(created);
         var requests = new java.util.LinkedHashSet<PedestrianRouteRequest>();
         observations.set(requests);
         try { return new Observation<>(calculation.get(), java.util.List.copyOf(requests)); }
         finally {
+            PedestrianRoutePlanner planner;
+            synchronized (PedestrianRoutePlanning.class) { planner = current; }
+            // A newly launched alternative which the selector did not retain
+            // has no other caller yet. Never cancel pre-existing/shared demand.
+            for (var request : created) if (!requests.contains(request)) planner.discardUnobserved(request);
+            if (previousAcquired == null) acquired.remove();
+            else { created.retainAll(requests); previousAcquired.addAll(created); acquired.set(previousAcquired); }
             if (previous == null) observations.remove();
             else { previous.addAll(requests); observations.set(previous); }
         }

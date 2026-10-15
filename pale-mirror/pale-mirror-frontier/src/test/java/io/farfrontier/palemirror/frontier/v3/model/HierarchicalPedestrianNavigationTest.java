@@ -43,6 +43,14 @@ class HierarchicalPedestrianNavigationTest {
             assertEquals(PedestrianRouteResult.Status.FOUND, result.status(), "rebase must not repeatedly promote the first long calculation");
             KnownPedestrianNavigation.requireRoute(ground, result.route());
             assertEquals(2, planner.pendingCount());
+            // The local lane may now finish before either long request gets a
+            // slice. Rebuilding views must still preserve subsequent far progress.
+            for (int turn = 0; turn < 4; turn++) {
+                ground = rebuild.get();
+                planner.query(ground, start, far); planner.query(ground, start, farther);
+                var admission = new java.util.concurrent.atomic.AtomicInteger();
+                planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2, () -> admission.incrementAndGet() < 200);
+            }
             assertTrue(planner.waitingDiagnostics(8).stream().allMatch(wait -> wait.searchWorkUnits() > 0));
         }
     }
@@ -64,8 +72,9 @@ class HierarchicalPedestrianNavigationTest {
         var start = SurfaceAnchor.at(1, 63, 1); var near = SurfaceAnchor.at(3, 63, 1);
         try (var planner = new CooperativePedestrianPlanner()) {
             for (int i = 0; i < 8; i++) planner.query(ground, start, SurfaceAnchor.at(2_000 + i, 63, 1));
-            assertEquals(7, planner.pendingCount()); assertEquals(1, planner.deferredCount());
+            assertEquals(8, planner.pendingCount()); assertEquals(0, planner.deferredCount(), "idle capacity is borrowable");
             assertEquals("PLANNING_QUEUED", planner.query(ground, start, near).reason());
+            assertEquals(1, planner.suspendedCount(), "local demand reclaims borrowed capacity without throwing away a long search");
             for (int turn = 0; turn < 32 && planner.peek(ground, start, near).orElseThrow().status() == PedestrianRouteResult.Status.PLANNING; turn++) {
                 var admission = new java.util.concurrent.atomic.AtomicInteger();
                 planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2, () -> admission.incrementAndGet() < 200);

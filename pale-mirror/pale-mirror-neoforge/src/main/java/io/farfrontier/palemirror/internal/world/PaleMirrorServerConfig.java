@@ -13,6 +13,8 @@ public final class PaleMirrorServerConfig {
     public static final ModConfigSpec.IntValue PEACEFUL_AMBIENT_CAP_PER_PLAYER;
     public static final ModConfigSpec.DoubleValue RUNTIME_BUDGET_MILLIS;
     public static final ModConfigSpec.IntValue RUNTIME_WEIGHT_BUDGET;
+    public static final ModConfigSpec.IntValue NAVIGATION_WORKERS;
+    public static final ModConfigSpec.IntValue NAVIGATION_SLICES_PER_TURN;
     public static final ModConfigSpec.BooleanValue DH_CACHE_ONLY_CONTROL;
     public static final ModConfigSpec.DoubleValue DH_FAST_TRAVEL_ENTER_SPEED;
     public static final ModConfigSpec.DoubleValue DH_FAST_TRAVEL_EXIT_SPEED;
@@ -46,6 +48,10 @@ public final class PaleMirrorServerConfig {
         RUNTIME_WEIGHT_BUDGET = builder.comment(
                         "Maximum weighted PM operations admitted per tick before background work is deferred.")
                 .defineInRange("runtime.weightBudget", 256, 16, 4096);
+        NAVIGATION_WORKERS = builder.comment("Bounded immutable route-search workers; restart required. Never access live Minecraft state.")
+                .defineInRange("runtime.navigationWorkers", 2, 1, 4);
+        NAVIGATION_SLICES_PER_TURN = builder.comment("Maximum new background navigation slices per host turn; total in-flight ceiling remains eight.")
+                .defineInRange("runtime.navigationSlicesPerTurn", 8, 1, 8);
         DH_CACHE_ONLY_CONTROL = builder.comment(
                         "Pin server-side Distant Horizons to PRE_EXISTING_ONLY. Ready LOD cache and sync remain enabled, "
                                 + "but DH never generates unknown terrain.")

@@ -169,7 +169,7 @@ class PedestrianPlanningWakeIndexTest {
                     List.of(pending.target(), near.target()), TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
             var observation = PedestrianRoutePlanning.observe(() -> KnownPedestrianNavigation.plannedRoute(GROUND, near.start(), order));
             assertEquals(near.target(), observation.result().getLast());
-            assertEquals(1, planner.pendingCount());
+            assertEquals(0, planner.pendingCount(), "discarded newly acquired alternatives must not consume calculation capacity");
             assertTrue(observation.requests().isEmpty(), "a usable route must not create a wake subscription for discarded alternatives");
         }
     }

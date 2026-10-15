@@ -17,6 +17,8 @@ public final class PedestrianAccessSelection {
     public boolean reachable(SurfaceAnchor target) {
         var result = results.get(target);
         if (result == null) {
+            if (results.values().stream().anyMatch(value -> value.status() == PedestrianRouteResult.Status.PLANNING)
+                    && PedestrianRoutePlanning.peek(geometry, origin, target).isEmpty()) return false;
             try { result = KnownPedestrianNavigation.queryBetween(geometry, origin, target); }
             catch (KnownPedestrianNavigation.RouteUnavailable blocked) {
                 if (blocked.status() != PedestrianRouteResult.Status.NO_PATH) throw blocked;

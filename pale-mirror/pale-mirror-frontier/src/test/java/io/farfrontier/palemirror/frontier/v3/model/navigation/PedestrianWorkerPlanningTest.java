@@ -65,6 +65,73 @@ class PedestrianWorkerPlanningTest {
         }
     }
 
+    @Test void completedClearanceDoesNotWaitForAnUnfinishedIndependentLane() {
+        var workers = new ManualWorkers();
+        var geometry = geometry(workers, PedestrianGeometryRevision.initial(), -1);
+        var start = SurfaceAnchor.at(1, 63, 1); var ordinary = SurfaceAnchor.at(10, 63, 1);
+        var clearance = SurfaceAnchor.at(2, 63, 1);
+        try (var planner = new CooperativePedestrianPlanner(workers)) {
+            planner.query(geometry, start, ordinary); planner.advance(BUDGET);
+            planner.query(geometry, start, clearance, PedestrianRouteExtent.COMPLETE, PedestrianPlanningService.PASSAGE_CLEARANCE);
+            planner.advance(BUDGET); workers.run(1); planner.advance(BUDGET);
+            assertEquals(PedestrianRouteResult.Status.FOUND, planner.peek(geometry, start, clearance).orElseThrow().status());
+            assertEquals(PedestrianRouteResult.Status.PLANNING, planner.peek(geometry, start, ordinary).orElseThrow().status());
+            workers.drain(); planner.advance(BUDGET);
+            assertEquals(PedestrianRouteResult.Status.FOUND, planner.peek(geometry, start, ordinary).orElseThrow().status());
+        }
+    }
+
+    @Test void clearanceCanBorrowBackCapacityAndOrdinaryWorkStillCompletes() {
+        var workers = new ManualWorkers(); var geometry = geometry(workers, PedestrianGeometryRevision.initial(), -1);
+        var start = SurfaceAnchor.at(1, 63, 1); var clearance = SurfaceAnchor.at(1, 63, 2);
+        try (var planner = new CooperativePedestrianPlanner(workers)) {
+            for (int i = 0; i < 8; i++) planner.query(geometry, start, SurfaceAnchor.at(3 + i, 63, 1));
+            assertEquals("PLANNING_QUEUED", planner.query(geometry, start, clearance,
+                    PedestrianRouteExtent.COMPLETE, PedestrianPlanningService.PASSAGE_CLEARANCE).reason());
+            planner.advance(BUDGET); workers.drain(); planner.advance(BUDGET);
+            assertEquals(PedestrianRouteResult.Status.FOUND, planner.peek(geometry, start, clearance).orElseThrow().status());
+            for (int i = 0; i < 32 && planner.pendingCount() + planner.deferredCount() > 0; i++) {
+                workers.drain(); planner.advance(BUDGET);
+            }
+            assertEquals(9, planner.completedCount()); assertEquals(0, planner.deferredCount());
+        }
+    }
+
+    @Test void mixedPressureCompletesLocalServiceBeforeDistantJourneysWithoutStarvingEither() {
+        var workers = new ManualWorkers(); var revision = PedestrianGeometryRevision.initial();
+        var geometry = new PedestrianRouteGeometry() {
+            public Object version() { return revision; }
+            public Optional<PedestrianGeometryRevision> regionalRevision() { return Optional.of(revision); }
+            public WorldBounds bounds() { return new WorldBounds(0, 0, 512, 16); }
+            public SurfaceAnchor supportAt(int x, int z) {
+                assertTrue(workers.calculating, "no host surveying under mixed pressure");
+                return SurfaceAnchor.at(x, 63, z);
+            }
+            public boolean blocked(SurfaceAnchor surface) { return false; }
+        };
+        var start = SurfaceAnchor.at(1, 63, 1); var local = SurfaceAnchor.at(3, 63, 1);
+        var clearance = SurfaceAnchor.at(1, 63, 2);
+        try (var planner = new CooperativePedestrianPlanner(workers)) {
+            for (int i = 0; i < 16; i++) planner.query(geometry, start, SurfaceAnchor.at(480 + i, 63, 1));
+            planner.advance(BUDGET * 4); // All borrowed slots have a real in-flight slice.
+            planner.query(geometry, start, local);
+            planner.query(geometry, start, clearance, PedestrianRouteExtent.COMPLETE, PedestrianPlanningService.PASSAGE_CLEARANCE);
+            for (int turn = 0; turn < 8 && planner.peek(geometry, start, local).orElseThrow().status() == PedestrianRouteResult.Status.PLANNING; turn++) {
+                workers.drain(); planner.advance(BUDGET * 4);
+            }
+            assertEquals(PedestrianRouteResult.Status.FOUND, planner.peek(geometry, start, clearance).orElseThrow().status());
+            assertEquals(PedestrianRouteResult.Status.FOUND, planner.peek(geometry, start, local).orElseThrow().status());
+            assertTrue(planner.pendingCount() + planner.deferredCount() > 0, "local requests cannot wait for the distant batch to drain");
+            for (int turn = 0; turn < 1000 && planner.pendingCount() + planner.deferredCount() > 0; turn++) {
+                workers.drain(); planner.advance(BUDGET * 4);
+                assertTrue(planner.pendingCount() <= 8); assertTrue(planner.suspendedCount() <= 8);
+                assertTrue(workers.queue.size() <= 8);
+            }
+            assertEquals(18, planner.completedCount(), "distant demand retains eventual service");
+            assertEquals(0, planner.deferredCount());
+        }
+    }
+
     @Test void changedDependencyDiscardsWorkerResultButUnrelatedRevisionRetainsIt() {
         for (boolean changedRoute : List.of(false, true)) {
             var workers = new ManualWorkers(); var revision = PedestrianGeometryRevision.initial();

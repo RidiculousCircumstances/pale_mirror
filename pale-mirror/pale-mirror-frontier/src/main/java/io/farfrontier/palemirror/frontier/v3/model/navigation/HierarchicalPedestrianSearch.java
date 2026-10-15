@@ -58,6 +58,7 @@ public final class HierarchicalPedestrianSearch {
     private PedestrianMacroSearch itineraryJoin;
     private long attemptedItineraryRevision = -1;
     private boolean destinationChecked;
+    private int endpointsChecked;
     private int destinationNode, destinationEdge, destinationDirection = -1, destinationOffset, destinationExit, destinationEntrance;
 
     public HierarchicalPedestrianSearch(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
@@ -132,8 +133,24 @@ public final class HierarchicalPedestrianSearch {
         if (terminal != null) return terminal;
         long limit = work + budget;
         turnLimit = limit;
+        if (localSearch != null || reverseLocalSearch != null) {
+            while (endpointsChecked < 2) {
+                if (work >= limit || !mayContinue.getAsBoolean())
+                    return result(PedestrianRouteResult.Status.PLANNING, "ENDPOINT_CHECK_PENDING");
+                var endpoint = endpointsChecked++ == 0 ? start : target;
+                work++;
+                var tile = PedestrianRegion.Tile.at(endpoint);
+                dependencies.put(tile, geometry.regionalRevision().map(value -> value.at(tile.x(), tile.z())).orElse(geometry.version()));
+                if (!geometry.bounds().contains(endpoint.support()) || geometry.supportExcluded(endpoint))
+                    return finish(PedestrianRouteResult.Status.NO_PATH, "ENDPOINT_KNOWN_REMOVED_OR_FORBIDDEN");
+                if (!geometry.knowsSupport(endpoint))
+                    return finish(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY, "ENDPOINT_LEVEL_NOT_KNOWN");
+                if (geometry.blocked(endpoint))
+                    return finish(PedestrianRouteResult.Status.NO_PATH, "ENDPOINT_KNOWN_BLOCKED_SUPPORT");
+            }
+        }
         if (localSearch != null) {
-            work += localSearch.advance(budget, mayContinue);
+            work += localSearch.advance(Math.toIntExact(limit - work), mayContinue);
             if (!localSearch.finished()) return result(PedestrianRouteResult.Status.PLANNING, "LOCAL_SEARCH_IN_PROGRESS");
             if (localSearch.result() != null) {
                 route.addAll(localSearch.result()); localSearch = null; reverseLocalSearch = null;
@@ -241,7 +258,7 @@ public final class HierarchicalPedestrianSearch {
             // A local refinement is itself resumable; keep each admitted piece small.
             work += segmentRefinement.advance(Math.min(256, Math.toIntExact(limit - work)));
             var segment = segmentRefinement.result();
-            if (segment == null) break;
+            if (segment == null) continue;
             segmentRefinement = null;
             int offset = route.isEmpty() ? 0 : 1;
             int remaining = extent.maximumSurfaces() - route.size();

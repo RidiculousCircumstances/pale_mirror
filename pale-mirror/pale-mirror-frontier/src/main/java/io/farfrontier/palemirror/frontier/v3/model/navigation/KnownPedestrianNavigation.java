@@ -182,6 +182,10 @@ public final class KnownPedestrianNavigation {
         var pendingRequests = new java.util.ArrayList<PedestrianRouteRequest>();
         for (SurfaceAnchor station : order.legalStations()) {
             if (!geometry.bounds().contains(station.support()) || geometry.blocked(station)) continue;
+            // Explore one unresolved alternative at a time. Still inspect every
+            // retained result: an already proven alternative must not wait for it.
+            if (deferredPlanning && !retainedOnly && (best != null || !pendingRequests.isEmpty())
+                    && PedestrianRoutePlanning.peek(geometry, start, station, extent).isEmpty()) continue;
             PedestrianRouteResult result = retainedOnly ? PedestrianRoutePlanning.peek(geometry, start, station, extent)
                     .orElseGet(() -> new PedestrianRouteResult(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY,
                             List.of(), 0, 0, "ROUTE_NOT_CALCULATED"))

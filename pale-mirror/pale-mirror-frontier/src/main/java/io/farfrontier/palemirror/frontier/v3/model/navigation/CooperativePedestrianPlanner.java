@@ -10,6 +10,8 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     private static final int MAX_PENDING = 8, MAX_RESULTS = 128, MAX_RETAINED_SURFACES = 131_072, MAX_RETAINED_REGIONS = 16_384;
     private record Completed(PedestrianRouteResult result, PedestrianRegionDependencies dependencies) { }
     private final Map<PedestrianRouteRequest, PedestrianSearchTask> pending = new LinkedHashMap<>();
+    private final Map<PedestrianRouteRequest, PedestrianSearchTask> suspended = new LinkedHashMap<>();
+    private final PedestrianPlanningFairness fairness = new PedestrianPlanningFairness();
     private final java.util.concurrent.Executor executor;
     private final ArrayDeque<PedestrianSearchTask> inFlight = new ArrayDeque<>();
     private final Map<PedestrianRouteRequest, Completed> completed = new LinkedHashMap<>();
@@ -44,6 +46,10 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     }
     @Override public synchronized PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target,
                                                                PedestrianRouteExtent extent) {
+        return query(geometry, start, target, extent, PedestrianPlanningService.ORDINARY);
+    }
+    @Override public synchronized PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target,
+                                                               PedestrianRouteExtent extent, PedestrianPlanningService service) {
         if (closed) throw new IllegalStateException("pedestrian planner is closed");
         if (geometry.regionalRevision().isPresent()) synchronizeScope(geometry);
         else if (version != geometry.version()) {
@@ -54,7 +60,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
                 removeCompleted(request); invalidated(request);
             }
             for (var request : java.util.List.copyOf(deferred.keySet())) if (request.geometry().regionalRevision().isEmpty()) {
-                deferred.remove(request); invalidated(request);
+                deferred.remove(request); discardSuspended(request); invalidated(request);
             }
             version = geometry.version();
             progressRevision++;
@@ -62,21 +68,17 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         var request = PedestrianRouteRequest.of(geometry, start, target, extent);
         Completed result = completed.get(request);
         if (result != null) return result.result();
-        admitDeferred();
+        fairness.requested(request, service);
         admittedAt.putIfAbsent(request, turns);
         if (!pending.containsKey(request)) {
-            if (!canAdmit(request)) {
-                var waiting = waiting("PLANNING_QUEUE_CAPACITY");
-                if (deferred.size() >= MAX_RESULTS && !deferred.containsKey(request)) {
-                    var evicted = deferred.keySet().iterator().next();
-                    deferred.remove(evicted); admittedAt.remove(evicted); invalidated(evicted);
-                }
-                deferred.put(request, waiting); return waiting;
+            if (deferred.size() >= MAX_RESULTS && !deferred.containsKey(request)) {
+                var evicted = deferred.keySet().iterator().next();
+                deferred.remove(evicted); discardSuspended(evicted); invalidated(evicted);
             }
-            deferred.remove(request);
-            pending.put(request, task(request)); ready.addLast(request);
+            deferred.putIfAbsent(request, waiting("PLANNING_QUEUE_CAPACITY"));
         }
-        return waiting("PLANNING_QUEUED");
+        admitDeferred();
+        return waiting(pending.containsKey(request) ? "PLANNING_QUEUED" : "PLANNING_QUEUE_CAPACITY");
     }
 
     public synchronized void advance(int workBudget) {
@@ -97,7 +99,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         int visits = pending.size() + deferred.size();
         while (remaining >= HierarchicalPedestrianSearch.MIN_SLICE_WORK && visits-- > 0 && !ready.isEmpty()
                 && mayContinue.getAsBoolean()) {
-            var request = ready.removeFirst();
+            var request = fairness.take(ready);
             var search = pending.get(request);
             int slice = Math.min(remaining, HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
             var step = search.advance(slice, mayContinue);
@@ -109,28 +111,33 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         }
     }
     private void advanceWorkers(int budget, java.util.function.BooleanSupplier mayContinue) {
-        // Publish in submission order. Thread completion order cannot reorder
-        // addressed notifications; each predecessor is only one bounded slice.
+        // Independent lanes do not fence each other. Within each lane retain
+        // submission order; publication is server-owned, never a worker callback.
         int publications = MAX_PENDING;
-        while (!inFlight.isEmpty() && publications-- > 0 && mayContinue.getAsBoolean()) {
-            var task = inFlight.getFirst(); var step = task.poll();
-            if (step == null) break;
-            inFlight.removeFirst(); workUnits += step.spent();
-            if (step.spent() > 0) progressRevision++;
+        var blocked = java.util.EnumSet.noneOf(PedestrianPlanningFairness.Lane.class);
+        for (var task : java.util.List.copyOf(inFlight)) {
+            if (publications-- == 0 || !mayContinue.getAsBoolean()) break;
             var request = task.request();
-            if (pending.get(request) != task) continue;
+            if (pending.get(request) != task) { inFlight.remove(task); continue; }
+            var lane = fairness.lane(request);
+            if (blocked.contains(lane)) continue;
+            var step = task.poll();
+            if (step == null) { blocked.add(lane); continue; }
+            inFlight.remove(task); workUnits += step.spent();
+            if (step.spent() > 0) progressRevision++;
             if (step.result().status() == PedestrianRouteResult.Status.PLANNING) ready.addLast(request);
             else complete(request, task, step.result());
         }
+        admitDeferred();
         int slice = HierarchicalPedestrianSearch.MIN_SLICE_WORK;
         while (budget >= slice && !ready.isEmpty() && inFlight.size() < MAX_PENDING && mayContinue.getAsBoolean()) {
-            var request = ready.removeFirst(); var task = pending.get(request);
+            var request = fairness.take(ready); var task = pending.get(request);
             task.submit(executor, slice); inFlight.addLast(task); budget -= slice;
         }
     }
     private void complete(PedestrianRouteRequest request, PedestrianSearchTask search, PedestrianRouteResult result) {
         pending.remove(request);
-        admittedAt.remove(request); completedCount++;
+        admittedAt.remove(request); fairness.remove(request); completedCount++;
         var dependency = search.dependencies();
         corridors.remember(request.geometry(), result, dependency);
         while (!completed.isEmpty() && (completed.size() >= MAX_RESULTS
@@ -147,23 +154,43 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     private void admitDeferred() {
         // Admission resumes the exact deferred calculation, never broadcasts a free slot to all processes.
         // Also used after invalidation frees capacity, before a new caller can overtake retained waiters.
-        while (pending.size() < MAX_PENDING && !deferred.isEmpty()) {
-            var candidate = deferred.keySet().stream().filter(this::canAdmit).findFirst();
-            if (candidate.isEmpty()) break;
-            var admitted = candidate.orElseThrow(); deferred.remove(admitted);
-            pending.put(admitted, task(admitted));
+        int visits = MAX_PENDING;
+        while (!deferred.isEmpty() && visits-- > 0) {
+            var admitted = fairness.nextAdmission(deferred.keySet(), pending.keySet());
+            if (pending.size() == MAX_PENDING) {
+                var victim = fairness.yieldFor(admitted, pending.keySet(), ready);
+                if (victim == null) break;
+                // Saved searches own large bounded graphs. Keep at most another
+                // active-window worth; evicting derived work grants no outcome.
+                if (suspended.size() == MAX_PENDING) discardSuspended(suspended.keySet().iterator().next());
+                suspended.put(victim, pending.remove(victim)); ready.remove(victim);
+                deferred.put(victim, waiting("PLANNING_SERVICE_YIELD"));
+            }
+            deferred.remove(admitted);
+            var retained = suspended.remove(admitted);
+            pending.put(admitted, retained == null ? task(admitted) : retained);
             ready.addLast(admitted);
             progressRevision++;
         }
     }
-    /** Long inter-region queries cannot occupy the last slot needed by local service/work goals. */
-    private boolean canAdmit(PedestrianRouteRequest request) {
-        return pending.size() < MAX_PENDING && (PedestrianLocalSearch.nearby(request.start(), request.target())
-                || pending.keySet().stream().filter(value -> !PedestrianLocalSearch.nearby(value.start(), value.target())).count() < MAX_PENDING - 1);
+    private void discardSuspended(PedestrianRouteRequest request) {
+        var retained = suspended.remove(request); if (retained != null) retained.cancel();
+    }
+    @Override public synchronized void discardUnobserved(PedestrianRouteRequest request) {
+        var search = pending.remove(request);
+        if (search != null) { search.cancel(); inFlight.remove(search); ready.remove(request); }
+        deferred.remove(request); discardSuspended(request);
+        if (admittedAt.containsKey(request)) invalidated(request);
+    }
+    @Override public synchronized boolean hasCalculation(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target,
+                                                         PedestrianRouteExtent extent) {
+        return admittedAt.keySet().stream().anyMatch(request -> request.start().equals(start) && request.target().equals(target)
+                && request.extent().equals(extent) && (request.geometry() == geometry
+                    || geometry.regionalRevision().isPresent() && sameScope(request, geometry)));
     }
     /** Diagnostic counter only. Addressed changes, not this global counter, wake continuations. */
     public synchronized long progressRevision() { return progressRevision; }
-    private void invalidated(PedestrianRouteRequest request) { admittedAt.remove(request); changes.put(request, PedestrianPlanningChange.Kind.INVALIDATED); }
+    private void invalidated(PedestrianRouteRequest request) { admittedAt.remove(request); fairness.remove(request); changes.put(request, PedestrianPlanningChange.Kind.INVALIDATED); }
     private void removeCompleted(PedestrianRouteRequest request) {
         var removed = completed.remove(request);
         retainedSurfaces -= removed.result().route().size(); retainedRegions -= removed.dependencies().revisions().size();
@@ -176,9 +203,11 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     private void synchronizeScope(PedestrianRouteGeometry geometry) {
         for (var request : java.util.List.copyOf(pending.keySet())) if (request.geometry() != geometry && sameScope(request, geometry)) {
             long since = admittedAt.get(request);
-            var search = pending.remove(request); invalidated(request);
             var replacement = PedestrianRouteRequest.of(geometry, request.start(), request.target(), request.extent());
+            var lane = fairness.lane(request);
+            var search = pending.remove(request); invalidated(request);
             if (search.rebase(replacement)) {
+                fairness.restore(replacement, lane);
                 pending.put(replacement, search);
                 // Replacing an immutable view is not a new calculation turn.
                 // Preserve round-robin position: rebuilding views every tick
@@ -187,7 +216,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
                 for (var queued : ready) rotation.addLast(queued.equals(request) ? replacement : queued);
                 ready.clear(); ready.addAll(rotation);
                 admittedAt.put(replacement, since);
-            } else { search.cancel(); inFlight.remove(search); ready.remove(request); }
+            } else { fairness.remove(replacement); search.cancel(); inFlight.remove(search); ready.remove(request); }
             progressRevision++;
         }
         for (var request : java.util.List.copyOf(completed.keySet())) if (request.geometry() != geometry && sameScope(request, geometry)) {
@@ -207,8 +236,13 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
                 rebasedDeferred.put(request, entry.getValue()); continue;
             }
             long since = admittedAt.get(request);
-            invalidated(request);
             var replacement = PedestrianRouteRequest.of(geometry, request.start(), request.target(), request.extent());
+            var lane = fairness.lane(request); invalidated(request); fairness.restore(replacement, lane);
+            var retained = suspended.remove(request);
+            if (retained != null) {
+                if (retained.rebase(replacement)) suspended.put(replacement, retained);
+                else retained.cancel();
+            }
             rebasedDeferred.put(replacement, entry.getValue()); admittedAt.put(replacement, since); progressRevision++;
         }
         // A refreshed view is the same demand, not a new arrival at the end of the queue.
@@ -246,6 +280,15 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     public synchronized int pendingCount() { return pending.size(); }
     public synchronized int inFlightCount() { return inFlight.size(); }
     public synchronized int deferredCount() { return deferred.size(); }
+    public record ServiceDiagnostic(String service, long active, long waiting, long oldestWaitTurns) { }
+    public synchronized java.util.List<ServiceDiagnostic> serviceDiagnostics() {
+        return java.util.Arrays.stream(PedestrianPlanningFairness.Lane.values()).map(lane -> new ServiceDiagnostic(lane.name(),
+                pending.keySet().stream().filter(request -> fairness.lane(request) == lane).count(),
+                deferred.keySet().stream().filter(request -> fairness.lane(request) == lane).count(),
+                admittedAt.entrySet().stream().filter(entry -> fairness.lane(entry.getKey()) == lane)
+                        .mapToLong(entry -> turns - entry.getValue()).max().orElse(0L))).toList();
+    }
+    public synchronized int suspendedCount() { return suspended.size(); }
     /** Host planning turns, not canonical ticks or a product timeout. */
     public synchronized long oldestWaitTurns() {
         return admittedAt.values().stream().mapToLong(since -> turns - since).max().orElse(0L);
@@ -270,6 +313,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     }
     @Override public synchronized void close() {
         closed = true; pending.values().forEach(PedestrianSearchTask::cancel);
+        suspended.values().forEach(PedestrianSearchTask::cancel); suspended.clear(); fairness.clear();
         pending.clear(); inFlight.clear(); ready.clear(); completed.clear(); deferred.clear(); admittedAt.clear(); changes.clear();
         regions.clear(); corridors.clear(); itineraries.clear(); retainedSurfaces = 0; retainedRegions = 0;
     }

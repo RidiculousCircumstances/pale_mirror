@@ -106,6 +106,12 @@ final class FrontierV3PedestrianCourtesy {
     }
 
     private static boolean pursue(ServerLevel level, FrontierWorldState state, Mob body, FrontierV3ActorActuation actuation) {
+        return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.withService(
+                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPlanningService.PASSAGE_CLEARANCE,
+                () -> pursueClearance(level, state, body, actuation));
+    }
+
+    private static boolean pursueClearance(ServerLevel level, FrontierWorldState state, Mob body, FrontierV3ActorActuation actuation) {
         SubjectId actor = actuation.id().execution().actorId();
         Target target = TARGETS.get(body);
         if (target != null && !target.authority().id().equals(actuation.id())) {
