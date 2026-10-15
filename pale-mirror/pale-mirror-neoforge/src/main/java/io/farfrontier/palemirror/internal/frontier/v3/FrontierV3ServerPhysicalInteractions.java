@@ -54,9 +54,9 @@ final class FrontierV3ServerPhysicalInteractions {
         var hall = state.bootstrap().settlements().stream().flatMap(home -> home.structures().stream())
                 .filter(structure -> structure.id().equals(board.ownerId())
                         && structure.kind() == io.farfrontier.palemirror.frontier.v3.model.StructureKind.HALL).findFirst();
-        var card = hall.isPresent() ? FrontierV3TownHallCard.from(state, hall.orElseThrow())
-                : FrontierV3ObjectBoardCard.fromBoard(board);
-        PaleMirrorPlayerPresentation.inspect(player, "frontier-v3:board:" + owner, card);
+        if (hall.isPresent()) PaleMirrorPlayerPresentation.inspectPages(player, "frontier-v3:board:" + owner,
+                FrontierV3TownTradeCards.pages(state, hall.orElseThrow(), runtime.executionView().orElseThrow().instant().ticks()));
+        else PaleMirrorPlayerPresentation.inspect(player, "frontier-v3:board:" + owner, FrontierV3ObjectBoardCard.fromBoard(board));
         return true;
     }
     static boolean presentTownHall(ServerLevel level, ServerPlayer player, BlockPos position) {
@@ -76,8 +76,8 @@ final class FrontierV3ServerPhysicalInteractions {
                         && structure.kind() == io.farfrontier.palemirror.frontier.v3.model.StructureKind.HALL).findFirst();
         if (hall.isEmpty() || !level.getBlockState(position).equals(FrontierV3GrayboxExecutor.material(
                 io.farfrontier.palemirror.frontier.v3.model.GrayboxMaterial.valueOf(claim.material())))) return false;
-        PaleMirrorPlayerPresentation.inspect(player, "frontier-v3:board:" + claim.owner(),
-                FrontierV3TownHallCard.from(state, hall.orElseThrow()));
+        PaleMirrorPlayerPresentation.inspectPages(player, "frontier-v3:board:" + claim.owner(),
+                FrontierV3TownTradeCards.pages(state, hall.orElseThrow(), runtime.executionView().orElseThrow().instant().ticks()));
         return true;
     }
     static boolean presentResident(ServerLevel level, ServerPlayer player, Entity entity) {

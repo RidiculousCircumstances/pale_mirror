@@ -25,7 +25,10 @@ import net.minecraft.sounds.SoundSource;
 public final class PaleMirrorPlayerPresentation {
     private static final int MAX_CONNECTED_PLAYERS = 128;
     private static final int CONTEXT_DURATION_TICKS = 80;
-    private static final Map<MinecraftServer, Map<UUID, PlayerNoticeGate>> GATES = new IdentityHashMap<>();
+    private record Session(PlayerNoticeGate gate, ContextCardPager pager) {
+        Session() { this(new PlayerNoticeGate(), new ContextCardPager()); }
+    }
+    private static final Map<MinecraftServer, Map<UUID, Session>> GATES = new IdentityHashMap<>();
 
     private PaleMirrorPlayerPresentation() { }
 
@@ -37,7 +40,7 @@ public final class PaleMirrorPlayerPresentation {
     public static void actionRejected(ServerPlayer player, String key) {
         Objects.requireNonNull(player, "player");
         PlayerNoticeGate gate = gates(Objects.requireNonNull(player.getServer(), "player server"))
-                .computeIfAbsent(player.getUUID(), ignored -> new PlayerNoticeGate());
+                .computeIfAbsent(player.getUUID(), ignored -> new Session()).gate();
         if (gate.admit(new PlayerNoticeGate.Notice(key, PlayerNoticeGate.Channel.DENIAL_CUE,
                 PlayerNoticeGate.Priority.REJECTION, PlayerNoticeGate.Origin.PLAYER_ACTION, 100),
                 player.serverLevel().getGameTime()) != PlayerNoticeGate.Decision.DELIVER) return;
@@ -48,11 +51,28 @@ public final class PaleMirrorPlayerPresentation {
     public static void inspect(ServerPlayer player, String key, PlayerContextCard card) {
         Objects.requireNonNull(player, "player"); Objects.requireNonNull(card, "card");
         PlayerNoticeGate gate = gates(Objects.requireNonNull(player.getServer(), "player server"))
-                .computeIfAbsent(player.getUUID(), ignored -> new PlayerNoticeGate());
+                .computeIfAbsent(player.getUUID(), ignored -> new Session()).gate();
         if (gate.admit(new PlayerNoticeGate.Notice(key, PlayerNoticeGate.Channel.CONTEXT_CARD,
                 PlayerNoticeGate.Priority.CONTEXT, PlayerNoticeGate.Origin.PLAYER_ACTION, 20), player.serverLevel().getGameTime()) != PlayerNoticeGate.Decision.DELIVER) return;
         int duration = card.lines().size() > 2 ? 200 : CONTEXT_DURATION_TICKS;
         PaleMirrorNetwork.sendContextCard(player, new PlayerContextCardPayload(card.title(), card.lines(), duration, card.accentRgb()));
+    }
+
+    /** Explicit repeated inspection pages; duplicate interaction events must not advance the cursor. */
+    public static void inspectPages(ServerPlayer player, String key, java.util.List<PlayerContextCard> pages) {
+        if (pages.isEmpty() || pages.stream().anyMatch(card -> card.lines().size() >= PlayerContextCard.MAX_LINES))
+            throw new IllegalArgumentException("paged cards must leave room for navigation");
+        var session = gates(Objects.requireNonNull(player.getServer(), "player server"))
+                .computeIfAbsent(player.getUUID(), ignored -> new Session());
+        long now = player.serverLevel().getGameTime();
+        if (session.gate().admit(new PlayerNoticeGate.Notice(key, PlayerNoticeGate.Channel.CONTEXT_CARD,
+                PlayerNoticeGate.Priority.CONTEXT, PlayerNoticeGate.Origin.PLAYER_ACTION, 20), now)
+                != PlayerNoticeGate.Decision.DELIVER) return;
+        int index = session.pager().next(key, pages.size(), now, player.isShiftKeyDown());
+        var card = pages.get(index);
+        var lines = new java.util.ArrayList<>(card.lines());
+        lines.add((index + 1) + "/" + pages.size() + " · Click: next · Sneak: first");
+        PaleMirrorNetwork.sendContextCard(player, new PlayerContextCardPayload(card.title(), lines, 300, card.accentRgb()));
     }
 
     /** Clears the only ephemeral state at server shutdown; no player/world state is retained. */
@@ -60,10 +80,10 @@ public final class PaleMirrorPlayerPresentation {
         GATES.remove(Objects.requireNonNull(server, "server"));
     }
 
-    private static Map<UUID, PlayerNoticeGate> gates(MinecraftServer server) {
+    private static Map<UUID, Session> gates(MinecraftServer server) {
         return GATES.computeIfAbsent(server, ignored -> new LinkedHashMap<>(MAX_CONNECTED_PLAYERS + 1, 0.75f, true) {
             @Override
-            protected boolean removeEldestEntry(Map.Entry<UUID, PlayerNoticeGate> eldest) {
+            protected boolean removeEldestEntry(Map.Entry<UUID, Session> eldest) {
                 return size() > MAX_CONNECTED_PLAYERS;
             }
         });
