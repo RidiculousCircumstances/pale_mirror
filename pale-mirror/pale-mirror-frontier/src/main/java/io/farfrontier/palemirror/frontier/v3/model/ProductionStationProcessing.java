@@ -5,15 +5,21 @@ import java.util.Optional;
 
 /** Station lifecycle service: no knowledge of bakery phases, resident needs or travel. */
 public final class ProductionStationProcessing {
+    public enum StartReadiness { READY, OPERATION_ACTIVE, FUEL_EFFECT_PENDING, OUTPUT_OCCUPIED, INSUFFICIENT_HEAT }
     private ProductionStationProcessing() { }
     public static boolean canStart(FrontierWorldState state, SubjectId stationId, ProductionRecipe.Id recipeId, int inputQuantity) {
+        return startReadiness(state, stationId, recipeId, inputQuantity) == StartReadiness.READY;
+    }
+    public static StartReadiness startReadiness(FrontierWorldState state, SubjectId stationId, ProductionRecipe.Id recipeId, int inputQuantity) {
         var recipe = state.bootstrap().ruleset().production().require(recipeId);
         recipe.outputForInput(inputQuantity);
         var machine = state.productionStations().require(stationId);
         var station = ProductionStationEnergy.record(state, stationId).productionStation().orElseThrow();
-        return machine.operation().isEmpty() && machine.pendingFuel().isEmpty()
-                && ProductionStationRecipe.portVacant(state, station, ActorContainerItemOrder.StationPort.OUTPUT)
-                && machine.storedHeat() >= Math.multiplyExact(recipe.heatPerBatch(), inputQuantity / recipe.ingredient().quantity());
+        if (machine.operation().isPresent()) return StartReadiness.OPERATION_ACTIVE;
+        if (machine.pendingFuel().isPresent()) return StartReadiness.FUEL_EFFECT_PENDING;
+        if (!ProductionStationRecipe.portVacant(state, station, ActorContainerItemOrder.StationPort.OUTPUT)) return StartReadiness.OUTPUT_OCCUPIED;
+        return machine.storedHeat() >= Math.multiplyExact(recipe.heatPerBatch(), inputQuantity / recipe.ingredient().quantity())
+                ? StartReadiness.READY : StartReadiness.INSUFFICIENT_HEAT;
     }
     public static ProductionOperation require(FrontierWorldState state, SubjectId stationId,
                                                SubjectId orderId, ProductionRecipe.Id recipeId) {

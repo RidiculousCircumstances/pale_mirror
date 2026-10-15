@@ -19,4 +19,9 @@ public final class SupplyCapacityComposition {
         for (var key : SupplyCapacityPort.Key.values()) result.addAll(PORTS.get(key).read(state, home, stocks));
         return List.copyOf(result);
     }
+    public static List<SupplyPlanner.Dependency> dependencies(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks) {
+        var result = new ArrayList<SupplyPlanner.Dependency>();
+        for (var key : SupplyCapacityPort.Key.values()) result.addAll(PORTS.get(key).dependencies(state, home, stocks));
+        return List.copyOf(result);
+    }
 }

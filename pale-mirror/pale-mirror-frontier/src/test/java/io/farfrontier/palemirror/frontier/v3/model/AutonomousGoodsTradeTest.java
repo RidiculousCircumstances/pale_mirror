@@ -181,6 +181,30 @@ class AutonomousGoodsTradeTest {
         assertThrows(IllegalArgumentException.class, () -> FrontierWorldRuntimeDefinition.planScheduled(state, action, new SimInstant(799)));
     }
 
+    @Test void actualAskNotBuyerCeilingDeterminesAffordablePartialPurchase() {
+        var state = issue(companyFixture(), HOME, "minecraft:wheat", 64, "affordable-public-grain");
+        var budget = FixedScalar.whole(5);
+        var economics = state.inventory().economics();
+        state = state.withInventory(state.inventory().withEconomics(economics.transfer(COMPANY, HOME,
+                economics.availableToReserve(COMPANY).minus(budget))));
+        var trade = state.companies().goodsTrade();
+        var participants = new HashMap<>(trade.participants().participants());
+        var buyer = participants.get(COMPANY);
+        participants.put(COMPANY, buyer.withPrices(Map.of("minecraft:wheat",
+                new io.farfrontier.palemirror.frontier.v3.model.market.MarketPricePolicy.Quote(
+                        FixedScalar.whole(1), FixedScalar.whole(10), FixedScalar.whole(1), 0, 0, Optional.empty(), 0))));
+        state = state.withCompanies(state.companies().withGoodsTrade(trade.withParticipants(new GoodsParticipantState(participants))));
+        state = review(state, HOME, 400); state = review(state, COMPANY, 400);
+        var contract = state.companies().goodsTrade().contracts().values().stream()
+                .filter(value -> value.buyer().id().equals(COMPANY)).findFirst().orElseThrow();
+        assertEquals(5, contract.quantity(), "five affordable units must not disappear behind a ten-unit price ceiling");
+        assertEquals(FixedScalar.whole(1), contract.deliveredUnitPrice());
+        assertEquals(FixedScalar.ZERO, state.inventory().economics().availableToReserve(COMPANY));
+        state = review(state, COMPANY, 401);
+        assertTrue(state.companies().goodsTrade().contracts().get(contract.id()).fulfilled());
+        assertEquals(FixedScalar.ZERO, state.inventory().economics().require(COMPANY).balance());
+        assertEquals(5, state.inventory().fungibleResources().totalQuantity(COMPANY, "minecraft:wheat"));
+    }
     @Test void unfundedOrUnknownDemandIsExplainedWithoutInventingAnOrderOrPayment() {
         var state = companyFixture();
         var funds = state.inventory().economics().availableToReserve(HOME);

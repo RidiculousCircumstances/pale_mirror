@@ -6,6 +6,19 @@ import java.util.List;
 
 /** Production-owned interpretation of pickup, delivery and witnessed departure. */
 public final class ProductionServiceAccess implements ServiceAccessCapability {
+    public sealed interface ResumeWait { String label(); }
+    public enum ServiceWait implements ResumeWait {
+        STATION_CUSTODY, AUTOMATIC_PROCESSING, OUTPUT_STORAGE_CAPACITY;
+        @Override public String label() { return name(); }
+    }
+    public record StationWait(ProductionStationProcessing.StartReadiness readiness) implements ResumeWait {
+        public StationWait {
+            java.util.Objects.requireNonNull(readiness);
+            if (readiness == ProductionStationProcessing.StartReadiness.READY)
+                throw new IllegalArgumentException("ready station has no wait");
+        }
+        @Override public String label() { return readiness.name(); }
+    }
     @Override public ServiceAccessDemand.Kind kind() { return ServiceAccessDemand.Kind.PRODUCTION; }
     @Override public ServiceAccessDemand.Priority priority() { return ServiceAccessDemand.Priority.WORK; }
     @Override public java.util.Set<SubjectId> wakePoints(FrontierWorldState previous, FrontierWorldState next) {
@@ -41,11 +54,16 @@ public final class ProductionServiceAccess implements ServiceAccessCapability {
     public static boolean mayResumeWork(FrontierWorldState state, HumanAssignment assignment) {
         FrontierProductionWorkSceneSupport.executionCheckpoint(state, assignment);
         var job = state.productionJobs().get(assignment.ownerId().orElseThrow());
+        return resumeBlocker(state, job).isEmpty();
+    }
+    /** Owner-provided explanation, shared by admission and read-only diagnostics. */
+    public static java.util.Optional<ResumeWait> resumeBlocker(FrontierWorldState state, ProductionJob job) {
         var work = job.bakeryWork().orElseThrow();
         if (work.phase() == BakeryWorkState.Phase.PROCESSING
                 && state.bootstrap().ruleset().production().require(work.recipeId()).processingMode() == ProductionRecipe.ProcessingMode.AUTOMATIC)
-            return BakeryStationOperation.require(state, job).complete();
-        return operationEligible(state, job);
+            return BakeryStationOperation.require(state, job).complete() ? java.util.Optional.empty()
+                    : java.util.Optional.of(ServiceWait.AUTOMATIC_PROCESSING);
+        return operationBlocker(state, job);
     }
     public static java.util.Set<SubjectId> resumeWakeKeys(FrontierWorldState state, HumanAssignment assignment) {
         FrontierProductionWorkSceneSupport.executionCheckpoint(state, assignment);
@@ -82,20 +100,26 @@ public final class ProductionServiceAccess implements ServiceAccessCapability {
 
     /** Storage backpressure retains the job/cargo, not an exclusive service turn. */
     private static boolean operationEligible(FrontierWorldState state, ProductionJob job) {
+        return operationBlocker(state, job).isEmpty();
+    }
+    private static java.util.Optional<ResumeWait> operationBlocker(FrontierWorldState state, ProductionJob job) {
         var work = job.bakeryWork().orElseThrow();
         if (work.pendingPhysicalStep().isEmpty() && work.phase() == BakeryWorkState.Phase.STATION_LOAD) {
             var station = ProductionStationEnergy.record(state, work.stationId());
-            return !ReferenceContainerCustody.blocksCanonicalUse(state, station.id())
-                    && ProductionStationProcessing.canStart(state, work.stationId(), work.recipeId(), job.inputCount());
+            if (ReferenceContainerCustody.blocksCanonicalUse(state, station.id())) return java.util.Optional.of(ServiceWait.STATION_CUSTODY);
+            var readiness = ProductionStationProcessing.startReadiness(state, work.stationId(), work.recipeId(), job.inputCount());
+            return readiness == ProductionStationProcessing.StartReadiness.READY ? java.util.Optional.empty()
+                    : java.util.Optional.of(new StationWait(readiness));
         }
         if (work.phase() == BakeryWorkState.Phase.PROCESSING
                 && state.bootstrap().ruleset().production().require(work.recipeId()).processingMode()
-                    == ProductionRecipe.ProcessingMode.AUTOMATIC) return false;
-        if (work.pendingPhysicalStep().isPresent() || work.phase() != BakeryWorkState.Phase.DEPOT_DELIVERY) return true;
+                    == ProductionRecipe.ProcessingMode.AUTOMATIC) return java.util.Optional.of(ServiceWait.AUTOMATIC_PROCESSING);
+        if (work.pendingPhysicalStep().isPresent() || work.phase() != BakeryWorkState.Phase.DEPOT_DELIVERY) return java.util.Optional.empty();
         var depot = BakeryStorage.current(job);
-        return ReferenceContainerCustody.hasLiveCustody(state, depot)
+        boolean available = ReferenceContainerCustody.hasLiveCustody(state, depot)
                 ? ProductionOutputCapacity.deliverySlot(state, job).isPresent()
                 : !ProductionOutputCapacity.depotDeliveryUnavailable(state, job);
+        return available ? java.util.Optional.empty() : java.util.Optional.of(ServiceWait.OUTPUT_STORAGE_CAPACITY);
     }
 
     public static boolean mayAdvance(FrontierWorldState state, ProductionJob job, SurfaceAnchor destination) {

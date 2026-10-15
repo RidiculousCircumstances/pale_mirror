@@ -10,4 +10,6 @@ public interface SupplyCapacityPort {
     Key key();
     List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home,
                                     Map<String, SupplyPlanner.Stock> stocks);
+    List<SupplyPlanner.Dependency> dependencies(FrontierWorldState state, SubjectId home,
+                                               Map<String, SupplyPlanner.Stock> stocks);
 }

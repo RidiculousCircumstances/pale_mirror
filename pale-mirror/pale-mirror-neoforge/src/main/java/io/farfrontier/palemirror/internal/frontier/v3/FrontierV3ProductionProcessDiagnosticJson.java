@@ -68,6 +68,8 @@ final class FrontierV3ProductionProcessDiagnosticJson {
                     + "\",\"stationBoundStacks\":" + stationBindings
                     + ",\"depotCustodyStatus\":\"" + (depotScope == null ? "NONE" : depotScope.status()) + "\""
                     + ",\"coldBlocker\":\"" + BakeryProcess.coldBlocker(state, job).orElse("NONE") + "\""
+                    + ",\"resumeBlocker\":\"" + io.farfrontier.palemirror.frontier.v3.model.ProductionServiceAccess.resumeBlocker(state, job)
+                        .map(io.farfrontier.palemirror.frontier.v3.model.ProductionServiceAccess.ResumeWait::label).orElse("NONE") + "\""
                     + ",\"coldRouteBlocker\":\"" + FrontierV3DiagnosticJson.quote(
                     BakeryProcess.coldRouteBlocker(state, job).orElse("NONE")) + "\""
                     + ",\"actorBody\":" + (actor == null ? "null" : FrontierV3DiagnosticJson.position(actor.body()));

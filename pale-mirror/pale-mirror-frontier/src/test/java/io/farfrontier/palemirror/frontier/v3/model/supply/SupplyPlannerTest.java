@@ -41,12 +41,31 @@ class SupplyPlannerTest {
         assertTrue(plan.require("coal").reasons().contains(SupplyPlanner.Reason.PRODUCTION_FUEL));
         assertFalse(plan.require("coal").urgent(100));
     }
-    @Test void buysReadyFoodWhenProductionCannotMeetTheActualFoodDeadline() {
+    @Test void overdueFoodKeepsEmergencyPurchaseAndRestoresItsProductionChain() {
         var stocks = Map.of("bread", stock(0, 0, 100, 1, FOOD), "wheat", stock(0, 0, 0, 0, MATERIAL), "coal", stock(0, 0, 0, 0, MATERIAL));
         var process = new SupplyPlanner.Process("bakery", "bread", 1, Map.of("wheat", 3), 80, Map.of("coal", 1600L), 0, 100, 10, 100);
         var plan = new SupplyPlanner().plan(stocks, List.of(process));
-        assertEquals(100, plan.require("bread").purchase()); assertEquals(0, plan.require("wheat").purchase());
+        assertEquals(100, plan.require("bread").purchase()); assertEquals(300, plan.require("wheat").purchase());
+        assertEquals(0, plan.require("bread").production(), "late recovery is not timely coverage");
+        assertEquals(100, plan.require("bread").recoveryProduction());
+        assertEquals(5, plan.require("coal").purchase());
+        assertTrue(plan.require("coal").urgent(100));
+        assertTrue(plan.require("wheat").urgent(100));
         assertTrue(plan.require("bread").urgent(100));
+    }
+    @Test void promisedOutputStillPublishesUnfundedDependenciesWithoutNewCapacity() {
+        var stocks = Map.of("bread", new SupplyPlanner.Stock(0, 0, 21, 21, 0, 1, 100, FOOD),
+                "coal", stock(0, 0, 8, 0, MATERIAL));
+        var commitment = new SupplyPlanner.Dependency("bread", "coal", 2, SupplyPlanner.Reason.PRODUCTION_FUEL);
+        var plan = new SupplyPlanner().plan(stocks, List.of(), List.of(commitment));
+        assertEquals(0, plan.require("bread").purchase(), "the retained output is not promised twice");
+        assertEquals(8, plan.require("coal").purchase(), "dependency and stock replenishment overlap rather than sum");
+        assertEquals(2, plan.require("coal").protectedInput());
+        assertTrue(plan.require("coal").urgent(100));
+        var funded = new HashMap<>(stocks); funded.put("coal", stock(0, 8, 8, 0, MATERIAL));
+        assertEquals(0, new SupplyPlanner().plan(funded, List.of(), List.of(commitment)).require("coal").purchase());
+        assertThrows(IllegalArgumentException.class, () -> new SupplyPlanner().plan(stocks, List.of(), List.of(
+                commitment, new SupplyPlanner.Dependency("coal", "bread", 1, SupplyPlanner.Reason.PRODUCTION_INPUT))));
     }
     @Test void urgentFuelRequiresAnActualDownstreamDeadlineAndSupplyTimeCountsBeforeProduction() {
         var process = new SupplyPlanner.Process("bakery", "bread", 1, Map.of("wheat", 3), 80, Map.of("coal", 1600L), 0, 200, 10, 100);

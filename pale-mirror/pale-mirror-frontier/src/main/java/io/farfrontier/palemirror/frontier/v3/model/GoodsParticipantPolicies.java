@@ -31,11 +31,12 @@ public final class GoodsParticipantPolicies {
                 view.supplyPlan().ifPresent(plan -> {
                     var demand = plan.require(commodity.itemKind());
                     result.append(" buy=").append(demand.purchase()).append(" produce=").append(demand.production())
+                            .append(" recover=").append(demand.recoveryProduction())
                             .append(" deadline=").append(demand.deadlineTicks()).append(" causes=")
                             .append(demand.reasons().stream().sorted().toList());
                 });
                 if (stock.unclaimedAtEndpoint() + stock.expectedIncoming() < target
-                        && view.availableMoney().compareTo(GoodsParticipantPricing.bid(view.participant(), commodity)) < 0) result.append(" NO_FUNDS");
+                        && view.availableMoney().raw() == 0) result.append(" NO_FUNDS");
             }
             return result.toString();
         }
@@ -53,9 +54,12 @@ public final class GoodsParticipantPolicies {
                 if (missing > 0) {
                     int quantity = Math.min(view.supplyPlan().isPresent() ? rules.supplyPlanning().maximumOrderItems() : rules.maximumBatch(), Math.min(missing,
                             view.purchaseLimits().getOrDefault(commodity.itemKind(), Integer.MAX_VALUE)));
-                    long affordable = view.availableMoney().raw() / buyPrice.raw();
-                    quantity = (int) Math.min(quantity, affordable);
-                    if (quantity > 0) result.add(new Intent(commodity.itemKind(), GoodsTradeOrder.Side.BUY, quantity, buyPrice));
+                    // A quote is interest, not a financial reservation. Preserve the
+                    // desired quantity; matching caps it at the actual seller price
+                    // against the remaining budget after each admitted allocation.
+                    var limit = new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(
+                            Math.min(buyPrice.raw(), view.availableMoney().raw()));
+                    if (quantity > 0 && limit.raw() > 0) result.add(new Intent(commodity.itemKind(), GoodsTradeOrder.Side.BUY, quantity, limit));
                 } else if (surplus > 0) {
                     result.add(new Intent(commodity.itemKind(), GoodsTradeOrder.Side.SELL,
                             Math.min(view.supplyPlan().isPresent() ? rules.supplyPlanning().maximumOrderItems() : rules.maximumBatch(), surplus), sellPrice));

@@ -15,7 +15,8 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
         var trade = state.companies().goodsTrade();
         var supply = view.supplyPlan().map(plan -> plan.demands().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
                 .map(e -> "{\"commodity\":" + string(e.getKey()) + ",\"purchase\":" + e.getValue().purchase()
-                        + ",\"production\":" + e.getValue().production() + ",\"protectedInput\":" + e.getValue().protectedInput()
+                        + ",\"production\":" + e.getValue().production() + ",\"recoveryProduction\":" + e.getValue().recoveryProduction()
+                        + ",\"protectedInput\":" + e.getValue().protectedInput()
                         + ",\"deadlineTicks\":" + (e.getValue().deadlineTicks() == Long.MAX_VALUE ? "null" : e.getValue().deadlineTicks())
                         + ",\"causes\":[" + e.getValue().reasons().stream().sorted().map(r -> string(r.name())).collect(Collectors.joining(",")) + "]}")
                 .collect(Collectors.joining(","))).orElse("");

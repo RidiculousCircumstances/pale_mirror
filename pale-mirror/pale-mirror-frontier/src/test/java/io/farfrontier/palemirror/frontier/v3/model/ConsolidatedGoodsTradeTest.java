@@ -83,7 +83,7 @@ class ConsolidatedGoodsTradeTest {
         }
     }
     @Test void autonomousQuotesAdmitOneMixedExactTripAndRoundTripItsSharedAuthority() {
-        var state = initial();
+        var state = withMixedPurchaseBudget(initial());
         var seller = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
         var buyer = state.companies().goodsTrade().participants().participants().get(seller.known().getFirst().party().id());
         var buyerMoney = state.inventory().economics().require(buyer.party().id()).balance();
@@ -101,6 +101,21 @@ class ConsolidatedGoodsTradeTest {
     private static FrontierWorldState initial() {
         return ConsolidatedTradeFixture.initial(new WorldId("frontier:consolidated-test"), 20260918065L, false);
     }
+    private static FrontierWorldState withMixedPurchaseBudget(FrontierWorldState state) {
+        var seller = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
+        var buyer = seller.known().getFirst().party().id();
+        var ledger = state.inventory().economics();
+        // This fixture tests a mixed manifest, not rationing a tiny treasury.
+        // Fund it from existing accounts; no successful sale or receipt is fabricated.
+        for (var home : state.bootstrap().settlements()) {
+            if (home.id().equals(buyer) || home.id().equals(seller.party().id())) continue;
+            if (ledger.availableToReserve(buyer).compareTo(FixedScalar.whole(400)) >= 0) break;
+            var available = ledger.availableToReserve(home.id());
+            ledger = ledger.transfer(home.id(), buyer, available);
+        }
+        assertTrue(ledger.availableToReserve(buyer).compareTo(FixedScalar.whole(400)) >= 0);
+        return state.withInventory(state.inventory().withEconomics(ledger));
+    }
     @Test void noWorkerPreflightPublishesQuotesButNoSaleOrStockMoneyReservation() {
         var state = initial(); var home = new SubjectId("settlement:1");
         var buyer = state.companies().goodsTrade().participants().participants().get(home).known().getFirst().party().id();
@@ -115,7 +130,7 @@ class ConsolidatedGoodsTradeTest {
         assertFalse(state.companies().goodsTrade().orders().isEmpty(), "quotes are not binding reservations");
     }
     @Test void observedLossOfOneMixedParcelDoesNotRetireTheAssetOrOtherCommercialObligations() {
-        var state = ConsolidatedTradeFixture.initial(new WorldId("frontier:consolidated-loss"), 20260918065L, true);
+        var state = withMixedPurchaseBudget(ConsolidatedTradeFixture.initial(new WorldId("frontier:consolidated-loss"), 20260918065L, true));
         var home = new SubjectId("settlement:1");
         var buyer = state.companies().goodsTrade().participants().participants().get(home).known().getFirst().party().id();
         state = review(state, home, 400); state = review(state, buyer, 401);

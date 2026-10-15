@@ -28,6 +28,7 @@ public final class SettlementSupplyPlanning {
                     StockTargetDemand.target(commodity, residents, stock.protectedMinimum()), stock.protectedMinimum(),
                     food == null ? 0 : metabolism, period, trade.supplyPlanning().require(commodity.itemKind())));
         }
-        return PLANNER.plan(facts, SupplyCapacityComposition.read(state, home, facts));
+        return PLANNER.plan(facts, SupplyCapacityComposition.read(state, home, facts),
+                SupplyCapacityComposition.dependencies(state, home, facts));
     }
 }

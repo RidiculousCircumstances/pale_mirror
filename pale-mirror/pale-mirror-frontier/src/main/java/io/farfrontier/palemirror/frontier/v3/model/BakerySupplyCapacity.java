@@ -16,10 +16,16 @@ final class BakerySupplyCapacity implements SupplyCapacityPort {
                 .thenComparing(java.util.function.Function.identity())).findFirst().orElseThrow();
         var fuels = new TreeMap<String, Long>();
         state.bootstrap().ruleset().production().fuels().forEach(f -> fuels.put(f.itemKind(), f.heatUnits()));
-        long heat = state.productionStations().require(capacity.orElseThrow().station()).storedHeat();
+        var station = capacity.orElseThrow().station();
+        long heat = Math.max(0, ProductionStationEnergy.suppliedHeat(state, station)
+                - BakerySupplyObligations.requiredHeat(state, station));
         return List.of(new SupplyPlanner.Process(recipe.id().value(), recipe.product().itemKind(), recipe.product().quantity(),
                 Map.of(input, recipe.ingredient().quantity()), recipe.heatPerBatch(), fuels, heat,
                 capacity.orElseThrow().firstOutputDelay(), capacity.orElseThrow().batchTicks(),
                 state.bootstrap().ruleset().goodsTrade().supplyPlanning().maximumOrderItems()));
+    }
+    @Override public List<SupplyPlanner.Dependency> dependencies(FrontierWorldState state, SubjectId home,
+                                                                Map<String, SupplyPlanner.Stock> stocks) {
+        return BakerySupplyObligations.dependencies(state, home, stocks);
     }
 }

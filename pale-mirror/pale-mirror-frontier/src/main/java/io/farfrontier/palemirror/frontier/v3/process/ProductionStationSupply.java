@@ -14,17 +14,7 @@ final class ProductionStationSupply {
             long demand = catalog.recipes().stream().filter(recipe -> recipe.capability() == station.capability())
                     .mapToLong(recipe -> Math.multiplyExact(recipe.heatPerBatch(), (64 / recipe.ingredient().quantity()) * 2L)).max().orElse(0);
             if (demand == 0) continue;
-            long available = state.productionStations().require(station.id()).storedHeat();
-            var fuelAccount = FungibleResourceCustodySupport.accountAtContainer(state, record.id());
-            for (var fuel : catalog.fuels()) {
-                long stored = fuelAccount.map(account -> account.lotQuantities().entrySet().stream()
-                        .filter(entry -> state.inventory().fungibleResources().lots().get(entry.getKey()).itemKind().equals(fuel.itemKind()))
-                        .mapToLong(Map.Entry::getValue).sum()).orElse(0L);
-                available = Math.addExact(available, Math.multiplyExact(fuel.heatUnits(), stored
-                        + state.shipments().shipments().values().stream().filter(shipment -> !shipment.terminal()
-                            && shipment.receiver().containerId().equals(record.id()) && shipment.itemKind().equals(fuel.itemKind()))
-                        .mapToLong(Shipment::quantity).sum()));
-            }
+            long available = ProductionStationEnergy.suppliedHeat(state, station.id());
             if (available >= demand) continue;
             var facility = FrontierWorldStateSupport.settlement(state.bootstrap(), worker.settlementId()).structures().stream()
                     .filter(value -> value.id().equals(station.facilityId())).findFirst().orElseThrow();

@@ -9,6 +9,20 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GoodsMarketPolicyTest {
+    @Test void aSmallBudgetKeepsInterestInCheaperPartialOffersWithoutInventingFunds() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:small-buy-budget"),
+                20260918065L, FrontierRulesets.marketQuarryGraybox()));
+        var participant = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:9"));
+        var view = GoodsParticipantView.read(state, participant);
+        var small = new GoodsParticipantView(participant, view.residents(), new FixedScalar(1), view.stocks(), view.purchaseLimits(), view.supplyPlan());
+        var intents = GoodsParticipantPolicies.require(participant).decide(small, state.bootstrap().ruleset().goodsTrade());
+        var buy = intents.stream().filter(i -> i.side() == GoodsTradeOrder.Side.BUY).findFirst().orElseThrow();
+        assertEquals(1, buy.limit().raw(), "unit ceiling cannot exceed the entire remaining budget");
+        assertTrue(buy.quantity() > 0);
+        var empty = new GoodsParticipantView(participant, view.residents(), FixedScalar.ZERO, view.stocks(), view.purchaseLimits(), view.supplyPlan());
+        assertTrue(GoodsParticipantPolicies.require(participant).decide(empty, state.bootstrap().ruleset().goodsTrade()).stream()
+                .noneMatch(i -> i.side() == GoodsTradeOrder.Side.BUY));
+    }
     @Test void activeContractAndReservedStockCannotBeErasedAtPublication() {
         var state = GoodsTradeTest.reserved();
         var contract = state.companies().goodsTrade().contracts().values().iterator().next();
