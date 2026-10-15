@@ -27,19 +27,21 @@ public final class ResourceSiteHarvestKnownNavigation {
 
     /** Scheduler eligibility and diagnostics consume retained evidence without starting a search. */
     public static List<SurfaceAnchor> retainedPath(FrontierWorldState state, ResourceSiteHarvestJob job) {
-        var context = context(state, job);
-        try { return context.knowledge().retainedPath(context.start(), context.goal().movementOrder()); }
+        try {
+            var context = context(state, job);
+            return context.knowledge().retainedPath(context.start(), context.goal().movementOrder());
+        }
         catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
             throw new KnowledgeUnavailable("field route has no retained calculation: " + unavailable.getMessage(), unavailable);
         }
     }
     public static List<SurfaceAnchor> plannedPath(FrontierWorldState state, ResourceSiteHarvestJob job) {
-        Context context = context(state, job);
         try {
+            Context context = context(state, job);
             return context.knowledge().plannedPath(context.start(), context.goal().movementOrder());
         } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
             throw new KnowledgeUnavailable("field goal has no path in retained known geometry: "
-                    + context.goal().kind() + ": " + unavailable.getMessage(), unavailable);
+                    + job.id().value() + ": " + unavailable.getMessage(), unavailable);
         }
     }
 

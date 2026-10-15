@@ -112,7 +112,9 @@ public final class FrontierV3NavigationShapeGameTests {
         helper.assertTrue(FrontierV3NavigationShapes.capture(level, point).isEmpty(),
                 "powder snow needs an entity context, not an empty-context universal answer");
         var lava = FrontierV3NavigationShapes.declared(Blocks.LAVA.defaultBlockState(), point, level.getHeight(), level.getMinBuildHeight());
-        helper.assertTrue(lava.isEmpty() || !lava.orElseThrow().dry(), "empty fluid collision is not permission to walk");
+        helper.assertTrue(lava.isPresent() && !lava.orElseThrow().dry(), "fluid is a known hazard, not unknown geometry");
+        var water = FrontierV3NavigationShapes.declared(Blocks.WATER.defaultBlockState(), point, level.getHeight(), level.getMinBuildHeight());
+        helper.assertTrue(water.isPresent() && !water.orElseThrow().dry(), "irrigation must not poison neighbouring dry contacts");
         level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2);
         helper.succeed();
     }

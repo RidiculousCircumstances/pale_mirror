@@ -10,6 +10,16 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class NavigationShapeIntegrationTest {
+    @Test void knownFluidBesideFarmlandDoesNotInvalidateDryContactButCannotBeCrossed() {
+        var support = SurfaceAnchor.at(0, 63, 0);
+        var farmland = new NavigationCell(new NavigationShape(List.of(new NavigationShape.Box(0, 0, 0, 1, .9375, 1))), true);
+        var water = new NavigationCell(NavigationShape.FULL, false);
+        NavigationCollisionView view = p -> Optional.of(p.equals(new BlockPosition(1, 63, 0)) ? water
+                : p.y() == 63 ? farmland : NavigationCell.AIR);
+        assertTrue(NavigationBodyGeometry.known(view, support, UnitNavigationProfile.VILLAGER));
+        assertFalse(NavigationBodyGeometry.contacts(view, support, UnitNavigationProfile.VILLAGER, .5, .5).isEmpty());
+        assertTrue(NavigationBodyGeometry.contacts(view, SurfaceAnchor.at(1, 63, 0), UnitNavigationProfile.VILLAGER, .5, .5).isEmpty());
+    }
     private static final NavigationCell SLAB = new NavigationCell(new NavigationShape(List.of(
             new NavigationShape.Box(0, 0, 0, 1, .5, 1))), true);
     @Test void declaredColdShapesUseTheRegisteredProcessAndStableCodecWithoutLoadedCells() {

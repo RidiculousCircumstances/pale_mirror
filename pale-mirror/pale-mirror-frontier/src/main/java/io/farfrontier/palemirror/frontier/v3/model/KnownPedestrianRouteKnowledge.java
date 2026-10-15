@@ -528,9 +528,9 @@ public final class KnownPedestrianRouteKnowledge {
             cached.witnessedDepartures().put(witnessedStart, departure);
             return departure;
         }
-        if (knowledge.geometry.blocked(witnessedStart))
-            throw new KnownPedestrianNavigation.RouteUnavailable(
-                    "field worker's known support is no longer traversable");
+        // This factory supplies knowledge, not actor clearance admission. The shared
+        // profiled route query distinguishes UNKNOWN_GEOMETRY from a proven obstacle.
+        // In particular, a pending neighbouring block observation is not NO_PATH.
         return knowledge;
     }
 

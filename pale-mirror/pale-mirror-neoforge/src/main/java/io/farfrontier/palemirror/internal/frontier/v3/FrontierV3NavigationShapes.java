@@ -56,6 +56,12 @@ final class FrontierV3NavigationShapes extends net.minecraft.world.level.pathfin
     private static Optional<NavigationCell> capture(BlockGetter reader, BlockPos origin) {
         try {
             var state = reader.getBlockState(origin);
+            // Dry-ground navigation excludes the fluid voxel for every supported
+            // profile. This is a known hazard, not unknown neighbouring geometry.
+            // Do not ask the fluid's entity-dependent stand-on-water collision
+            // context: swimming/equipment capabilities are outside this provider.
+            if (!state.getFluidState().isEmpty()) return Optional.of(new NavigationCell(
+                    NavigationShape.FULL, false, Optional.of(FrontierV3BlockStates.describe(state))));
             // Minecraft explicitly marks non-cacheable/contextual shapes. An
             // empty CollisionContext is not evidence for every actor (snow,
             // scaffolding, equipment-dependent and stateful modded shapes).
