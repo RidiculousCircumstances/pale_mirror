@@ -14,6 +14,7 @@ final class ExtractionGroundKnowledge implements KnownBlockGeometry<BlockExtract
     private final ExtractionDeposit deposit;
     private record Protection(Set<TerrainColumn> columns, Set<BlockPosition> blocks) { }
     private static final ImmutableInputView<Protection> VIEW = new ImmutableInputView<>();
+    private static final ImmutableInputView<Set<TerrainColumn>> BASE_COLUMNS = new ImmutableInputView<>();
     private static final Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ImmutableInputView<Protection>> SITE_VIEWS = new LinkedHashMap<>();
     private ExtractionGroundKnowledge(FrontierWorldState state, Set<TerrainColumn> protectedColumns, Set<BlockPosition> declared,
                                       ExtractionDeposit deposit) {
@@ -46,21 +47,7 @@ final class ExtractionGroundKnowledge implements KnownBlockGeometry<BlockExtract
         return new ExtractionGroundKnowledge(state, other.columns(), other.blocks(), deposit);
     }
     private static Protection protection(FrontierWorldState state, Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> localSite) {
-        var columns = new HashSet<TerrainColumn>();
-        for (var settlement : state.bootstrap().settlements()) {
-            FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures())
-                    .forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
-            settlement.residents().forEach(resident -> columns.add(new TerrainColumn(resident.home().x(), resident.home().z())));
-        }
-        for (var site : FrontierResourceSitePlan.compile(state.bootstrap()).values())
-            site.managedSlots().forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
-        var roads = FrontierRouteNetwork.footprint(state.bootstrap(), state.routeTopology());
-        roads.foundationCells().forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
-        roads.surfaceCells().forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
-        FrontierGrayboxPlan.intactOrganOccupancy(state.bootstrap().hive().organs())
-                .forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
-        FrontierGrayboxPlan.intactOrganOccupancy(List.copyOf(state.hiveColony().addedOrgans().values()))
-                .forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
+        var columns = new HashSet<>(baseColumns(state));
         state.physicalDeltas().keySet().forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
         state.extractionSites().geologicalExclusions().positions().forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
         var declared = new HashSet<BlockPosition>();
@@ -69,18 +56,34 @@ final class ExtractionGroundKnowledge implements KnownBlockGeometry<BlockExtract
             if (!localSite.filter(deposit.site().id()::equals).isPresent()) {
                 deposit.site().layout().cells().forEach(cell -> declared.add(cell.source()));
                 declared.addAll(deposit.site().layout().terrainSupports().keySet());
+                deposit.site().layout().accessSurfaces().forEach(surface -> columns.add(new TerrainColumn(surface.x(), surface.z())));
+                deposit.site().layout().fixedBlocks().keySet().forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
+                deposit.site().layout().cells().forEach(cell -> columns.add(new TerrainColumn(cell.source().x(), cell.source().z())));
             }
         }
-        // Retained access and another worksite's land are whole-column obligations,
-        // not permission to create a competing underground surface beneath them.
-        // Own air clearance is not a permanent ban on the natural floor below it.
-        for (var deposit : state.extractionSites().deposits().values()) {
-            if (localSite.filter(deposit.site().id()::equals).isPresent()) continue;
-            deposit.site().layout().accessSurfaces().forEach(surface -> columns.add(new TerrainColumn(surface.x(), surface.z())));
-            deposit.site().layout().fixedBlocks().keySet().forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
-            deposit.site().layout().cells().forEach(cell -> columns.add(new TerrainColumn(cell.source().x(), cell.source().z())));
-        }
         return new Protection(Set.copyOf(columns), Set.copyOf(declared));
+    }
+
+    /** Excavation fronts change frequently; immutable towns/roads do not. */
+    static Set<TerrainColumn> baseColumns(FrontierWorldState state) {
+        return BASE_COLUMNS.get(List.of(state.bootstrap(), state.routeTopology(), state.hiveColony().addedOrgans()), () -> {
+            var columns = new HashSet<TerrainColumn>();
+            for (var settlement : state.bootstrap().settlements()) {
+                FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures())
+                        .forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
+                settlement.residents().forEach(resident -> columns.add(new TerrainColumn(resident.home().x(), resident.home().z())));
+            }
+            for (var site : FrontierResourceSitePlan.compile(state.bootstrap()).values())
+                site.managedSlots().forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
+            var roads = FrontierRouteNetwork.footprint(state.bootstrap(), state.routeTopology());
+            roads.foundationCells().forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
+            roads.surfaceCells().forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
+            FrontierGrayboxPlan.intactOrganOccupancy(state.bootstrap().hive().organs())
+                    .forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
+            FrontierGrayboxPlan.intactOrganOccupancy(List.copyOf(state.hiveColony().addedOrgans().values()))
+                    .forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
+            return Set.copyOf(columns);
+        });
     }
     @Override public Optional<Sample<BlockExtraction.Block>> at(BlockPosition position) {
         if (state.extractionSites().geologicalExclusions().positions().contains(position)) return Optional.empty();

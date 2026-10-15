@@ -10,12 +10,14 @@ import java.util.*;
 /** Bounded, demand-local shape observation. No chunk loading, block repair or actor movement. */
 final class FrontierV3NavigationObservation {
     private static final Map<ServerLevel, Window> WINDOWS = new WeakHashMap<>();
+    private static final int MAX_PENDING_CELLS = 8192;
     private static final class Window {
         final Object bootstrap;
         Window(Object bootstrap) { this.bootstrap = bootstrap; }
         int cursor;
         List<io.farfrontier.palemirror.frontier.v3.api.SubjectId> roster = List.of();
         Object declarations;
+        final Set<NavigationBlockState> checkedDefinitions = new HashSet<>();
         boolean fenceRejected;
         final Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, Pose> seen = new HashMap<>();
         final Set<BlockPosition> dirty = new LinkedHashSet<>();
@@ -59,6 +61,14 @@ final class FrontierV3NavigationObservation {
             var pose = new Pose(position, new java.lang.ref.WeakReference<>(chunk));
             int radius = Math.max(2, actor.navigationProfile().footprintRadius() + 1);
             int top = actor.navigationProfile().bodyLayers() + 1;
+            int envelopeSize = (radius * 2 + 1) * (radius * 2 + 1) * (top + 3);
+            if (window.dirty.size() + envelopeSize > MAX_PENDING_CELLS) {
+                // Retire only unavailable *requests*, never their durable unknown fences.
+                // The loaded actor roster is rearmed, so a later visit resamples them.
+                window.dirty.removeIf(cell -> level.getChunkSource().getChunkNow(cell.x() >> 4, cell.z() >> 4) == null);
+                window.captured.keySet().retainAll(window.dirty); window.seen.clear();
+                if (window.dirty.size() + envelopeSize > MAX_PENDING_CELLS) return;
+            }
             for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) for (int dy = -2; dy <= top; dy++) {
                 var cell = new BlockPosition(position.x() + dx, position.y() + dy, position.z() + dz);
                 if (state.bootstrap().bounds().contains(cell)) window.dirty.add(cell);
@@ -72,29 +82,54 @@ final class FrontierV3NavigationObservation {
             FrontierWorldState state, Window window) {
         if (window.dirty.isEmpty()) return false;
         var changes = new LinkedHashMap<BlockPosition, Optional<NavigationCell>>();
-        for (var position : window.dirty.stream().limit(125).toList())
-            changes.put(position, window.captured.containsKey(position) ? window.captured.get(position)
-                    : FrontierV3NavigationShapes.capture(level, position));
+        // Absence of a loaded chunk is NOT an observation that invalidates retained
+        // COLD knowledge. Rotate unavailable requests so a chunk edge cannot fence
+        // observation of other actors; actual pre-write unknown fences stay retained.
+        var batch = window.dirty.stream().limit(125).toList();
+        for (var position : batch) {
+            window.dirty.remove(position); window.dirty.add(position);
+        }
+        changes.putAll(captureAvailable(batch,
+                position -> level.getChunkSource().getChunkNow(position.x() >> 4, position.z() >> 4) != null,
+                position -> window.captured.containsKey(position) ? window.captured.get(position)
+                        : FrontierV3NavigationShapes.capture(level, position)));
+        if (changes.isEmpty()) return false;
         var surveyed = Set.copyOf(changes.keySet());
         if (publish(runtime, state, changes)) { window.dirty.removeAll(surveyed); surveyed.forEach(window.captured::remove); }
         return true;
+    }
+    /** Empty sample means positively unsupported; an absent chunk produces no sample at all. */
+    static Map<BlockPosition, Optional<NavigationCell>> captureAvailable(List<BlockPosition> positions,
+            java.util.function.Predicate<BlockPosition> available,
+            java.util.function.Function<BlockPosition, Optional<NavigationCell>> capture) {
+        var result = new LinkedHashMap<BlockPosition, Optional<NavigationCell>>();
+        for (var position : positions) if (available.test(position)) result.put(position, capture.apply(position));
+        return result;
     }
     private static boolean registerDefinitions(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                FrontierWorldState state, Window window) {
         var declarations = KnownNavigationBlocks.forState(state);
         if (window.declarations == declarations) return false;
         var additions = new LinkedHashMap<NavigationBlockState, Optional<NavigationCell>>();
+        var checked = new HashSet<NavigationBlockState>();
         for (var block : declarations.values()) {
-            if (state.navigationGeometry().definitions().containsKey(block) || additions.containsKey(block)) continue;
+            // Definitions are adapter-produced facts. Revalidate once per runtime,
+            // including retained UNKNOWN from an older adapter, without loading land.
+            if (window.checkedDefinitions.contains(block) || !checked.add(block)) continue;
             var nativeState = FrontierV3BlockStates.resolve(block);
             var cell = nativeState.hasOffsetFunction() ? Optional.<NavigationCell>empty()
                     : FrontierV3NavigationShapes.declared(nativeState, new BlockPosition(0, 0, 0), level.getHeight(), level.getMinBuildHeight());
-            additions.put(block, cell);
-            if (additions.size() == 32) break;
+            if (!Objects.equals(state.navigationGeometry().definitions().get(block), cell)) additions.put(block, cell);
+            if (checked.size() == 32) break;
         }
-        if (additions.isEmpty()) { window.declarations = declarations; return false; }
-        FrontierV3CommandSubmission.submitResult(runtime, "navigation-definitions", NavigationGeometryObserved.OWNER.value(),
-                new NavigationGeometryObserved(state.navigationGeometry().revision(), Map.of(), additions));
+        if (additions.isEmpty()) {
+            window.checkedDefinitions.addAll(checked);
+            if (checked.isEmpty()) { window.declarations = declarations; return false; }
+            return true;
+        }
+        if (FrontierV3CommandSubmission.submitResult(runtime, "navigation-definitions", NavigationGeometryObserved.OWNER.value(),
+                new NavigationGeometryObserved(state.navigationGeometry().revision(), Map.of(), additions)) instanceof CommandResult.Accepted)
+            window.checkedDefinitions.addAll(checked);
         return true;
     }
     static boolean blockWrite(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
@@ -105,10 +140,9 @@ final class FrontierV3NavigationObservation {
         var changes = new LinkedHashMap<BlockPosition, Optional<NavigationCell>>();
         var window = window(level, state);
         if (committed) {
-            for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) for (int dy = -1; dy <= 1; dy++) {
-                var cell = position.offset(dx, dy, dz);
-                if (window.dirty.contains(cell)) window.captured.put(cell, FrontierV3NavigationShapes.capture(level, cell));
-            }
+            if (window.dirty.contains(position)
+                    && level.getChunkSource().getChunkNow(position.x() >> 4, position.z() >> 4) != null)
+                window.captured.put(position, FrontierV3NavigationShapes.capture(level, position));
             return true;
         }
         var chunk = level.getChunkSource().getChunkNow(physical.getX() >> 4, physical.getZ() >> 4);
@@ -122,16 +156,13 @@ final class FrontierV3NavigationObservation {
             if (planned.isPresent() && planned.orElseThrow().shape().equals(after.orElseThrow().shape())
                     && planned.orElseThrow().dry() == after.orElseThrow().dry()) return true;
         }
-        for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) for (int dy = -1; dy <= 1; dy++) {
-            var cell = new BlockPosition(physical.getX() + dx, physical.getY() + dy, physical.getZ() + dz);
-            if (state.bootstrap().bounds().contains(cell) && (cell.equals(position) || state.navigationGeometry().cells().containsKey(cell))) {
-                // Fence before mutation. Re-capture in one bounded observation batch,
-                // not a second forced durable write for every block callback.
-                changes.put(cell, Optional.empty());
-                window.dirty.add(cell);
-                window.captured.remove(cell);
-            }
-        }
+        // The shape adapter retains self-state-only facts. A block change invalidates
+        // that cell, not 26 independent neighbours (possibly unloaded). Neighbour
+        // state changes enter their own write hook; protruding-volume dependencies
+        // are expanded by the navigation revision owner, not invented observations.
+        changes.put(position, Optional.empty());
+        window.dirty.add(position);
+        window.captured.remove(position);
         if (!changes.isEmpty() && (runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE || !publish(runtime, state, changes))) {
             if (!window.fenceRejected) io.farfrontier.palemirror.PaleMirrorMod.LOGGER.warn(
                     "PMV3_NAVIGATION_WRITE_WAIT position={} geometryRevision={} reason=KNOWLEDGE_FENCE_NOT_ADMITTED runtime={}",

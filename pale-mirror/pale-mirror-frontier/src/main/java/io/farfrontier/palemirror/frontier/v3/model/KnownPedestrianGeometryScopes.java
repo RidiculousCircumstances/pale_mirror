@@ -34,7 +34,7 @@ final class KnownPedestrianGeometryScopes {
         var positions = new HashSet<BlockPosition>();
         var sources = io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockMap.copyOf(sourceBlocks);
         for (var region : sources.changesFrom(priorShapeSources)) {
-            positions.addAll(sources.in(region).keySet()); positions.addAll(priorShapeSources.in(region).keySet());
+            addChangedPositions(positions, sources.in(region), priorShapeSources.in(region));
         }
         priorShapeSources = sources;
         if (prior == null || !current.definitions().equals(prior.definitions()))
@@ -42,7 +42,7 @@ final class KnownPedestrianGeometryScopes {
                 if (prior == null || !Objects.equals(current.definitions().get(block), prior.definitions().get(block))) positions.add(position);
             });
         for (var region : cells.changesFrom(previous)) {
-            positions.addAll(cells.in(region).keySet()); positions.addAll(previous.in(region).keySet());
+            addChangedPositions(positions, cells.in(region), previous.in(region));
         }
         var regions = new HashSet<PedestrianGeometryRevision.Region>();
         for (var position : positions) {
@@ -51,6 +51,13 @@ final class KnownPedestrianGeometryScopes {
                 regions.add(PedestrianGeometryRevision.Region.at(position.offset(dx, 0, dz)));
         }
         ground = ground.changed(regions);
+    }
+
+    /** A regional index narrows comparison, not the invalidation footprint. */
+    private static <T> void addChangedPositions(Set<BlockPosition> changed, Map<BlockPosition, T> current,
+                                               Map<BlockPosition, T> prior) {
+        current.forEach((position, value) -> { if (!Objects.equals(value, prior.get(position))) changed.add(position); });
+        prior.keySet().forEach(position -> { if (!current.containsKey(position)) changed.add(position); });
     }
 
     static synchronized void refresh(Object currentBootstrap, Set<BlockPosition> obstacleInput,

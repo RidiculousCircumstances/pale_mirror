@@ -69,10 +69,15 @@ public final class PaleMirrorPlayerPresentation {
                 PlayerNoticeGate.Priority.CONTEXT, PlayerNoticeGate.Origin.PLAYER_ACTION, 20), now)
                 != PlayerNoticeGate.Decision.DELIVER) return;
         int index = session.pager().next(key, pages.size(), now, player.isShiftKeyDown());
+        PaleMirrorNetwork.sendContextCard(player, pagePayload(pages, index));
+    }
+
+    /** Payload construction is shared with the boundary regression, including protocol limits. */
+    static PlayerContextCardPayload pagePayload(java.util.List<PlayerContextCard> pages, int index) {
         var card = pages.get(index);
         var lines = new java.util.ArrayList<>(card.lines());
         lines.add((index + 1) + "/" + pages.size() + " · Click: next · Sneak: first");
-        PaleMirrorNetwork.sendContextCard(player, new PlayerContextCardPayload(card.title(), lines, 300, card.accentRgb()));
+        return new PlayerContextCardPayload(card.title(), lines, 200, card.accentRgb());
     }
 
     /** Clears the only ephemeral state at server shutdown; no player/world state is retained. */

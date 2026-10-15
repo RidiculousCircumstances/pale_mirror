@@ -22,13 +22,39 @@ final class FrontierV3BodyObservation {
             // chunk. A hidden body's final save may precede the actual terrain unload.
             // Observe the available object without requesting a ticket or generation.
             var chunk = level.getChunkSource().getChunkNow(support.getX() >> 4, support.getZ() >> 4);
-            if (chunk != null) return capture(body, chunk, support);
+            if (chunk == null) chunk = level.getChunkSource().getChunkNow(body.getBlockX() >> 4, body.getBlockZ() >> 4);
+            if (chunk != null) {
+                var observation = capture(body, chunk, support);
+                if (observation.support().isPresent()) remember(body, observation);
+                return observation;
+            }
         }
         return unsupported(body);
     }
 
-    private static Observation capture(Entity body, net.minecraft.world.level.BlockGetter geometry,
+    static Observation capture(Entity body, net.minecraft.world.level.BlockGetter geometry,
                                        net.minecraft.core.BlockPos support) {
+        var result = contact(body, geometry, support);
+        if (result.support().isPresent()) return result;
+        // Minecraft's cached getOnPos is a hint, not a second coordinate authority.
+        // A moved body may still name its previous support. Resolve its actual
+        // centre column against collision, including fractional/protruding tops.
+        int feet = (int) Math.floor(body.getBoundingBox().minY);
+        for (int y = feet; y >= feet - 2; y--) {
+            var candidate = new net.minecraft.core.BlockPos(body.getBlockX(), y, body.getBlockZ());
+            if (candidate.equals(support)) continue;
+            if (geometry instanceof net.minecraft.world.level.chunk.LevelChunk chunk
+                    && !chunk.getPos().equals(new net.minecraft.world.level.ChunkPos(candidate))) continue;
+            result = contact(body, geometry, candidate);
+            if (result.support().isPresent()) return result;
+        }
+        return unsupported(body);
+    }
+
+    private static Observation contact(Entity body, net.minecraft.world.level.BlockGetter geometry,
+                                       net.minecraft.core.BlockPos support) {
+        if (geometry instanceof net.minecraft.world.level.chunk.LevelChunk chunk
+                && !chunk.getPos().equals(new net.minecraft.world.level.ChunkPos(support))) return unsupported(body);
         var collision = geometry.getBlockState(support).getCollisionShape(geometry, support);
         var bounds = body.getBoundingBox();
         var contactTop = collision.toAabbs().stream()
@@ -42,6 +68,10 @@ final class FrontierV3BodyObservation {
             return new Observation(surface.standingBody(), Optional.of(surface));
         }
         return unsupported(body);
+    }
+
+    private static void remember(Entity body, Observation observation) {
+        DEPARTING_CONTACTS.put(body, new DepartingContact(body.getX(), body.getY(), body.getZ(), observation));
     }
 
     private static Observation unsupported(Entity body) {
@@ -58,7 +88,7 @@ final class FrontierV3BodyObservation {
         if (body.level() != chunk.getLevel() || !new net.minecraft.world.level.ChunkPos(support).equals(chunk.getPos())) return;
         var observation = capture(body, chunk, support);
         if (observation.support().isPresent()) {
-            DEPARTING_CONTACTS.put(body, new DepartingContact(body.getX(), body.getY(), body.getZ(), observation));
+            remember(body, observation);
         } else DEPARTING_CONTACTS.remove(body);
     }
 
@@ -69,6 +99,7 @@ final class FrontierV3BodyObservation {
     static Observation captureForDeparture(Entity body) {
         var support = body.getOnPos();
         var current = capture(body);
+        if (current.support().isPresent()) return current;
         if (!(body.level() instanceof ServerLevel level)
                 || level.getChunkSource().getChunkNow(support.getX() >> 4, support.getZ() >> 4) != null) return current;
         var chunks = level.getChunkSource().chunkMap;

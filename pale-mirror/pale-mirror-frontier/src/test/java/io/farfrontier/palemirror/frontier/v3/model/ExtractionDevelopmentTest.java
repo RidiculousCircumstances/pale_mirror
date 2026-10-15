@@ -24,6 +24,8 @@ class ExtractionDevelopmentTest {
         for (long id : next.prerequisites()) changed = changed.observe(id, 1,
                 id == prerequisite ? torch : new BlockExtraction.Block("minecraft:air", Map.of()));
         var state = before.withChanges(FrontierWorldStateUpdate.begin().extractionSites(before.extractionSites().replace(changed)));
+        assertSame(ExtractionGroundKnowledge.baseColumns(before), ExtractionGroundKnowledge.baseColumns(state),
+                "mine observations must not recompile unchanged protected towns and roads");
         assertTrue(changed.accessibleSources(Set.of()).contains(next));
         assertTrue(new ExtractionWorkingSurfaces(state, changed).standable(next.workstation()));
         var projected = new ExtractionKnownGeometry().project(state);

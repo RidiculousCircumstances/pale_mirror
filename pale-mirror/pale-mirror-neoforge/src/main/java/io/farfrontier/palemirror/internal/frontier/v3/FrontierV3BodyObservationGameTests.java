@@ -32,6 +32,10 @@ public final class FrontierV3BodyObservationGameTests {
                     java.util.Optional.of(new BodyPosition(support.getX(), support.getY() + 1, support.getZ())),
                     "the release body follows the real farmland collision top, not the transient onGround flag");
             BodyPosition expected = new BodyPosition(support.getX(), support.getY() + 1, support.getZ());
+            helper.assertValueEqual(FrontierV3BodyObservation.capture(worker,
+                    helper.getLevel().getChunkSource().getChunkNow(support.getX() >> 4, support.getZ() >> 4),
+                    support.below()).supportedBody(), java.util.Optional.of(expected),
+                    "a stale native support hint cannot round fractional farmland feet down into stone");
             helper.assertValueEqual(FrontierV3AmbientActorExecutor.observedBody(worker), expected,
                     "ambient WORK release must agree with harvest on fractional farmland feet");
             helper.assertValueEqual(FrontierV3SurfaceObservation.observedBody(worker), expected,

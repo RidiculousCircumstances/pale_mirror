@@ -9,6 +9,24 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class KnownPedestrianGeometryScopesTest {
+    @Test void interiorShapeChangeDoesNotInvalidateUnchangedRegionBoundary() {
+        KnownPedestrianGeometryScopes.refresh(new Object(), Set.of(), Map.of());
+        var interior = new BlockPosition(8, 64, 8);
+        var boundary = new BlockPosition(15, 64, 15);
+        var before = NavigationGeometryState.empty().observe(0, Map.of(interior, java.util.Optional.of(NavigationCell.SOLID),
+                boundary, java.util.Optional.of(NavigationCell.SOLID)));
+        KnownPedestrianGeometryScopes.observeShapes(null, before, Map.of());
+        var revision = KnownPedestrianGeometryScopes.groundRevision();
+        var after = before.observe(1, Map.of(interior, java.util.Optional.of(NavigationCell.AIR)));
+        KnownPedestrianGeometryScopes.observeShapes(before, after, Map.of());
+        assertEquals(Set.of(new PedestrianGeometryRevision.Region(0, 0)),
+                KnownPedestrianGeometryScopes.groundRevision().changesSince(revision));
+        var borderChange = after.observe(2, Map.of(boundary, java.util.Optional.empty()));
+        var next = KnownPedestrianGeometryScopes.groundRevision();
+        KnownPedestrianGeometryScopes.observeShapes(after, borderChange, Map.of());
+        assertTrue(KnownPedestrianGeometryScopes.groundRevision().changesSince(next)
+                .contains(new PedestrianGeometryRevision.Region(1, 1)), "real border changes retain collision halo invalidation");
+    }
     @Test void resolvedCollisionFactsInvalidateTheirRegionEvenWhenOccupiedUnionIsUnchanged() {
         var bootstrap = new Object(); var position = new BlockPosition(2, 64, 2);
         KnownPedestrianGeometryScopes.refresh(bootstrap, Set.of(position), Map.of(), Set.of(), Set.of(position), Set.of());
