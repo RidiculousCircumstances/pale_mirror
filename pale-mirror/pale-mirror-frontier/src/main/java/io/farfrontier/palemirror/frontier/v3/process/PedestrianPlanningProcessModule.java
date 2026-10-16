@@ -22,8 +22,7 @@ final class PedestrianPlanningProcessModule implements FrontierWorldProcessModul
         // not historical due time or queue-head position, fences its generation.
         // Match ordinary owner wake semantics: run on the next canonical tick,
         // never manufacture a tick-zero review or execute inside notification admission.
-        var replacement = new ScheduledAction(expected.id(), new SimInstant(Math.addExact(command.submittedAt().ticks(), 1L)), expected.priority(),
-                expected.subject(), expected.kind(), expected.weight());
+        var replacement = value.continuationAt(command.submittedAt());
         return new CommandPlan.Accepted(List.of(new ProposedEvent(expected.subject(),
                 new ScheduleEffect.Rescheduled(expected.id(), replacement))));
     }

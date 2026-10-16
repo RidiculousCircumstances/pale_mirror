@@ -11,6 +11,35 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPlanningWakeIndexTest {
+    @Test void wakeRetainsUnfinishedSiblingUntilOwnerReplacesOrCancelsItsDemand() {
+        var index = new PedestrianPlanningWakeIndex(); var owner = action("mixed", 6000);
+        var fast = request(3); var slow = request(20);
+        var released = new java.util.ArrayList<PedestrianRouteRequest>();
+        index.replace(owner, List.of(fast, slow));
+        index.changed(List.of(new PedestrianPlanningChange(fast, PedestrianPlanningChange.Kind.RESULT_AVAILABLE)));
+        var continuation = new PedestrianPlanningReady(owner).continuationAt(new SimInstant(20));
+        index.resumed(owner, continuation);
+        index.releaseUnused(released::add);
+        assertTrue(released.isEmpty(), "notification admission must not cancel unfinished sibling searches");
+        assertFalse(index.waiting(continuation));
+        assertTrue(index.ready(view(21, continuation)).isEmpty());
+        index.changed(List.of(new PedestrianPlanningChange(slow, PedestrianPlanningChange.Kind.RESULT_AVAILABLE)));
+        assertTrue(index.ready(view(21, continuation)).isEmpty(), "already runnable owner needs no second wake");
+        index.replace(action("mixed", 8000), List.of(slow));
+        index.releaseUnused(released::add);
+        assertEquals(List.of(fast), released);
+        index.ready(view(22)); index.releaseUnused(released::add);
+        assertEquals(List.of(fast, slow), released, "cancelled successor must release remaining work");
+        assertThrows(IllegalArgumentException.class, () -> index.resumed(owner, continuation));
+    }
+    @Test void naturallyDueOwnerKeepsItsDemandUntilItsReviewRuns() {
+        var index = new PedestrianPlanningWakeIndex(); var owner = action("due", 20);
+        index.replace(owner, List.of(request(3), request(20)));
+        index.changed(List.of(new PedestrianPlanningChange(request(3), PedestrianPlanningChange.Kind.RESULT_AVAILABLE)));
+        assertTrue(index.ready(view(20, owner)).isEmpty());
+        assertFalse(index.waiting(owner));
+        index.releaseUnused(request -> fail("runnable is not retired: " + request));
+    }
     @Test void onlyLastRetiredConsumerReleasesCalculationAndReplacementDoesNotCancelIt() {
         var index = new PedestrianPlanningWakeIndex();
         var a = action("owner-a", 20); var b = action("owner-b", 20); var query = request(3);

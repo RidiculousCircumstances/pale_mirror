@@ -14,6 +14,7 @@ public final class PedestrianPlanningWakeIndex {
     private final Map<PedestrianRouteRequest, Set<ScheduleId>> dependents = new LinkedHashMap<>();
     private final Set<ScheduleId> ready = new LinkedHashSet<>();
     private final Set<ScheduleId> parked = new HashSet<>();
+    private final Set<ScheduleId> runnable = new HashSet<>();
     private final Set<PedestrianRouteRequest> released = new LinkedHashSet<>();
 
     public void replace(ScheduledAction action, List<PedestrianRouteRequest> requests) {
@@ -26,6 +27,7 @@ public final class PedestrianPlanningWakeIndex {
     public void remove(ScheduleId id) {
         ready.remove(id);
         parked.remove(id);
+        runnable.remove(id);
         var previous = waits.remove(id);
         if (previous == null) return;
         for (var request : previous.requests()) {
@@ -39,11 +41,27 @@ public final class PedestrianPlanningWakeIndex {
         released.clear();
     }
     public void changed(List<PedestrianPlanningChange> changes) {
-        for (var change : changes) ready.addAll(dependents.getOrDefault(change.request(), Set.of()));
+        for (var change : changes) for (var id : dependents.getOrDefault(change.request(), Set.of()))
+            if (!runnable.contains(id)) ready.add(id);
+    }
+    /** An accepted wake transfers demand to the exact runnable generation. It does
+     * not retire sibling calculations before the owner actually resumes. */
+    public void resumed(ScheduledAction expected, ScheduledAction replacement) {
+        var wait = waits.get(expected.id());
+        if (wait == null || !wait.action().equals(expected) || !ready.contains(expected.id())
+                || !expected.id().equals(replacement.id()) || !expected.subject().equals(replacement.subject())
+                || !expected.kind().equals(replacement.kind()) || expected.priority() != replacement.priority()
+                || expected.weight() != replacement.weight())
+            throw new IllegalArgumentException("planning resume lost its exact continuation");
+        waits.put(expected.id(), new Wait(replacement, wait.requests()));
+        makeRunnable(expected.id());
+    }
+    private void makeRunnable(ScheduleId id) {
+        ready.remove(id); parked.remove(id); runnable.add(id);
     }
     public boolean waiting(ScheduledAction action) {
         var wait = waits.get(action.id());
-        return wait != null && wait.action().equals(action) && !ready.contains(action.id());
+        return wait != null && wait.action().equals(action) && !ready.contains(action.id()) && !runnable.contains(action.id());
     }
     /** Records the kernel's hold-dependency inquiry, not a domain grant or queue mutation. */
     public void markParked(ScheduledAction action) {
@@ -67,7 +85,7 @@ public final class PedestrianPlanningWakeIndex {
             if (!retained.test(action)) remove(entry.getKey());
             else if (ready.contains(entry.getKey()) && !parked.contains(entry.getKey())
                     && (action.dueAt().ticks() <= instant.ticks()
-                        || action.dueAt().ticks() - instant.ticks() == 1L)) remove(entry.getKey());
+                        || action.dueAt().ticks() - instant.ticks() == 1L)) makeRunnable(entry.getKey());
         }
         // Completion order, not original registration order: a repeatedly rearmed owner
         // joins the tail and cannot starve another retained ready continuation.

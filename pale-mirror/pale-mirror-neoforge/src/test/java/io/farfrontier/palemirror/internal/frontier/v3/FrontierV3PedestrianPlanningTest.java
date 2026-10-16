@@ -53,6 +53,7 @@ class FrontierV3PedestrianPlanningTest {
             assertEquals(4, runtime.commandAdmissionCapacity().orElseThrow().availableReceipts());
             FrontierV3PedestrianPlanning.admitReady(runtime, index);
             assertEquals(0, index.readyCount());
+            index.releaseUnused(requestToCancel -> fail("accepted wake must retain demand until the owner resumes: " + requestToCancel));
             assertEquals(1, runtime.checkpointImage().orElseThrow().receipts().size());
             assertEquals(new SimInstant(runtime.canonicalState().orElseThrow().instant().ticks() + 1), runtime.executionView().orElseThrow().schedules().stream()
                     .filter(a -> a.id().equals(action.id())).findFirst().orElseThrow().dueAt());

@@ -67,15 +67,19 @@ final class FrontierV3PedestrianPlanning {
         int admitted = 0;
         for (var action : ready) {
             if (admitted == budget) break;
+            var wake = new PedestrianPlanningReady(action);
+            var continuation = wake.continuationAt(runtime.canonicalState().orElseThrow().instant());
             var result = FrontierV3CommandSubmission.submitResultBound(runtime, "pedestrian-planning-ready", action.subject().value(),
-                    new PedestrianPlanningReady(action), action);
+                    wake, action);
             if (result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Rejected rejected) {
                 var code = rejected.rejection().code();
                 if (code == io.farfrontier.palemirror.frontier.v3.api.RejectionCode.RECEIPT_CAPACITY_EXHAUSTED
                         || code == io.farfrontier.palemirror.frontier.v3.api.RejectionCode.TRANSACTION_CAPACITY_EXHAUSTED) break;
                 throw new IllegalStateException("addressed planning wake rejected: " + result);
             }
-            index.remove(action.id());
+            if (!runtime.retainsScheduledAction(continuation))
+                throw new IllegalStateException("accepted planning wake lost its exact runnable generation");
+            index.resumed(action, continuation);
             admitted++;
         }
     }
