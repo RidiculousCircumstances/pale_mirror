@@ -13,14 +13,14 @@ public record FrontierSettlementWorkDiagnostic(
         String settlementId, Lane strategic, Lane facility, List<String> readySites,
         List<String> pendingHarvestSchedules, String harvestAdmission,
         int livingFarmers, String availableFarmerId, String farmStatus,
-        String depotSurface, boolean depotHasFreeSlot
+        String harvestStorageId, boolean harvestStorageAvailable
 ) {
     public FrontierSettlementWorkDiagnostic {
         Objects.requireNonNull(settlementId, "settlement id"); Objects.requireNonNull(strategic, "strategic lane");
         Objects.requireNonNull(facility, "facility lane"); readySites = List.copyOf(readySites);
         pendingHarvestSchedules = List.copyOf(pendingHarvestSchedules); Objects.requireNonNull(harvestAdmission, "harvest admission");
         Objects.requireNonNull(availableFarmerId, "available farmer"); Objects.requireNonNull(farmStatus, "farm status");
-        Objects.requireNonNull(depotSurface, "depot surface");
+        Objects.requireNonNull(harvestStorageId, "harvest storage");
     }
 
     public record Lane(String objectiveId, String kind, String status) {
@@ -56,14 +56,14 @@ public record FrontierSettlementWorkDiagnostic(
                 .map(value -> value.id().value()).orElse("");
         String farmStatus = sites.stream().map(site -> state.structureConditions().get(site.facilityId()).name()).distinct().sorted()
                 .reduce((left, right) -> left.equals(right) ? left : "MIXED").orElse("MISSING");
-        var surface = state.inventory().surfaces().get(FrontierWorldState.depotId(settlementId));
-        String depotSurface = surface == null ? "MISSING" : surface.status().name();
-        boolean depotHasFreeSlot = surface != null && surface.status() == ContainerSurfaceStatus.ACTIVE
-                && state.firstFreeContainerSlot(surface.containerId()).isPresent();
+        var receiving = sites.stream().flatMap(site -> ResourceStorageSelection.newStackCandidates(state, settlementId,
+                "minecraft:wheat", 64, state.resourceSites().cycle(site.id()).layout().cells().getFirst().workstation(),
+                java.util.Set.of(ResourceStorageRole.WAREHOUSE)).stream()).findFirst();
+        String storageId = receiving.map(value -> value.containerId().value()).orElse("");
         String admission = harvestAdmission(state, settlementId, readySites, facility, farmStatus, livingFarmers,
-                availableFarmer, depotSurface, depotHasFreeSlot, pendingSchedules);
+                availableFarmer, receiving.isPresent(), pendingSchedules);
         return Optional.of(new FrontierSettlementWorkDiagnostic(settlementId.value(), strategic, facility, readySites, pendingSchedules, admission,
-                livingFarmers, availableFarmer, farmStatus, depotSurface, depotHasFreeSlot));
+                livingFarmers, availableFarmer, farmStatus, storageId, receiving.isPresent()));
     }
 
     private static Lane lane(FrontierWorldState state, SubjectId settlementId, StrategicObjectiveLane lane) {
@@ -75,7 +75,7 @@ public record FrontierSettlementWorkDiagnostic(
 
     private static String harvestAdmission(FrontierWorldState state, SubjectId settlementId, List<String> readySites, Lane facility,
                                            String farmStatus, int livingFarmers, String availableFarmer,
-                                           String depotSurface, boolean depotHasFreeSlot, List<String> pendingSchedules) {
+                                           boolean storageAvailable, List<String> pendingSchedules) {
         if (readySites.isEmpty()) return "NO_READY_SITE";
         if (!ProductionStockDemand.read(state, settlementId, "minecraft:wheat").requested()) return "STOCK_TARGET_MET";
         String recoveringFarmer = state.humanPopulation().residents().values().stream()
@@ -92,8 +92,7 @@ public record FrontierSettlementWorkDiagnostic(
         if (!farmStatus.equals(StructureCondition.INTACT.name())) return "FARM_UNAVAILABLE";
         if (livingFarmers == 0) return "NO_LIVING_FARMER";
         if (availableFarmer.isEmpty()) return "FARMER_RESERVED";
-        if (!depotSurface.equals(ContainerSurfaceStatus.ACTIVE.name())) return "DEPOT_SURFACE_" + depotSurface;
-        if (!depotHasFreeSlot) return "DEPOT_FULL";
+        if (!storageAvailable) return "NO_AVAILABLE_HARVEST_STORAGE";
         if (pendingSchedules.isEmpty()) return "MISSING_HARVEST_SCHEDULE";
         return "READY_TO_PLAN";
     }

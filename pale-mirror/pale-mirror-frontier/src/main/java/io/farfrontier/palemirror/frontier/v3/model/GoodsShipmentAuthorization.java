@@ -21,7 +21,7 @@ final class GoodsShipmentAuthorization implements ShipmentAuthorizationPort {
         // A company may use its settlement's fleet, without changing who owns the sale or its terms.
         var organizer = state.companies().goodsTrade().participants().participants().get(fulfillment.organizer().id());
         if (organizer == null || !organizer.party().equals(fulfillment.organizer())
-                || !organizer.endpoint().withStation(organization.home().station()).equals(organization.home()))
+                || !organizer.settlementId().equals(organization.home().settlementId()))
             throw new IllegalArgumentException("commercial organizer has no exact declared home");
     }
     @Override public FrontierWorldStateUpdate allocationDisposed(FrontierWorldState state, Shipment shipment, ExactInventory inventory) {

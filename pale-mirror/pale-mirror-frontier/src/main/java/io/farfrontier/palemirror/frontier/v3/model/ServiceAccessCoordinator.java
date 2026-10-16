@@ -42,7 +42,7 @@ public final class ServiceAccessCoordinator {
         var movement = state.actorMovements().get(actorId);
         if (movement != null) movement.context().clearancePoint().ifPresent(points::add);
         var actor = state.actorLocations().get(actorId);
-        if (actor != null) ServiceBoundaryComposition.declarations(state).values().stream()
+        if (actor != null) ServiceBoundaryComposition.operationalDeclarations(state).values().stream()
                 .filter(point -> point.boundary().occupied(actor.body())).forEach(point -> points.add(point.pointId()));
         return java.util.Set.copyOf(points);
     }

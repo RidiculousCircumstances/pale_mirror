@@ -94,6 +94,12 @@ public final class ResourceStorageSelection {
             int quantity, SurfaceAnchor origin, Set<ResourceStorageRole> roles, Optional<SubjectId> completing) {
         return receiving(state, owner, itemKind, quantity, origin, roles, completing).toList();
     }
+    /** A newly issued exact stack needs both capacity and an unoccupied addressed slot. No route search. */
+    public static List<ShipmentEndpoint> newStackCandidates(FrontierWorldState state, SubjectId owner, String itemKind,
+            int quantity, SurfaceAnchor origin, Set<ResourceStorageRole> roles) {
+        return receiving(state, owner, itemKind, quantity, origin, roles, Optional.empty())
+                .filter(endpoint -> state.firstFreeContainerSlot(endpoint.containerId()).isPresent()).toList();
+    }
     /** Validate one producer-declared receiver without enumerating or ranking alternative warehouses. */
     public static boolean receivesAt(FrontierWorldState state, ShipmentEndpoint endpoint, SubjectId owner,
             String itemKind, int quantity, Set<ResourceStorageRole> roles, Optional<SubjectId> completing) {

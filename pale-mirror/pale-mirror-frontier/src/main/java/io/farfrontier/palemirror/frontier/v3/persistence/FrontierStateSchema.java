@@ -4,9 +4,8 @@ import java.io.*;
 
 /** Sole header grammar for early installed-world selection and complete aggregate hydration. */
 final class FrontierStateSchema {
-    // Retained collision observations and native state-shape definitions. Fractional
-    // contacts do not change semantic support identity; old disposable worlds are rejected.
-    static final int VERSION = 288;
+    // Market identity retains legal home, not a permanent container. Exact trade endpoints stay on contracts.
+    static final int VERSION = 289;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

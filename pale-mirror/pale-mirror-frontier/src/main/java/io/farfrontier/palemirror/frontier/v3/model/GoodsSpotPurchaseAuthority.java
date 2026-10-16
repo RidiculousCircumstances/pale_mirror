@@ -11,20 +11,21 @@ public final class GoodsSpotPurchaseAuthority {
         var seller = state.companies().goodsTrade().participants().participants().get(sellerId);
         var buyer = state.companies().goodsTrade().participants().participants().get(buyerId);
         var budget = state.inventory().economics().budgets().get(budgetId);
-        if (seller == null || buyer == null || !seller.endpoint().containerId().equals(container) || sellerId.equals(buyerId)
+        if (seller == null || buyer == null || !GoodsParticipantStorage.eligible(state, seller, container, kind) || sellerId.equals(buyerId)
                 || budget == null || !budget.payerId().equals(buyerId)) return 0;
         var rules = state.bootstrap().ruleset().goodsTrade();
         var sale = GoodsParticipantPolicies.require(seller).decide(GoodsParticipantView.read(state, seller), rules).stream()
                 .filter(i -> i.side() == GoodsTradeOrder.Side.SELL && i.itemKind().equals(kind)).findFirst().orElse(null);
         if (sale == null || rules.policies().get(buyer.policy()).stream().noneMatch(c -> c.itemKind().equals(kind)
                 && GoodsParticipantPricing.bid(buyer, c).compareTo(sale.limit()) >= 0)) return 0;
-        return (int) Math.min(sale.quantity(), budget.remaining().raw() / sale.limit().raw());
+        return (int) Math.min(GoodsParticipantStorage.unclaimed(state, seller, container, kind),
+                Math.min(sale.quantity(), budget.remaining().raw() / sale.limit().raw()));
     }
     public static Optional<GoodsSpotPurchase> offer(FrontierWorldState state, UnitResourceTransfer transfer,
                                                    SubjectId buyerId, SubjectId budgetId, SubjectId reasonId) {
         var seller = state.companies().goodsTrade().participants().participants().get(transfer.sourceEconomicOwnerId());
         var budget = state.inventory().economics().budgets().get(budgetId);
-        if (seller == null || !seller.endpoint().containerId().equals(transfer.containerId()) || seller.party().id().equals(buyerId)
+        if (seller == null || !GoodsParticipantStorage.eligible(state, seller, transfer.containerId(), transfer.itemKind()) || seller.party().id().equals(buyerId)
                 || budget == null || !budget.payerId().equals(buyerId)) return Optional.empty();
         var rules = state.bootstrap().ruleset().goodsTrade();
         var sale = GoodsParticipantPolicies.require(seller).decide(GoodsParticipantView.read(state, seller), rules).stream()

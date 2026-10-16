@@ -16,6 +16,9 @@ public final class ServiceBoundaryComposition {
     private static FrontierBootstrap cachedBootstrap;
     private static List<Object> versions = List.of();
     private static Map<SubjectId, ServiceBoundaryProvider.Declaration> cached;
+    private static Object activeSurfaces;
+    private static Object activeDeclarations;
+    private static Map<SubjectId, ServiceBoundaryProvider.Declaration> active;
     /** One latest rebuildable spatial view; actor positions, permits and stock never enter this cache. */
     private record TurnoverIndex(Map<SubjectId, ServiceBoundaryProvider.Declaration> declarations,
             Object providerVersions, KnownPedestrianRouteKnowledge knowledge, Object residents, List<ServiceAccessPoint> points,
@@ -67,11 +70,28 @@ public final class ServiceBoundaryComposition {
     public static List<ServiceAccessPoint> geometries(FrontierWorldState state) {
         return turnoverIndex(state).points();
     }
+    /** Retained identities remain resolvable for draining work; retired facilities impose no new spatial restrictions. */
+    static synchronized Map<SubjectId, ServiceBoundaryProvider.Declaration> operationalDeclarations(FrontierWorldState state) {
+        var declared = declarations(state);
+        if (activeDeclarations == declared && activeSurfaces == state.inventory().surfaces()) return active;
+        var result = new LinkedHashMap<SubjectId, ServiceBoundaryProvider.Declaration>();
+        declared.forEach((id, value) -> {
+            var surface = state.inventory().surfaces().get(id);
+            if (surface != null && surface.status() != ContainerSurfaceStatus.RETIRED) result.put(id, value);
+        });
+        if (!result.equals(active)) active = Map.copyOf(result);
+        activeDeclarations = declared; activeSurfaces = state.inventory().surfaces();
+        return active;
+    }
+    public static boolean occupancyChanged(FrontierWorldState state, BodyPosition previous, BodyPosition observed) {
+        return !previous.equals(observed) && operationalDeclarations(state).values().stream()
+                .anyMatch(point -> point.boundary().occupied(previous) || point.boundary().occupied(observed));
+    }
     public static Optional<ServiceBoundaryProvider.Declaration> turnoverPoint(FrontierWorldState state, SurfaceAnchor actual) {
         return Optional.ofNullable(turnoverIndex(state).bySurface().get(actual));
     }
     private static synchronized TurnoverIndex turnoverIndex(FrontierWorldState state) {
-        var declared = declarations(state);
+        var declared = operationalDeclarations(state);
         var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state);
         var residents = state.humanPopulation().residents();
         if (turnoverIndex != null && turnoverIndex.declarations() == declared
@@ -79,14 +99,19 @@ public final class ServiceBoundaryComposition {
                 && turnoverIndex.knowledge() == knowledge && turnoverIndex.residents() == residents) return turnoverIndex;
         var points = new ArrayList<ServiceAccessPoint>();
         var surfaces = new HashMap<SurfaceAnchor, ServiceBoundaryProvider.Declaration>();
-        declared.values().stream().sorted(Comparator.comparing(ServiceBoundaryProvider.Declaration::pointId)).forEach(value -> {
+        var ordered = declared.values().stream().sorted(Comparator.comparing(ServiceBoundaryProvider.Declaration::pointId)).toList();
+        ordered.forEach(value -> {
             var point = geometry(state, value.identity());
             points.add(point);
-            // Preserve the former sorted-first result where declared temporary footprints overlap.
             point.boundary().occupiedSurfaces().forEach(surface -> surfaces.putIfAbsent(surface, value));
+        });
+        // A real service boundary takes precedence over another facility's nearby waiting/egress apron.
+        for (int index = 0; index < ordered.size(); index++) {
+            var value = ordered.get(index);
+            var point = points.get(index);
             point.waitingSurfaces().forEach(surface -> surfaces.putIfAbsent(surface, value));
             point.egressSurfaces().forEach(surface -> surfaces.putIfAbsent(surface, value));
-        });
+        }
         turnoverIndex = new TurnoverIndex(declared, versions, knowledge, residents, List.copyOf(points), Map.copyOf(surfaces));
         return turnoverIndex;
     }

@@ -11,7 +11,7 @@
           "totalCropSlots": 65 } } },
       { "view": "resident_life", "id": "resident:1-13", "expect": {
         "status": "ok", "nutrition": "NOURISHED", "assignment": "FIELD_HARVEST",
-        "metabolismEffectivePermille": 4000, "depotBread": 64 } }
+        "metabolismEffectivePermille": 4000, "bootstrapDepotBread": 64 } }
     ] }
   ],
   "actions": [
@@ -24,12 +24,12 @@
     { "type": "release_fast_forward_hold" },
     { "type": "wait_until_diagnostic", "view": "resident_life", "id": "resident:1-13",
       "expect": { "status": "ok", "nutrition": "HUNGRY", "assignment": "FIELD_HARVEST",
-        "activity": "EAT", "depotBread": 64 }, "timeoutMs": 60000,
+        "activity": "EAT", "bootstrapDepotBread": 64 }, "timeoutMs": 60000,
       "causalMilestone": "retained_field_worker_yields_for_exact_hunger" },
     { "type": "inspect", "view": "process", "id": "job:site-harvest-1-wheat-field-1" },
     { "type": "wait_until_diagnostic", "view": "resident_life", "id": "resident:1-13",
       "expect": { "status": "ok", "nutrition": "NOURISHED", "assignment": "FIELD_HARVEST",
-        "activity": "WORK", "mealPhase": "NONE", "depotBread": 63, "depotBreadClaimed": 0 },
+        "activity": "WORK", "mealPhase": "NONE", "bootstrapDepotBread": 63, "bootstrapDepotBreadClaimed": 0 },
       "timeoutMs": 120000, "causalMilestone": "same_field_worker_eats_and_resumes" },
     { "type": "look_nearest_entity", "entityType": "minecraft:villager",
       "nameContains": {"diagnostic":{"view":"actor","id":"resident:1-13","field":"name"}}, "maxDistance": 64, "timeoutMs": 30000 },
@@ -47,7 +47,7 @@
   "assertions": [
     { "after": 6, "view": "resident_life", "id": "resident:1-13",
       "expect": { "status": "ok", "nutrition": "NOURISHED", "assignment": "FIELD_HARVEST",
-        "activity": "WORK", "mealPhase": "NONE", "depotBread": 63 } },
+        "activity": "WORK", "mealPhase": "NONE", "bootstrapDepotBread": 63 } },
     { "after": 12, "view": "container", "id": "container:1-depot",
       "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } }
   ],

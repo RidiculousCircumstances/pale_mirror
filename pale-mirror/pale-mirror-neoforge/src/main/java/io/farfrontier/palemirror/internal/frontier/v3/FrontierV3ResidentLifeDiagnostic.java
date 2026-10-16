@@ -129,7 +129,8 @@ final class FrontierV3ResidentLifeDiagnostic {
                     .map(route -> Long.toString(route.arrivalTick())).orElse("null"))
                 + ",\"mealAtWaitingPocket\":" + (meal != null && ResidentMealKnownNavigation.atWaitingPocket(state, meal))
                 + ",\"mealKnownRoute\":\"" + quote(mealKnownRoute(state, meal)) + "\""
-                + ",\"mealSource\":\"" + (meal == null ? "NONE" : meal.portable() ? "PERSONAL_INVENTORY" : "DEPOT") + "\""
+                + ",\"mealSource\":\"" + (meal == null ? "NONE" : meal.portable() ? "PERSONAL_INVENTORY" : "STORAGE") + "\""
+                + ",\"mealStorageId\":\"" + (meal == null || meal.portable() ? "" : quote(meal.depotId().value())) + "\""
                 + ",\"mealServiceAvailable\":" + (meal != null && !meal.portable() && ResidentMealServiceAccess.available(
                     state, meal.depotId(), meal.residentId()))
                 + ",\"movementOrderPresent\":" + (movement != null)
@@ -144,7 +145,7 @@ final class FrontierV3ResidentLifeDiagnostic {
                     + movement.order().legalStations().getFirst().y() + ",\"z\":"
                     + movement.order().legalStations().getFirst().z() + "}")
                 + ",\"movementKnownRoute\":\"" + quote(movementKnownRoute(state, movement)) + "\""
-                + ",\"depotBread\":" + bread + ",\"depotBreadClaimed\":" + claimed
+                + ",\"bootstrapDepotBread\":" + bread + ",\"bootstrapDepotBreadClaimed\":" + claimed
                 + ",\"settlementBreadStock\":" + SettlementFoodPolicy.breadStock(state, resident.settlementId())
                 + ",\"settlementBreadUsable\":" + SettlementFoodPolicy.usableBread(state, resident.settlementId()) + "}";
     }

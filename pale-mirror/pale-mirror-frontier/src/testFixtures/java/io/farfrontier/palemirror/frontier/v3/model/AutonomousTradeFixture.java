@@ -17,8 +17,8 @@ final class AutonomousTradeFixture {
         int stock = Math.max(commodity.target(view.residents()), view.stocks().get("minecraft:bread").protectedMinimum()) + 16;
         var lot = new SubjectId("lot:autonomous-trade-initial-bread"); var staging = new SubjectId("custody:autonomous-trade-setup");
         var resources = state.inventory().fungibleResources().issue(new ResourceLot(lot, seller.party().id(), "minecraft:bread", stock,
-                "fixture:finite-initial-bread", List.of()), new CustodyAccount(staging, new ResourceCustody.Container(seller.endpoint().containerId()), Map.of(lot, stock), Map.of()));
-        resources = resources.transfer(staging, ReferenceContainerCustody.scopeId(seller.endpoint().containerId()), Map.of(lot, stock), Map.of());
+                "fixture:finite-initial-bread", List.of()), new CustodyAccount(staging, new ResourceCustody.Container(FrontierWorldState.depotId(seller.settlementId())), Map.of(lot, stock), Map.of()));
+        resources = resources.transfer(staging, ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(seller.settlementId())), Map.of(lot, stock), Map.of());
         return state.withInventory(state.inventory().withFungibleResources(resources));
     }
     private AutonomousTradeFixture() { }

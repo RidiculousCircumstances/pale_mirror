@@ -131,9 +131,9 @@ public final class AmbientPlacementPolicy {
     private static List<SurfaceAnchor> serviceZone(FrontierWorldState state, AmbientActorLease lease) {
         ResidentProfile resident = state.humanPopulation().resident(lease.actorId());
         if (resident == null) return exact(state, lease);
-        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), resident.settlementId());
         List<SurfaceAnchor> result = new ArrayList<>(exact(state, lease));
-        for (ServiceAccessPoint point : SettlementServiceAccessPoints.placementPoint(state, settlement.id(), lease.handoffBody()).stream().toList()) {
+        for (var declaration : ServiceBoundaryComposition.turnoverPoint(state, lease.handoffBody().supportingSurface()).stream().toList()) {
+            var point = ServiceBoundaryComposition.geometry(state, declaration.identity());
             // These are bounded geometric proposals, not admission proofs. The physical
             // selector tries the retained body first and proves only a usable alternative.
             for (var surface : point.waitingSurfaces().stream().sorted(Comparator.comparingLong(
@@ -143,20 +143,18 @@ public final class AmbientPlacementPolicy {
         }
         return List.copyOf(result);
     }
-    private static ServiceAccessPoint requireServicePoint(FrontierWorldState state, AmbientActorLease lease, SurfaceAnchor surface) {
+    private static ServiceBoundaryProvider.Declaration requireServicePoint(FrontierWorldState state, AmbientActorLease lease, SurfaceAnchor surface) {
         var resident = state.humanPopulation().resident(lease.actorId());
         if (resident == null) throw new IllegalArgumentException("service placement lacks its exact resident");
-        var point = SettlementServiceAccessPoints.placementPoint(state, resident.settlementId(), lease.handoffBody())
+        var declaration = ServiceBoundaryComposition.turnoverPoint(state, lease.handoffBody().supportingSurface())
                 .orElseThrow(() -> new IllegalArgumentException("body placement is outside a declared service zone"));
+        var point = ServiceBoundaryComposition.geometry(state, declaration.identity());
         if (!point.waitingSurfaces().contains(surface)) throw new IllegalArgumentException("body placement is not a declared waiting surface");
-        return point;
+        return declaration;
     }
-    private static KnownPedestrianRouteKnowledge serviceKnowledge(FrontierWorldState state, AmbientActorLease lease, ServiceAccessPoint point) {
-        var resident = state.humanPopulation().resident(lease.actorId());
-        var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), resident.settlementId());
-        var facility = settlement.structures().stream().filter(value -> value.id().equals(point.facilityId())).findFirst().orElseThrow();
-        return KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), List.of(
-                new KnownPedestrianRouteKnowledge.Passage(facility, KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS))).forActor(state, lease.actorId());
+    private static KnownPedestrianRouteKnowledge serviceKnowledge(FrontierWorldState state, AmbientActorLease lease,
+            ServiceBoundaryProvider.Declaration point) {
+        return ServiceBoundaryComposition.knowledge(state, point.identity()).forActor(state, lease.actorId());
     }
     private static Optional<PedestrianRouteReceipt> selectedServiceRoute(FrontierWorldState state, AmbientActorLease lease, SurfaceAnchor surface) {
         var point = requireServicePoint(state, lease, surface);

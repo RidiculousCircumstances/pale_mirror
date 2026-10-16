@@ -233,10 +233,23 @@ class ResourceSiteHarvestProcessTest {
         return StrategicObjectiveProcess.reduceTask(state, settlement, (StrategicTaskPlanned) opportunity.get(1).payload());
     }
 
-    @Test void hungryFarmerStartsReadyHarvestWhenDepotHasNoBread() {
+    @Test void hungryFarmerStartsReadyHarvestWithRetiredDepotAndAReplacementWarehouseWithoutBread() {
         FrontierWorldState state = ready(initial(126L));
         SubjectId site = new SubjectId("site:1-wheat-field");
         SubjectId settlement = new SubjectId("settlement:1");
+        var depot = FrontierWorldState.depotId(settlement);
+        var oldEndpoint = (ShipmentEndpoint.Depot) GoodsParticipantStorage.endpoint(state, depot);
+        var replacement = new SubjectId("container:harvest-replacement");
+        var endpoint = new ShipmentEndpoint.Storage(settlement, replacement, oldEndpoint.station(),
+                java.util.Optional.of(oldEndpoint.facilityId()), ShipmentEndpointComposition.exteriorApproach(state, oldEndpoint));
+        var socket = state.inventory().surfaces().get(depot).position();
+        state = state.withInventory(state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE).withSurfaceStatus(depot, ContainerSurfaceStatus.RETIRED));
+        state = new ResourceStorageDeclared(new ContainerRecord(replacement, settlement, 27, ContainerPurpose.RESOURCE_STORAGE,
+                java.util.Optional.empty(), java.util.Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(),
+                    0, ResourceStorageRole.WAREHOUSE))), socket).apply(state, settlement);
+        state = state.withInventory(state.inventory().withSurfaceStatus(replacement, ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(replacement, ContainerSurfaceStatus.ACTIVE));
         ResidentProfile farmer = FrontierWorldStateSupport.availableWorkResident(state, settlement,
                 ResidentWorkKind.AGRICULTURE, HumanCapability.AGRICULTURE).orElseThrow();
         assertTrue(ResidentMealOpportunity.find(state, farmer.id()).isEmpty());
@@ -253,6 +266,9 @@ class ResourceSiteHarvestProcessTest {
         var planned = ResourceSiteHarvestProcess.plan(state, ResourceSiteHarvestProcess.start(task, 27_085L));
         assertTrue(planned.stream().map(ProposedEvent::payload).anyMatch(ResourceSiteHarvestStarted.class::isInstance),
                 "an empty food depot must not prevent the food-producing farmer from beginning the real job");
+        var started = planned.stream().map(ProposedEvent::payload).filter(ResourceSiteHarvestStarted.class::isInstance)
+                .map(ResourceSiteHarvestStarted.class::cast).findFirst().orElseThrow();
+        assertEquals(replacement, started.job().outputSlot().containerId());
     }
 
     @Test void travellingMealDoesNotHideAvailableBreadFromAnotherHungryFarmer() {

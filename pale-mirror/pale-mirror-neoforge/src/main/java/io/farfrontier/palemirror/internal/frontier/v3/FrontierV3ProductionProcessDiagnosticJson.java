@@ -38,8 +38,8 @@ final class FrontierV3ProductionProcessDiagnosticJson {
                     .filter(value -> value.id().equals(work.stationId())).findFirst().orElseThrow();
             var stationScope = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(station.containerId()));
             var stationReplica = state.replicaCustody().replicas().get(station.containerId());
-            var depotScope = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(
-                    FrontierWorldState.depotId(job.settlementId())));
+            var storageId = io.farfrontier.palemirror.frontier.v3.model.BakeryStorage.current(job);
+            var storageScope = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(storageId));
             long stationBindings = state.inventory().fungibleResources().bindings().values().stream()
                     .filter(value -> value.accountId().equals(work.stationAccountId())).count();
             return ",\"cursor\":null,\"goal\":{\"kind\":\"" + work.phase()
@@ -66,7 +66,10 @@ final class FrontierV3ProductionProcessDiagnosticJson {
                     + "\",\"stationCustodyStatus\":\"" + (stationScope == null ? "NONE" : stationScope.status())
                     + "\",\"stationReplicaState\":\"" + (stationReplica == null ? "NONE" : stationReplica.state())
                     + "\",\"stationBoundStacks\":" + stationBindings
-                    + ",\"depotCustodyStatus\":\"" + (depotScope == null ? "NONE" : depotScope.status()) + "\""
+                    + ",\"storageId\":\"" + FrontierV3DiagnosticJson.quote(storageId.value()) + "\""
+                    + ",\"sourceStorageId\":\"" + FrontierV3DiagnosticJson.quote(work.sourceContainerId().value()) + "\""
+                    + ",\"destinationStorageId\":\"" + FrontierV3DiagnosticJson.quote(job.rights().destinationContainerId().value()) + "\""
+                    + ",\"storageCustodyStatus\":\"" + (storageScope == null ? "NONE" : storageScope.status()) + "\""
                     + ",\"coldBlocker\":\"" + BakeryProcess.coldBlocker(state, job).orElse("NONE") + "\""
                     + ",\"resumeBlocker\":\"" + io.farfrontier.palemirror.frontier.v3.model.ProductionServiceAccess.resumeBlocker(state, job)
                         .map(io.farfrontier.palemirror.frontier.v3.model.ProductionServiceAccess.ResumeWait::label).orElse("NONE") + "\""

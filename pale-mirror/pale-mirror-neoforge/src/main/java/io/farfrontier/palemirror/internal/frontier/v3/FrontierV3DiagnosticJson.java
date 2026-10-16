@@ -391,7 +391,7 @@ final class FrontierV3DiagnosticJson {
                 + ",\"pendingHarvestSchedules\":" + strings(value.pendingHarvestSchedules())
                 + ",\"harvestAdmission\":\"" + quote(value.harvestAdmission()) + "\",\"livingFarmers\":" + value.livingFarmers()
                 + ",\"availableFarmer\":\"" + quote(value.availableFarmerId()) + "\",\"farmStatus\":\"" + quote(value.farmStatus())
-                + "\",\"depotSurface\":\"" + quote(value.depotSurface()) + "\",\"depotHasFreeSlot\":" + value.depotHasFreeSlot()
+                + "\",\"harvestStorageId\":\"" + quote(value.harvestStorageId()) + "\",\"harvestStorageAvailable\":" + value.harvestStorageAvailable()
                 + ",\"quarantine\":\"" + (state.humanPopulation().quarantined(subject) ? "QUARANTINED" : "NORMAL") + "\",\"activeCases\":"
                 + state.humanPopulation().activeCases(subject) + ",\"food\":{\"status\":\""
                 + (SettlementFoodPolicy.breadStock(state, subject) == 0 ? "SHORTAGE"

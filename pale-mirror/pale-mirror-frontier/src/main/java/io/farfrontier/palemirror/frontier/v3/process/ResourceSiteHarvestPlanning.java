@@ -148,9 +148,8 @@ final class ResourceSiteHarvestPlanning {
         if (worker == null) throw new IllegalArgumentException("resource-site harvest worker has no canonical body");
         ShipmentEndpoint storage = null;
         java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt> storageRoute = java.util.Optional.empty();
-        for (var candidate : ResourceStorageSelection.receivingCandidates(state, site.settlementId(), "minecraft:wheat", 64,
-                worker.supportingSurface(), java.util.Set.of(ResourceStorageRole.WAREHOUSE), java.util.Optional.empty())) {
-            if (state.firstFreeContainerSlot(candidate.containerId()).isEmpty()) continue;
+        for (var candidate : ResourceStorageSelection.newStackCandidates(state, site.settlementId(), "minecraft:wheat", 64,
+                worker.supportingSurface(), java.util.Set.of(ResourceStorageRole.WAREHOUSE))) {
             try {
                 var route = ResourceStorageNavigation.plannedPath(state, worker.supportingSurface(), candidate);
                 storage = candidate;

@@ -7,7 +7,7 @@ import java.util.*;
 
 /** Registered bounded economic reviews. Each participant supplies consent; matching and delivery remain separate. */
 public final class GoodsParticipantProcess {
-    private record QuoteKey(GoodsTradeParty counterparty, String itemKind, GoodsTradeOrder.Side side) { }
+    private record QuoteKey(GoodsTradeParty counterparty, String itemKind, GoodsTradeOrder.Side side, SubjectId container) { }
     public static final String REVIEW = "frontier.goods.participant.review";
     public static ScheduledAction review(SubjectId party, long due) {
         return new ScheduledAction(new ScheduleId("schedule:goods-participant/" + party.value().replace(':', '-')),
@@ -78,10 +78,13 @@ public final class GoodsParticipantProcess {
                 .sorted(Comparator.comparing(GoodsTradeOrder::id)).toList()) {
             var replacement = intents.stream().filter(intent -> intent.itemKind().equals(order.itemKind()) && intent.side() == order.side()).findFirst();
             boolean currentPeer = participant.known().stream().anyMatch(peer -> peer.party().equals(order.counterparty()));
-            if (currentPeer && order.expiresAtTick() >= now && replacement.filter(intent -> intent.quantity() == order.availableQuantity()
+            if (currentPeer && GoodsParticipantStorage.eligible(state, participant, order.containerId(), order.itemKind())
+                    && (order.side() != GoodsTradeOrder.Side.SELL || GoodsParticipantStorage.unclaimed(state, participant, order.containerId(), order.itemKind()) > 0)
+                    && (order.side() != GoodsTradeOrder.Side.BUY || GoodsTradeStateSupport.receivingCapacity(state, order.containerId(), order.itemKind(), 1))
+                    && order.expiresAtTick() >= now && replacement.filter(intent -> intent.quantity() == order.availableQuantity()
                     && intent.limit().equals(order.unitPriceLimit())).isPresent()) continue;
             if (order.expiresAtTick() >= now && replacement.isPresent()) retainedExpiry.merge(
-                    new QuoteKey(order.counterparty(), order.itemKind(), order.side()), order.expiresAtTick(), Math::min);
+                    new QuoteKey(order.counterparty(), order.itemKind(), order.side(), order.containerId()), order.expiresAtTick(), Math::min);
             var withdrawal = new GoodsTradeOrderWithdrawn(order.id(), order.committedQuantity());
             events.add(new ProposedEvent(participant.party().id(), withdrawal));
             state = state.withCompanies(state.companies().withGoodsTrade(state.companies().goodsTrade().withdraw(participant.party().id(), withdrawal)));
@@ -89,18 +92,21 @@ public final class GoodsParticipantProcess {
         int published = 0;
         for (var intent : intents) for (var peer : participant.known()) {
             var counterparty = state.companies().goodsTrade().participants().participants().get(peer.party().id());
-            if (counterparty == null || !counterparty.party().equals(peer.party()) || !counterparty.endpoint().equals(peer.endpoint())) continue;
+            if (counterparty == null || !counterparty.party().equals(peer.party()) || !counterparty.settlementId().equals(peer.settlementId())) continue;
+            for (var endpoint : GoodsParticipantStorage.quoteEndpoints(state, participant, intent)) {
             boolean pending = state.companies().goodsTrade().orders().values().stream().anyMatch(order ->
                     order.party().equals(participant.party()) && order.counterparty().equals(peer.party()) && order.itemKind().equals(intent.itemKind())
+                            && order.containerId().equals(endpoint.containerId())
                             && order.side() == intent.side() && order.availableQuantity() > 0 && order.expiresAtTick() >= now);
             if (pending || state.companies().goodsTrade().orders().size() >= GoodsTradeState.MAX_ORDERS) continue;
             var id = new SubjectId("order:goods-policy/" + WorkOpportunityIdentity.digest(participant.party().id().value() + "|" + participant.reviewRevision()
-                    + "|" + peer.party().id().value() + "|" + intent.itemKind() + "|" + intent.side().wireTag()));
-            var order = new GoodsTradeOrder(id, participant.party(), peer.party(), intent.side(), participant.endpoint().containerId(),
+                    + "|" + peer.party().id().value() + "|" + intent.itemKind() + "|" + intent.side().wireTag() + "|" + endpoint.containerId().value()));
+            var order = new GoodsTradeOrder(id, participant.party(), peer.party(), intent.side(), endpoint.containerId(),
                     intent.itemKind(), intent.quantity(), 0, intent.limit(), retainedExpiry.getOrDefault(
-                            new QuoteKey(peer.party(), intent.itemKind(), intent.side()), Math.addExact(now, rules.orderLifetime())));
+                            new QuoteKey(peer.party(), intent.itemKind(), intent.side(), endpoint.containerId()), Math.addExact(now, rules.orderLifetime())));
             state = GoodsTradeStateSupport.place(state, participant.party().id(), order, now);
             events.add(new ProposedEvent(participant.party().id(), new GoodsTradeOrderPlaced(order))); published++;
+            }
         }
         String decision;
         if (rules.supplyPlanning().enabled()) {
@@ -116,7 +122,9 @@ public final class GoodsParticipantProcess {
             var value = match.orElseThrow();
             var seller = state.companies().goodsTrade().participants().participants().get(value.contract().seller().id());
             var buyer = state.companies().goodsTrade().participants().participants().get(value.contract().buyer().id());
-            var routeStatus = GoodsShipmentPlanning.routeStatus(state, seller.endpoint(), buyer.endpoint(), value.contract().id());
+            var routeStatus = GoodsShipmentPlanning.routeStatus(state,
+                    GoodsParticipantStorage.endpoint(state, value.contract().sourceContainerId()),
+                    GoodsParticipantStorage.endpoint(state, value.contract().receiverContainerId()), value.contract().id());
             if (routeStatus == io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.FOUND) {
                 state = GoodsTradeStateSupport.reserve(state, value.contract().seller().id(), value.contract(), value.allocations(), now);
                 events.add(new ProposedEvent(value.contract().seller().id(), new GoodsTradeReserved(value.contract(), value.allocations())));

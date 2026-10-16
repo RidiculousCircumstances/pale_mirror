@@ -15,12 +15,12 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
     public GoodsParticipantView(GoodsParticipant participant, int residents, FixedScalar availableMoney, Map<String, Stock> stocks) {
         this(participant, residents, availableMoney, stocks, Map.of());
     }
-    public record Stock(int ownedAtEndpoint, int unclaimedAtEndpoint, int expectedIncoming, int protectedMinimum) {
-        public Stock(int ownedAtEndpoint, int unclaimedAtEndpoint, int expectedIncoming) {
-            this(ownedAtEndpoint, unclaimedAtEndpoint, expectedIncoming, 0);
+    public record Stock(int ownedInStorage, int unclaimedInStorage, int expectedIncoming, int protectedMinimum) {
+        public Stock(int ownedInStorage, int unclaimedInStorage, int expectedIncoming) {
+            this(ownedInStorage, unclaimedInStorage, expectedIncoming, 0);
         }
         public Stock {
-            if (ownedAtEndpoint < 0 || unclaimedAtEndpoint < 0 || unclaimedAtEndpoint > ownedAtEndpoint || expectedIncoming < 0 || protectedMinimum < 0)
+            if (ownedInStorage < 0 || unclaimedInStorage < 0 || unclaimedInStorage > ownedInStorage || expectedIncoming < 0 || protectedMinimum < 0)
                 throw new IllegalArgumentException("invalid participant stock view");
         }
     }
@@ -44,27 +44,28 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
     }
     private static GoodsParticipantView project(FrontierWorldState state, GoodsParticipant participant) {
         participant.party().validate(state.inventory().economics());
-        var account = FungibleResourceCustodySupport.accountAtContainer(state, participant.endpoint().containerId());
         var ledger = state.inventory().fungibleResources();
         var result = new HashMap<String, Stock>();
         for (var commodity : state.bootstrap().ruleset().goodsTrade().policies().get(participant.policy())) {
-            int owned = account.map(value -> value.lotQuantities().entrySet().stream().filter(entry -> {
+            var containers = GoodsParticipantStorage.containers(state, participant, commodity.itemKind());
+            var accounts = containers.stream().flatMap(container -> FungibleResourceCustodySupport.accountAtContainer(state, container).stream()).toList();
+            int owned = accounts.stream().flatMap(value -> value.lotQuantities().entrySet().stream()).filter(entry -> {
                 var lot = ledger.lots().get(entry.getKey());
                 return lot.economicOwnerId().equals(participant.party().id()) && lot.itemKind().equals(commodity.itemKind());
-            }).mapToInt(Map.Entry::getValue).reduce(0, Math::addExact)).orElse(0);
-            int unclaimed = account.map(value -> ledger.unclaimedQuantity(value.id(), participant.party().id(), commodity.itemKind())).orElse(0);
+            }).mapToInt(Map.Entry::getValue).reduce(0, Math::addExact);
+            int unclaimed = accounts.stream().mapToInt(value -> ledger.unclaimedQuantity(value.id(), participant.party().id(), commodity.itemKind())).reduce(0, Math::addExact);
             int incoming = state.companies().goodsTrade().contracts().values().stream()
                     .filter(contract -> !contract.terminal() && contract.buyer().equals(participant.party())
-                            && contract.itemKind().equals(commodity.itemKind()) && contract.receiverContainerId().equals(participant.endpoint().containerId()))
+                            && contract.itemKind().equals(commodity.itemKind()) && containers.contains(contract.receiverContainerId()))
                     .mapToInt(GoodsTradeContract::remainingQuantity).reduce(0, Math::addExact);
-            incoming = Math.addExact(incoming, InternalShipmentIncomingStock.quantity(state.shipments(), participant.party().id(),
-                    participant.endpoint().containerId(), commodity.itemKind()));
+            for (var container : containers) incoming = Math.addExact(incoming, InternalShipmentIncomingStock.quantity(
+                    state.shipments(), participant.party().id(), container, commodity.itemKind()));
             int protectedMinimum = participant.policy() == GoodsPolicyKind.PUBLIC_SETTLEMENT
                     ? PublicStockProtection.minimum(state, participant.party().id(), commodity.itemKind()) : 0;
             result.put(commodity.itemKind(), new Stock(owned, unclaimed, incoming, protectedMinimum));
         }
         int residents = (int) state.humanPopulation().residents().values().stream()
-                .filter(resident -> resident.settlementId().equals(participant.endpoint().settlementId())
+                .filter(resident -> resident.settlementId().equals(participant.settlementId())
                         && state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE).count();
         var plan = participant.policy() == GoodsPolicyKind.PUBLIC_SETTLEMENT && state.bootstrap().ruleset().goodsTrade().supplyPlanning().enabled()
                 ? Optional.of(SettlementSupplyPlanning.read(state, participant.party().id(), residents, result))
@@ -74,7 +75,7 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
                 : new SettlementFoodPurchases.Advice(Map.of(), Map.of());
         advice.protectedInputs().forEach((kind, minimum) -> {
             var stock = result.get(kind);
-            result.put(kind, new Stock(stock.ownedAtEndpoint(), stock.unclaimedAtEndpoint(), stock.expectedIncoming(),
+            result.put(kind, new Stock(stock.ownedInStorage(), stock.unclaimedInStorage(), stock.expectedIncoming(),
                     Math.max(minimum, stock.protectedMinimum())));
         });
         return new GoodsParticipantView(participant, residents, state.inventory().economics().availableToReserve(participant.party().id()), result, advice.limits(), plan);

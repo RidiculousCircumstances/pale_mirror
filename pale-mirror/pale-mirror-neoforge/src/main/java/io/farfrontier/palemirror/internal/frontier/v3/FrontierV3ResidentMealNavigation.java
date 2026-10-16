@@ -33,6 +33,13 @@ final class FrontierV3ResidentMealNavigation {
         }
         var actuation = FrontierV3AmbientActuation.capture(state, runtime, body, lease, meal.executionId()).orElse(null);
         if (actuation == null || !actuation.current(body)) return;
+        // A prepared consumption retains its fence while ordinary physics may move the body.
+        // Clear the passage through the same navigator; never cancel/replay the resource effect.
+        if (meal.phase() == ResidentMeal.Phase.CONSUME && !meal.portable()
+                && ResidentMealProcess.requiresClearance(state, meal, FrontierV3SurfaceObservation.observedBody(body))) {
+            pursueClearance(level, state, body, meal, actuation);
+            return;
+        }
         if (meal.phase() != ResidentMeal.Phase.MOVE
                 && !meal.movesToClearance()) {
             ROUTES.remove(body);
@@ -41,13 +48,7 @@ final class FrontierV3ResidentMealNavigation {
             return;
         }
         if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS) {
-            ROUTES.remove(body);
-            var result = FrontierV3ServiceClearanceNavigation.pursue(level, body, state, meal.settlementId(),
-                    meal.depotId(), meal.residentId(), meal.residentId(), FrontierWireTags.tag(meal.phase()),
-                    meal.startedAtTick() + 1L, actuation);
-            if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED)
-                blocked(body, meal, "service_exit:" + result.reason());
-            else BLOCKED.remove(body);
+            pursueClearance(level, state, body, meal, actuation);
             return;
         }
         Route route = ROUTES.get(body);
@@ -107,6 +108,17 @@ final class FrontierV3ResidentMealNavigation {
                 FrontierV3GoalNavigation.Goal.routed(order, route.physicalOnly() ? List.of() : route.waypoints(), state.bootstrap().bounds()), actuation);
         if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED)
             blocked(body, meal, "minecraft_path:" + result.reason());
+        else BLOCKED.remove(body);
+    }
+
+    private static void pursueClearance(ServerLevel level, FrontierWorldState state, Mob body,
+                                        ResidentMeal meal, FrontierV3ActorActuation actuation) {
+        ROUTES.remove(body);
+        var result = FrontierV3ServiceClearanceNavigation.pursue(level, body, state, meal.settlementId(),
+                meal.depotId(), meal.residentId(), meal.residentId(), FrontierWireTags.tag(meal.phase()),
+                meal.startedAtTick() + 1L, actuation);
+        if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED)
+            blocked(body, meal, "service_exit:" + result.reason());
         else BLOCKED.remove(body);
     }
 

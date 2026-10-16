@@ -9,7 +9,7 @@
     { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
       { "view": "resident_life", "id": "resident:6-1", "expect": {
         "status": "ok", "nutrition": "HUNGRY", "activity": "EAT",
-        "mealPhase": "CONSUME", "depotBread": 63, "depotBreadClaimed": 0 } },
+        "mealPhase": "CONSUME", "bootstrapDepotBread": 63, "bootstrapDepotBreadClaimed": 0 } },
       { "view": "resource", "id": "custody:resident-meal-6-1", "expect": {
         "status": "ok", "quantity": 1, "bindingCount": 0,
         "custody": { "kind": "ACTOR", "actor": "resident:6-1" } } }
@@ -24,7 +24,7 @@
       "position": { "x": -125, "y": 64, "z": -8 }, "settleMs": 1000 },
     { "type": "wait_until_diagnostic", "view": "resident_life", "id": "resident:6-1",
       "expect": { "status": "ok", "nutrition": "NOURISHED", "mealPhase": "NONE",
-        "depotBread": 63, "depotBreadClaimed": 0 },
+        "bootstrapDepotBread": 63, "bootstrapDepotBreadClaimed": 0 },
       "timeoutMs": 90000, "causalMilestone": "cold_held_bread_consumed_once_after_hot_return" },
     { "type": "inspect", "view": "actor", "id": "resident:6-1" },
     { "type": "inspect", "view": "container", "id": "container:6-depot" }
@@ -32,9 +32,9 @@
   "restart": { "mode": "graceful", "afterAction": 1, "resumeSetup": [] },
   "assertions": [
     { "after": 2, "view": "resident_life", "id": "resident:6-1", "expect": {
-      "status": "ok", "nutrition": "HUNGRY", "mealPhase": "CONSUME", "depotBread": 63 } },
+      "status": "ok", "nutrition": "HUNGRY", "mealPhase": "CONSUME", "bootstrapDepotBread": 63 } },
     { "after": 4, "view": "resident_life", "id": "resident:6-1", "expect": {
-      "status": "ok", "nutrition": "NOURISHED", "mealPhase": "NONE", "depotBread": 63 } },
+      "status": "ok", "nutrition": "NOURISHED", "mealPhase": "NONE", "bootstrapDepotBread": 63 } },
     { "after": 6, "view": "container", "id": "container:6-depot", "expect": {
       "status": "ok", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } }
   ],

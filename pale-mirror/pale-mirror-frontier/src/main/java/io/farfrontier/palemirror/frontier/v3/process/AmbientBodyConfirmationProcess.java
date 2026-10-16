@@ -36,6 +36,6 @@ public final class AmbientBodyConfirmationProcess {
     public static boolean serviceOccupancyChanged(FrontierWorldState state, SubjectId actorId,
                                                  BodyPosition previous, BodyPosition observed) {
         ResidentProfile resident = state.humanPopulation().resident(actorId);
-        return resident != null && SettlementServiceAccessPoints.occupancyChanged(state, resident.settlementId(), previous, observed);
+        return resident != null && ServiceBoundaryComposition.occupancyChanged(state, previous, observed);
     }
 }

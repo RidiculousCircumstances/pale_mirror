@@ -28,18 +28,21 @@ final class GoodsTripPlanning {
         if (requirements.isEmpty()) return new Result(initial, List.of(), "NO_CURRENT_PURCHASE_REQUIREMENT");
         for (var peer : reviewer.known()) {
             var other = initial.companies().goodsTrade().participants().participants().get(peer.party().id());
-            if (other == null || !other.party().equals(peer.party()) || !other.endpoint().equals(peer.endpoint())) continue;
+            if (other == null || !other.party().equals(peer.party()) || !other.settlementId().equals(peer.settlementId())) continue;
+            var reviewedPairs = new EnumMap<GoodsTradeFulfillment.Mode, Integer>(GoodsTradeFulfillment.Mode.class);
+            for (var endpoints : GoodsOrderMatching.endpointPairs(initial, other, buyer, now)) {
             for (var mode : GoodsTradeFulfillment.Mode.values()) {
                 var seller = other;
                 var state = initial; var reservations = new ArrayList<ProposedEvent>(); var parcels = new ArrayList<GoodsTripAssembly.Parcel>();
                 var reservedPrefixes = new ArrayList<FrontierWorldState>(); reservedPrefixes.add(initial);
-                int reviews = 0; var considered = new HashSet<String>();
+                int reviews = reviewedPairs.getOrDefault(mode, 0); var considered = new HashSet<String>();
                 int cargoLimit = Math.min(initial.bootstrap().ruleset().goodsTrade().supplyPlanning().maximumTripCargoStacks(),
                         ShipmentState.MAX_SHIPMENTS - initial.shipments().shipments().size());
                 while (parcels.size() < cargoLimit && state.companies().goodsTrade().contracts().size() < GoodsTradeState.MAX_CONTRACTS
                         && reviews < initial.bootstrap().ruleset().goodsTrade().maximumPairReviews()) {
-                    var search = GoodsOrderMatching.first(state, reviewer, now, Optional.of(seller.party()), Optional.of(buyer.party()), considered);
+                    var search = GoodsOrderMatching.first(state, reviewer, now, Optional.of(seller.party()), Optional.of(buyer.party()), considered, Optional.of(endpoints));
                     reviews += search.checkedPairs();
+                    reviewedPairs.put(mode, reviews); // Additional warehouses share the original per-peer/mode work budget.
                     if (search.match().isEmpty()) {
                         if (!considered.isEmpty()) { considered.clear(); continue; }
                         if (parcels.isEmpty()) decision = search.disposition(); break;
@@ -68,9 +71,11 @@ final class GoodsTripPlanning {
                     var selectedEvents = new ArrayList<>(reservations.subList(0, count));
                     long estimate;
                     try {
-                        var knowledge = ShipmentEndpointComposition.knowledge(initial, List.of(seller.endpoint(), buyer.endpoint()));
-                        var outward = knowledge.estimateBetween(seller.endpoint().station(), buyer.endpoint().station());
-                        var returning = knowledge.estimateBetween(buyer.endpoint().station(), seller.endpoint().station());
+                        var source = GoodsParticipantStorage.endpoint(initial, selected.getFirst().contract().sourceContainerId());
+                        var receiver = GoodsParticipantStorage.endpoint(initial, selected.getFirst().contract().receiverContainerId());
+                        var knowledge = ShipmentEndpointComposition.knowledge(initial, List.of(source, receiver));
+                        var outward = knowledge.estimateBetween(source.station(), receiver.station());
+                        var returning = knowledge.estimateBetween(receiver.station(), source.station());
                         estimate = initial.bootstrap().ruleset().expedition().plannedDuration(
                                 outward.estimatedEdges(), returning.estimatedEdges());
                     }
@@ -79,11 +84,13 @@ final class GoodsTripPlanning {
                         break; // Quantity cannot change this pair's regional connectivity.
                     }
                     var id = new SubjectId("procurement:" + WorkOpportunityIdentity.digest(seller.party().id().value()
-                            + "|" + buyer.party().id().value() + "|" + mode + "|" + count));
+                            + "|" + buyer.party().id().value() + "|" + mode + "|" + count
+                            + "|" + endpoints.source().value() + "|" + endpoints.receiver().value()));
                     candidates.add(new Candidate(selectedState, List.copyOf(selectedEvents), seller, selected, mode, cause,
                             offer(id, selected, estimate, mode), List.copyOf(reservedPrefixes.subList(0, count + 1))));
                     break;
                 }
+            }
             }
         }
         while (!candidates.isEmpty()) {

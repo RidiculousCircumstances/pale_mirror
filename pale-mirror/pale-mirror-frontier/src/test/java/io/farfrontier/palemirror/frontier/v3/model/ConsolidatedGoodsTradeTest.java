@@ -269,6 +269,8 @@ class ConsolidatedGoodsTradeTest {
         var home = new SubjectId("settlement:1");
         var seller = initial.companies().goodsTrade().participants().participants().get(home);
         var buyer = seller.known().getFirst().party().id();
+        initial = replaceWarehouse(initial, home);
+        initial = replaceWarehouse(initial, buyer);
         var base = FrontierWorldRuntimeDefinition.configuration(world, initial.bootstrap().seed(), FrontierRulesets.supplyQuarryGraybox());
         var schedules = new ArrayList<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction>();
         schedules.add(GoodsParticipantProcess.review(home, 400)); schedules.add(GoodsParticipantProcess.review(buyer, 401));
@@ -286,6 +288,8 @@ class ConsolidatedGoodsTradeTest {
             var state = engine.canonicalState().state();
             if (admitted == null && !state.shipments().missions().isEmpty()) {
                 admitted = state.shipments().missions().values().iterator().next();
+                assertNotEquals(FrontierWorldState.depotId(home), admitted.sender().containerId());
+                assertNotEquals(FrontierWorldState.depotId(buyer), admitted.receiver().containerId());
                 assertEquals(animal, admitted.transportAssetId().isPresent());
                 if (animal) assertEquals(2, state.unitGroups().groups().get(admitted.groupId()).members().size(),
                         "a finite animal needs one actual companion, not one person per parcel");
@@ -306,7 +310,8 @@ class ConsolidatedGoodsTradeTest {
                         var physical = ActorBodyAuthority.demand(state, parcel.execution().actorId());
                         assertEquals(DeliveryEstimate.Reason.PHYSICAL_PROGRESS_REQUIRED, ShipmentDeliveryForecast.read(physical, parcel).reason(),
                                 "a materialized body needs fresh progress evidence, not its stale COLD pose");
-                        var incoming = SettlementDeliveryForecast.read(state, mission.receiver().settlementId(), mission.receiver().containerId());
+                        var incoming = SettlementDeliveryForecast.read(state,
+                                state.companies().goodsTrade().participants().participants().get(mission.receiver().settlementId()));
                         assertTrue(incoming.getOrDefault(parcel.itemKind(), List.of()).stream().mapToLong(
                                 io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Arrival::quantity).sum() >= parcel.quantity());
                     }
@@ -338,7 +343,10 @@ class ConsolidatedGoodsTradeTest {
         assertTrue(returned, "mixed cargo must return, not merely be declared: tick=" + engine.checkpoint().instant().ticks()
                 + " mission=" + (finalMission == null ? "retired" : finalMission.stage())
                 + " group=" + (finalGroup == null ? "retired" : finalGroup.phase())
-                + " movingActors=" + finalState.actorMovements().keySet());
+                + " journey=" + (finalGroup == null ? "none" : finalGroup.journey().map(j -> j.cursor() + "/" + j.route().size()))
+                + " movingActors=" + finalState.actorMovements().entrySet().stream().map(e -> e.getKey() + " issued="
+                    + e.getValue().issuedAtTick() + " arrival=" + e.getValue().coldTravel().map(t -> t.arrivalTick()))
+                    .toList());
         assertNull(finalGroup); assertNull(finalMission);
         var completedGroup = admitted.groupId();
         for (var authority : finalState.actorExecutions().actors().values())
@@ -356,5 +364,25 @@ class ConsolidatedGoodsTradeTest {
             state = FrontierWorldRuntimeDefinition.reduce(state, event);
         }
         return state;
+    }
+    private static FrontierWorldState replaceWarehouse(FrontierWorldState state, SubjectId home) {
+        var old = FrontierWorldState.depotId(home);
+        var original = GoodsParticipantStorage.endpoint(state, old);
+        var id = new SubjectId("container:trade-replacement-" + home.value().replace(':', '-'));
+        var station = original.station();
+        var endpoint = new ShipmentEndpoint.Storage(home, id, station,
+                java.util.Optional.of(((ShipmentEndpoint.Depot) original).facilityId()),
+                ShipmentEndpointComposition.exteriorApproach(state, original));
+        var record = new ContainerRecord(id, home, 27, ContainerPurpose.RESOURCE_STORAGE, Optional.empty(),
+                Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
+        var socket = state.inventory().surfaces().get(old).position();
+        var stock = FungibleResourceCustodySupport.accountAtContainer(state, old).orElseThrow();
+        state = state.withInventory(state.inventory().withSurfaceStatus(old, ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(old, ContainerSurfaceStatus.ACTIVE).withSurfaceStatus(old, ContainerSurfaceStatus.RETIRED));
+        state = new ResourceStorageDeclared(record, socket).apply(state, home);
+        var resources = state.inventory().fungibleResources().transferToNewAccount(stock.id(),
+                new CustodyAccount(ReferenceContainerCustody.scopeId(id), new ResourceCustody.Container(id), stock.lotQuantities(), Map.of()));
+        return state.withInventory(state.inventory().withFungibleResources(resources).withSurfaceStatus(id, ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(id, ContainerSurfaceStatus.ACTIVE));
     }
 }

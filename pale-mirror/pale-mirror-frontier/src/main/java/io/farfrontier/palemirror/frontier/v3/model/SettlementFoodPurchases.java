@@ -19,7 +19,7 @@ public final class SettlementFoodPurchases {
                 .filter(value -> value.economicOwner().equals(home) && value.itemKind().equals(recipe.product().itemKind()))
                 .mapToLong(StockSupplyPort.Commitment::incoming).sum();
         long deficit = Math.max(0, StockTargetDemand.target(commodity, residents, food.protectedMinimum())
-                - food.unclaimedAtEndpoint() - food.expectedIncoming() - promisedFood);
+                - food.unclaimedInStorage() - food.expectedIncoming() - promisedFood);
         boolean urgent = SettlementFoodPolicy.reserveCoverageBread(state, home) < SettlementFoodPolicy.reserveRequirement(state, home);
         var catalog = state.bootstrap().ruleset().production();
         long heat = state.inventory().containers().values().stream().filter(record -> record.ownerId().equals(home)
@@ -58,7 +58,7 @@ public final class SettlementFoodPurchases {
             long fieldSupply = StockSupplyComposition.pending(state, StockSupplyPort.Key.FIELD).stream()
                     .filter(value -> value.economicOwner().equals(home) && value.itemKind().equals(kind))
                     .mapToLong(StockSupplyPort.Commitment::incoming).sum();
-            long covered = input.unclaimedAtEndpoint() + (long) input.expectedIncoming() + fieldSupply;
+            long covered = input.unclaimedInStorage() + (long) input.expectedIncoming() + fieldSupply;
             result.put(kind, Math.toIntExact(Math.min(Integer.MAX_VALUE, Math.max(0, needed - covered))));
             protectedInputs.put(kind, Math.toIntExact(Math.min(4096, Math.max(0, needed - fieldSupply))));
         }

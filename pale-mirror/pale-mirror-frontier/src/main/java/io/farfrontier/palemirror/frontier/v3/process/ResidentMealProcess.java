@@ -99,6 +99,10 @@ public final class ResidentMealProcess {
         if (body == null || body.condition().status() != ActorLifeStatus.ALIVE)
             return List.of(new ProposedEvent(meal.residentId(), new ScheduleEffect.Consumed(action.id())));
         long now = Math.max(action.dueAt().ticks(), currentTick);
+        if (ActorExecutionCoordinator.coldAvailable(state, meal.residentId())
+                && meal.pendingPhysicalStep().isEmpty() && requiresClearance(state, meal, body.body()))
+            return List.of(new ProposedEvent(meal.residentId(), new ResidentMealClearanceRequired(meal.executionId(), body.body())),
+                    new ProposedEvent(meal.residentId(), new ScheduleEffect.Rescheduled(action.id(), progress(meal, Math.addExact(now, 1L)))));
         Optional<ResidentMealColdStep> step = planColdStep(state, meal.residentId(), now);
         // A waiting side pocket is held by its addressed service wake. A genuinely
         // unavailable known route is retried at a bounded cadence, not every tick.
@@ -260,6 +264,8 @@ public final class ResidentMealProcess {
         ResidentMealPhysicalStep step = prepared.step();
         if (!meal.executionId().equals(step.executionId()) || meal.phase() != step.phase() || meal.pendingPhysicalStep().isPresent())
             throw new IllegalArgumentException("HOT meal effect cannot prepare a foreign or second stage");
+        if (!validHotMealBody(state, meal, state.ambientLeases().get(subject), state.actorLocations().get(subject).body()))
+            throw new IllegalArgumentException("HOT meal effect lacks its current interaction body");
         FungibleResourceLedger ledger = state.inventory().fungibleResources();
         if (step.phase() == ResidentMeal.Phase.TAKE) {
             if (!ReferenceContainerCustody.hasOperationalCustody(state, meal.depotId()))
@@ -343,7 +349,7 @@ public final class ResidentMealProcess {
                 || lease.status() != AmbientLeaseStatus.HOT || lease.goal() != AmbientGoalKind.MEAL
                 || lease.revision() != ambientRevision
                 || !lease.goalBody().equals(goalSurface(state, meal).standingBody())
-                || actor == null || !validHotMealBody(state, meal, lease, actor.body()))
+                || actor == null)
             throw new IllegalArgumentException("HOT meal step lacks its exact resident, body or lease");
         state.actorExecutions().requireCurrent(meal.executionId());
         return meal;
@@ -373,6 +379,23 @@ public final class ResidentMealProcess {
         return meal.phase() == ResidentMeal.Phase.CONSUME && (meal.portable()
                 ? state.actorLocations().get(meal.residentId()).body().equals(observedBody)
                 : port(state, meal).accessBoundary().cleared(observedBody));
+    }
+
+    public static boolean requiresClearance(FrontierWorldState state, ResidentMeal meal, BodyPosition observedBody) {
+        return meal.phase() == ResidentMeal.Phase.CONSUME && !meal.portable()
+                && port(state, meal).accessBoundary().occupied(observedBody);
+    }
+
+    public static FrontierWorldState reduceClearanceRequired(FrontierWorldState state, SubjectId subject,
+                                                             ResidentMealClearanceRequired required) {
+        ResidentMeal meal = state.humanPopulation().meals().get(subject);
+        ActorLocation actor = state.actorLocations().get(subject);
+        if (meal == null || actor == null || !meal.executionId().equals(required.execution())
+                || !subject.equals(required.execution().actorId()) || actor.condition().status() != ActorLifeStatus.ALIVE
+                || !actor.body().equals(required.body()) || !requiresClearance(state, meal, required.body()))
+            throw new IllegalArgumentException("meal clearance retry lacks its exact current blocked body and portion owner");
+        state.actorExecutions().requireCurrent(required.execution());
+        return state.withHumanPopulation(state.humanPopulation().advanceMeal(meal, meal.requireClearance()));
     }
 
     /** Supported exit releases access and permits eating; further parking travel is not a meal prerequisite. */
@@ -444,6 +467,7 @@ public final class ResidentMealProcess {
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
                 || !ActorExecutionCoordinator.coldAvailable(state, residentId))
             return Optional.empty();
+        if (requiresClearance(state, meal, actor.body())) return Optional.empty();
         if (meal.movesToClearance()) {
             if (meal.phase() == ResidentMeal.Phase.CLEAR_ACCESS
                     && port(state, meal).accessBoundary().cleared(actor.body()))

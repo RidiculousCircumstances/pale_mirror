@@ -40,7 +40,7 @@ final class FrontierV3PhysicalWaitTrace {
     }
 
     static void bakery(Entity body, FrontierWorldState state, ProductionJob job, String gate) {
-        SubjectId depot = FrontierWorldState.depotId(job.settlementId());
+        SubjectId depot = ProductionServiceAccess.point(state, job);
         var boundary = ServiceAccessCoordinator.boundary(state, depot);
         String meals = state.humanPopulation().meals().values().stream()
                 .filter(meal -> !meal.portable() && meal.depotId().equals(depot)).sorted(java.util.Comparator.comparing(ResidentMeal::residentId))
@@ -49,7 +49,7 @@ final class FrontierV3PhysicalWaitTrace {
                     + ":ambient=" + state.ambientLeases().get(meal.residentId()))
                 .collect(java.util.stream.Collectors.joining("|"));
         emit(body, job.id().value(), "gate=" + gate + ";phase=" + job.bakeryWork().orElseThrow().phase()
-                + ";meals=" + meals);
+                + ";servicePoint=" + depot.value() + ";meals=" + meals);
     }
 
     static void clear(Entity body) { WAITS.remove(body); }

@@ -215,9 +215,11 @@ public final class StrategicObjectiveProcess {
             return List.of(new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(resourceHarvestOpportunity(state, lifecycle,
                     Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval())))));
         }
-        // A full depot is a reversible admission condition, not a failed harvest.
+        // Storage capacity is a reversible admission condition, not a failed harvest.
         // Keep the one exact opportunity alive without creating a doomed task.
-        if (state.firstFreeContainerSlot(FrontierWorldState.depotId(owner)).isEmpty()) {
+        if (ResourceStorageSelection.newStackCandidates(state, owner, "minecraft:wheat", 64,
+                state.resourceSites().cycle(site.id()).layout().cells().getFirst().workstation(),
+                java.util.Set.of(ResourceStorageRole.WAREHOUSE)).isEmpty()) {
             return List.of(new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(resourceHarvestOpportunity(state, lifecycle,
                     Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().strategicReviewInterval())))));
         }

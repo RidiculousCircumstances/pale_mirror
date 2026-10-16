@@ -145,8 +145,7 @@ final class FrontierV3PedestrianCourtesy {
             var observed = FrontierV3BodyObservation.capture(body).supportedBody();
             if (observed.isEmpty()) return false;
             var start = observed.orElseThrow().supportingSurface();
-            var points = state.bootstrap().settlements().stream()
-                    .flatMap(settlement -> SettlementServiceAccessPoints.forSettlement(state, settlement.id()).stream()).toList();
+            var points = ServiceBoundaryComposition.geometries(state);
             var knowledge = PedestrianLocalDeparture.departure(state, start).forActor(state, actor);
             var excluded = new HashSet<>(ServiceDestinationClaims.excludedFor(state, actor));
             TARGETS.keySet().stream().filter(other -> !TARGETS.get(other).authority().current(other)).toList()
@@ -167,7 +166,11 @@ final class FrontierV3PedestrianCourtesy {
                         "courtesy:" + unavailable.status() + ":" + unavailable.getMessage());
                 return target != null;
             }
-            if (destination.isEmpty()) return false; // No invented route and no recursive displacement chain.
+            if (destination.isEmpty()) {
+                FrontierV3PhysicalWaitTrace.actor(body, state, actor, "courtesy:no-safe-clearance-position;servicePoints="
+                        + points.size() + ";physicalCandidates=" + queries[0]);
+                return false; // No invented route and no recursive displacement chain.
+            }
             var accepted = request.orElseThrow();
             var obstruction = accepted.blockers().stream().filter(blocker -> FrontierV3PedestrianYieldRequests.matches(
                     blocker, body.getUUID(), actuation.id().body(), body.getBoundingBox())).findFirst().orElseThrow();

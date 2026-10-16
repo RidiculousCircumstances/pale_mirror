@@ -19,11 +19,11 @@ class GoodsSpotPurchaseTest {
                 new FinancialBudget(budget, buyer, FinancialBudget.OwnerKind.TRANSPORT_MISSION, owner, funds))));
         var actor = state.humanPopulation().residents().values().stream().filter(r -> r.settlementId().equals(buyer)).findFirst().orElseThrow().id();
         var resources = state.inventory().fungibleResources();
-        var account = FungibleResourceCustodySupport.accountAtContainer(state, seller.endpoint().containerId()).orElseThrow();
+        var account = FungibleResourceCustodySupport.accountAtContainer(state, GoodsParticipantStorage.endpoint(state, FrontierWorldState.depotId(seller.settlementId())).containerId()).orElseThrow();
         var selected = FungibleResourceCustodySupport.selectAtAccount(resources, account.id(), seller.party().id(), FoodCatalog.BREAD, 2).orElseThrow();
-        var transfer = new UnitResourceTransfer(new SubjectId("claim:paid-fixture"), actor, seller.endpoint().containerId(), account.id(),
+        var transfer = new UnitResourceTransfer(new SubjectId("claim:paid-fixture"), actor, GoodsParticipantStorage.endpoint(state, FrontierWorldState.depotId(seller.settlementId())).containerId(), account.id(),
                 new SubjectId("custody:paid-fixture"), seller.party().id(), FoodCatalog.BREAD, selected.lotQuantities(),
-                new ActorItemSlot.Pocket(0), seller.endpoint().station(), state.actorExecutions().next(actor, ActorActivityKind.GROUP_MEMBER, owner), Optional.empty());
+                new ActorItemSlot.Pocket(0), GoodsParticipantStorage.endpoint(state, FrontierWorldState.depotId(seller.settlementId())).station(), state.actorExecutions().next(actor, ActorActivityKind.GROUP_MEMBER, owner), Optional.empty());
         return new Fixture(state, transfer, buyer, budget);
     }
     @Test void foreignFoodRequiresConsentAndFundsAndSettlesOnlyAfterActualCustodyReceipt() {

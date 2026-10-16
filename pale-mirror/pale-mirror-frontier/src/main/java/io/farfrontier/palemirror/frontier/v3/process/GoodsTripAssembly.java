@@ -17,16 +17,19 @@ final class GoodsTripAssembly {
         if (parcels.isEmpty() || parcels.size() > 32) throw new IllegalArgumentException("unbounded trade manifest");
         for (var parcel : parcels) if (!parcel.contract().seller().equals(seller.party()) || !parcel.contract().buyer().equals(buyer.party())
                 || parcel.contract().fulfillment().mode() != mode || !parcel.contract().fulfillment().organizer().equals(organizer.party())
-                || !parcel.contract().sourceContainerId().equals(seller.endpoint().containerId())
-                || !parcel.contract().receiverContainerId().equals(buyer.endpoint().containerId())
+                || !parcel.contract().sourceContainerId().equals(parcels.getFirst().contract().sourceContainerId())
+                || !parcel.contract().receiverContainerId().equals(parcels.getFirst().contract().receiverContainerId())
                 || parcel.claim().quantity() > 64 || !parcel.contract().outstandingClaims().containsKey(parcel.claim().id()))
             throw new IllegalArgumentException("manifest mixes recipients or loses an exact accepted allocation");
-        var people = ResidentWorkComposition.SELECTION.eligible(state, organizer.endpoint().settlementId(),
+        for (var parcel : parcels) if (!GoodsParticipantStorage.eligible(state, seller, parcel.contract().sourceContainerId(), parcel.contract().itemKind())
+                || !GoodsParticipantStorage.eligible(state, buyer, parcel.contract().receiverContainerId(), parcel.contract().itemKind()))
+            return Optional.empty();
+        var people = ResidentWorkComposition.SELECTION.eligible(state, organizer.settlementId(),
                 ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS, now);
         var available = new ArrayList<ResidentProfile>();
         for (var person : people) {
             var ids = new ArrayList<>(available.stream().map(ResidentProfile::id).toList()); ids.add(person.id());
-            if (SettlementLabourAllocation.canCommitToMission(state, organizer.endpoint().settlementId(), ResidentWorkKind.LOGISTICS, ids))
+            if (SettlementLabourAllocation.canCommitToMission(state, organizer.settlementId(), ResidentWorkKind.LOGISTICS, ids))
                 available.add(person);
         }
         if (available.isEmpty()) return Optional.empty();
@@ -36,7 +39,7 @@ final class GoodsTripAssembly {
             if (walking.isPresent()) return walking;
         }
         for (var animal : state.transportFleet().assets().values().stream().filter(a ->
-                TransportAssetAdmission.available(state, a, organizer.endpoint().settlementId())).sorted(Comparator.comparing(TransportAsset::actorId)).toList()) {
+                TransportAssetAdmission.available(state, a, organizer.settlementId())).sorted(Comparator.comparing(TransportAsset::actorId)).toList()) {
             if (parcels.size() > Math.min(animal.stackSlots(), state.bootstrap().ruleset().expedition().packAnimalStackSlots())) continue;
             var packed = declaration(state, seller, buyer, parcels, mode, List.of(available.getFirst()), Optional.of(animal), now);
             if (packed.isPresent()) return packed;
@@ -49,16 +52,18 @@ final class GoodsTripAssembly {
         var missionId = new SubjectId("transport-mission:goods-trip/" + stem);
         var groupId = new SubjectId("unit-group:goods-trip/" + stem);
         var approachActor = animal.map(TransportAsset::actorId).orElse(people.getFirst().id());
-        var journey = ShipmentEndpointComposition.knowledge(state, List.of(seller.endpoint(), buyer.endpoint()));
-        var source = ActorStorageApproach.select(state, seller.endpoint(), approachActor,
+        var sourceEndpoint = GoodsParticipantStorage.endpoint(state, parcels.getFirst().contract().sourceContainerId());
+        var destinationEndpoint = GoodsParticipantStorage.endpoint(state, parcels.getFirst().contract().receiverContainerId());
+        var journey = ShipmentEndpointComposition.knowledge(state, List.of(sourceEndpoint, destinationEndpoint));
+        var source = ActorStorageApproach.select(state, sourceEndpoint, approachActor,
                 state.actorLocations().get(approachActor).supportingSurface(), journey);
         if (source.isEmpty()) return Optional.empty();
-        var destinationPort = ActorStorageApproach.select(state, buyer.endpoint(), approachActor, source.orElseThrow().station(), journey);
+        var destinationPort = ActorStorageApproach.select(state, destinationEndpoint, approachActor, source.orElseThrow().station(), journey);
         if (destinationPort.isEmpty()) return Optional.empty();
         var senderEndpoint = source.orElseThrow(); var receiverEndpoint = destinationPort.orElseThrow();
         var members = new ArrayList<UnitGroup.Member>(); var shipments = new ArrayList<Shipment>();
-        var receiving = FungibleResourceCustodySupport.accountAtContainer(state, buyer.endpoint().containerId()).map(CustodyAccount::id)
-                .orElseGet(() -> ReferenceContainerCustody.scopeId(buyer.endpoint().containerId()));
+        var receiving = FungibleResourceCustodySupport.accountAtContainer(state, destinationEndpoint.containerId()).map(CustodyAccount::id)
+                .orElseGet(() -> ReferenceContainerCustody.scopeId(destinationEndpoint.containerId()));
         for (int index = 0; index < parcels.size(); index++) {
             var parcel = parcels.get(index);
             var actor = animal.map(TransportAsset::actorId).orElse(people.get(Math.min(index, people.size() - 1)).id());

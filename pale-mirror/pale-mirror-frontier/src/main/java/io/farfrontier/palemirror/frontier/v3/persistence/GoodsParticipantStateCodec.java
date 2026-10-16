@@ -11,9 +11,9 @@ final class GoodsParticipantStateCodec {
     static void write(DataOutputStream out, GoodsParticipantState state) throws IOException {
         out.writeInt(state.participants().size());
         for (var participant : state.participants().values().stream().sorted(Comparator.comparing(p -> p.party().id())).toList()) {
-            party(out, participant.party()); out.writeByte(participant.policy().wireTag()); endpoint(out, participant.endpoint());
+            party(out, participant.party()); out.writeByte(participant.policy().wireTag()); out.writeUTF(participant.settlementId().value());
             out.writeInt(participant.known().size());
-            for (var peer : participant.known()) { party(out, peer.party()); endpoint(out, peer.endpoint()); }
+            for (var peer : participant.known()) { party(out, peer.party()); out.writeUTF(peer.settlementId().value()); }
             out.writeLong(participant.reviewRevision()); out.writeUTF(participant.decision()); out.writeLong(participant.reviewedAtTick());
             ParticipantPriceCodec.write(out, participant.prices());
         }
@@ -22,10 +22,10 @@ final class GoodsParticipantStateCodec {
         var result = new HashMap<SubjectId, GoodsParticipant>();
         int count = bounded(in, GoodsParticipantState.MAX_PARTICIPANTS);
         for (int i = 0; i < count; i++) {
-            var party = party(in); var policy = GoodsPolicyKind.fromWireTag(in.readUnsignedByte()); var endpoint = endpoint(in);
+            var party = party(in); var policy = GoodsPolicyKind.fromWireTag(in.readUnsignedByte()); var home = new SubjectId(in.readUTF());
             var peers = new ArrayList<GoodsParticipant.Counterparty>();
-            for (int n = bounded(in, 16); n > 0; n--) peers.add(new GoodsParticipant.Counterparty(party(in), endpoint(in)));
-            var participant = new GoodsParticipant(party, policy, endpoint, peers, in.readLong(), in.readUTF(), in.readLong(), ParticipantPriceCodec.read(in));
+            for (int n = bounded(in, 16); n > 0; n--) peers.add(new GoodsParticipant.Counterparty(party(in), new SubjectId(in.readUTF())));
+            var participant = new GoodsParticipant(party, policy, home, peers, in.readLong(), in.readUTF(), in.readLong(), ParticipantPriceCodec.read(in));
             if (result.put(party.id(), participant) != null) throw new IllegalArgumentException("duplicate saved participant");
         }
         return new GoodsParticipantState(result);
@@ -38,11 +38,5 @@ final class GoodsParticipantStateCodec {
     }
     private static GoodsTradeParty party(DataInputStream in) throws IOException {
         return new GoodsTradeParty(new SubjectId(in.readUTF()), FrontierWireTags.require(EconomicOwnerKind.class, in.readUnsignedByte()));
-    }
-    private static void endpoint(DataOutputStream out, ShipmentEndpoint value) throws IOException {
-        ShipmentStateCodec.endpoint(out, value);
-    }
-    private static ShipmentEndpoint endpoint(DataInputStream in) throws IOException {
-        return ShipmentStateCodec.endpoint(in);
     }
 }

@@ -16,7 +16,7 @@ public final class GoodsParticipantWakeup {
     }
     public static List<ProposedEvent> container(FrontierWorldState state, SubjectId container, String cause, long now) {
         return state.companies().goodsTrade().participants().participants().values().stream()
-                .filter(value -> value.endpoint().containerId().equals(container)).sorted(Comparator.comparing(value -> value.party().id()))
+                .filter(value -> GoodsParticipantStorage.declared(state, value).contains(container)).sorted(Comparator.comparing(value -> value.party().id()))
                 .flatMap(value -> party(state, value.party().id(), cause, now).stream()).toList();
     }
     private GoodsParticipantWakeup() { }

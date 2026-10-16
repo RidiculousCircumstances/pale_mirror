@@ -28,7 +28,7 @@ final class GoodsShipmentPlanning {
                 .sorted(Comparator.comparing(GoodsTradeContract::id)).toList()) {
             var seller = state.companies().goodsTrade().participants().participants().get(contract.seller().id());
             var buyer = state.companies().goodsTrade().participants().participants().get(contract.buyer().id());
-            if (seller == null || buyer == null || !seller.endpoint().settlementId().equals(resident.settlementId())) continue;
+            if (seller == null || buyer == null || !seller.settlementId().equals(resident.settlementId())) continue;
             var source = FungibleResourceCustodySupport.accountAtContainer(state, contract.sourceContainerId()).orElse(null);
             if (source == null) continue;
             for (var claimId : contract.outstandingClaims().keySet().stream().sorted().toList()) {
@@ -36,7 +36,7 @@ final class GoodsShipmentPlanning {
                 if (state.shipments().holds(claimId) || !source.claimQuantities().containsKey(claimId) || claim.quantity() > 64) continue;
                 var shipmentId = new SubjectId("shipment:goods/" + claimId.value().replace(':', '-'));
                 if (!state.shipments().shipments().containsKey(shipmentId)
-                        && reachable(state, seller.endpoint(), buyer.endpoint(), shipmentId)) return true;
+                        && reachable(state, GoodsParticipantStorage.endpoint(state, contract.sourceContainerId()), GoodsParticipantStorage.endpoint(state, contract.receiverContainerId()), shipmentId)) return true;
             }
         }
         return false;
@@ -59,20 +59,20 @@ final class GoodsShipmentPlanning {
                 if (state.shipments().holds(claimId) || !source.claimQuantities().containsKey(claimId)) continue;
                 var claim = state.inventory().fungibleResources().claims().get(claimId);
                 if (claim.quantity() > 64) continue; // Current policy batches are bounded; larger manual contracts retain their own partition protocol.
-                var candidates = ResidentWorkComposition.SELECTION.eligible(state, seller.endpoint().settlementId(),
+                var candidates = ResidentWorkComposition.SELECTION.eligible(state, seller.settlementId(),
                         ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS, now);
                 var courier = candidates.stream().filter(resident -> SettlementLabourAllocation.canCommitToMission(
-                        state, seller.endpoint().settlementId(), ResidentWorkKind.LOGISTICS, List.of(resident.id()))).findFirst();
+                        state, seller.settlementId(), ResidentWorkKind.LOGISTICS, List.of(resident.id()))).findFirst();
                 if (courier.isEmpty()) return List.of();
                 var id = new SubjectId("shipment:goods/" + claimId.value().replace(':', '-'));
                 if (state.shipments().shipments().containsKey(id)) continue;
-                var receiving = FungibleResourceCustodySupport.accountAtContainer(state, buyer.endpoint().containerId())
-                        .map(CustodyAccount::id).orElseGet(() -> ReferenceContainerCustody.scopeId(buyer.endpoint().containerId()));
+                var receiving = FungibleResourceCustodySupport.accountAtContainer(state, GoodsParticipantStorage.endpoint(state, contract.receiverContainerId()).containerId())
+                        .map(CustodyAccount::id).orElseGet(() -> ReferenceContainerCustody.scopeId(GoodsParticipantStorage.endpoint(state, contract.receiverContainerId()).containerId()));
                 var shipment = new Shipment(id, new ResourceClaimDelegation(ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT,
                         claimId, contract.id(), id, contract.revision()), state.actorExecutions().next(courier.orElseThrow().id(), ActorActivityKind.COURIER, id),
-                        seller.endpoint(), buyer.endpoint(), source.id(), new SubjectId("custody:" + id.value().replace(':', '-')),
+                        GoodsParticipantStorage.endpoint(state, contract.sourceContainerId()), GoodsParticipantStorage.endpoint(state, contract.receiverContainerId()), source.id(), new SubjectId("custody:" + id.value().replace(':', '-')),
                         receiving, contract.itemKind(), claim.lotQuantities(), Shipment.Status.AWAITING_LOAD, 1);
-                if (!reachable(state, seller.endpoint(), buyer.endpoint(), id)) continue;
+                if (!reachable(state, GoodsParticipantStorage.endpoint(state, contract.sourceContainerId()), GoodsParticipantStorage.endpoint(state, contract.receiverContainerId()), id)) continue;
                 var missionId = new SubjectId("transport-mission:goods/" + claimId.value().replace(':', '-'));
                 var groupId = new SubjectId("unit-group:transport/" + claimId.value().replace(':', '-'));
                 shipment = shipment.withMission(missionId);
@@ -82,7 +82,7 @@ final class GoodsShipmentPlanning {
                 var carrierId = shipment.execution().actorId();
                 // Initial non-combat accompaniment. Escort tactics are a separate future mission capability.
                 candidates.stream().filter(resident -> !resident.id().equals(carrierId)
-                        && SettlementLabourAllocation.canCommitToMission(state, seller.endpoint().settlementId(),
+                        && SettlementLabourAllocation.canCommitToMission(state, seller.settlementId(),
                                 ResidentWorkKind.LOGISTICS, List.of(carrierId, resident.id())))
                         .findFirst().ifPresent(resident -> members.add(
                             new io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Member(resident.id(),
@@ -94,14 +94,14 @@ final class GoodsShipmentPlanning {
                         io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup.Phase.READY, 1, 0, Optional.empty());
                 SurfaceAnchor home, destination;
                 try {
-                    home = TransportGroupMissionPort.rendezvous(state, seller.endpoint(), members.size());
-                    destination = TransportGroupMissionPort.rendezvous(state, buyer.endpoint(), members.size());
+                    home = TransportGroupMissionPort.rendezvous(state, GoodsParticipantStorage.endpoint(state, contract.sourceContainerId()), members.size());
+                    destination = TransportGroupMissionPort.rendezvous(state, GoodsParticipantStorage.endpoint(state, contract.receiverContainerId()), members.size());
                 } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { continue; }
                 if (state.unitGroups().groups().size() >= io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState.MAX_GROUPS
                         || state.shipments().shipments().size() >= ShipmentState.MAX_SHIPMENTS) return List.of();
-                var mission = new TransportMission(missionId, groupId, List.of(shipment.id()), seller.endpoint(), buyer.endpoint(),
-                        new TransportOrganization(new EconomicIdentity(seller.endpoint().settlementId(), EconomicOwnerKind.SETTLEMENT_TREASURY),
-                                seller.endpoint(), TransportOrganization.Itinerary.SOURCE_DELIVERY),
+                var mission = new TransportMission(missionId, groupId, List.of(shipment.id()), GoodsParticipantStorage.endpoint(state, contract.sourceContainerId()), GoodsParticipantStorage.endpoint(state, contract.receiverContainerId()),
+                        new TransportOrganization(new EconomicIdentity(seller.settlementId(), EconomicOwnerKind.SETTLEMENT_TREASURY),
+                                GoodsParticipantStorage.endpoint(state, contract.sourceContainerId()), TransportOrganization.Itinerary.SOURCE_DELIVERY),
                         home, destination, TransportMission.Stage.LOADING, 1);
                 if (state.bootstrap().ruleset().schemaVersion() >= 17) {
                     var load = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyPlanning.walkingLoad(state, mission, group, now);
@@ -112,7 +112,7 @@ final class GoodsShipmentPlanning {
                                 .flatMap(Optional::stream).anyMatch(plan -> plan.transport() == io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionProvisioning.Transport.PACK_ANIMAL);
                         if (!capacityNeedsAnimal) continue;
                         var asset = state.transportFleet().assets().values().stream().filter(candidate ->
-                                io.farfrontier.palemirror.frontier.v3.model.expedition.TransportAssetAdmission.available(state, candidate, seller.endpoint().settlementId()))
+                                io.farfrontier.palemirror.frontier.v3.model.expedition.TransportAssetAdmission.available(state, candidate, seller.settlementId()))
                                 .sorted(Comparator.comparing(io.farfrontier.palemirror.frontier.v3.model.expedition.TransportAsset::actorId)).findFirst();
                         if (asset.isEmpty()) continue; // Real finite capacity, never spawn an animal for a job.
                         var animal = asset.orElseThrow();
@@ -129,12 +129,12 @@ final class GoodsShipmentPlanning {
                         group = new io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup(group.id(), group.mission(), animalMembers,
                                 group.formation(), group.phase(), group.revision(), group.goalOrdinal(), group.journey());
                         try {
-                            home = TransportGroupMissionPort.rendezvous(state, seller.endpoint(), animalMembers.size());
-                            destination = TransportGroupMissionPort.rendezvous(state, buyer.endpoint(), animalMembers.size());
+                            home = TransportGroupMissionPort.rendezvous(state, GoodsParticipantStorage.endpoint(state, contract.sourceContainerId()), animalMembers.size());
+                            destination = TransportGroupMissionPort.rendezvous(state, GoodsParticipantStorage.endpoint(state, contract.receiverContainerId()), animalMembers.size());
                         } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { continue; }
-                        mission = new TransportMission(missionId, groupId, List.of(shipment.id()), seller.endpoint(), buyer.endpoint(),
-                                new TransportOrganization(new EconomicIdentity(seller.endpoint().settlementId(), EconomicOwnerKind.SETTLEMENT_TREASURY),
-                                        seller.endpoint(), TransportOrganization.Itinerary.SOURCE_DELIVERY),
+                        mission = new TransportMission(missionId, groupId, List.of(shipment.id()), GoodsParticipantStorage.endpoint(state, contract.sourceContainerId()), GoodsParticipantStorage.endpoint(state, contract.receiverContainerId()),
+                                new TransportOrganization(new EconomicIdentity(seller.settlementId(), EconomicOwnerKind.SETTLEMENT_TREASURY),
+                                        GoodsParticipantStorage.endpoint(state, contract.sourceContainerId()), TransportOrganization.Itinerary.SOURCE_DELIVERY),
                                 home, destination, TransportMission.Stage.LOADING, 1, mission.financialBudgetId()).withTransportAsset(animal.actorId());
                         load = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyPlanning.load(state, mission, group, now);
                     }

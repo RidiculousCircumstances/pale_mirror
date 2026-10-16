@@ -7,7 +7,7 @@ import java.util.Set;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 
-/** Composition of declared settlement service geometry; depots are the first provider. */
+/** Bootstrap depot geometry provider. Current service discovery belongs to ServiceBoundaryComposition. */
 public final class SettlementServiceAccessPoints {
     // Rebuildable geometry only: one current world, one latest view per facility, bounded eviction.
     // Actor positions, claims, meals and permits are always read from current canonical state.
@@ -45,31 +45,6 @@ public final class SettlementServiceAccessPoints {
                 .filter(structure -> structure.kind() == StructureKind.DEPOT)
                 .findFirst().map(SettlementDepotServicePort::forDepot)
                 .orElseThrow(() -> new IllegalArgumentException("settlement has no current depot"));
-    }
-    public static boolean occupancyChanged(FrontierWorldState state, SubjectId settlementId, BodyPosition previous, BodyPosition observed) {
-        if (previous.equals(observed)) return false;
-        return FrontierWorldStateSupport.settlement(state.bootstrap(), settlementId).structures().stream()
-                .filter(structure -> structure.kind() == StructureKind.DEPOT)
-                .map(SettlementDepotServicePort::forDepot).map(SettlementDepotServicePort::accessBoundary)
-                .anyMatch(boundary -> boundary.occupied(previous) || boundary.occupied(observed));
-    }
-    public static java.util.Optional<ServiceAccessPoint> occupiedPoint(FrontierWorldState state, SubjectId settlementId, BodyPosition body) {
-        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), settlementId);
-        return settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT)
-                .filter(structure -> SettlementDepotServicePort.forDepot(structure).accessBoundary().occupied(body))
-                .findFirst().map(structure -> forDepot(state, settlement, structure));
-    }
-    /** Admission may resume at either the service boundary or one of its declared waiting spots. */
-    public static java.util.Optional<ServiceAccessPoint> placementPoint(FrontierWorldState state,
-            SubjectId settlementId, BodyPosition body) {
-        return forSettlement(state, settlementId).stream()
-                .filter(point -> ServiceAreaDestinations.temporary(point, body.supportingSurface()))
-                .findFirst();
-    }
-    public static List<ServiceAccessPoint> forSettlement(FrontierWorldState state, SubjectId settlementId) {
-        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), settlementId);
-        return settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT)
-                .map(structure -> forDepot(state, settlement, structure)).toList();
     }
     public static synchronized ServiceAccessPoint forDepot(FrontierWorldState state, Settlement settlement, SettlementStructure depot) {
         Geometry geometry = geometry(state, settlement, depot);

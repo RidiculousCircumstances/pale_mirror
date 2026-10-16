@@ -42,8 +42,10 @@ class ServiceAccessCapabilitiesTest {
             var samples = new java.util.HashSet<SurfaceAnchor>(point.boundary().occupiedSurfaces());
             samples.addAll(point.waitingSurfaces()); samples.addAll(point.egressSurfaces());
             for (var surface : samples) {
-                var expected = ServiceBoundaryComposition.declarations(initial).values().stream()
-                        .sorted(java.util.Comparator.comparing(ServiceBoundaryProvider.Declaration::pointId))
+                var expected = ServiceBoundaryComposition.operationalDeclarations(initial).values().stream()
+                        .sorted(java.util.Comparator.<ServiceBoundaryProvider.Declaration, Boolean>comparing(value ->
+                                !value.boundary().occupied(surface.standingBody()))
+                                .thenComparing(ServiceBoundaryProvider.Declaration::pointId))
                         .filter(value -> ServiceAreaDestinations.temporary(
                                 ServiceBoundaryComposition.geometry(initial, value.identity()), surface)).findFirst();
                 assertEquals(expected, ServiceBoundaryComposition.turnoverPoint(initial, surface));
@@ -51,7 +53,7 @@ class ServiceAccessCapabilitiesTest {
         }
         var home = initial.bootstrap().settlements().getFirst();
         var actor = home.residents().getFirst().id();
-        var point = SettlementServiceAccessPoints.forSettlement(initial, home.id()).getFirst();
+        var point = ServiceBoundaryComposition.geometry(initial, ServiceBoundaryComposition.declaration(initial, FrontierWorldState.depotId(home.id())).identity());
         var waiting = point.waitingSurfaces().getFirst();
         var occupied = initial.withActorBody(actor, waiting.standingBody());
         assertSame(points, ServiceBoundaryComposition.geometries(occupied), "bodies are not geometry dependencies");

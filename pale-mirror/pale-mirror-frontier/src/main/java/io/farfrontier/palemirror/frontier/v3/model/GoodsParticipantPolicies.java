@@ -24,7 +24,7 @@ public final class GoodsParticipantPolicies {
             for (var commodity : rules.policies().get(kind)) {
                 var stock = view.stocks().get(commodity.itemKind());
                 int target = StockTargetDemand.target(commodity, view.residents(), stock.protectedMinimum());
-                result.append("; ").append(commodity.itemKind()).append(" unclaimed=").append(stock.unclaimedAtEndpoint())
+                result.append("; ").append(commodity.itemKind()).append(" unclaimed=").append(stock.unclaimedInStorage())
                         .append(" target=").append(target).append(" incoming=").append(stock.expectedIncoming())
                         .append(" askRaw=").append(GoodsParticipantPricing.ask(view.participant(), commodity).raw())
                         .append(" bidRaw=").append(GoodsParticipantPricing.bid(view.participant(), commodity).raw());
@@ -35,7 +35,7 @@ public final class GoodsParticipantPolicies {
                             .append(" deadline=").append(demand.deadlineTicks()).append(" causes=")
                             .append(demand.reasons().stream().sorted().toList());
                 });
-                if (stock.unclaimedAtEndpoint() + stock.expectedIncoming() < target
+                if (stock.unclaimedInStorage() + stock.expectedIncoming() < target
                         && view.availableMoney().raw() == 0) result.append(" NO_FUNDS");
             }
             return result.toString();
@@ -49,8 +49,8 @@ public final class GoodsParticipantPolicies {
                 var sellPrice = GoodsParticipantPricing.ask(view.participant(), commodity);
                 int target = StockTargetDemand.target(commodity, view.residents(), stock.protectedMinimum());
                 int missing = view.supplyPlan().map(plan -> Math.toIntExact(plan.require(commodity.itemKind()).purchase()))
-                        .orElseGet(() -> target - Math.addExact(stock.unclaimedAtEndpoint(), stock.expectedIncoming()));
-                int surplus = stock.unclaimedAtEndpoint() - target;
+                        .orElseGet(() -> target - Math.addExact(stock.unclaimedInStorage(), stock.expectedIncoming()));
+                int surplus = stock.unclaimedInStorage() - target;
                 if (missing > 0) {
                     int quantity = Math.min(view.supplyPlan().isPresent() ? rules.supplyPlanning().maximumOrderItems() : rules.maximumBatch(), Math.min(missing,
                             view.purchaseLimits().getOrDefault(commodity.itemKind(), Integer.MAX_VALUE)));

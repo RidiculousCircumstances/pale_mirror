@@ -6,8 +6,18 @@ import java.util.*;
 
 /** Matches explicit mutual consent. It cannot invent targets, change limits or read unknown stocks. */
 final class GoodsOrderMatching {
+    record Endpoints(SubjectId source, SubjectId receiver) { }
     record Match(GoodsTradeContract contract, List<GoodsTradeStockAllocation> allocations) { }
     record Search(Optional<Match> match, String disposition, int checkedPairs) { }
+    static List<Endpoints> endpointPairs(FrontierWorldState state, GoodsParticipant seller, GoodsParticipant buyer, long now) {
+        return new io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook(
+                state.companies().goodsTrade().orders().values(), now)
+                .offers(buyer.party(), Optional.of(seller.party()), Set.of()).stream()
+                .filter(pair -> GoodsParticipantStorage.eligible(state, seller, pair.sell().containerId(), pair.sell().itemKind())
+                        && GoodsParticipantStorage.eligible(state, buyer, pair.buy().containerId(), pair.buy().itemKind()))
+                .map(pair -> new Endpoints(pair.sell().containerId(), pair.buy().containerId())).distinct()
+                .limit(state.bootstrap().ruleset().goodsTrade().maximumPairReviews()).toList();
+    }
     static Search first(FrontierWorldState state, GoodsParticipant reviewer, long now) {
         return first(state, reviewer, now, Optional.empty(), Optional.of(reviewer.party()));
     }
@@ -17,10 +27,17 @@ final class GoodsOrderMatching {
     }
     static Search first(FrontierWorldState state, GoodsParticipant reviewer, long now,
                         Optional<GoodsTradeParty> selectedSeller, Optional<GoodsTradeParty> selectedBuyer, Set<String> excludedCommodities) {
+        return first(state, reviewer, now, selectedSeller, selectedBuyer, excludedCommodities, Optional.empty());
+    }
+    static Search first(FrontierWorldState state, GoodsParticipant reviewer, long now,
+                        Optional<GoodsTradeParty> selectedSeller, Optional<GoodsTradeParty> selectedBuyer,
+                        Set<String> excludedCommodities, Optional<Endpoints> endpoints) {
         var trade = state.companies().goodsTrade();
         var book = new io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook(trade.orders().values(), now);
         var offers = book.buyers().stream().filter(buyer -> selectedBuyer.filter(value -> !value.equals(buyer)).isEmpty())
                 .flatMap(buyer -> book.offers(buyer, selectedSeller, excludedCommodities).stream())
+                .filter(pair -> endpoints.map(points -> points.source().equals(pair.sell().containerId())
+                        && points.receiver().equals(pair.buy().containerId())).orElse(true))
                 .filter(pair -> pair.buy().party().equals(reviewer.party()) || pair.sell().party().equals(reviewer.party())).toList();
         var cachedIntents = new HashMap<SubjectId, List<GoodsParticipantPolicy.Intent>>();
         String disposition = "NO_MUTUAL_KNOWN_QUOTE"; int checked = 0;
@@ -35,6 +52,10 @@ final class GoodsOrderMatching {
                 if (sell.unitPriceLimit().compareTo(buy.unitPriceLimit()) > 0) { disposition = "PRICE_LIMIT"; continue; }
                 var buyer = trade.participants().participants().get(buy.party().id());
                 if (buyer == null || !buyer.party().equals(buy.party()) || !known(seller, buyer) || !known(buyer, seller)) continue;
+                if (!GoodsParticipantStorage.eligible(state, seller, sell.containerId(), sell.itemKind())
+                        || !GoodsParticipantStorage.eligible(state, buyer, buy.containerId(), buy.itemKind())) {
+                    disposition = "STORAGE_UNAVAILABLE"; continue;
+                }
                 var sellerIntent = intent(state, seller, sell.itemKind(), GoodsTradeOrder.Side.SELL, cachedIntents);
                 var buyerIntent = intent(state, buyer, buy.itemKind(), GoodsTradeOrder.Side.BUY, cachedIntents);
                 if (sellerIntent.isEmpty() || buyerIntent.isEmpty()) { disposition = "CURRENT_RESERVE_STOCK_OR_FUNDS"; continue; }
@@ -84,7 +105,7 @@ final class GoodsOrderMatching {
                 .stream().filter(value -> value.itemKind().equals(itemKind) && value.side() == side).findFirst();
     }
     private static boolean known(GoodsParticipant owner, GoodsParticipant other) {
-        return owner.known().stream().anyMatch(peer -> peer.party().equals(other.party()) && peer.endpoint().equals(other.endpoint()));
+        return owner.known().stream().anyMatch(peer -> peer.party().equals(other.party()) && peer.settlementId().equals(other.settlementId()));
     }
     private GoodsOrderMatching() { }
 }

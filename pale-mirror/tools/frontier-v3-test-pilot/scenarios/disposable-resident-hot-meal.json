@@ -15,7 +15,7 @@
     { "type": "fast_forward", "ticks": 6000, "timeoutMs": 180000 },
     { "type": "inspect", "view": "actor", "id": "resident:6-1" },
     { "type": "wait_until_diagnostic", "view": "resident_life", "id": "resident:6-1",
-      "expect": { "status": "ok", "nutrition": "NOURISHED", "mealPhase": "NONE", "depotBread": 63,
+      "expect": { "status": "ok", "nutrition": "NOURISHED", "mealPhase": "NONE", "bootstrapDepotBread": 63,
         "metabolismEffectivePermille": 4000 }, "timeoutMs": 60000,
       "causalMilestone": "one_physical_bread_eaten_by_exact_resident" },
     { "type": "inspect", "view": "actor", "id": "resident:6-1" },
@@ -23,8 +23,8 @@
   ],
   "assertions": [
     { "after": 6, "view": "resident_life", "id": "resident:6-1",
-      "expect": { "status": "ok", "nutrition": "NOURISHED", "mealPhase": "NONE", "depotBread": 63,
-        "depotBreadClaimed": 0 } },
+      "expect": { "status": "ok", "nutrition": "NOURISHED", "mealPhase": "NONE", "bootstrapDepotBread": 63,
+        "bootstrapDepotBreadClaimed": 0 } },
     { "after": 8, "view": "container", "id": "container:6-depot",
       "expect": { "status": "ok", "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } }
   ],

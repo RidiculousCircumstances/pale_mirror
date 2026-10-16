@@ -20,9 +20,8 @@ final class FrontierV3ServicePointClearance {
         ResidentProfile resident = state.humanPopulation().resident(lease.actorId());
         if (resident == null) return false;
         BodyPosition observed = FrontierV3BodyObservation.position(body);
-        List<ServiceAccessPoint> points = SettlementServiceAccessPoints.forSettlement(state, resident.settlementId());
-        ServiceAccessPoint point = points.stream().filter(candidate -> ServiceAreaDestinations.temporary(
-                candidate, observed.supportingSurface())).findFirst().orElse(null);
+        List<ServiceAccessPoint> points = ServiceBoundaryComposition.geometries(state);
+        var point = ServiceBoundaryComposition.turnoverPoint(state, observed.supportingSurface()).orElse(null);
         Target target = TARGETS.get(body);
         if (target != null && (target.revision() != lease.revision() || !target.actuation().equals(actuation.id()))) {
             TARGETS.remove(body); target = null;
@@ -31,12 +30,7 @@ final class FrontierV3ServicePointClearance {
         if (target == null || target.revision() != lease.revision()
                 || target.surfaces().stream().noneMatch(surface -> FrontierV3SemanticMovement.targetIsNavigable(level, body, surface))) {
             if (point == null) { TARGETS.remove(body); return false; }
-            Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), point.settlementId());
-            SettlementStructure facility = settlement.structures().stream()
-                    .filter(value -> value.id().equals(point.facilityId())).findFirst().orElseThrow();
-            var knowledge = KnownPedestrianRouteKnowledge.forSettlement(state, settlement.id(), List.of(
-                    new KnownPedestrianRouteKnowledge.Passage(facility,
-                            KnownPedestrianRouteKnowledge.Passage.Reach.PUBLIC_ACCESS)));
+            var knowledge = ServiceBoundaryComposition.knowledge(state, point.identity()).forActor(state, lease.actorId());
             List<SurfaceAnchor> surfaces;
             try { surfaces = ServiceAreaDestinations.select(points, lease.actorId(),
                     observed.supportingSurface(), knowledge, ServiceDestinationClaims.excludedFor(state, lease.actorId()),

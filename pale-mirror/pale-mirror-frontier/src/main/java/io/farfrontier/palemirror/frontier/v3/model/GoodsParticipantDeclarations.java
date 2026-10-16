@@ -21,7 +21,7 @@ public final class GoodsParticipantDeclarations {
             var peers = settlements.stream().filter(other -> !other.id().equals(settlement.id()))
                     .map(GoodsParticipantDeclarations::publicPeer).toList();
             participants = participants.register(new GoodsParticipant(publicParty(settlement.id()),
-                    GoodsPolicyKind.PUBLIC_SETTLEMENT, endpoint(settlement), peers, 0, "NOT_REVIEWED", 0));
+                    GoodsPolicyKind.PUBLIC_SETTLEMENT, settlement.id(), peers, 0, "NOT_REVIEWED", 0));
         }
         return participants;
     }
@@ -32,7 +32,7 @@ public final class GoodsParticipantDeclarations {
         var ownParty = new GoodsTradeParty(company.id(), EconomicOwnerKind.COMPANY);
         var peers = new ArrayList<>(publicParticipant.known()); peers.add(publicPeer(home));
         var next = state.register(new GoodsParticipant(ownParty, GoodsPolicyKind.OWN_ACCOUNT_COMPANY,
-                endpoint(home), peers, 0, "NOT_REVIEWED", company.registeredAtTick()));
+                home.id(), peers, 0, "NOT_REVIEWED", company.registeredAtTick()));
         // Institutions may introduce their company, but do not grant it public inventory.
         var map = new HashMap<>(next.participants());
         for (var entry : map.entrySet()) {
@@ -40,14 +40,14 @@ public final class GoodsParticipantDeclarations {
             if (participant.policy() != GoodsPolicyKind.PUBLIC_SETTLEMENT
                     || !participant.party().id().equals(home.id()) && participant.known().stream()
                         .noneMatch(peer -> peer.party().equals(publicParty(home.id())))) continue;
-            var known = new ArrayList<>(participant.known()); known.add(new GoodsParticipant.Counterparty(ownParty, endpoint(home)));
-            entry.setValue(new GoodsParticipant(participant.party(), participant.policy(), participant.endpoint(),
+            var known = new ArrayList<>(participant.known()); known.add(new GoodsParticipant.Counterparty(ownParty, home.id()));
+            entry.setValue(new GoodsParticipant(participant.party(), participant.policy(), participant.settlementId(),
                     known, participant.reviewRevision(), participant.decision(), participant.reviewedAtTick(), participant.prices()));
         }
         return new GoodsParticipantState(map);
     }
     private static GoodsParticipant.Counterparty publicPeer(Settlement settlement) {
-        return new GoodsParticipant.Counterparty(publicParty(settlement.id()), endpoint(settlement));
+        return new GoodsParticipant.Counterparty(publicParty(settlement.id()), settlement.id());
     }
     public static GoodsTradeParty publicParty(SubjectId settlement) {
         return new GoodsTradeParty(settlement, EconomicOwnerKind.SETTLEMENT_TREASURY);

@@ -13,20 +13,20 @@ public final class BuyerCollectionFixture {
         var ledger = state.inventory().fungibleResources();
         var lot = new SubjectId("lot:collection-provisions"); var staging = new SubjectId("custody:collection-provisions");
         // Empty accounts retire with their last lot; an empty physical chest remains a valid destination.
-        var destination = FungibleResourceCustodySupport.accountAtContainer(state, buyer.endpoint().containerId())
+        var destination = FungibleResourceCustodySupport.accountAtContainer(state, FrontierWorldState.depotId(buyer.settlementId()))
                 .map(CustodyAccount::id).orElse(staging);
         ledger = ledger.issue(new ResourceLot(lot, buyer.party().id(), "minecraft:bread", 384, "fixture:collection-provisions", List.of()),
-                new CustodyAccount(staging, buyer.endpoint().custody(), Map.of(lot, 384), Map.of()));
+                new CustodyAccount(staging, new ResourceCustody.Container(FrontierWorldState.depotId(buyer.settlementId())), Map.of(lot, 384), Map.of()));
         if (!destination.equals(staging)) ledger = ledger.transfer(staging, destination, Map.of(lot, 384), Map.of());
         // Source stock must exceed the actual protected stone reserve; do not wait for hunger to create a different sale.
         var export = new SubjectId("lot:collection-export-stone");
         var exportStage = new SubjectId("custody:collection-export-stone");
-        var source = FungibleResourceCustodySupport.accountAtContainer(state, seller.endpoint().containerId()).orElseThrow();
+        var source = FungibleResourceCustodySupport.accountAtContainer(state, FrontierWorldState.depotId(seller.settlementId())).orElseThrow();
         // Keep the real 27-slot chest capacity: replace four surplus bread stacks
         // with eight stone stacks, not an over-capacity or special test container.
         ledger = ledger.destroy(source.id(), Map.of(new SubjectId("lot:trip-test/minecraft-bread"), 256), Map.of());
         ledger = ledger.issue(new ResourceLot(export, seller.party().id(), "minecraft:cobblestone", 512,
-                "fixture:finite-export-stock", List.of()), new CustodyAccount(exportStage, seller.endpoint().custody(), Map.of(export, 512), Map.of()));
+                "fixture:finite-export-stock", List.of()), new CustodyAccount(exportStage, new ResourceCustody.Container(FrontierWorldState.depotId(seller.settlementId())), Map.of(export, 512), Map.of()));
         ledger = ledger.transfer(exportStage, source.id(), Map.of(export, 512), Map.of());
         return state.withChanges(FrontierWorldStateUpdate.begin()
                 .inventory(state.inventory().withFungibleResources(ledger))

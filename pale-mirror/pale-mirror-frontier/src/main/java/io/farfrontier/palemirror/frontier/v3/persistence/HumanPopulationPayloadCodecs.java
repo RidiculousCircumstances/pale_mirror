@@ -264,6 +264,24 @@ final class HumanPopulationPayloadCodecs {
         return mealHand("frontier.resident_meal_hot_hand_released", false);
     }
 
+    static PayloadCodec mealClearanceRequired() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resident_meal_clearance_required"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                var required = (ResidentMealClearanceRequired) payload;
+                return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                    ActorExecutionStateCodec.writeId(output, required.execution());
+                    FrontierWorldPayloadCodecs.writePosition(output, required.body().supportingSurface().support());
+                });
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResidentMealClearanceRequired(
+                        ActorExecutionStateCodec.readId(input),
+                        BodyPosition.above(new SurfaceAnchor(FrontierWorldPayloadCodecs.readPosition(input)))));
+            }
+        };
+    }
+
     static PayloadCodec mealHotAccessCleared() {
         return new PayloadCodec() {
             @Override public String type() { return "frontier.resident_meal_hot_access_cleared"; }

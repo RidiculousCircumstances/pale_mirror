@@ -40,7 +40,15 @@ public final class GroupTravelCohesion {
         double basePace = 1.0 / policy.ticksPerEdge();
         if (living.size() == 1) return MovementPermission.allow(new TravelPace(basePace));
         var route = group.journey().orElseThrow().route();
+        var current = positions.currentPointAt(actorId);
+        if (current.isEmpty()) return MovementPermission.hold(MovementPermission.Reason.POSITION_UNAVAILABLE, actorId);
+        double currentProgress = projection(route, current.orElseThrow()) + slot * policy.spacing();
+        // Nearest-segment projection can jump between branches beside a bend.
+        // A proposed step cannot gain more progress than its physical displacement;
+        // arbitration still uses the common actual image, then re-evaluates after acceptance.
         double progress = projection(route, position) + slot * policy.spacing();
+        if (!onRoute(route, current.orElseThrow()))
+            progress = Math.min(progress, currentProgress + distance(current.orElseThrow(), position));
         double slowest = Double.POSITIVE_INFINITY;
         SubjectId slowestPeer = null;
         double rosterSpan = (double) (living.size() - 1) * policy.spacing();
@@ -57,8 +65,13 @@ public final class GroupTravelCohesion {
             // distance may stretch the envelope but may never reverse who yields.
             // Deterministic slot order breaks exact ties; the lagging member can always close.
             double separation = distance(position, actual) - rosterSpan;
+            // Who yields is decided from the SAME current position image, not
+            // from each candidate's hypothetical next step. Otherwise equally
+            // ranked members both become "ahead" in their own proposal and both
+            // are forbidden to move. Candidate progress remains bounded below;
+            // after its accepted segment, the next current image re-arbitrates.
             if (separation > spatialGap
-                    && (progress > peerProgress || progress == peerProgress && slot < index)) {
+                    && (currentProgress > peerProgress || currentProgress == peerProgress && slot < index)) {
                 spatialGap = separation; spatialPeer = living.get(index).actorId();
             }
             if (peerProgress < slowest) { slowest = peerProgress; slowestPeer = living.get(index).actorId(); }
@@ -89,9 +102,22 @@ public final class GroupTravelCohesion {
     }
     public static List<SurfaceAnchor> segment(FrontierWorldState state, UnitGroup group, SubjectId actor,
                                              List<SurfaceAnchor> path, ActorPositionView positions) {
+        var itinerary = group.journey().orElseThrow().route();
+        int limit = path.size();
+        if (!itinerary.contains(path.getFirst())) {
+            // Joining ends at first contact. Re-arbitrate from that exact common-route
+            // checkpoint before authorizing the tail; approach projection cannot waive
+            // the ordinary along-route envelope for an entire bent itinerary.
+            var stations = Set.copyOf(itinerary);
+            for (int index = 1; index < path.size(); index++)
+                if (stations.contains(path.get(index))) { limit = index + 1; break; }
+        }
         int end = 1;
-        while (end < path.size() && permits(state, group, actor, path.get(end), positions)) end++;
+        while (end < limit && permits(state, group, actor, path.get(end), positions)) end++;
         return List.copyOf(path.subList(0, end));
+    }
+    private static boolean onRoute(List<SurfaceAnchor> route, ActorPositionView.TravelPoint point) {
+        return route.stream().anyMatch(surface -> point.equals(ActorPositionView.TravelPoint.at(surface.standingBody())));
     }
     private static double projection(List<SurfaceAnchor> route, ActorPositionView.TravelPoint position) {
         double best = 0, distance = Double.POSITIVE_INFINITY, travelled = 0;

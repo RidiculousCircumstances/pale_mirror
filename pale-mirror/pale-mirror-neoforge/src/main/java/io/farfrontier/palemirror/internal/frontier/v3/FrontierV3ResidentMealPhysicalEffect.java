@@ -67,6 +67,9 @@ final class FrontierV3ResidentMealPhysicalEffect {
         var currentMeal = state.humanPopulation().meals().get(residentId);
         if (currentMeal == null || !currentMeal.equals(meal)) return false;
         if (meal.phase() == ResidentMeal.Phase.CONSUME) {
+            if (meal.pendingPhysicalStep().isEmpty() && ResidentMealProcess.requiresClearance(state, meal, observedBody.orElseThrow()))
+                return accepted(level, runtime, residentId, "resident-meal-clearance-required",
+                        new ResidentMealClearanceRequired(meal.executionId(), observedBody.orElseThrow()));
             if (!ResidentMealProcess.mayConsumeAt(state, meal, observedBody.orElseThrow())) return false;
             return consume(level, runtime, state, meal, worker, lease);
         }

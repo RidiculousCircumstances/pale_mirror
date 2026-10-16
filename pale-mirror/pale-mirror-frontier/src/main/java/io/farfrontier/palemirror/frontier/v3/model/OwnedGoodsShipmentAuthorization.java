@@ -15,7 +15,7 @@ final class OwnedGoodsShipmentAuthorization extends SameOwnerShipmentAuthorizati
         if (admission || grant.kind() != ResourceClaimDelegation.Kind.OWNED_GOODS_SHIPMENT || grant.authorizationRevision() != 1
                 || mission == null || mission.organization().itinerary() != TransportOrganization.Itinerary.DESTINATION_COLLECTION
                 || !mission.shipmentIds().contains(shipment.id()) || buyer == null
-                || !buyer.endpoint().withStation(shipment.receiver().station()).equals(shipment.receiver())
+                || !buyer.settlementId().equals(shipment.receiver().settlementId())
                 || !mission.organization().home().equals(shipment.receiver())
                 || claim == null || claim.purpose() != ClaimPurpose.INTERNAL_LOGISTICS
                 || !claim.claimantId().equals(grant.claimantId()) || !claim.economicOwnerId().equals(grant.claimantId())

@@ -25,7 +25,7 @@ final class GoodsProductionPricing {
                                                 Map<String, FixedScalar> prices) {
         if (view.participant().policy() != GoodsPolicyKind.PUBLIC_SETTLEMENT || view.supplyPlan().isEmpty()) return Map.of();
         var facts = new TreeMap<String, SupplyPlanner.Stock>(); var rules = state.bootstrap().ruleset().goodsTrade();
-        view.stocks().forEach((item, stock) -> facts.put(item, new SupplyPlanner.Stock(stock.unclaimedAtEndpoint(), stock.expectedIncoming(),
+        view.stocks().forEach((item, stock) -> facts.put(item, new SupplyPlanner.Stock(stock.unclaimedInStorage(), stock.expectedIncoming(),
                 0, 0, stock.protectedMinimum(), 0, 1, rules.supplyPlanning().require(item))));
         var result = new HashMap<String, FixedScalar>();
         for (var process : SupplyCapacityComposition.read(state, view.participant().party().id(), facts)) {

@@ -22,7 +22,7 @@ class ActorMovementProcessTest {
                 new WorldId("frontier:turnover-readiness"), 421L));
         var home = initial.bootstrap().settlements().getFirst();
         var actor = home.residents().getFirst().id();
-        var point = SettlementServiceAccessPoints.forSettlement(initial, home.id()).getFirst();
+        var point = ServiceBoundaryComposition.geometry(initial, ServiceBoundaryComposition.declaration(initial, FrontierWorldState.depotId(home.id())).identity());
         var state = initial.withActorBody(actor, point.waitingSurfaces().getFirst().standingBody());
         try (var binding = PedestrianRoutePlanning.bind((geometry, from, to) -> {
             throw new AssertionError("queue readiness cannot choose a parking route");
@@ -52,7 +52,7 @@ class ActorMovementProcessTest {
         var home = state.bootstrap().settlements().getFirst();
         var host = state.bootstrap().settlements().get(1);
         var actor = home.residents().getFirst().id();
-        var point = SettlementServiceAccessPoints.forSettlement(state, host.id()).getFirst();
+        var point = ServiceBoundaryComposition.geometry(state, ServiceBoundaryComposition.declaration(state, FrontierWorldState.depotId(host.id())).identity());
         state = state.withActorBody(actor, point.station().standingBody());
         var occupied = ServiceAccessCoordinator.turnoverPoint(state, actor).orElseThrow();
         assertEquals(point, ServiceBoundaryComposition.geometry(state, occupied.identity()));
@@ -71,7 +71,7 @@ class ActorMovementProcessTest {
                 new WorldId("frontier:service-buffer-turnover"), 421L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
         SubjectId actor = settlement.residents().getFirst().id();
-        ServiceAccessPoint point = SettlementServiceAccessPoints.forSettlement(state, settlement.id()).getFirst();
+        ServiceAccessPoint point = ServiceBoundaryComposition.geometry(state, ServiceBoundaryComposition.declaration(state, FrontierWorldState.depotId(settlement.id())).identity());
         state = state.withActorBody(actor, point.waitingSurfaces().getFirst().standingBody());
         ActorMovement movement = ResidentServiceTurnover.select(state, actor, 1L).orElseThrow();
         assertTrue(point.waitingSurfaces().stream().noneMatch(movement.order()::arrivedAt));

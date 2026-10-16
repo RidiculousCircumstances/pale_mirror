@@ -46,13 +46,14 @@ public final class GoodsParticipantPricing {
                     .map(MarketPriceHistory.Sale::receipt);
             int target = StockTargetDemand.target(commodity, view.residents(), stock.protectedMinimum());
             long shortage = view.supplyPlan().map(plan -> plan.require(commodity.itemKind()).purchase())
-                    .orElse((long) Math.max(0, target - stock.unclaimedAtEndpoint() - stock.expectedIncoming()));
+                    .orElse((long) Math.max(0, target - stock.unclaimedInStorage() - stock.expectedIncoming()));
             int pressure = (int) Math.min(1000, Math.multiplyExact(shortage, 1000) / Math.max(1, target));
             var context = new MarketPricePolicy.Context(floors.getOrDefault(commodity.itemKind(), io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO),
                     Optional.ofNullable(alternatives.get(commodity.itemKind())), pressure,
-                    TransportMarketAccess.confirmed(state, participant.endpoint().containerId(), commodity.itemKind()));
+                    GoodsParticipantStorage.containers(state, participant, commodity.itemKind()).stream()
+                            .anyMatch(container -> TransportMarketAccess.confirmed(state, container, commodity.itemKind())));
             next.put(commodity.itemKind(), policy.review(commodity.minimumSellPrice(), commodity.maximumBuyPrice(), reference,
-                    Math.max(0, stock.unclaimedAtEndpoint() - target), sale, Optional.ofNullable(participant.prices().get(commodity.itemKind())), now, rules.pricing(), context));
+                    Math.max(0, stock.unclaimedInStorage() - target), sale, Optional.ofNullable(participant.prices().get(commodity.itemKind())), now, rules.pricing(), context));
         }
         return Map.copyOf(next);
     }

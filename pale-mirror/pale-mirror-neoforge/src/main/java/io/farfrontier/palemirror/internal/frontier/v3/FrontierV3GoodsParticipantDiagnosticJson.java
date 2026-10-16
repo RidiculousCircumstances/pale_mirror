@@ -9,8 +9,8 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
     static String render(FrontierScheduleView checkpoint, FrontierWorldState state, GoodsParticipant participant) {
         var view = GoodsParticipantView.read(state, participant);
         var stocks = view.stocks().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).map(entry ->
-                "{\"commodity\":" + string(entry.getKey()) + ",\"owned\":" + entry.getValue().ownedAtEndpoint()
-                        + ",\"unclaimed\":" + entry.getValue().unclaimedAtEndpoint() + ",\"incoming\":" + entry.getValue().expectedIncoming()
+                "{\"commodity\":" + string(entry.getKey()) + ",\"owned\":" + entry.getValue().ownedInStorage()
+                        + ",\"unclaimed\":" + entry.getValue().unclaimedInStorage() + ",\"incoming\":" + entry.getValue().expectedIncoming()
                         + ",\"protectedMinimum\":" + entry.getValue().protectedMinimum() + "}").collect(Collectors.joining(","));
         var trade = state.companies().goodsTrade();
         var supply = view.supplyPlan().map(plan -> plan.demands().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
@@ -22,7 +22,7 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                 .collect(Collectors.joining(","))).orElse("");
         var known = participant.known().stream().sorted(java.util.Comparator.comparing(value -> value.party().id()))
                 .map(value -> "{\"participant\":" + string(value.party().id().value())
-                        + ",\"container\":" + string(value.endpoint().containerId().value()) + "}").collect(Collectors.joining(","));
+                        + ",\"settlement\":" + string(value.settlementId().value()) + "}").collect(Collectors.joining(","));
         var reviews = checkpoint.schedules().stream().filter(value -> value.subject().equals(participant.party().id())
                 && (value.kind().equals(io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.REVIEW)
                     || value.kind().equals(io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantWakeup.OPPORTUNITY)))
@@ -31,12 +31,15 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                 .sorted(java.util.Comparator.comparing(GoodsTradeOrder::id)).map(value ->
                         "{\"id\":" + string(value.id().value()) + ",\"side\":" + string(value.side().name())
                                 + ",\"counterparty\":" + string(value.counterparty().id().value()) + ",\"commodity\":" + string(value.itemKind())
+                                + ",\"container\":" + string(value.containerId().value())
                                 + ",\"availableQuantity\":" + value.availableQuantity() + ",\"limitRaw\":" + value.unitPriceLimit().raw()
                                 + ",\"expiresAtTick\":" + value.expiresAtTick() + "}").collect(Collectors.joining(","));
         var contracts = trade.contracts().values().stream().filter(value -> value.seller().equals(participant.party()) || value.buyer().equals(participant.party()))
                 .sorted(java.util.Comparator.comparing(GoodsTradeContract::id)).map(value ->
                         "{\"id\":" + string(value.id().value()) + ",\"seller\":" + string(value.seller().id().value())
                                 + ",\"buyer\":" + string(value.buyer().id().value()) + ",\"commodity\":" + string(value.itemKind())
+                                + ",\"sourceContainer\":" + string(value.sourceContainerId().value())
+                                + ",\"receiverContainer\":" + string(value.receiverContainerId().value())
                                 + ",\"fulfillment\":" + string(value.fulfillment().mode().name())
                                 + ",\"organizer\":" + string(value.fulfillment().organizer().id().value())
                                 + ",\"acceptedQuantity\":" + value.acceptedQuantity() + ",\"remainingQuantity\":" + value.remainingQuantity()
@@ -73,7 +76,9 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
         return FrontierV3DiagnosticJson.base("process", participant.party().id().value(), checkpoint)
                 + ",\"status\":\"ok\",\"family\":\"frontier.goods-participant\""
                 + ",\"identity\":{\"participant\":" + string(participant.party().id().value()) + ",\"ownerKind\":" + string(participant.party().kind().name())
-                + ",\"policy\":" + string(participant.policy().name()) + ",\"container\":" + string(participant.endpoint().containerId().value()) + "}"
+                + ",\"policy\":" + string(participant.policy().name()) + ",\"settlement\":" + string(participant.settlementId().value()) + "}"
+                + ",\"declaredStorages\":[" + GoodsParticipantStorage.declared(state, participant).stream().sorted()
+                    .map(id -> string(id.value())).collect(Collectors.joining(",")) + "]"
                 + ",\"reviewRevision\":" + participant.reviewRevision() + ",\"reviewedAtTick\":" + participant.reviewedAtTick()
                 + ",\"decision\":" + string(participant.decision()) + ",\"currentPolicy\":" + string(GoodsParticipantPolicies.require(participant)
                     .explain(view, state.bootstrap().ruleset().goodsTrade())) + ",\"availableMoneyRaw\":" + view.availableMoney().raw()

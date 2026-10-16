@@ -31,7 +31,7 @@ class GoodsParticipantDeclarationsTest {
             var participant = participants.participants().get(settlement.id());
             assertEquals(state.bootstrap().settlements().stream().filter(other -> !other.id().equals(settlement.id()))
                     .map(other -> new GoodsParticipant.Counterparty(GoodsParticipantDeclarations.publicParty(other.id()),
-                            GoodsParticipantDeclarations.endpoint(other))).collect(Collectors.toSet()),
+                            other.id())).collect(Collectors.toSet()),
                     java.util.Set.copyOf(participant.known()));
             assertEquals(11, participant.known().size());
         }

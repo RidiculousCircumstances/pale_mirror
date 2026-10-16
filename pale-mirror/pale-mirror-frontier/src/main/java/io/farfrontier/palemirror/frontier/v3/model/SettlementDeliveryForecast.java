@@ -7,16 +7,19 @@ import java.util.*;
 /** Joins exact incoming commercial/internal obligations with logistics advice, without counting orders twice. */
 final class SettlementDeliveryForecast {
     private SettlementDeliveryForecast() { }
-    static Map<String, List<SupplyPlanner.Arrival>> read(FrontierWorldState state, SubjectId owner, SubjectId container) {
+    static Map<String, List<SupplyPlanner.Arrival>> read(FrontierWorldState state, GoodsParticipant participant) {
+        var owner = participant.party().id();
         var claims = new HashMap<SubjectId, Integer>();
         for (var contract : state.companies().goodsTrade().contracts().values())
-            if (!contract.terminal() && contract.buyer().id().equals(owner) && contract.receiverContainerId().equals(container))
+            if (!contract.terminal() && contract.buyer().id().equals(owner)
+                    && GoodsParticipantStorage.eligible(state, participant, contract.receiverContainerId(), contract.itemKind()))
                 contract.outstandingClaims().forEach((id, quantity) -> {
                     if (claims.put(id, quantity) != null) throw new IllegalArgumentException("duplicate incoming trade claim");
                 });
         var result = new TreeMap<String, List<SupplyPlanner.Arrival>>();
         for (var shipment : state.shipments().shipments().values().stream().sorted(Comparator.comparing(Shipment::id)).toList()) {
-            if (shipment.terminal() || shipment.reception().isPresent() || !shipment.receiver().containerId().equals(container)) continue;
+            if (shipment.terminal() || shipment.reception().isPresent()
+                    || !GoodsParticipantStorage.eligible(state, participant, shipment.receiver().containerId(), shipment.itemKind())) continue;
             int quantity = switch (shipment.authorization().kind()) {
                 case GOODS_CONTRACT_SHIPMENT -> Math.min(shipment.quantity(), claims.getOrDefault(shipment.authorization().claimId(), 0));
                 case INTERNAL_SHIPMENT, OWNED_GOODS_SHIPMENT -> shipment.authorization().claimantId().equals(owner) ? shipment.quantity() : 0;

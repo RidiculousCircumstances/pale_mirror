@@ -236,7 +236,7 @@ class AutonomousGoodsTradeTest {
         assertTrue(state.inventory().economics().reservations().isEmpty());
         var participant = state.companies().goodsTrade().participants().participants().get(HOME);
         var map = new HashMap<>(state.companies().goodsTrade().participants().participants());
-        map.put(HOME, new GoodsParticipant(participant.party(), participant.policy(), participant.endpoint(), List.of(),
+        map.put(HOME, new GoodsParticipant(participant.party(), participant.policy(), participant.settlementId(), List.of(),
                 participant.reviewRevision(), participant.decision(), participant.reviewedAtTick()));
         state = state.withCompanies(state.companies().withGoodsTrade(state.companies().goodsTrade().withParticipants(new GoodsParticipantState(map))));
         state = review(state, HOME, 800);
@@ -323,7 +323,7 @@ class AutonomousGoodsTradeTest {
                 .noneMatch(intent -> intent.itemKind().equals("minecraft:bread") && intent.side() == GoodsTradeOrder.Side.SELL));
         assertThrows(IllegalArgumentException.class, () -> GoodsParticipantPolicies.register(List.of()));
         assertThrows(IllegalArgumentException.class, () -> new GoodsParticipant(new GoodsTradeParty(HOME, EconomicOwnerKind.COMPANY),
-                GoodsPolicyKind.PUBLIC_SETTLEMENT, participant.endpoint(), participant.known(), 0, "forged", 0));
+                GoodsPolicyKind.PUBLIC_SETTLEMENT, participant.settlementId(), participant.known(), 0, "forged", 0));
     }
 
     private static FrontierWorldState companyFixture() {

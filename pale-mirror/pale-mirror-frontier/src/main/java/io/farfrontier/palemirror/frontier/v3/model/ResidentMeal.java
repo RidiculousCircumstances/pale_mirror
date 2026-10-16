@@ -155,6 +155,15 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Residen
                 portion, claimId, retainedWorkOwner, Phase.MOVE, startedAtTick, Optional.empty(), Optional.empty(), Optional.empty(), executionId);
     }
 
+    /** Re-entering a passage invalidates clearance, never the already acquired portion. */
+    public ResidentMeal requireClearance() {
+        if (portable() || phase != Phase.CONSUME || pendingPhysicalStep.isPresent() || coldTravel.isPresent())
+            throw new IllegalArgumentException("only an unbegun storage consumption may clear access again");
+        return new ResidentMeal(residentId, settlementId, source, clearingSurface, actorAccountId,
+                portion, claimId, retainedWorkOwner, Phase.CLEAR_ACCESS, startedAtTick,
+                Optional.empty(), Optional.empty(), Optional.empty(), executionId);
+    }
+
     public ResidentMeal clearWait() {
         return waitReason.isEmpty() ? this : new ResidentMeal(residentId, settlementId, source, clearingSurface,
                 actorAccountId, portion, claimId, retainedWorkOwner, phase,

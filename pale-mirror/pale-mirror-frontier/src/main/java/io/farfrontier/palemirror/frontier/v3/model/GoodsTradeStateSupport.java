@@ -27,10 +27,11 @@ public final class GoodsTradeStateSupport {
         }
         contract.seller().validate(state.inventory().economics()); contract.buyer().validate(state.inventory().economics());
         requireContainer(state, contract.sourceContainerId()); requireContainer(state, contract.receiverContainerId());
-        int protectedMinimum = GoodsTradeSourceAdmission.protectedMinimum(state, contract.seller(),
-                contract.sourceContainerId(), contract.itemKind());
-        var source = FungibleResourceCustodySupport.accountAtContainer(state, contract.sourceContainerId()).orElseThrow();
-        if (state.inventory().fungibleResources().unclaimedQuantity(source.id(), contract.seller().id(), contract.itemKind())
+        int protectedMinimum = GoodsTradeSourceAdmission.protectedMinimum(state, contract.seller(), contract.itemKind());
+        var seller = state.companies().goodsTrade().participants().participants().get(contract.seller().id());
+        if (!GoodsParticipantStorage.eligible(state, seller, contract.sourceContainerId(), contract.itemKind()))
+            throw new IllegalArgumentException("goods source is not an eligible participant warehouse");
+        if (GoodsParticipantStorage.unclaimed(state, seller, contract.itemKind())
                 - contract.quantity() < protectedMinimum)
             throw new IllegalArgumentException("goods reservation would spend the protected local reserve");
         if (!contract.sourceContainerId().equals(contract.receiverContainerId())
@@ -95,19 +96,21 @@ public final class GoodsTradeStateSupport {
             participant.policy().validate(participant.party());
             var account = state.inventory().economics().require(participant.party().id());
             if (account.ownerKind() != participant.party().kind()) throw new IllegalArgumentException("participant lost its nominal economic owner");
-            ShipmentEndpointComposition.validate(state, participant.endpoint());
+            FrontierWorldStateSupport.settlement(state.bootstrap(), participant.settlementId());
             if (participant.policy() == GoodsPolicyKind.PUBLIC_SETTLEMENT
-                    && !participant.party().id().equals(participant.endpoint().settlementId()))
+                    && !participant.party().id().equals(participant.settlementId()))
                 throw new IllegalArgumentException("public goods policy declared another settlement endpoint");
             if (participant.policy() == GoodsPolicyKind.OWN_ACCOUNT_COMPANY) {
                 var company = state.companies().companies().get(participant.party().id());
-                if (company == null || !company.settlementId().equals(participant.endpoint().settlementId()))
+                if (company == null || !company.settlementId().equals(participant.settlementId()))
                     throw new IllegalArgumentException("company policy lost its exact legal home");
             }
             for (var peer : participant.known()) {
                 if (state.inventory().economics().require(peer.party().id()).ownerKind() != peer.party().kind())
                     throw new IllegalArgumentException("known goods peer has forged nominal economic identity");
-                ShipmentEndpointComposition.validate(state, peer.endpoint());
+                var known = trade.participants().participants().get(peer.party().id());
+                if (known == null || !known.party().equals(peer.party()) || !known.settlementId().equals(peer.settlementId()))
+                    throw new IllegalArgumentException("known peer has a foreign legal home");
             }
         }
         Map<SubjectId, Integer> orderTotals = new java.util.HashMap<>();

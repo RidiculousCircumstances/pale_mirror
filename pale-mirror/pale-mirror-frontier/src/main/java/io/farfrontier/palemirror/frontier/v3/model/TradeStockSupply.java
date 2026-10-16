@@ -28,8 +28,8 @@ final class TradeStockSupply implements StockSupplyPort {
             int requested = 0;
             for (var peer : seller.known()) {
                 var buyer = participants.get(peer.party().id());
-                if (buyer == null || !buyer.party().equals(peer.party()) || !buyer.endpoint().equals(peer.endpoint())
-                        || buyer.known().stream().noneMatch(value -> value.party().equals(seller.party()) && value.endpoint().equals(seller.endpoint()))) continue;
+                if (buyer == null || !buyer.party().equals(peer.party()) || !buyer.settlementId().equals(peer.settlementId())
+                        || buyer.known().stream().noneMatch(value -> value.party().equals(seller.party()) && value.settlementId().equals(seller.settlementId()))) continue;
                 var intents = intentions.computeIfAbsent(buyer.party().id(), ignored -> GoodsParticipantPolicies.require(buyer)
                         .decide(GoodsParticipantView.read(state, buyer), rules));
                 int wanted = intents.stream().filter(intent -> intent.side() == GoodsTradeOrder.Side.BUY

@@ -105,7 +105,7 @@ class ProductionSpecializationTest {
         assertFalse(GoodsParticipantView.read(withoutOperators, participant).purchaseLimits().containsKey("minecraft:bread"),
                 "a physical station and fuel do not make grain usable without any permitted operator");
         // Policy receives current stock facts; removing real owned food changes its actual urgency.
-        var account = FungibleResourceCustodySupport.accountAtContainer(state, participant.endpoint().containerId()).orElseThrow();
+        var account = FungibleResourceCustodySupport.accountAtContainer(state, FrontierWorldState.depotId(participant.settlementId())).orElseThrow();
         var bread = account.lotQuantities().entrySet().stream().filter(entry -> state.inventory().fungibleResources().lots()
                 .get(entry.getKey()).itemKind().equals("minecraft:bread")).collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
         var emptyFood = state.withInventory(state.inventory().withFungibleResources(state.inventory().fungibleResources().destroy(account.id(), bread, Map.of())));

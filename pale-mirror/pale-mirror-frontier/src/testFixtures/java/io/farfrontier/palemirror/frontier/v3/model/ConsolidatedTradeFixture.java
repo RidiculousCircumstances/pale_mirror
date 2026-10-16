@@ -18,7 +18,7 @@ public final class ConsolidatedTradeFixture {
         state = state.withCompanies(state.companies().withGoodsTrade(state.companies().goodsTrade()
                 .withParticipants(new GoodsParticipantState(participants))));
         var ledger = state.inventory().fungibleResources();
-        var target = FungibleResourceCustodySupport.accountAtContainer(state, buyer.endpoint().containerId()).orElseThrow();
+        var target = FungibleResourceCustodySupport.accountAtContainer(state, FrontierWorldState.depotId(buyer.settlementId())).orElseThrow();
         var bread = new TreeMap<SubjectId, Integer>();
         for (var entry : target.lotQuantities().entrySet())
             if (ledger.lots().get(entry.getKey()).itemKind().equals("minecraft:bread")) bread.put(entry.getKey(), entry.getValue());
@@ -44,16 +44,16 @@ public final class ConsolidatedTradeFixture {
         return state;
     }
     private static GoodsParticipant knowsOnly(GoodsParticipant actor, GoodsParticipant peer) {
-        return new GoodsParticipant(actor.party(), actor.policy(), actor.endpoint(),
-                List.of(new GoodsParticipant.Counterparty(peer.party(), peer.endpoint())), 0, "fixture:one-known-counterparty", 0);
+        return new GoodsParticipant(actor.party(), actor.policy(), actor.settlementId(),
+                List.of(new GoodsParticipant.Counterparty(peer.party(), peer.settlementId())), 0, "fixture:one-known-counterparty", 0);
     }
     private static FrontierWorldState add(FrontierWorldState state, GoodsParticipant seller, String kind, int quantity) {
         var ledger = state.inventory().fungibleResources();
-        var account = FungibleResourceCustodySupport.accountAtContainer(state, seller.endpoint().containerId()).orElseThrow();
+        var account = FungibleResourceCustodySupport.accountAtContainer(state, FrontierWorldState.depotId(seller.settlementId())).orElseThrow();
         var lot = new SubjectId("lot:trip-test/" + kind.replace(':', '-'));
         var staging = new SubjectId("custody:trip-test/" + kind.replace(':', '-'));
         ledger = ledger.issue(new ResourceLot(lot, seller.party().id(), kind, quantity, "fixture:initial-stock", List.of()),
-                new CustodyAccount(staging, new ResourceCustody.Container(seller.endpoint().containerId()), Map.of(lot, quantity), Map.of()));
+                new CustodyAccount(staging, new ResourceCustody.Container(FrontierWorldState.depotId(seller.settlementId())), Map.of(lot, quantity), Map.of()));
         return state.withInventory(state.inventory().withFungibleResources(ledger.transfer(staging, account.id(), Map.of(lot, quantity), Map.of())));
     }
 }

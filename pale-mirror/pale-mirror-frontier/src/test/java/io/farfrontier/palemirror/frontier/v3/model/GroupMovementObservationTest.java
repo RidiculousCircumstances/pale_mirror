@@ -105,6 +105,42 @@ class GroupMovementObservationTest {
         assertFalse(first.allowed()); assertTrue(second.allowed(), "straight-line closeness to the destination is not travel progress");
         assertEquals(Optional.of(back), first.waitingFor());
     }
+    @Test void closingLateralGapCannotDeadlockAtAnEqualRouteRankAfterService() {
+        var state = travelling(); var original = state.unitGroups().groups().values().stream()
+                .filter(g -> g.phase() == UnitGroup.Phase.TRAVELLING).findFirst().orElseThrow();
+        var route = java.util.stream.IntStream.rangeClosed(0, 40).mapToObj(x -> SurfaceAnchor.at(x, 63, 0)).toList();
+        var group = new UnitGroup(original.id(), original.mission(), original.members(), original.formation(), original.phase(),
+                original.revision(), original.goalOrdinal(), Optional.of(new UnitGroup.Journey(route.getLast(), route, route.size() - 1,
+                        original.journey().orElseThrow().stations())));
+        var front = group.members().getFirst().actorId(); var back = group.members().getLast().actorId();
+        int spacing = UnitGroupMissionPorts.require(group).travelPolicy(state, group).spacing();
+        var lead = SurfaceAnchor.at(10, 63, 16); var follower = SurfaceAnchor.at(10 - spacing, 63, 0);
+        ActorPositionView positions = actor -> (actor.equals(front) ? lead : follower).standingBody();
+        assertFalse(GroupTravelCohesion.assess(state, group, front, lead, positions).allowed());
+        assertTrue(GroupTravelCohesion.assess(state, group, back, follower, positions).allowed());
+        assertTrue(GroupTravelCohesion.assess(state, group, back,
+                SurfaceAnchor.at(follower.x() + 1, 63, 0), positions).allowed(), "a rank-crossing step reduces the lateral gap");
+        assertFalse(GroupTravelCohesion.assess(state, group, front,
+                SurfaceAnchor.at(lead.x() + 1, 63, 16), positions).allowed(), "the other member cannot widen the same gap");
+        assertFalse(GroupTravelCohesion.assess(state, group, back,
+                SurfaceAnchor.at(40, 63, 16), positions).allowed(), "closing lateral distance never waives along-route progress limits");
+        ActorPositionView aligned = actor -> (actor.equals(front) ? lead : SurfaceAnchor.at(10, 63, 0)).standingBody();
+        assertTrue(GroupTravelCohesion.assess(state, group, front, SurfaceAnchor.at(11, 63, 16), aligned).allowed(),
+                "after alignment the current lagging member must be allowed to advance, even without a strictly decreasing lateral distance");
+        assertFalse(GroupTravelCohesion.assess(state, group, back, SurfaceAnchor.at(11, 63, 0), aligned).allowed());
+        var bend = new ArrayList<SurfaceAnchor>();
+        for (int x = 0; x <= 20; x++) bend.add(SurfaceAnchor.at(x, 63, 0));
+        for (int z = 1; z <= 10; z++) bend.add(SurfaceAnchor.at(20, 63, z));
+        for (int x = 19; x >= 0; x--) bend.add(SurfaceAnchor.at(x, 63, 10));
+        var folded = new UnitGroup(original.id(), original.mission(), original.members(), original.formation(), original.phase(),
+                original.revision(), original.goalOrdinal(), Optional.of(new UnitGroup.Journey(bend.getLast(), bend, bend.size() - 1,
+                        original.journey().orElseThrow().stations())));
+        ActorPositionView betweenBranches = actor -> (actor.equals(front) ? SurfaceAnchor.at(10, 63, 0)
+                : SurfaceAnchor.at(10 - spacing, 63, 5)).standingBody();
+        assertTrue(GroupTravelCohesion.assess(state, folded, back,
+                SurfaceAnchor.at(10 - spacing, 63, 6), betweenBranches).allowed(),
+                "one physical step toward the shared route must not count as jumping dozens of route blocks across a bend");
+    }
     @Test void coincidentColdMembersHaveConnectedBirthSpaceWithoutChangingTheirJourneyOrCargo() {
         var state = travelling();
         var group = state.unitGroups().groups().values().stream().filter(g -> g.phase() == UnitGroup.Phase.TRAVELLING).findFirst().orElseThrow();

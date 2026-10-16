@@ -204,7 +204,7 @@ class ResidentMealKnownNavigationTest {
                 "future eating targets are not committed passage permits");
         var route = ResidentMealKnownNavigation.returnPath(state, clearing);
         assertTrue(port.accessBoundary().cleared(route.getLast().standingBody()));
-        var point = SettlementServiceAccessPoints.forSettlement(state, settlement.id()).getFirst();
+        var point = ServiceBoundaryComposition.geometry(state, ServiceBoundaryComposition.declaration(state, FrontierWorldState.depotId(settlement.id())).identity());
         assertTrue(point.egressSurfaces().contains(route.getLast()));
         assertTrue(ServiceAreaDestinations.temporary(point, route.getLast()),
                 "a resident must clear the escape perimeter after eating");
@@ -262,7 +262,7 @@ class ResidentMealKnownNavigationTest {
         var route = ResidentMealKnownNavigation.path(state, meal);
         assertTrue(!route.getLast().equals(stalePocket));
         assertTrue(!exits.contains(route.getLast()));
-        var point = SettlementServiceAccessPoints.forSettlement(state, settlement.id()).getFirst();
+        var point = ServiceBoundaryComposition.geometry(state, ServiceBoundaryComposition.declaration(state, FrontierWorldState.depotId(settlement.id())).identity());
         var rest = ServiceAreaDestinations.select(List.of(point), actor, stalePocket, knowledge, java.util.Set.of()).orElseThrow();
         assertTrue(!ServiceAreaDestinations.temporary(point, rest));
     }
