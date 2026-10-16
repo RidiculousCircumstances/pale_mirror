@@ -176,10 +176,10 @@ class ConsolidatedGoodsTradeTest {
         var buyer = seller.known().getFirst().party().id();
         var ledger = state.inventory().economics();
         // This fixture tests a mixed manifest, not rationing a tiny treasury.
-        // Fund it from existing accounts; no successful sale or receipt is fabricated.
+        // Cover the remaining essential purchases as well as this cargo. Fund
+        // from existing accounts; no successful sale or receipt is fabricated.
         for (var home : state.bootstrap().settlements()) {
             if (home.id().equals(buyer) || home.id().equals(seller.party().id())) continue;
-            if (ledger.availableToReserve(buyer).compareTo(FixedScalar.whole(400)) >= 0) break;
             var available = ledger.availableToReserve(home.id());
             ledger = ledger.transfer(home.id(), buyer, available);
         }

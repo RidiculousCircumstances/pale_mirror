@@ -372,7 +372,10 @@ public final class KnownPedestrianRouteKnowledge {
 
     /** The exact retained departure may refine its one column; it cannot invent remote terrain. */
     private synchronized io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry geometryFrom(SurfaceAnchor start) {
-        if (geometry.knowsSupport(start)) return geometry;
+        // Surveyed existence and permission are independent. A captured chest
+        // top is a known support but remains excluded from ordinary transit;
+        // its retained occupant still needs the exact departure permission.
+        if (geometry.knowsSupport(start) && !geometry.supportExcluded(start)) return geometry;
         if (!geometry.clearanceKnown(start)) throw new KnownPedestrianNavigation.RouteUnavailable(
                 io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.UNKNOWN_GEOMETRY,
                 "retained departure lacks current block facts: " + start);

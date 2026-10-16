@@ -110,4 +110,12 @@ class SupplyPlannerTest {
         assertEquals(TripDispatchPolicy.Cause.SUPPLY_DEADLINE, TripDispatchPolicy.assess(List.of(new TripDispatchPolicy.Goods(2, 0, FOOD, urgent))));
         assertEquals(TripDispatchPolicy.Cause.PREFERRED_LOAD, TripDispatchPolicy.assess(List.of(new TripDispatchPolicy.Goods(100, 0, FOOD, ordinary))));
     }
+    @Test void anAgedLargeOrderDoesNotDispatchEachNewlyAvailableItem() {
+        var ordinary = new SupplyPlanner.Demand(192, 0, 0, Long.MAX_VALUE,
+                Set.of(SupplyPlanner.Reason.STOCK_REPLENISHMENT), Optional.empty());
+        assertEquals(TripDispatchPolicy.Cause.ACCUMULATING, TripDispatchPolicy.assess(List.of(
+                new TripDispatchPolicy.Goods(1, 10000, MATERIAL, ordinary))));
+        assertEquals(TripDispatchPolicy.Cause.MAXIMUM_WAIT, TripDispatchPolicy.assess(List.of(
+                new TripDispatchPolicy.Goods(MATERIAL.preferredLot(), 10000, MATERIAL, ordinary))));
+    }
 }

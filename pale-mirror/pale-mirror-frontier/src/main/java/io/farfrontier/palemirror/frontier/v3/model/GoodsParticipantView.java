@@ -7,6 +7,7 @@ import java.util.*;
 public record GoodsParticipantView(GoodsParticipant participant, int residents, FixedScalar availableMoney,
                                    Map<String, Stock> stocks, Map<String, Integer> purchaseLimits,
                                    Optional<io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Plan> supplyPlan) {
+    private static final ImmutableInputView<Map<GoodsParticipant, GoodsParticipantView>> VIEWS = new ImmutableInputView<>();
     public GoodsParticipantView(GoodsParticipant participant, int residents, FixedScalar availableMoney,
                                 Map<String, Stock> stocks, Map<String, Integer> purchaseLimits) {
         this(participant, residents, availableMoney, stocks, purchaseLimits, Optional.empty());
@@ -30,7 +31,18 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
         if (purchaseLimits.values().stream().anyMatch(value -> value < 0)) throw new IllegalArgumentException("negative purchase limit");
         if (residents < 0 || availableMoney.raw() < 0) throw new IllegalArgumentException("invalid participant economic view");
     }
-    public static GoodsParticipantView read(FrontierWorldState state, GoodsParticipant participant) {
+    public static synchronized GoodsParticipantView read(FrontierWorldState state, GoodsParticipant participant) {
+        // Repeated matching, reserve and production-policy questions share one
+        // immutable input. Never reuse a projection after even a draft mutation.
+        var views = VIEWS.get(List.of(state), HashMap::new);
+        var prior = views.get(participant);
+        if (prior != null) return prior;
+        var result = project(state, participant);
+        if (views.size() >= 64) views.clear();
+        views.put(participant, result);
+        return result;
+    }
+    private static GoodsParticipantView project(FrontierWorldState state, GoodsParticipant participant) {
         participant.party().validate(state.inventory().economics());
         var account = FungibleResourceCustodySupport.accountAtContainer(state, participant.endpoint().containerId());
         var ledger = state.inventory().fungibleResources();

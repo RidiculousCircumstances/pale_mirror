@@ -50,9 +50,8 @@ public final class ExpeditionSupplyPlanning {
                     int quantity = Math.min(64, remaining);
                     var selected = FungibleResourceCustodySupport.selectAtAccount(resources, source.id(),
                             mission.organization().sponsor().id(), food.itemKind(), quantity).orElseThrow();
-                    var claim = new SubjectId("claim:expedition/" + mission.id().value().replace(':', '-')
-                            + "/" + revision + "/" + member.actorId().value().replace(':', '-') + "/" + index);
-                    var account = new SubjectId("custody:expedition/" + claim.value().replace(':', '-'));
+                    var claim = supplyClaim(mission.id(), revision, member.actorId().value(), index);
+                    var account = supplyAccount(claim);
                     var allocation = new ExpeditionSupplyLoad.Allocation(claim, member.actorId(), source.id(), account,
                             free.get(member.actorId()).get(index++), selected.lotQuantities(), ExpeditionSupplyLoad.Outcome.RESERVED, Optional.empty());
                     resources = reserve(resources, allocation, mission.id(), mission.organization().sponsor().id(), food.itemKind());
@@ -70,7 +69,7 @@ public final class ExpeditionSupplyPlanning {
                 while (remaining > 0) {
                     int quantity = Math.min(64, remaining);
                     var selected = FungibleResourceCustodySupport.selectAtAccount(resources, source.id(), mission.organization().sponsor().id(), food.itemKind(), quantity).orElseThrow();
-                    var claim = new SubjectId("claim:expedition/" + mission.id().value().replace(':', '-') + "/" + revision + "/shared/" + index++);
+                    var claim = supplyClaim(mission.id(), revision, "shared", index++);
                     var allocation = new ExpeditionSupplyLoad.Allocation(claim, asset.actorId(), source.id(), destination,
                             new ActorItemSlot.AttachedStorage(asset.containerId()), selected.lotQuantities(), ExpeditionSupplyLoad.Outcome.RESERVED, Optional.empty());
                     resources = reserve(resources, allocation, mission.id(), mission.organization().sponsor().id(), food.itemKind());
@@ -218,5 +217,14 @@ public final class ExpeditionSupplyPlanning {
         var bindings = resources.bindings().values().stream().filter(b -> b.accountId().equals(allocation.sourceAccountId())).toList();
         return bindings.isEmpty() ? resources.reserve(claim, allocation.sourceAccountId())
                 : resources.reserveBound(claim, allocation.sourceAccountId(), bindings.getFirst().authorityEpoch());
+    }
+    // Parent identifiers may already occupy their full legal length. Compose facts,
+    // not nested identifier spellings; the retained allocation owns the relationship.
+    static SubjectId supplyClaim(SubjectId mission, long revision, String recipient, int index) {
+        return new SubjectId("claim:expedition/" + StableCorrelationIdentity.digest(
+                mission.value() + "\n" + revision + "\n" + recipient + "\n" + index));
+    }
+    static SubjectId supplyAccount(SubjectId claim) {
+        return new SubjectId("custody:expedition/" + StableCorrelationIdentity.digest(claim.value()));
     }
 }

@@ -12,11 +12,18 @@ public final class TripDispatchPolicy {
     public static Cause assess(List<Goods> manifest) {
         if (manifest.isEmpty()) throw new IllegalArgumentException("empty trip has no dispatch policy");
         if (manifest.stream().anyMatch(g -> g.demand().urgent(g.policy().leadTicks()))) return Cause.SUPPLY_DEADLINE;
-        if (manifest.stream().anyMatch(g -> g.waitingTicks() >= g.policy().maximumWaitTicks())) return Cause.MAXIMUM_WAIT;
         long loadPermille = manifest.stream().mapToLong(g -> Math.multiplyExact((long) g.quantity(), 1000L)
                 / g.policy().preferredTripLoad()).sum();
-        return loadPermille >= 1000 && manifest.stream().anyMatch(g -> g.quantity() >= g.policy().preferredLot())
-                ? Cause.PREFERRED_LOAD : Cause.ACCUMULATING;
+        if (loadPermille >= 1000 && manifest.stream().anyMatch(g -> g.quantity() >= g.policy().preferredLot()))
+            return Cause.PREFERRED_LOAD;
+        // Age belongs to unmet demand, not to each newly produced item. An old
+        // large order must not dispatch a fresh one-item caravan every review.
+        // Permit a full smaller remaining need, or a useful lot, after waiting;
+        // genuine supply deadlines above remain independent of batch size.
+        if (manifest.stream().anyMatch(g -> g.waitingTicks() >= g.policy().maximumWaitTicks()
+                && g.quantity() >= Math.min(g.policy().preferredLot(), Math.max(1, g.demand().purchase()))))
+            return Cause.MAXIMUM_WAIT;
+        return Cause.ACCUMULATING;
     }
     private TripDispatchPolicy() { }
 }

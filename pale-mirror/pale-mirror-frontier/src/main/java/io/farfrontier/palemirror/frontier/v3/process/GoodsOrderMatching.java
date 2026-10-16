@@ -47,7 +47,8 @@ final class GoodsOrderMatching {
                 int max = Math.min(Math.min(sell.availableQuantity(), buy.availableQuantity()),
                         Math.min(sellerIntent.orElseThrow().quantity(), buyerIntent.orElseThrow().quantity()));
                 FixedScalar price = sell.unitPriceLimit();
-                max = (int) Math.min(max, state.inventory().economics().availableToReserve(buy.party().id()).raw() / price.raw());
+                max = (int) Math.min(max, GoodsParticipantFunding.purchase(GoodsParticipantView.read(state, buyer),
+                        state.bootstrap().ruleset().goodsTrade(), buy.itemKind()).raw() / price.raw());
                 for (int quantity = Math.min(max, state.bootstrap().ruleset().goodsTrade().maximumBatch()); quantity > 0; quantity--) {
                     if (!sell.containerId().equals(buy.containerId()) && !GoodsTradeStateSupport.receivingCapacity(state,
                             buy.containerId(), buy.itemKind(), quantity)) { disposition = "RECEIVER_CAPACITY"; continue; }

@@ -130,6 +130,39 @@ class KnownPedestrianRouteKnowledgeTest {
         ResourceStorageNavigation.forEndpoint(codec.decode(codec.encode(declared)), endpoint).requireRoute(route);
     }
 
+    @Test void observedChestTopStillGrantsOnlyRetainedDepartureAfterRecovery() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:observed-chest-departure"), 91L));
+        var home = state.bootstrap().settlements().getFirst();
+        var ground = KnownPedestrianGround.forFrontier(state).at(home.anchor().x() + 22, home.anchor().z() + 22);
+        var id = new SubjectId("container:observed-chest-departure");
+        var endpoint = new ShipmentEndpoint.Storage(home.id(), id, ground, Optional.empty(), ground);
+        var block = ground.support().offset(0, 1, 0);
+        state = new ResourceStorageDeclared(new ContainerRecord(id, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE,
+                Optional.empty(), Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0,
+                        ResourceStorageRole.WAREHOUSE))), block).apply(state, home.id());
+        var chest = new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell(
+                new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationShape(List.of(
+                        new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationShape.Box(
+                                .0625, 0, .0625, .9375, .875, .9375))), true);
+        state = new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved(0,
+                Map.of(block, Optional.of(chest))).apply(state,
+                io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved.OWNER);
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        for (var current : List.of(state, codec.decode(codec.encode(state)))) {
+            var start = new SurfaceAnchor(block);
+            var actor = home.residents().getFirst().id();
+            var knowledge = PedestrianLocalDeparture.departure(current, start).forActor(current, actor);
+            assertTrue(knowledge.geometry().knowsSupport(start));
+            assertTrue(knowledge.geometry().blocked(start), "known contact is still forbidden as a new transit goal");
+            var route = PedestrianLocalDeparture.exitToPublic(current, actor, start);
+            assertTrue(route.size() > 1);
+            knowledge.requireRoute(route);
+            assertTrue(PedestrianLocalDeparture.publicPosition(current, route.getLast()));
+            assertThrows(KnownPedestrianNavigation.RouteUnavailable.class,
+                    () -> knowledge.plannedBetween(route.getLast(), start));
+        }
+    }
+
     @Test void realStorageProviderPreservesUnrelatedPlanningButRecoveryStartsANewKnowledgeEpoch() throws Exception {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:regional-provider"), 91L));
         var home = state.bootstrap().settlements().getFirst();

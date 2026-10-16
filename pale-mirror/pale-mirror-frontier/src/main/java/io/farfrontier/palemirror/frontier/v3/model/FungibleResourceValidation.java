@@ -8,29 +8,26 @@ import java.util.Map;
  * No transitions, recipes or resource producers are owned here. */
 final class FungibleResourceValidation {
     private FungibleResourceValidation() { }
+    private record OwnedKind(SubjectId owner, String item) { }
 
     static void validateAccounts(Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,
                                          Map<SubjectId, CustodyAccount> accounts) {
         Map<SubjectId, Integer> lotTotals = new HashMap<>(); Map<SubjectId, Integer> claimTotals = new HashMap<>();
         for (CustodyAccount account : accounts.values()) {
-            account.lotQuantities().forEach((id, quantity) -> { if (!lots.containsKey(id)) throw new IllegalArgumentException("custody account references an unknown lot"); lotTotals.merge(id, quantity, Integer::sum); });
+            Map<OwnedKind, Integer> stockByKind = new HashMap<>();
+            Map<OwnedKind, Integer> claimedByKind = new HashMap<>();
+            account.lotQuantities().forEach((id, quantity) -> {
+                ResourceLot lot = lots.get(id);
+                if (lot == null) throw new IllegalArgumentException("custody account references an unknown lot");
+                lotTotals.merge(id, quantity, Math::addExact);
+                stockByKind.merge(new OwnedKind(lot.economicOwnerId(), lot.itemKind()), quantity, Math::addExact);
+            });
             account.claimQuantities().forEach((id, quantity) -> {
                 ClaimAllocation claim = claims.get(id);
                 if (claim == null) throw new IllegalArgumentException("custody account references an unknown claim");
-                claimTotals.merge(id, quantity, Integer::sum);
-                int compatible = account.lotQuantities().entrySet().stream().filter(entry -> {
-                    ResourceLot lot = lots.get(entry.getKey());
-                    return lot.economicOwnerId().equals(claim.economicOwnerId()) && lot.itemKind().equals(claim.itemKind());
-                }).mapToInt(Map.Entry::getValue).sum();
-                if (quantity > compatible) throw new IllegalArgumentException("claim allocation exceeds compatible account stock");
+                claimTotals.merge(id, quantity, Math::addExact);
+                claimedByKind.merge(new OwnedKind(claim.economicOwnerId(), claim.itemKind()), quantity, Math::addExact);
             });
-        }
-        lots.forEach((id, lot) -> { if (lotTotals.getOrDefault(id, 0) != lot.quantity()) throw new IllegalArgumentException("resource lot must have exact canonical custody"); });
-        claims.forEach((id, claim) -> { if (claimTotals.getOrDefault(id, 0) != claim.quantity()) throw new IllegalArgumentException("claim allocation must have exact canonical custody"); });
-        for (CustodyAccount account : accounts.values()) {
-            Map<String, Integer> claimedByKind = new HashMap<>(); Map<String, Integer> stockByKind = new HashMap<>();
-            account.claimQuantities().forEach((id, quantity) -> { ClaimAllocation claim = claims.get(id); claimedByKind.merge(claim.economicOwnerId().value() + "|" + claim.itemKind(), quantity, Integer::sum); });
-            account.lotQuantities().forEach((id, quantity) -> { ResourceLot lot = lots.get(id); stockByKind.merge(lot.economicOwnerId().value() + "|" + lot.itemKind(), quantity, Integer::sum); });
             claimedByKind.forEach((key, quantity) -> { if (quantity > stockByKind.getOrDefault(key, 0)) throw new IllegalArgumentException("claim allocations exceed exact account stock"); });
             Map<SubjectId, Integer> pinnedByLot = new HashMap<>();
             account.claimQuantities().forEach((claimId, accountQuantity) -> {
@@ -42,7 +39,7 @@ final class FungibleResourceValidation {
                     if (lot == null || !lot.economicOwnerId().equals(claim.economicOwnerId()) || !lot.itemKind().equals(claim.itemKind())) {
                         throw new IllegalArgumentException("pinned claim references a foreign lot");
                     }
-                    pinnedByLot.merge(lotId, quantity, Integer::sum);
+                    pinnedByLot.merge(lotId, quantity, Math::addExact);
                 });
             });
             pinnedByLot.forEach((lotId, quantity) -> {
@@ -51,6 +48,8 @@ final class FungibleResourceValidation {
                 }
             });
         }
+        lots.forEach((id, lot) -> { if (lotTotals.getOrDefault(id, 0) != lot.quantity()) throw new IllegalArgumentException("resource lot must have exact canonical custody"); });
+        claims.forEach((id, claim) -> { if (claimTotals.getOrDefault(id, 0) != claim.quantity()) throw new IllegalArgumentException("claim allocation must have exact canonical custody"); });
     }
 
     static void validateBindings(Map<SubjectId, ResourceLot> lots, Map<SubjectId, ClaimAllocation> claims,
