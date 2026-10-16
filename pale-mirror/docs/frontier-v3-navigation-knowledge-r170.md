@@ -78,3 +78,26 @@ Neither test is deleted or weakened by this change. Narrow affected checks
 and the actual Minecraft boundary provide this fix's acceptance evidence.
 No full-pack graphical/player acceptance or unrestricted modded dynamic-shape
 support is claimed.
+
+## Delivery
+
+Clean detached source `/home/rd/proj/pm-release-r170.zSk5RA/source/pale-mirror`:
+release build, guardrails and packaged-JAR verification PASS;42/42 navigation
+and375/375 general native GameTests PASS,3m55s total. This does not turn the
+separately interrupted broad pure-Java `check` into a pass.
+
+Installed via pack publishing/installer scripts and verified preflight and
+fresh startup. New world `frontier-v3-navigation-r170-20261016`, schema290,
+ruleset `frontier-v3-quarry-graybox-r13`. Old R169 world preserved, not deleted.
+Artifact SHA512:
+`a24f4072d7e9d6ae660017deb5c0dd767f78229f375991ff785989fb63442a13f4bd9010055cb2139c9e4e7380bc8e68a728c3ef9061589b1d46bb7e23ca1f01`.
+Service `far-frontier-v3-live.service`,PID3122147,port25565,
+start epoch1792139099,invocation`9f76ca1ac9234fb1a97c305eebfc8630`.
+Diagnostics atinstant979:statusok,366residents/12settlements,no ready lag,
+no pending navigation searches or geometry waits,fast-forwardoff.
+Recent64 host-through-PM samples mean2.19ms/max2.81ms: idle startup/COLD only,
+not measured HOT-load improvement. No new quarantine. No client launched.
+Receipts in the release directory: `release-build.log`, `install.log`,
+`preflight.log`, `deploy-verify.log`, `live-diagnostics.log`.
+Source clean; pack tracked clean with pre-existing `.f0v-baseline/` untouched.
+Governance unrelated WIP retained. No push requested/performed.
