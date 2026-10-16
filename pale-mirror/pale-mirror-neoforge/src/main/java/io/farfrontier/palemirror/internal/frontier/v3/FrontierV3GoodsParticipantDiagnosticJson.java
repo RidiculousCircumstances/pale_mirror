@@ -73,7 +73,7 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                         || s.seller().equals(participant.party().id())))
                 .sorted(java.util.Map.Entry.comparingByKey()).map(e -> string(e.getKey()) + ":true")
                 .collect(Collectors.joining(","));
-        return FrontierV3DiagnosticJson.base("process", participant.party().id().value(), checkpoint)
+        String essential = FrontierV3DiagnosticJson.base("process", participant.party().id().value(), checkpoint)
                 + ",\"status\":\"ok\",\"family\":\"frontier.goods-participant\""
                 + ",\"identity\":{\"participant\":" + string(participant.party().id().value()) + ",\"ownerKind\":" + string(participant.party().kind().name())
                 + ",\"policy\":" + string(participant.policy().name()) + ",\"settlement\":" + string(participant.settlementId().value()) + "}"
@@ -83,13 +83,18 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                 + ",\"decision\":" + string(participant.decision()) + ",\"currentPolicy\":" + string(GoodsParticipantPolicies.require(participant)
                     .explain(view, state.bootstrap().ruleset().goodsTrade())) + ",\"availableMoneyRaw\":" + view.availableMoney().raw()
                 + ",\"nextReviewTick\":" + (reviews.isPresent() ? Long.toString(reviews.orElseThrow()) : "null")
-                + ",\"knownCounterparties\":[" + known + "],\"stocks\":[" + stocks
+                + ",\"stocks\":[" + stocks
                 + "],\"supplyPlan\":[" + supply + "],\"reserves\":" + view.supplyPlan().map(FrontierV3ReserveDiagnosticJson::render).orElse("[]")
-                + ",\"orders\":[" + orders + "],\"contracts\":[" + contracts + "]"
                 + ",\"acceptedCommodities\":{" + acceptedCommodities + "}"
                 + ",\"prices\":[" + prices + "],\"completedSales\":[" + completedSales + "]"
-                + ",\"completedCommodities\":{" + completedCommodities + "}"
-                + ",\"expeditions\":" + FrontierV3ExpeditionDiagnosticJson.render(checkpoint, state, participant) + "}";
+                + ",\"completedCommodities\":{" + completedCommodities + "}";
+        // The common byte budget preserves current stock/planning facts when retained
+        // trade history grows. Explicit omissions are not empty orders or no caravans.
+        return FrontierV3DiagnosticDetailBudget.finish(essential, java.util.List.of(
+                new FrontierV3DiagnosticDetailBudget.Section("expeditions", FrontierV3ExpeditionDiagnosticJson.render(checkpoint, state, participant)),
+                new FrontierV3DiagnosticDetailBudget.Section("knownCounterparties", "[" + known + "]"),
+                new FrontierV3DiagnosticDetailBudget.Section("orders", "[" + orders + "]"),
+                new FrontierV3DiagnosticDetailBudget.Section("contracts", "[" + contracts + "]")));
     }
     private static String string(String value) { return "\"" + FrontierV3DiagnosticJson.quote(value) + "\""; }
     private FrontierV3GoodsParticipantDiagnosticJson() { }

@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "id": "live_reserve_policy_observation",
+  "server": {"host": "127.0.0.1", "port": 25565},
+  "pilot": {"username": "PMTestPilot"},
+  "setup": [
+    {"type": "assert_fixture", "timeoutMs": 30000, "checks": [{"view": "summary", "id": "", "expect": {"status": "ok", "requiredConflicts": 0}}]},
+    {"type": "command", "command": "/gamemode creative"}
+  ],
+  "actions": [
+    {"type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": {"diagnostic": {"view": "container", "id": "container:6-depot", "field": "position"}}, "offset": {"x": -10, "y": -1, "z": -12}, "settleMs": 0},
+    {"type": "wait_until_diagnostic", "view": "container", "id": "container:6-depot", "expect": {"status": "ok", "surface": "ACTIVE", "replica": {"state": "OBSERVED_CURRENT", "conflict": ""}}, "timeoutMs": 90000},
+    {"type": "look", "at": {"diagnostic": {"view": "site", "id": "site:6-wheat-field", "field": "firstCrop"}}},
+    {"type": "wait", "ms": 120000},
+    {"type": "inspect", "view": "settlement", "id": "settlement:6"},
+    {"type": "inspect", "view": "site", "id": "site:6-wheat-field"},
+    {"type": "inspect", "view": "performance", "id": ""},
+    {"type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": {"diagnostic": {"view": "container", "id": "container:7-depot", "field": "position"}}, "offset": {"x": -10, "y": -1, "z": -12}, "settleMs": 0},
+    {"type": "wait_until_diagnostic", "view": "container", "id": "container:7-depot", "expect": {"status": "ok", "surface": "ACTIVE", "replica": {"state": "OBSERVED_CURRENT", "conflict": ""}}, "timeoutMs": 90000},
+    {"type": "look", "at": {"diagnostic": {"view": "site", "id": "site:7-wheat-field", "field": "firstCrop"}}},
+    {"type": "wait", "ms": 120000},
+    {"type": "inspect", "view": "settlement", "id": "settlement:7"},
+    {"type": "inspect", "view": "site", "id": "site:7-wheat-field"},
+    {"type": "inspect", "view": "performance", "id": ""},
+    {"type": "visit", "dimension": "minecraft:overworld", "position": {"x": 24, "y": 64, "z": -132}, "settleMs": 5000},
+    {"type": "inspect", "view": "summary", "id": ""}
+  ],
+  "assertions": [{"after": 16, "view": "summary", "id": "", "expect": {"status": "ok", "requiredConflicts": 0, "sceneConflicts": 0, "inventoryConflicts": 0}}],
+  "frames": [{"after": 4, "name": "hearthvale-observed"}, {"after": 11, "name": "clearwater-observed"}]
+}
