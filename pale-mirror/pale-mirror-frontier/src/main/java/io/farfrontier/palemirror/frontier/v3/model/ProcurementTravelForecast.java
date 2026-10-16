@@ -13,8 +13,10 @@ final class ProcurementTravelForecast {
                     || mission.supplies().orElseThrow().needsReplan() || !state.unitGroups().groups().containsKey(mission.groupId())
                     || !GoodsTradeStateSupport.receivingCapacity(state, mission.receiver().containerId(), offer.itemKind(), 1)) continue;
             var proof = mission.supplies().orElseThrow().journey();
-            try { proof.require(state, mission); }
-            catch (IllegalArgumentException staleGeometry) { continue; }
+            // This retained trip length is cost advice, not a fresh traversability
+            // proof. Rewalking every physical edge here multiplies route validation
+            // by every economic/worker query. Admission and movement still validate
+            // their own current geometry; no quote becomes promised delivery here.
             var rules = state.bootstrap().ruleset().expedition();
             long duration = rules.plannedDuration(proof.outward().edges(), proof.returning().edges());
             long labour = Math.addExact(Math.multiplyExact(Math.addExact(proof.outward().edges(), proof.returning().edges()),
