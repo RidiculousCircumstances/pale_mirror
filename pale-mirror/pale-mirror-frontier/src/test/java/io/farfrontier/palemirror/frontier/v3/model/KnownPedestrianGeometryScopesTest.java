@@ -13,15 +13,15 @@ class KnownPedestrianGeometryScopesTest {
         KnownPedestrianGeometryScopes.refresh(new Object(), Set.of(), Map.of());
         var interior = new BlockPosition(8, 64, 8);
         var boundary = new BlockPosition(15, 64, 15);
-        var before = NavigationGeometryState.empty().observe(0, Map.of(interior, java.util.Optional.of(NavigationCell.SOLID),
-                boundary, java.util.Optional.of(NavigationCell.SOLID)));
+        var before = NavigationGeometryState.empty().observe(0, Map.of(interior, NavigationObservation.known(NavigationCell.SOLID),
+                boundary, NavigationObservation.known(NavigationCell.SOLID)));
         KnownPedestrianGeometryScopes.observeShapes(null, before, Map.of());
         var revision = KnownPedestrianGeometryScopes.groundRevision();
-        var after = before.observe(1, Map.of(interior, java.util.Optional.of(NavigationCell.AIR)));
+        var after = before.observe(1, Map.of(interior, NavigationObservation.known(NavigationCell.AIR)));
         KnownPedestrianGeometryScopes.observeShapes(before, after, Map.of());
         assertEquals(Set.of(new PedestrianGeometryRevision.Region(0, 0)),
                 KnownPedestrianGeometryScopes.groundRevision().changesSince(revision));
-        var borderChange = after.observe(2, Map.of(boundary, java.util.Optional.empty()));
+        var borderChange = after.observe(2, Map.of(boundary, NavigationObservation.unavailable(NavigationObservation.Kind.WRITE_PENDING)));
         var next = KnownPedestrianGeometryScopes.groundRevision();
         KnownPedestrianGeometryScopes.observeShapes(after, borderChange, Map.of());
         assertTrue(KnownPedestrianGeometryScopes.groundRevision().changesSince(next)

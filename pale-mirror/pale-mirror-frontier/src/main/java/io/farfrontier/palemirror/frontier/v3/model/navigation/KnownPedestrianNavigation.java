@@ -88,6 +88,16 @@ public final class KnownPedestrianNavigation {
                         ? io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBodyGeometry.known(collisions, surface, UnitNavigationProfile.VILLAGER)
                         : surveyed.clearanceKnown(surface);
             }
+            @Override public java.util.Set<BlockPosition> missingGeometry(SurfaceAnchor surface) {
+                if (collisions.detailedAt(surface.x(), surface.z())) return io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBodyGeometry
+                        .missing(collisions, surface, UnitNavigationProfile.VILLAGER);
+                var missing = new java.util.HashSet<BlockPosition>();
+                for (int y = 0; y <= 2; y++) {
+                    var position = surface.support().offset(0, y, 0);
+                    if (!surveyed.blockKnown(position)) missing.add(position);
+                }
+                return java.util.Set.copyOf(missing);
+            }
             @Override public boolean canTraverse(SurfaceAnchor from, SurfaceAnchor to) {
                 if (!collisions.detailedAt(from.x(), from.z()) && !collisions.detailedAt(to.x(), to.z()))
                     return PedestrianRouteGeometry.super.canTraverse(from, to);
@@ -120,7 +130,7 @@ public final class KnownPedestrianNavigation {
     /** Geometry-only admission: no fictitious actor/order is needed to request a supported leg. */
     public static List<SurfaceAnchor> plannedBetween(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
         var result = queryBetween(geometry, start, target);
-        if (result.status() == PedestrianRouteResult.Status.PLANNING)
+        if (result.awaitable())
             PedestrianRoutePlanning.await(PedestrianRouteRequest.of(geometry, start, target));
         if (result.status() != PedestrianRouteResult.Status.FOUND)
             throw new RouteUnavailable(result.status(), result.reason());
@@ -130,7 +140,7 @@ public final class KnownPedestrianNavigation {
     /** Regional connectivity for alternative ranking. Never exposes cells to a movement executor. */
     public static PedestrianRouteEstimate estimateBetween(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
         var result = PedestrianRoutePlanning.query(geometry, start, target, PedestrianRouteExtent.ESTIMATE);
-        if (result.status() == PedestrianRouteResult.Status.PLANNING)
+        if (result.awaitable())
             PedestrianRoutePlanning.await(PedestrianRouteRequest.of(geometry, start, target, PedestrianRouteExtent.ESTIMATE));
         if (result.status() != PedestrianRouteResult.Status.ESTIMATED)
             throw new RouteUnavailable(result.status(), result.reason());
@@ -142,11 +152,6 @@ public final class KnownPedestrianNavigation {
 
     /** Calculation result only. An alternatives owner decides which unresolved requests actually block its result. */
     public static PedestrianRouteResult queryBetween(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
-        if (!geometry.clearanceKnown(start) || !geometry.clearanceKnown(target))
-            throw new RouteUnavailable(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY, "known endpoints lack current collision facts");
-        if (!geometry.bounds().contains(start.support()) || geometry.blocked(start)
-                || !geometry.bounds().contains(target.support()) || geometry.blocked(target))
-            throw new RouteUnavailable("known endpoints have no clear support/body column");
         var result = PedestrianRoutePlanning.query(geometry, start, target);
         if (result.status() == PedestrianRouteResult.Status.FOUND && (result.route().isEmpty()
                 || !result.route().getFirst().equals(start) || !result.route().getLast().equals(target)))
@@ -218,31 +223,26 @@ public final class KnownPedestrianNavigation {
         Objects.requireNonNull(geometry); Objects.requireNonNull(start); Objects.requireNonNull(order);
         if (order.capability() != TraversalCapability.PEDESTRIAN)
             throw new IllegalArgumentException("known pedestrian navigation cannot change actor capability");
-        if (!geometry.clearanceKnown(start))
-            throw new RouteUnavailable(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY, "known departure lacks current collision facts");
-        if (!geometry.bounds().contains(start.support()) || geometry.blocked(start))
+        if (!geometry.bounds().contains(start.support()) || geometry.clearanceKnown(start) && geometry.blocked(start))
             throw new RouteUnavailable("known pedestrian start has no clear support/body column");
         List<SurfaceAnchor> best = null;
         PedestrianRouteResult deferred = null;
         PedestrianRouteResult failure = null;
         var pendingRequests = new java.util.ArrayList<PedestrianRouteRequest>();
+        boolean calculating = false;
         for (SurfaceAnchor station : order.legalStations()) {
-            if (!geometry.clearanceKnown(station)) {
-                deferred = new PedestrianRouteResult(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY, List.of(), 0, 0,
-                        "GOAL_COLLISION_NOT_KNOWN");
-                continue;
-            }
-            if (!geometry.bounds().contains(station.support()) || geometry.blocked(station)) continue;
+            if (!geometry.bounds().contains(station.support()) || geometry.clearanceKnown(station) && geometry.blocked(station)) continue;
             // Explore one unresolved alternative at a time. Still inspect every
             // retained result: an already proven alternative must not wait for it.
-            if (deferredPlanning && !retainedOnly && (best != null || !pendingRequests.isEmpty())
+            if (deferredPlanning && !retainedOnly && (best != null || calculating)
                     && PedestrianRoutePlanning.peek(geometry, start, station, extent).isEmpty()) continue;
             PedestrianRouteResult result = retainedOnly ? PedestrianRoutePlanning.peek(geometry, start, station, extent)
                     .orElseGet(() -> new PedestrianRouteResult(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY,
                             List.of(), 0, 0, "ROUTE_NOT_CALCULATED"))
                     : deferredPlanning ? PedestrianRoutePlanning.query(geometry, start, station, extent)
                         : PedestrianRoutePlanning.calculate(geometry, start, station);
-            if (result.status() == PedestrianRouteResult.Status.PLANNING)
+            calculating |= result.status() == PedestrianRouteResult.Status.PLANNING;
+            if (result.awaitable())
                 pendingRequests.add(PedestrianRouteRequest.of(geometry, start, station, extent));
             if (result.status() == PedestrianRouteResult.Status.FOUND || result.status() == PedestrianRouteResult.Status.SEGMENT_READY) {
                 List<SurfaceAnchor> candidate = result.route();

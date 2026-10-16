@@ -14,6 +14,7 @@ public final class PedestrianPlanningWakeIndex {
     private final Map<PedestrianRouteRequest, Set<ScheduleId>> dependents = new LinkedHashMap<>();
     private final Set<ScheduleId> ready = new LinkedHashSet<>();
     private final Set<ScheduleId> parked = new HashSet<>();
+    private final Set<PedestrianRouteRequest> released = new LinkedHashSet<>();
 
     public void replace(ScheduledAction action, List<PedestrianRouteRequest> requests) {
         remove(action.id());
@@ -29,8 +30,13 @@ public final class PedestrianPlanningWakeIndex {
         if (previous == null) return;
         for (var request : previous.requests()) {
             var owners = dependents.get(request); owners.remove(id);
-            if (owners.isEmpty()) dependents.remove(request);
+            if (owners.isEmpty()) { dependents.remove(request); released.add(request); }
         }
+    }
+    /** Replacements are atomic at the process boundary: a refreshed/shared demand survives. */
+    public void releaseUnused(java.util.function.Consumer<PedestrianRouteRequest> release) {
+        for (var request : released) if (dependents.keySet().stream().noneMatch(request::sameDemand)) release.accept(request);
+        released.clear();
     }
     public void changed(List<PedestrianPlanningChange> changes) {
         for (var change : changes) ready.addAll(dependents.getOrDefault(change.request(), Set.of()));

@@ -14,6 +14,8 @@ final class PedestrianSearchTask {
     private PedestrianRouteGeometry searchGeometry;
     private CompletableFuture<Step> flight;
     private long work;
+    private long restarts;
+    private String stage = "QUEUED";
     private volatile boolean cancelled;
 
     PedestrianSearchTask(PedestrianRouteRequest request, Function<PedestrianRouteRequest, HierarchicalPedestrianSearch> factory) {
@@ -21,6 +23,8 @@ final class PedestrianSearchTask {
     }
     PedestrianRouteRequest request() { return request; }
     long workUnits() { return work; }
+    long restarts() { return restarts; }
+    String stage() { return stage; }
     PedestrianRegionDependencies dependencies() { return search.dependencies(); }
     boolean compatible(PedestrianRouteGeometry geometry) {
         return geometry == request.geometry() || flight == null && search.compatible(geometry);
@@ -32,7 +36,7 @@ final class PedestrianSearchTask {
     }
     Step advance(int budget, BooleanSupplier mayContinue) {
         search.prepareReuse();
-        Step step = calculate(search, budget, mayContinue); work += step.spent(); search.publishReuse(); return step;
+        Step step = calculate(search, budget, mayContinue); work += step.spent(); stage = step.result().reason(); search.publishReuse(); return step;
     }
     void submit(Executor executor, int budget) {
         if (flight != null || cancelled) throw new IllegalStateException("pedestrian slice already running or retired");
@@ -50,10 +54,11 @@ final class PedestrianSearchTask {
     Step poll() {
         if (flight == null || !flight.isDone()) return null;
         Step step = flight.join(); flight = null; work += step.spent();
+        stage = step.result().reason();
         if (cancelled) return step;
         if (searchGeometry != request.geometry()) {
             if (!search.rebase(request.geometry())) {
-                reset();
+                restarts++; stage = "CHANGED_WORKER_DEPENDENCY"; reset();
                 return new Step(new PedestrianRouteResult(PedestrianRouteResult.Status.PLANNING,
                         java.util.List.of(), 0, 0, "CHANGED_WORKER_DEPENDENCY"), step.spent());
             }

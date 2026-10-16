@@ -119,7 +119,7 @@ final class FrontierV3SemanticMovement {
 
     private static boolean hasSupport(ServerLevel level, BlockPos support) {
         return FrontierV3NavigationShapes.capture(level, new BlockPosition(support.getX(), support.getY(), support.getZ()))
-                .filter(cell -> cell.dry() && cell.shape().topAt(.5, .5).isPresent()).isPresent();
+                .cell().filter(cell -> cell.dry() && cell.shape().topAt(.5, .5).isPresent()).isPresent();
     }
 
     /** Uses the exact target body volume, so slabs and carpets are valid only when they really support this body. */
@@ -160,7 +160,7 @@ final class FrontierV3SemanticMovement {
      * lift to the integer cell above the anchor.
      */
     static Vec3 point(ServerLevel level, SurfaceAnchor surface) {
-        var cell = FrontierV3NavigationShapes.capture(level, surface.support());
+        var cell = FrontierV3NavigationShapes.capture(level, surface.support()).cell();
         var top = cell.isPresent() ? cell.orElseThrow().shape().topAt(.5, .5) : java.util.OptionalDouble.empty();
         // The nominal point is only a request coordinate; target admission above
         // rejects missing support. It must never grant an observed arrival.

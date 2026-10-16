@@ -8,10 +8,11 @@ import java.util.*;
 final class RetainedNavigationGeometry {
     private record Index(Map<TerrainColumn, List<BlockPosition>> columns, Set<TerrainColumn> detailed) { }
     private record Projection(RegionalBlockMap<Optional<NavigationCell>> cells, Map<Region, Index> index) { }
-    private static RegionalBlockMap<Optional<NavigationCell>> priorObserved = RegionalBlockMap.copyOf(Map.of());
+    private static RegionalBlockMap<NavigationObservation> priorObserved = RegionalBlockMap.copyOf(Map.of());
     private static RegionalBlockMap<NavigationBlockState> priorSources = RegionalBlockMap.copyOf(Map.of());
-    private static Map<NavigationBlockState, Optional<NavigationCell>> priorDefinitions = Map.of();
+    private static Map<NavigationBlockState, NavigationObservation> priorDefinitions = Map.of();
     private static Projection projected = new Projection(RegionalBlockMap.copyOf(Map.of()), Map.of());
+    private static final Set<Region> contextualRegions = new HashSet<>();
     private RetainedNavigationGeometry() { }
     static BoundedPedestrianApproach.SurveyedSurface overlay(BoundedPedestrianApproach.SurveyedSurface base,
                                                            NavigationGeometryState observations,
@@ -66,7 +67,16 @@ final class RetainedNavigationGeometry {
     private static synchronized Projection project(NavigationGeometryState observations, RegionalBlockMap<NavigationBlockState> sources) {
         var observed = RegionalBlockMap.copyOf(observations.cells());
         var changed = new HashSet<>(observed.changesFrom(priorObserved));
+        for (var region : changed) {
+            if (observed.in(region).values().stream().anyMatch(value -> !value.dependencies().isEmpty())) contextualRegions.add(region);
+            else contextualRegions.remove(region);
+        }
         changed.addAll(sources.changesFrom(priorSources));
+        // Contextual shapes can read a neighbouring region. Recompute only this
+        // bounded halo; captured neighbour identities also validate after recovery.
+        for (var region : Set.copyOf(changed)) for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++)
+            if (contextualRegions.contains(new Region(region.x() + dx, region.z() + dz)))
+                changed.add(new Region(region.x() + dx, region.z() + dz));
         if (priorDefinitions != observations.definitions() && !priorDefinitions.equals(observations.definitions())) {
             changed.addAll(sources.regions()); changed.addAll(priorSources.regions());
         }
@@ -75,13 +85,25 @@ final class RetainedNavigationGeometry {
         for (var region : changed) {
             var result = new HashMap<BlockPosition, Optional<NavigationCell>>();
             sources.in(region).forEach((position, block) -> {
-                var definition = observations.definitions().get(block);
+                var evidence = observations.definitions().get(block);
+                var definition = evidence == null ? null : evidence.cell();
                 if (definition != null && (definition.isEmpty() || !definition.orElseThrow().dry()
                         || !definition.orElseThrow().shape().equals(NavigationShape.FULL)
                             && !definition.orElseThrow().shape().equals(NavigationShape.EMPTY))) result.put(position, definition);
             });
-            observed.in(region).forEach((position, cell) -> {
+            observed.in(region).forEach((position, evidence) -> {
+                var cell = evidence.cell();
                 var current = sources.get(position);
+                // Validate the sampled block itself before its neighbours: a
+                // stale contextual shape must not fence a newer COLD source.
+                if (current != null && cell.isPresent()
+                        && !cell.orElseThrow().observedState().filter(current::equals).isPresent()) return;
+                for (var dependency : evidence.dependencies().entrySet()) {
+                    var currentDependency = sources.get(dependency.getKey());
+                    if (currentDependency != null && !dependency.getValue().filter(currentDependency::equals).isPresent()) {
+                        cell = Optional.empty(); break;
+                    }
+                }
                 // A retained native sample cannot resurrect a source block already mined in COLD.
                 if (current == null || cell.isEmpty() || cell.orElseThrow().observedState().filter(current::equals).isPresent())
                     result.put(position, cell);

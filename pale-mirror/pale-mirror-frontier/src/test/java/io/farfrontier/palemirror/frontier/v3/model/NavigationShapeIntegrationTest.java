@@ -10,6 +10,33 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class NavigationShapeIntegrationTest {
+    @Test void typedUnknownAndNeighbourDependenciesSurviveCodecAndColdChangesInvalidateCapturedShapes() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:context-shape"), 41));
+        var origin = new BlockPosition(20, 64, 20); var neighbour = origin.offset(1, 0, 0);
+        var stone = new NavigationBlockState("minecraft:stone", Map.of());
+        var air = new NavigationBlockState("minecraft:air", Map.of());
+        var evidence = NavigationObservation.known(new NavigationCell(NavigationShape.FULL, true, Optional.of(stone)),
+                Map.of(neighbour, Optional.of(stone)));
+        var update = new NavigationGeometryObserved(0, Map.of(origin, evidence));
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(update, codecs.decode(update.type(), codecs.encode(update)));
+        state = update.apply(state, NavigationGeometryObserved.OWNER);
+        var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
+        assertEquals(evidence, state.navigationGeometry().cells().get(origin));
+        var base = (BoundedPedestrianApproach.SurveyedSurface) (x, z) -> SurfaceAnchor.at(x, 63, z);
+        var before = RetainedNavigationGeometry.overlay(base, state.navigationGeometry(), Map.of(origin, stone, neighbour, stone));
+        assertTrue(before.collisionAt(origin).isPresent());
+        var after = RetainedNavigationGeometry.overlay(base, state.navigationGeometry(), Map.of(origin, stone, neighbour, air));
+        assertFalse(after.blockKnown(origin), "COLD neighbour change must not reuse the previous physical shape");
+        var replaced = RetainedNavigationGeometry.overlay(base, state.navigationGeometry(), Map.of(origin, air, neighbour, air));
+        assertTrue(replaced.blockKnown(origin), "a replaced source cannot inherit its old contextual shape's unknown fence");
+        for (var kind : NavigationObservation.Kind.values()) if (kind != NavigationObservation.Kind.KNOWN) {
+            var change = new NavigationGeometryObserved(1, Map.of(origin, NavigationObservation.unavailable(kind)));
+            assertEquals(change, codecs.decode(change.type(), codecs.encode(change)));
+        }
+        assertThrows(IllegalArgumentException.class, () -> NavigationObservation.known(NavigationCell.AIR,
+                Map.of(neighbour, Optional.empty())));
+    }
     @Test void knownFluidBesideFarmlandDoesNotInvalidateDryContactButCannotBeCrossed() {
         var support = SurfaceAnchor.at(0, 63, 0);
         var farmland = new NavigationCell(new NavigationShape(List.of(new NavigationShape.Box(0, 0, 0, 1, .9375, 1))), true);
@@ -26,7 +53,7 @@ class NavigationShapeIntegrationTest {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:shape-catalog"), 41));
         var block = new NavigationBlockState("minecraft:stone_slab", Map.of("type", "bottom", "waterlogged", "false"));
         var shape = new NavigationCell(SLAB.shape(), true, Optional.of(block));
-        var update = new NavigationGeometryObserved(0, Map.of(), Map.of(block, Optional.of(shape)));
+        var update = new NavigationGeometryObserved(0, Map.of(), Map.of(block, NavigationObservation.known(shape)));
         var registry = FrontierWorldRuntimeDefinition.processRegistry();
         var owner = registry.requireCommandOwner(update.type());
         assertEquals("navigation-geometry", owner);
@@ -49,7 +76,7 @@ class NavigationShapeIntegrationTest {
         var overlay = RetainedNavigationGeometry.overlay(base, recovered.navigationGeometry(), Map.of(source, block));
         assertEquals(Optional.of(shape), overlay.collisionAt(source));
         assertTrue(recovered.navigationGeometry().cells().isEmpty(), "COLD catalog needs no physical visit");
-        assertThrows(IllegalArgumentException.class, () -> new NavigationGeometryState(0, Map.of(), Map.of(block, Optional.of(NavigationCell.SOLID))));
+        assertThrows(IllegalArgumentException.class, () -> new NavigationGeometryState(0, Map.of(), Map.of(block, NavigationObservation.known(NavigationCell.SOLID))));
         var old = codec.encode(changed); old[4] = 1; old[5] = 31; // old schema287
         assertThrows(IllegalArgumentException.class, () -> codec.decode(old));
     }
@@ -77,7 +104,7 @@ class NavigationShapeIntegrationTest {
     @Test void shapeObservationSurvivesOrdinaryStateUpdatesAndRecoveryAndInvalidatesOnlyLocalGraphs() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:shapes"), 41));
         var position = new BlockPosition(20, 64, 20);
-        var observed = new NavigationGeometryObserved(0, Map.of(position, Optional.of(SLAB)));
+        var observed = new NavigationGeometryObserved(0, Map.of(position, NavigationObservation.known(SLAB)));
         state = observed.apply(state, NavigationGeometryObserved.OWNER);
         var unchanged = state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory()));
         assertSame(state.navigationGeometry(), unchanged.navigationGeometry());
@@ -87,7 +114,7 @@ class NavigationShapeIntegrationTest {
         assertThrows(IllegalArgumentException.class, () -> observed.apply(previous, NavigationGeometryObserved.OWNER));
         assertThrows(IllegalArgumentException.class, () -> observed.apply(previous, new SubjectId("foreign:geometry")));
         var before = KnownPedestrianRouteKnowledge.forFrontier(recovered).geometry().regionalRevision().orElseThrow();
-        var next = new NavigationGeometryObserved(1, Map.of(position, Optional.of(NavigationCell.AIR))).apply(recovered, NavigationGeometryObserved.OWNER);
+        var next = new NavigationGeometryObserved(1, Map.of(position, NavigationObservation.known(NavigationCell.AIR))).apply(recovered, NavigationGeometryObserved.OWNER);
         var after = KnownPedestrianRouteKnowledge.forFrontier(next).geometry().regionalRevision().orElseThrow();
         assertTrue(after.changesSince(before).contains(new PedestrianGeometryRevision.Region(1, 1)));
         assertFalse(after.changesSince(before).contains(new PedestrianGeometryRevision.Region(20, 20)));
@@ -95,13 +122,13 @@ class NavigationShapeIntegrationTest {
     @Test void retainedOverlayDrivesTheActualProfiledPlannerAndUnknownNeverMeansAir() {
         var bootstrap = FrontierBootstrapper.create(new WorldId("frontier:shape-route"), 41);
         var from = SurfaceAnchor.at(20, 64, 20); var to = SurfaceAnchor.at(21, 64, 20);
-        var observations = NavigationGeometryState.empty().observe(0, Map.of(from.support(), Optional.of(SLAB)));
+        var observations = NavigationGeometryState.empty().observe(0, Map.of(from.support(), NavigationObservation.known(SLAB)));
         var base = (BoundedPedestrianApproach.SurveyedSurface) (x, z) -> SurfaceAnchor.at(x, 64, z);
         var overlay = RetainedNavigationGeometry.overlay(base, observations, Map.of());
         var geometry = new ProfiledPedestrianGeometry(KnownPedestrianNavigation.geometry(bootstrap, Set.of(), overlay),
                 UnitNavigationProfile.VILLAGER, ignored -> false);
         assertTrue(geometry.canTraverse(from, to));
-        var missing = observations.observe(1, Map.of(from.support().offset(0, 1, 0), Optional.empty()));
+        var missing = observations.observe(1, Map.of(from.support().offset(0, 1, 0), NavigationObservation.unavailable(NavigationObservation.Kind.WRITE_PENDING)));
         var unknown = new ProfiledPedestrianGeometry(KnownPedestrianNavigation.geometry(bootstrap, Set.of(),
                 RetainedNavigationGeometry.overlay(base, missing, Map.of())), UnitNavigationProfile.VILLAGER, ignored -> false);
         assertFalse(unknown.clearanceKnown(from));
@@ -112,7 +139,7 @@ class NavigationShapeIntegrationTest {
         var p = new BlockPosition(20, 64, 20);
         var stone = new NavigationBlockState("minecraft:stone", Map.of());
         var air = new NavigationBlockState("minecraft:air", Map.of());
-        var samples = NavigationGeometryState.empty().observe(0, Map.of(p, Optional.of(new NavigationCell(NavigationShape.FULL, true, Optional.of(stone)))));
+        var samples = NavigationGeometryState.empty().observe(0, Map.of(p, NavigationObservation.known(new NavigationCell(NavigationShape.FULL, true, Optional.of(stone)))));
         var base = (BoundedPedestrianApproach.SurveyedSurface) (x, z) -> SurfaceAnchor.at(x, 63, z);
         var overlay = RetainedNavigationGeometry.overlay(base, samples, Map.of(p, air));
         assertTrue(overlay.collisionAt(p).isEmpty());

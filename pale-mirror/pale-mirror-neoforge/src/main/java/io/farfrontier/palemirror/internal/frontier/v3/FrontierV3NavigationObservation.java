@@ -21,7 +21,8 @@ final class FrontierV3NavigationObservation {
         boolean fenceRejected;
         final Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, Pose> seen = new HashMap<>();
         final Set<BlockPosition> dirty = new LinkedHashSet<>();
-        final Map<BlockPosition, Optional<NavigationCell>> captured = new HashMap<>();
+        Set<BlockPosition> demands = Set.of();
+        Iterator<BlockPosition> demandCursor = Collections.emptyIterator();
     }
     private record Pose(BodyPosition position, java.lang.ref.WeakReference<Object> loadedChunk) {
         boolean matches(BodyPosition current, Object chunk) { return position.equals(current) && loadedChunk.get() == chunk; }
@@ -38,6 +39,7 @@ final class FrontierV3NavigationObservation {
         var state = runtime.decodedState().orElse(null); if (state == null) return;
         var window = window(level, state);
         if (registerDefinitions(level, runtime, state, window)) return;
+        enqueueDemands(level, runtime, state, window);
         if (observePending(level, runtime, state, window)) return;
         if (window.seen.size() > 4096) window.seen.clear();
         if (window.cursor >= window.roster.size()) {
@@ -66,7 +68,7 @@ final class FrontierV3NavigationObservation {
                 // Retire only unavailable *requests*, never their durable unknown fences.
                 // The loaded actor roster is rearmed, so a later visit resamples them.
                 window.dirty.removeIf(cell -> level.getChunkSource().getChunkNow(cell.x() >> 4, cell.z() >> 4) == null);
-                window.captured.keySet().retainAll(window.dirty); window.seen.clear();
+                window.seen.clear();
                 if (window.dirty.size() + envelopeSize > MAX_PENDING_CELLS) return;
             }
             for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) for (int dy = -2; dy <= top; dy++) {
@@ -81,7 +83,7 @@ final class FrontierV3NavigationObservation {
     private static boolean observePending(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             FrontierWorldState state, Window window) {
         if (window.dirty.isEmpty()) return false;
-        var changes = new LinkedHashMap<BlockPosition, Optional<NavigationCell>>();
+        var changes = new LinkedHashMap<BlockPosition, NavigationObservation>();
         // Absence of a loaded chunk is NOT an observation that invalidates retained
         // COLD knowledge. Rotate unavailable requests so a chunk edge cannot fence
         // observation of other actors; actual pre-write unknown fences stay retained.
@@ -91,18 +93,37 @@ final class FrontierV3NavigationObservation {
         }
         changes.putAll(captureAvailable(batch,
                 position -> level.getChunkSource().getChunkNow(position.x() >> 4, position.z() >> 4) != null,
-                position -> window.captured.containsKey(position) ? window.captured.get(position)
-                        : FrontierV3NavigationShapes.capture(level, position)));
+                position -> FrontierV3NavigationShapes.capture(level, position)));
         if (changes.isEmpty()) return false;
         var surveyed = Set.copyOf(changes.keySet());
-        if (publish(runtime, state, changes)) { window.dirty.removeAll(surveyed); surveyed.forEach(window.captured::remove); }
+        if (publish(runtime, state, changes)) window.dirty.removeAll(surveyed);
         return true;
     }
-    /** Empty sample means positively unsupported; an absent chunk produces no sample at all. */
-    static Map<BlockPosition, Optional<NavigationCell>> captureAvailable(List<BlockPosition> positions,
+    private static void enqueueDemands(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime,
+            FrontierWorldState state, Window window) {
+        var demands = FrontierV3PedestrianPlanning.knowledgeDemands(runtime);
+        if (window.demands != demands || !window.demandCursor.hasNext()) {
+            window.demands = demands; window.demandCursor = demands.iterator();
+        }
+        for (int i = 0; i < 125 && window.demandCursor.hasNext() && window.dirty.size() < MAX_PENDING_CELLS; i++) {
+            var position = window.demandCursor.next();
+            if (!state.bootstrap().bounds().contains(position)
+                    || level.getChunkSource().getChunkNow(position.x() >> 4, position.z() >> 4) == null) continue;
+            var prior = state.navigationGeometry().cells().get(position);
+            if (prior != null && switch (prior.kind()) {
+                case KNOWN, WRITE_PENDING, NOT_OBSERVED, CHUNK_UNAVAILABLE, NEIGHBOUR_UNAVAILABLE -> false;
+                default -> true;
+            }) continue;
+            if (prior != null && prior.dependencies().keySet().stream().anyMatch(dependency ->
+                    level.getChunkSource().getChunkNow(dependency.x() >> 4, dependency.z() >> 4) == null)) continue;
+            window.dirty.add(position);
+        }
+    }
+    /** Loaded samples retain typed evidence; an absent chunk produces no sample at all. */
+    static Map<BlockPosition, NavigationObservation> captureAvailable(List<BlockPosition> positions,
             java.util.function.Predicate<BlockPosition> available,
-            java.util.function.Function<BlockPosition, Optional<NavigationCell>> capture) {
-        var result = new LinkedHashMap<BlockPosition, Optional<NavigationCell>>();
+            java.util.function.Function<BlockPosition, NavigationObservation> capture) {
+        var result = new LinkedHashMap<BlockPosition, NavigationObservation>();
         for (var position : positions) if (available.test(position)) result.put(position, capture.apply(position));
         return result;
     }
@@ -110,15 +131,14 @@ final class FrontierV3NavigationObservation {
                                                FrontierWorldState state, Window window) {
         var declarations = KnownNavigationBlocks.forState(state);
         if (window.declarations == declarations) return false;
-        var additions = new LinkedHashMap<NavigationBlockState, Optional<NavigationCell>>();
+        var additions = new LinkedHashMap<NavigationBlockState, NavigationObservation>();
         var checked = new HashSet<NavigationBlockState>();
         for (var block : declarations.values()) {
             // Definitions are adapter-produced facts. Revalidate once per runtime,
             // including retained UNKNOWN from an older adapter, without loading land.
             if (window.checkedDefinitions.contains(block) || !checked.add(block)) continue;
             var nativeState = FrontierV3BlockStates.resolve(block);
-            var cell = nativeState.hasOffsetFunction() ? Optional.<NavigationCell>empty()
-                    : FrontierV3NavigationShapes.declared(nativeState, new BlockPosition(0, 0, 0), level.getHeight(), level.getMinBuildHeight());
+            var cell = FrontierV3NavigationShapes.declared(nativeState, new BlockPosition(0, 0, 0), level.getHeight(), level.getMinBuildHeight());
             if (!Objects.equals(state.navigationGeometry().definitions().get(block), cell)) additions.put(block, cell);
             if (checked.size() == 32) break;
         }
@@ -137,32 +157,35 @@ final class FrontierV3NavigationObservation {
         var state = runtime.passiveOwnershipState().orElse(null); if (state == null) return true;
         var position = new BlockPosition(physical.getX(), physical.getY(), physical.getZ());
         if (!state.bootstrap().bounds().contains(position)) return true;
-        var changes = new LinkedHashMap<BlockPosition, Optional<NavigationCell>>();
+        var changes = new LinkedHashMap<BlockPosition, NavigationObservation>();
         var window = window(level, state);
         if (committed) {
-            if (window.dirty.contains(position)
-                    && level.getChunkSource().getChunkNow(position.x() >> 4, position.z() >> 4) != null)
-                window.captured.put(position, FrontierV3NavigationShapes.capture(level, position));
+            // Capture at publication time: later neighbour updates in the same physical
+            // operation must not leave a cached pre-update dependent shape.
             return true;
         }
         var chunk = level.getChunkSource().getChunkNow(physical.getX() >> 4, physical.getZ() >> 4);
         if (chunk == null || chunk.getBlockState(physical).equals(replacement)) return true;
-        var before = FrontierV3NavigationShapes.capture(level, position);
-        var after = FrontierV3NavigationShapes.declared(replacement, position, level.getHeight(), level.getMinBuildHeight());
-        if (before.isPresent() && after.isPresent() && before.orElseThrow().shape().equals(after.orElseThrow().shape())
+        var before = FrontierV3NavigationShapes.capture(level, position).cell();
+        var after = FrontierV3NavigationShapes.declared(replacement, position, level.getHeight(), level.getMinBuildHeight()).cell();
+        // Retained contextual samples own exact neighbour dependencies. Invalidate
+        // them before the write even when this block's own collision stays equal.
+        int radius = NavigationObservation.DEPENDENCY_RADIUS;
+        for (int dx = -radius; dx <= radius; dx++) for (int dy = -radius; dy <= radius; dy++) for (int dz = -radius; dz <= radius; dz++) {
+            var dependent = position.offset(dx, dy, dz);
+            var evidence = state.navigationGeometry().cells().get(dependent);
+            if (evidence != null && evidence.dependencies().containsKey(position))
+                changes.put(dependent, NavigationObservation.unavailable(NavigationObservation.Kind.WRITE_PENDING, evidence.dependencies()));
+        }
+        if (changes.isEmpty() && before.isPresent() && after.isPresent() && before.orElseThrow().shape().equals(after.orElseThrow().shape())
                 && before.orElseThrow().dry() == after.orElseThrow().dry()) return true;
-        if (!state.navigationGeometry().cells().containsKey(position) && after.isPresent()) {
+        if (changes.isEmpty() && !state.navigationGeometry().cells().containsKey(position) && after.isPresent()) {
             var planned = KnownPedestrianRouteKnowledge.forFrontier(state).geometry().collisions().orElseThrow().cell(position);
             if (planned.isPresent() && planned.orElseThrow().shape().equals(after.orElseThrow().shape())
                     && planned.orElseThrow().dry() == after.orElseThrow().dry()) return true;
         }
-        // The shape adapter retains self-state-only facts. A block change invalidates
-        // that cell, not 26 independent neighbours (possibly unloaded). Neighbour
-        // state changes enter their own write hook; protruding-volume dependencies
-        // are expanded by the navigation revision owner, not invented observations.
-        changes.put(position, Optional.empty());
-        window.dirty.add(position);
-        window.captured.remove(position);
+        changes.put(position, NavigationObservation.unavailable(NavigationObservation.Kind.WRITE_PENDING));
+        window.dirty.addAll(changes.keySet());
         if (!changes.isEmpty() && (runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE || !publish(runtime, state, changes))) {
             if (!window.fenceRejected) io.farfrontier.palemirror.PaleMirrorMod.LOGGER.warn(
                     "PMV3_NAVIGATION_WRITE_WAIT position={} geometryRevision={} reason=KNOWLEDGE_FENCE_NOT_ADMITTED runtime={}",
@@ -174,17 +197,30 @@ final class FrontierV3NavigationObservation {
         return true;
     }
     private static boolean publish(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
-                                   Map<BlockPosition, Optional<NavigationCell>> observations) {
+                                   Map<BlockPosition, NavigationObservation> observations) {
         var known = KnownPedestrianRouteKnowledge.forFrontier(state).geometry().collisions().orElseThrow();
+        var confirmed = new HashSet<BlockPosition>();
+        observations.forEach((position, evidence) -> { if (evidence.cell().isPresent()) confirmed.add(position); });
         observations.entrySet().removeIf(entry -> {
-            if (state.navigationGeometry().cells().containsKey(entry.getKey())) return false;
-            var expected = known.cell(entry.getKey()); var actual = entry.getValue();
+            if (state.navigationGeometry().cells().containsKey(entry.getKey()) || !entry.getValue().dependencies().isEmpty()) return false;
+            var expected = known.cell(entry.getKey()); var actual = entry.getValue().cell();
             return expected.isPresent() && actual.isPresent() && expected.orElseThrow().shape().equals(actual.orElseThrow().shape())
                     && expected.orElseThrow().dry() == actual.orElseThrow().dry();
         });
         observations.entrySet().removeIf(entry -> Objects.equals(state.navigationGeometry().cells().get(entry.getKey()), entry.getValue()));
-        if (observations.isEmpty()) return true;
-        return FrontierV3CommandSubmission.submitResult(runtime, "navigation-geometry", NavigationGeometryObserved.OWNER.value(),
+        // A worker on an older immutable view may finish AFTER the publication
+        // which supplied its missing fact. A demand-driven no-op resample must
+        // still wake that wait; it needs no duplicate durable geometry event.
+        if (observations.isEmpty()) {
+            FrontierV3PedestrianPlanning.geometryObserved(runtime, confirmed);
+            return true;
+        }
+        boolean accepted = FrontierV3CommandSubmission.submitResult(runtime, "navigation-geometry", NavigationGeometryObserved.OWNER.value(),
                 new NavigationGeometryObserved(state.navigationGeometry().revision(), observations)) instanceof CommandResult.Accepted;
+        if (accepted) {
+            confirmed.addAll(observations.keySet());
+            FrontierV3PedestrianPlanning.geometryObserved(runtime, confirmed);
+        }
+        return accepted;
     }
 }

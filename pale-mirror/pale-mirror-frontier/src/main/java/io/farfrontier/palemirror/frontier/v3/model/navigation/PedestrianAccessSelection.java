@@ -37,7 +37,7 @@ public final class PedestrianAccessSelection {
             var result = entry.getValue();
             if (result.status() == PedestrianRouteResult.Status.FOUND || result.status() == PedestrianRouteResult.Status.NO_PATH) continue;
             if (first == null) first = result;
-            if (result.status() == PedestrianRouteResult.Status.PLANNING)
+            if (result.awaitable())
                 PedestrianRoutePlanning.await(PedestrianRouteRequest.of(geometry, origin, entry.getKey()));
         }
         if (first != null) throw new KnownPedestrianNavigation.RouteUnavailable(first.status(), first.reason());

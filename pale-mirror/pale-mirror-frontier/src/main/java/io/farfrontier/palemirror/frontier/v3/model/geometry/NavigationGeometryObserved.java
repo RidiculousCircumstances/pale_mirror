@@ -6,11 +6,11 @@ import java.util.*;
 
 /** One bounded atomic replacement of observed navigation facts, including explicit invalidations. */
 public record NavigationGeometryObserved(long expectedRevision,
-        Map<BlockPosition, Optional<NavigationCell>> cells,
-        Map<NavigationBlockState, Optional<NavigationCell>> definitions) implements FrontierPayload {
+        Map<BlockPosition, NavigationObservation> cells,
+        Map<NavigationBlockState, NavigationObservation> definitions) implements FrontierPayload {
     public static final SubjectId OWNER = new SubjectId("geometry:navigation");
     public static final String TYPE = "frontier.navigation_geometry_observed";
-    public NavigationGeometryObserved(long expectedRevision, Map<BlockPosition, Optional<NavigationCell>> cells) {
+    public NavigationGeometryObserved(long expectedRevision, Map<BlockPosition, NavigationObservation> cells) {
         this(expectedRevision, cells, Map.of());
     }
     public NavigationGeometryObserved {

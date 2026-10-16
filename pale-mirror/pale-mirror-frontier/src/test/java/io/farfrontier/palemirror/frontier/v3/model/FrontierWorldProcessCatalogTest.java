@@ -318,7 +318,8 @@ class FrontierWorldProcessCatalogTest {
                 Map.entry("pedestrian-planning", new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPlanningReady(
                         io.farfrontier.palemirror.frontier.v3.process.UnitGroupProcess.progress(new SubjectId("group:representative"), 6000))),
                 Map.entry("navigation-geometry", new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved(
-                        0, Map.of(new BlockPosition(0, 64, 0), Optional.empty()))),
+                        0, Map.of(new BlockPosition(0, 64, 0), io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.unavailable(
+                                io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.Kind.WRITE_PENDING)))),
                 Map.entry("transport-missions", new TransportMissionRetired(new SubjectId("mission:representative"), 1L)),
                 Map.entry("expedition-supplies", new ExpeditionSupplyColdLoaded(new SubjectId("mission:representative"), new SubjectId("claim:representative"))),
                 Map.entry("unit-inventory", new UnitInventoryDispositionObserved(

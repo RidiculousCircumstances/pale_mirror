@@ -10,6 +10,15 @@ public final class NavigationBodyGeometry {
     public enum Clearance { CLEAR, BLOCKED, UNKNOWN }
     private NavigationBodyGeometry() { }
 
+    /** Exact missing reads from the same clearance calculation, not an invented survey radius. */
+    public static Set<BlockPosition> missing(NavigationCollisionView view, SurfaceAnchor support, UnitNavigationProfile profile) {
+        var missing = new LinkedHashSet<BlockPosition>();
+        boolean known = known(position -> {
+            var cell = view.cell(position); if (cell.isEmpty()) missing.add(position); return cell;
+        }, support, profile);
+        return known ? Set.of() : Set.copyOf(missing);
+    }
+
     public static boolean known(NavigationCollisionView view, SurfaceAnchor support, UnitNavigationProfile profile) {
         var source = view.cell(support.support()); if (source.isEmpty()) return false;
         boolean unknown = false;

@@ -51,6 +51,7 @@ final class FrontierV3PedestrianPlanning {
                     (FrontierWorldState) runtime.decodedState().orElseThrow(), runtime.executionView().orElseThrow());
         }
         if (owner != runtime) throw new IllegalStateException("pedestrian planning has a foreign runtime owner");
+        continuations.releaseUnused(planner::discardUnobserved);
         long started = System.nanoTime();
         planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * slices,
                 () -> System.nanoTime() - started < allowance);
@@ -78,6 +79,13 @@ final class FrontierV3PedestrianPlanning {
             admitted++;
         }
     }
+    static synchronized java.util.Set<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> knowledgeDemands(FrontierV3ServerRuntime<?, ?> runtime) {
+        return owner == runtime ? planner.knowledgeDemands() : java.util.Set.of();
+    }
+    static synchronized void geometryObserved(FrontierV3ServerRuntime<?, ?> runtime,
+            java.util.Set<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> positions) {
+        if (owner == runtime) planner.geometryObserved(positions);
+    }
     static synchronized String diagnostic(FrontierV3ServerRuntime<?, ?> runtime) {
         var capacity = runtime.commandAdmissionCapacity().orElseThrow();
         return "{\"waiting\":" + (owner == runtime ? continuations.waitingCount() : 0)
@@ -96,6 +104,7 @@ final class FrontierV3PedestrianPlanning {
                 + ",\"completedSearches\":" + (owner == runtime ? planner.completedCount() : 0)
                 + ",\"searchProgressRevision\":" + (owner == runtime ? planner.progressRevision() : 0)
                 + ",\"oldestRequests\":" + waitingDiagnostic(runtime)
+                + ",\"geometryWaits\":" + knowledgeDiagnostic(runtime)
                 + ",\"wakeSafetyMaximum\":" + MAX_WAKE_COMMANDS_PER_TURN
                 + ",\"availableReceipts\":" + capacity.availableReceipts()
                 + ",\"maximumReceipts\":" + capacity.maximumReceipts()
@@ -116,8 +125,26 @@ final class FrontierV3PedestrianPlanning {
                 + "],\"to\":[" + wait.target().x() + "," + wait.target().y() + "," + wait.target().z()
                 + "],\"phase\":\"" + (wait.deferred() ? "CAPACITY_WAIT" : "SEARCHING")
                 + "\",\"detail\":\"" + wait.extent().detail() + "\",\"maximumSurfaces\":" + wait.extent().maximumSurfaces()
-                + ",\"waitPlanningTurns\":" + wait.waitTurns() + ",\"searchWorkUnits\":" + wait.searchWorkUnits() + "}")
+                + ",\"waitPlanningTurns\":" + wait.waitTurns() + ",\"searchWorkUnits\":" + wait.searchWorkUnits()
+                + ",\"stage\":\"" + wait.stage() + "\",\"restarts\":" + wait.restarts() + "}")
                 .collect(java.util.stream.Collectors.joining(",", "[", "]"));
+    }
+    private static String knowledgeDiagnostic(FrontierV3ServerRuntime<?, ?> runtime) {
+        if (owner != runtime) return "[]";
+        var state = (FrontierWorldState) runtime.decodedState().orElseThrow();
+        return planner.knowledgeDiagnostics(8).stream().map(wait -> {
+            var cells = wait.result().missingGeometry().stream().sorted(java.util.Comparator
+                    .comparingInt(io.farfrontier.palemirror.frontier.v3.model.BlockPosition::x)
+                    .thenComparingInt(io.farfrontier.palemirror.frontier.v3.model.BlockPosition::y)
+                    .thenComparingInt(io.farfrontier.palemirror.frontier.v3.model.BlockPosition::z)).limit(8).map(position -> {
+                var evidence = state.navigationGeometry().cells().get(position);
+                return "{\"position\":[" + position.x() + "," + position.y() + "," + position.z() + "],\"observation\":\""
+                        + (evidence == null ? "NOT_OBSERVED" : evidence.kind().name()) + "\"}";
+            }).collect(java.util.stream.Collectors.joining(",", "[", "]"));
+            return "{\"from\":[" + wait.start().x() + "," + wait.start().y() + "," + wait.start().z()
+                    + "],\"to\":[" + wait.target().x() + "," + wait.target().y() + "," + wait.target().z()
+                    + "],\"reason\":\"" + wait.result().reason() + "\",\"missingCells\":" + cells + "}";
+        }).collect(java.util.stream.Collectors.joining(",", "[", "]"));
     }
     static synchronized void forget(FrontierV3ServerRuntime<?, ?> runtime) {
         if (owner != runtime) return;

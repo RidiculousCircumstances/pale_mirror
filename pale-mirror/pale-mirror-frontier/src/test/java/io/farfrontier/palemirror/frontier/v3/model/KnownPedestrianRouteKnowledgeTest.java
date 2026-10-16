@@ -145,7 +145,7 @@ class KnownPedestrianRouteKnowledgeTest {
                         new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationShape.Box(
                                 .0625, 0, .0625, .9375, .875, .9375))), true);
         state = new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved(0,
-                Map.of(block, Optional.of(chest))).apply(state,
+                Map.of(block, io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.known(chest))).apply(state,
                 io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved.OWNER);
         var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
         for (var current : List.of(state, codec.decode(codec.encode(state)))) {

@@ -7,7 +7,7 @@ public final class KnownBlockCollision {
     private KnownBlockCollision() { }
     public static Optional<NavigationCell> resolve(NavigationGeometryState knowledge, NavigationBlockState block) {
         var definition = knowledge.definitions().get(block);
-        if (definition != null) return definition;
+        if (definition != null) return definition.cell();
         // Authored bootstrap facts remain usable before the native registry has
         // published its catalog. This list grants only known state-independent
         // vanilla cubes/air, never a guessed shape for an unregistered block.
@@ -27,7 +27,7 @@ public final class KnownBlockCollision {
         var definition = knowledge.definitions().get(block);
         // A declared opaque bootstrap obstacle grants no support or passage.
         // Native registration can refine it; an explicitly unavailable definition stays unknown.
-        return definition == null ? Optional.of(KnownBlockClearance.navigationCell(block.kind())) : definition.map(KnownBlockCollision::coarse);
+        return definition == null ? Optional.of(KnownBlockClearance.navigationCell(block.kind())) : definition.cell().map(KnownBlockCollision::coarse);
     }
     public static boolean potentialSupport(NavigationGeometryState knowledge, NavigationBlockState block) {
         return resolve(knowledge, block).filter(cell -> cell.dry() && !cell.shape().boxes().isEmpty()).isPresent();

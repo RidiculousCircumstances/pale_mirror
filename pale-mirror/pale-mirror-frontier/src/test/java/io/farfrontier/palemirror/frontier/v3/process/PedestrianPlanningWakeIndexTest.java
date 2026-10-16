@@ -11,6 +11,17 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPlanningWakeIndexTest {
+    @Test void onlyLastRetiredConsumerReleasesCalculationAndReplacementDoesNotCancelIt() {
+        var index = new PedestrianPlanningWakeIndex();
+        var a = action("owner-a", 20); var b = action("owner-b", 20); var query = request(3);
+        var released = new java.util.ArrayList<PedestrianRouteRequest>();
+        index.replace(a, List.of(query)); index.replace(b, List.of(query));
+        index.replace(a, List.of(query)); index.releaseUnused(released::add);
+        assertTrue(released.isEmpty());
+        index.remove(a.id()); index.releaseUnused(released::add); assertTrue(released.isEmpty());
+        index.remove(b.id()); index.releaseUnused(released::add); assertEquals(List.of(query), released);
+        index.releaseUnused(released::add); assertEquals(1, released.size());
+    }
     @Test void regionalRebaseWakesOnlyTheExactOldAddressThenTheSelectedSuccessorWithoutLosingWork() {
         var revision = PedestrianGeometryRevision.initial(); var next = revision.changed(java.util.Set.of(new PedestrianGeometryRevision.Region(12, 0)));
         java.util.function.Function<PedestrianGeometryRevision, PedestrianRouteGeometry> geometry = current -> new PedestrianRouteGeometry() {

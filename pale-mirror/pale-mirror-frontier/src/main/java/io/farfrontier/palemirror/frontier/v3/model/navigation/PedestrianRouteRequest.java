@@ -21,4 +21,13 @@ public record PedestrianRouteRequest(PedestrianRouteGeometry geometry, Object ve
                                             PedestrianRouteExtent extent) {
         return new PedestrianRouteRequest(geometry, geometry.version(), start, target, extent);
     }
+    /** Same demand across immutable geometry refreshes, never across task/profile scopes. */
+    public boolean sameDemand(PedestrianRouteRequest other) {
+        if (!start.equals(other.start) || !target.equals(other.target) || !extent.equals(other.extent)) return false;
+        if (geometry == other.geometry) return true;
+        var left = geometry.regionalRevision(); var right = other.geometry.regionalRevision();
+        return left.isPresent() && right.isPresent() && geometry.bounds().equals(other.geometry.bounds())
+                && left.orElseThrow().scope().equals(right.orElseThrow().scope())
+                && left.orElseThrow().geometryScope().equals(right.orElseThrow().geometryScope());
+    }
 }

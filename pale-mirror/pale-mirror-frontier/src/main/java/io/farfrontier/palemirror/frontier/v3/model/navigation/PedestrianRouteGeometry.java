@@ -22,6 +22,10 @@ public interface PedestrianRouteGeometry {
     boolean blocked(SurfaceAnchor surface);
     /** Missing current block facts are a wait, not proof that a route is impossible. */
     default boolean clearanceKnown(SurfaceAnchor surface) { return true; }
+    /** Missing evidence only; implementations with collision volumes report exact reads. */
+    default java.util.Set<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> missingGeometry(SurfaceAnchor surface) {
+        return clearanceKnown(surface) ? java.util.Set.of() : java.util.Set.of(surface.support());
+    }
     default boolean blockKnown(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) { return true; }
     default java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCollisionView> collisions() { return java.util.Optional.empty(); }
     /** Positive knowledge that this exact support was removed or forbidden, not missing knowledge. */

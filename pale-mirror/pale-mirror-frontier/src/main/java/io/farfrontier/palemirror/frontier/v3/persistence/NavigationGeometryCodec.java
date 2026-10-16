@@ -16,13 +16,49 @@ final class NavigationGeometryCodec {
         return new NavigationGeometryState(in.readLong(), readCells(in, NavigationGeometryState.MAX_CELLS),
                 readDefinitions(in, NavigationGeometryState.MAX_DEFINITIONS));
     }
-    private static void writeCells(DataOutputStream out, Map<BlockPosition, Optional<NavigationCell>> cells) throws IOException {
+    private static void writeCells(DataOutputStream out, Map<BlockPosition, NavigationObservation> cells) throws IOException {
         out.writeInt(cells.size());
         for (var position : cells.keySet().stream().sorted(Comparator.comparingInt(BlockPosition::x)
                 .thenComparingInt(BlockPosition::y).thenComparingInt(BlockPosition::z)).toList()) {
             FrontierWorldStateCodec.writePosition(out, position);
-            writeCell(out, cells.get(position));
+            writeObservation(out, cells.get(position));
         }
+    }
+    private static void writeObservation(DataOutputStream out, NavigationObservation value) throws IOException {
+        out.writeInt(value.kind().wireTag()); writeCell(out, value.cell());
+        out.writeInt(value.dependencies().size());
+        for (var position : value.dependencies().keySet().stream().sorted(Comparator.comparingInt(BlockPosition::x)
+                .thenComparingInt(BlockPosition::y).thenComparingInt(BlockPosition::z)).toList()) {
+            FrontierWorldStateCodec.writePosition(out, position);
+            var block = value.dependencies().get(position); out.writeBoolean(block.isPresent());
+            if (block.isPresent()) writeBlock(out, block.orElseThrow());
+        }
+    }
+    private static NavigationObservation readObservation(DataInputStream in, Optional<BlockPosition> origin) throws IOException {
+        var kind = NavigationObservation.Kind.requireWireTag(in.readInt()); var cell = readCell(in);
+        int count = in.readInt();
+        if (count < 0 || count > NavigationObservation.MAX_DEPENDENCIES || origin.isEmpty() && count != 0)
+            throw new IllegalArgumentException("unbounded navigation dependencies");
+        var dependencies = new HashMap<BlockPosition, Optional<NavigationBlockState>>();
+        for (int i = 0; i < count; i++) {
+            var position = FrontierWorldStateCodec.readPosition(in);
+            var block = in.readBoolean() ? Optional.of(readBlock(in)) : Optional.<NavigationBlockState>empty();
+            if (dependencies.put(position, block) != null) throw new IllegalArgumentException("duplicate navigation dependency");
+        }
+        var observation = new NavigationObservation(kind, cell, dependencies);
+        origin.ifPresent(observation::requireAt); return observation;
+    }
+    private static void writeBlock(DataOutputStream out, NavigationBlockState block) throws IOException {
+        out.writeUTF(block.kind()); out.writeInt(block.properties().size());
+        for (var entry : new TreeMap<>(block.properties()).entrySet()) { out.writeUTF(entry.getKey()); out.writeUTF(entry.getValue()); }
+    }
+    private static NavigationBlockState readBlock(DataInputStream in) throws IOException {
+        String kind = in.readUTF(); int count = in.readInt();
+        if (count < 0 || count > 32) throw new IllegalArgumentException("unbounded navigation dependency properties");
+        var properties = new TreeMap<String, String>();
+        for (int i = 0; i < count; i++) if (properties.put(in.readUTF(), in.readUTF()) != null)
+            throw new IllegalArgumentException("duplicate navigation dependency property");
+        return new NavigationBlockState(kind, properties);
     }
     private static void writeCell(DataOutputStream out, Optional<NavigationCell> value) throws IOException {
             out.writeBoolean(value.isPresent());
@@ -41,12 +77,12 @@ final class NavigationGeometryCodec {
                 out.writeDouble(box.maxX()); out.writeDouble(box.maxY()); out.writeDouble(box.maxZ());
             }
     }
-    private static Map<BlockPosition, Optional<NavigationCell>> readCells(DataInputStream in, int bound) throws IOException {
+    private static Map<BlockPosition, NavigationObservation> readCells(DataInputStream in, int bound) throws IOException {
         int count = in.readInt(); if (count < 0 || count > bound) throw new IllegalArgumentException("unbounded geometry cells");
-        var cells = new LinkedHashMap<BlockPosition, Optional<NavigationCell>>();
+        var cells = new LinkedHashMap<BlockPosition, NavigationObservation>();
         for (int i = 0; i < count; i++) {
             var position = FrontierWorldStateCodec.readPosition(in);
-            if (cells.put(position, readCell(in)) != null) throw new IllegalArgumentException("duplicate navigation cell");
+            if (cells.put(position, readObservation(in, Optional.of(position))) != null) throw new IllegalArgumentException("duplicate navigation cell");
         }
         return Map.copyOf(cells);
     }
@@ -71,25 +107,25 @@ final class NavigationGeometryCodec {
             }
             return cell;
     }
-    private static void writeDefinitions(DataOutputStream out, Map<NavigationBlockState, Optional<NavigationCell>> values) throws IOException {
+    private static void writeDefinitions(DataOutputStream out, Map<NavigationBlockState, NavigationObservation> values) throws IOException {
         out.writeInt(values.size());
         for (var block : values.keySet().stream().sorted(Comparator.comparing(NavigationBlockState::kind)
                 .thenComparing(value -> new TreeMap<>(value.properties()).toString())).toList()) {
             out.writeUTF(block.kind()); out.writeInt(block.properties().size());
             for (var entry : new TreeMap<>(block.properties()).entrySet()) { out.writeUTF(entry.getKey()); out.writeUTF(entry.getValue()); }
-            writeCell(out, values.get(block));
+            writeObservation(out, values.get(block));
         }
     }
-    private static Map<NavigationBlockState, Optional<NavigationCell>> readDefinitions(DataInputStream in, int bound) throws IOException {
+    private static Map<NavigationBlockState, NavigationObservation> readDefinitions(DataInputStream in, int bound) throws IOException {
         int count = in.readInt(); if (count < 0 || count > bound) throw new IllegalArgumentException("unbounded shape definitions");
-        var result = new HashMap<NavigationBlockState, Optional<NavigationCell>>();
+        var result = new HashMap<NavigationBlockState, NavigationObservation>();
         for (int i = 0; i < count; i++) {
             String kind = in.readUTF(); int size = in.readInt();
             if (size < 0 || size > 32) throw new IllegalArgumentException("unbounded definition properties");
             var properties = new TreeMap<String, String>();
             for (int p = 0; p < size; p++) if (properties.put(in.readUTF(), in.readUTF()) != null)
                 throw new IllegalArgumentException("duplicate definition property");
-            if (result.put(new NavigationBlockState(kind, properties), readCell(in)) != null)
+            if (result.put(new NavigationBlockState(kind, properties), readObservation(in, Optional.empty())) != null)
                 throw new IllegalArgumentException("duplicate shape definition");
         }
         return Map.copyOf(result);

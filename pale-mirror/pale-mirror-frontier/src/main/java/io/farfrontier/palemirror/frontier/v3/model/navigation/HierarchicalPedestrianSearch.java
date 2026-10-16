@@ -51,6 +51,7 @@ public final class HierarchicalPedestrianSearch {
     private java.util.function.BooleanSupplier mayContinue = () -> true;
     private PedestrianLocalSearch localSearch;
     private PedestrianLocalSearch reverseLocalSearch;
+    private PedestrianLocalSearch destinationProbe;
     private PedestrianCorridorJoin corridorJoin;
     private final PedestrianCorridorCache corridors;
     private PedestrianCorridorCache.Corridor attemptedCorridor;
@@ -61,6 +62,7 @@ public final class HierarchicalPedestrianSearch {
     private boolean destinationChecked;
     private int endpointsChecked;
     private int destinationNode, destinationEdge, destinationDirection = -1, destinationOffset, destinationExit, destinationEntrance;
+    private java.util.Set<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> missingGeometry = java.util.Set.of();
 
     public HierarchicalPedestrianSearch(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
         this(geometry, start, target, new PedestrianRegionCache());
@@ -111,6 +113,7 @@ public final class HierarchicalPedestrianSearch {
         geometry = current;
         if (localSearch != null) localSearch.rebase(current);
         if (reverseLocalSearch != null) reverseLocalSearch.rebase(current);
+        if (destinationProbe != null) destinationProbe.rebase(current);
         if (corridorJoin != null) corridorJoin.rebase(current);
         if (itineraryJoin != null) itineraryJoin.rebase(current);
         return true;
@@ -144,8 +147,14 @@ public final class HierarchicalPedestrianSearch {
                 dependencies.put(tile, geometry.regionalRevision().map(value -> value.at(tile.x(), tile.z())).orElse(geometry.version()));
                 if (!geometry.bounds().contains(endpoint.support()) || geometry.supportExcluded(endpoint))
                     return finish(PedestrianRouteResult.Status.NO_PATH, "ENDPOINT_KNOWN_REMOVED_OR_FORBIDDEN");
-                if (!geometry.knowsSupport(endpoint) || !geometry.clearanceKnown(endpoint))
+                if (!geometry.knowsSupport(endpoint) || !geometry.clearanceKnown(endpoint)) {
+                    missingGeometry = geometry.missingGeometry(endpoint).stream().sorted(java.util.Comparator
+                            .comparingInt(io.farfrontier.palemirror.frontier.v3.model.BlockPosition::x)
+                            .thenComparingInt(io.farfrontier.palemirror.frontier.v3.model.BlockPosition::y)
+                            .thenComparingInt(io.farfrontier.palemirror.frontier.v3.model.BlockPosition::z))
+                            .limit(512).collect(java.util.stream.Collectors.toUnmodifiableSet());
                     return finish(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY, "ENDPOINT_LEVEL_NOT_KNOWN");
+                }
                 if (geometry.blocked(endpoint))
                     return finish(PedestrianRouteResult.Status.NO_PATH, "ENDPOINT_KNOWN_BLOCKED_SUPPORT");
             }
@@ -158,6 +167,7 @@ public final class HierarchicalPedestrianSearch {
                 return finish(PedestrianRouteResult.Status.FOUND, "EXACT_LOCAL_ROUTE");
             }
             if (localSearch.disconnected()) return finish(PedestrianRouteResult.Status.NO_PATH, "KNOWN_ISOLATED_SOURCE_COMPONENT");
+            if (localSearch.knowledgeBlocked()) return knowledgeWait(localSearch, "SOURCE_COMPONENT_NEEDS_GEOMETRY");
             localSearch = null; // No positive proof: retain full regional completeness.
             if (work >= limit || !mayContinue.getAsBoolean()) return result(PedestrianRouteResult.Status.PLANNING, "REGIONAL_SEARCH_IN_PROGRESS");
         }
@@ -169,6 +179,7 @@ public final class HierarchicalPedestrianSearch {
                 return finish(PedestrianRouteResult.Status.FOUND, "EXACT_REVERSE_LOCAL_ROUTE");
             }
             if (reverseLocalSearch.disconnected()) return finish(PedestrianRouteResult.Status.NO_PATH, "KNOWN_ISOLATED_TARGET_COMPONENT");
+            if (reverseLocalSearch.knowledgeBlocked()) return knowledgeWait(reverseLocalSearch, "TARGET_COMPONENT_NEEDS_GEOMETRY");
             reverseLocalSearch = null;
             if (work >= limit || !mayContinue.getAsBoolean()) return result(PedestrianRouteResult.Status.PLANNING, "REGIONAL_SEARCH_IN_PROGRESS");
         }
@@ -220,6 +231,7 @@ public final class HierarchicalPedestrianSearch {
         while (!destinationChecked && work < limit && mayContinue.getAsBoolean()) {
             int reachable = probeDestination();
             if (reachable > 0) destinationChecked = true;
+            if (reachable == -2) return knowledgeWait(destinationProbe, "TARGET_COMPONENT_NEEDS_GEOMETRY");
             if (reachable < 0) return finish(PedestrianRouteResult.Status.NO_PATH, "KNOWN_ISOLATED_TARGET_COMPONENT");
         }
         if (!destinationChecked) return result(PedestrianRouteResult.Status.PLANNING, "TARGET_CONNECTIVITY_IN_PROGRESS");
@@ -340,7 +352,19 @@ public final class HierarchicalPedestrianSearch {
     /** 1 means possible incoming access, -1 proved isolation, 0 cooperative continuation. */
     private int probeDestination() {
         var local = regions.get(destination.tile());
-        if (local.unknown() || queue.peek().node().equals(destination)) { work++; return 1; }
+        if (queue.peek().node().equals(destination)) { work++; return 1; }
+        if (local.unknown()) {
+            // Unknown elsewhere in a chunk says nothing about this goal's
+            // incoming component. Exhaust its bounded exact frontier first.
+            if (destinationProbe == null) destinationProbe = new PedestrianLocalSearch(geometry, target, start, surface -> {
+                var tile = PedestrianRegion.Tile.at(surface);
+                dependencies.put(tile, geometry.regionalRevision().map(revision -> revision.at(tile.x(), tile.z())).orElse(geometry.version()));
+            }, true);
+            work += destinationProbe.advance(Math.toIntExact(turnLimit - work), mayContinue);
+            if (!destinationProbe.finished()) return 0;
+            if (destinationProbe.knowledgeBlocked()) return -2;
+            return destinationProbe.disconnected() ? -1 : 1;
+        }
         if (destinationDirection < 0) {
             work++;
             if (destinationNode == local.size()) { destinationDirection = 0; return 0; }
@@ -464,9 +488,14 @@ public final class HierarchicalPedestrianSearch {
     private PedestrianRouteResult unavailable(String reason) {
         return finish(unknown ? PedestrianRouteResult.Status.UNKNOWN_GEOMETRY : PedestrianRouteResult.Status.NO_PATH, reason);
     }
+    private PedestrianRouteResult knowledgeWait(PedestrianLocalSearch search, String reason) {
+        missingGeometry = search.missingGeometry();
+        return finish(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY, reason);
+    }
     private PedestrianRouteResult finish(PedestrianRouteResult.Status status, String reason) { terminal = extent.limit(result(status, reason)); return terminal; }
     private PedestrianRouteResult result(PedestrianRouteResult.Status status, String reason) {
         return new PedestrianRouteResult(status, status == PedestrianRouteResult.Status.FOUND || status == PedestrianRouteResult.Status.SEGMENT_READY
-                ? route : List.of(), work, regions.size(), reason);
+                ? route : List.of(), work, regions.size(), reason, java.util.Optional.empty(),
+                status == PedestrianRouteResult.Status.UNKNOWN_GEOMETRY ? missingGeometry : java.util.Set.of());
     }
 }

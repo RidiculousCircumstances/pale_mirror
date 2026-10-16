@@ -30,7 +30,7 @@ final class KnownPedestrianGeometryScopes {
             Map<BlockPosition, io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBlockState> sourceBlocks) {
         var cells = io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockMap.copyOf(current.cells());
         var previous = io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockMap.copyOf(
-                prior == null ? java.util.Map.<BlockPosition, java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell>>of() : prior.cells());
+                prior == null ? java.util.Map.<BlockPosition, io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation>of() : prior.cells());
         var positions = new HashSet<BlockPosition>();
         var sources = io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockMap.copyOf(sourceBlocks);
         for (var region : sources.changesFrom(priorShapeSources)) {
@@ -44,6 +44,15 @@ final class KnownPedestrianGeometryScopes {
         for (var region : cells.changesFrom(previous)) {
             addChangedPositions(positions, cells.in(region), previous.in(region));
         }
+        // A changed neighbour can alter a contextual shape which itself extends
+        // across the next chunk boundary. Include the exact dependent origin
+        // before applying the ordinary shape-protrusion halo.
+        for (var position : Set.copyOf(positions))
+            for (int dx = -1; dx <= 1; dx++) for (int dy = -1; dy <= 1; dy++) for (int dz = -1; dz <= 1; dz++) {
+                var dependent = position.offset(dx, dy, dz);
+                var evidence = cells.get(dependent);
+                if (evidence != null && evidence.dependencies().containsKey(position)) positions.add(dependent);
+            }
         var regions = new HashSet<PedestrianGeometryRevision.Region>();
         for (var position : positions) {
             // Shapes may protrude into the neighbouring cell and depend on neighbouring states.

@@ -7,6 +7,19 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPlanningDemandTest {
+    @Test void retiringLastConsumerCancelsItsRebasedWorkerWithoutPublishingAnArrival() {
+        var tasks = new ArrayList<Runnable>(); var revision = PedestrianGeometryRevision.initial();
+        var old = ground(revision); var next = ground(revision.changed(Set.of(new PedestrianGeometryRevision.Region(7, 0))));
+        var start = SurfaceAnchor.at(1, 63, 1); var goal = SurfaceAnchor.at(90, 63, 1);
+        try (var planner = new CooperativePedestrianPlanner(tasks::add)) {
+            planner.query(old, start, goal); planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK);
+            planner.query(next, start, goal);
+            planner.discardUnobserved(PedestrianRouteRequest.of(old, start, goal));
+            tasks.forEach(Runnable::run); planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK);
+            assertEquals(0, planner.pendingCount()); assertEquals(0, planner.inFlightCount());
+            assertEquals(0, planner.completedCount()); assertTrue(planner.peek(next, start, goal).isEmpty());
+        }
+    }
     private static PedestrianRouteGeometry ground(PedestrianGeometryRevision revision) {
         return new PedestrianRouteGeometry() {
             public Object version() { return revision; }

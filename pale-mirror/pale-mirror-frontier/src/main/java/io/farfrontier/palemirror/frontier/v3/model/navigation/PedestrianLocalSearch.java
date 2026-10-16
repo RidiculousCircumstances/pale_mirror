@@ -23,6 +23,7 @@ final class PedestrianLocalSearch {
     private List<SurfaceAnchor> neighbours;
     private List<SurfaceAnchor> result;
     private boolean finished, unknown, exhausted;
+    private final Set<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> missing = new LinkedHashSet<>();
     PedestrianLocalSearch(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target, Consumer<SurfaceAnchor> observed) {
         this(geometry, start, target, observed, false);
     }
@@ -46,7 +47,7 @@ final class PedestrianLocalSearch {
                 observed.accept(candidate.surface());
                 var levels = geometry.surfacesAt(candidate.surface().x(), candidate.surface().z());
                 if (!levels.contains(candidate.surface()) && !geometry.supportExcluded(candidate.surface())) unknown = true;
-                if (!geometry.clearanceKnown(candidate.surface())) unknown = true;
+                if (!geometry.clearanceKnown(candidate.surface())) recordUnknown(candidate.surface());
                 if (levels.size() > PedestrianRegionBuild.MAX_LEVELS) { finished = true; break; }
                 if (levels.stream().distinct().count() != levels.size())
                     throw new IllegalArgumentException("local navigation column contains duplicate levels");
@@ -70,8 +71,8 @@ final class PedestrianLocalSearch {
             if (neighbours == null) {
                 observed.accept(SurfaceAnchor.at(x, expanding.y(), z));
                 neighbours = geometry.surfacesAt(x, z);
-                if (neighbours.stream().anyMatch(surface -> !geometry.clearanceKnown(surface))) unknown = true;
-                if (neighbours.isEmpty()) unknown = true;
+                for (var surface : neighbours) if (!geometry.clearanceKnown(surface)) recordUnknown(surface);
+                if (neighbours.isEmpty()) recordUnknown(SurfaceAnchor.at(x, expanding.y(), z));
                 if (neighbours.size() > PedestrianRegionBuild.MAX_LEVELS) { finished = true; break; }
                 if (neighbours.stream().distinct().count() != neighbours.size())
                     throw new IllegalArgumentException("local navigation column contains duplicate levels");
@@ -96,5 +97,20 @@ final class PedestrianLocalSearch {
     }
     boolean finished() { return finished; }
     boolean disconnected() { return exhausted && !unknown; }
+    boolean knowledgeBlocked() { return exhausted && unknown; }
+    Set<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> missingGeometry() { return Set.copyOf(missing); }
+    private void recordUnknown(SurfaceAnchor surface) {
+        unknown = true;
+        var facts = geometry.missingGeometry(surface);
+        if (facts.isEmpty()) facts = Set.of(surface.support());
+        // A bounded observation window can be filled in successive publications.
+        // A partial demand never becomes a claim that the remainder is known.
+        for (var fact : facts.stream().sorted(Comparator.comparingInt(io.farfrontier.palemirror.frontier.v3.model.BlockPosition::x)
+                .thenComparingInt(io.farfrontier.palemirror.frontier.v3.model.BlockPosition::y)
+                .thenComparingInt(io.farfrontier.palemirror.frontier.v3.model.BlockPosition::z)).toList()) {
+            if (missing.size() == 512) break;
+            missing.add(fact); observed.accept(new SurfaceAnchor(fact));
+        }
+    }
     List<SurfaceAnchor> result() { return result; }
 }

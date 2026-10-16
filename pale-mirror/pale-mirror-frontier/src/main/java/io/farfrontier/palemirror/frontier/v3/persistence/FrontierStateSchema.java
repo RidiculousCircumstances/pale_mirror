@@ -5,7 +5,7 @@ import java.io.*;
 /** Sole header grammar for early installed-world selection and complete aggregate hydration. */
 final class FrontierStateSchema {
     // Market identity retains legal home, not a permanent container. Exact trade endpoints stay on contracts.
-    static final int VERSION = 289;
+    static final int VERSION = 290;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

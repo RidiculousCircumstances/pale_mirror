@@ -12,6 +12,7 @@ import net.minecraft.world.level.block.state.properties.SlabType;
 import net.neoforged.neoforge.gametest.*;
 import java.util.List;
 import java.util.Optional;
+import io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation;
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.*;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
@@ -22,6 +23,42 @@ import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinit
 @PrefixGameTestTemplate(false)
 public final class FrontierV3NavigationShapeGameTests {
     private FrontierV3NavigationShapeGameTests() { }
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 60)
+    public static void neighbourWriteFencesOnlyItsDependentsAndObservationPublishesTorchAsKnownEmpty(GameTestHelper helper) {
+        var level = helper.getLevel(); var pos = helper.absolutePos(new BlockPos(3, 2, 3));
+        var neighbourPos = pos.north();
+        var origin = new BlockPosition(pos.getX(), pos.getY(), pos.getZ());
+        var neighbour = new BlockPosition(neighbourPos.getX(), neighbourPos.getY(), neighbourPos.getZ());
+        var bootstrap = FrontierV3AmbientPhysicsGameTests.translatedBootstrap(FrontierBootstrapper.create(
+                new WorldId("frontier:neighbour-observation"), 41), pos.getX(), pos.getY() - 64, pos.getZ());
+        level.setBlock(pos, Blocks.STONE.defaultBlockState(), 2);
+        level.setBlock(neighbourPos, Blocks.STONE.defaultBlockState(), 2);
+        var runtime = FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(bootstrap), new EphemeralStore(), 10_000);
+        try {
+            var sample = FrontierV3NavigationShapes.capture(level, origin).cell().orElseThrow();
+            var evidence = NavigationObservation.known(sample, java.util.Map.of(neighbour, Optional.of(FrontierV3BlockStates.describe(Blocks.STONE.defaultBlockState()))));
+            FrontierV3CommandSubmission.submit(runtime, "shape-dependent", "test",
+                    new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved(0, java.util.Map.of(origin, evidence)));
+            helper.assertTrue(FrontierV3NavigationObservation.blockWrite(level, runtime, neighbourPos, Blocks.TORCH.defaultBlockState(), false),
+                    "ordinary physical mutation can install its durable fence");
+            var fenced = runtime.decodedState().orElseThrow().navigationGeometry();
+            helper.assertTrue(fenced.cells().get(origin).kind() == NavigationObservation.Kind.WRITE_PENDING
+                    && fenced.cells().get(neighbour).kind() == NavigationObservation.Kind.WRITE_PENDING,
+                    "both the changed cell and exact contextual dependent are fenced before effects");
+            level.setBlock(neighbourPos, Blocks.TORCH.defaultBlockState(), 2);
+            FrontierV3NavigationObservation.blockWrite(level, runtime, neighbourPos, Blocks.TORCH.defaultBlockState(), true);
+            for (int i = 0; i < 12 && runtime.decodedState().orElseThrow().navigationGeometry().cells().get(neighbour).cell().isEmpty(); i++)
+                FrontierV3NavigationObservation.tick(level, runtime);
+            var observed = runtime.decodedState().orElseThrow().navigationGeometry();
+            helper.assertTrue(observed.cells().get(neighbour).cell().orElseThrow().shape().boxes().isEmpty(),
+                    "a real torch publishes empty collision, never an unresolved fence");
+            helper.assertTrue(observed.cells().get(origin).cell().isPresent(), "dependent is resampled without actor movement or a timer retry");
+        } finally {
+            runtime.shutdown(); level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2); level.setBlock(neighbourPos, Blocks.AIR.defaultBlockState(), 2);
+        }
+        helper.succeed();
+    }
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 60)
     public static void realObservationProducerRegistersColdDefinitionsWithoutMaterializingAWorld(GameTestHelper helper) {
@@ -58,14 +95,14 @@ public final class FrontierV3NavigationShapeGameTests {
         var p = new BlockPosition(20, 64, 20);
         try {
             var fence = new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved(0,
-                    java.util.Map.of(p, Optional.empty()));
+                    java.util.Map.of(p, NavigationObservation.unavailable(NavigationObservation.Kind.WRITE_PENDING)));
             helper.assertTrue(FrontierV3CommandSubmission.submitResult(first, "shape-fence", "test", fence) instanceof CommandResult.Accepted,
                     "write fence must be durable before physical mutation");
         } finally { store.close(); } // Abrupt process boundary: no runtime checkpoint.
         var second = FrontierV3ServerRuntime.start(config, new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         try {
             var recovered = second.decodedState().orElseThrow();
-            helper.assertTrue(recovered.navigationGeometry().cells().containsKey(p) && recovered.navigationGeometry().cells().get(p).isEmpty(),
+            helper.assertTrue(recovered.navigationGeometry().cells().containsKey(p) && recovered.navigationGeometry().cells().get(p).kind() == NavigationObservation.Kind.WRITE_PENDING,
                     "WAL recovery must not turn an unresolved physical write into bootstrap air");
             var slab = FrontierV3NavigationShapes.declared(Blocks.OAK_SLAB.defaultBlockState(), p, helper.getLevel().getHeight(), helper.getLevel().getMinBuildHeight());
             FrontierV3CommandSubmission.submit(second, "shape-observed", "test",
@@ -73,7 +110,7 @@ public final class FrontierV3NavigationShapeGameTests {
         } finally { second.shutdown(); }
         var third = FrontierV3ServerRuntime.start(config, new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         try {
-            helper.assertTrue(third.decodedState().orElseThrow().navigationGeometry().cells().get(p).orElseThrow().shape()
+            helper.assertTrue(third.decodedState().orElseThrow().navigationGeometry().cells().get(p).cell().orElseThrow().shape()
                     .topAt(.5, .5).orElseThrow() == .5, "checkpoint recovery retains native fractional support");
         } finally { third.shutdown(); }
         helper.succeed();
@@ -87,10 +124,11 @@ public final class FrontierV3NavigationShapeGameTests {
                 Blocks.OAK_SLAB.defaultBlockState().setValue(SlabBlock.TYPE, SlabType.TOP),
                 Blocks.STONE_STAIRS.defaultBlockState().setValue(StairBlock.FACING, Direction.NORTH),
                 Blocks.STONE_STAIRS.defaultBlockState().setValue(StairBlock.FACING, Direction.EAST),
-                Blocks.OAK_FENCE.defaultBlockState(), Blocks.FARMLAND.defaultBlockState())) {
+                Blocks.OAK_FENCE.defaultBlockState(), Blocks.FARMLAND.defaultBlockState(),
+                Blocks.TORCH.defaultBlockState(), Blocks.WALL_TORCH.defaultBlockState())) {
             level.setBlock(pos, state, 2);
-            var captured = FrontierV3NavigationShapes.capture(level, support).orElseThrow();
-            var declared = FrontierV3NavigationShapes.declared(state, support, level.getHeight(), level.getMinBuildHeight()).orElseThrow();
+            var captured = FrontierV3NavigationShapes.capture(level, support).cell().orElseThrow();
+            var declared = FrontierV3NavigationShapes.declared(state, support, level.getHeight(), level.getMinBuildHeight()).cell().orElseThrow();
             helper.assertTrue(captured.equals(declared), "COLD declared state and HOT state need identical geometry: " + state);
             helper.assertTrue(captured.shape().boxes().size() == state.getCollisionShape(level, pos).toAabbs().size(),
                     "adapter retains native boxes, not a full-cube approximation");
@@ -109,12 +147,12 @@ public final class FrontierV3NavigationShapeGameTests {
         var level = helper.getLevel(); var pos = helper.absolutePos(new BlockPos(3, 2, 3));
         var point = new BlockPosition(pos.getX(), pos.getY(), pos.getZ());
         level.setBlock(pos, Blocks.POWDER_SNOW.defaultBlockState(), 2);
-        helper.assertTrue(FrontierV3NavigationShapes.capture(level, point).isEmpty(),
+        helper.assertTrue(FrontierV3NavigationShapes.capture(level, point).kind() == NavigationObservation.Kind.DYNAMIC_SHAPE_UNSUPPORTED,
                 "powder snow needs an entity context, not an empty-context universal answer");
         var lava = FrontierV3NavigationShapes.declared(Blocks.LAVA.defaultBlockState(), point, level.getHeight(), level.getMinBuildHeight());
-        helper.assertTrue(lava.isPresent() && !lava.orElseThrow().dry(), "fluid is a known hazard, not unknown geometry");
+        helper.assertTrue(lava.cell().isPresent() && !lava.cell().orElseThrow().dry(), "fluid is a known hazard, not unknown geometry");
         var water = FrontierV3NavigationShapes.declared(Blocks.WATER.defaultBlockState(), point, level.getHeight(), level.getMinBuildHeight());
-        helper.assertTrue(water.isPresent() && !water.orElseThrow().dry(), "irrigation must not poison neighbouring dry contacts");
+        helper.assertTrue(water.cell().isPresent() && !water.cell().orElseThrow().dry(), "irrigation must not poison neighbouring dry contacts");
         level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2);
         helper.succeed();
     }

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
+import io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -31,12 +32,12 @@ class ResidentMealKnownNavigationTest {
                 new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationShape(List.of(
                         new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationShape.Box(
                                 .0625, 0, .0625, .9375, .875, .9375))), true);
-        var captured = new java.util.LinkedHashMap<BlockPosition, Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell>>();
-        captured.put(block, Optional.of(chest));
+        var captured = new java.util.LinkedHashMap<BlockPosition, NavigationObservation>();
+        captured.put(block, NavigationObservation.known(chest));
         for (var neighbor : List.of(ground.support().offset(1, 0, 0), ground.support().offset(-1, 0, 0),
                 ground.support().offset(0, 0, 1), ground.support().offset(0, 0, -1))) {
-            captured.put(neighbor, Optional.of(io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.SOLID));
-            captured.put(neighbor.offset(0, 1, 0), Optional.of(io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.AIR));
+            captured.put(neighbor, NavigationObservation.known(io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.SOLID));
+            captured.put(neighbor.offset(0, 1, 0), NavigationObservation.known(io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.AIR));
         }
         state = new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved(0,
                 captured).apply(state,

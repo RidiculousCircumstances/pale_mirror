@@ -29,6 +29,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     private long progressRevision;
     private long turns;
     private long completedCount;
+    private java.util.Set<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> knowledgeDemandCache;
     private final Map<PedestrianRouteRequest, Long> admittedAt = new LinkedHashMap<>();
     private final Map<Object, PedestrianRouteGeometry> synchronizedScopes = new LinkedHashMap<>();
 
@@ -147,6 +148,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
             var oldest = completed.keySet().iterator().next(); removeCompleted(oldest); invalidated(oldest);
         }
         completed.put(request, new Completed(result, dependency)); retainedSurfaces += result.route().size();
+        knowledgeDemandCache = null;
         retainedRegions += dependency.revisions().size();
         changes.put(request, PedestrianPlanningChange.Kind.RESULT_AVAILABLE);
         admitDeferred();
@@ -178,10 +180,30 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         var retained = suspended.remove(request); if (retained != null) retained.cancel();
     }
     @Override public synchronized void discardUnobserved(PedestrianRouteRequest request) {
+        for (var retained : java.util.List.copyOf(admittedAt.keySet())) if (request.sameDemand(retained)) discardExact(retained);
+    }
+    private void discardExact(PedestrianRouteRequest request) {
         var search = pending.remove(request);
         if (search != null) { search.cancel(); inFlight.remove(search); ready.remove(request); }
         deferred.remove(request); discardSuspended(request);
         if (admittedAt.containsKey(request)) invalidated(request);
+    }
+    /** Bounded missing facts from completed unknown results; no active worker is polled or surveyed. */
+    public synchronized java.util.Set<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> knowledgeDemands() {
+        if (knowledgeDemandCache != null) return knowledgeDemandCache;
+        var positions = new java.util.LinkedHashSet<io.farfrontier.palemirror.frontier.v3.model.BlockPosition>();
+        for (var value : completed.values()) positions.addAll(value.result().missingGeometry());
+        knowledgeDemandCache = java.util.Set.copyOf(positions); return knowledgeDemandCache;
+    }
+    /** An actual geometry publication addresses dependent waits; a timer is not new knowledge. */
+    public synchronized void geometryObserved(java.util.Set<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> positions) {
+        for (var entry : java.util.List.copyOf(completed.entrySet())) {
+            var result = entry.getValue().result();
+            if (result.status() == PedestrianRouteResult.Status.UNKNOWN_GEOMETRY
+                    && result.missingGeometry().stream().anyMatch(positions::contains)) {
+                removeCompleted(entry.getKey()); invalidated(entry.getKey());
+            }
+        }
     }
     @Override public synchronized boolean hasCalculation(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target,
                                                          PedestrianRouteExtent extent) {
@@ -193,6 +215,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     public synchronized long progressRevision() { return progressRevision; }
     private void invalidated(PedestrianRouteRequest request) { admittedAt.remove(request); fairness.remove(request); changes.put(request, PedestrianPlanningChange.Kind.INVALIDATED); }
     private void removeCompleted(PedestrianRouteRequest request) {
+        knowledgeDemandCache = null;
         var removed = completed.remove(request);
         retainedSurfaces -= removed.result().route().size(); retainedRegions -= removed.dependencies().revisions().size();
     }
@@ -300,7 +323,13 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         return admittedAt.values().stream().mapToLong(since -> turns - since).max().orElse(0L);
     }
     public record WaitingDiagnostic(SurfaceAnchor start, SurfaceAnchor target, boolean deferred,
-                                    long waitTurns, long searchWorkUnits, PedestrianRouteExtent extent) { }
+                                    long waitTurns, long searchWorkUnits, PedestrianRouteExtent extent, String stage, long restarts) { }
+    public record KnowledgeDiagnostic(SurfaceAnchor start, SurfaceAnchor target, PedestrianRouteResult result) { }
+    public synchronized java.util.List<KnowledgeDiagnostic> knowledgeDiagnostics(int maximum) {
+        if (maximum < 0 || maximum > MAX_RESULTS) throw new IllegalArgumentException("unbounded knowledge diagnostics");
+        return completed.entrySet().stream().filter(entry -> entry.getValue().result().status() == PedestrianRouteResult.Status.UNKNOWN_GEOMETRY)
+                .limit(maximum).map(entry -> new KnowledgeDiagnostic(entry.getKey().start(), entry.getKey().target(), entry.getValue().result())).toList();
+    }
     /** Read-only bounded oldest-first view. It cannot advance, rebase, admit or wake anything. */
     public synchronized java.util.List<WaitingDiagnostic> waitingDiagnostics(int maximum) {
         if (maximum < 0 || maximum > MAX_PENDING + MAX_RESULTS)
@@ -308,7 +337,8 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         return admittedAt.entrySet().stream().sorted(Map.Entry.comparingByValue()).limit(maximum).map(entry -> {
             var request = entry.getKey(); var search = pending.get(request);
             return new WaitingDiagnostic(request.start(), request.target(), search == null,
-                    turns - entry.getValue(), search == null ? 0L : search.workUnits(), request.extent());
+                    turns - entry.getValue(), search == null ? 0L : search.workUnits(), request.extent(),
+                    search == null ? "CAPACITY_WAIT" : search.stage(), search == null ? 0 : search.restarts());
         }).toList();
     }
     public synchronized long completedCount() { return completedCount; }
@@ -323,5 +353,6 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         pending.clear(); inFlight.clear(); ready.clear(); completed.clear(); deferred.clear(); admittedAt.clear(); changes.clear();
         regions.clear(); corridors.clear(); itineraries.clear(); retainedSurfaces = 0; retainedRegions = 0;
         synchronizedScopes.clear();
+        knowledgeDemandCache = null;
     }
 }

@@ -90,6 +90,20 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
         }
         return true;
     }
+    @Override public java.util.Set<BlockPosition> missingGeometry(SurfaceAnchor surface) {
+        if (detailed(surface)) return NavigationBodyGeometry.missing(collisions().orElseThrow(), surface, profile);
+        var missing = new java.util.HashSet<BlockPosition>();
+        int radius = profile.footprintRadius();
+        for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
+            var contact = SurfaceAnchor.at(surface.x() + dx, surface.y(), surface.z() + dz);
+            missing.addAll(terrain.missingGeometry(contact));
+            for (int y = 0; y <= profile.bodyLayers(); y++) {
+                var position = contact.support().offset(0, y, 0);
+                if (!blockKnown(position)) missing.add(position);
+            }
+        }
+        return java.util.Set.copyOf(missing);
+    }
     @Override public boolean blocked(SurfaceAnchor surface) {
         if (!terrain.supportAvailable(surface)) return true;
         return !clearBody(surface);
