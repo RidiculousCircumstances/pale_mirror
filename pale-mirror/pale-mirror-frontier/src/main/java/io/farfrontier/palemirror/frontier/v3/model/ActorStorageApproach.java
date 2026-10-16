@@ -18,17 +18,17 @@ public final class ActorStorageApproach {
         var knowledge = declaredJourney.forActor(state, actorId);
         var candidates = java.util.stream.Stream.concat(java.util.stream.Stream.of(endpoint.station()),
                 ShipmentEndpointComposition.stations(state, endpoint).stream()).distinct().toList();
-        KnownPedestrianNavigation.RouteUnavailable pending = null;
         for (var station : candidates) {
             if (!knowledge.clearStation(station)) continue;
             var selected = endpoint.withStation(station);
             ShipmentEndpointComposition.validate(state, selected);
             try { knowledge.plannedBetween(origin, station); return Optional.of(selected); }
             catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
-                if (unavailable.status() != PedestrianRouteResult.Status.NO_PATH) pending = unavailable;
+                // An unfinished proof does not disqualify this station. Retain
+                // one addressed wait instead of racing every port's full route.
+                if (unavailable.status() != PedestrianRouteResult.Status.NO_PATH) throw unavailable;
             }
         }
-        if (pending != null) throw pending;
         return Optional.empty();
     }
 }

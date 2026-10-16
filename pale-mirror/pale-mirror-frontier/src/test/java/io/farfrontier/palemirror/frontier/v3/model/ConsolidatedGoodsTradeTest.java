@@ -11,6 +11,29 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ConsolidatedGoodsTradeTest {
+    @Test void storageApproachWaitsForOneDeclaredStationInsteadOfLaunchingAllAlternatives() throws Exception {
+        var state = initial(); var home = new SubjectId("settlement:1");
+        var endpoint = GoodsParticipantStorage.endpoint(state, FrontierWorldState.depotId(home));
+        var actor = state.humanPopulation().residents().values().stream()
+                .filter(person -> person.settlementId().equals(home)).map(ResidentProfile::id).sorted().findFirst().orElseThrow();
+        var queries = new java.util.concurrent.atomic.AtomicInteger();
+        var planner = new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanner() {
+            public io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult query(
+                    io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry geometry,
+                    SurfaceAnchor start, SurfaceAnchor target) {
+                queries.incrementAndGet();
+                return new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(
+                        io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
+                        List.of(), 0, 0, "PENDING_STORAGE_APPROACH");
+            }
+        };
+        try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind(planner)) {
+            var observation = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.observe(() ->
+                    assertThrows(io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable.class,
+                        () -> ActorStorageApproach.select(state, endpoint, actor, state.actorLocations().get(actor).supportingSurface())));
+            assertEquals(1, queries.get()); assertEquals(1, observation.requests().size());
+        }
+    }
     @Test void selectedTripPendingProvisionRouteDoesNotFanOutIntoOtherCrewsOrQuotes() throws Exception {
         var state = initial(); var home = new SubjectId("settlement:1");
         var buyer = state.companies().goodsTrade().participants().participants().get(home).known().getFirst().party().id();

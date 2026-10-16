@@ -11,6 +11,29 @@ import java.util.function.Predicate;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianRegionalInvalidationTest {
+    @Test void completedEstimateRetainsItsConnectedItineraryNotTheExploredAlternatives() {
+        var revision = PedestrianGeometryRevision.initial(); var bounds = new WorldBounds(0, 0, 256, 256);
+        var start = SurfaceAnchor.at(1, 63, 1); var target = SurfaceAnchor.at(240, 63, 240);
+        var geometry = flat(revision, bounds, s -> false);
+        var search = new HierarchicalPedestrianSearch(geometry, start, target, new PedestrianRegionCache(), null,
+                PedestrianRouteExtent.ESTIMATE, new PedestrianItineraryCache());
+        PedestrianRouteResult result = null;
+        for (int i = 0; i < 4096; i++) {
+            result = search.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            if (result.status() != PedestrianRouteResult.Status.PLANNING) break;
+        }
+        assertEquals(PedestrianRouteResult.Status.ESTIMATED, result.status());
+        var proof = search.dependencies();
+        assertTrue(proof.revisions().size() < result.regions(), "completed proof must not retain explored dead alternatives");
+        assertTrue(proof.revisions().containsKey(PedestrianRegion.Tile.at(start)));
+        assertTrue(proof.revisions().containsKey(PedestrianRegion.Tile.at(target)));
+        var outside = java.util.stream.IntStream.range(0, 16).boxed().flatMap(x -> java.util.stream.IntStream.range(0, 16)
+                .mapToObj(z -> new PedestrianGeometryRevision.Region(x, z)))
+                .filter(r -> !proof.revisions().containsKey(new PedestrianRegion.Tile(r.x(), r.z()))).findFirst().orElseThrow();
+        assertTrue(proof.matches(flat(revision.changed(Set.of(outside)), bounds, s -> false)));
+        assertFalse(proof.matches(flat(revision.changed(Set.of(PedestrianGeometryRevision.Region.at(target.support()))), bounds, s -> false)));
+    }
+
     @Test void requestHashingDoesNotRescanImmutableRegionalFactsAndCollisionsDoNotGrantEquality() {
         var reads = new AtomicInteger(); var scope = new Object(); var baseline = new Object();
         class Token { @Override public int hashCode() { reads.incrementAndGet(); return 7; } }

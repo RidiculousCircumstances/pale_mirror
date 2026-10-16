@@ -104,7 +104,32 @@ public final class HierarchicalPedestrianSearch {
     synchronized PedestrianRegionDependencies dependencies() {
         return new PedestrianRegionDependencies(geometry.bounds(), geometry.regionalRevision()
                 .map(PedestrianGeometryRevision::scope).orElse(geometry), geometry.regionalRevision()
-                .map(PedestrianGeometryRevision::geometryScope).orElse(geometry), dependencies);
+                .map(PedestrianGeometryRevision::geometryScope).orElse(geometry), resultDependencies());
+    }
+
+    /** A positive receipt proves this route, not optimality over every explored
+     * alternative. Pending/negative searches still depend on their full frontier.
+     * Profiled regional tokens already include the body's collision halo. */
+    private Map<PedestrianRegion.Tile, Object> resultDependencies() {
+        if (terminal == null) return dependencies;
+        return switch (terminal.status()) {
+            case FOUND, SEGMENT_READY -> proofDependencies(terminal.route());
+            case ESTIMATED -> itineraryDependencies();
+            default -> dependencies;
+        };
+    }
+    private Map<PedestrianRegion.Tile, Object> itineraryDependencies() {
+        var surfaces = new ArrayList<SurfaceAnchor>(); surfaces.add(start); surfaces.add(target);
+        for (var portal : itinerary) { surfaces.add(portal.exit()); surfaces.add(portal.entrance()); }
+        return proofDependencies(surfaces);
+    }
+    private Map<PedestrianRegion.Tile, Object> proofDependencies(List<SurfaceAnchor> surfaces) {
+        var proof = new LinkedHashMap<PedestrianRegion.Tile, Object>();
+        for (var surface : surfaces) {
+            var tile = PedestrianRegion.Tile.at(surface);
+            proof.put(tile, Objects.requireNonNull(dependencies.get(tile), "route proof lacks surveyed region"));
+        }
+        return proof;
     }
 
     /** Rebase only untouched surveyed dependencies. Future expansion consumes the new immutable view. */
@@ -347,7 +372,7 @@ public final class HierarchicalPedestrianSearch {
     }
     /** Server publication after generation/dependency checks; never called from a worker. */
     synchronized void publishReuse() {
-        if (itineraries != null && itinerary != null) itineraries.remember(geometry, target, itinerary, dependencies);
+        if (itineraries != null && itinerary != null) itineraries.remember(geometry, target, itinerary, itineraryDependencies());
     }
     /** 1 means possible incoming access, -1 proved isolation, 0 cooperative continuation. */
     private int probeDestination() {
