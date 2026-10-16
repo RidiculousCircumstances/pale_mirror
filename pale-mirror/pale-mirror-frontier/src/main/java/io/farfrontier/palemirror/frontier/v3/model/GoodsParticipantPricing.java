@@ -35,7 +35,9 @@ public final class GoodsParticipantPricing {
         var next = new TreeMap<String, MarketPricePolicy.Quote>();
         var policy = new MarketPricePolicy();
         var prices = new TreeMap<String, io.farfrontier.palemirror.frontier.v3.api.FixedScalar>();
-        catalog.forEach(commodity -> prices.put(commodity.itemKind(), ask(participant, commodity)));
+        catalog.forEach(commodity -> prices.put(commodity.itemKind(), rules.supplyPlanning().sourcing().isPresent()
+                ? history.reference(commodity.itemKind(), rules.pricing().recencyTicks()).orElse(commodity.minimumSellPrice())
+                : ask(participant, commodity)));
         var floors = GoodsProductionPricing.floors(state.bootstrap().ruleset().production(), prices);
         var alternatives = GoodsProductionPricing.alternatives(state, view, prices);
         for (var commodity : catalog) {

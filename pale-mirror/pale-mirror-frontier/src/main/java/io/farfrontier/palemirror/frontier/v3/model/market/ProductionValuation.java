@@ -12,7 +12,7 @@ public final class ProductionValuation {
     /** Costs are amortized across batches: one coal's unused heat is not charged again to each loaf. */
     public static Optional<FixedScalar> unitCost(Map<String, Integer> inputs, int output, long heat,
                                                  Map<String, FixedScalar> prices, List<Fuel> fuels) {
-        if (inputs.isEmpty() || output < 1 || heat < 0) throw new IllegalArgumentException("invalid production valuation");
+        if (output < 1 || heat < 0) throw new IllegalArgumentException("invalid production valuation");
         BigInteger cost = BigInteger.ZERO;
         for (var entry : inputs.entrySet()) {
             var price = prices.get(entry.getKey());

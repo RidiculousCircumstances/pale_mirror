@@ -14,7 +14,7 @@ public record ResourceSiteHarvestBatchPrepared(SubjectId siteId, SubjectId jobId
         Objects.requireNonNull(siteId, "field batch site"); Objects.requireNonNull(jobId, "field batch job");
         Objects.requireNonNull(leaseId, "field batch scene"); Objects.requireNonNull(nextOutputSlot, "field batch next slot");
         if (!siteId.value().startsWith("site:") || !jobId.value().startsWith("job:site-harvest-")
-                || deliveredYieldBefore < 0 || deliveredYieldBefore % 64 != 0)
+                || deliveredYieldBefore < 0)
             throw new IllegalArgumentException("field batch preparation has invalid declared identities");
     }
 

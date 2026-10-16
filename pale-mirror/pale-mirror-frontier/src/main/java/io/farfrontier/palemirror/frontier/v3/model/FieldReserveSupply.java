@@ -20,8 +20,11 @@ final class FieldReserveSupply implements ReserveSupplyPort {
                     });
                 });
         if (!usable) return new Facts(Map.of(), List.of(), Map.of());
-        long lead = Math.addExact(Math.multiplyExact(ResourceSiteLifecycle.MATURE_STAGE,
-                state.bootstrap().ruleset().cadence().resourceGrowthStageInterval()), state.humanPopulation().schedule(home).dayTicks());
+        long growth = state.resourceSites().sites().values().stream()
+                .filter(site -> state.resourceSite(site.siteId()).settlementId().equals(home))
+                .mapToLong(site -> FieldAgronomy.fullGrowthTicks(state.bootstrap(), state.resourceSites().cycle(site.siteId()).layout()))
+                .min().orElseThrow();
+        long lead = Math.addExact(growth, state.humanPopulation().schedule(home).dayTicks());
         return new Facts(Map.of(), List.of(), Map.of("minecraft:wheat", new Timing(lead, TimingBasis.LOCAL_ESTIMATE)));
     }
 }

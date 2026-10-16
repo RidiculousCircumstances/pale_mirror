@@ -62,13 +62,14 @@ final class FrontierV3ResourceFieldWitness {
             Objects.requireNonNull(actorId, "harvest hand actor");
             Objects.requireNonNull(entityId, "harvest hand body");
             Objects.requireNonNull(extraction, "prepared block extraction");
-            if (!extraction.definition().equals(io.farfrontier.palemirror.frontier.v3.model.FieldHarvestExtraction.DEFINITION))
+            if (!io.farfrontier.palemirror.frontier.v3.model.FieldHarvestExtraction.isDefinition(extraction.definition()))
                 throw new IllegalArgumentException("field hand effect borrows a foreign extraction profile");
             if (!extraction.execution().actorId().equals(actorId)
                     || !extraction.execution().activityOwnerId().equals(jobId)
                     || extraction.execution().activityKind() != io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST)
                 throw new IllegalArgumentException("field hand effect borrows another extraction execution");
-            if (!siteId.value().startsWith("site:") || authorityEpoch < 1 || beforeCount < 0 || beforeCount >= 64)
+            if (!siteId.value().startsWith("site:") || authorityEpoch < 1 || beforeCount < 0 || beforeCount >= 64
+                    || beforeCount + extraction.quantity(io.farfrontier.palemirror.frontier.v3.model.FieldHarvestExtraction.ITEM) > 64)
                 throw new IllegalArgumentException("harvest hand effect lacks a bounded predecessor or authority");
         }
         int afterCount() { return Math.addExact(beforeCount, extraction.quantity(

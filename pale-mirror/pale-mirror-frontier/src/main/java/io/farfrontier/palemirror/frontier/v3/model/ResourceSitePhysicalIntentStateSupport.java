@@ -234,11 +234,11 @@ public final class ResourceSitePhysicalIntentStateSupport {
         if (intent == null || intent.status() != PhysicalIntentStatus.RUNNING
                 || !job.returningForBatch() || job.progress().complete()
                 || job.deliveredYieldQuantity() != delivered.deliveredYieldBefore()
-                || !cycle.pendingPlayerBreaks().isEmpty() || ResourceSiteHarvestCargo.quantity(state, job) != 64
+                || !cycle.pendingPlayerBreaks().isEmpty() || ResourceSiteHarvestCargo.quantity(state, job) != receipt.harvestedQuantity()
                 || !receipt.jobId().equals(job.id()) || !receipt.workerId().equals(job.workerId())
                 || !receipt.actorAccountId().equals(job.actorAccountId())
                 || !receipt.depotAccountId().equals(job.depotAccountId())
-                || receipt.harvestedQuantity() != 64
+                || receipt.harvestedQuantity() < 1
                 || state.physicalObservations().containsKey(receipt.id()))
             throw new IllegalArgumentException("field batch delivery lacks its exact pending full hand and intent");
         validateHarvestDeliveryReceipt(state.bootstrap(), intent, receipt);

@@ -35,8 +35,9 @@ public final class SettlementSupplyPlanning {
                     deliveries.getOrDefault(commodity.itemKind(), List.of()),
                     reserve == null ? OptionalLong.empty() : OptionalLong.of(reserve.reorderPoint())));
         }
-        var planned = PLANNER.plan(facts, SupplyCapacityComposition.read(state, home, facts),
-                SupplyCapacityComposition.dependencies(state, home, facts));
-        return new SupplyPlanner.Plan(planned.demands(), reserves);
+        var capacities = SupplyCapacityComposition.read(state, home, facts);
+        var planned = PLANNER.plan(facts, capacities, SupplyCapacityComposition.dependencies(state, home, facts),
+                SettlementSourcingMarket.read(state, participant, capacities));
+        return new SupplyPlanner.Plan(planned.demands(), reserves, planned.preferredPurchaseSpending());
     }
 }

@@ -44,5 +44,21 @@ class BakerySupplyRecoveryTest {
         assertEquals(ProductionStationProcessing.StartReadiness.INSUFFICIENT_HEAT,
                 ProductionStationProcessing.startReadiness(supplied, station, job.bakeryWork().orElseThrow().recipeId(), job.inputCount()),
                 "fuel on hand is a supply promise, not already burned heat");
+
+        // A player can destroy the selected station before the baker arrives.
+        // The job retains its exact historical endpoint until owner replacement,
+        // but its missing machine must not crash unrelated settlement planning.
+        var lost = state.withInventory(state.inventory().withSurfaceStatus(record.id(), ContainerSurfaceStatus.PREPARED)
+                .withSurfaceStatus(record.id(), ContainerSurfaceStatus.ACTIVE).withSurfaceStatus(record.id(), ContainerSurfaceStatus.RETIRED));
+        lost = new ProductionStationRetired(station, lost.productionStations().require(station).revision()).apply(lost, station);
+        assertEquals(0, ProductionStationEnergy.suppliedHeat(lost, station));
+        assertFalse(SupplyCapacityComposition.dependencies(lost, task.ownerId(), facts).isEmpty());
+        var lostDemand = GoodsParticipantView.read(lost, participant).supplyPlan().orElseThrow().require("minecraft:bread");
+        assertTrue(lostDemand.purchase() > 0 && lostDemand.production() == 0,
+                "lost station must preserve actual food purchasing, not promise unavailable processing: " + lostDemand);
+        assertEquals(state.productionJobs(), lost.productionJobs(), "forecasting cannot cancel or retarget the retained job");
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        var restored = codec.decode(codec.encode(lost));
+        assertEquals(0, ProductionStationEnergy.suppliedHeat(restored, station));
     }
 }

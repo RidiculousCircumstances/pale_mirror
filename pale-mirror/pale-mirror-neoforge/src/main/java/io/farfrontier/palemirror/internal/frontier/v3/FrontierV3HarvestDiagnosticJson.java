@@ -1,5 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
+import io.farfrontier.palemirror.frontier.v3.model.FieldAgronomy;
+
 import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId;
@@ -127,7 +129,8 @@ final class FrontierV3HarvestDiagnosticJson {
                 + ",\"deferredMaterializationSlots\":" + job.progress().completedCropSlots()
                 + ",\"totalCropSlots\":" + job.progress().totalCropSlots()
                 + ",\"harvestedYield\":" + job.harvestedYieldQuantity()
-                + ",\"fieldHarvestedYield\":" + cycle.harvestedCount()
+                + ",\"fieldHarvestedCells\":" + cycle.harvestedCount()
+                + ",\"fieldPotentialYield\":" + FieldAgronomy.expectedYield(state.bootstrap(), cycle)
                 + ",\"deliveredYield\":" + job.deliveredYieldQuantity()
                 + ",\"carriedYield\":" + ResourceSiteHarvestCargo.quantity(state, job)
                 + ",\"returningForBatch\":" + job.returningForBatch() + "}"

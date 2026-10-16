@@ -45,15 +45,15 @@ final class ResourceSitePayloadCodecs {
                 ResourceSiteGrowthAdvanced advanced = (ResourceSiteGrowthAdvanced) payload;
                 byte[] site = advanced.siteId().value().getBytes(StandardCharsets.UTF_8);
                 if (site.length == 0 || site.length > 255) throw new IllegalArgumentException("resource-site id encoding is invalid");
-                return ByteBuffer.allocate(1 + site.length + Long.BYTES + Integer.BYTES).put((byte) site.length).put(site)
-                        .putLong(advanced.growthEpoch()).putInt(advanced.growthStage()).array();
+                return ByteBuffer.allocate(1 + site.length + 2 * Long.BYTES + Integer.BYTES).put((byte) site.length).put(site)
+                        .putLong(advanced.growthEpoch()).putInt(advanced.growthStage()).putLong(advanced.growthTick()).array();
             }
             @Override public FrontierPayload decode(byte[] bytes) {
-                if (bytes.length < 1 + Long.BYTES + Integer.BYTES) throw new IllegalArgumentException("truncated resource-site growth payload");
+                if (bytes.length < 1 + 2 * Long.BYTES + Integer.BYTES) throw new IllegalArgumentException("truncated resource-site growth payload");
                 ByteBuffer input = ByteBuffer.wrap(bytes); int length = Byte.toUnsignedInt(input.get());
-                if (length == 0 || bytes.length != 1 + length + Long.BYTES + Integer.BYTES) throw new IllegalArgumentException("malformed resource-site growth payload");
+                if (length == 0 || bytes.length != 1 + length + 2 * Long.BYTES + Integer.BYTES) throw new IllegalArgumentException("malformed resource-site growth payload");
                 byte[] site = new byte[length]; input.get(site);
-                return new ResourceSiteGrowthAdvanced(new SubjectId(new String(site, StandardCharsets.UTF_8)), input.getLong(), input.getInt());
+                return new ResourceSiteGrowthAdvanced(new SubjectId(new String(site, StandardCharsets.UTF_8)), input.getLong(), input.getInt(), input.getLong());
             }
         };
     }

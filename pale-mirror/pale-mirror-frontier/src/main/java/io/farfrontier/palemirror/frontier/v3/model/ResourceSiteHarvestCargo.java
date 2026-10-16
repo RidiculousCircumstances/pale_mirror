@@ -80,7 +80,7 @@ public final class ResourceSiteHarvestCargo {
     /** Existing shared actor/container transfer owns custody; the family supplies exact source and endpoint. */
     public static ActorContainerItemOrder deliveryOrder(FrontierWorldState state, ResourceSiteHarvestJob job) {
         ResourceLot part = part(state, job).orElseThrow(() -> new IllegalArgumentException("harvest delivery has no carried part"));
-        if (!job.progress().complete() && (!job.returningForBatch() || part.quantity() != 64)
+        if (!job.progress().complete() && !job.returningForBatch()
                 || !ResourceSiteHarvestGoal.actorAtDepot(state, job)
                 || !HarvestStorageReplacement.retainedAvailable(state, job))
             throw new IllegalArgumentException("harvest delivery lacks its ready part or actual depot arrival");

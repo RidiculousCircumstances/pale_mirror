@@ -11,7 +11,7 @@ public record ResourceSiteHarvestBatchDelivered(ResourceSiteHarvestDeliveryObser
                                                 int deliveredYieldBefore) implements FrontierPayload {
     public ResourceSiteHarvestBatchDelivered {
         Objects.requireNonNull(receipt, "field batch delivery receipt");
-        if (deliveredYieldBefore < 0 || deliveredYieldBefore % 64 != 0 || receipt.harvestedQuantity() != 64
+        if (deliveredYieldBefore < 0 || receipt.harvestedQuantity() < 1
                 || !receipt.id().equals(observationId(receipt.jobId(), deliveredYieldBefore)))
             throw new IllegalArgumentException("field intermediate delivery must name one exact full part");
     }
@@ -19,10 +19,10 @@ public record ResourceSiteHarvestBatchDelivered(ResourceSiteHarvestDeliveryObser
     public static PhysicalObservationId observationId(SubjectId jobId, int deliveredYieldBefore) {
         Objects.requireNonNull(jobId, "field batch job");
         if (!jobId.value().startsWith("job:site-harvest-")
-                || deliveredYieldBefore < 0 || deliveredYieldBefore % 64 != 0)
+                || deliveredYieldBefore < 0)
             throw new IllegalArgumentException("field batch observation needs its stable job and part offset");
         return new PhysicalObservationId("observation:field-delivery-" + jobId.value().substring("job:".length())
-                + "-part-" + deliveredYieldBefore / 64);
+                + "-after-" + deliveredYieldBefore);
     }
 
     @Override public String type() { return "frontier.resource_site_harvest_batch_delivered"; }

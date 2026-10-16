@@ -28,7 +28,10 @@ final class GoodsProductionPricing {
         view.stocks().forEach((item, stock) -> facts.put(item, new SupplyPlanner.Stock(stock.unclaimedInStorage(), stock.expectedIncoming(),
                 0, 0, stock.protectedMinimum(), 0, 1, rules.supplyPlanning().require(item))));
         var result = new HashMap<String, FixedScalar>();
-        for (var process : SupplyCapacityComposition.read(state, view.participant().party().id(), facts)) {
+        var capacities = SupplyCapacityComposition.read(state, view.participant().party().id(), facts);
+        var economic = state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().isPresent()
+                ? SettlementSourcingMarket.read(state, view.participant(), capacities).processUnitCosts() : Map.<String, Long>of();
+        for (var process : capacities) {
             var demand = view.supplyPlan().orElseThrow().require(process.product());
             long batches = Math.max(1, Math.ceilDiv(demand.purchase(), process.outputPerBatch()));
             if (batches > process.maximumBatches()
@@ -43,7 +46,8 @@ final class GoodsProductionPricing {
             process.inputs().forEach((item, quantity) -> inputs.put(item, Math.toIntExact(Math.multiplyExact(quantity, batches))));
             var cost = ProductionValuation.unitCost(inputs, Math.toIntExact(Math.multiplyExact(process.outputPerBatch(), batches)),
                     heat, prices, fuels);
-            cost.ifPresent(value -> result.merge(process.product(), value, (a, b) -> a.compareTo(b) <= 0 ? a : b));
+            if (economic.containsKey(process.id())) cost = Optional.of(new FixedScalar(economic.get(process.id())));
+            cost.filter(value -> value.raw() > 0).ifPresent(value -> result.merge(process.product(), value, (a, b) -> a.compareTo(b) <= 0 ? a : b));
         }
         return Map.copyOf(result);
     }

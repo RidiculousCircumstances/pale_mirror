@@ -17,6 +17,7 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                 .map(e -> "{\"commodity\":" + string(e.getKey()) + ",\"purchase\":" + e.getValue().purchase()
                         + ",\"production\":" + e.getValue().production() + ",\"recoveryProduction\":" + e.getValue().recoveryProduction()
                         + ",\"protectedInput\":" + e.getValue().protectedInput()
+                        + ",\"preferredPurchaseBudgetRaw\":" + plan.preferredPurchaseSpending().getOrDefault(e.getKey(), 0L)
                         + ",\"deadlineTicks\":" + (e.getValue().deadlineTicks() == Long.MAX_VALUE ? "null" : e.getValue().deadlineTicks())
                         + ",\"causes\":[" + e.getValue().reasons().stream().sorted().map(r -> string(r.name())).collect(Collectors.joining(",")) + "]}")
                 .collect(Collectors.joining(","))).orElse("");

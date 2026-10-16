@@ -29,11 +29,11 @@ public final class ResourceFieldGrowthProcess {
         var site = state.resourceSites().site(action.subject());
         if (!eligible(site) || !action.id().equals(next(site, action.dueAt().ticks()).id())) return List.of();
         var cycle = state.resourceSites().cycle(site.siteId());
-        var grown = cycle.advanceGrowthStage(state.resourceSites().growthProtectedCells(site.siteId()));
+        var grown = FieldAgronomy.grow(state, cycle, action.dueAt().ticks());
         var nextSite = site.withPlantReadiness(grown);
         var events = new ArrayList<ProposedEvent>();
         if (grown != cycle || nextSite != site)
-            events.add(new ProposedEvent(site.siteId(), new ResourceSiteGrowthAdvanced(site.siteId(), site.growthEpoch(), site.growthStage())));
+            events.add(new ProposedEvent(site.siteId(), new ResourceSiteGrowthAdvanced(site.siteId(), site.growthEpoch(), site.growthStage(), action.dueAt().ticks())));
         if (site.phase() != ResourceSitePhase.READY && nextSite.phase() == ResourceSitePhase.READY
                 || nextSite.phase() == ResourceSitePhase.HARVESTING && newlyActionable(cycle, grown))
             events.add(new ProposedEvent(site.siteId(), new ScheduleEffect.Created(
@@ -50,7 +50,7 @@ public final class ResourceFieldGrowthProcess {
         var site = state.resourceSites().site(subject);
         if (!eligible(site) || site.growthEpoch() != event.growthEpoch() || site.growthStage() != event.growthStage())
             throw new IllegalArgumentException("plant growth has a stale site boundary");
-        var grown = state.resourceSites().cycle(subject).advanceGrowthStage(state.resourceSites().growthProtectedCells(subject));
+        var grown = FieldAgronomy.grow(state, state.resourceSites().cycle(subject), event.growthTick());
         return state.withResourceSites(state.resourceSites().replace(site.withPlantReadiness(grown), grown));
     }
 

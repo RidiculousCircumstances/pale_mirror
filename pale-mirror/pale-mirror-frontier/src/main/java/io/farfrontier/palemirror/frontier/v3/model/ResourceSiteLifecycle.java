@@ -139,10 +139,16 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
     public ResourceSiteLifecycle advanceHarvest(ResourceSiteHarvestJob expected, int count, ResourceSiteHarvestGoal goal,
                                                  SurfaceAnchor station, int nextSlot, ResourceFieldCycle.WorkOutcome outcome,
                                                  ResourceFieldCycle cycle) {
+        return advanceHarvest(expected, count, goal, station, nextSlot, outcome, cycle,
+                outcome == ResourceFieldCycle.WorkOutcome.HARVESTED ? 1 : 0);
+    }
+    public ResourceSiteLifecycle advanceHarvest(ResourceSiteHarvestJob expected, int count, ResourceSiteHarvestGoal goal,
+                                                 SurfaceAnchor station, int nextSlot, ResourceFieldCycle.WorkOutcome outcome,
+                                                 ResourceFieldCycle cycle, int extractedQuantity) {
         var job = require(expected);
         if (!job.matchesWorkGoal(goal, station) || count != job.progress().completedCropSlots() + 1)
             throw new IllegalArgumentException("invalid exact crop completion");
-        return replace(job.withConfirmedCrop(job.progress().confirmPreparedCrop(nextSlot), outcome).bindTarget(cycle));
+        return replace(job.withConfirmedCrop(job.progress().confirmPreparedCrop(nextSlot), outcome, extractedQuantity).bindTarget(cycle));
     }
     public ResourceSiteLifecycle returnFullHarvestBatch(ResourceSiteHarvestJob job) { return replace(require(job).withFullBatchReturn()); }
     public ResourceSiteLifecycle retargetHarvestStorage(ResourceSiteHarvestJob job, InventoryCustody.ContainerSlot slot,

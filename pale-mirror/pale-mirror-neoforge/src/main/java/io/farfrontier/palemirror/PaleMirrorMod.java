@@ -19,6 +19,7 @@ public final class PaleMirrorMod {
         modBus.addListener(PaleMirrorNetwork::register);
         NeoForge.EVENT_BUS.addListener(PaleMirrorCommandRegistrar::register);
         PaleMirrorItems.register(modBus);
+        io.farfrontier.palemirror.internal.agriculture.AgricultureRegistration.register(modBus);
         io.farfrontier.palemirror.internal.production.PaleMirrorProductionStations.register(modBus);
         io.farfrontier.palemirror.internal.production.ProductionBenchInteraction.install(
                 new io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ProductionBenchAccess());

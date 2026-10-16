@@ -27,6 +27,41 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceSiteColdHarvestReceiptTest {
+    @Test void fertileFieldDeliversFullAndPartialHandsAndRetainsExactYieldAcrossRecovery() {
+        SubjectId site = new SubjectId("site:7-wheat-field"), owner = new SubjectId("settlement:7");
+        var bootstrap = FrontierBootstrapper.create(new WorldId("frontier:fertile-harvest"), 125L, FrontierRulesets.marketQuarryGraybox());
+        var layout = FrontierResourceSitePlan.compile(bootstrap).get(site).layout();
+        var cells = layout.cells().subList(0, 19);
+        bootstrap = new FrontierBootstrap(bootstrap.worldId(), bootstrap.seed(), bootstrap.bounds(), bootstrap.settlements(),
+                bootstrap.hive(), bootstrap.ruleset(), bootstrap.terrain(), java.util.Map.of(site,
+                        new ResourceFieldLayout(1, cells.stream().mapToLong(c -> c.id().value()).max().orElseThrow() + 1,
+                                cells, layout.irrigationSlots())));
+        var state = FrontierWorldState.initial(bootstrap);
+        var prep = ResourceSiteProcess.planPreparation(state, ResourceSiteProcess.preparation(site, 4000));
+        state = ResourceSiteProcess.reducePreparationStarted(state, site, (ResourceSitePreparationStarted) prep.getFirst().payload());
+        state = ResourceSiteProcess.reducePrepared(state, site, (ResourceSitePrepared) prep.get(1).payload());
+        for (int i = 0; i < 7; i++) {
+            var cycle = state.resourceSites().site(site);
+            state = ResourceSiteProcess.reduceGrowth(state, site, new ResourceSiteGrowthAdvanced(site, cycle.growthEpoch(), cycle.growthStage()));
+        }
+        assertEquals(76, FieldAgronomy.expectedYield(bootstrap, state.resourceSites().cycle(site)));
+        long before = state.inventory().fungibleResources().totalQuantity(owner, FieldHarvestExtraction.ITEM);
+        var opportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
+                StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 5000));
+        state = StrategicObjectiveProcess.reduceObjective(state, owner, (StrategicObjectiveSelected) opportunity.getFirst().payload());
+        state = StrategicObjectiveProcess.reduceTask(state, owner, (StrategicTaskPlanned) opportunity.get(1).payload());
+        var task = state.strategicPlans().tasks().values().stream().filter(t -> t.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
+        var start = ResourceSiteHarvestProcess.plan(state, ResourceSiteHarvestProcess.start(task, 5100));
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, owner, (StrategicTaskTransition) start.getFirst().payload());
+        var started = (ResourceSiteHarvestStarted) start.get(1).payload();
+        state = ResourceSiteHarvestProcess.reduceStarted(state, site, started);
+        state = prepareThroughRuntime(state, site, (PhysicalIntentPrepared) start.get(2).payload());
+        state = completeColdHarvest(state, site, ((ScheduleEffect.Created) start.get(3).payload()).action());
+        var codec = new FrontierWorldStateCodec();
+        state = codec.decode(codec.encode(state));
+        assertEquals(before + 76, state.inventory().fungibleResources().totalQuantity(owner, FieldHarvestExtraction.ITEM));
+        assertFalse(state.inventory().fungibleResources().accounts().containsKey(started.job().actorAccountId()));
+    }
     @Test
     void loadedFarmerYieldsAndResumesSameFieldJobAfterColdMealWithoutLosingCargo() {
         SubjectId site = new SubjectId("site:1-wheat-field");
@@ -597,7 +632,7 @@ class ResourceSiteColdHarvestReceiptTest {
                     case ResourceSiteHarvestCropPrepared crop -> state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
                     case ResourceSiteHarvestProgressed progressed -> state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);
                     case ResourceSiteHarvestWorkChanged changed -> state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
-                    case StrategicTaskTransition transition -> state = StrategicObjectiveProcess.reduceTaskTransition(state, new SubjectId("settlement:1"), transition);
+                    case StrategicTaskTransition transition -> state = StrategicObjectiveProcess.reduceTaskTransition(state, state.resourceSite(site).settlementId(), transition);
                     case ScheduleEffect.Rescheduled rescheduled -> action = rescheduled.replacement();
                     case ScheduleEffect.Cancelled ignored -> { }
                     case ScheduleEffect.Created created -> {

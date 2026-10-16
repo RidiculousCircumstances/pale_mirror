@@ -22,7 +22,9 @@ final class BakerySupplyCapacity implements SupplyCapacityPort {
         return List.of(new SupplyPlanner.Process(recipe.id().value(), recipe.product().itemKind(), recipe.product().quantity(),
                 Map.of(input, recipe.ingredient().quantity()), recipe.heatPerBatch(), fuels, heat,
                 capacity.orElseThrow().firstOutputDelay(), capacity.orElseThrow().batchTicks(),
-                state.bootstrap().ruleset().goodsTrade().supplyPlanning().maximumOrderItems()));
+                state.bootstrap().ruleset().goodsTrade().supplyPlanning().maximumOrderItems(), capacity.orElseThrow().labourTicks(),
+                state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().isPresent()
+                        ? capacity.orElseThrow().labourCapacity() : Map.of()));
     }
     @Override public List<SupplyPlanner.Dependency> dependencies(FrontierWorldState state, SubjectId home,
                                                                 Map<String, SupplyPlanner.Stock> stocks) {

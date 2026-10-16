@@ -9,7 +9,16 @@ import java.util.List;
 public final class GoodsParticipantFunding {
     private GoodsParticipantFunding() { }
     public static FixedScalar purchase(GoodsParticipantView view, GoodsTradeRules rules, String item) {
-        return ProcurementBudget.forPurchase(view.availableMoney(), needs(view, rules), item);
+        var preferred = view.supplyPlan().map(plan -> plan.preferredPurchaseSpending()).orElse(java.util.Map.of());
+        if (preferred.isEmpty()) return ProcurementBudget.forPurchase(view.availableMoney(), needs(view, rules), item);
+        long other = preferred.entrySet().stream().filter(e -> !e.getKey().equals(item)).mapToLong(java.util.Map.Entry::getValue)
+                .reduce(0L, Math::addExact);
+        var remainder = new FixedScalar(Math.max(0, view.availableMoney().raw() - other));
+        // These are bounded affordable alternatives selected under the shared budget,
+        // not reservations. A changed draft state recomputes the advice before matching.
+        if (preferred.containsKey(item)) return new FixedScalar(Math.min(remainder.raw(), preferred.get(item)));
+        var unselected = needs(view, rules).stream().filter(need -> !preferred.containsKey(need.item())).toList();
+        return ProcurementBudget.forPurchase(remainder, unselected, item);
     }
     public static boolean fundsRestart(GoodsParticipantView view, GoodsTradeRules rules, String item) {
         return ProcurementBudget.fundsRestart(view.availableMoney(), needs(view, rules), item);

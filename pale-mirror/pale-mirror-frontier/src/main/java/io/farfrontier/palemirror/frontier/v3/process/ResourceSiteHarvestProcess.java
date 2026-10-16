@@ -191,17 +191,18 @@ public final class ResourceSiteHarvestProcess {
                 ? FieldHarvestExtraction.prepareKnown(field, cell.id(),
                     "harvest-cell:" + job.id().value() + ':' + field.epoch() + ':' + cell.id().value(),
                     state.actorExecutions().current(
-                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST).get(job.workerId()))
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST).get(job.workerId()),
+                    FieldHarvestExtraction.definition(state.bootstrap(), cell.crop()))
                     : null;
         int extractedQuantity = extraction == null ? 0 : extraction.quantity(FieldHarvestExtraction.ITEM);
         int carriedAfter = Math.addExact(ResourceSiteHarvestCargo.quantity(state, job), extractedQuantity);
         SurfaceAnchor workerStation = state.actorLocations().get(job.workerId()).supportingSurface();
         int nextSelected = lifecycle.nextHarvestTarget(job, worked);
         ResourceSiteLifecycle advanced = lifecycle.advanceHarvest(job, progressed.completedCropSlots(),
-                ResourceSiteHarvestGoal.current(state, job), workerStation, nextSelected, progressed.outcome(), worked);
+                ResourceSiteHarvestGoal.current(state, job), workerStation, nextSelected, progressed.outcome(), worked, extractedQuantity);
         ResourceSiteHarvestJob advancedJob = advanced.harvestJob(job.id()).orElseThrow();
         if (!advancedJob.progress().complete()
-                && carriedAfter == 64) {
+                && carriedAfter > 64 - FieldAgronomy.maximumYield(state.bootstrap())) {
             advanced = advanced.returnFullHarvestBatch(advancedJob);
         }
         ExactInventory inventory = state.inventory();
@@ -324,7 +325,7 @@ public final class ResourceSiteHarvestProcess {
             throw new IllegalArgumentException("COLD field batch has no exclusively returned farmer and depot");
         requireContinuationBinding(job, action);
         ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
-        if (ResourceSiteHarvestCargo.quantity(state, job) != 64 || !ResourceSiteHarvestPlanning.batchDeliveryCapacityAvailable(state, job))
+        if (ResourceSiteHarvestCargo.quantity(state, job) < 1 || !ResourceSiteHarvestPlanning.batchDeliveryCapacityAvailable(state, job))
             throw new IllegalArgumentException("COLD field batch lacks a full hand or next depot reservation");
         ResourceSite site = site(state, job.siteId());
         ActorLocation actor = state.actorLocations().get(job.workerId());
@@ -430,7 +431,7 @@ public final class ResourceSiteHarvestProcess {
         if (lifecycle.phase() != ResourceSitePhase.HARVESTING || !job.id().equals(prepared.jobId())
                 || !job.returningForBatch()
                 || job.deliveredYieldQuantity() != prepared.deliveredYieldBefore()
-                || job.batchSuccessorSlot().isPresent() || ResourceSiteHarvestCargo.quantity(state, job) != 64
+                || job.batchSuccessorSlot().isPresent() || ResourceSiteHarvestCargo.quantity(state, job) < 1
                 || intent == null || intent.status() != PhysicalIntentStatus.RUNNING)
             throw new IllegalArgumentException("field batch reservation lacks its exact full HOT hand");
         FrontierResourceSiteHarvestSceneSupport.requireHotLease(state, job, prepared.leaseId());

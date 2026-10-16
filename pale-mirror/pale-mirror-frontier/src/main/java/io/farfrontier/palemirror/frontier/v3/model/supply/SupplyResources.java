@@ -8,17 +8,36 @@ final class SupplyResources {
     private final Map<String, String> fuels = new HashMap<>();
     private final Map<String, Long> processReady = new HashMap<>();
     private final Map<String, Long> inputRequirements = new HashMap<>();
+    private final Map<String, Long> labour = new TreeMap<>();
 
     long requireInput(String item, long quantity) {
         return inputRequirements.merge(item, quantity, Math::addExact);
     }
 
-    SupplyResources(Map<String, SupplyPlanner.Stock> stocks) {
+    SupplyResources(Map<String, SupplyPlanner.Stock> stocks, List<SupplyPlanner.Process> processes) {
+        for (var process : processes) process.labourCapacity().forEach((worker, ticks) -> {
+            var previous = labour.putIfAbsent(worker, ticks);
+            if (previous != null && !previous.equals(ticks)) throw new IllegalArgumentException("inconsistent shared labour horizon");
+        });
         stocks.forEach((item, stock) -> {
             var quantities = new TreeMap<Long, Long>(); quantities.put(0L, stock.available());
             stock.arrivals().forEach(arrival -> quantities.merge(arrival.afterTicks(), arrival.quantity(), Math::addExact));
             available.put(item, quantities);
         });
+    }
+
+    long labourBatches(SupplyPlanner.Process process) {
+        if (process.labourCapacity().isEmpty()) return Long.MAX_VALUE;
+        return process.labourCapacity().keySet().stream().mapToLong(labour::get).reduce(0L, Math::addExact) / process.labourTicksPerBatch();
+    }
+    void allocateLabour(SupplyPlanner.Process process, long batches) {
+        if (process.labourCapacity().isEmpty()) return;
+        long needed = Math.multiplyExact(batches, process.labourTicksPerBatch());
+        for (var worker : process.labourCapacity().keySet().stream().sorted().toList()) {
+            long used = Math.min(needed, labour.get(worker));
+            labour.put(worker, labour.get(worker) - used); needed -= used;
+        }
+        if (needed != 0) throw new IllegalArgumentException("production overcommits shared labour");
     }
 
     Set<String> retain(List<SupplyPlanner.Dependency> commitments) {

@@ -312,7 +312,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
         ResourceSiteLifecycle lifecycle = state.resourceSites().sites().get(witness.siteId());
         ResourceSiteHarvestJob job = lifecycle == null ? null : lifecycle.harvestJob(witness.jobId()).orElse(null);
         if (job == null
-                || job.deliveredYieldQuantity() != witness.deliveredYieldBefore() + 64) return false;
+                || job.deliveredYieldQuantity() != witness.deliveredYieldBefore() + witness.quantity()) return false;
         return job.lastConfirmedBatch().filter(batch -> batch.deliveredYieldBefore() == witness.deliveredYieldBefore()
                 && batch.receipt().id().equals(batchObservationId(witness.jobId(), witness.deliveredYieldBefore()))
                 && batch.receipt().witnessId().equals(witness.witnessId())

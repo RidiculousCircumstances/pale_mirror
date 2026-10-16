@@ -443,13 +443,19 @@ public final class ResourceFieldCycle {
 
     /** Plant biology ignores work accounting; only unresolved effects fence their exact cells. */
     public ResourceFieldCycle advanceGrowthStage(Set<ResourceFieldLayout.CellId> protectedCells) {
+        return advanceGrowthStage(protectedCells, ignored -> true);
+    }
+
+    public ResourceFieldCycle advanceGrowthStage(Set<ResourceFieldLayout.CellId> protectedCells,
+                                                 java.util.function.Predicate<ResourceFieldLayout.Cell> due) {
         Objects.requireNonNull(protectedCells, "growth protected cells");
+        Objects.requireNonNull(due, "crop environmental clock");
         boolean changed = false;
         var groups = new LinkedHashMap<ResourceFieldLayout.ChunkColumn, Map<ResourceFieldLayout.CellId, CellState>>();
         for (ResourceFieldLayout.Cell cell : layout.cells()) {
             CellState current = cell(cell.id());
             if (current.crop() == Crop.GROWING && !pendingPlayerBreaks.containsKey(cell.id())
-                    && !protectedCells.contains(cell.id())) {
+                    && !protectedCells.contains(cell.id()) && due.test(cell)) {
                 changed = true;
                 int next = Math.addExact(current.growthStage(), 1);
                 current = new CellState(current.soil(), next == ResourceSiteLifecycle.MATURE_STAGE ? Crop.MATURE : Crop.GROWING,

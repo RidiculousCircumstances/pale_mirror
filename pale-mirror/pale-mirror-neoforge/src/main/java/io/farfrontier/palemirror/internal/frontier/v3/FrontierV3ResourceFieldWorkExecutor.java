@@ -101,7 +101,7 @@ final class FrontierV3ResourceFieldWorkExecutor {
                 var extraction = extractionPort(level, runtime, state, lease, worker, job).prepare(
                         cause(job, cycle, id), state.actorExecutions().current(
                             io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST).get(job.workerId()), cell.crop(),
-                        io.farfrontier.palemirror.frontier.v3.model.FieldHarvestExtraction.DEFINITION);
+                        io.farfrontier.palemirror.frontier.v3.model.FieldHarvestExtraction.definition(state.bootstrap(), cell.crop()));
                 var effect = new FrontierV3ResourceFieldWitness.HandEffect(job.siteId(), job.id(), job.workerId(),
                         lease.members().getFirst().entityId(), ResourceSiteHarvestCargo.handEpoch(state, job, lease),
                         ResourceSiteHarvestCargo.quantity(state, job), extraction);

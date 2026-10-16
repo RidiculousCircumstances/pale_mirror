@@ -67,6 +67,7 @@ public final class FrontierV3BlockExtractionGameTests {
                         && port.apply(retained) == BlockExtractionPort.Result.POSTCONDITION_PRESENT
                         && worker.getOffhandItem().isEmpty(),
                 "a restored effect removes the real block once, does not reroll or issue resources, and leaves replant to the field");
+        checkTerritorialLoot(helper, port, execution, crop);
 
         var stone = new BlockExtraction.Definition("pale_mirror:test_stone_v1",
                 new BlockExtraction.Block("minecraft:stone", Map.of()),
@@ -119,5 +120,38 @@ public final class FrontierV3BlockExtractionGameTests {
     private static boolean rejects(Runnable operation) {
         try { operation.run(); return false; }
         catch (IllegalArgumentException expected) { return true; }
+    }
+
+    /** Synchronous fixture-only biome change, restored before any other test/server tick. */
+    private static void checkTerritorialLoot(GameTestHelper helper, FrontierV3MinecraftBlockExtraction port,
+            ActorExecutionId execution, BlockPos crop) {
+        var level = helper.getLevel();
+        var chunk = level.getChunkSource().getChunkNow(Math.floorDiv(crop.getX(), 16), Math.floorDiv(crop.getZ(), 16));
+        if (chunk == null) throw new IllegalStateException("native loot fixture requires its already loaded template chunk");
+        var section = chunk.getSection(level.getSectionIndex(crop.getY()));
+        var prior = section.getBiomes();
+        int x = Math.floorDiv(crop.getX(), 4), y = Math.floorDiv(crop.getY(), 4), z = Math.floorDiv(crop.getZ(), 4);
+        var sampler = level.getChunkSource().randomState().sampler();
+        var registry = level.registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.BIOME);
+        var rules = io.farfrontier.palemirror.frontier.v3.model.agriculture.GrayboxAgriculture.rules();
+        try {
+            for (var biome : rules.biomes().keySet().stream().sorted().toList()) {
+                var holder = registry.getHolderOrThrow(net.minecraft.resources.ResourceKey.create(
+                        net.minecraft.core.registries.Registries.BIOME, net.minecraft.resources.ResourceLocation.parse(biome)));
+                section.fillBiomesFromNoise((qx, qy, qz, ignored) -> qx == x && qy == y && qz == z
+                        ? holder : prior.get(qx & 3, qy & 3, qz & 3), sampler, x & ~3, y & ~3, z & ~3);
+                level.setBlock(crop, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 7), 3);
+                int expected = rules.yieldInBiome("minecraft:wheat", biome);
+                int ordinary = net.minecraft.world.level.block.Block.getDrops(level.getBlockState(crop), level, crop, null)
+                        .stream().filter(stack -> stack.is(Items.WHEAT)).mapToInt(ItemStack::getCount).sum();
+                var prepared = port.prepare("native:territorial-" + expected, execution,
+                        new BlockPosition(crop.getX(), crop.getY(), crop.getZ()), FieldHarvestExtraction.definition(expected));
+                helper.assertTrue(ordinary == expected && prepared.quantity("minecraft:wheat") == expected,
+                        "ordinary block drops and worker extraction must agree with canonical yield in " + biome);
+            }
+        } finally {
+            section.fillBiomesFromNoise((qx, qy, qz, ignored) -> prior.get(qx & 3, qy & 3, qz & 3),
+                    sampler, x & ~3, y & ~3, z & ~3);
+        }
     }
 }

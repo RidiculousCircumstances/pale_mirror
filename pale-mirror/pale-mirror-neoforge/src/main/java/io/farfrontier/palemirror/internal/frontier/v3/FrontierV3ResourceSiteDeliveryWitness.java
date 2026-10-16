@@ -29,8 +29,8 @@ record FrontierV3ResourceSiteDeliveryWitness(SubjectId siteId, SubjectId jobId, 
                 || !beforeFingerprint.matches("sha256:[0-9a-f]{64}")
                 || !afterFingerprint.matches("sha256:[0-9a-f]{64}")
                 || witnessId.isBlank() || witnessId.length() > 256
-                || deliveredYieldBefore < 0 || deliveredYieldBefore % 64 != 0
-                || intermediate && (quantity != 64 || successorSlot < -1 || successorSlot == slot)
+                || deliveredYieldBefore < 0
+                || intermediate && (successorSlot < -1 || successorSlot == slot)
                 || !intermediate && successorSlot != -1) {
             throw new IllegalArgumentException("field delivery witness has invalid owner or physical boundary");
         }

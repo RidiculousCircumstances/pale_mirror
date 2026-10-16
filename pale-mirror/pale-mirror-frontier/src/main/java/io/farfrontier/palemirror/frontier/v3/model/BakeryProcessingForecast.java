@@ -5,7 +5,8 @@ import java.util.OptionalLong;
 
 /** Bakery-owned conservative supply estimate. No route search, assignment mutation or market recursion. */
 final class BakeryProcessingForecast {
-    record Capacity(SubjectId station, long firstOutputDelay, long batchTicks) { }
+    record Capacity(SubjectId station, long firstOutputDelay, long batchTicks, long labourTicks,
+                    java.util.Map<String, Long> labourCapacity) { }
     static OptionalLong firstOutputDelay(FrontierWorldState state, SubjectId home) {
         return capacity(state, home).map(c -> OptionalLong.of(c.firstOutputDelay())).orElseGet(OptionalLong::empty);
     }
@@ -39,9 +40,9 @@ final class BakeryProcessingForecast {
             return java.util.Optional.empty();
         var definition = state.bootstrap().ruleset().workCatalog().require(recipe.product().itemKind(), WorkOperation.PRODUCE);
         if (recipe.processingMode() == ProductionRecipe.ProcessingMode.AUTOMATIC)
-            return java.util.Optional.of(new Capacity(station.id(), definition.workUnits(), definition.workUnits()));
+            return java.util.Optional.of(new Capacity(station.id(), definition.workUnits(), definition.workUnits(), 0, java.util.Map.of()));
         var assignments = HumanAssignmentProjection.compile(state);
-        int speed = SettlementWorkPolicy.permissions(state, home).workers(ResidentWorkKind.BAKING).stream()
+        var workers = SettlementWorkPolicy.permissions(state, home).workers(ResidentWorkKind.BAKING).stream()
                 .map(id -> state.humanPopulation().resident(id))
                 .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE
                         && resident.capability(definition.capability()) > 0)
@@ -52,18 +53,20 @@ final class BakeryProcessingForecast {
                     var job = state.productionJobs().get(assignment.ownerId().orElseThrow());
                     return job != null && job.facilityId().equals(facility.id()) && job.bakeryWork().isPresent()
                             && job.bakeryWork().orElseThrow().block().isEmpty();
-                })
-                .mapToInt(resident -> ResidentWorkStatistics.speedPermille(resident, definition, state.bootstrap().ruleset().workCatalog()))
-                .max().orElse(0);
+                }).toList();
+        int speed = workers.stream().mapToInt(resident -> ResidentWorkStatistics.speedPermille(resident, definition,
+                state.bootstrap().ruleset().workCatalog())).min().orElse(0);
         if (speed == 0) return java.util.Optional.empty();
         var schedule = state.humanPopulation().schedule(home);
         long dailyWork = schedule.segments().stream().filter(segment -> segment.window() == SettlementDailySchedule.Window.WORK)
                 .mapToLong(segment -> segment.endExclusive() - segment.startInclusive()).sum();
+        if (dailyWork == 0) return java.util.Optional.empty();
         long workTicks = Math.ceilDiv(Math.multiplyExact(definition.workUnits(), 1_000L), speed);
         // Include the worst daily phase and one preceding batch; actual admission still proves travel/access.
         long days = Math.addExact(1L, Math.ceilDiv(Math.multiplyExact(workTicks, 2L), dailyWork));
         long batchTicks = Math.ceilDiv(Math.multiplyExact(workTicks, schedule.dayTicks()), dailyWork);
-        return java.util.Optional.of(new Capacity(station.id(), Math.multiplyExact(days, schedule.dayTicks()), batchTicks));
+        return java.util.Optional.of(new Capacity(station.id(), Math.multiplyExact(days, schedule.dayTicks()), batchTicks, workTicks,
+                SupplyLabourCapacity.day(state, home, workers.stream().map(ResidentProfile::id).toList())));
     }
     private BakeryProcessingForecast() { }
 }

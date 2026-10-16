@@ -5,13 +5,18 @@ import java.util.*;
 /** Ruleset-owned policy, not inferred from recipe names or resource identifier prefixes. */
 public record SupplyPlanningRules(Map<String, SupplyPolicy> commodities, int maximumOrderItems,
                                   int workCargoSlots, int personalFoodItems, int maximumTripCargoStacks,
-                                  Optional<ReservePolicy> reserves) {
+                                  Optional<ReservePolicy> reserves, Optional<SourcingRules> sourcing) {
+    public SupplyPlanningRules(Map<String, SupplyPolicy> commodities, int maximumOrderItems,
+            int workCargoSlots, int personalFoodItems, int maximumTripCargoStacks, Optional<ReservePolicy> reserves) {
+        this(commodities, maximumOrderItems, workCargoSlots, personalFoodItems, maximumTripCargoStacks, reserves, Optional.empty());
+    }
     public SupplyPlanningRules(Map<String, SupplyPolicy> commodities, int maximumOrderItems,
             int workCargoSlots, int personalFoodItems, int maximumTripCargoStacks) {
         this(commodities, maximumOrderItems, workCargoSlots, personalFoodItems, maximumTripCargoStacks, Optional.empty());
     }
     public SupplyPlanningRules {
         reserves = Objects.requireNonNull(reserves);
+        sourcing = Objects.requireNonNull(sourcing);
         commodities = Map.copyOf(commodities);
         if (commodities.size() > 256 || maximumOrderItems < 1 || maximumOrderItems > 4096
                 || workCargoSlots != 1 || personalFoodItems < 1 || personalFoodItems > 64
@@ -23,6 +28,7 @@ public record SupplyPlanningRules(Map<String, SupplyPolicy> commodities, int max
     public SupplyPolicy require(String item) { return Objects.requireNonNull(commodities.get(item), "undeclared supply commodity " + item); }
     public String canonicalText() {
         return reserves.map(value -> "reserves=" + value.canonicalText() + "|").orElse("")
+                + sourcing.map(value -> "sourcing=" + value.canonicalText() + "|").orElse("")
                 + maximumOrderItems + ":" + workCargoSlots + ":" + personalFoodItems + ":" + maximumTripCargoStacks + "|"
                 + commodities.entrySet().stream().sorted(Map.Entry.comparingByKey())
                     .map(e -> e.getKey() + "=" + e.getValue().canonicalText()).collect(java.util.stream.Collectors.joining("|"));

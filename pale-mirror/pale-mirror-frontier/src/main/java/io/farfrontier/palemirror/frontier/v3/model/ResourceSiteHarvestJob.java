@@ -40,10 +40,9 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
             throw new IllegalArgumentException("field job identities must use their declared namespaces");
         if (storageRevision < 1 || actorAccountId.equals(depotAccountId)
                 || !depotAccountId.equals(ReferenceContainerCustody.scopeId(outputSlot.containerId()))
-                || harvestedYieldQuantity < 0 || harvestedYieldQuantity > progress.completedCropSlots()
+                || harvestedYieldQuantity < 0 || harvestedYieldQuantity > Math.multiplyExact(progress.completedCropSlots(), 64)
                 || deliveredYieldQuantity < 0 || deliveredYieldQuantity > harvestedYieldQuantity
                 || harvestedYieldQuantity - deliveredYieldQuantity > 64
-                || deliveredYieldQuantity % 64 != 0
                 || returningForBatch && (progress.complete() || progress.hasPendingCrop())
                 || batchSuccessorSlot.isPresent() && (!returningForBatch
                     || !batchSuccessorSlot.orElseThrow().containerId().equals(outputSlot.containerId())
@@ -65,7 +64,7 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
                                             SubjectId siteId, SubjectId workerId,
                                             SubjectId actorAccountId, int delivered) {
         ResourceSiteHarvestDeliveryObservation receipt = batch.receipt();
-        return delivered >= 64 && batch.deliveredYieldBefore() == delivered - 64
+        return delivered >= receipt.harvestedQuantity() && batch.deliveredYieldBefore() == delivered - receipt.harvestedQuantity()
                 && receipt.jobId().equals(jobId)
                 && receipt.siteId().equals(siteId) && receipt.workerId().equals(workerId)
                 && receipt.actorAccountId().equals(actorAccountId);
@@ -77,10 +76,14 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
     }
 
     public ResourceSiteHarvestJob withConfirmedCrop(ResourceSiteHarvestProgress next, ResourceFieldCycle.WorkOutcome outcome) {
+        return withConfirmedCrop(next, outcome, outcome == ResourceFieldCycle.WorkOutcome.HARVESTED ? 1 : 0);
+    }
+    public ResourceSiteHarvestJob withConfirmedCrop(ResourceSiteHarvestProgress next, ResourceFieldCycle.WorkOutcome outcome, int produced) {
         Objects.requireNonNull(outcome, "confirmed field outcome");
         if (next.completedCropSlots() != progress.completedCropSlots() + 1 || !progress.hasPendingCrop())
             throw new IllegalArgumentException("field yield history requires one confirmed pending cell outcome");
-        int produced = outcome == ResourceFieldCycle.WorkOutcome.HARVESTED ? 1 : 0;
+        if (produced < 0 || produced > 64 || (outcome == ResourceFieldCycle.WorkOutcome.HARVESTED) != (produced > 0))
+            throw new IllegalArgumentException("field outcome differs from exact extraction output");
         return new ResourceSiteHarvestJob(id, taskId, siteId, workerId, actorAccountId, depotAccountId,
                 outputItemId, outputSlot, intentId, next, deliveredYieldQuantity, returningForBatch,
                 batchSuccessorSlot, lastConfirmedBatch, navigationBlock, Math.addExact(harvestedYieldQuantity, produced), target, storageRevision);
@@ -161,7 +164,7 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
     /** The current hand filled before the final CellId; the next goal is the depot. */
     public ResourceSiteHarvestJob withFullBatchReturn() {
         if (progress.complete() || progress.hasPendingCrop() || returningForBatch || navigationBlock.isPresent()
-                || undeliveredYieldQuantity() != 64)
+                || undeliveredYieldQuantity() < 1)
             throw new IllegalArgumentException("field batch return lacks its exact full hand");
         return copy(progress, deliveredYieldQuantity, true, Optional.empty(), lastConfirmedBatch, Optional.empty());
     }
@@ -169,7 +172,7 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
     public ResourceSiteHarvestJob reserveBatchSuccessorSlot(InventoryCustody.ContainerSlot nextSlot) {
         Objects.requireNonNull(nextSlot, "reserved next field output slot");
         if (!returningForBatch || batchSuccessorSlot.isPresent() || navigationBlock.isPresent()
-                || undeliveredYieldQuantity() != 64
+                || undeliveredYieldQuantity() < 1
                 || !nextSlot.containerId().equals(outputSlot.containerId()) || nextSlot.equals(outputSlot))
             throw new IllegalArgumentException("field batch successor reservation lacks its full hand and depot");
         return copy(progress, deliveredYieldQuantity, true, Optional.of(nextSlot), lastConfirmedBatch, Optional.empty());
@@ -187,13 +190,13 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
         Objects.requireNonNull(nextSlot, "optional next field depot slot");
         Objects.requireNonNull(confirmedBatch, "confirmed field batch receipt");
         if (!returningForBatch || progress.complete() || navigationBlock.isPresent()
-                || undeliveredYieldQuantity() != 64
+                || undeliveredYieldQuantity() < 1
                 || nextSlot.filter(slot -> !slot.containerId().equals(outputSlot.containerId()) || slot.equals(outputSlot)).isPresent()
                 || batchSuccessorSlot.isPresent() && !batchSuccessorSlot.equals(nextSlot))
             throw new IllegalArgumentException("field batch delivery has no exact depot continuation");
         return new ResourceSiteHarvestJob(id, taskId, siteId, workerId, actorAccountId, depotAccountId,
                 outputItemId, nextSlot.orElse(outputSlot), intentId,
-                nextSlot.isPresent() ? progress : progress.afterDeliverySelection(-1), deliveredYieldQuantity + 64,
+                nextSlot.isPresent() ? progress : progress.afterDeliverySelection(-1), harvestedYieldQuantity,
                 false, Optional.empty(), confirmedBatch, Optional.empty(), harvestedYieldQuantity, target, storageRevision);
     }
 

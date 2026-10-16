@@ -6,7 +6,8 @@ import java.util.*;
 
 /** Closed owner composition; missing/duplicate producers never inherit availability. */
 public final class SupplyCapacityComposition {
-    private static final Map<SupplyCapacityPort.Key, SupplyCapacityPort> PORTS = register(List.of(new BakerySupplyCapacity()));
+    private static final Map<SupplyCapacityPort.Key, SupplyCapacityPort> PORTS = register(List.of(
+            new BakerySupplyCapacity(), new FieldSupplyCapacity(), new ExtractionSupplyCapacity()));
     private SupplyCapacityComposition() { }
     public static Map<SupplyCapacityPort.Key, SupplyCapacityPort> register(List<SupplyCapacityPort> ports) {
         var result = new EnumMap<SupplyCapacityPort.Key, SupplyCapacityPort>(SupplyCapacityPort.Key.class);

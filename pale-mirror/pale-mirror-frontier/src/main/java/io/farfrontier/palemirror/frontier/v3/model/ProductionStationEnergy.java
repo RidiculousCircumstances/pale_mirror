@@ -8,6 +8,11 @@ public final class ProductionStationEnergy {
     /** Supply forecast only: stored fuel and admitted deliveries do not authorize recipe execution. */
     public static long suppliedHeat(FrontierWorldState state, SubjectId stationId) {
         var record = record(state, stationId);
+        // Historical job/receiver declarations outlive a destroyed machine while
+        // their owners select a replacement. Retired physical capacity supplies
+        // no energy; it must not require the already retired runtime instance.
+        // Missing runtime on any non-retired declaration remains an invariant error.
+        if (state.inventory().surfaces().get(record.id()).status() == ContainerSurfaceStatus.RETIRED) return 0;
         var ledger = state.inventory().fungibleResources();
         var account = FungibleResourceCustodySupport.accountAtContainer(state, record.id());
         long available = state.productionStations().require(stationId).storedHeat();
