@@ -24,7 +24,8 @@ final class GoodsTripPlanning {
         var requirements = GoodsParticipantPolicies.require(buyer).decide(demand, initial.bootstrap().ruleset().goodsTrade())
                 .stream().filter(intent -> intent.side() == GoodsTradeOrder.Side.BUY)
                 .map(intent -> new ProcurementSelection.Requirement(intent.itemKind(), intent.quantity(),
-                        demand.supplyPlan().map(plan -> plan.require(intent.itemKind()).deadlineTicks()).orElse(Long.MAX_VALUE))).toList();
+                        demand.supplyPlan().map(plan -> plan.require(intent.itemKind()).deadlineTicks()).orElse(Long.MAX_VALUE),
+                        GoodsParticipantFunding.fundsRestart(demand, initial.bootstrap().ruleset().goodsTrade(), intent.itemKind()))).toList();
         if (requirements.isEmpty()) return new Result(initial, List.of(), "NO_CURRENT_PURCHASE_REQUIREMENT");
         for (var peer : reviewer.known()) {
             var other = initial.companies().goodsTrade().participants().participants().get(peer.party().id());

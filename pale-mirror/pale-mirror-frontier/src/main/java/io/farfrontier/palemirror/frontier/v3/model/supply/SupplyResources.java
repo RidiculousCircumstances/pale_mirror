@@ -7,6 +7,11 @@ final class SupplyResources {
     private final Map<String, NavigableMap<Long, Long>> available = new HashMap<>();
     private final Map<String, String> fuels = new HashMap<>();
     private final Map<String, Long> processReady = new HashMap<>();
+    private final Map<String, Long> inputRequirements = new HashMap<>();
+
+    long requireInput(String item, long quantity) {
+        return inputRequirements.merge(item, quantity, Math::addExact);
+    }
 
     SupplyResources(Map<String, SupplyPlanner.Stock> stocks) {
         stocks.forEach((item, stock) -> {

@@ -6,6 +6,15 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ProcurementSelectionTest {
+    @Test void fundedRestartWinsAnEqualDeadlineWithoutDependingOnCommoditySpelling() {
+        var needs = List.of(new ProcurementSelection.Requirement("a-food", 60, 0),
+                new ProcurementSelection.Requirement("z-fuel", 1, 0, true));
+        var food = new ProcurementSelection.Offer(new SubjectId("offer:food"),
+                Map.of("a-food", new ProcurementSelection.Line(4, FixedScalar.whole(3))), FixedScalar.ZERO, 100, 0);
+        var fuel = new ProcurementSelection.Offer(new SubjectId("offer:fuel"),
+                Map.of("z-fuel", new ProcurementSelection.Line(1, FixedScalar.whole(8))), FixedScalar.ZERO, 100, 0);
+        assertEquals(Optional.of(fuel.id()), new ProcurementSelection().select(needs, List.of(food, fuel)));
+    }
     @Test void buyerChoosesDeliveredCostRatherThanCheapestGoodsOrInputOrder() {
         var request = List.of(new ProcurementSelection.Requirement("grain", 64, 100));
         var near = offer("near", 8, 64, 64, 50, 0);

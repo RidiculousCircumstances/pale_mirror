@@ -8,7 +8,10 @@ import java.util.*;
 /** Buyer policy ranks quoted alternatives. Exact logistics admission follows selection;
  * estimates never reserve goods, assign a crew or authorize movement. */
 public final class ProcurementSelection {
-    public record Requirement(String item, int quantity, long deadlineHorizonTicks) {
+    public record Requirement(String item, int quantity, long deadlineHorizonTicks, boolean fundedProductionRestart) {
+        public Requirement(String item, int quantity, long deadlineHorizonTicks) {
+            this(item, quantity, deadlineHorizonTicks, false);
+        }
         public Requirement {
             Objects.requireNonNull(item);
             if (item.isBlank() || quantity < 1 || deadlineHorizonTicks < 0) throw new IllegalArgumentException("invalid purchase requirement");
@@ -42,6 +45,7 @@ public final class ProcurementSelection {
                 || offers.stream().map(Offer::id).distinct().count() != offers.size())
             throw new IllegalArgumentException("unbounded or duplicate procurement alternatives");
         for (var need : requirements.stream().sorted(Comparator.comparingLong(Requirement::deadlineHorizonTicks)
+                .thenComparing(need -> !need.fundedProductionRestart())
                 .thenComparing(Requirement::item)).toList()) {
             var candidates = offers.stream().filter(o -> o.goods().containsKey(need.item())).toList();
             if (candidates.isEmpty()) continue;

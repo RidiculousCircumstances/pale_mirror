@@ -6,6 +6,18 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ProcurementBudgetTest {
+    @Test void equalOverdueNeedsKeepACompleteAffordableRestartInsteadOfSpendingEverythingOnFallback() {
+        var needs = List.of(new ProcurementBudget.Need("bread", 80, FixedScalar.whole(3), 0),
+                new ProcurementBudget.Need("fuel", 5, FixedScalar.whole(8), 0, 1),
+                new ProcurementBudget.Need("grain", 180, FixedScalar.ONE, 0, 3));
+        assertEquals(FixedScalar.whole(1), ProcurementBudget.forPurchase(FixedScalar.whole(12), needs, "bread"));
+        assertEquals(FixedScalar.whole(9), ProcurementBudget.forPurchase(FixedScalar.whole(12), needs, "fuel"));
+        assertEquals(FixedScalar.whole(4), ProcurementBudget.forPurchase(FixedScalar.whole(12), needs, "grain"));
+        assertTrue(ProcurementBudget.fundsRestart(FixedScalar.whole(12), needs, "fuel"));
+        assertEquals(FixedScalar.whole(4), ProcurementBudget.forPurchase(FixedScalar.whole(4), needs, "bread"),
+                "an unaffordable restart must not forbid an affordable meal");
+        assertFalse(ProcurementBudget.fundsRestart(FixedScalar.whole(4), needs, "fuel"));
+    }
     @Test void earlierFoodDependencyIsProtectedFromReservePurchasesAndOptionalTravelMoney() {
         var needs = List.of(new ProcurementBudget.Need("fuel", 8, FixedScalar.whole(2), 100),
                 new ProcurementBudget.Need("stone", 128, FixedScalar.whole(1), Long.MAX_VALUE));

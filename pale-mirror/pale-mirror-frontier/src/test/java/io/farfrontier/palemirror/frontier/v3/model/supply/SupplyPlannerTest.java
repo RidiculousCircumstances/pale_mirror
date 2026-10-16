@@ -54,6 +54,21 @@ class SupplyPlannerTest {
         assertTrue(plan.require("wheat").urgent(100));
         assertTrue(plan.require("bread").urgent(100));
     }
+    @Test void unfundedRecoveryDoesNotLockTheWholeGrainReserveAgainstFinancingFuel() {
+        var stocks = Map.of("bread", stock(0, 0, 62, 1, FOOD),
+                "wheat", stock(204, 0, 116, 0, MATERIAL), "coal", stock(0, 0, 1, 0, MATERIAL));
+        var process = new SupplyPlanner.Process("bakery", "bread", 1, Map.of("wheat", 3),
+                80, Map.of("coal", 1600L), 0, 100, 10, 100);
+        var plan = new SupplyPlanner().plan(stocks, List.of(process));
+        assertEquals(62, plan.require("bread").recoveryProduction());
+        assertEquals(4, plan.require("coal").purchase(), "full recovery demand remains visible");
+        assertEquals(1, plan.require("coal").protectedInput(), "fund one restart, not all speculative fuel");
+        assertEquals(3, plan.require("wheat").protectedInput(), "the other 183 grain are not funded production");
+        var supplied = new HashMap<>(stocks); supplied.put("coal", stock(4, 0, 1, 0, MATERIAL));
+        var backed = new SupplyPlanner().plan(supplied, List.of(process));
+        assertEquals(186, backed.require("wheat").protectedInput(), "late but fully backed work retains its inputs");
+        assertEquals(0, backed.require("bread").production(), "protection is not proof of timely output");
+    }
     @Test void promisedOutputStillPublishesUnfundedDependenciesWithoutNewCapacity() {
         var stocks = Map.of("bread", new SupplyPlanner.Stock(0, 0, 21, 21, 0, 1, 100, FOOD),
                 "coal", stock(0, 0, 8, 0, MATERIAL));

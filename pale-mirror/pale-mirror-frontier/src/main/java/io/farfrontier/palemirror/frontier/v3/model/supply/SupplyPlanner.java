@@ -124,7 +124,7 @@ public final class SupplyPlanner {
         for (var committed : commitments) {
             var product = requireStock(stocks, committed.product());
             long deadline = product.policy().essential() ? product.deadline() : Long.MAX_VALUE;
-            dependency(stocks, processes, demands, allocatedBatches, resources, committed.resource(), committed.quantity(),
+            dependency(stocks, processes, demands, allocatedBatches, resources, committed.resource(), committed.quantity(), committed.quantity(),
                     deadline, Set.of(), committed.reason(), new HashSet<>(Set.of(committed.product())));
         }
         for (var entry : stocks.entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
@@ -172,9 +172,15 @@ public final class SupplyPlanner {
             long allocated = allocatedBatches.getOrDefault(process.id(), 0L);
             long batches = potentialBatches(process, allocated, amount);
             long secured = feasibleBatches(process, resources, allocated, amount, deadline);
+            long backed = feasibleBatches(process, resources, allocated, amount, Long.MAX_VALUE);
+            // A wish to recover the entire reserve is not an inventory hold. Protect
+            // backed production (even if late) and one restart batch, not every
+            // hypothetical batch whose complementary inputs have not been secured.
+            long protectedBatches = Math.min(batches, Math.max(1, backed));
             // Coverage and intent are separate even for a partially funded batch plan.
             var fuel = resources.fuel(process, batches, allocated);
-            resources.allocate(process, secured, allocated);
+            var protectedFuel = resources.fuel(process, protectedBatches, allocated);
+            resources.allocate(process, backed, allocated);
             allocatedBatches.put(process.id(), Math.addExact(allocated, batches));
             produced = Math.multiplyExact(secured, process.outputPerBatch());
             recovery = Math.multiplyExact(batches - secured, process.outputPerBatch());
@@ -184,9 +190,11 @@ public final class SupplyPlanner {
                                 Math.multiplyExact(allocated + batches - 1, process.batchTicks())));
                 for (var input : process.inputs().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList())
                     dependency(stocks, capacities, demands, allocatedBatches, resources, input.getKey(), Math.multiplyExact(batches, input.getValue()),
+                            Math.multiplyExact(protectedBatches, input.getValue()),
                             inputDeadline, reasons, Reason.PRODUCTION_INPUT, ancestors);
                 if (fuel.isPresent()) {
                     dependency(stocks, capacities, demands, allocatedBatches, resources, fuel.orElseThrow().item(), fuel.orElseThrow().quantity(),
+                            protectedFuel.map(FuelRequirement::quantity).orElse(0L),
                             inputDeadline, reasons, Reason.PRODUCTION_FUEL, ancestors);
                 }
             }
@@ -202,14 +210,15 @@ public final class SupplyPlanner {
         ancestors.remove(item);
     }
     private void dependency(Map<String, Stock> stocks, List<Process> capacities, Map<String, Demand> demands, Map<String, Long> allocatedBatches, SupplyResources resources,
-                            String item, long required, long deadline, Set<Reason> reasons,
+                            String item, long required, long protectedQuantity, long deadline, Set<Reason> reasons,
                             Reason dependency, Set<String> ancestors) {
         var stock = requireStock(stocks, item); var previous = demands.get(item);
-        long total = Math.addExact(previous.protectedInput(), required);
+        long total = resources.requireInput(item, required);
+        long protection = Math.addExact(previous.protectedInput(), protectedQuantity);
         var combined = EnumSet.noneOf(Reason.class); combined.addAll(previous.reasons()); combined.add(dependency);
         long missing = Math.max(0, total - stock.covered());
         if (missing > 0 && deadline <= stock.policy().leadTicks()) combined.add(Reason.CRITICAL_PRODUCTION_DEADLINE);
-        demands.put(item, new Demand(previous.purchase(), previous.production(), previous.recoveryProduction(), total,
+        demands.put(item, new Demand(previous.purchase(), previous.production(), previous.recoveryProduction(), protection,
                 Math.min(previous.deadlineTicks(), deadline), combined, previous.process()));
         long additional = Math.max(0, missing - previous.purchase() - previous.production());
         if (additional > 0) {
