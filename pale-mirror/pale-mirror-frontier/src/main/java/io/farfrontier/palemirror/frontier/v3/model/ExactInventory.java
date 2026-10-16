@@ -687,14 +687,14 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
     /** Replaces only the canonical financial ledger; exact item custody/claims remain unchanged. */
     public ExactInventory withEconomics(EconomicLedger nextEconomics) {
         return new ExactInventory(containers, items, cargo, playerItems, worldCarrierItems, conflicts, surfaces,
-                Objects.requireNonNull(nextEconomics, "economic ledger"), fungibleResources);
+                Objects.requireNonNull(nextEconomics, "economic ledger"), fungibleResources, occupiedSlots);
     }
 
     /** Replaces the one canonical fungible-resource ledger without altering stable equipment/cargo identities. */
     public ExactInventory withFungibleResources(FungibleResourceLedger nextResources) {
         return admitNoNewContainerOvercommit(new ExactInventory(containers, items, cargo, playerItems,
                 worldCarrierItems, conflicts, surfaces, economics,
-                Objects.requireNonNull(nextResources, "fungible resource ledger")));
+                Objects.requireNonNull(nextResources, "fungible resource ledger"), occupiedSlots));
     }
 
     /** Retain one exact current physical layout before releasing its authority, never recreate stock from it. */

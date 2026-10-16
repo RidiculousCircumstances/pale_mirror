@@ -18,6 +18,7 @@ class ContainerStockIndexTest {
         var ledger = new FungibleResourceLedger(Map.of(lot, new ResourceLot(lot, owner, "minecraft:wheat", 65, "test", List.of())),
                 Map.of(), Map.of(account, new CustodyAccount(account, new ResourceCustody.Container(container), Map.of(lot, 65), Map.of())), Map.of());
         var stocked = inventory.withFungibleResources(ledger);
+        assertSame(inventory.occupiedSlots(), stocked.occupiedSlots(), "fungible stock does not move exact equipment slots");
         var budget = ContainerStockIndex.budget(stocked, container);
         assertEquals(2, budget.packedStacks()); assertEquals(Map.of("minecraft:wheat", 65L), budget.stockByKind());
         assertEquals(Set.of(26), budget.occupied());
@@ -26,6 +27,9 @@ class ContainerStockIndexTest {
         var claim = new ClaimAllocation(new SubjectId("claim:index"), owner, owner, "minecraft:wheat", 10,
                 Map.of(lot, 10), ClaimPurpose.EXTERNAL_RESERVATION);
         var reserved = stocked.withFungibleResources(ledger.reserve(claim, account));
+        assertSame(stocked.occupiedSlots(), reserved.occupiedSlots(), "reservation drafts retain exact physical index");
+        var financial = reserved.withEconomics(new EconomicLedger(reserved.economics().accounts()));
+        assertSame(reserved.occupiedSlots(), financial.occupiedSlots(), "financial changes do not invalidate physical slots");
         assertSame(budget, ContainerStockIndex.budget(reserved, container), "reservations do not repack physical stock");
         var removed = stocked.withoutItem(item);
         assertTrue(ContainerStockIndex.budget(removed, container).occupied().isEmpty());
