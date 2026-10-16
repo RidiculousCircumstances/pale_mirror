@@ -14,6 +14,12 @@ final class FrontierV3SupportedBodyCapture {
         return observe(level, actor, false);
     }
 
+    /** Existing physical pose, not an imagined centred destination or a goal-arrival test. */
+    static Optional<BodyPosition> observeClear(ServerLevel level, Mob actor) {
+        return observe(level, actor).filter(ignored ->
+                !level.getBlockCollisions(actor, actor.getBoundingBox()).iterator().hasNext());
+    }
+
     static Optional<BodyPosition> observeDeparting(ServerLevel level, Mob actor) {
         return observe(level, actor, true);
     }

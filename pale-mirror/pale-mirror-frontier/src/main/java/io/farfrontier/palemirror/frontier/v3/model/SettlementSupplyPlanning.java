@@ -13,6 +13,8 @@ public final class SettlementSupplyPlanning {
         var rules = state.bootstrap().ruleset(); var trade = rules.goodsTrade(); var life = rules.residentLife();
         if (!trade.supplyPlanning().enabled()) throw new IllegalArgumentException("supply planning was not selected by ruleset");
         var facts = new TreeMap<String, SupplyPlanner.Stock>();
+        var participant = state.companies().goodsTrade().participants().participants().get(home);
+        var deliveries = SettlementDeliveryForecast.read(state, home, participant.endpoint().containerId());
         long metabolism = state.humanPopulation().residents().values().stream()
                 .filter(r -> r.settlementId().equals(home) && state.actorLocations().get(r.id()).condition().status() == ActorLifeStatus.ALIVE)
                 .mapToLong(r -> r.characteristics().effectiveMetabolismPermille(state.humanPopulation().nutrition(r.id()).lastEvaluatedTick())).sum();
@@ -26,7 +28,8 @@ public final class SettlementSupplyPlanning {
             long period = food == null ? 1 : Math.multiplyExact(Math.multiplyExact(life.satietyUnitTicks(), 1000L), food.nutritionPerItem());
             facts.put(commodity.itemKind(), new SupplyPlanner.Stock(stock.unclaimedAtEndpoint(), stock.expectedIncoming(), promised,
                     StockTargetDemand.target(commodity, residents, stock.protectedMinimum()), stock.protectedMinimum(),
-                    food == null ? 0 : metabolism, period, trade.supplyPlanning().require(commodity.itemKind())));
+                    food == null ? 0 : metabolism, period, trade.supplyPlanning().require(commodity.itemKind()),
+                    deliveries.getOrDefault(commodity.itemKind(), List.of())));
         }
         return PLANNER.plan(facts, SupplyCapacityComposition.read(state, home, facts),
                 SupplyCapacityComposition.dependencies(state, home, facts));

@@ -281,7 +281,7 @@ class ConsolidatedGoodsTradeTest {
                 SimInstant.ZERO, base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(),
                 base.limits(), schedules, base.transactionCommitter(), base.stateValidator(), base.executionMetrics(), base.kernelQuarantineReporter());
         var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(configuration);
-        TransportMission admitted = null; boolean recovered = false, delivered = false, returned = false;
+        TransportMission admitted = null; boolean recovered = false, delivered = false, returned = false, estimated = false;
         for (int boundary = 0; boundary < 4000; boundary++) {
             var state = engine.canonicalState().state();
             if (admitted == null && !state.shipments().missions().isEmpty()) {
@@ -295,6 +295,21 @@ class ConsolidatedGoodsTradeTest {
                 if (mission == null) { returned = true; break; }
                 for (var id : mission.shipmentIds()) {
                     var parcel = state.shipments().shipments().get(id);
+                    var estimate = ShipmentDeliveryForecast.read(state, parcel);
+                    if (!estimated && estimate.timing().isPresent()) {
+                        estimated = true;
+                        assertEquals(TransportMission.Stage.OUTBOUND, mission.stage());
+                        assertEquals(Shipment.Status.CARRYING, parcel.status());
+                        assertTrue(estimate.timing().orElseThrow().planningTicks() > 0);
+                        var restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+                        assertEquals(estimate, ShipmentDeliveryForecast.read(restored, restored.shipments().shipments().get(id)));
+                        var physical = ActorBodyAuthority.demand(state, parcel.execution().actorId());
+                        assertEquals(DeliveryEstimate.Reason.PHYSICAL_PROGRESS_REQUIRED, ShipmentDeliveryForecast.read(physical, parcel).reason(),
+                                "a materialized body needs fresh progress evidence, not its stale COLD pose");
+                        var incoming = SettlementDeliveryForecast.read(state, mission.receiver().settlementId(), mission.receiver().containerId());
+                        assertTrue(incoming.getOrDefault(parcel.itemKind(), List.of()).stream().mapToLong(
+                                io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Arrival::quantity).sum() >= parcel.quantity());
+                    }
                     if (!parcel.terminal() && parcel.status() == Shipment.Status.CARRYING && parcel.mobileContainerId().isEmpty())
                         assertEquals(parcel.carriedAccountId(), ActorCarryCapabilities.workCargo(state, parcel.execution().actorId()).orElseThrow().accountId());
                 }
@@ -316,6 +331,7 @@ class ConsolidatedGoodsTradeTest {
             if (boundary % 64 == 0) engine.compact(engine.checkpoint().revision());
         }
         assertNotNull(admitted); assertTrue(recovered); assertTrue(delivered);
+        assertTrue(estimated, "an actually routed delivery must expose logistics timing before arrival");
         var finalState = engine.canonicalState().state();
         var finalMission = finalState.shipments().missions().get(admitted.id());
         var finalGroup = finalState.unitGroups().groups().get(admitted.groupId());

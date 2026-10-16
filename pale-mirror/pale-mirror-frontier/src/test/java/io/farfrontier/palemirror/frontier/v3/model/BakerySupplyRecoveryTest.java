@@ -22,6 +22,9 @@ class BakerySupplyRecoveryTest {
         assertTrue(publicPlan.require("minecraft:coal").urgent(100));
         assertTrue(publicPlan.require("minecraft:coal").protectedInput() > 0,
                 "the actual settlement/market composition must retain the admitted batch's fuel obligation");
+        assertTrue(publicPlan.require("minecraft:bread").purchase() >= job.outputCount(),
+                "an admitted job without fuel must not hide food demand from the actual market policy");
+        assertTrue(publicPlan.require("minecraft:bread").reasons().contains(SupplyPlanner.Reason.UNSECURED_PRODUCTION));
         var policy = new SupplyPolicy(500, 1, 8, 100, 500, true);
         var facts = Map.of("minecraft:bread", new SupplyPlanner.Stock(0, 0, job.outputCount(), job.outputCount(), 0, 1, 100, policy),
                 "minecraft:coal", new SupplyPlanner.Stock(0, 0, 0, 0, 0, 0, 100, policy));

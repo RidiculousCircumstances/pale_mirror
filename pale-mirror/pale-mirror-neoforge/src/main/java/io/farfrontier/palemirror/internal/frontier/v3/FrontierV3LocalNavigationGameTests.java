@@ -876,24 +876,6 @@ public final class FrontierV3LocalNavigationGameTests {
         });
     }
 
-    /** A fractional in-flight body must not seed a production cursor from its rounded cell. */
-    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty")
-    public static void productionHandoffRequiresCurrentObservedSupport(GameTestHelper helper) {
-        BlockPos support = helper.absolutePos(new BlockPos(4, 0, 4));
-        helper.getLevel().setBlock(support, Blocks.STONE.defaultBlockState(), 3);
-        helper.getLevel().setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
-        helper.getLevel().setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
-        Zombie worker = helper.spawnWithNoFreeWill(EntityType.ZOMBIE, new Vec3(4.5D, 1.0D, 4.5D));
-        BodyPosition observed = new BodyPosition(support.getX(), support.getY() + 1, support.getZ());
-
-        helper.assertTrue(FrontierV3ProductionWorkSceneExecutor.observedHandoffSurfaceIsCurrent(helper.getLevel(), worker, observed),
-                "a body standing at its inferred support may transfer its exact production custody");
-        worker.setPos(worker.getX(), worker.getY() + .90D, worker.getZ());
-        helper.assertFalse(FrontierV3ProductionWorkSceneExecutor.observedHandoffSurfaceIsCurrent(helper.getLevel(), worker, observed),
-                "the same rounded body cell while vertically in-flight must defer the transfer rather than invent a floor");
-        helper.succeed();
-    }
-
     /** A settled accepted hand-off retires only historical fall evidence from the exact body. */
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty")
     public static void acceptedProductionHandoffClearsOnlyGroundedHistoricalFallDistance(GameTestHelper helper) {

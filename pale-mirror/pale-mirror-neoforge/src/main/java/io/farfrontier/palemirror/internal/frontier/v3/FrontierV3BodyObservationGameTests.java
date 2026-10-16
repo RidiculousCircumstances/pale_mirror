@@ -18,6 +18,34 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 public final class FrontierV3BodyObservationGameTests {
     private FrontierV3BodyObservationGameTests() { }
 
+    /** Adoption needs physical support, not arrival at the centre of a future work station. */
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft", template = "bastion/mobs/empty")
+    public static void productionHandoffRequiresCurrentObservedSupport(GameTestHelper helper) {
+        BlockPos support = helper.absolutePos(new BlockPos(4, 0, 4));
+        helper.getLevel().setBlock(support, Blocks.STONE.defaultBlockState(), 3);
+        helper.getLevel().setBlock(support.above(), Blocks.AIR.defaultBlockState(), 3);
+        helper.getLevel().setBlock(support.above(2), Blocks.AIR.defaultBlockState(), 3);
+        Villager worker = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(4.5D, 1.0D, 4.5D));
+        BodyPosition observed = new BodyPosition(support.getX(), support.getY() + 1, support.getZ());
+        helper.assertTrue(FrontierV3ProductionWorkSceneExecutor.observedHandoffSurfaceIsCurrent(helper.getLevel(), worker, observed),
+                "a body standing at its inferred support may transfer its exact production custody");
+        worker.setPos(support.getX() + .2994225586649D, worker.getY(), support.getZ() + .7423973076949D);
+        Vec3 offCentre = worker.position();
+        helper.assertFalse(FrontierV3SemanticMovement.arrived(helper.getLevel(), worker, observed.supportingSurface()),
+                "adopting a supported body must not weaken final work-station arrival");
+        helper.assertTrue(FrontierV3ProductionWorkSceneExecutor.observedHandoffSurfaceIsCurrent(helper.getLevel(), worker, observed),
+                "an off-centre supported body must transfer without first moving or teleporting");
+        helper.assertValueEqual(worker.position(), offCentre, "adoption observation never corrects the physical pose");
+        worker.setPos(worker.getX(), worker.getY() + .90D, worker.getZ());
+        helper.assertFalse(FrontierV3ProductionWorkSceneExecutor.observedHandoffSurfaceIsCurrent(helper.getLevel(), worker, observed),
+                "the same rounded body cell while vertically in-flight must defer the transfer rather than invent a floor");
+        worker.setPos(offCentre);
+        helper.getLevel().setBlock(support.above(), Blocks.STONE.defaultBlockState(), 3);
+        helper.assertFalse(FrontierV3ProductionWorkSceneExecutor.observedHandoffSurfaceIsCurrent(helper.getLevel(), worker, observed),
+                "real block intersection still prevents adoption");
+        helper.succeed();
+    }
+
     @GameTest(batch = "pm-frontier-v3-scene-harvest-support", templateNamespace = "minecraft",
             template = "bastion/treasure/big_air_full", timeoutTicks = 20)
     public static void farmerReleaseCapturesRealCollisionSupportButNotAnAirborneBody(GameTestHelper helper) {

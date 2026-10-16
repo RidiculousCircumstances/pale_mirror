@@ -16,6 +16,7 @@ final class FrontierV3ShipmentDiagnosticJson {
         var body = ActorMovementProcess.bodyAt(state, actor, checkpoint.instant().ticks());
         var contract = state.companies().goodsTrade().contracts().get(shipment.authorization().claimantId());
         var obligation = ShipmentProgressObligation.describe(state, shipment);
+        var delivery = ShipmentDeliveryForecast.read(state, shipment);
         var mission = shipment.transportMissionId().map(state.shipments().missions()::get);
         boolean selected = !shipment.terminal() && TransportCargoExecution.selected(state, shipment);
         var admission = lease != null && lease.status() == AmbientLeaseStatus.HOT
@@ -53,6 +54,10 @@ final class FrontierV3ShipmentDiagnosticJson {
                     (movement == null ? shipment.movementOrder() : movement.order()).legalStations().getFirst().standingBody()))
                 + ",\"lease\":" + (lease == null || lease.status() == AmbientLeaseStatus.CLOSED ? "null" : string(lease.status().name()))
                 + ",\"coldArrivalTick\":" + (movement == null ? -1 : movement.coldTravel().map(TimedKnownRoute::arrivalTick).orElse(-1L))
+                + ",\"deliveryEstimate\":{\"reason\":" + string(delivery.reason().name())
+                + ",\"basis\":\"retained-logistics-checkpoint\",\"timing\":" + delivery.timing().map(value ->
+                    "{\"travelTicks\":" + value.travelTicks() + ",\"handlingTicks\":" + value.handlingTicks()
+                        + ",\"marginTicks\":" + value.marginTicks() + ",\"planningTicks\":" + value.planningTicks() + "}").orElse("null") + "}"
                 + ",\"progressObligation\":{\"schema\":1,\"rule\":\"frontier.shipment.progress.v1\",\"subject\":" + string(shipment.id().value())
                 + ",\"worker\":" + string(actor.value()) + ",\"generation\":" + shipment.execution().generation()
                 + ",\"revision\":" + shipment.revision() + ",\"fingerprint\":" + string(obligation.fingerprint())

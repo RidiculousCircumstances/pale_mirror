@@ -97,14 +97,13 @@ final class FrontierV3ProductionWorkSceneExecutor {
         // the reducer rejects drift rather than restarting work or teleporting the worker.
         SceneMemberPosition capture = new SceneMemberPosition(member.actorId(), FrontierV3BodyObservation.position(body),
                 new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(Math.round(body.getHealth() * io.farfrontier.palemirror.frontier.v3.api.FixedScalar.SCALE)));
-        // Integer Minecraft cells are not themselves an observation of standing: a body in the
-        // upper portion of that cell may still be rising, falling, or supported by a different
-        // physical datum.  Rebasing a canonical production cursor from it would turn an
-        // in-flight ambient pose into a false exact surface.  Keep ambient custody until this
-        // same body is actually at, and collision-clear on, the one inferred support—no reset,
-        // replacement, alternate floor, or desired-state repair is permitted here.
-        if (!observedHandoffSurfaceIsCurrent(level, body, capture.body())
-                || !FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return;
+        // Adoption observes this existing body; it is not arrival at a work station.
+        // Requiring goal centering here deadlocks with the ambient pre-lease hold.
+        if (!observedHandoffSurfaceIsCurrent(level, body, capture.body())) {
+            FrontierV3PhysicalWaitTrace.actor(body, state, member.actorId(), "production-handoff:unsupported-or-obstructed-body");
+            return;
+        }
+        if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return;
         // `handoffPosition` is the durable first route surface used by prepared-scene
         // validation.  The reducer rebases the unstarted traversal from this same observation,
         // so retain the support beneath the captured body as well as the captured body itself.
@@ -270,8 +269,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
      * This is a read-only admission fence, not a pose correction.
      */
     static boolean observedHandoffSurfaceIsCurrent(ServerLevel level, Mob worker, BodyPosition observed) {
-        SurfaceAnchor inferredSupport = observed.supportingSurface();
-        return FrontierV3SemanticMovement.arrived(level, worker, inferredSupport) && clearNextBody(level, worker, inferredSupport);
+        return FrontierV3SupportedBodyCapture.observeClear(level, worker).filter(observed::equals).isPresent();
     }
 
     /** Applies the accepted grounded hand-off fact without changing the retained body or route. */
