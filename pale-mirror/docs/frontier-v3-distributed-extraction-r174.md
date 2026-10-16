@@ -1,6 +1,7 @@
 # R174 — deposits and distributed extraction
 
-Accepted 2026-10-16. Active implementation goal; not a completion claim.
+Accepted 2026-10-16. Implemented and deployed 2026-10-16; verification scope and
+known unrelated debt are recorded below. Human M3 acceptance is not claimed.
 
 ## Outcome and boundaries
 
@@ -167,4 +168,39 @@ human M3. This native scenario does not claim simultaneous physical mining at
 both sites; parallel distinct jobs/claims/tools are covered by Java integration.
 All task-owned native client/server/display processes exited.
 
-Release source commit and fresh-world deployment are the remaining delivery step.
+## Delivery
+
+Source commit `4aeb7fce163eddd0c934b69b8e425fac4068b322`; source worktree clean.
+Detached release `/home/rd/proj/pm-release-r174.HiMfsM/source/pale-mirror` built
+with the explicit companion disabled-mod catalog. `:pale-mirror-neoforge:build
+:pale-mirror-neoforge:verifyPackagedJar` passed in2m45s (full NeoForge tests rerun
+by the clean release build). Packaged class bytes match the native-tested WIP
+artifact; release metadata accounts for the changed JAR checksum.
+
+Installed SHA512:
+`153bb3db8f97505e80f1621eb6f2911506297106ce99bed999838dc404d8eee4d8c314cb58be8c3f3dec8edf7357a2fc0ccfb98f8ab1c3bf54c56f2d59c13de7`.
+Normal RCON stop saved all old-world dimensions. Pack `install-server.sh`
+installed the pinned artifact and datapack into the new selected world
+`/home/rd/far-frontier-server/frontier-v3-deposits-r174-20261016`;
+old R172 world was not deleted or loaded with the new schema. Explicit runtime
+selector r15, schema291, seed20260918065. Preflight with fresh-world absence and
+post-start `frontier-v3-deploy-verify.sh` both PASS.
+
+Service `far-frontier-v3-live.service`, start epoch1792161107,
+invocation79ce1229cbf440a399ce63da194a32c0, wrapper4069843/Java4069867, port25565.
+Fresh ready/startup records at14:31:58/14:32:00UTC. At tick1463: requiredConflicts0,
+first home has two independent known mineral/worksite declarations; ordinary
+COLD worker resident:1-10 already mined one coal with retained work:extraction-1.
+At tick307: ready backlog0/lag0, navigation waiting0; recent host samples around
+2.8ms mean/4.7ms maximum, not a controlled speedup or long-run performance claim.
+No fast-forward was used on the new live world for this check.
+
+First home's two storage interaction points are(-317,61,-339) and(-361,61,-297)
+in `pale_mirror:frontier_graybox`. Concurrent work is demand-driven: one unit of
+unmet fuel must not recruit two miners merely to demonstrate parallelism.
+These coordinates aid inspection, not an assertion that both sites are always busy.
+
+Temporary artifact HTTP server exited; no task-owned graphical client/display
+or disposable scenario server remains. Pack tracked files unchanged; preserved
+preexisting `.f0v-baseline/`. Governance unrelated WIP preserved; only R174
+documentation/contract/architecture additions committed. No push or client update.

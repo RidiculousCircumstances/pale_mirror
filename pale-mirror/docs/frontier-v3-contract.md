@@ -775,6 +775,28 @@ a second mutable infection state.
 
 ## Physical economy and custody
 
+### Distributed extraction — accepted 2026-10-16
+
+The [distributed extraction order](frontier-v3-distributed-extraction-r174.md)
+separates finite three-dimensional geological deposits, explicit settlement
+knowledge and operating worksites. Geological declarations are initial material
+distribution, not a second current-stock ledger: mined or externally changed
+blocks cannot be regenerated from them. Known deposits may have several worksites;
+the settlement compares work opportunities against shared unmet demand and its
+finite workforce. Independent accepted jobs may operate concurrently without
+sharing an exclusive tool, source cell or work station. Waiting for a route is
+not depletion and must not conceal another executable opportunity.
+
+Switching worksites retains the worker, execution and tool at a safe boundary;
+held output goes through ordinary custody/delivery before reassignment. Navigation,
+block extraction, storage and logistics retain their existing sole authorities.
+A worksite does not require its genesis chest: equipment storage is bootstrap
+content, and tasks select suitable current storage under shared policy.
+Graybox content is multiple finite coal deposits with distinct extent/access and
+incidental stone. Other mineral definitions must reuse these mechanisms, but metal
+production, exploration gameplay and tunnel/support construction are not activated.
+These are obligations; the order records actual verification and release status.
+
 The accepted [autonomous trade/logistics contract](frontier-v3-trade-logistics-contract.md)
 adds independent settlement/company goods orders, commercial obligations,
 reserved funds and recipient-neutral physical shipments. First content is bread
