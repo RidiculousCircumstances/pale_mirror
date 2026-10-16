@@ -55,7 +55,7 @@ class ExtractionAreaPlanningTest {
                 .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
         assertEquals(before.inventory(), after.inventory()); assertEquals(before.actorLocations(), after.actorLocations());
         assertEquals(before.extractionSites().work(), after.extractionSites().work());
-        assertEquals(old.site().containerId(), next.site().containerId());
+        assertEquals(old.site().settlementId(), next.site().settlementId());
         assertTrue(next.site().layout().infrastructureIds().entrySet().containsAll(old.site().layout().infrastructureIds().entrySet()));
         assertTrue(next.available(Set.of()).stream().allMatch(cell -> cell.id() > 512));
         for (var cell : next.available(Set.of())) {

@@ -75,7 +75,9 @@ public final class FrontierV3NavigationShapeGameTests {
                 helper.assertTrue(state.navigationGeometry().definitions().containsKey(block), "graybox source block has a shape definition: " + block);
             for (var deposit : state.extractionSites().deposits().values()) {
                 var site = deposit.site();
-                var endpoint = state.inventory().containers().get(site.containerId()).storage().orElseThrow().endpoint();
+                var endpoint = state.inventory().containers().values().stream().flatMap(container -> container.storage().stream())
+                        .map(ResourceStoragePolicy::endpoint).filter(value -> value instanceof ShipmentEndpoint.ExtractiveSite storage
+                            && storage.siteId().equals(site.id())).findFirst().orElseThrow();
                 var knowledge = ResourceStorageNavigation.forEndpoint(state, endpoint);
                 helper.assertTrue(!knowledge.plannedBetween(site.layout().entrance(), site.layout().storagePort()).isEmpty(),
                         "native catalog must preserve the actual COLD quarry entrance/storage approach");

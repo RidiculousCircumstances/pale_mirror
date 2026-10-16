@@ -54,7 +54,7 @@ class ExtractionDevelopmentReplayTest {
             assertEquals(before.inventory(), after.inventory()); assertEquals(before.actorLocations(), after.actorLocations());
             assertEquals(cell.definition().after(), after.extractionSites().deposits().get(site).cells().get(last).knownBlock());
             calls.set(0);
-            var action = ExtractionContinuation.review(site, 6000);
+            var action = ExtractionContinuation.review(deposit.site().settlementId(), 6000);
             var review = PedestrianRoutePlanning.observe(() -> ExtractionWorkProcess.review(after, action, 6000));
             assertEquals(planning.requests().size(), calls.get(), "pending development must stop before staff/source admission fans out");
             assertEquals(Set.copyOf(planning.requests()), Set.copyOf(review.requests()));

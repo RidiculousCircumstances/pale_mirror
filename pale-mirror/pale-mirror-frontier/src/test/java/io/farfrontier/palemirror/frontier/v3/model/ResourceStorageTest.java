@@ -30,15 +30,15 @@ class ResourceStorageTest {
         }
         assertTrue(restored.inventory().containers().values().stream().filter(c -> c.productionStation().isPresent()).allMatch(c -> c.storage().isEmpty()));
         var site = restored.extractionSites().deposits().values().iterator().next().site();
-        var storage = restored.inventory().containers().get(site.containerId()).storage().orElseThrow();
+        var storage = restored.inventory().containers().get(QuarryStorageFixture.container(state, site)).storage().orElseThrow();
         assertFalse(storage.filter().accepts("minecraft:bread"));
-        assertFalse(ContainerStorageAdmission.receive(restored, site.containerId(), "minecraft:bread", 1, Optional.empty()));
+        assertFalse(ContainerStorageAdmission.receive(restored, QuarryStorageFixture.container(state, site), "minecraft:bread", 1, Optional.empty()));
     }
     @Test void discoveryRespectsOwnershipTierFilterAndAccessibilityRatherThanTheSitesOriginalChest() {
         var state = initial(); var site = state.extractionSites().deposits().values().iterator().next().site();
         var destination = ResourceStorageSelection.destination(state, site.settlementId(), "minecraft:cobblestone", 1,
                 site.layout().storagePort(), Set.of(ResourceStorageRole.WAREHOUSE), Optional.empty(), endpoint -> true).orElseThrow();
-        assertNotEquals(site.containerId(), destination.containerId());
+        assertNotEquals(QuarryStorageFixture.container(state, site), destination.containerId());
         assertEquals(site.settlementId(), destination.settlementId());
         assertTrue(ResourceStorageSelection.destination(state, site.settlementId(), "minecraft:cobblestone", 1,
                 site.layout().storagePort(), Set.of(ResourceStorageRole.WAREHOUSE), Optional.empty(), endpoint -> false).isEmpty());
@@ -77,7 +77,8 @@ class ResourceStorageTest {
                 PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:blocked-storage-access"));
         var refusal = assertThrows(io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable.class,
                 () -> ResourceStorageNavigation.plannedPath(blocked, target.station(), target));
-        assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH, refusal.status());
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.UNKNOWN_GEOMETRY, refusal.status(),
+                "an unclassified physical change requires observation; it is not a proved impassable block");
         assertEquals(state.actorExecutions(), blocked.actorExecutions());
         assertEquals(state.inventory().fungibleResources(), blocked.inventory().fungibleResources());
     }

@@ -22,16 +22,12 @@ final class ExtractionWorkPlanning {
     static boolean availableWork(FrontierWorldState state, ResidentProfile resident, long atTick) {
         if (!demanded(state, resident.settlementId())) return false;
         try {
-            for (var deposit : state.extractionSites().deposits().values().stream()
-                    .filter(value -> value.site().settlementId().equals(resident.settlementId()))
-                    .sorted(Comparator.comparing(value -> value.site().id())).toList())
-                if (ExtractionWorkAdmission.opportunity(state, resident, deposit.site().id()).isPresent()) return true;
+            return new SettlementExtractionAdmission(Set.of()).discover(state, resident, atTick).isPresent();
         } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable pending) {
             // A read-only availability port grants nothing. An observed exact route wait
             // wakes its caller; pending/unknown calculation is never absence/depletion.
             return false;
         }
-        return false;
     }
     static boolean demanded(FrontierWorldState state, SubjectId home) {
         return ExtractionStockDemand.requested(state, home);

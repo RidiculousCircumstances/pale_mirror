@@ -12,9 +12,9 @@ public final class ExtractionContinuation {
         return new ScheduledAction(new ScheduleId("schedule:extraction/work/" + job.value().replace(':', '/')),
                 new SimInstant(tick), 12, job, PROGRESS, 1);
     }
-    public static ScheduledAction review(SubjectId site, long tick) {
-        return new ScheduledAction(new ScheduleId("schedule:extraction/site/" + site.value().replace(':', '/')),
-                new SimInstant(tick), 13, site, REVIEW, 1);
+    public static ScheduledAction review(SubjectId settlement, long tick) {
+        return new ScheduledAction(new ScheduleId("schedule:extraction/settlement/" + settlement.value().replace(':', '/')),
+                new SimInstant(tick), 13, settlement, REVIEW, 1);
     }
     public static ProposedEvent wake(SubjectId job, long tick) {
         var action = at(job, Math.addExact(tick, 1));

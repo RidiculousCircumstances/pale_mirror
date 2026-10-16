@@ -137,7 +137,7 @@ class InternalShipmentTest {
         var source = new SubjectId("custody:test-retarget-source"); var lot = new SubjectId("lot:test-retarget");
         var ledger = state.inventory().fungibleResources().issue(
                 new ResourceLot(lot, home.id(), "minecraft:cobblestone", 10, "retarget-source", List.of()),
-                new CustodyAccount(source, new ResourceCustody.Container(site.containerId()), Map.of(lot, 10), Map.of()));
+                new CustodyAccount(source, new ResourceCustody.Container(QuarryStorageFixture.container(state, site)), Map.of(lot, 10), Map.of()));
         state = state.withInventory(state.inventory().withFungibleResources(ledger));
         var worker = SettlementWorkforce.candidates(state, home.id(), ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS).getFirst();
         var receiver = GoodsParticipantDeclarations.endpoint(home);
@@ -146,7 +146,7 @@ class InternalShipmentTest {
         var id = new SubjectId("shipment:test-retarget"); var claim = new SubjectId("claim:test-retarget");
         var shipment = new Shipment(id, new ResourceClaimDelegation(ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT,
                 claim, home.id(), id, 1), state.actorExecutions().next(worker.id(), ActorActivityKind.COURIER, id),
-                new ShipmentEndpoint.ExtractiveSite(home.id(), site.id(), site.containerId(), site.layout().storagePort()), receiver,
+                new ShipmentEndpoint.ExtractiveSite(home.id(), site.id(), QuarryStorageFixture.container(state, site), site.layout().storagePort()), receiver,
                 source, new SubjectId("custody:test-retarget-carrier"), receiving, "minecraft:cobblestone", Map.of(lot, 10),
                 Shipment.Status.AWAITING_LOAD, 1);
         state = InternalShipmentStateSupport.dispatch(state, home.id(), new InternalShipmentDispatched(shipment,
@@ -216,7 +216,7 @@ class InternalShipmentTest {
         var shipmentId = new SubjectId("shipment:test-quarry-player-loss");
         var ledger = state.inventory().fungibleResources().issue(
                 new ResourceLot(lot, home.id(), "minecraft:cobblestone", 36, "isolated-loss-fixture", List.of()),
-                new CustodyAccount(source, new ResourceCustody.Container(site.containerId()), Map.of(lot, 36), Map.of()));
+                new CustodyAccount(source, new ResourceCustody.Container(QuarryStorageFixture.container(state, site)), Map.of(lot, 36), Map.of()));
         state = state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().withFungibleResources(ledger)));
         var worker = SettlementWorkforce.candidates(state, home.id(), ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS).getFirst();
         var receiver = GoodsParticipantDeclarations.endpoint(home);
@@ -224,27 +224,28 @@ class InternalShipmentTest {
                 .orElseGet(() -> ReferenceContainerCustody.scopeId(receiver.containerId()));
         var shipment = new Shipment(shipmentId, new ResourceClaimDelegation(ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT,
                 claimId, home.id(), shipmentId, 1), state.actorExecutions().next(worker.id(), ActorActivityKind.COURIER, shipmentId),
-                new ShipmentEndpoint.ExtractiveSite(home.id(), site.id(), site.containerId(), site.layout().storagePort()), receiver,
+                new ShipmentEndpoint.ExtractiveSite(home.id(), site.id(), QuarryStorageFixture.container(state, site), site.layout().storagePort()), receiver,
                 source, new SubjectId("custody:test-quarry-player-carrier"), receiving, "minecraft:cobblestone", Map.of(lot, 36),
                 Shipment.Status.AWAITING_LOAD, 1);
         state = InternalShipmentStateSupport.dispatch(state, home.id(), new InternalShipmentDispatched(shipment,
                 new ClaimAllocation(claimId, home.id(), home.id(), shipment.itemKind(), 36, Map.of(lot, 36), ClaimPurpose.INTERNAL_LOGISTICS)));
         var inventoryBeforeBinding = state.inventory();
+        var sourceContainer = QuarryStorageFixture.container(state, site);
         int freeSlot = java.util.stream.IntStream.range(0, 27)
-                .filter(slot -> inventoryBeforeBinding.itemAt(site.containerId(), slot).isEmpty()).findFirst().orElseThrow();
+                .filter(slot -> inventoryBeforeBinding.itemAt(sourceContainer, slot).isEmpty()).findFirst().orElseThrow();
         var stack = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                new InventoryCustody.ContainerSlot(site.containerId(), freeSlot)), "minecraft:cobblestone", 36);
+                new InventoryCustody.ContainerSlot(QuarryStorageFixture.container(state, site), freeSlot)), "minecraft:cobblestone", 36);
         ledger = state.inventory().fungibleResources();
         state = state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().withFungibleResources(
                 ledger.rebind(source, 1L, FungiblePhysicalObservation.bind(ledger, source, 1L, List.of(stack))))));
         assertEquals(Set.of(claimId), SourceStockClaimLoss.admissibleClaims(state, source));
         var loss = assertInstanceOf(FungibleStockDepartureObserved.class, FungibleContainerPlayerEdit.classify(
-                state.inventory().fungibleResources(), source, site.containerId(), home.id(), 1L,
+                state.inventory().fungibleResources(), source, QuarryStorageFixture.container(state, site), home.id(), 1L,
                 UUID.randomUUID(), UUID.randomUUID(), List.of(), SourceStockClaimLoss.admissibleClaims(state, source)));
         var economics = state.inventory().economics();
         var after = SourceStockClaimLoss.settle(state, loss);
         var woken = ServiceAccessCoordinator.wakePoints(state, after);
-        assertTrue(woken.contains(site.containerId()), "retiring a courier wakes its exact source, not only the home depot");
+        assertTrue(woken.contains(QuarryStorageFixture.container(state, site)), "retiring a courier wakes its exact source, not only the home depot");
         assertTrue(woken.contains(receiver.containerId()), "both sides of the retired transport demand are addressed");
         assertEquals(Shipment.Status.ALLOCATION_WITHDRAWN, after.shipments().shipments().get(shipmentId).status());
         assertFalse(after.inventory().fungibleResources().claims().containsKey(claimId));
@@ -264,7 +265,7 @@ class InternalShipmentTest {
         var claimId = new SubjectId("claim:test-local-haul"); var shipmentId = new SubjectId("shipment:test-local-haul");
         var resource = new ResourceLot(lot, home.id(), "minecraft:cobblestone", 10, "isolated-fixture", List.of());
         var ledger = state.inventory().fungibleResources().issue(resource,
-                new CustodyAccount(source, new ResourceCustody.Container(site.containerId()), Map.of(lot, 10), Map.of()));
+                new CustodyAccount(source, new ResourceCustody.Container(QuarryStorageFixture.container(state, site)), Map.of(lot, 10), Map.of()));
         state = state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().withFungibleResources(ledger)));
         var worker = SettlementWorkforce.candidates(state, home.id(), ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS).getFirst();
         var receiver = GoodsParticipantDeclarations.endpoint(home);
@@ -272,7 +273,7 @@ class InternalShipmentTest {
                 .orElseGet(() -> ReferenceContainerCustody.scopeId(receiver.containerId()));
         var shipment = new Shipment(shipmentId, new ResourceClaimDelegation(ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT,
                 claimId, home.id(), shipmentId, 1), state.actorExecutions().next(worker.id(), ActorActivityKind.COURIER, shipmentId),
-                new ShipmentEndpoint.ExtractiveSite(home.id(), site.id(), site.containerId(), site.layout().storagePort()), receiver,
+                new ShipmentEndpoint.ExtractiveSite(home.id(), site.id(), QuarryStorageFixture.container(state, site), site.layout().storagePort()), receiver,
                 source, new SubjectId("custody:test-local-hauler"), receiving, "minecraft:cobblestone", Map.of(lot, 10), Shipment.Status.AWAITING_LOAD, 1);
         var claim = new ClaimAllocation(claimId, home.id(), home.id(), shipment.itemKind(), 10, shipment.lotQuantities(), ClaimPurpose.INTERNAL_LOGISTICS);
         var before = state;

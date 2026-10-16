@@ -42,7 +42,7 @@ public final class ExtractionStockDemand {
      * the initial face is depleted. This projection never grants reach or work. */
     private static Map<SubjectId, Set<String>> undevelopedProducts(FrontierWorldState state) {
         return UNDEVELOPED.get(List.of(state.bootstrap(), state.extractionSites().deposits(),
-                state.extractionSites().geologicalExclusions()), () -> {
+                state.extractionSites().geologicalExclusions(), state.extractionSites().geology(), state.extractionSites().knowledge()), () -> {
             var result = new LinkedHashMap<SubjectId, Set<String>>();
             for (var deposit : state.extractionSites().deposits().values()) {
                 var sources = deposit.site().layout().cells().stream().map(ExtractionLayout.Cell::source)

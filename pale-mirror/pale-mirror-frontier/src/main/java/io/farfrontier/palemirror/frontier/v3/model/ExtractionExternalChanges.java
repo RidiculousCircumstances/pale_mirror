@@ -61,7 +61,7 @@ public final class ExtractionExternalChanges {
         }
         if (event.unapplied().isPresent() != usedAbort) throw new IllegalArgumentException("external change supplied foreign abort evidence");
         var deposits = new LinkedHashMap<>(sites.deposits()); deposits.put(changed.site().id(), changed);
-        var successor = new ExtractionSiteState(deposits, jobs, sites.nextWorkOrdinal(), sites.geologicalExclusions());
+        var successor = new ExtractionSiteState(deposits, jobs, sites.nextWorkOrdinal(), sites.geologicalExclusions(), sites.geology(), sites.knowledge());
         var custody = lease.status() == PhysicalCustodyLeaseStatus.PREPARING
                 ? state.replicaCustody().supersedeProjection(region.scopeId(), lease.authorityEpoch(), lease.expectedCanonicalRevision(),
                     lease.expectedReplicaRevision(), revision, ExtractionSourceCustody.fingerprint(successor, region), region.provenance())

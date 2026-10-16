@@ -1,0 +1,308 @@
+{
+  "schema": 1,
+  "id": "disposable_distributed_quarry_recovery",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 20260918065
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25585,
+    "profile": "distributed-quarry-world",
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMDeposits"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "process",
+          "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+          "expect": {
+            "status": "ok",
+            "settlement": "settlement:1",
+            "result": {
+              "geologyKnown": true
+            }
+          }
+        },
+        {
+          "view": "process",
+          "id": "extraction:quarry-f82092b2-3240-345a-a3c3-aaa6ab9aa18f",
+          "expect": {
+            "status": "ok",
+            "settlement": "settlement:1",
+            "result": {
+              "geologyKnown": true
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571"
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "extraction:quarry-f82092b2-3240-345a-a3c3-aaa6ab9aa18f"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "process",
+          "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -1,
+        "y": 0,
+        "z": -2
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "work:extraction-1",
+      "expect": {
+        "status": "ok",
+        "family": "frontier.extraction.work",
+        "lease": "HOT"
+      },
+      "timeoutMs": 180000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "work:extraction-1",
+      "expect": {
+        "status": "ok",
+        "family": "frontier.extraction.work",
+        "lease": "HOT"
+      },
+      "timeoutMs": 180000,
+      "requireIncreaseAt": "result.carried",
+      "causalMilestone": "actual_hot_miner_advances_finite_source_history"
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "process",
+          "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+          "field": "firstSource"
+        }
+      }
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "process",
+          "id": "extraction:quarry-f82092b2-3240-345a-a3c3-aaa6ab9aa18f",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -1,
+        "y": 0,
+        "z": -2
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "process",
+          "id": "extraction:quarry-f82092b2-3240-345a-a3c3-aaa6ab9aa18f",
+          "field": "firstSource"
+        }
+      }
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "extraction:quarry-f82092b2-3240-345a-a3c3-aaa6ab9aa18f"
+    },
+    {
+      "type": "visit",
+      "dimension": "minecraft:overworld",
+      "position": {
+        "x": 24,
+        "y": 64,
+        "z": -132
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "workersCold": true,
+          "liveSourceRegions": 0
+        }
+      },
+      "timeoutMs": 90000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "extraction:quarry-f82092b2-3240-345a-a3c3-aaa6ab9aa18f",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "workersCold": true,
+          "liveSourceRegions": 0
+        }
+      },
+      "timeoutMs": 90000
+    },
+    {
+      "type": "fast_forward",
+      "ticks": 2000,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571"
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "extraction:quarry-f82092b2-3240-345a-a3c3-aaa6ab9aa18f"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "process",
+          "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -1,
+        "y": 0,
+        "z": -2
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "hasExtraction": true
+        }
+      },
+      "timeoutMs": 120000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "process",
+          "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+          "field": "firstSource"
+        }
+      }
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571"
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "extraction:quarry-f82092b2-3240-345a-a3c3-aaa6ab9aa18f"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 16
+  },
+  "assertions": [
+    {
+      "after": 5,
+      "view": "process",
+      "id": "work:extraction-1",
+      "expect": {
+        "status": "ok",
+        "family": "frontier.extraction.work",
+        "lease": "HOT"
+      }
+    },
+    {
+      "after": 20,
+      "view": "process",
+      "id": "extraction:quarry-ec4ecc0f-23a5-3244-b419-734f76281571",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "hasExtraction": true
+        }
+      }
+    },
+    {
+      "after": 22,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "inventoryConflicts": 0,
+        "sceneConflicts": 0,
+        "replicaCustodyDiagnostics": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 7,
+      "name": "first-deposit-during-hot-mining"
+    },
+    {
+      "after": 10,
+      "name": "separate-second-worksite"
+    },
+    {
+      "after": 20,
+      "name": "mined-front-after-cold-and-restart"
+    }
+  ]
+}

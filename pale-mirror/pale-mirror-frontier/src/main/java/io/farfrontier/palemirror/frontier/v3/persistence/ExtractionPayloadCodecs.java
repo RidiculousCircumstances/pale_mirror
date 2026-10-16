@@ -165,11 +165,7 @@ final class ExtractionPayloadCodecs {
         var value = decision.orElseThrow();
         switch (value) {
             case io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWorkDecision.Source source -> {
-                out.writeByte(1); ActorExecutionStateCodec.writeId(out, source.execution());
-                FrontierWorldStateCodec.writePosition(out, source.origin().support());
-                var target = source.target(); out.writeByte(target.key().family().wireTag());
-                out.writeUTF(target.key().owner().value()); out.writeLong(target.key().cell()); out.writeLong(target.revision());
-                PedestrianRouteReceiptCodec.write(out, source.route());
+                out.writeByte(1); writeSource(out, source);
             }
             case io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWorkDecision.Storage storage -> {
                 out.writeByte(2); ActorExecutionStateCodec.writeId(out, storage.execution());
@@ -182,25 +178,43 @@ final class ExtractionPayloadCodecs {
             case io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWorkDecision.StorePart part -> {
                 out.writeByte(4); ActorExecutionStateCodec.writeId(out, part.execution());
             }
+            case io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWorkDecision.Relocate relocation -> {
+                out.writeByte(5); writeSource(out, relocation.source());
+                ShipmentStateCodec.endpoint(out, relocation.destination()); PedestrianRouteReceiptCodec.write(out, relocation.storageRoute());
+            }
         }
     }
     private static java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWorkDecision> readDecision(DataInputStream in) throws IOException {
         return switch (in.readUnsignedByte()) {
             case 0 -> java.util.Optional.empty();
-            case 1 -> {
-                var execution = ActorExecutionStateCodec.readId(in); var origin = new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in));
-                var target = new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionTarget(new CellMutationKey(
-                        CellMutationKey.OwnerFamily.decode(in.readUnsignedByte()), new SubjectId(in.readUTF()), in.readLong()), in.readLong());
-                yield java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWorkDecision.Source(
-                        execution, origin, target, PedestrianRouteReceiptCodec.read(in)));
-            }
+            case 1 -> java.util.Optional.of(readSource(in));
             case 2 -> java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWorkDecision.Storage(
                     ActorExecutionStateCodec.readId(in), new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in)),
                     ShipmentStateCodec.endpoint(in), PedestrianRouteReceiptCodec.read(in)));
             case 3 -> java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWorkDecision.Finished(ActorExecutionStateCodec.readId(in)));
             case 4 -> java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWorkDecision.StorePart(ActorExecutionStateCodec.readId(in)));
+            case 5 -> {
+                var selected = readSource(in);
+                yield java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWorkDecision.Relocate(
+                        selected, ShipmentStateCodec.endpoint(in), PedestrianRouteReceiptCodec.read(in)));
+            }
             default -> throw new IllegalArgumentException("unknown extraction selected-decision wire tag");
         };
+    }
+    private static void writeSource(DataOutputStream out,
+            io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWorkDecision.Source source) throws IOException {
+        ActorExecutionStateCodec.writeId(out, source.execution());
+        FrontierWorldStateCodec.writePosition(out, source.origin().support());
+        var target = source.target(); out.writeByte(target.key().family().wireTag());
+        out.writeUTF(target.key().owner().value()); out.writeLong(target.key().cell()); out.writeLong(target.revision());
+        PedestrianRouteReceiptCodec.write(out, source.route());
+    }
+    private static io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWorkDecision.Source readSource(DataInputStream in) throws IOException {
+        var execution = ActorExecutionStateCodec.readId(in); var origin = new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in));
+        var target = new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionTarget(new CellMutationKey(
+                CellMutationKey.OwnerFamily.decode(in.readUnsignedByte()), new SubjectId(in.readUTF()), in.readLong()), in.readLong());
+        return new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWorkDecision.Source(
+                execution, origin, target, PedestrianRouteReceiptCodec.read(in));
     }
     private interface Reader { FrontierPayload read(DataInputStream in) throws IOException; }
     private static PayloadCodec codec(String type, Writer writer, Reader reader) {

@@ -102,7 +102,7 @@ public record ExtractionDeposit(ExtractionSite site, Map<Long, CellState> cells,
         for (var cell : layout.cells()) if (!next.containsKey(cell.id())) {
             next.put(cell.id(), new CellState(1, Disposition.PRESENT, cell.definition().before())); additions.add(cell.id());
         }
-        return new ExtractionDeposit(new ExtractionSite(site.id(), site.settlementId(), site.containerId(), layout), next, geometry,
+        return new ExtractionDeposit(new ExtractionSite(site.id(), site.settlementId(), layout, site.mineralDeposits()), next, geometry,
                 development.extend(expectedRevision, additions));
     }
 }

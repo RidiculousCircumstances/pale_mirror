@@ -54,6 +54,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("quarryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("quarry-graybox"))),
             Map.entry("fuelledQuarryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("fuelled-quarry"))),
             Map.entry("supplyQuarryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("supply-quarry"))),
+            Map.entry("distributedQuarryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("market-quarry"))),
             Map.entry("consolidatedTrade", FrontierV3FixtureCatalog::consolidatedTradeConfiguration),
             Map.entry("buyerCollection", FrontierV3FixtureCatalog::buyerCollectionConfiguration),
             Map.entry("quarryFront", QuarryFrontFixture::configuration),

@@ -29,12 +29,13 @@ public final class FrontierDomainRelationships {
         GOODS_ORDER, GOODS_CONTRACT, ECONOMIC_ACCOUNT, CONTAINER, SHIPMENT, UNIT_GROUP, TRANSPORT_MISSION,
         PRODUCTION_JOB, HIVE_GROWTH_JOB, RESOURCE_SITE, RESOURCE_HARVEST_JOB, RESIDENT, EXACT_ITEM, RESOURCE_LOT, RESOURCE_ACCOUNT,
         RESOURCE_CLAIM, PROVISION_CYCLE, PROVISION_ALLOCATION, SCENE_LEASE, AMBIENT_LEASE, CARRIER_EVIDENCE,
-        CARGO, SERVICE_WORK, HIVE_MOBILIZATION, BIOFORM, STRUCTURE, ACTOR, EXTRACTION_SITE, EXTRACTION_WORK
+        CARGO, SERVICE_WORK, HIVE_MOBILIZATION, BIOFORM, STRUCTURE, ACTOR, EXTRACTION_SITE, EXTRACTION_WORK, SETTLEMENT, MINERAL_DEPOSIT
     }
 
     /** Stable semantic strings are deliberately independent from enum ordinal/wire ordering. */
     public enum Kind {
-        EXTRACTION_STORAGE("extraction-storage"), EXTRACTION_WORK_SITE("extraction-work-site"),
+        EXTRACTION_MINERAL("extraction-mineral"), SETTLEMENT_MINERAL_KNOWLEDGE("settlement-mineral-knowledge"),
+        EXTRACTION_WORK_SITE("extraction-work-site"),
         EXTRACTION_WORKER("extraction-worker"), EXTRACTION_TOOL("extraction-tool"), EXTRACTION_CARGO("extraction-cargo"),
         EXTRACTION_TOOL_SOURCE("extraction-tool-source"), EXTRACTION_WORK_STORAGE("extraction-work-storage"),
         BUDGET_PAYER("budget-payer"), BUDGET_OWNER("budget-owner"), RESERVATION_BUDGET("reservation-budget"),
@@ -96,7 +97,8 @@ public final class FrontierDomainRelationships {
         return Map.copyOf(result); }
     private static Set<Lifecycle> lifecycle(Kind kind) { return kind == Kind.ACTOR_AMBIENT_LEASE || kind == Kind.ACTOR_CARRIER_EVIDENCE ? EnumSet.of(Lifecycle.OBSERVED) : EnumSet.allOf(Lifecycle.class); }
     private static EntityKind source(Kind kind) { return switch (kind) {
-        case EXTRACTION_STORAGE -> EntityKind.EXTRACTION_SITE;
+        case EXTRACTION_MINERAL -> EntityKind.EXTRACTION_SITE;
+        case SETTLEMENT_MINERAL_KNOWLEDGE -> EntityKind.SETTLEMENT;
         case EXTRACTION_WORK_SITE, EXTRACTION_WORKER, EXTRACTION_TOOL, EXTRACTION_CARGO, EXTRACTION_TOOL_SOURCE, EXTRACTION_WORK_STORAGE -> EntityKind.EXTRACTION_WORK;
         case BUDGET_PAYER, BUDGET_OWNER -> EntityKind.FINANCIAL_BUDGET;
         case RESERVATION_BUDGET -> EntityKind.FINANCIAL_RESERVATION;
@@ -116,7 +118,7 @@ public final class FrontierDomainRelationships {
         case SERVICE_TASK, SERVICE_WORKER, SERVICE_FACILITY, SERVICE_INPUT, SERVICE_SCENE_LEASE -> EntityKind.SERVICE_WORK;
         case HIVE_MOBILIZATION_TASK, HIVE_MOBILIZATION_MEMBER -> EntityKind.HIVE_MOBILIZATION; }; }
     private static EntityKind target(Kind kind) { return switch (kind) {
-        case EXTRACTION_STORAGE -> EntityKind.CONTAINER;
+        case EXTRACTION_MINERAL, SETTLEMENT_MINERAL_KNOWLEDGE -> EntityKind.MINERAL_DEPOSIT;
         case EXTRACTION_WORK_SITE -> EntityKind.EXTRACTION_SITE;
         case EXTRACTION_WORKER -> EntityKind.RESIDENT;
         case EXTRACTION_TOOL -> EntityKind.EXACT_ITEM;
@@ -154,7 +156,8 @@ public final class FrontierDomainRelationships {
         case SERVICE_TASK, HIVE_MOBILIZATION_TASK -> EntityKind.TASK; case SERVICE_FACILITY -> EntityKind.STRUCTURE; case SERVICE_INPUT -> EntityKind.EXACT_ITEM;
         case SERVICE_SCENE_LEASE -> EntityKind.SCENE_LEASE; case HIVE_MOBILIZATION_MEMBER -> EntityKind.BIOFORM; }; }
     private static EntityKind owner(Kind kind) { return switch (kind) {
-        case EXTRACTION_STORAGE -> EntityKind.EXTRACTION_SITE;
+        case EXTRACTION_MINERAL -> EntityKind.EXTRACTION_SITE;
+        case SETTLEMENT_MINERAL_KNOWLEDGE -> EntityKind.SETTLEMENT;
         case EXTRACTION_WORK_SITE, EXTRACTION_WORKER, EXTRACTION_TOOL, EXTRACTION_CARGO, EXTRACTION_TOOL_SOURCE, EXTRACTION_WORK_STORAGE -> EntityKind.EXTRACTION_WORK;
         case BUDGET_PAYER, BUDGET_OWNER -> EntityKind.FINANCIAL_BUDGET;
         case RESERVATION_BUDGET -> EntityKind.FINANCIAL_RESERVATION;
@@ -177,6 +180,7 @@ public final class FrontierDomainRelationships {
         case SERVICE_TASK, SERVICE_WORKER, SERVICE_FACILITY, SERVICE_INPUT, SERVICE_SCENE_LEASE -> EntityKind.SERVICE_WORK;
         case HIVE_MOBILIZATION_TASK, HIVE_MOBILIZATION_MEMBER -> EntityKind.HIVE_MOBILIZATION; }; }
     private static Cardinality cardinality(Kind kind) { return switch (kind) {
+        case EXTRACTION_MINERAL, SETTLEMENT_MINERAL_KNOWLEDGE -> Cardinality.MANY_TO_MANY;
         case OBJECTIVE_TASK, PROVISION_ALLOCATION, ACTOR_CARRIER_EVIDENCE, GOODS_CLAIM, GROUP_MEMBER, TRANSPORT_SHIPMENT -> Cardinality.ONE_TO_MANY;
         case TASK_PREDECESSOR, ALLOCATION_RECIPIENT -> Cardinality.MANY_TO_MANY; default -> Cardinality.MANY_TO_ONE; }; }
     public enum FamilyDisposition { RELATION_LAYER_CURRENT, OWNER_EXPLICIT_UNCHANGED, MIGRATION_REQUIRED_BEFORE_TOUCH, NOT_A_DOMAIN_RELATION }
@@ -231,7 +235,9 @@ public final class FrontierDomainRelationships {
     }
 
     private static final List<OwnerSurface> CURRENT_OWNER_SURFACES = List.of(
-            surface(io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSite.class, "id", "settlementId", "containerId"),
+            surface(io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSite.class, "id", "settlementId", "mineralDeposits"),
+            surface(io.farfrontier.palemirror.frontier.v3.model.geology.MineralDeposit.class, "id"),
+            surface(io.farfrontier.palemirror.frontier.v3.model.geology.GeologicalKnowledge.class, "surveys"),
             surface(io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWork.class,
                     "id", "siteId", "toolId", "carriedAccountId", "outputLotId"),
             surface(Shipment.class, "id", "sourceAccountId", "carriedAccountId", "receivingAccountId", "lotQuantities", "transportMissionId", "mobileContainerId"),

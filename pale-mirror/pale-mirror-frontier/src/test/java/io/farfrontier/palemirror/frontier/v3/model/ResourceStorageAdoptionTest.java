@@ -148,7 +148,7 @@ class ResourceStorageAdoptionTest {
         var state = initial();
         var site = state.extractionSites().deposits().values().stream()
                 .filter(deposit -> deposit.site().settlementId().equals(new SubjectId("settlement:6"))).findFirst().orElseThrow().site();
-        var socket = state.inventory().surfaces().get(site.containerId()).position();
+        var socket = state.inventory().surfaces().get(QuarryStorageFixture.container(state, site)).position();
         assertEquals(site.settlementId(), SettlementStorageTerritory.owner(state, socket).orElseThrow().id());
         var original = event(state, false); var record = original.declaration().container();
         var adopted = original.apply(state, record.ownerId());

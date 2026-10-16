@@ -88,16 +88,16 @@ class ProductionStockDemandTest {
         var ledger = state.inventory().fungibleResources();
         var lot = new SubjectId("lot:stock-test-quarry"); var account = new SubjectId("custody:stock-test-quarry");
         ledger = ledger.issue(new ResourceLot(lot, owner, "minecraft:cobblestone", count, "test:stock", List.of()),
-                new CustodyAccount(account, new ResourceCustody.Container(site.containerId()), Map.of(lot, count), Map.of()));
+                new CustodyAccount(account, new ResourceCustody.Container(QuarryStorageFixture.container(state, site)), Map.of(lot, count), Map.of()));
         state = state.withInventory(state.inventory().withFungibleResources(ledger));
         var filled = ProductionStockDemand.read(state, owner, "minecraft:cobblestone");
         assertFalse(filled.requested()); assertEquals(count, filled.held());
         var actor = state.bootstrap().settlements().stream().filter(value -> value.id().equals(owner)).findFirst().orElseThrow().residents().getFirst().id();
         var take = new ActorContainerItemOrder(site.id(), actor, ActorContainerItemOrder.Direction.TAKE,
-                new ActorContainerItemOrder.Portion.Fungible(account, new ResourceCustody.Container(site.containerId()),
+                new ActorContainerItemOrder.Portion.Fungible(account, new ResourceCustody.Container(QuarryStorageFixture.container(state, site)),
                         new SubjectId("custody:stock-test-hauler"), new ResourceCustody.Actor(actor), Optional.empty(),
                         "minecraft:cobblestone", Map.of(lot, 64)),
-                new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(site.containerId()), site.layout().storagePort(),
+                new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(QuarryStorageFixture.container(state, site)), site.layout().storagePort(),
                 ActorContainerItemOrder.Hand.OFF, 1, 1);
         ledger = ledger.transferActorOrderCold(take);
         state = state.withInventory(state.inventory().withFungibleResources(ledger));

@@ -14,7 +14,7 @@ class CoalDepositReserveTest {
     }
     @Test void longReserveIsFinitePhysicalOreNotFreeInventoryOrAnExpandedInitialJobPool() {
         var state = initial(); var rules = state.bootstrap().ruleset();
-        assertEquals("frontier-v3-quarry-graybox-r14", rules.id());
+        assertEquals("frontier-v3-quarry-graybox-r15", rules.id());
         assertTrue(rules.initialSettlementStocks().stream().noneMatch(stock -> stock.itemKind().equals("minecraft:coal")));
         assertTrue(state.inventory().fungibleResources().lots().values().stream().noneMatch(lot -> lot.itemKind().equals("minecraft:coal")));
         assertTrue(rules.goodsTrade().supplyPlanning().reserves().isPresent());
@@ -25,14 +25,14 @@ class CoalDepositReserveTest {
                     .filter(block -> block.block().kind().equals("minecraft:coal_ore")).toList();
             if (ore.isEmpty()) continue;
             producers++;
-            assertEquals(1336, ore.size()); coal += ore.size();
+            assertTrue(Set.of(1336, 384).contains(ore.size()), "primary and secondary finite ore bodies"); coal += ore.size();
             var outside = ore.stream().filter(block -> block.key().role() == WorksiteBlock.Role.NATURAL_TERRAIN).findFirst().orElseThrow();
             var sample = ExtractionGroundKnowledge.forSite(state, deposit).at(outside.position()).orElseThrow();
             assertEquals("minecraft:coal_ore", sample.block().kind());
             assertEquals(io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockGeometry.Sample.Permission.PUBLIC, sample.permission());
             assertTrue(state.bootstrap().bounds().contains(outside.position()));
         }
-        assertEquals(3, producers); assertEquals(4008, coal);
+        assertEquals(6, producers); assertEquals(5160, coal);
         long required = ProductionFuelReserve.requiredItems(rules.production(), rules.workCatalog(), BakeryRecipes.BREAD,
                 "minecraft:coal", 64, state.bootstrap().settlements().size(), 100_000);
         assertTrue(coal >= required, "finite veins cover every existing bakery at the maximum normal rate");

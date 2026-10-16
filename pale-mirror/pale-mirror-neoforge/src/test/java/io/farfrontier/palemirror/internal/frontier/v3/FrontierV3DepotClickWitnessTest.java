@@ -67,13 +67,13 @@ class FrontierV3DepotClickWitnessTest {
                         20260918065L, io.farfrontier.palemirror.frontier.v3.model.FrontierRulesets.installed(
                                 "frontier-v3-quarry-graybox-r4")));
         var site = state.extractionSites().deposits().values().iterator().next().site();
-        var inventory = state.inventory().withSurfaceStatus(site.containerId(),
+        var inventory = state.inventory().withSurfaceStatus(io.farfrontier.palemirror.frontier.v3.model.QuarryStorageFixture.container(state, site),
                 io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus.PREPARED)
-                .withSurfaceStatus(site.containerId(), io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus.ACTIVE);
+                .withSurfaceStatus(io.farfrontier.palemirror.frontier.v3.model.QuarryStorageFixture.container(state, site), io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus.ACTIVE);
         state = state.withChanges(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate.begin().inventory(inventory));
-        var at = inventory.surfaces().get(site.containerId()).position();
+        var at = inventory.surfaces().get(io.farfrontier.palemirror.frontier.v3.model.QuarryStorageFixture.container(state, site)).position();
         var position = new net.minecraft.core.BlockPos(at.x(), at.y(), at.z());
-        assertEquals(site.containerId(), FrontierV3ContainerClickExecutor.ownedContainer(state, position).id());
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.QuarryStorageFixture.container(state, site), FrontierV3ContainerClickExecutor.ownedContainer(state, position).id());
         assertEquals(null, FrontierV3ContainerClickExecutor.ownedContainer(state, position.above(10)));
     }
 

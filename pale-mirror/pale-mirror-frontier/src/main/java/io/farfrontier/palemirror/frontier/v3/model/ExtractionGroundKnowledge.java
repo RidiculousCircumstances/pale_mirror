@@ -94,6 +94,9 @@ final class ExtractionGroundKnowledge implements KnownBlockGeometry<BlockExtract
                         : protectedColumns.contains(new TerrainColumn(position.x(), position.z()))
                             || declared.contains(position) || sources.containsKey(position)
                             ? Sample.Permission.PROTECTED : Sample.Permission.PUBLIC));
+        // A global terrain probe has no settlement survey authority. Never flatten
+        // a declared mineral inclusion into the background stone stratum.
+        if (state.extractionSites().geology().at(position).isPresent()) return Optional.empty();
         return ExtractionTerrainFacts.at(state.bootstrap(), position).map(fact -> new Sample<>(
                 fact.block(), fact.revision(),
                 protectedColumns.contains(new TerrainColumn(position.x(), position.z())) || declared.contains(position)

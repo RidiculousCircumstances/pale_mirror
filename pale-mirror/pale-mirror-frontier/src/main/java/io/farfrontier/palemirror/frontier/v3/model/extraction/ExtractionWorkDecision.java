@@ -26,6 +26,12 @@ public sealed interface ExtractionWorkDecision {
     record StorePart(ActorExecutionId execution) implements ExtractionWorkDecision {
         public StorePart { requireExecution(execution); }
     }
+    /** Explicit destination site; moving the worker does not transfer geology or mint stock. */
+    record Relocate(Source source, ShipmentEndpoint destination, Optional<PedestrianRouteReceipt> storageRoute)
+            implements ExtractionWorkDecision {
+        public Relocate { Objects.requireNonNull(source); Objects.requireNonNull(destination); Objects.requireNonNull(storageRoute); }
+        @Override public ActorExecutionId execution() { return source.execution(); }
+    }
     private static void requireExecution(ActorExecutionId execution) {
         if (Objects.requireNonNull(execution).activityKind() != ActorActivityKind.EXTRACTION)
             throw new IllegalArgumentException("extraction choice has a foreign execution declaration");

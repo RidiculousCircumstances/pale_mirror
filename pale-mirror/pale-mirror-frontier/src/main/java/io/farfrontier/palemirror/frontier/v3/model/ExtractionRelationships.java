@@ -8,12 +8,16 @@ import static io.farfrontier.palemirror.frontier.v3.model.FrontierDomainRelation
 final class ExtractionRelationships {
     private ExtractionRelationships() { }
     static void collect(FrontierWorldState state, List<Edge> edges) {
-        state.extractionSites().validate(state.bootstrap(), state.inventory());
+        state.extractionSites().validate(state.bootstrap());
         ExtractionWorkAuthority.validateReferences(state.extractionSites(), state.actorExecutions());
         for (var deposit : state.extractionSites().deposits().values()) {
             var owner = new SubjectEndpoint(EntityKind.EXTRACTION_SITE, deposit.site().id());
-            add(edges, Kind.EXTRACTION_STORAGE, owner, EntityKind.CONTAINER, deposit.site().containerId());
+            deposit.site().mineralDeposits().forEach(id -> add(edges, Kind.EXTRACTION_MINERAL, owner, EntityKind.MINERAL_DEPOSIT, id));
         }
+        state.extractionSites().knowledge().surveys().forEach((home, known) -> {
+            var owner = new SubjectEndpoint(EntityKind.SETTLEMENT, home);
+            known.keySet().forEach(id -> add(edges, Kind.SETTLEMENT_MINERAL_KNOWLEDGE, owner, EntityKind.MINERAL_DEPOSIT, id));
+        });
         for (var job : state.extractionSites().work().values()) {
             var owner = new SubjectEndpoint(EntityKind.EXTRACTION_WORK, job.id());
             var resident = state.humanPopulation().resident(job.execution().actorId());

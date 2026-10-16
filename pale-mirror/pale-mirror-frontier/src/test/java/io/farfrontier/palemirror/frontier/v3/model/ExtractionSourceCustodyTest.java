@@ -24,7 +24,8 @@ class ExtractionSourceCustodyTest {
                 "the isolated declared front must admit all three mutation targets");
         var sites = original.replace(deposit);
         var one = mutationJob(deposit, first, 1); var two = mutationJob(deposit, second, 2); var three = mutationJob(deposit, remote, 3);
-        sites = new ExtractionSiteState(sites.deposits(), Map.of(one.id(), one, two.id(), two, three.id(), three), 4);
+        sites = new ExtractionSiteState(sites.deposits(), Map.of(one.id(), one, two.id(), two, three.id(), three), 4,
+                sites.geologicalExclusions(), sites.geology(), sites.knowledge());
         assertTrue(ExtractionSourceCustody.mutationAvailable(sites, one));
         assertTrue(ExtractionSourceCustody.mutationAvailable(sites, two));
         var step = new ExtractionPhysicalStep.BlockWork(new ActorHotObservation(new ActorActuationId(
@@ -49,9 +50,9 @@ class ExtractionSourceCustodyTest {
     private static ExtractionWork mutationJob(ExtractionDeposit deposit, ExtractionLayout.Cell cell, int ordinal) {
         var id = new SubjectId("work:mutation-" + ordinal); var actor = new SubjectId("resident:mutation-" + ordinal);
         var site = deposit.site();
-        var endpoint = new ShipmentEndpoint.ExtractiveSite(site.settlementId(), site.id(), site.containerId(), site.layout().storagePort());
+        var endpoint = new ShipmentEndpoint.ExtractiveSite(site.settlementId(), site.id(), new SubjectId("container:mutation-fixture"), site.layout().storagePort());
         return new ExtractionWork(id, site.id(), new ActorExecutionId(actor, ActorActivityKind.EXTRACTION, id, 1),
-                new SubjectId("tool:mutation-" + ordinal), new InventoryCustody.ContainerSlot(site.containerId(), ordinal - 1),
+                new SubjectId("tool:mutation-" + ordinal), new InventoryCustody.ContainerSlot(new SubjectId("container:mutation-fixture"), ordinal - 1),
                 endpoint, endpoint, cell.definition().coldOutput().getFirst().itemKind(), new SubjectId("custody:mutation-" + ordinal),
                 new SubjectId("lot:mutation-" + ordinal), 0, ExtractionWork.Phase.EXTRACT, 1,
                 Optional.of(ExtractionWorkEffects.target(deposit, cell)), Optional.empty(), Optional.empty());
@@ -136,7 +137,7 @@ class ExtractionSourceCustodyTest {
     @Test void socketDeclaresBothItsFloorAndAirOpeningAndRejectsForeignGeometry() {
         var state = initial(); var site = state.extractionSites().deposits().values().iterator().next().site();
         var socket = (ContainerSocketSupport.Worksite) FrontierContainerSocketPlan.declaredSupport(state,
-                state.inventory().surfaces().get(site.containerId())).orElseThrow();
+                state.inventory().surfaces().get(QuarryStorageFixture.container(state, site))).orElseThrow();
         assertEquals(site.layout().container(), socket.socket().position());
         assertEquals("minecraft:air", socket.socket().block().kind());
         assertEquals(WorksiteBlock.Role.CONTAINER_SOCKET, socket.socket().key().role());

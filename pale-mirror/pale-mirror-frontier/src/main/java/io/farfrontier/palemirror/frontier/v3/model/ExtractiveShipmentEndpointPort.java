@@ -10,15 +10,17 @@ final class ExtractiveShipmentEndpointPort implements ShipmentEndpointPort {
         if (!(endpoint instanceof ShipmentEndpoint.ExtractiveSite declared))
             throw new IllegalArgumentException("extractive endpoint has a foreign nominal schema");
         var deposit = state.extractionSites().deposits().get(declared.siteId());
-        if (deposit == null || !deposit.site().settlementId().equals(declared.settlementId())
-                || !deposit.site().containerId().equals(declared.containerId())
-                || !deposit.site().layout().storagePort().equals(declared.station()))
+        if (deposit == null || !deposit.site().settlementId().equals(declared.settlementId()))
             throw new IllegalArgumentException("shipment endpoint differs from its declared extractive storage port");
         return deposit.site();
     }
     @Override public void validate(FrontierWorldState state, ShipmentEndpoint endpoint) {
-        var site = site(state, endpoint); var container = state.inventory().containers().get(site.containerId());
-        if (container == null || !container.ownerId().equals(site.settlementId()))
+        var site = site(state, endpoint); var container = state.inventory().containers().get(endpoint.containerId());
+        var surface = state.inventory().surfaces().get(endpoint.containerId());
+        if (container == null || !container.ownerId().equals(site.settlementId()) || container.storage().isEmpty()
+                || !container.storage().orElseThrow().endpoint().equals(endpoint) || surface == null || !surface.fixed()
+                || !io.farfrontier.palemirror.frontier.v3.model.geometry.BlockInteractionReach.VANILLA_ADULT_PEDESTRIAN
+                    .contains(endpoint.station(), surface.position()))
             throw new IllegalArgumentException("extractive endpoint lost its exact storage ownership");
     }
     @Override public List<KnownPedestrianRouteKnowledge.SettlementPassage> passages(FrontierWorldState state, ShipmentEndpoint endpoint) {

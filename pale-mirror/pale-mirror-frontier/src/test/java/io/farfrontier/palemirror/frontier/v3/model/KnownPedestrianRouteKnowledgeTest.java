@@ -83,7 +83,7 @@ class KnownPedestrianRouteKnowledgeTest {
                 20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r6")));
         var deposit = state.extractionSites().deposits().values().stream()
                 .filter(value -> value.site().settlementId().equals(new SubjectId("settlement:6"))).findFirst().orElseThrow();
-        var container = state.inventory().containers().get(deposit.site().containerId());
+        var container = state.inventory().containers().get(QuarryStorageFixture.container(state, deposit.site()));
         assertEquals(ContainerPurpose.EXTRACTIVE_STORAGE, container.purpose());
         var endpoint = container.storage().orElseThrow().endpoint();
         var start = new SurfaceAnchor(state.inventory().surfaces().get(container.id()).position());

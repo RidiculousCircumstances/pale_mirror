@@ -77,10 +77,9 @@ class ExtractionAdmissionReplayTest {
                     .sorted().findFirst().orElseThrow();
             long tick = Math.max(action.dueAt().ticks(), engine.checkpoint().instant().ticks());
             if (action.kind().equals(ExtractionContinuation.REVIEW)) {
-                var site = state.extractionSites().deposits().get(action.subject()).site();
-                for (var resident : ResidentWorkComposition.SELECTION.eligible(state, site.settlementId(),
+                for (var resident : ResidentWorkComposition.SELECTION.eligible(state, action.subject(),
                         ResidentWorkKind.EXTRACTION, HumanCapability.EXTRACTION, tick)) {
-                    var offer = ResidentWorkComposition.SELECTION.offer(state, resident, tick, new ExtractionWorkAdmission(site.id()));
+                    var offer = ResidentWorkComposition.SELECTION.offer(state, resident, tick, new SettlementExtractionAdmission(Set.of()));
                     if (offer.isPresent()) return new Fixture(state, tick, offer.orElseThrow().execution());
                 }
             }
@@ -113,7 +112,7 @@ class ExtractionAdmissionReplayTest {
     }
     @Test void pendingCalculationAcquiresNothingAndRuntimeRecoveryRestoresTheAddressedWait() throws Exception {
         var f = fixture(); var state = f.state(); var job = f.start().work();
-        var action = ExtractionContinuation.review(job.siteId(), f.tick());
+        var action = ExtractionContinuation.review(ExtractionWorkAuthority.site(state, job).settlementId(), f.tick());
         var calls = new java.util.concurrent.atomic.AtomicInteger();
         try (var ignored = PedestrianRoutePlanning.bind((geometry, start, target) -> {
             calls.incrementAndGet();

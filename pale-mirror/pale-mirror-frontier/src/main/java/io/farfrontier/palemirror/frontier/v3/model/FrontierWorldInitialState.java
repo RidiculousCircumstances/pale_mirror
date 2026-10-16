@@ -33,11 +33,12 @@ final class FrontierWorldInitialState {
         Map<SubjectId, StructureCondition> structures = new LinkedHashMap<>();
         bootstrap.settlements().forEach(settlement -> settlement.structures().forEach(structure -> structures.put(structure.id(), StructureCondition.INTACT)));
         Map<SubjectId, ContainerRecord> containers = new LinkedHashMap<>();
-        var extraction = GrayboxQuarryPlan.initial(bootstrap);
-        extraction.deposits().values().forEach(deposit -> containers.put(deposit.site().containerId(),
-                new ContainerRecord(deposit.site().containerId(), deposit.site().settlementId(), 27, ContainerPurpose.EXTRACTIVE_STORAGE)
+        var installation = GrayboxQuarryPlan.compile(bootstrap);
+        var extraction = installation.sites();
+        extraction.deposits().values().forEach(deposit -> containers.put(installation.initialContainers().get(deposit.site().id()),
+                new ContainerRecord(installation.initialContainers().get(deposit.site().id()), deposit.site().settlementId(), 27, ContainerPurpose.EXTRACTIVE_STORAGE)
                         .withStorage(new ResourceStoragePolicy(new ShipmentEndpoint.ExtractiveSite(deposit.site().settlementId(),
-                                deposit.site().id(), deposit.site().containerId(), deposit.site().layout().storagePort()),
+                                deposit.site().id(), installation.initialContainers().get(deposit.site().id()), deposit.site().layout().storagePort()),
                                 new ResourceStorageFilter(false, java.util.Set.of(bootstrap.ruleset().extraction().source().toolKind()),
                                         Map.of("pale_mirror:extracted_materials", bootstrap.ruleset().extraction().definitions().stream().flatMap(definition -> definition.coldOutput().stream())
                                                 .map(output -> output.itemKind()).collect(java.util.stream.Collectors.toSet()))), 0, ResourceStorageRole.LOCAL_BUFFER))));
@@ -57,8 +58,8 @@ final class FrontierWorldInitialState {
         fleet.assets().values().forEach(asset -> containers.put(asset.containerId(),
                 new ContainerRecord(asset.containerId(), asset.homeSettlementId(), asset.stackSlots(), ContainerPurpose.MOBILE_STORAGE)));
         var surfaces = new LinkedHashMap<>(ContainerSurfaceManifest.initial(bootstrap));
-        extraction.deposits().values().forEach(deposit -> surfaces.put(deposit.site().containerId(),
-                new ContainerSurface(deposit.site().containerId(), deposit.site().layout().container(), ContainerSurfaceStatus.UNMATERIALIZED)));
+        extraction.deposits().values().forEach(deposit -> surfaces.put(installation.initialContainers().get(deposit.site().id()),
+                new ContainerSurface(installation.initialContainers().get(deposit.site().id()), deposit.site().layout().container(), ContainerSurfaceStatus.UNMATERIALIZED)));
         fleet.assets().values().forEach(asset -> surfaces.put(asset.containerId(),
                 new ContainerSurface(asset.containerId(), new ContainerLocation.Mobile(asset.actorId()),
                         ContainerSurfaceStatus.UNMATERIALIZED)));
@@ -69,7 +70,7 @@ final class FrontierWorldInitialState {
                 SubjectId tool = new SubjectId("item:quarry-tool-" + java.util.UUID.nameUUIDFromBytes(
                         (site.id().value() + "|" + slot).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
                 items.put(tool, new ExactItemStack(tool, site.settlementId(), bootstrap.ruleset().extraction().source().toolKind(), 1,
-                        new InventoryCustody.ContainerSlot(site.containerId(), slot)));
+                        new InventoryCustody.ContainerSlot(installation.initialContainers().get(site.id()), slot)));
             }
         }
         SubjectId wheat = new SubjectId("lot:bootstrap-1-wheat");

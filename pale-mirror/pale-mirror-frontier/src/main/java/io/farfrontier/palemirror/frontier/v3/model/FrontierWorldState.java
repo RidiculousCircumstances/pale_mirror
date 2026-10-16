@@ -212,7 +212,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
         Objects.requireNonNull(unitGroups, "unit groups");
         Objects.requireNonNull(transportFleet, "transport fleet");
         Objects.requireNonNull(extractionSites, "extraction sites");
-        extractionSites.validate(bootstrap, inventory);
+        extractionSites.validate(bootstrap);
         ExtractionWorkAuthority.validateReferences(extractionSites, actorExecutions);
         TransportFleetReferences.validate(bootstrap, transportFleet, actorLocations, inventory, shipments);
         GroupMemberActivityCapability.validateReferences(unitGroups, actorExecutions);

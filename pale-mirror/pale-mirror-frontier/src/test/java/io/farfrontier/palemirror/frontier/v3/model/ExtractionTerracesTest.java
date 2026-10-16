@@ -185,9 +185,9 @@ class ExtractionTerracesTest {
                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.EXTRACTION, id, 1);
         var source = quarry.available(Set.of()).getFirst();
         var valid = new ExtractionWork(id, quarry.site().id(), execution, new SubjectId("tool:registry-output-check"),
-                new InventoryCustody.ContainerSlot(quarry.site().containerId(), 0),
-                state.inventory().containers().get(quarry.site().containerId()).storage().orElseThrow().endpoint(),
-                state.inventory().containers().get(quarry.site().containerId()).storage().orElseThrow().endpoint(), "minecraft:cobblestone",
+                new InventoryCustody.ContainerSlot(QuarryStorageFixture.container(state, quarry.site()), 0),
+                state.inventory().containers().get(QuarryStorageFixture.container(state, quarry.site())).storage().orElseThrow().endpoint(),
+                state.inventory().containers().get(QuarryStorageFixture.container(state, quarry.site())).storage().orElseThrow().endpoint(), "minecraft:cobblestone",
                 new SubjectId("custody:registry-output-check"), new SubjectId("lot:registry-output-check"),
                 0, ExtractionWork.Phase.TAKE_TOOL, 1, Optional.of(ExtractionWorkEffects.target(quarry, source)),
                 Optional.empty(), Optional.empty());

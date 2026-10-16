@@ -11,22 +11,26 @@ import java.util.*;
 final class ExtractionWorkProcess {
     private ExtractionWorkProcess() { }
     static List<ProposedEvent> review(FrontierWorldState state, ScheduledAction action, long tick) {
-        var site = Objects.requireNonNull(state.extractionSites().deposits().get(action.subject()), "review mining site").site();
+        var home = action.subject();
         if (!action.kind().equals(ExtractionContinuation.REVIEW)
-                || !action.id().equals(ExtractionContinuation.review(site.id(), action.dueAt().ticks()).id()))
+                || !action.id().equals(ExtractionContinuation.review(home, action.dueAt().ticks()).id())
+                || state.bootstrap().settlements().stream().noneMatch(settlement -> settlement.id().equals(home)))
             throw new IllegalArgumentException("mining review has a foreign schedule");
         long now = Math.max(tick, action.dueAt().ticks());
         var events = new ArrayList<ProposedEvent>();
-        FrontierWorldState projected;
-        try { projected = ExtractionDevelopmentContinuation.append(state, site.id(), events, now); }
-        catch (KnownPedestrianNavigation.RouteUnavailable pending) {
-            return List.of(nextReview(state, action, now));
+        FrontierWorldState projected = state;
+        var developing = new HashSet<SubjectId>();
+        for (var deposit : state.extractionSites().deposits().values().stream()
+                .filter(value -> value.site().settlementId().equals(home))
+                .sorted(Comparator.comparing(value -> value.site().id())).toList()) {
+            try { projected = ExtractionDevelopmentContinuation.append(projected, deposit.site().id(), events, now); }
+            catch (KnownPedestrianNavigation.RouteUnavailable pending) { developing.add(deposit.site().id()); }
         }
-        var provider = new ExtractionWorkAdmission(site.id());
-        for (var resident : ResidentWorkComposition.SELECTION.eligible(state, site.settlementId(), ResidentWorkKind.EXTRACTION, HumanCapability.EXTRACTION, now)) {
+        var provider = new SettlementExtractionAdmission(developing);
+        for (var resident : ResidentWorkComposition.SELECTION.eligible(projected, home, ResidentWorkKind.EXTRACTION, HumanCapability.EXTRACTION, now)) {
             Optional<ResidentWorkOffer<ExtractionWorkStarted>> offer;
             try { offer = ResidentWorkComposition.SELECTION.offer(projected, resident, now, provider); }
-            catch (KnownPedestrianNavigation.RouteUnavailable pending) { break; }
+            catch (KnownPedestrianNavigation.RouteUnavailable pending) { continue; }
             if (offer.isEmpty()) continue;
             var start = offer.orElseThrow().execution();
             projected = ExtractionWorkAdmission.start(projected, start, now);
@@ -78,26 +82,37 @@ final class ExtractionWorkProcess {
                 && (job.phase() == ExtractionWork.Phase.TAKE_TOOL || job.phase() == ExtractionWork.Phase.EXTRACT))
             return advance(state, job, ExtractionWorkProgressed.Operation.END_WORK, action, now);
         if (job.phase() == ExtractionWork.Phase.SELECT_SOURCE) {
+            boolean developmentWaiting = false;
             if (ExtractionWorkAuthority.carried(state, job) == 0 && ExtractionWorkPolicy.requested(state, job)
                     && !ExtractionWorkPolicy.remaining(state.extractionSites().deposits().get(job.siteId()))) {
                 var development = new ArrayList<ProposedEvent>();
                 try {
                     ExtractionDevelopmentContinuation.append(state, job.siteId(), development, now);
                 } catch (KnownPedestrianNavigation.RouteUnavailable pending) {
-                    return retry(state, job, now);
+                    developmentWaiting = true;
                 }
                 if (!development.isEmpty()) return List.copyOf(development);
             }
             ExtractionWorkDecision decision;
             if (ExtractionWorkAuthority.carried(state, job) > 0) decision = new ExtractionWorkDecision.StorePart(job.execution());
-            else if (ExtractionWorkPolicy.finished(state, job)) decision = new ExtractionWorkDecision.Finished(job.execution());
+            else if (!ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.execution().actorId(), now)) {
+                if (developmentWaiting || !ExtractionWorkPolicy.finished(state, job)) return retry(state, job, now);
+                decision = new ExtractionWorkDecision.Finished(job.execution());
+            }
             else {
-                if (!ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.execution().actorId(), now)) return retry(state, job, now);
-                Optional<ExtractionWorkDecision.Source> selected;
+                Optional<ExtractionWorkDecision.Source> selected = Optional.empty();
+                boolean waiting = developmentWaiting;
                 try { selected = ExtractionWorkPolicy.nextTarget(state, job); }
-                catch (KnownPedestrianNavigation.RouteUnavailable pending) { return retry(state, job, now); }
-                if (selected.isEmpty()) return retry(state, job, now);
-                decision = selected.orElseThrow();
+                catch (KnownPedestrianNavigation.RouteUnavailable pending) { waiting = true; }
+                if (selected.isPresent()) decision = selected.orElseThrow();
+                else {
+                    try {
+                        var relocated = ExtractionWorkRelocation.select(state, job);
+                        if (relocated.isPresent()) return relocate(state, job, relocated.orElseThrow(), action, now);
+                    } catch (KnownPedestrianNavigation.RouteUnavailable pending) { waiting = true; }
+                    if (waiting || !ExtractionWorkPolicy.finished(state, job)) return retry(state, job, now);
+                    decision = new ExtractionWorkDecision.Finished(job.execution());
+                }
             }
             return advance(state, job, new ExtractionWorkProgressed(job.id(), job.revision(),
                     ExtractionWorkProgressed.Operation.SELECT_SOURCE, Optional.of(decision)), action, now);
@@ -148,10 +163,19 @@ final class ExtractionWorkProcess {
         return advance(state, job, operation, action, now);
     }
     private static List<ProposedEvent> alternative(FrontierWorldState state, ExtractionWork job, ScheduledAction action, long now) {
-        Optional<ExtractionWorkDecision.Source> selected;
+        Optional<ExtractionWorkDecision.Source> selected = Optional.empty();
+        boolean waiting = false;
         try { selected = ExtractionWorkTargets.alternative(state, job); }
-        catch (KnownPedestrianNavigation.RouteUnavailable pending) { return retry(state, job, now); }
-        if (selected.isEmpty()) return retry(state, job, now);
+        catch (KnownPedestrianNavigation.RouteUnavailable pending) { waiting = true; }
+        if (selected.isEmpty()) {
+            if (job.phase() != ExtractionWork.Phase.EXTRACT) return retry(state, job, now);
+            if (ExtractionWorkAuthority.carried(state, job) > 0)
+                return waiting ? retry(state, job, now) : advance(state, job, ExtractionWorkProgressed.Operation.STORE_PART, action, now);
+            try {
+                var relocated = ExtractionWorkRelocation.select(state, job);
+                return relocated.isPresent() ? relocate(state, job, relocated.orElseThrow(), action, now) : retry(state, job, now);
+            } catch (KnownPedestrianNavigation.RouteUnavailable pending) { return retry(state, job, now); }
+        }
         return advance(state, job, new ExtractionWorkProgressed(job.id(), job.revision(),
                 ExtractionWorkProgressed.Operation.SELECT_REACHABLE, Optional.of(selected.orElseThrow())), action, now);
     }
@@ -159,6 +183,11 @@ final class ExtractionWorkProcess {
             ExtractionWorkProgressed.Operation operation, ScheduledAction action, long now) {
         var event = new ExtractionWorkProgressed(job.id(), job.revision(), operation);
         return advance(state, job, event, action, now);
+    }
+    private static List<ProposedEvent> relocate(FrontierWorldState state, ExtractionWork job,
+            ExtractionWorkDecision.Relocate selected, ScheduledAction action, long now) {
+        return advance(state, job, new ExtractionWorkProgressed(job.id(), job.revision(),
+                ExtractionWorkProgressed.Operation.RELOCATE_SITE, Optional.of(selected)), action, now);
     }
     private static List<ProposedEvent> advance(FrontierWorldState state, ExtractionWork job,
             ExtractionWorkProgressed event, ScheduledAction action, long now) {

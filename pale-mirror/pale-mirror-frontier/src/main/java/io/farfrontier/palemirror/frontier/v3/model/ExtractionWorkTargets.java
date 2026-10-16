@@ -17,7 +17,8 @@ public final class ExtractionWorkTargets {
             io.farfrontier.palemirror.frontier.v3.api.SubjectId actor, List<ExtractionLayout.Cell> available,
             AreaWorkSelection.SpatialPolicy policy, ExtractionPriorities priorities) {
         var peers = peerStations(state, deposit, actor);
-        var cells = available.stream().filter(cell -> ExtractionWorkSafety.available(state, deposit, cell))
+        var cells = available.stream().filter(cell -> priorities.require(cell.id()).missing() > 0)
+                .filter(cell -> ExtractionWorkSafety.available(state, deposit, cell))
                 .sorted(Comparator.comparingLong(ExtractionLayout.Cell::id)).toList();
         var best = cells.stream().filter(cell -> AreaWorkSelection.stationAvailable(cell.workstation(), peers))
                 .map(cell -> priorities.require(cell.id())).min(io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPriority::compareTo);
@@ -89,6 +90,10 @@ public final class ExtractionWorkTargets {
     public static Optional<ExtractionWorkDecision.Source> plannedSelection(FrontierWorldState state, ExtractionWork job,
             List<ExtractionLayout.Cell> available, AreaWorkSelection.SpatialPolicy policy) {
         var deposit = state.extractionSites().deposits().get(job.siteId());
+        return plannedAt(state, job, deposit, available, policy);
+    }
+    static Optional<ExtractionWorkDecision.Source> plannedAt(FrontierWorldState state, ExtractionWork job,
+            ExtractionDeposit deposit, List<ExtractionLayout.Cell> available, AreaWorkSelection.SpatialPolicy policy) {
         var start = state.actorLocations().get(job.execution().actorId()).supportingSurface();
         var knowledge = knowledge(state, job);
         var priorities = ExtractionPriorities.read(state, deposit, Optional.of(job.id()));
@@ -118,6 +123,8 @@ public final class ExtractionWorkTargets {
             throw new IllegalArgumentException("selected mining source removes an occupied support or retained access edge");
         if (!ExtractionStockDemand.requiredCells(state, deposit, Optional.of(job.id())).contains(cell.id()))
             throw new IllegalArgumentException("selected mining source is not a requested product or prerequisite");
+        if (ExtractionPriorities.read(state, deposit, Optional.of(job.id())).require(cell.id()).missing() == 0)
+            throw new IllegalArgumentException("selected mining source duplicates assigned settlement demand");
         boolean emptyPart = job.phase() == ExtractionWork.Phase.SELECT_SOURCE && ExtractionWorkAuthority.carried(state, job) == 0;
         if (!job.execution().equals(selected.execution()) || !selected.origin().equals(
                 state.actorLocations().get(job.execution().actorId()).supportingSurface())

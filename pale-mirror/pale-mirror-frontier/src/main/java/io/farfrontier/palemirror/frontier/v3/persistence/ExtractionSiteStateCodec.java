@@ -11,10 +11,13 @@ import java.util.*;
 final class ExtractionSiteStateCodec {
     private ExtractionSiteStateCodec() { }
     static void write(DataOutputStream out, ExtractionSiteState state) throws IOException {
+        MineralGeologyCodec.write(out, state.geology(), state.knowledge());
         out.writeInt(state.deposits().size());
         for (var deposit : state.deposits().values().stream().sorted(Comparator.comparing(value -> value.site().id())).toList()) {
             var site = deposit.site(); var layout = site.layout();
-            out.writeUTF(site.id().value()); out.writeUTF(site.settlementId().value()); out.writeUTF(site.containerId().value());
+            out.writeUTF(site.id().value()); out.writeUTF(site.settlementId().value());
+            out.writeInt(site.mineralDeposits().size());
+            for (var mineral : site.mineralDeposits().stream().sorted().toList()) out.writeUTF(mineral.value());
             FrontierWorldStateCodec.writePosition(out, layout.entrance().support());
             FrontierWorldStateCodec.writePosition(out, layout.container());
             FrontierWorldStateCodec.writePosition(out, layout.storagePort().support());
@@ -56,9 +59,13 @@ final class ExtractionSiteStateCodec {
                 .thenComparingInt(BlockPosition::y).thenComparingInt(BlockPosition::z)).toList()) FrontierWorldStateCodec.writePosition(out, position);
     }
     static ExtractionSiteState read(DataInputStream in) throws IOException {
+        var geological = MineralGeologyCodec.read(in);
         var deposits = new LinkedHashMap<SubjectId, ExtractionDeposit>();
         for (int i = 0, count = count(in, 64); i < count; i++) {
-            SubjectId id = new SubjectId(in.readUTF()), home = new SubjectId(in.readUTF()), containerId = new SubjectId(in.readUTF());
+            SubjectId id = new SubjectId(in.readUTF()), home = new SubjectId(in.readUTF());
+            var minerals = new HashSet<SubjectId>();
+            for (int g = 0, n = count(in, io.farfrontier.palemirror.frontier.v3.model.geology.MineralGeology.MAX_DEPOSITS); g < n; g++)
+                if (!minerals.add(new SubjectId(in.readUTF()))) throw new IllegalArgumentException("duplicate worksite mineral relationship");
             var entrance = new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in));
             BlockPosition container = FrontierWorldStateCodec.readPosition(in);
             var port = new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in));
@@ -96,7 +103,7 @@ final class ExtractionSiteStateCodec {
                 var state = new ExtractionDeposit.CellState(cellRevision, disposition, block, operation);
                 if (states.putIfAbsent(cellId, state) != null) throw new IllegalArgumentException("duplicate extraction cell state");
             }
-            var site = new ExtractionSite(id, home, containerId, new ExtractionLayout(cells, fixed, surfaces, entrance, container, port, infrastructureIds, natural, terrainIds));
+            var site = new ExtractionSite(id, home, new ExtractionLayout(cells, fixed, surfaces, entrance, container, port, infrastructureIds, natural, terrainIds), minerals);
             var geometry = new LinkedHashMap<BlockPosition, ExtractionDeposit.GeometryState>();
             for (int g = 0, n = count(in, ExtractionLayout.MAX_CELLS * 4); g < n; g++) {
                 var position = FrontierWorldStateCodec.readPosition(in);
@@ -118,7 +125,8 @@ final class ExtractionSiteStateCodec {
         var exclusions = new HashSet<BlockPosition>();
         for (int i = 0, count = count(in, io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockExclusions.MAX_POSITIONS); i < count; i++)
             if (!exclusions.add(FrontierWorldStateCodec.readPosition(in))) throw new IllegalArgumentException("duplicate geological exclusion");
-        return new ExtractionSiteState(deposits, work, ordinal, new io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockExclusions(exclusions));
+        return new ExtractionSiteState(deposits, work, ordinal, new io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockExclusions(exclusions),
+                geological.geology(), geological.knowledge());
     }
     static void writeDefinition(DataOutputStream out, BlockExtraction.Definition definition) throws IOException {
         out.writeUTF(definition.id()); writeBlock(out, definition.before()); writeBlock(out, definition.after());

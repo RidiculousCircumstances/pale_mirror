@@ -24,6 +24,14 @@ final class ExtractionWorkingSurfaces {
         var fixed = layout.fixedBlocks().get(position);
         if (fixed != null) return Optional.of(fixed);
         if (state.extractionSites().geologicalExclusions().positions().contains(position)) return Optional.empty();
+        var mineral = state.extractionSites().geology().at(position);
+        if (mineral.isPresent()) {
+            var match = mineral.orElseThrow();
+            var declaration = state.extractionSites().geology().deposits().get(match.depositId());
+            return deposit.site().mineralDeposits().contains(match.depositId())
+                    && state.extractionSites().knowledge().knows(deposit.site().settlementId(), declaration)
+                    ? Optional.of(match.section().material()) : Optional.empty();
+        }
         var natural = layout.terrainSupports().get(position);
         return natural == null ? ExtractionTerrainFacts.at(state.bootstrap(), position).map(sample -> sample.block())
                 : Optional.of(natural);

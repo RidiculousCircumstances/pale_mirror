@@ -15,7 +15,7 @@ class ExtractionSiteTest {
         var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(configuration);
         var initial = engine.canonicalState().state();
         var site = initial.extractionSites().deposits().values().stream().sorted(Comparator.comparing(value -> value.site().id())).findFirst().orElseThrow().site();
-        var storage = initial.inventory().containers().get(site.containerId()).storage().orElseThrow().endpoint();
+        var storage = initial.inventory().containers().get(QuarryStorageFixture.container(initial, site)).storage().orElseThrow().endpoint();
         assertFalse(ResourceStorageNavigation.plannedPath(initial, site.layout().entrance(), storage).isEmpty(),
                 "the operational fixture needs a known tool approach before advancing the whole world");
         boolean deliveredHome = false;
@@ -112,7 +112,7 @@ class ExtractionSiteTest {
         assertEquals(bootstrap.ruleset().extraction().width(), deposit.available(Set.of()).size());
         assertEquals(2, state.inventory().items().values().stream().filter(item ->
                 item.custody() instanceof InventoryCustody.ContainerSlot slot
-                    && slot.containerId().equals(deposit.site().containerId())).count());
+                    && slot.containerId().equals(QuarryStorageFixture.container(state, deposit.site()))).count());
         for (var site : state.extractionSites().deposits().values()) {
             var layout = site.site().layout();
             var view = KnownPedestrianRouteKnowledge.forFrontier(state);
@@ -127,7 +127,7 @@ class ExtractionSiteTest {
             assertTrue(route.stream().map(SurfaceAnchor::y).distinct().count() > 1);
             assertTrue(view.geometry().blocked(new SurfaceAnchor(site.available(Set.of()).getFirst().source().offset(0, -2, 0))));
             assertEquals(2, SettlementWorkPolicy.permissions(state, site.site().settlementId()).workers(ResidentWorkKind.EXTRACTION).size());
-            var endpoint = new ShipmentEndpoint.ExtractiveSite(site.site().settlementId(), site.site().id(), site.site().containerId(), layout.storagePort());
+            var endpoint = new ShipmentEndpoint.ExtractiveSite(site.site().settlementId(), site.site().id(), QuarryStorageFixture.container(state, site.site()), layout.storagePort());
             var home = FrontierWorldStateSupport.settlement(bootstrap, site.site().settlementId());
             var depot = GoodsParticipantDeclarations.endpoint(home);
             var hauling = new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(site.site().id(), order.actorId(), 1, 1,
@@ -144,7 +144,7 @@ class ExtractionSiteTest {
             assertThrows(IllegalArgumentException.class, () -> ServiceBoundaryComposition.require(state,
                     new ServicePointId(ServicePointId.Kind.SETTLEMENT_DEPOT, point.settlementId(), point.containerId())));
             assertThrows(IllegalArgumentException.class, () -> ShipmentEndpointComposition.validate(state,
-                    new ShipmentEndpoint.Depot(home.id(), site.site().id(), site.site().containerId(), layout.storagePort())));
+                    new ShipmentEndpoint.Depot(home.id(), site.site().id(), QuarryStorageFixture.container(state, site.site()), layout.storagePort())));
         }
         var upper = deposit.available(Set.of()).getFirst();
         var extracted = deposit.extracted(upper.id(), 1, "effect:test-upper");

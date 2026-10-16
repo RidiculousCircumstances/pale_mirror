@@ -117,4 +117,13 @@ public record ExtractionWork(SubjectId id, SubjectId siteId, ActorExecutionId ex
         return new ExtractionWork(id, siteId, execution, toolId, toolReturnSlot, toolSource, destination, outputKind,
                 carriedAccountId, outputLotId, batch, phase, Math.addExact(revision, 1), target, labour, Optional.empty());
     }
+    /** Caller proves empty cargo and a reachable requested source before this exact reassignment. */
+    public ExtractionWork relocate(ExtractionTarget selected, String output, ShipmentEndpoint destination) {
+        if (pending.isPresent() || phase != Phase.SELECT_SOURCE && phase != Phase.EXTRACT
+                || selected.key().owner().equals(siteId) || !destination.settlementId().equals(storageTarget.settlementId()))
+            throw new IllegalArgumentException("site relocation requires a safe same-home selection boundary");
+        return new ExtractionWork(id, selected.key().owner(), execution, toolId, toolReturnSlot, toolSource, destination, output,
+                carriedAccountId, outputLotId, batch, Phase.EXTRACT, Math.addExact(revision, 1),
+                Optional.of(selected), Optional.empty(), Optional.empty());
+    }
 }

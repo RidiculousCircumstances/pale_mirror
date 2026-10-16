@@ -43,7 +43,7 @@ class ExtractionExternalChangesTest {
     private record Admission(FrontierWorldState state, long tick) { }
     private static Admission admitted() {
         var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:source-retarget"),
-                20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r1"));
+                20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r13"));
         var engine = FrontierEngines.createCanonicalStateAccess(configuration);
         for (int turn = 0; turn < 500 && engine.canonicalState().state().extractionSites().work().isEmpty(); turn++) {
             var current = engine.canonicalState().state();
@@ -72,7 +72,7 @@ class ExtractionExternalChangesTest {
                 : job.execution();
         if (suspended) state = ActorExecutionComposition.LIFECYCLE.prepareBegin(state, successor, admission.tick())
                 .commit(state, FrontierWorldStateUpdate.begin());
-        var depot = suspended ? FrontierWorldState.depotId(site.settlementId()) : site.containerId();
+        var depot = suspended ? FrontierWorldState.depotId(site.settlementId()) : QuarryStorageFixture.container(state, site);
         if (suspended) state = state.withActorBody(actor,
                 SettlementServiceAccessPoints.depotPort(state, site.settlementId()).serviceSurface().standingBody());
         var clearance = ResourceAccessClearance.select(state, depot, successor, admission.tick()).orElseThrow();

@@ -2,6 +2,8 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.extraction.*;
+import io.farfrontier.palemirror.frontier.v3.model.geology.*;
+import io.farfrontier.palemirror.frontier.v3.model.geometry.BlockVolume;
 import java.util.*;
 
 /** Fresh-world content producer. Runtime excavation consumes its declared geometry, not this compiler. */
@@ -16,8 +18,15 @@ public final class GrayboxQuarryPlan {
         return List.copyOf(producers);
     }
     public static ExtractionSiteState initial(FrontierBootstrap bootstrap) {
+        return compile(bootstrap).sites();
+    }
+    /** Fresh-world equipment is not a permanent worksite-to-storage relationship. */
+    public record Installation(ExtractionSiteState sites, Map<SubjectId, SubjectId> initialContainers) {
+        public Installation { initialContainers = Map.copyOf(initialContainers); }
+    }
+    public static Installation compile(FrontierBootstrap bootstrap) {
         ExtractionRules rules = bootstrap.ruleset().extraction();
-        if (!rules.enabled()) return ExtractionSiteState.empty();
+        if (!rules.enabled()) return new Installation(ExtractionSiteState.empty(), Map.of());
         Set<BlockPosition> occupied = new HashSet<>();
         for (var settlement : bootstrap.settlements()) {
             occupied.addAll(FrontierSettlementActorSlots.intactStructureOccupancy(bootstrap.terrain(), settlement.structures()));
@@ -32,6 +41,9 @@ public final class GrayboxQuarryPlan {
         var occupiedColumns = new HashSet<TerrainColumn>();
         occupied.forEach(position -> occupiedColumns.add(new TerrainColumn(position.x(), position.z())));
         Map<SubjectId, ExtractionDeposit> deposits = new LinkedHashMap<>();
+        Map<SubjectId, SubjectId> containers = new LinkedHashMap<>();
+        Map<SubjectId, MineralDeposit> minerals = new LinkedHashMap<>();
+        Map<SubjectId, Map<SubjectId, Long>> surveys = new LinkedHashMap<>();
         int producerIndex = 0;
         for (Settlement home : producerSettlements(bootstrap)) {
             var local = new HashSet<BlockPosition>(FrontierSettlementActorSlots.intactStructureOccupancy(bootstrap.terrain(), home.structures()));
@@ -40,33 +52,55 @@ public final class GrayboxQuarryPlan {
                     .forEach(site -> local.addAll(site.managedSlots()));
             int extent = local.stream().mapToInt(position -> Math.max(Math.abs(position.x() - home.anchor().x()),
                     Math.abs(position.z() - home.anchor().z()))).max().orElseThrow();
-            ExtractionSite selected = null;
-            for (FacilityFacing facing : List.of(FacilityFacing.EAST, FacilityFacing.SOUTH, FacilityFacing.WEST, FacilityFacing.NORTH)) {
-                int distance = extent + rules.width() + rules.exteriorClearance();
-                BlockPosition anchor = home.anchor().offset(facing.x() * distance, 0, facing.z() * distance);
-                int supportY = bootstrap.terrain().supportYAt(anchor.x(), anchor.z());
-                anchor = new BlockPosition(anchor.x(), supportY - rules.pitDepth(), anchor.z());
-                ExtractionLayout layout = layout(anchor, facing, rules, producerIndex);
-                var positions = new HashSet<>(layout.fixedBlocks().keySet());
-                positions.addAll(layout.terrainSupports().keySet());
-                layout.cells().forEach(cell -> positions.add(cell.source()));
-                // A quarry must not overlap another owner even when its pit is vertically below it.
-                if (positions.stream().anyMatch(position -> !bootstrap.bounds().contains(position)
-                        || occupiedColumns.contains(new TerrainColumn(position.x(), position.z())))) continue;
-                String identity = UUID.nameUUIDFromBytes((bootstrap.worldId().value() + "|" + home.id().value() + "|quarry")
-                        .getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
-                SubjectId id = new SubjectId("extraction:quarry-" + identity);
-                selected = new ExtractionSite(id, home.id(), new SubjectId("container:quarry-" + identity), layout);
-                positions.forEach(position -> occupiedColumns.add(new TerrainColumn(position.x(), position.z()))); break;
+            for (int installationIndex = 0; installationIndex <= rules.additionalPockets().size(); installationIndex++) {
+                var siteRules = rules.installation(installationIndex);
+                ExtractionSite selected = null;
+                for (FacilityFacing facing : List.of(FacilityFacing.EAST, FacilityFacing.SOUTH, FacilityFacing.WEST, FacilityFacing.NORTH)) {
+                    int distance = extent + rules.width() + rules.exteriorClearance();
+                    BlockPosition anchor = home.anchor().offset(facing.x() * distance, 0, facing.z() * distance);
+                    int supportY = bootstrap.terrain().supportYAt(anchor.x(), anchor.z());
+                    anchor = new BlockPosition(anchor.x(), supportY - rules.pitDepth(), anchor.z());
+                    ExtractionLayout layout = layout(anchor, facing, siteRules, producerIndex);
+                    var positions = new HashSet<>(layout.fixedBlocks().keySet());
+                    positions.addAll(layout.terrainSupports().keySet());
+                    layout.cells().forEach(cell -> positions.add(cell.source()));
+                    // A quarry must not overlap another owner even when its pit is vertically below it.
+                    if (positions.stream().anyMatch(position -> !bootstrap.bounds().contains(position)
+                            || occupiedColumns.contains(new TerrainColumn(position.x(), position.z())))) continue;
+                    String identity = UUID.nameUUIDFromBytes((bootstrap.worldId().value() + "|" + home.id().value() + "|quarry"
+                            + (installationIndex == 0 ? "" : "|" + installationIndex))
+                            .getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+                    SubjectId id = new SubjectId("extraction:quarry-" + identity);
+                    var mineral = mineral(anchor, facing, siteRules, producerIndex, new SubjectId("deposit:mineral-" + identity));
+                    selected = new ExtractionSite(id, home.id(), layout, mineral.map(value -> Set.of(value.id())).orElse(Set.of()));
+                    mineral.ifPresent(value -> {
+                        minerals.put(value.id(), value);
+                        surveys.computeIfAbsent(home.id(), ignored -> new LinkedHashMap<>()).put(value.id(), value.revision());
+                    });
+                    containers.put(id, new SubjectId("container:quarry-" + identity));
+                    positions.forEach(position -> occupiedColumns.add(new TerrainColumn(position.x(), position.z()))); break;
+                }
+                if (selected == null) throw new IllegalArgumentException("no clear exterior quarry for " + home.id());
+                var opened = rules.developmentBatchCells() == 0 ? selected.layout().cells().stream().map(ExtractionLayout.Cell::id)
+                        : selected.layout().cells().stream().filter(cell -> cell.prerequisites().isEmpty()).map(ExtractionLayout.Cell::id);
+                deposits.put(selected.id(), ExtractionDeposit.initial(selected,
+                        opened.collect(java.util.stream.Collectors.toUnmodifiableSet())));
             }
-            if (selected == null) throw new IllegalArgumentException("no clear exterior quarry for " + home.id());
-            var opened = rules.developmentBatchCells() == 0 ? selected.layout().cells().stream().map(ExtractionLayout.Cell::id)
-                    : selected.layout().cells().stream().filter(cell -> cell.prerequisites().isEmpty()).map(ExtractionLayout.Cell::id);
-            deposits.put(selected.id(), ExtractionDeposit.initial(selected,
-                    opened.collect(java.util.stream.Collectors.toUnmodifiableSet())));
             producerIndex++;
         }
-        return new ExtractionSiteState(deposits);
+        return new Installation(new ExtractionSiteState(deposits, Map.of(), 1,
+                io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockExclusions.empty(),
+                new MineralGeology(minerals), new GeologicalKnowledge(surveys)), containers);
+    }
+    private static Optional<MineralDeposit> mineral(BlockPosition anchor, FacilityFacing facing, ExtractionRules rules,
+            int producerIndex, SubjectId id) {
+        return rules.pocket().filter(pocket -> producerIndex % pocket.producerPeriod() == 0).map(pocket -> {
+            var a = at(anchor, facing, pocket.firstDepth(), 1, pocket.firstRow());
+            var b = at(anchor, facing, pocket.firstDepth() + pocket.depthCells() - 1, 2, pocket.firstRow() + pocket.rowCells() - 1);
+            var bounds = new BlockVolume(new BlockPosition(Math.min(a.x(), b.x()), a.y(), Math.min(a.z(), b.z())),
+                    new BlockPosition(Math.max(a.x(), b.x()), b.y(), Math.max(a.z(), b.z())));
+            return new MineralDeposit(id, 1, List.of(new MineralDeposit.Section(bounds, pocket.material().before())));
+        });
     }
     private static ExtractionLayout layout(BlockPosition anchor, FacilityFacing facing, ExtractionRules rules, int producerIndex) {
         var fixed = new LinkedHashMap<BlockPosition, BlockExtraction.Block>();

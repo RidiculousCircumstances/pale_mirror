@@ -17,8 +17,9 @@ final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
             java.util.stream.Stream.concat(TYPES.stream(), Set.of("frontier.actor_movement_interrupted", "frontier.actor_movement_started", "kernel.schedule_created",
                     "frontier.ambient_lease_transition", "kernel.schedule_rescheduled", "kernel.schedule_cancelled").stream()).collect(java.util.stream.Collectors.toUnmodifiableSet()), TYPES);
     @Override public List<ScheduledAction> initialSchedules(FrontierBootstrap bootstrap) {
-        return GrayboxQuarryPlan.initial(bootstrap).deposits().keySet().stream().sorted()
-                .map(site -> ExtractionContinuation.review(site, bootstrap.ruleset().extraction().reviewTicks())).toList();
+        return GrayboxQuarryPlan.initial(bootstrap).deposits().values().stream()
+                .map(deposit -> deposit.site().settlementId()).distinct().sorted()
+                .map(home -> ExtractionContinuation.review(home, bootstrap.ruleset().extraction().reviewTicks())).toList();
     }
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
         return switch (event.payload()) {

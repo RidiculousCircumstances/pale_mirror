@@ -15,6 +15,16 @@ public final class ExtractionColdWork {
         if (event.decision().filter(value -> !value.execution().equals(job.execution())).isPresent())
             throw new IllegalArgumentException("mining selected successor has stale execution authority");
         var site = ExtractionWorkAuthority.site(state, job);
+        if (event.operation() == ExtractionWorkProgressed.Operation.RELOCATE_SITE) {
+            var next = ExtractionWorkRelocation.require(state, job, (ExtractionWorkDecision.Relocate) event.decision().orElseThrow());
+            return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().relocateWork(job, next)));
+        }
+        if (event.operation() == ExtractionWorkProgressed.Operation.STORE_PART) {
+            if (job.phase() != ExtractionWork.Phase.EXTRACT || ExtractionWorkAuthority.carried(state, job) == 0)
+                throw new IllegalArgumentException("early mining delivery requires a held part at a safe source boundary");
+            return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replaceWork(
+                    job, job.transition(ExtractionWork.Phase.STORE, Optional.empty()))));
+        }
         if (event.operation() == ExtractionWorkProgressed.Operation.END_WORK) {
             if (ExtractionWorkPolicy.requested(state, job)
                     || job.phase() != ExtractionWork.Phase.TAKE_TOOL && job.phase() != ExtractionWork.Phase.EXTRACT)

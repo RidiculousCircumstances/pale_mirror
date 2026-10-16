@@ -65,20 +65,23 @@ public final class ExtractionWorksiteBlocks {
     public static Optional<WorksiteBlock> support(FrontierWorldState state, ContainerSurface surface) {
         var container = state.inventory().containers().get(surface.containerId());
         if (container == null || container.purpose() != ContainerPurpose.EXTRACTIVE_STORAGE) return Optional.empty();
-        return state.extractionSites().deposits().values().stream()
-                .filter(deposit -> deposit.site().containerId().equals(container.id()))
-                .flatMap(deposit -> declared(deposit).stream())
+        return declared(attachment(state, container)).stream()
                 .filter(cell -> cell.position().equals(surface.position().offset(0, -1, 0))).findFirst();
     }
     public static Optional<ContainerSocketSupport.Worksite> socketSupport(FrontierWorldState state, ContainerSurface surface) {
         var container = state.inventory().containers().get(surface.containerId());
         if (container == null || container.purpose() != ContainerPurpose.EXTRACTIVE_STORAGE) return Optional.empty();
-        var deposit = state.extractionSites().deposits().values().stream()
-                .filter(value -> value.site().containerId().equals(container.id())).findFirst().orElseThrow();
+        var deposit = attachment(state, container);
         var cells = declared(deposit).stream().map(cell -> current(deposit, cell)).toList();
         var support = cells.stream().filter(cell -> cell.position().equals(surface.position().offset(0, -1, 0))).findFirst();
         var socket = cells.stream().filter(cell -> cell.key().role() == WorksiteBlock.Role.CONTAINER_SOCKET
                 && cell.position().equals(surface.position())).findFirst();
         return support.flatMap(cell -> socket.map(opening -> new ContainerSocketSupport.Worksite(cell, opening)));
+    }
+    private static ExtractionDeposit attachment(FrontierWorldState state, ContainerRecord container) {
+        if (!(container.storage().orElseThrow().endpoint() instanceof ShipmentEndpoint.ExtractiveSite endpoint))
+            throw new IllegalArgumentException("authored extractive container has no explicit worksite attachment");
+        ShipmentEndpointComposition.validate(state, endpoint);
+        return Objects.requireNonNull(state.extractionSites().deposits().get(endpoint.siteId()), "container worksite attachment");
     }
 }

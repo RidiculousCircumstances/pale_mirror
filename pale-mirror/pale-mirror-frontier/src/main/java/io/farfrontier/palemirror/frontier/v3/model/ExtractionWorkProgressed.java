@@ -7,7 +7,8 @@ import io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionWorkDeci
 public record ExtractionWorkProgressed(SubjectId jobId, long expectedRevision, Operation operation,
         Optional<ExtractionWorkDecision> decision) implements FrontierPayload {
     public enum Operation {
-        TAKE_TOOL(1), LABOUR(2), EXTRACT_BLOCK(3), STORE(4), RETURN_TOOL(5), SELECT_REACHABLE(6), SELECT_SOURCE(7), END_WORK(8), SELECT_STORAGE(9);
+        TAKE_TOOL(1), LABOUR(2), EXTRACT_BLOCK(3), STORE(4), RETURN_TOOL(5), SELECT_REACHABLE(6), SELECT_SOURCE(7), END_WORK(8), SELECT_STORAGE(9),
+        RELOCATE_SITE(10), STORE_PART(11);
         private final int tag; Operation(int tag) { this.tag = tag; }
         public int wireTag() { return tag; }
         public static Operation decode(int tag) {
@@ -19,13 +20,15 @@ public record ExtractionWorkProgressed(SubjectId jobId, long expectedRevision, O
         Objects.requireNonNull(jobId); Objects.requireNonNull(operation);
         Objects.requireNonNull(decision);
         if (expectedRevision < 1) throw new IllegalArgumentException("invalid extraction predecessor");
-        boolean selecting = operation == Operation.SELECT_SOURCE || operation == Operation.SELECT_REACHABLE || operation == Operation.SELECT_STORAGE;
+        boolean selecting = operation == Operation.SELECT_SOURCE || operation == Operation.SELECT_REACHABLE
+                || operation == Operation.SELECT_STORAGE || operation == Operation.RELOCATE_SITE;
         if (selecting != decision.isPresent() || decision.filter(value -> !value.execution().activityOwnerId().equals(jobId)
                 || switch (operation) {
                     case SELECT_SOURCE -> !(value instanceof ExtractionWorkDecision.Source || value instanceof ExtractionWorkDecision.Finished
                             || value instanceof ExtractionWorkDecision.StorePart);
                     case SELECT_REACHABLE -> !(value instanceof ExtractionWorkDecision.Source);
                     case SELECT_STORAGE -> !(value instanceof ExtractionWorkDecision.Storage);
+                    case RELOCATE_SITE -> !(value instanceof ExtractionWorkDecision.Relocate);
                     default -> true;
                 }).isPresent()) throw new IllegalArgumentException("extraction operation lacks its exhaustive selected successor");
     }

@@ -45,7 +45,8 @@ public final class FrontierRulesets {
     private static final FrontierRuleset PREVIOUS_MARKET_QUARRY_GRAYBOX = marketQuarry(SUPPLY_QUARRY_GRAYBOX);
     private static final FrontierRuleset PREVIOUS_STOCKED_QUARRY_GRAYBOX = longFuelReserve(PREVIOUS_MARKET_QUARRY_GRAYBOX);
     private static final FrontierRuleset PREVIOUS_DEPOSIT_QUARRY_GRAYBOX = longFuelDeposits(PREVIOUS_MARKET_QUARRY_GRAYBOX);
-    private static final FrontierRuleset MARKET_QUARRY_GRAYBOX = dynamicReserves(PREVIOUS_DEPOSIT_QUARRY_GRAYBOX);
+    private static final FrontierRuleset DYNAMIC_RESERVE_QUARRY_GRAYBOX = dynamicReserves(PREVIOUS_DEPOSIT_QUARRY_GRAYBOX);
+    private static final FrontierRuleset MARKET_QUARRY_GRAYBOX = distributedDeposits(DYNAMIC_RESERVE_QUARRY_GRAYBOX);
     /** Existing worlds retain their exact selector and timing; they are never silently retuned. */
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R6 = ruleset("frontier-v3-production-r6", 8, 1L, 20L, 1L);
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R4 = ruleset("frontier-v3-production-r4", 6, 1L, 20L, 1L);
@@ -60,6 +61,7 @@ public final class FrontierRulesets {
     private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L, 200L);
     private static final Map<String, FrontierRuleset> INSTALLED = Map.ofEntries(
             Map.entry(MARKET_QUARRY_GRAYBOX.id(), MARKET_QUARRY_GRAYBOX),
+            Map.entry(DYNAMIC_RESERVE_QUARRY_GRAYBOX.id(), DYNAMIC_RESERVE_QUARRY_GRAYBOX),
             Map.entry(PREVIOUS_DEPOSIT_QUARRY_GRAYBOX.id(), PREVIOUS_DEPOSIT_QUARRY_GRAYBOX),
             Map.entry(PREVIOUS_MARKET_QUARRY_GRAYBOX.id(), PREVIOUS_MARKET_QUARRY_GRAYBOX),
             Map.entry(PREVIOUS_STOCKED_QUARRY_GRAYBOX.id(), PREVIOUS_STOCKED_QUARRY_GRAYBOX),
@@ -89,6 +91,17 @@ public final class FrontierRulesets {
     public static FrontierRuleset fuelledQuarryGraybox() { return FUELLED_QUARRY_GRAYBOX; }
     public static FrontierRuleset supplyQuarryGraybox() { return SUPPLY_QUARRY_GRAYBOX; }
     public static FrontierRuleset marketQuarryGraybox() { return MARKET_QUARRY_GRAYBOX; }
+
+    private static FrontierRuleset distributedDeposits(FrontierRuleset base) {
+        var prior = base.extraction().pocket().orElseThrow();
+        var extraction = base.extraction().withAdditionalPockets(java.util.List.of(
+                new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionPocketProfile(
+                    prior.producerPeriod(), 4, 16, 0, 12, prior.material())));
+        return new FrontierRuleset("frontier-v3-quarry-graybox-r15", base.schemaVersion(), base.cadence(), base.spatial(), base.rates(),
+                base.facilityCapacity(), base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
+                base.workCatalog(), base.goodsTrade(), base.initialSettlementStocks(), base.labour(), base.expedition(), extraction,
+                base.execution(), base.production(), base.fields());
+    }
 
     private static FrontierRuleset dynamicReserves(FrontierRuleset base) {
         var prior = base.goodsTrade().supplyPlanning();
