@@ -20,7 +20,6 @@ final class FrontierV3ServicePointClearance {
         ResidentProfile resident = state.humanPopulation().resident(lease.actorId());
         if (resident == null) return false;
         BodyPosition observed = FrontierV3BodyObservation.position(body);
-        List<ServiceAccessPoint> points = ServiceBoundaryComposition.geometries(state);
         var point = ServiceBoundaryComposition.turnoverPoint(state, observed.supportingSurface()).orElse(null);
         Target target = TARGETS.get(body);
         if (target != null && (target.revision() != lease.revision() || !target.actuation().equals(actuation.id()))) {
@@ -30,13 +29,13 @@ final class FrontierV3ServicePointClearance {
         if (target == null || target.revision() != lease.revision()
                 || target.surfaces().stream().noneMatch(surface -> FrontierV3SemanticMovement.targetIsNavigable(level, body, surface))) {
             if (point == null) { TARGETS.remove(body); return false; }
-            var knowledge = ServiceBoundaryComposition.knowledge(state, point.identity()).forActor(state, lease.actorId());
+            var clearance = ServiceClearanceRoutes.from(state, lease.actorId(), observed.supportingSurface());
             List<SurfaceAnchor> surfaces;
-            try { surfaces = ServiceAreaDestinations.select(points, lease.actorId(),
-                    observed.supportingSurface(), knowledge, ServiceDestinationClaims.excludedFor(state, lease.actorId()),
-                    surface -> FrontierV3SemanticMovement.targetIsNavigable(level, body, surface)
-                            && FrontierV3GoalNavigation.canReach(level, body, FrontierV3GoalNavigation.Goal.station(surface,
-                                new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds()))))
+            try { surfaces = ServiceAreaDestinations.select(clearance, lease.actorId(),
+                    observed.supportingSurface(), ServiceDestinationClaims.excludedFor(state, lease.actorId()),
+                    surface -> FrontierV3SemanticMovement.targetIsNavigable(level, body, surface),
+                    surface -> FrontierV3GoalNavigation.canReach(level, body, FrontierV3GoalNavigation.Goal.station(surface,
+                                new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())), actuation))
                     .map(List::of).orElse(List.of()); }
             catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 FrontierV3GoalNavigation.stop(body, actuation);

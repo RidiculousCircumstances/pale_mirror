@@ -48,15 +48,14 @@ final class ResidentServiceTurnover {
         if (occupied.isEmpty()) return Optional.empty();
         var actor = state.actorLocations().get(actorId);
         var point = occupied.orElseThrow();
-        List<ServiceAccessPoint> points = ServiceBoundaryComposition.geometries(state);
-        var knowledge = ServiceBoundaryComposition.knowledge(state, point.identity());
+        var clearance = ServiceClearanceRoutes.from(state, actorId, actor.supportingSurface());
         var excluded = new HashSet<SurfaceAnchor>();
         state.actorLocations().entrySet().stream().filter(entry -> !entry.getKey().equals(actorId))
                 .filter(entry -> entry.getValue().condition().status() == ActorLifeStatus.ALIVE)
                 .map(entry -> entry.getValue().supportingSurface()).forEach(excluded::add);
         state.humanPopulation().meals().values().stream().map(ResidentMeal::clearingSurface).forEach(excluded::add);
         state.actorMovements().values().stream().flatMap(value -> value.order().legalStations().stream()).forEach(excluded::add);
-        return ServiceAreaDestinations.select(points, actorId, actor.supportingSurface(), knowledge, excluded)
+        return ServiceAreaDestinations.select(clearance, actorId, actor.supportingSurface(), excluded, surface -> true, surface -> true)
                 .map(destination -> new ActorMovement(new MovementOrder(actorId, actorId, 0L,
                         Math.addExact(atTick, 1L), List.of(destination), TraversalCapability.PEDESTRIAN,
                         MovementOrder.ArrivalPolicy.EXACT_STATION), atTick,

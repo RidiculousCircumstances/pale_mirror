@@ -13,6 +13,18 @@ public final class ServiceAreaDestinations {
     private record Candidate(SurfaceAnchor surface, long distance, int ordinal) { }
     private ServiceAreaDestinations() { }
 
+    /** Actual-origin escape uses the common declared departure; target and native-route probes stay separate. */
+    public static Optional<SurfaceAnchor> select(ServiceClearanceRoutes clearance, SubjectId actorId,
+            SurfaceAnchor start, Set<SurfaceAnchor> excluded,
+            java.util.function.Predicate<SurfaceAnchor> available,
+            java.util.function.Predicate<SurfaceAnchor> reachable) {
+        return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.withService(
+                io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPlanningService.PASSAGE_CLEARANCE,
+                () -> selectClearance(clearance.points(), actorId, start, clearance.knowledge(), excluded,
+                        surface -> clearance.publicDestination(surface) && available.test(surface),
+                        clearance::allows, reachable));
+    }
+
     public static boolean temporary(ServiceAccessPoint point, SurfaceAnchor surface) {
         return point.boundary().occupied(surface.standingBody()) || point.waitingSurfaces().contains(surface)
                 || point.egressSurfaces().contains(surface);
@@ -28,12 +40,15 @@ public final class ServiceAreaDestinations {
             java.util.function.Predicate<SurfaceAnchor> available) {
         return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.withService(
                 io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPlanningService.PASSAGE_CLEARANCE,
-                () -> selectClearance(points, actorId, start, knowledge, excluded, available));
+                () -> selectClearance(points, actorId, start, knowledge, excluded, available,
+                        route -> points.stream().allMatch(point -> point.boundary().allowsWaitingRoute(route)), surface -> true));
     }
 
     private static Optional<SurfaceAnchor> selectClearance(List<ServiceAccessPoint> points, SubjectId actorId,
             SurfaceAnchor start, KnownPedestrianRouteKnowledge knowledge, Set<SurfaceAnchor> excluded,
-            java.util.function.Predicate<SurfaceAnchor> available) {
+            java.util.function.Predicate<SurfaceAnchor> available,
+            java.util.function.Predicate<List<SurfaceAnchor>> routeAllowed,
+            java.util.function.Predicate<SurfaceAnchor> reachable) {
         // Local traffic clearance must not wait for a whole-world hierarchical
         // route when the same geometry already proves a bounded sidestep.
         var local = knowledge.localMovementRoutes(start);
@@ -44,8 +59,8 @@ public final class ServiceAreaDestinations {
                         .thenComparingInt(SurfaceAnchor::x).thenComparingInt(SurfaceAnchor::z)).toList();
         for (var candidate : nearby)
             if (hasStandingClearance(candidate, excluded) && points.stream().noneMatch(point -> temporary(point, candidate))
-                    && points.stream().allMatch(point -> point.boundary().allowsWaitingRoute(local.get(candidate)))
-                    && available.test(candidate)) return Optional.of(candidate);
+                    && available.test(candidate) && routeAllowed.test(local.get(candidate))
+                    && reachable.test(candidate)) return Optional.of(candidate);
         var candidates = new java.util.PriorityQueue<Candidate>(java.util.Comparator.comparingLong(Candidate::distance)
                 .thenComparingInt(Candidate::ordinal));
         int ordinal = 0;
@@ -69,7 +84,7 @@ public final class ServiceAreaDestinations {
                         TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
                 try {
                     List<SurfaceAnchor> route = knowledge.plannedPath(start, order);
-                    if (points.stream().allMatch(point -> point.boundary().allowsWaitingRoute(route)))
+                    if (routeAllowed.test(route) && reachable.test(candidate))
                         return Optional.of(candidate);
                 } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
                     if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)

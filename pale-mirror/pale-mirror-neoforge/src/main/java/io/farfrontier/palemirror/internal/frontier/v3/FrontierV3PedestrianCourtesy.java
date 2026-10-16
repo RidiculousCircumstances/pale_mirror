@@ -20,10 +20,10 @@ final class FrontierV3PedestrianCourtesy {
     }
     private static final Map<Mob, Target> TARGETS = new WeakHashMap<>();
     private static final Map<Mob, Long> NEXT_QUERY = new WeakHashMap<>();
+    private static final Map<Mob, FrontierV3ClearanceProbe> SEARCHES = new WeakHashMap<>();
     private static final Map<Mob, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityCheckpoint.Wait> DEFERRED = new WeakHashMap<>();
     private static final Map<ServerLevel, Integer> CURSORS = new WeakHashMap<>();
     private static final int MAX_ACTIVE = 32, MAX_ADMISSIONS_PER_TICK = 4;
-    private static final int MAX_PHYSICAL_CANDIDATES = MovementOrder.MAX_LEGAL_STATIONS;
     private FrontierV3PedestrianCourtesy() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
@@ -91,6 +91,7 @@ final class FrontierV3PedestrianCourtesy {
     }
 
     private static void cancel(Mob body) {
+        SEARCHES.remove(body);
         var target = TARGETS.remove(body);
         if (target != null) FrontierV3GoalNavigation.stopCourtesy(body, target.authority());
     }
@@ -137,7 +138,7 @@ final class FrontierV3PedestrianCourtesy {
             // A pushed body returns through the same navigator without resetting missing-evidence wait.
         }
         var request = FrontierV3PedestrianYieldRequests.forBody(level, body, actuation.id().body(), other -> canYield(state, other));
-        if (target == null && request.isEmpty()) return false;
+        if (target == null && request.isEmpty()) { SEARCHES.remove(body); return false; }
         if (target == null || !FrontierV3SemanticMovement.targetIsNavigable(level, body, target.station())) {
             if (request.isEmpty()) { cancel(body); return false; }
             if (level.getGameTime() < NEXT_QUERY.getOrDefault(body, 0L)) return target != null;
@@ -145,22 +146,30 @@ final class FrontierV3PedestrianCourtesy {
             var observed = FrontierV3BodyObservation.capture(body).supportedBody();
             if (observed.isEmpty()) return false;
             var start = observed.orElseThrow().supportingSurface();
-            var points = ServiceBoundaryComposition.geometries(state);
-            var knowledge = PedestrianLocalDeparture.departure(state, start).forActor(state, actor);
+            var clearance = ServiceClearanceRoutes.from(state, actor, start);
+            var retainedSearch = SEARCHES.get(body);
+            if (retainedSearch == null || !retainedSearch.matches(actuation.id(), start, clearance.knowledge().geometry())) {
+                retainedSearch = new FrontierV3ClearanceProbe(actuation.id(), start, clearance.knowledge().geometry());
+                SEARCHES.put(body, retainedSearch);
+            }
+            var search = retainedSearch;
+            search.nextTurn();
             var excluded = new HashSet<>(ServiceDestinationClaims.excludedFor(state, actor));
             TARGETS.keySet().stream().filter(other -> !TARGETS.get(other).authority().current(other)).toList()
                     .forEach(FrontierV3PedestrianCourtesy::cancel);
             TARGETS.forEach((other, reserved) -> { if (other != body) excluded.add(reserved.station()); });
             var scope = new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds());
             var passage = request.orElseThrow().passage();
-            int[] queries = {0};
             java.util.Optional<SurfaceAnchor> destination;
-            try { destination = ServiceAreaDestinations.select(points, actor,
-                    start, knowledge, excluded,
-                    station -> PedestrianLocalDeparture.publicPosition(state, station) && !passage.contains(station.support())
-                            && FrontierV3SemanticMovement.targetIsNavigable(level, body, station)
-                            && queries[0]++ < MAX_PHYSICAL_CANDIDATES
-                            && FrontierV3GoalNavigation.canReach(level, body, FrontierV3GoalNavigation.Goal.station(station, scope), actuation)); }
+            try { destination = ServiceAreaDestinations.select(clearance, actor, start, excluded,
+                    station -> !search.rejected(station) && !passage.contains(station.support())
+                            && FrontierV3SemanticMovement.targetIsNavigable(level, body, station),
+                    station -> search.test(station, () -> FrontierV3GoalNavigation.canReach(level, body,
+                            FrontierV3GoalNavigation.Goal.station(station, scope), actuation))); }
+            catch (FrontierV3ClearanceProbe.Pending pending) {
+                FrontierV3PhysicalWaitTrace.actor(body, state, actor, "courtesy:SEARCH_PENDING:" + pending.getMessage());
+                return target != null;
+            }
             catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 FrontierV3PhysicalWaitTrace.actor(body, state, actor,
                         "courtesy:" + unavailable.status() + ":" + unavailable.getMessage());
@@ -168,9 +177,12 @@ final class FrontierV3PedestrianCourtesy {
             }
             if (destination.isEmpty()) {
                 FrontierV3PhysicalWaitTrace.actor(body, state, actor, "courtesy:no-safe-clearance-position;servicePoints="
-                        + points.size() + ";physicalCandidates=" + queries[0]);
+                        + clearance.points().size() + ";nativeProbes=" + search.probes()
+                        + ";rejectedNativeDestinations=" + search.rejectedCount());
+                SEARCHES.remove(body); // A completed pass can reconsider occupants that have since moved.
                 return false; // No invented route and no recursive displacement chain.
             }
+            SEARCHES.remove(body);
             var accepted = request.orElseThrow();
             var obstruction = accepted.blockers().stream().filter(blocker -> FrontierV3PedestrianYieldRequests.matches(
                     blocker, body.getUUID(), actuation.id().body(), body.getBoundingBox())).findFirst().orElseThrow();
