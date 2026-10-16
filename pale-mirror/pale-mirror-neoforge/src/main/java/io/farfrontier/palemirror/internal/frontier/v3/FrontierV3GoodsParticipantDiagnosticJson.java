@@ -84,7 +84,8 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                     .explain(view, state.bootstrap().ruleset().goodsTrade())) + ",\"availableMoneyRaw\":" + view.availableMoney().raw()
                 + ",\"nextReviewTick\":" + (reviews.isPresent() ? Long.toString(reviews.orElseThrow()) : "null")
                 + ",\"knownCounterparties\":[" + known + "],\"stocks\":[" + stocks
-                + "],\"supplyPlan\":[" + supply + "],\"orders\":[" + orders + "],\"contracts\":[" + contracts + "]"
+                + "],\"supplyPlan\":[" + supply + "],\"reserves\":" + view.supplyPlan().map(FrontierV3ReserveDiagnosticJson::render).orElse("[]")
+                + ",\"orders\":[" + orders + "],\"contracts\":[" + contracts + "]"
                 + ",\"acceptedCommodities\":{" + acceptedCommodities + "}"
                 + ",\"prices\":[" + prices + "],\"completedSales\":[" + completedSales + "]"
                 + ",\"completedCommodities\":{" + completedCommodities + "}"

@@ -9,6 +9,23 @@ final class BakeryProcessingForecast {
     static OptionalLong firstOutputDelay(FrontierWorldState state, SubjectId home) {
         return capacity(state, home).map(c -> OptionalLong.of(c.firstOutputDelay())).orElseGet(OptionalLong::empty);
     }
+    /** Long-run buffer timing does not mistake a meal, occupied machine or current batch for lost capacity. */
+    static long reserveLeadTicks(FrontierWorldState state, SubjectId home) {
+        var recipe = BakeryRecipes.bread(state);
+        var definition = state.bootstrap().ruleset().workCatalog().require(recipe.product().itemKind(), WorkOperation.PRODUCE);
+        if (recipe.processingMode() == ProductionRecipe.ProcessingMode.AUTOMATIC) return definition.workUnits();
+        int speed = SettlementWorkPolicy.permissions(state, home).workers(ResidentWorkKind.BAKING).stream()
+                .map(id -> state.humanPopulation().resident(id))
+                .filter(r -> state.actorLocations().get(r.id()).condition().status() == ActorLifeStatus.ALIVE && r.capability(definition.capability()) > 0)
+                .mapToInt(r -> ResidentWorkStatistics.speedPermille(r, definition, state.bootstrap().ruleset().workCatalog()))
+                .min().orElse(0);
+        if (speed == 0) return state.bootstrap().ruleset().goodsTrade().supplyPlanning().require(recipe.product().itemKind()).leadTicks();
+        var schedule = state.humanPopulation().schedule(home);
+        long dailyWork = schedule.segments().stream().filter(s -> s.window() == SettlementDailySchedule.Window.WORK)
+                .mapToLong(s -> s.endExclusive() - s.startInclusive()).sum();
+        long ticks = Math.ceilDiv(Math.multiplyExact(definition.workUnits(), 1000L), speed);
+        return Math.multiplyExact(Math.addExact(1L, Math.ceilDiv(Math.multiplyExact(ticks, 2L), dailyWork)), schedule.dayTicks());
+    }
     static java.util.Optional<Capacity> capacity(FrontierWorldState state, SubjectId home) {
         var recipe = BakeryRecipes.bread(state);
         var facility = FrontierWorldStateSupport.settlement(state.bootstrap(), home).structures().stream()

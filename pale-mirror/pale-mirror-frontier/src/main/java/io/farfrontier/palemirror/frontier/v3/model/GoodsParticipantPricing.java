@@ -44,7 +44,7 @@ public final class GoodsParticipantPricing {
             var sale = history.commodities().getOrDefault(commodity.itemKind(), List.of()).stream()
                     .filter(value -> value.seller().equals(participant.party().id())).reduce((first, last) -> last)
                     .map(MarketPriceHistory.Sale::receipt);
-            int target = StockTargetDemand.target(commodity, view.residents(), stock.protectedMinimum());
+            int target = view.target(commodity);
             long shortage = view.supplyPlan().map(plan -> plan.require(commodity.itemKind()).purchase())
                     .orElse((long) Math.max(0, target - stock.unclaimedInStorage() - stock.expectedIncoming()));
             int pressure = (int) Math.min(1000, Math.multiplyExact(shortage, 1000) / Math.max(1, target));

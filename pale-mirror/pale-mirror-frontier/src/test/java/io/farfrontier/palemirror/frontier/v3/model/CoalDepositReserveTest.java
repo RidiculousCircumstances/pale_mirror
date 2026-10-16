@@ -14,11 +14,10 @@ class CoalDepositReserveTest {
     }
     @Test void longReserveIsFinitePhysicalOreNotFreeInventoryOrAnExpandedInitialJobPool() {
         var state = initial(); var rules = state.bootstrap().ruleset();
-        assertEquals("frontier-v3-quarry-graybox-r13", rules.id());
+        assertEquals("frontier-v3-quarry-graybox-r14", rules.id());
         assertTrue(rules.initialSettlementStocks().stream().noneMatch(stock -> stock.itemKind().equals("minecraft:coal")));
         assertTrue(state.inventory().fungibleResources().lots().values().stream().noneMatch(lot -> lot.itemKind().equals("minecraft:coal")));
-        assertEquals(8, rules.goodsTrade().policies().get(GoodsPolicyKind.PUBLIC_SETTLEMENT).stream()
-                .filter(value -> value.itemKind().equals("minecraft:coal")).findFirst().orElseThrow().targetFixed());
+        assertTrue(rules.goodsTrade().supplyPlanning().reserves().isPresent());
         long coal = 0; int producers = 0;
         for (var deposit : state.extractionSites().deposits().values()) {
             assertEquals(64, deposit.site().layout().cells().size(), "geology is not a pre-admitted giant work pool");

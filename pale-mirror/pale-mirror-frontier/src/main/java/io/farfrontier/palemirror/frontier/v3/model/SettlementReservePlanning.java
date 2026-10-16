@@ -1,0 +1,46 @@
+package io.farfrontier.palemirror.frontier.v3.model;
+
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.supply.SupplyReservePlanner;
+import io.farfrontier.palemirror.frontier.v3.model.supply.SupplyReservePlanner.*;
+import java.util.*;
+
+/** One shared projection; no market-view recursion or family-specific dispatch in the coordinator. */
+public final class SettlementReservePlanning {
+    private static final Map<ReserveSupplyPort.Key, ReserveSupplyPort> PORTS = register(List.of(
+            new NutritionReserveSupply(), new BakeryReserveSupply(), new FieldReserveSupply(), new ExtractionReserveSupply(), new LogisticsReserveSupply()));
+    private static final ImmutableInputView<Map<SubjectId, Map<String, Target>>> CACHE = new ImmutableInputView<>();
+    private SettlementReservePlanning() { }
+    public static Map<ReserveSupplyPort.Key, ReserveSupplyPort> register(List<ReserveSupplyPort> ports) {
+        var result = new EnumMap<ReserveSupplyPort.Key, ReserveSupplyPort>(ReserveSupplyPort.Key.class);
+        for (var port : ports) if (result.put(port.key(), port) != null) throw new IllegalArgumentException("duplicate reserve facts owner");
+        if (result.size() != ReserveSupplyPort.Key.values().length) throw new IllegalArgumentException("missing reserve facts owner");
+        return Map.copyOf(result);
+    }
+    public static boolean enabled(FrontierWorldState state) { return state.bootstrap().ruleset().goodsTrade().supplyPlanning().reserves().isPresent(); }
+    public static synchronized Map<String, Target> read(FrontierWorldState state, SubjectId home) {
+        var views = CACHE.get(List.of(state), HashMap::new);
+        return views.computeIfAbsent(home, ignored -> project(state, home));
+    }
+    private static Map<String, Target> project(FrontierWorldState state, SubjectId home) {
+        var rules = state.bootstrap().ruleset().goodsTrade().supplyPlanning();
+        var policy = rules.reserves().orElseThrow(() -> new IllegalArgumentException("dynamic reserves not selected"));
+        var needs = new TreeMap<String, Need>(); var timing = new TreeMap<String, Timing>(); var flows = new ArrayList<Flow>();
+        rules.commodities().forEach((item, rule) -> {
+            needs.put(item, new Need(Rate.ZERO, 0)); timing.put(item, new Timing(rule.leadTicks(), TimingBasis.INITIAL_ESTIMATE));
+        });
+        var estimates = new HashMap<String, Timing>();
+        for (var key : ReserveSupplyPort.Key.values()) {
+            var facts = PORTS.get(key).read(state, home);
+            if (!needs.keySet().containsAll(facts.needs().keySet()) || !needs.keySet().containsAll(facts.timing().keySet()))
+                throw new IllegalArgumentException("reserve owner supplied undeclared resource");
+            facts.needs().forEach((item, need) -> needs.merge(item, need,
+                    (a, b) -> new Need(a.consumption().plus(b.consumption()), Math.addExact(a.immediate(), b.immediate()))));
+            flows.addAll(facts.flows());
+            facts.timing().forEach((item, estimate) -> estimates.merge(item, estimate,
+                    (a, b) -> a.leadTicks() <= b.leadTicks() ? a : b));
+        }
+        timing.putAll(estimates);
+        return new SupplyReservePlanner().plan(needs, flows, timing, policy);
+    }
+}

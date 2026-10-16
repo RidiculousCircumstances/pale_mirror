@@ -44,7 +44,8 @@ public final class FrontierRulesets {
     private static final FrontierRuleset SUPPLY_QUARRY_GRAYBOX = supplyQuarry(FUELLED_QUARRY_GRAYBOX);
     private static final FrontierRuleset PREVIOUS_MARKET_QUARRY_GRAYBOX = marketQuarry(SUPPLY_QUARRY_GRAYBOX);
     private static final FrontierRuleset PREVIOUS_STOCKED_QUARRY_GRAYBOX = longFuelReserve(PREVIOUS_MARKET_QUARRY_GRAYBOX);
-    private static final FrontierRuleset MARKET_QUARRY_GRAYBOX = longFuelDeposits(PREVIOUS_MARKET_QUARRY_GRAYBOX);
+    private static final FrontierRuleset PREVIOUS_DEPOSIT_QUARRY_GRAYBOX = longFuelDeposits(PREVIOUS_MARKET_QUARRY_GRAYBOX);
+    private static final FrontierRuleset MARKET_QUARRY_GRAYBOX = dynamicReserves(PREVIOUS_DEPOSIT_QUARRY_GRAYBOX);
     /** Existing worlds retain their exact selector and timing; they are never silently retuned. */
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R6 = ruleset("frontier-v3-production-r6", 8, 1L, 20L, 1L);
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R4 = ruleset("frontier-v3-production-r4", 6, 1L, 20L, 1L);
@@ -59,6 +60,7 @@ public final class FrontierRulesets {
     private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L, 200L);
     private static final Map<String, FrontierRuleset> INSTALLED = Map.ofEntries(
             Map.entry(MARKET_QUARRY_GRAYBOX.id(), MARKET_QUARRY_GRAYBOX),
+            Map.entry(PREVIOUS_DEPOSIT_QUARRY_GRAYBOX.id(), PREVIOUS_DEPOSIT_QUARRY_GRAYBOX),
             Map.entry(PREVIOUS_MARKET_QUARRY_GRAYBOX.id(), PREVIOUS_MARKET_QUARRY_GRAYBOX),
             Map.entry(PREVIOUS_STOCKED_QUARRY_GRAYBOX.id(), PREVIOUS_STOCKED_QUARRY_GRAYBOX),
             Map.entry(SUPPLY_QUARRY_GRAYBOX.id(), SUPPLY_QUARRY_GRAYBOX),
@@ -87,6 +89,18 @@ public final class FrontierRulesets {
     public static FrontierRuleset fuelledQuarryGraybox() { return FUELLED_QUARRY_GRAYBOX; }
     public static FrontierRuleset supplyQuarryGraybox() { return SUPPLY_QUARRY_GRAYBOX; }
     public static FrontierRuleset marketQuarryGraybox() { return MARKET_QUARRY_GRAYBOX; }
+
+    private static FrontierRuleset dynamicReserves(FrontierRuleset base) {
+        var prior = base.goodsTrade().supplyPlanning();
+        var planning = new io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanningRules(prior.commodities(),
+                prior.maximumOrderItems(), prior.workCargoSlots(), prior.personalFoodItems(), prior.maximumTripCargoStacks(),
+                java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.model.supply.ReservePolicy(
+                        base.goodsTrade().reviewInterval(), 500)));
+        return new FrontierRuleset("frontier-v3-quarry-graybox-r14", base.schemaVersion(), base.cadence(), base.spatial(), base.rates(),
+                base.facilityCapacity(), base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
+                base.workCatalog(), base.goodsTrade().withSupplyPlanning(planning), base.initialSettlementStocks(), base.labour(),
+                base.expedition(), base.extraction(), base.execution(), base.production(), base.fields());
+    }
 
     /** Coal stays finite geology, not a warehouse grant. Ordinary mining and trade obtain it. */
     private static FrontierRuleset longFuelDeposits(FrontierRuleset base) {

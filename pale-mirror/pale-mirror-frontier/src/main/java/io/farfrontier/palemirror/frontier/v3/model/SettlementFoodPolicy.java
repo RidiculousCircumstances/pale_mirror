@@ -14,6 +14,8 @@ public final class SettlementFoodPolicy {
 
     /** Two ordinary meals per living resident, plus the current target portion, never missed-meal debt. */
     public static int reserveRequirement(FrontierWorldState state, SubjectId settlementId) {
+        if (SettlementReservePlanning.enabled(state)) return Math.toIntExact(
+                SettlementReservePlanning.read(state, settlementId).get(BREAD).reorderPoint());
         return state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId))
                 .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)

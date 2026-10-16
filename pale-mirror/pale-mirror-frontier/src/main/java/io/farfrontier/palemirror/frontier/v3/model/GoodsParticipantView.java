@@ -24,6 +24,12 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
                 throw new IllegalArgumentException("invalid participant stock view");
         }
     }
+    public int target(GoodsTradeRules.Commodity commodity) {
+        if (supplyPlan.isPresent() && !supplyPlan.orElseThrow().reserves().isEmpty())
+            return Math.toIntExact(Math.max(supplyPlan.orElseThrow().reserves().get(commodity.itemKind()).quantity(),
+                    supplyPlan.orElseThrow().require(commodity.itemKind()).protectedInput()));
+        return StockTargetDemand.target(commodity, residents, stocks.get(commodity.itemKind()).protectedMinimum());
+    }
     public GoodsParticipantView {
         Objects.requireNonNull(participant); Objects.requireNonNull(availableMoney); stocks = Map.copyOf(stocks);
         supplyPlan = Objects.requireNonNull(supplyPlan);

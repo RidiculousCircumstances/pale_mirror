@@ -23,7 +23,7 @@ public final class GoodsParticipantPolicies {
             var result = new StringBuilder("moneyRaw=" + view.availableMoney().raw());
             for (var commodity : rules.policies().get(kind)) {
                 var stock = view.stocks().get(commodity.itemKind());
-                int target = StockTargetDemand.target(commodity, view.residents(), stock.protectedMinimum());
+                int target = view.target(commodity);
                 result.append("; ").append(commodity.itemKind()).append(" unclaimed=").append(stock.unclaimedInStorage())
                         .append(" target=").append(target).append(" incoming=").append(stock.expectedIncoming())
                         .append(" askRaw=").append(GoodsParticipantPricing.ask(view.participant(), commodity).raw())
@@ -47,7 +47,7 @@ public final class GoodsParticipantPolicies {
                 var stock = Objects.requireNonNull(view.stocks().get(commodity.itemKind()));
                 var buyPrice = GoodsParticipantPricing.bid(view.participant(), commodity);
                 var sellPrice = GoodsParticipantPricing.ask(view.participant(), commodity);
-                int target = StockTargetDemand.target(commodity, view.residents(), stock.protectedMinimum());
+                int target = view.target(commodity);
                 int missing = view.supplyPlan().map(plan -> Math.toIntExact(plan.require(commodity.itemKind()).purchase()))
                         .orElseGet(() -> target - Math.addExact(stock.unclaimedInStorage(), stock.expectedIncoming()));
                 int surplus = stock.unclaimedInStorage() - target;

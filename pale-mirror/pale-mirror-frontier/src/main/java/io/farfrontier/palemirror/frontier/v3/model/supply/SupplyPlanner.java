@@ -13,16 +13,21 @@ public final class SupplyPlanner {
     }
     public record Stock(long available, long incoming, long promisedProduction, long target,
                         long protectedMinimum, long consumptionUnits, long consumptionPeriodTicks,
-                        SupplyPolicy policy, List<Arrival> arrivals) {
+                        SupplyPolicy policy, List<Arrival> arrivals, OptionalLong plannedReorderPoint) {
+        public Stock(long available, long incoming, long promisedProduction, long target,
+                     long protectedMinimum, long consumptionUnits, long consumptionPeriodTicks, SupplyPolicy policy, List<Arrival> arrivals) {
+            this(available, incoming, promisedProduction, target, protectedMinimum, consumptionUnits, consumptionPeriodTicks, policy, arrivals, OptionalLong.empty());
+        }
         public Stock(long available, long incoming, long promisedProduction, long target,
                      long protectedMinimum, long consumptionUnits, long consumptionPeriodTicks, SupplyPolicy policy) {
             this(available, incoming, promisedProduction, target, protectedMinimum, consumptionUnits, consumptionPeriodTicks, policy, List.of());
         }
         public Stock {
             Objects.requireNonNull(policy);
+            Objects.requireNonNull(plannedReorderPoint);
             arrivals = List.copyOf(arrivals);
             if (available < 0 || incoming < 0 || promisedProduction < 0 || target < 0
-                    || protectedMinimum < 0 || consumptionUnits < 0 || consumptionPeriodTicks < 1
+                    || protectedMinimum < 0 || consumptionUnits < 0 || consumptionPeriodTicks < 1 || plannedReorderPoint.orElse(0) < 0
                     || arrivals.size() > 1024 || arrivals.stream().mapToLong(Arrival::quantity).reduce(0, Math::addExact) > incoming)
                 throw new IllegalArgumentException("invalid supply stock facts");
         }
@@ -32,6 +37,7 @@ public final class SupplyPlanner {
                     : Math.multiplyExact(available, consumptionPeriodTicks) / consumptionUnits;
         }
         public long reorderPoint() {
+            if (plannedReorderPoint.isPresent()) return Math.max(protectedMinimum, plannedReorderPoint.getAsLong());
             long travelUse = Math.ceilDiv(Math.multiplyExact(consumptionUnits, policy.leadTicks()), consumptionPeriodTicks);
             return Math.max(protectedMinimum, Math.max(travelUse,
                     Math.multiplyExact(target, policy.reorderPermille()) / 1000));
@@ -69,8 +75,10 @@ public final class SupplyPlanner {
                     && deadlineTicks <= leadTicks;
         }
     }
-    public record Plan(Map<String, Demand> demands) {
-        public Plan { demands = Map.copyOf(demands); }
+    public record Plan(Map<String, Demand> demands, Map<String, SupplyReservePlanner.Target> reserves) {
+        public Plan(Map<String, Demand> demands) { this(demands, Map.of()); }
+        public Plan { demands = Map.copyOf(demands); reserves = Map.copyOf(reserves);
+            if (!reserves.isEmpty() && !reserves.keySet().equals(demands.keySet())) throw new IllegalArgumentException("incomplete reserve plan"); }
         public Demand require(String item) { return Objects.requireNonNull(demands.get(item), "undeclared demand " + item); }
     }
     /** Remaining unsecured dependency of already committed production. Not a second output promise. */
@@ -106,7 +114,7 @@ public final class SupplyPlanner {
             var value = observed.get(product);
             pendingUnsecured.put(product, value.promisedProduction());
             backed.put(product, new Stock(value.available(), value.incoming(), 0, value.target(),
-                    value.protectedMinimum(), value.consumptionUnits(), value.consumptionPeriodTicks(), value.policy(), value.arrivals()));
+                    value.protectedMinimum(), value.consumptionUnits(), value.consumptionPeriodTicks(), value.policy(), value.arrivals(), value.plannedReorderPoint()));
         }
         var stocks = Map.copyOf(backed);
         var demands = new TreeMap<String, Demand>();

@@ -15,7 +15,8 @@ public final class ProductionStockDemand {
     public static StockTargetDemand read(FrontierWorldState state, SubjectId settlement, String itemKind,
                                         Optional<SubjectId> completingSubject) {
         var supply = readSupply(state, settlement, itemKind, completingSubject);
-        return new StockTargetDemand(Math.addExact(supply.target(), StockSupplyComposition.inputDemand(state, settlement, itemKind)),
+        long inputs = StockSupplyComposition.inputDemand(state, settlement, itemKind);
+        return new StockTargetDemand(SettlementReservePlanning.enabled(state) ? Math.max(supply.target(), inputs) : Math.addExact(supply.target(), inputs),
                 supply.held(), supply.incoming(), supply.outgoing());
     }
     static StockTargetDemand readSupply(FrontierWorldState state, SubjectId settlement, String itemKind,
@@ -38,7 +39,8 @@ public final class ProductionStockDemand {
             outgoing = Math.addExact(outgoing, commitment.outgoing());
         }
         long stock = held(state.inventory()).getOrDefault(new Resource(settlement, itemKind), 0L);
-        long target = StockTargetDemand.target(commodity, residents, minimum);
+        long target = SettlementReservePlanning.enabled(state) ? SettlementReservePlanning.read(state, settlement).get(itemKind).quantity()
+                : StockTargetDemand.target(commodity, residents, minimum);
         if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().enabled()) {
             var demand = GoodsParticipantView.read(state, participant).supplyPlan().orElseThrow().require(itemKind);
             // Existing export demand remains in outgoing. Replenishment advice alone

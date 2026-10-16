@@ -15,6 +15,8 @@ public final class SettlementSupplyPlanning {
         var facts = new TreeMap<String, SupplyPlanner.Stock>();
         var participant = state.companies().goodsTrade().participants().participants().get(home);
         var deliveries = SettlementDeliveryForecast.read(state, participant);
+        var reserves = SettlementReservePlanning.enabled(state) ? SettlementReservePlanning.read(state, home)
+                : Map.<String, io.farfrontier.palemirror.frontier.v3.model.supply.SupplyReservePlanner.Target>of();
         long metabolism = state.humanPopulation().residents().values().stream()
                 .filter(r -> r.settlementId().equals(home) && state.actorLocations().get(r.id()).condition().status() == ActorLifeStatus.ALIVE)
                 .mapToLong(r -> r.characteristics().effectiveMetabolismPermille(state.humanPopulation().nutrition(r.id()).lastEvaluatedTick())).sum();
@@ -26,12 +28,15 @@ public final class SettlementSupplyPlanning {
                     .filter(c -> c.economicOwner().equals(home) && c.itemKind().equals(commodity.itemKind())).mapToLong(StockSupplyPort.Commitment::incoming).sum());
             var food = life.foods().foods().get(commodity.itemKind());
             long period = food == null ? 1 : Math.multiplyExact(Math.multiplyExact(life.satietyUnitTicks(), 1000L), food.nutritionPerItem());
+            var reserve = reserves.get(commodity.itemKind());
             facts.put(commodity.itemKind(), new SupplyPlanner.Stock(stock.unclaimedInStorage(), stock.expectedIncoming(), promised,
-                    StockTargetDemand.target(commodity, residents, stock.protectedMinimum()), stock.protectedMinimum(),
+                    reserve == null ? StockTargetDemand.target(commodity, residents, stock.protectedMinimum()) : reserve.quantity(), stock.protectedMinimum(),
                     food == null ? 0 : metabolism, period, trade.supplyPlanning().require(commodity.itemKind()),
-                    deliveries.getOrDefault(commodity.itemKind(), List.of())));
+                    deliveries.getOrDefault(commodity.itemKind(), List.of()),
+                    reserve == null ? OptionalLong.empty() : OptionalLong.of(reserve.reorderPoint())));
         }
-        return PLANNER.plan(facts, SupplyCapacityComposition.read(state, home, facts),
+        var planned = PLANNER.plan(facts, SupplyCapacityComposition.read(state, home, facts),
                 SupplyCapacityComposition.dependencies(state, home, facts));
+        return new SupplyPlanner.Plan(planned.demands(), reserves);
     }
 }
