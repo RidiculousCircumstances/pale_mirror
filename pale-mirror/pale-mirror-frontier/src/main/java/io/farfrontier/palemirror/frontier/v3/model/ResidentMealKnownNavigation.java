@@ -130,7 +130,8 @@ public final class ResidentMealKnownNavigation {
     public static void requireMovementRoute(FrontierWorldState state, ResidentMeal meal, List<SurfaceAnchor> route) {
         var port = ResourceStorageAccess.at(state, meal.depotId());
         PedestrianLocalDeparture.departure(state, route.getFirst(),
-                ShipmentEndpointComposition.passages(state, port.endpoint())).requireRoute(route);
+                ShipmentEndpointComposition.passages(state, port.endpoint()))
+                .forActor(state, meal.residentId()).requireRoute(route);
         var end = route.getLast();
         if (meal.phase() == ResidentMeal.Phase.MOVE) {
             if (end.equals(port.interactionStation(state))) {

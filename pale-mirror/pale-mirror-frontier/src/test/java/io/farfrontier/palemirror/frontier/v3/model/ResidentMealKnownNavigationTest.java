@@ -15,6 +15,47 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResidentMealKnownNavigationTest {
+    @Test void capturedChestDepartureUsesTheSameBodyGeometryDuringPlanningAndReplay() throws Exception {
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:meal-chest-departure"), 91L));
+        var home = initial.bootstrap().settlements().getFirst();
+        var actor = home.residents().getFirst().id();
+        var ground = KnownPedestrianGround.forFrontier(initial).at(home.anchor().x() + 22, home.anchor().z() + 22);
+        var container = new SubjectId("container:meal-departure");
+        var endpoint = new ShipmentEndpoint.Storage(home.id(), container, ground, Optional.empty(), ground);
+        var block = ground.support().offset(0, 1, 0);
+        var state = new ResourceStorageDeclared(new ContainerRecord(container, home.id(), 27, ContainerPurpose.RESOURCE_STORAGE,
+                Optional.empty(), Optional.of(new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0,
+                        ResourceStorageRole.WAREHOUSE))), block).apply(initial, home.id());
+        var chest = new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell(
+                new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationShape(List.of(
+                        new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationShape.Box(
+                                .0625, 0, .0625, .9375, .875, .9375))), true);
+        var captured = new java.util.LinkedHashMap<BlockPosition, Optional<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell>>();
+        captured.put(block, Optional.of(chest));
+        for (var neighbor : List.of(ground.support().offset(1, 0, 0), ground.support().offset(-1, 0, 0),
+                ground.support().offset(0, 0, 1), ground.support().offset(0, 0, -1))) {
+            captured.put(neighbor, Optional.of(io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.SOLID));
+            captured.put(neighbor.offset(0, 1, 0), Optional.of(io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.AIR));
+        }
+        state = new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved(0,
+                captured).apply(state,
+                io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved.OWNER);
+        var start = new SurfaceAnchor(block);
+        var meal = testMeal(state, home, actor, FrontierWorldState.depotId(home.id()), ground);
+        state = withMeal(state.withActorBody(actor, start.standingBody()), meal);
+        var step = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.planColdStep(state, actor, 24_001L).orElseThrow();
+        assertTrue(step.plannedRoute().isPresent());
+        var codecs = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs();
+        var decoded = (ResidentMealColdStep) codecs.decode(step.type(), codecs.encode(step));
+        try (var empty = new io.farfrontier.palemirror.frontier.v3.model.navigation.CooperativePedestrianPlanner();
+             var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind(empty)) {
+            var advanced = io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess.reduceColdStep(state, actor, decoded);
+            assertTrue(advanced.humanPopulation().meals().get(actor).coldTravel().isPresent());
+            assertEquals(0, empty.pendingCount(), "route acceptance must not launch another search");
+        }
+    }
+
     @Test void courtesyDepartureFromPrivateDepotStationHasTheSamePlanningAndReplayPermissions() throws Exception {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:r29-courtesy-meal"), 20260918065L));
