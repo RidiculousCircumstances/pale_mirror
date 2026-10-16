@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrap;
+import io.farfrontier.palemirror.internal.agriculture.AgriculturalFlatGenerator;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.levelgen.FlatLevelSource;
 
@@ -11,7 +12,9 @@ final class FrontierV3GeologicalBaseline {
         var declaration = bootstrap.ruleset().extraction().geology();
         if (declaration.isEmpty()) return;
         var generator = level.getChunkSource().getGenerator();
-        if (!(generator instanceof FlatLevelSource))
+        // Both implementations have X/Z-invariant vanilla flat columns. Biome selection
+        // changes agriculture, not the geological promise; the layers are checked below.
+        if (!(generator instanceof FlatLevelSource) && !(generator instanceof AgriculturalFlatGenerator))
             throw new IllegalStateException("declared uniform geology requires the actual flat graybox generator; arbitrary terrain needs surveyed knowledge");
         var geology = declaration.orElseThrow();
         var column = generator.getBaseColumn(bootstrap.bounds().minX(), bootstrap.bounds().minZ(), level,
