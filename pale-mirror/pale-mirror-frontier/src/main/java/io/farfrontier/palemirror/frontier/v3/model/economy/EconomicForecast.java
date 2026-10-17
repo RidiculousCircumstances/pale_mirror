@@ -11,7 +11,8 @@ final class EconomicForecast {
         // Dependent transformations require input-arrival sequencing; do not turn
         // an aggregate output estimate into an invented dated receipt here.
         if (!process.inputs().isEmpty() || process.heatPerBatch() > 0 || process.firstOutputDelayTicks() > horizon) return 0;
-        long batches = Math.min(process.maximumBatches(), Math.addExact(1, (horizon - process.firstOutputDelayTicks()) / process.batchTicks()));
+        long batches = Math.min(process.maximumBatches(), Math.multiplyExact(process.recipesPerOperation(),
+                Math.addExact(1, (horizon - process.firstOutputDelayTicks()) / process.operationTicks())));
         return Math.min(demand.production(), Math.multiplyExact(batches, process.outputPerBatch()));
     }
     private EconomicForecast() { }

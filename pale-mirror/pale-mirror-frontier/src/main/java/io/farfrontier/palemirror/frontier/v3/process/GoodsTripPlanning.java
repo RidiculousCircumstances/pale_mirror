@@ -13,6 +13,9 @@ final class GoodsTripPlanning {
             GoodsParticipant seller, List<GoodsTripAssembly.Parcel> parcels, GoodsTradeFulfillment.Mode mode,
             TripDispatchPolicy.Cause cause, ProcurementSelection.Offer offer, List<FrontierWorldState> prefixes) { }
     static Result plan(FrontierWorldState initial, GoodsParticipant reviewer, long now) {
+        return ImmutablePlanningScope.within(() -> planInScope(initial, reviewer, now));
+    }
+    private static Result planInScope(FrontierWorldState initial, GoodsParticipant reviewer, long now) {
         if (initial.unitGroups().groups().size() >= io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState.MAX_GROUPS
                 || initial.shipments().missions().size() >= io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState.MAX_GROUPS
                 || initial.shipments().shipments().size() >= ShipmentState.MAX_SHIPMENTS)
@@ -95,7 +98,8 @@ final class GoodsTripPlanning {
             }
         }
         while (!candidates.isEmpty()) {
-            var selected = new ProcurementSelection().select(requirements, candidates.stream().map(Candidate::offer).toList());
+            var selected = new ProcurementSelection().select(requirements, candidates.stream().map(Candidate::offer).toList(),
+                    initial.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().map(SourcingRules::labourValuePerTick).orElse(0L));
             if (selected.isEmpty()) break;
             var candidate = candidates.stream().filter(c -> c.offer().id().equals(selected.orElseThrow())).findFirst().orElseThrow();
             candidates.remove(candidate);

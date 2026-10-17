@@ -37,7 +37,7 @@ final class EconomicExportPlanning {
                 if (facts.market().processUnitCosts().getOrDefault(process.id(), Long.MAX_VALUE) > interest.unitPrice()) continue;
                 long batches = Math.min(capacity.get(process.id()), (wanted - held - made) / process.outputPerBatch());
                 if (!process.labourCapacity().isEmpty()) batches = Math.min(batches,
-                        process.labourCapacity().keySet().stream().mapToLong(labour::get).sum() / process.labourTicksPerBatch());
+                        process.recipesForLabour(process.labourCapacity().keySet().stream().mapToLong(labour::get).sum()));
                 for (var input : process.inputs().entrySet()) batches = Math.min(batches, inputs.get(input.getKey()) / input.getValue());
                 // Export cannot purchase inputs speculatively; use retained station
                 // heat only. Fuel purchasing is reserved for the domestic chain.
@@ -58,7 +58,7 @@ final class EconomicExportPlanning {
         return List.copyOf(result.values());
     }
     private static void consumeLabour(Map<String, Long> labour, SupplyPlanner.Process process, long batches) {
-        long missing = Math.multiplyExact(batches, process.labourTicksPerBatch());
+        long missing = process.labourTicks(batches);
         for (var worker : process.labourCapacity().keySet().stream().sorted().toList()) {
             long take = Math.min(missing, labour.get(worker)); labour.merge(worker, -take, Long::sum); missing -= take;
         }

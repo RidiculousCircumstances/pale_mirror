@@ -6,6 +6,25 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ProcurementSelectionTest {
+    @Test void emergencySelectionPrefersUsefulRecoveryRateButKeepsTheOnlySmallDelivery() {
+        var planner = new ProcurementSelection();
+        var need = List.of(new ProcurementSelection.Requirement("grain", 64, 0));
+        var tiny = offer("tiny", 2, 1, 0, 100, 0);
+        var useful = offer("useful", 2, 32, 0, 200, 0);
+        assertEquals(Optional.of(useful.id()), planner.select(need, List.of(tiny, useful)));
+        assertEquals(Optional.of(tiny.id()), planner.select(need, List.of(tiny)));
+        var single = List.of(new ProcurementSelection.Requirement("grain", 1, 0));
+        assertEquals(Optional.of(tiny.id()), planner.select(single, List.of(tiny, useful)),
+                "unneeded surplus cannot inflate recovery value");
+    }
+    @Test void ownLabourUsesTheSameShadowPriceAsSourcingWithoutCreatingAPayment() {
+        var need = List.of(new ProcurementSelection.Requirement("grain", 10, 1000));
+        var collection = offer("collect", 1, 10, 0, 100, 100);
+        var delivered = offer("delivered", 2, 10, 0, 100, 0);
+        assertEquals(Optional.of(delivered.id()), new ProcurementSelection().select(need,
+                List.of(collection, delivered), FixedScalar.whole(1).raw()));
+        assertEquals(FixedScalar.ZERO, collection.transportCost());
+    }
     @Test void fundedRestartWinsAnEqualDeadlineWithoutDependingOnCommoditySpelling() {
         var needs = List.of(new ProcurementSelection.Requirement("a-food", 60, 0),
                 new ProcurementSelection.Requirement("z-fuel", 1, 0, true));

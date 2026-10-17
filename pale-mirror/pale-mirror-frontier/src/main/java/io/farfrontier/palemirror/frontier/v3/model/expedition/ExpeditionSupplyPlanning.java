@@ -9,6 +9,11 @@ import java.util.*;
 /** Adapts actual roster, routes and stock to the pure policy; never creates food or a body. */
 public final class ExpeditionSupplyPlanning {
     private ExpeditionSupplyPlanning() { }
+    /** Cheap source-authority preflight. It promises neither enough food nor a journey. */
+    public static Optional<CustodyAccount> availableSource(FrontierWorldState state, SubjectId container) {
+        return ReferenceContainerCustody.blocksCanonicalUse(state, container) ? Optional.empty()
+                : FungibleResourceCustodySupport.accountAtContainer(state, container);
+    }
     public static Optional<ExpeditionSupplyLoad> walkingLoad(FrontierWorldState state, TransportMission mission,
                                                             UnitGroup group, long now) {
         return walkingLoad(state, mission, group, now, 1, state.inventory().fungibleResources());
@@ -20,8 +25,8 @@ public final class ExpeditionSupplyPlanning {
     public static Optional<ExpeditionSupplyLoad> walkingLoad(FrontierWorldState state, TransportMission mission,
             UnitGroup group, long now, long revision, FungibleResourceLedger availableResources) {
         var rules = state.bootstrap().ruleset(); var life = rules.residentLife();
-        var source = FungibleResourceCustodySupport.accountAtContainer(state, mission.organization().home().containerId()).orElse(null);
-        if (source == null || ReferenceContainerCustody.blocksCanonicalUse(state, mission.organization().home().containerId())) return Optional.empty();
+        var source = availableSource(state, mission.organization().home().containerId()).orElse(null);
+        if (source == null) return Optional.empty();
         var knowledge = TransportGroupMissionPort.knowledgeForEndpoints(state, mission.sender(), mission.receiver()).forActors(state, group.members().stream().map(UnitGroup.Member::actorId).toList());
         ExpeditionJourneyProof journey;
         try { journey = ExpeditionJourneyProof.select(state, mission, group); }

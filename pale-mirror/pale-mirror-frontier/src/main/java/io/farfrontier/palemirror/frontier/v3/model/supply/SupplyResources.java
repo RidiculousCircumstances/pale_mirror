@@ -29,11 +29,11 @@ final class SupplyResources {
 
     long labourBatches(SupplyPlanner.Process process) {
         if (process.labourCapacity().isEmpty()) return Long.MAX_VALUE;
-        return process.labourCapacity().keySet().stream().mapToLong(labour::get).reduce(0L, Math::addExact) / process.labourTicksPerBatch();
+        return process.recipesForLabour(process.labourCapacity().keySet().stream().mapToLong(labour::get).reduce(0L, Math::addExact));
     }
     void allocateLabour(SupplyPlanner.Process process, long batches) {
         if (process.labourCapacity().isEmpty()) return;
-        long needed = Math.multiplyExact(batches, process.labourTicksPerBatch());
+        long needed = process.labourTicks(batches);
         for (var worker : process.labourCapacity().keySet().stream().sorted().toList()) {
             long used = Math.min(needed, labour.get(worker));
             labour.put(worker, labour.get(worker) - used); needed -= used;

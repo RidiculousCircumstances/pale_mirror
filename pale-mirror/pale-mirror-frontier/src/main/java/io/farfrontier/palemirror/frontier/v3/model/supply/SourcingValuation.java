@@ -21,7 +21,9 @@ public final class SourcingValuation {
             Map<String, Long> prices, Map<String, Long> costs, Set<String> visiting, long labour) {
         if (costs.containsKey(process.id())) return costs.get(process.id());
         if (!visiting.add(process.product())) throw new IllegalArgumentException("cyclic sourcing capability");
-        long total = Math.multiplyExact(process.labourTicksPerBatch(), labour);
+        // Long-run unit valuation amortizes an operation over its actual recipe capacity.
+        // Forecast/admission still charge a full operation for a partial batch.
+        long total = Math.ceilDiv(Math.multiplyExact(process.labourTicksPerOperation(), labour), process.recipesPerOperation());
         for (var input : process.inputs().entrySet())
             total = Math.addExact(total, Math.multiplyExact(input.getValue(),
                     replacement(input.getKey(), capacities, prices, costs, visiting, labour)));

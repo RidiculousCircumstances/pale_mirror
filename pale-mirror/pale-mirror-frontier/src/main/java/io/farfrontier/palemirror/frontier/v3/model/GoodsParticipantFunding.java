@@ -10,8 +10,8 @@ public final class GoodsParticipantFunding {
     private GoodsParticipantFunding() { }
     public static FixedScalar purchase(GoodsParticipantView view, GoodsTradeRules rules, String item) {
         var economy = view.supplyPlan().flatMap(plan -> plan.economy());
-        if (economy.isPresent()) return new FixedScalar(Math.min(view.availableMoney().raw(),
-                economy.orElseThrow().purchaseBudgets().getOrDefault(item, 0L)));
+        if (economy.isPresent()) return io.farfrontier.palemirror.frontier.v3.model.economy.EconomicPurchaseFunding.available(
+                economy.orElseThrow(), view.availableMoney(), needs(view, rules), item);
         var preferred = view.supplyPlan().map(plan -> plan.preferredPurchaseSpending()).orElse(java.util.Map.of());
         if (preferred.isEmpty()) return ProcurementBudget.forPurchase(view.availableMoney(), needs(view, rules), item);
         long other = preferred.entrySet().stream().filter(e -> !e.getKey().equals(item)).mapToLong(java.util.Map.Entry::getValue)
@@ -27,10 +27,7 @@ public final class GoodsParticipantFunding {
         var economy = view.supplyPlan().flatMap(plan -> plan.economy());
         if (economy.isPresent()) {
             var restart = needs(view, rules).stream().filter(need -> need.restartQuantity() > 0).toList();
-            // A priority hint cannot borrow another item's economic envelope.
-            return restart.stream().anyMatch(need -> need.item().equals(item))
-                    && restart.stream().allMatch(need -> need.unitLimit().multiply(need.restartQuantity()).raw()
-                        <= economy.orElseThrow().purchaseBudgets().getOrDefault(need.item(), 0L));
+            return !restart.isEmpty() && ProcurementBudget.fundsRestart(view.availableMoney(), needs(view, rules), item);
         }
         return ProcurementBudget.fundsRestart(view.availableMoney(), needs(view, rules), item);
     }

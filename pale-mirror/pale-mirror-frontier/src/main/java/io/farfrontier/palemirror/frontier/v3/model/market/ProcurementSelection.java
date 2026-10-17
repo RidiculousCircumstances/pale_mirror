@@ -36,10 +36,15 @@ public final class ProcurementSelection {
         }
     }
 
-    /** Earliest need first; among offers for it compare delivered cost, then own labour and arrival.
+    /** Earliest need first; prefer timely offers, otherwise useful recovery rate.
+     * Among equally useful offers compare delivered cost including valued own labour.
      * Fixed trip overhead is allocated by quoted goods value, preserving the whole trip cost.
      * This is bounded greedy procurement, not a claim of optimal multi-trip packing. */
     public Optional<SubjectId> select(List<Requirement> requirements, List<Offer> offers) {
+        return select(requirements, offers, 0);
+    }
+    public Optional<SubjectId> select(List<Requirement> requirements, List<Offer> offers, long labourValuePerTick) {
+        if (labourValuePerTick < 0) throw new IllegalArgumentException("negative labour valuation");
         if (requirements.size() > 256 || offers.size() > 2048
                 || requirements.stream().map(Requirement::item).distinct().count() != requirements.size()
                 || offers.stream().map(Offer::id).distinct().count() != offers.size())
@@ -49,22 +54,28 @@ public final class ProcurementSelection {
                 .thenComparing(Requirement::item)).toList()) {
             var candidates = offers.stream().filter(o -> o.goods().containsKey(need.item())).toList();
             if (candidates.isEmpty()) continue;
-            // When all offers miss the deadline, earliest recovery remains useful. Never
+            // When all offers miss the deadline, partial recovery remains useful. Never
             // pretend no demand exists merely because timely provision has become impossible.
             boolean timely = candidates.stream().anyMatch(o -> o.arrivalDelayTicks() <= need.deadlineHorizonTicks());
             return candidates.stream().filter(o -> !timely || o.arrivalDelayTicks() <= need.deadlineHorizonTicks())
-                    .min((a, b) -> compare(a, b, need, timely)).map(Offer::id);
+                    .min((a, b) -> compare(a, b, need, timely, labourValuePerTick)).map(Offer::id);
         }
         return Optional.empty();
     }
-    private static int compare(Offer a, Offer b, Requirement need, boolean timely) {
+    private static int compare(Offer a, Offer b, Requirement need, boolean timely, long labourValuePerTick) {
         if (!timely) {
-            int arrival = Long.compare(a.arrivalDelayTicks(), b.arrivalDelayTicks());
-            if (arrival != 0) return arrival;
+            // Once all alternatives are late, compare useful recovery per journey
+            // time, not just the earliest single item. No hard minimum may suppress
+            // the only feasible small emergency shipment.
+            int recovery = BigInteger.valueOf(Math.min(need.quantity(), b.goods().get(need.item()).quantity()))
+                    .multiply(BigInteger.valueOf(Math.max(1, a.arrivalDelayTicks())))
+                    .compareTo(BigInteger.valueOf(Math.min(need.quantity(), a.goods().get(need.item()).quantity()))
+                            .multiply(BigInteger.valueOf(Math.max(1, b.arrivalDelayTicks()))));
+            if (recovery != 0) return recovery;
         }
         var av = goodsValue(a); var bv = goodsValue(b);
-        var ac = av.add(BigInteger.valueOf(a.transportCost().raw()));
-        var bc = bv.add(BigInteger.valueOf(b.transportCost().raw()));
+        var ac = av.add(BigInteger.valueOf(a.transportCost().raw())).add(BigInteger.valueOf(a.ownWorkerTicks()).multiply(BigInteger.valueOf(labourValuePerTick)));
+        var bc = bv.add(BigInteger.valueOf(b.transportCost().raw())).add(BigInteger.valueOf(b.ownWorkerTicks()).multiply(BigInteger.valueOf(labourValuePerTick)));
         int price = BigInteger.valueOf(a.goods().get(need.item()).unitPrice().raw()).multiply(ac).multiply(bv)
                 .compareTo(BigInteger.valueOf(b.goods().get(need.item()).unitPrice().raw()).multiply(bc).multiply(av));
         if (price != 0) return price;

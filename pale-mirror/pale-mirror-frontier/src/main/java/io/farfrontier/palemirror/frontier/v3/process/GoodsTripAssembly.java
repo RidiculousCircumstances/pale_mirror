@@ -54,6 +54,9 @@ final class GoodsTripAssembly {
         var approachActor = animal.map(TransportAsset::actorId).orElse(people.getFirst().id());
         var sourceEndpoint = GoodsParticipantStorage.endpoint(state, parcels.getFirst().contract().sourceContainerId());
         var destinationEndpoint = GoodsParticipantStorage.endpoint(state, parcels.getFirst().contract().receiverContainerId());
+        var homeContainer = mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY
+                ? sourceEndpoint.containerId() : destinationEndpoint.containerId();
+        if (ExpeditionSupplyPlanning.availableSource(state, homeContainer).isEmpty()) return Optional.empty();
         var journey = ShipmentEndpointComposition.knowledge(state, List.of(sourceEndpoint, destinationEndpoint));
         var source = ActorStorageApproach.select(state, sourceEndpoint, approachActor,
                 state.actorLocations().get(approachActor).supportingSurface(), journey);

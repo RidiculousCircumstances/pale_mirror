@@ -15,6 +15,9 @@ public final class GoodsParticipantProcess {
     }
     /** Due time orders the queue; only the supplied execution instant authorizes current trades. */
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, SimInstant executionInstant) {
+        return ImmutablePlanningScope.within(() -> planInScope(state, action, executionInstant));
+    }
+    private static List<ProposedEvent> planInScope(FrontierWorldState state, ScheduledAction action, SimInstant executionInstant) {
         Objects.requireNonNull(executionInstant, "goods review execution instant");
         if (executionInstant.compareTo(action.dueAt()) < 0)
             throw new IllegalArgumentException("goods participant review cannot execute before its due time");

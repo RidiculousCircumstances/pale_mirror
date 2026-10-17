@@ -46,8 +46,14 @@ public final class SupplyPlanner {
     /** Capacity owner supplies feasible recipes and conservative timing, not an executor. */
     public record Process(String id, String product, int outputPerBatch, Map<String, Integer> inputs,
                           long heatPerBatch, Map<String, Long> fuels, long availableHeat,
-                          long firstOutputDelayTicks, long batchTicks, int maximumBatches, long labourTicksPerBatch,
-                          Map<String, Long> labourCapacity) {
+                          long firstOutputDelayTicks, long operationTicks, int maximumBatches, long labourTicksPerOperation,
+                          Map<String, Long> labourCapacity, int recipesPerOperation) {
+        public Process(String id, String product, int outputPerBatch, Map<String, Integer> inputs,
+                long heatPerBatch, Map<String, Long> fuels, long availableHeat, long firstOutputDelayTicks,
+                long batchTicks, int maximumBatches, long labourTicksPerBatch, Map<String, Long> labourCapacity) {
+            this(id, product, outputPerBatch, inputs, heatPerBatch, fuels, availableHeat, firstOutputDelayTicks,
+                    batchTicks, maximumBatches, labourTicksPerBatch, labourCapacity, 1);
+        }
         public Process(String id, String product, int outputPerBatch, Map<String, Integer> inputs,
                 long heatPerBatch, Map<String, Long> fuels, long availableHeat, long firstOutputDelayTicks,
                 long batchTicks, int maximumBatches, long labourTicksPerBatch) {
@@ -64,15 +70,29 @@ public final class SupplyPlanner {
             Objects.requireNonNull(id); Objects.requireNonNull(product);
             inputs = Map.copyOf(inputs); fuels = Map.copyOf(fuels);
             labourCapacity = Map.copyOf(labourCapacity);
-            if (id.isBlank() || product.isBlank() || outputPerBatch < 1
+            if (id.isBlank() || product.isBlank() || outputPerBatch < 1 || recipesPerOperation < 1
                     || inputs.entrySet().stream().anyMatch(e -> e.getKey().isBlank() || e.getValue() < 1)
                     || heatPerBatch < 0 || availableHeat < 0 || firstOutputDelayTicks < 0
-                    || batchTicks < 1 || maximumBatches < 1 || labourTicksPerBatch < 0
+                    || operationTicks < 1 || maximumBatches < 1 || labourTicksPerOperation < 0
                     || labourCapacity.size() > 256 || labourCapacity.entrySet().stream().anyMatch(e -> e.getKey().isBlank() || e.getValue() < 1)
-                    || !labourCapacity.isEmpty() && labourTicksPerBatch == 0
+                    || !labourCapacity.isEmpty() && labourTicksPerOperation == 0
                     || fuels.entrySet().stream().anyMatch(e -> e.getKey().isBlank() || e.getValue() < 1)
                     || heatPerBatch > 0 && fuels.isEmpty())
                 throw new IllegalArgumentException("invalid supplied production capacity");
+        }
+        /** Inputs/output are per recipe; occupied processing/labour are per executable operation. */
+        public long labourTicks(long recipes) {
+            if (recipes < 0) throw new IllegalArgumentException("negative recipe count");
+            return Math.multiplyExact(Math.ceilDiv(recipes, recipesPerOperation), labourTicksPerOperation);
+        }
+        public long recipesForLabour(long ticks) {
+            if (ticks < 0) throw new IllegalArgumentException("negative available labour");
+            return labourTicksPerOperation == 0 ? maximumBatches : Math.min(maximumBatches,
+                    Math.multiplyExact(ticks / labourTicksPerOperation, recipesPerOperation));
+        }
+        public long completionTicks(long recipes) {
+            if (recipes < 1) throw new IllegalArgumentException("empty processing forecast");
+            return Math.addExact(firstOutputDelayTicks, Math.multiplyExact(Math.ceilDiv(recipes, recipesPerOperation) - 1, operationTicks));
         }
     }
     public record Demand(long purchase, long production, long recoveryProduction, long protectedInput, long deadlineTicks,
@@ -235,8 +255,7 @@ public final class SupplyPlanner {
             recovery = Math.multiplyExact(batches - secured, process.outputPerBatch());
             if (batches > 0) {
                 long inputDeadline = deadline == Long.MAX_VALUE ? Long.MAX_VALUE : Math.max(0,
-                        deadline - Math.addExact(process.firstOutputDelayTicks(),
-                                Math.multiplyExact(allocated + batches - 1, process.batchTicks())));
+                        deadline - process.completionTicks(allocated + batches));
                 for (var input : process.inputs().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList())
                     dependency(stocks, capacities, demands, allocatedBatches, resources, input.getKey(), Math.multiplyExact(batches, input.getValue()),
                             Math.multiplyExact(protectedBatches, input.getValue()),
@@ -287,8 +306,7 @@ public final class SupplyPlanner {
         while (lower < upper) {
             long candidate = lower + (upper - lower + 1) / 2;
             long total = Math.addExact(allocated, candidate);
-            long completion = Math.addExact(process.firstOutputDelayTicks(),
-                    Math.multiplyExact(total - 1, process.batchTicks()));
+            long completion = process.completionTicks(total);
             var ready = resources.readyAt(process, candidate, allocated);
             if (ready.isPresent() && ready.getAsLong() <= deadline && completion <= deadline - ready.getAsLong()) lower = candidate;
             else upper = candidate - 1;

@@ -35,7 +35,7 @@ final class GoodsProductionPricing {
             var demand = view.supplyPlan().orElseThrow().require(process.product());
             long batches = Math.max(1, Math.ceilDiv(demand.purchase(), process.outputPerBatch()));
             if (batches > process.maximumBatches()
-                    || Math.addExact(process.firstOutputDelayTicks(), Math.multiplyExact(batches - 1, process.batchTicks())) > demand.deadlineTicks()) continue;
+                    || process.completionTicks(batches) > demand.deadlineTicks()) continue;
             if (process.inputs().entrySet().stream().anyMatch(e -> !facts.containsKey(e.getKey())
                     || facts.get(e.getKey()).covered() < Math.multiplyExact(e.getValue(), batches))) continue;
             long heat = Math.max(0, Math.multiplyExact(process.heatPerBatch(), batches) - process.availableHeat());
