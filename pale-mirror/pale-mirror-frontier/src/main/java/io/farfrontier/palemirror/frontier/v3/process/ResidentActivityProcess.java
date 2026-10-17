@@ -176,8 +176,14 @@ public final class ResidentActivityProcess {
             return new ResidentActivityAdmission.Ready();
         ResidentNutrition nutrition = state.humanPopulation().nutrition(residentId).accrueThrough(now,
                 state.bootstrap().ruleset().residentLife(), resident.characteristics().effectiveMetabolismPermille(now));
-        if (!nutrition.wantsFood(state.bootstrap().ruleset().residentLife()))
+        if (!nutrition.wantsFood(state.bootstrap().ruleset().residentLife())) {
+            if (execution != null && execution.suspended().isPresent()
+                    && ResidentActivityCoordinator.assessEligibility(state, residentId, now).kind()
+                        == ResidentActivityChoice.Kind.WORK
+                    && !ResidentServiceTurnover.mayPlan(state, residentId, now))
+                return waiting(state, residentId, ResidentActivityAdmission.Reason.WORK_CHECKPOINT);
             return new ResidentActivityAdmission.Ready();
+        }
         // An idle obstruction can leave even when food admission is currently blocked.
         // Parking that resident under FOOD_STOCK/MEAL_CLEARANCE would keep the buffer full forever.
         if (ResidentServiceTurnover.mayPlan(state, residentId, now))
@@ -384,6 +390,13 @@ public final class ResidentActivityProcess {
         long next = Math.min(window, hunger);
         if (!mealStarted && !mealAlreadyRetained
                 && (choice.pending().isPresent() || effective.wantsFood(rules)))
+            next = Math.min(next, Math.addExact(now, PENDING_RETRY_TICKS));
+        // A retained work continuation is waiting for its owner's dependency,
+        // not for tomorrow's schedule. Keep a due action so the shared hold/wake
+        // index can release it when that dependency changes, without retry WAL.
+        var execution = state.actorExecutions().actors().get(resident.id());
+        if (!mealStarted && !mealAlreadyRetained && choice.kind() == ResidentActivityChoice.Kind.WORK
+                && execution != null && execution.suspended().isPresent())
             next = Math.min(next, Math.addExact(now, PENDING_RETRY_TICKS));
         return next;
     }

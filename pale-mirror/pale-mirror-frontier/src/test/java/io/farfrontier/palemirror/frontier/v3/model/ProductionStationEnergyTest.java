@@ -8,6 +8,20 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ProductionStationEnergyTest {
+    @Test void stationGeometryReusesOnlyUnchangedTerrainEndpointAndPopulation() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:station-geometry-reuse"), 41,
+                FrontierRulesets.fuelledQuarryGraybox()));
+        var station = state.inventory().containers().values().stream().flatMap(record -> record.productionStation().stream()).findFirst().orElseThrow();
+        var provider = new ProductionServiceBoundaries();
+        var declaration = ServiceBoundaryComposition.declaration(state, station.containerId());
+        var original = provider.geometry(state, declaration);
+        assertSame(original, provider.geometry(state, declaration));
+        var stocked = fuel(state, station);
+        assertSame(original, provider.geometry(stocked, declaration), "stock does not rebuild immutable access terrain");
+        var changed = state.recordPhysicalDelta(new PhysicalDelta(station.workerStation().support().offset(0, 1, 0),
+                PhysicalDeltaKind.UNKNOWN_SCAR, Optional.empty(), Optional.empty(), "test:station-geometry-edit"));
+        assertNotSame(original, provider.geometry(changed, declaration), "physical edits invalidate access geometry");
+    }
     private static final SubjectId FUEL = new SubjectId("lot:station-test-fuel");
     private static FrontierWorldState fuel(FrontierWorldState state, ProductionStationSpec station) {
         var owner = state.inventory().containers().get(station.containerId()).ownerId();
@@ -103,6 +117,18 @@ class ProductionStationEnergyTest {
         assertSuspendedWorkCannotAdmitScene(resting, job, 10_002);
         assertTrue(ResidentMealOpportunity.candidate(resting, actor, 10_002).isEmpty());
         assertFalse(ActivityExecutionCapabilities.mayResumeWork(resting, HumanAssignmentProjection.compile(resting).assignment(actor)));
+        assertFalse(resting.humanPopulation().nutrition(actor).accrueThrough(10_002,
+                resting.bootstrap().ruleset().residentLife(),
+                resting.humanPopulation().resident(actor).characteristics().effectiveMetabolismPermille(10_002))
+                .wantsFood(resting.bootstrap().ruleset().residentLife()), "exercise a nourished resource waiter");
+        var waitingReview = ResidentActivityProcess.plan(resting, ResidentActivityProcess.review(actor, 10_002)).stream()
+                .map(ProposedEvent::payload).filter(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class::isInstance)
+                .map(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class::cast)
+                .findFirst().orElseThrow().replacement();
+        assertEquals(10_003, waitingReview.dueAt().ticks(), "resource wait cannot sleep until the next work window");
+        assertEquals(ResidentActivityAdmission.Reason.WORK_CHECKPOINT,
+                assertInstanceOf(ResidentActivityAdmission.Waiting.class,
+                        ResidentActivityProcess.admission(resting, waitingReview)).reason());
         assertTrue(ResidentActivityProcess.plan(resting, ResidentActivityProcess.review(actor, 10_002)).stream()
                 .noneMatch(event -> event.payload() instanceof io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionResumed),
                 "even an admitted ordinary review cannot resume resource-blocked work");
@@ -112,6 +138,8 @@ class ProductionStationEnergyTest {
         for (int count = 0; count < 2; count++) resting = ProductionStationEnergy.apply(resting, station.id(),
                 new ProductionStationFuelChanged(ProductionStationFuelChanged.Stage.COLD_CONSUMED,
                         ProductionStationEnergy.next(resting, station.id()).orElseThrow(), List.of()));
+        assertTrue(new ProductionServiceAccess().demands(resting, station.containerId()).isEmpty(),
+                "resource readiness cannot give a suspended worker a phantom station turn");
         assertTrue(ResidentMealOpportunity.candidate(resting, actor, 10_003).isEmpty());
         assertInstanceOf(ResidentActivityAdmission.Ready.class, ResidentActivityProcess.admission(resting,
                 ResidentActivityProcess.review(actor, 10_003)), "available retained work resumes even without food");
@@ -122,6 +150,7 @@ class ProductionStationEnergyTest {
         var resumed = resting.actorExecutions().next(actor, retained.activityKind(), retained.activityOwnerId());
         var working = ActorExecutionComposition.LIFECYCLE.prepareResume(resting, retained, resumed, Optional.empty(), 10_004)
                 .commit(resting, FrontierWorldStateUpdate.begin());
+        assertEquals(1, new ProductionServiceAccess().demands(working, station.containerId()).size());
         assertTrue(FrontierProductionWorkSceneSupport.candidate(working, working.productionJobs().get(job.id())).isPresent(),
                 "the actual owner resumption restores HOT eligibility without losing the job");
     }

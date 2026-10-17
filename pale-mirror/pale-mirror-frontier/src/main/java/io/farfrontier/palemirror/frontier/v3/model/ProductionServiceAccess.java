@@ -76,6 +76,8 @@ public final class ProductionServiceAccess implements ServiceAccessCapability {
         var result = new ArrayList<ServiceAccessDemand>();
         for (var job : state.productionJobs().values()) {
             if (job.bakeryWork().isEmpty()
+                    || !state.actorExecutions().owns(job.workerId(),
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION, job.id())
                     || !(point(state, job).equals(pointId) || BakeryStorage.source(job).equals(pointId) || BakeryStorage.destination(job).equals(pointId))
                     || state.humanPopulation().meals().containsKey(job.workerId())
                     || state.actorMovements().containsKey(job.workerId())

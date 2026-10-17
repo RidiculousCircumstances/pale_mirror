@@ -315,7 +315,7 @@ class BakeryColdVerticalTest {
         }
         assertFalse(state.actorMovements().containsKey(resident));
         assertTrue(releasedBeforeArrival, "the service turn ends independently of any subsequent movement");
-        assertTrue(ProductionServiceAccess.available(state, job));
+        assertFalse(ProductionServiceAccess.available(state, job), "suspended work has no station turn before resumption");
         assertEquals(job, state.productionJobs().get(job.id()));
         assertEquals(3, state.inventory().fungibleResources().totalQuantity(job.settlementId(), "minecraft:bread"));
         assertTrue(state.actorExecutions().actors().get(resident).current().isEmpty(),
@@ -333,6 +333,7 @@ class BakeryColdVerticalTest {
                         new SimInstant(resumed.atTick()), resident,
                         io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(
                                 new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:baker-selected-resume")), resumed));
+        assertTrue(ProductionServiceAccess.available(state, job));
         assertTrue(ProductionProcess.planCompletion(state, ProductionProcess.complete(job, 27_300L))
                 .stream().anyMatch(event -> event.payload() instanceof BakeryColdStep));
     }

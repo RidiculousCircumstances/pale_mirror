@@ -157,13 +157,14 @@ final class FrontierV3PedestrianTraffic {
         if (Math.abs((long) target.getX() - origin.getX()) > radius
                 || Math.abs((long) target.getY() - origin.getY()) > radius
                 || Math.abs((long) target.getZ() - origin.getZ()) > radius) return null;
+        var clearance = new FrontierV3PathClearance.Query(level, actor);
         WalkNodeEvaluator evaluator = new WalkNodeEvaluator() {
             @Override public int getNeighbors(net.minecraft.world.level.pathfinder.Node[] neighbours, net.minecraft.world.level.pathfinder.Node from) {
                 int count = super.getNeighbors(neighbours, from), retained = 0;
                 for (int index = 0; index < count; index++) {
                     var next = neighbours[index];
                     if ((profile.isEmpty() || profile.orElseThrow().permitsGrade(from.y, next.y))
-                            && FrontierV3PathClearance.edge(level, actor, from.asBlockPos(), next.asBlockPos()))
+                            && clearance.edge(from.asBlockPos(), next.asBlockPos()))
                         neighbours[retained++] = next;
                 }
                 return retained;

@@ -53,6 +53,10 @@ public final class FrontierV3LocalNavigationGameTests {
             FrontierV3BodyObservation.refreshGroundContact(level, worker);
             helper.assertTrue(!FrontierV3PathClearance.edge(level, worker, low.above(), high.above()),
                     "standing room must not authorize climbing through the pocket ceiling");
+            level.setBlock(low.above(3), Blocks.AIR.defaultBlockState(), 3);
+            helper.assertTrue(FrontierV3PathClearance.edge(level, worker, low.above(), high.above()),
+                    "a later query observes a removed ceiling, never an earlier cached refusal");
+            level.setBlock(low.above(3), Blocks.STONE.defaultBlockState(), 3);
             helper.assertTrue(FrontierV3GoalNavigation.canReach(level, worker, FrontierV3GoalNavigation.Goal.station(target, scope)),
                     "a legal route through the open side remains available");
             for (int turn = 0; turn < 140 && !FrontierV3SemanticMovement.arrived(level, worker, target); turn++) {
