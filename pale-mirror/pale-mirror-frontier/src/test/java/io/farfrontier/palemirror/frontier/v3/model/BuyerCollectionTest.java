@@ -18,11 +18,11 @@ class BuyerCollectionTest {
         var seller = initial.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
         var buyer = initial.companies().goodsTrade().participants().participants().get(seller.known().getFirst().party().id());
         var buyerMoney = initial.inventory().economics().require(buyer.party().id()).balance();
-        var sellerMoney = initial.inventory().economics().require(seller.party().id()).balance();
         var engine = FrontierEngines.createCanonicalStateAccess(configuration);
         TransportMission admitted = null; boolean reachedSource = false, paid = false, recovered = false, returned = false, promptRetirement = false;
         GoodsTradeCollected pickup = null;
         int purchased = 0; FixedScalar payment = FixedScalar.ZERO; var originalHolds = new HashSet<SubjectId>();
+        var originalContracts = new HashSet<SubjectId>();
         for (int boundary = 0; boundary < 4000; boundary++) {
             var state = engine.canonicalState().state();
             if (admitted == null && !state.shipments().missions().isEmpty()) {
@@ -43,6 +43,7 @@ class BuyerCollectionTest {
                     var contract = state.companies().goodsTrade().contracts().get(parcel.authorization().claimantId());
                     assertEquals(GoodsTradeFulfillment.Mode.BUYER_COLLECTION, contract.fulfillment().mode());
                     originalHolds.add(contract.financialReservationId());
+                    originalContracts.add(contract.id());
                     purchased += contract.quantity(); payment = payment.plus(contract.outstandingPrice());
                 }
             }
@@ -74,18 +75,33 @@ class BuyerCollectionTest {
                                 .map(ProposedEvent::payload).filter(GoodsTradeCollected.class::isInstance)
                                 .map(GoodsTradeCollected.class::cast).findFirst().orElseThrow();
                         var receipt = pickup;
+                        // Compare the exact acceptance transition, not the global
+                        // balances over a journey with concurrent independent trades.
+                        var accepted = GoodsTradeCollectionSupport.accept(state, buyer.party().id(), receipt, now);
+                        var contract = state.companies().goodsTrade().contracts().get(receipt.receipt().contractId());
+                        var amount = contract.deliveredUnitPrice().multiply(receipt.receipt().title().quantity());
+                        assertEquals(state.inventory().economics().require(buyer.party().id()).balance().minus(amount),
+                                accepted.inventory().economics().require(buyer.party().id()).balance());
+                        assertEquals(state.inventory().economics().require(seller.party().id()).balance().plus(amount),
+                                accepted.inventory().economics().require(seller.party().id()).balance());
                         assertThrows(IllegalArgumentException.class, () -> GoodsTradeCollectionSupport.accept(state, seller.party().id(), receipt, now));
                         assertThrows(IllegalArgumentException.class, () -> GoodsTradeCollectionSupport.accept(state, buyer.party().id(),
                                 new GoodsTradeCollected(receipt.shipmentId(), receipt.expectedShipmentRevision() - 1, receipt.receipt()), now));
                         break;
                     }
                 }
-                if (mission.stage() == TransportMission.Stage.TO_SOURCE)
-                    assertEquals(buyerMoney, state.inventory().economics().require(buyer.party().id()).balance());
+                if (mission.stage() == TransportMission.Stage.TO_SOURCE) {
+                    assertTrue(state.inventory().economics().reservations().keySet().containsAll(originalHolds),
+                            "this mission must retain its payment holds until actual pickup");
+                    for (var id : originalContracts)
+                        assertEquals(0, state.companies().goodsTrade().contracts().get(id).acceptedQuantity());
+                }
                 if (!paid && mission.stage() == TransportMission.Stage.OUTBOUND) {
                     paid = true;
-                    assertEquals(buyerMoney.minus(payment), state.inventory().economics().require(buyer.party().id()).balance());
-                    assertEquals(sellerMoney.plus(payment), state.inventory().economics().require(seller.party().id()).balance());
+                    for (var id : originalContracts) {
+                        var contract = state.companies().goodsTrade().contracts().get(id);
+                        assertTrue(contract.fulfilled(), "ordinary pickup must accept this mission's whole allocation");
+                    }
                     assertTrue(Collections.disjoint(originalHolds, state.inventory().economics().reservations().keySet()),
                             "the collected contracts must be paid; other admitted trips may retain their own holds");
                     for (var id : mission.shipmentIds()) {
