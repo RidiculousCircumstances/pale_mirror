@@ -97,4 +97,19 @@ class EconomicPlannerTest {
         assertEquals(0, plan.economy().orElseThrow().productionTargets().get("grain"));
         assertTrue(plan.economy().orElseThrow().domesticTargets().get("grain") > 0);
     }
+    @Test void chosenFinishedFoodPurchaseDoesNotAlsoPurchaseItsRecipeAndForecastUsesItsPrice() {
+        var original = facts(20, 0, 0, 500, List.of(oven()), List.of());
+        var market = new SourcingMarket(500, 100, Map.of("oven", 10L),
+                List.of(new SourcingMarket.Offer("finished-food", "food", 100, 3, 3, 0, 0)));
+        var input = new EconomicSnapshot(original.dayTicks(), original.stocks(), original.needs(), original.flows(),
+                original.reserves(), original.processes(), original.commitments(), market, original.replacementPrices(), List.of(), 0);
+        var plan = new EconomicPlanner().plan(input, RULES); var economy = plan.economy().orElseThrow();
+        assertEquals(20, plan.preferredPurchaseQuantities().get("food"));
+        assertEquals(0, plan.require("grain").purchase()); assertEquals(0, plan.require("fuel").purchase());
+        assertEquals(0, economy.productionTargets().get("grain"));
+        assertEquals(0, economy.purchaseBudgets().get("fuel"));
+        assertEquals(60, economy.checkpoints().getLast().importCost());
+        assertEquals(440, economy.checkpoints().getLast().cashWithoutNewSales());
+        assertEquals(20, economy.checkpoints().getLast().netRequirements().get("food"), "an intended purchase is not already delivered food");
+    }
 }

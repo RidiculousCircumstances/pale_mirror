@@ -13,6 +13,7 @@ final class SupplyResources {
     long requireInput(String item, long quantity) {
         return inputRequirements.merge(item, quantity, Math::addExact);
     }
+    Map<String, Long> inputRequirements() { return Map.copyOf(inputRequirements); }
 
     SupplyResources(Map<String, SupplyPlanner.Stock> stocks, List<SupplyPlanner.Process> processes) {
         for (var process : processes) process.labourCapacity().forEach((worker, ticks) -> {

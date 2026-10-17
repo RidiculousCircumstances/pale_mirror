@@ -30,6 +30,7 @@ public record SourcingMarket(long availableMoney, int switchingSavingsPermille,
         private final SourcingMarket market;
         private final Map<String, Long> used = new HashMap<>();
         private final Map<String, Long> spending = new TreeMap<>();
+        private final Map<String, Long> purchased = new TreeMap<>();
         private long remaining;
         private Allocation(SourcingMarket market) { this.market = market; remaining = market.availableMoney(); }
         public long processCost(SupplyPlanner.Process process) {
@@ -47,6 +48,7 @@ public record SourcingMarket(long availableMoney, int switchingSavingsPermille,
                 if (take == 0 || !cheaper(Math.addExact(offer.deliveredCostPerItem(), Math.ceilDiv(offer.tripCost(), take)), ownCost)) continue;
                 long cost = Math.multiplyExact(take, offer.cashPerItem());
                 used.merge(offer.id(), take, Math::addExact); spending.merge(item, cost, Math::addExact);
+                purchased.merge(item, take, Math::addExact);
                 remaining -= cost; bought += take;
                 if (bought == quantity) break;
             }
@@ -61,5 +63,6 @@ public record SourcingMarket(long availableMoney, int switchingSavingsPermille,
             return take < 1 ? Long.MAX_VALUE : Math.addExact(offer.deliveredCostPerItem(), Math.ceilDiv(offer.tripCost(), take));
         }
         public Map<String, Long> spending() { return Map.copyOf(spending); }
+        public Map<String, Long> purchased() { return Map.copyOf(purchased); }
     }
 }

@@ -9,6 +9,10 @@ public final class EconomicRequirements {
         public Projection { gross = Map.copyOf(gross); missing = Map.copyOf(missing); }
     }
     public Projection project(EconomicSnapshot facts, long horizon) {
+        return project(facts, horizon, Map.of());
+    }
+    /** Chosen purchases change the intended input chain, never physical stock or its shortage. */
+    public Projection project(EconomicSnapshot facts, long horizon, Map<String, Long> plannedPurchases) {
         if (horizon < 1) throw new IllegalArgumentException("invalid economic horizon");
         var flows = new TreeMap<String, SupplyReservePlanner.Flow>();
         for (var flow : facts.flows()) {
@@ -27,7 +31,8 @@ public final class EconomicRequirements {
             long shortage = Math.max(0, gross.get(item) - Math.addExact(stock.available(), timedIncoming));
             missing.put(item, shortage);
             var flow = flows.get(item);
-            if (flow != null) flow.inputsPerOutput().forEach((input, ratio) -> gross.merge(input, ratio.over(shortage), Math::addExact));
+            long ownOutput = Math.max(0, shortage - plannedPurchases.getOrDefault(item, 0L));
+            if (flow != null) flow.inputsPerOutput().forEach((input, ratio) -> gross.merge(input, ratio.over(ownOutput), Math::addExact));
         }
         return new Projection(gross, missing);
     }

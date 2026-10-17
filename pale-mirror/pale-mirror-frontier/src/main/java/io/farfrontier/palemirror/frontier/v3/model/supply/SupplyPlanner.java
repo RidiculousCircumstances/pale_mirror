@@ -93,13 +93,25 @@ public final class SupplyPlanner {
     }
     public record Plan(Map<String, Demand> demands, Map<String, SupplyReservePlanner.Target> reserves,
                        Map<String, Long> preferredPurchaseSpending,
+                       Map<String, Long> preferredPurchaseQuantities, Map<String, Long> inputRequirements,
                        Optional<io.farfrontier.palemirror.frontier.v3.model.economy.EconomicPlan> economy) {
+        public Plan(Map<String, Demand> demands, Map<String, SupplyReservePlanner.Target> reserves,
+                    Map<String, Long> preferredPurchaseSpending,
+                    Optional<io.farfrontier.palemirror.frontier.v3.model.economy.EconomicPlan> economy) {
+            this(demands, reserves, preferredPurchaseSpending, Map.of(), Map.of(), economy);
+        }
         public Plan(Map<String, Demand> demands, Map<String, SupplyReservePlanner.Target> reserves,
                     Map<String, Long> preferredPurchaseSpending) { this(demands, reserves, preferredPurchaseSpending, Optional.empty()); }
         public Plan(Map<String, Demand> demands, Map<String, SupplyReservePlanner.Target> reserves) { this(demands, reserves, Map.of()); }
         public Plan(Map<String, Demand> demands) { this(demands, Map.of()); }
         public Plan { demands = Map.copyOf(demands); reserves = Map.copyOf(reserves);
             economy = Objects.requireNonNull(economy);
+            preferredPurchaseQuantities = Map.copyOf(preferredPurchaseQuantities); inputRequirements = Map.copyOf(inputRequirements);
+            if (!demands.keySet().containsAll(preferredPurchaseQuantities.keySet())
+                    || !demands.keySet().containsAll(inputRequirements.keySet())
+                    || preferredPurchaseQuantities.values().stream().anyMatch(value -> value < 0)
+                    || inputRequirements.values().stream().anyMatch(value -> value < 0))
+                throw new IllegalArgumentException("invalid selected source requirements");
             preferredPurchaseSpending = Map.copyOf(preferredPurchaseSpending);
             if (!demands.keySet().containsAll(preferredPurchaseSpending.keySet())
                     || preferredPurchaseSpending.values().stream().anyMatch(value -> value < 0))
@@ -184,7 +196,7 @@ public final class SupplyPlanner {
             if (missing > pending) expand(stocks, processes, demands, allocatedBatches, resources,
                     entry.getKey(), missing - pending, deadline, reasons, new HashSet<>(), sourcing);
         }
-        return new Plan(demands, Map.of(), sourcing.spending());
+        return new Plan(demands, Map.of(), sourcing.spending(), sourcing.purchased(), resources.inputRequirements(), Optional.empty());
     }
     private void expand(Map<String, Stock> stocks, List<Process> capacities, Map<String, Demand> demands, Map<String, Long> allocatedBatches, SupplyResources resources,
                         String item, long amount, long deadline, Set<Reason> reasons, Set<String> ancestors, SourcingMarket.Allocation sourcing) {
