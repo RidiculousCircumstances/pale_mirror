@@ -36,7 +36,11 @@ public final class SettlementStorageTerritory {
     public static List<Area> areas(FrontierWorldState state) {
         var sites = state.extractionSites().deposits().values().stream().map(deposit -> deposit.site())
                 .sorted(Comparator.comparing(site -> site.id())).toList();
-        return WORK_AREAS.get(List.of(state.bootstrap(), sites), () -> {
+        // Key the immutable declarations, not the newly allocated discovery list.
+        // Work/custody changes retain site identity; expansion/replacement does not.
+        var inputs = new ArrayList<Object>(sites.size() + 1);
+        inputs.add(state.bootstrap()); inputs.addAll(sites);
+        return WORK_AREAS.get(inputs, () -> {
         var result = new ArrayList<>(areas(state.bootstrap()));
         for (var site : sites) {
             var home = FrontierWorldStateSupport.settlement(state.bootstrap(), site.settlementId());

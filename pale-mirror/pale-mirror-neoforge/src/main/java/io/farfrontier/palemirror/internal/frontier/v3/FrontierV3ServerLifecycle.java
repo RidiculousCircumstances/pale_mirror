@@ -366,7 +366,10 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
         if (runtime == null) return;
         try (var hostTurn = FrontierV3HostTiming.beginPmTurn(runtime.executionMetrics())) {
-            runtime.runPersistenceTurn(() -> {
+            // Planning and canonical validation revisit the same immutable input.
+            // Keep bounded derived views through this whole turn, not just one planner;
+            // changed drafts still use distinct keys and no view survives as authority.
+            runtime.runPersistenceTurn(() -> io.farfrontier.palemirror.frontier.v3.model.ImmutablePlanningScope.within(() -> {
                 boolean active = runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE;
                 if (active) FrontierV3PedestrianPlanning.tick(runtime);
                 boolean initialHold = INITIAL_CANONICAL_HOLDS.containsKey(server);
@@ -387,7 +390,8 @@ public final class FrontierV3ServerLifecycle {
                     runtime.tick(FrontierV3RuntimeBudgets.ordinaryTick(runtime.decodedState().orElseThrow().bootstrap().ruleset()));
                     if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) advanceQueuedCanonicalTime(server, runtime);
                 }
-            });
+                return null;
+            }));
         } catch (RuntimeException error) {
             PaleMirrorMod.LOGGER.error("Frontier v3 server tick failed before quarantine", error);
             runtime.quarantine(error);

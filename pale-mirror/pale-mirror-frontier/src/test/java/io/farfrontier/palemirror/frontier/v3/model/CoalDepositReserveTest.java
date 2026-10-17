@@ -67,7 +67,13 @@ class CoalDepositReserveTest {
         var extension = ExtractionAreaPlanning.proposal(state, prior.site().id()).orElseThrow();
         assertTrue(extension.columns().stream().flatMap(column -> column.clearance().stream())
                 .anyMatch(sample -> sample.block().kind().equals("minecraft:coal_ore")));
+        var territory = SettlementStorageTerritory.areas(state);
         var after = ExtractionAreaPlanning.apply(state, prior.site().id(), extension, 1000);
+        var expandedTerritory = SettlementStorageTerritory.areas(after);
+        assertNotSame(territory, expandedTerritory, "a changed site declaration invalidates its derived land bounds");
+        assertEquals(expandedTerritory, SettlementStorageTerritory.areas(
+                new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(after))),
+                "cached expanded land must agree with independent recovered declarations");
         assertTrue(after.extractionSites().deposits().get(prior.site().id()).site().layout().cells().stream()
                 .anyMatch(cell -> cell.id() > 64 && cell.definition().before().kind().equals("minecraft:coal_ore")));
         assertEquals(state.inventory(), after.inventory(), "admitting a front never credits coal");

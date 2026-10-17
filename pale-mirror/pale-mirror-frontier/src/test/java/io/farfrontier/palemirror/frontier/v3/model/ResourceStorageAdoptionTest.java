@@ -7,6 +7,23 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResourceStorageAdoptionTest {
+    @Test void economicProjectionSurvivesPlannerDraftButNeverReusesChangedStock() {
+        var state = initial();
+        var participant = state.companies().goodsTrade().participants().participants().values().stream()
+                .filter(value -> value.settlementId().equals(state.bootstrap().settlements().getFirst().id())).findFirst().orElseThrow();
+        var adoption = event(state, true);
+        var draft = adoption.apply(state, participant.party().id());
+        var changed = draft.withInventory(draft.inventory().withSurfaceStatus(adoption.declaration().container().id(), ContainerSurfaceStatus.ACTIVE));
+        ImmutablePlanningScope.within(() -> {
+            var before = GoodsParticipantView.read(state, participant);
+            var after = ImmutablePlanningScope.within(() -> GoodsParticipantView.read(changed, participant));
+            assertEquals(before.stocks().get("minecraft:bread").ownedInStorage() + 3,
+                    after.stocks().get("minecraft:bread").ownedInStorage());
+            assertSame(before, GoodsParticipantView.read(state, participant),
+                    "canonical validation revisits the exact pre-state after planner-local scope exits");
+            return null;
+        });
+    }
     @Test void marketPublishesAlternativeWarehousesWithoutMultiplyingTheParticipantsDemand() {
         var initial = initial(); var home = initial.bootstrap().settlements().getFirst().id();
         var adoption = event(initial, true); var id = adoption.declaration().container().id();
@@ -146,12 +163,17 @@ class ResourceStorageAdoptionTest {
     }
     @Test void declaredMineLandAdmitsItsOwnerAndRetiredStorageDoesNotOwnTheReplacementSocket() {
         var state = initial();
+        var territories = SettlementStorageTerritory.areas(state);
+        assertSame(territories, SettlementStorageTerritory.areas(state),
+                "discovery must not rebuild every worksite boundary on each server turn");
         var site = state.extractionSites().deposits().values().stream()
                 .filter(deposit -> deposit.site().settlementId().equals(new SubjectId("settlement:6"))).findFirst().orElseThrow().site();
         var socket = state.inventory().surfaces().get(QuarryStorageFixture.container(state, site)).position();
         assertEquals(site.settlementId(), SettlementStorageTerritory.owner(state, socket).orElseThrow().id());
         var original = event(state, false); var record = original.declaration().container();
         var adopted = original.apply(state, record.ownerId());
+        assertSame(territories, SettlementStorageTerritory.areas(adopted),
+                "inventory changes do not alter declared land");
         var active = adopted.withInventory(adopted.inventory().withSurfaceStatus(record.id(), ContainerSurfaceStatus.ACTIVE));
         var retired = active.withInventory(active.inventory().withSurfaceStatus(record.id(), ContainerSurfaceStatus.RETIRED));
         assertTrue(ReferenceContainerCustody.blocksCanonicalUse(retired, record.id()));
