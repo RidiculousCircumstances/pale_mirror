@@ -26,9 +26,7 @@ import io.farfrontier.palemirror.frontier.v3.api.WorldId;
 import io.farfrontier.palemirror.frontier.v3.persistence.Durability;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -54,7 +52,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     private final KernelQuarantineReporter<S> kernelQuarantineReporter;
     private ScheduledActionQueue schedules = new ScheduledActionQueue();
     private final ScheduleAdmissionIndex<S> admissionIndex;
-    private final Map<CommandId, CommandReceipt> receipts = new LinkedHashMap<>();
+    private final CommandReceiptRetention receipts = new CommandReceiptRetention();
     private final List<TransactionRecord> transactions = new ArrayList<>();
     private S state;
     /** Immutable codec output for the current state revision; null means a newer WAL-backed state awaits its next snapshot. */
@@ -158,7 +156,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 configuration.stateValidator(), configuration.executionMetrics(), configuration.kernelQuarantineReporter());
         engine.revision = replay.revision();
         for (CommandReceipt receipt : receipts) {
-            if (engine.receipts.put(receipt.commandId(), receipt) != null) throw new IllegalArgumentException("duplicate recovered command receipt");
+            engine.receipts.add(receipt);
         }
         engine.transactions.addAll(List.copyOf(retainedTransactions));
         return engine;
@@ -180,7 +178,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         if (!command.submittedAt().equals(instant)) {
             return rejected(command, RejectionCode.COMMAND_EXPIRED, "command must enter at the current simulation instant");
         }
-        if (receipts.containsKey(command.id())) {
+        if (receipts.contains(command.id())) {
             return rejected(command, RejectionCode.DUPLICATE_COMMAND, "command id is already retained");
         }
         if (!revision.equals(command.expectedRevision())) {
@@ -209,7 +207,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             TransactionId transactionId = new TransactionId("transaction:revision-" + revision.next().value());
             CommandReceipt receipt = new CommandReceipt(command.id(), command.submittedAt(), transactionId, revision.next());
             commit(command.causes(), command.submittedAt(), accepted.events(), Optional.of(receipt));
-            receipts.put(command.id(), receipt);
+            receipts.add(receipt);
             return new CommandResult.Accepted(command.id(), transactionId, revision);
         } catch (RuntimeException error) {
             return quarantine(command, error);
@@ -316,7 +314,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     @Override
     public CheckpointImage checkpoint() {
         requireOwnerThread();
-        return new CheckpointImage(worldId, revision, instant, currentEncodedState(), schedules.snapshot(), List.copyOf(receipts.values()));
+        return new CheckpointImage(worldId, revision, instant, currentEncodedState(), schedules.snapshot(), receipts.snapshot());
     }
 
     @Override
@@ -341,7 +339,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     public io.farfrontier.palemirror.frontier.v3.api.CommandAdmissionCapacity commandAdmissionCapacity() {
         requireOwnerThread();
         long oldest = safeOldestReceiptInstant();
-        int retained = (int) receipts.values().stream().filter(receipt -> receipt.submittedAt().ticks() >= oldest).count();
+        int retained = receipts.retainedAt(oldest);
         return new io.farfrontier.palemirror.frontier.v3.api.CommandAdmissionCapacity(
                 limits.maxReceipts() - retained, limits.maxReceipts(),
                 limits.maxTransactions() - transactions.size(), limits.maxTransactions());
@@ -567,7 +565,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
 
     private void pruneReceipts() {
         long oldest = safeOldestReceiptInstant();
-        receipts.entrySet().removeIf(entry -> entry.getValue().submittedAt().ticks() < oldest);
+        receipts.pruneBefore(oldest);
     }
 
     private long safeOldestReceiptInstant() {
