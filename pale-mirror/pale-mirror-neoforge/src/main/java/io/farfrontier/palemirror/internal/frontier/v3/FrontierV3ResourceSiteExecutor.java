@@ -391,7 +391,9 @@ final class FrontierV3ResourceSiteExecutor {
         BlockPos position = minecraft(slot);
         BlockState observed = level.getBlockState(position);
         if (site.cropSlots().contains(slot)) return observed.isAir();
-        return (observed.is(Blocks.GRASS_BLOCK) || observed.is(Blocks.DIRT) || observed.is(Blocks.LIGHT_GRAY_CONCRETE))
+        return (observed.is(Blocks.GRASS_BLOCK) || observed.is(Blocks.DIRT) || observed.is(Blocks.LIGHT_GRAY_CONCRETE)
+                || observed.isSolidRender(level, position)
+                    && io.farfrontier.palemirror.internal.world.GeneratedTerrainBaseline.matches(level, position, observed))
                 && !level.getBlockState(position.below()).isAir();
     }
     static boolean baseline(ServerLevel level, ResourceSite site) {

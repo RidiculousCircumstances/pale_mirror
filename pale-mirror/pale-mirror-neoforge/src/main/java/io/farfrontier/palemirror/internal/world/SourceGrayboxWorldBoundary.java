@@ -86,7 +86,8 @@ final class SourceGrayboxWorldBoundary {
                 level.getChunkAt(position);
                 BlockState actual = level.getBlockState(position);
                 BlockState desired = x == 0 && z == 0 ? DECK_LANTERN : DECK_FOOTING;
-                if (!actual.equals(NEUTRAL_FOOTING) && !actual.equals(desired)) {
+                if (!actual.equals(NEUTRAL_FOOTING) && !actual.equals(desired)
+                        && !GeneratedTerrainBaseline.matches(level, position, actual)) {
                     throw new IllegalStateException("source graybox operator deck conflicts with a non-boundary block");
                 }
                 prior.put(position, actual);

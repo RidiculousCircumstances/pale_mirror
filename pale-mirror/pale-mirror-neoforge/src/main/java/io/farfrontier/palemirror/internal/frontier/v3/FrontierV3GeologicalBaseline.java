@@ -12,8 +12,8 @@ final class FrontierV3GeologicalBaseline {
         var declaration = bootstrap.ruleset().extraction().geology();
         if (declaration.isEmpty()) return;
         var generator = level.getChunkSource().getGenerator();
-        // Both implementations have X/Z-invariant vanilla flat columns. Biome selection
-        // changes agriculture, not the geological promise; the layers are checked below.
+        // Both implementations retain uniform subsurface layers. Agricultural
+        // surface decoration is above the declared stone stratum checked below.
         if (!(generator instanceof FlatLevelSource) && !(generator instanceof AgriculturalFlatGenerator))
             throw new IllegalStateException("declared uniform geology requires the actual flat graybox generator; arbitrary terrain needs surveyed knowledge");
         var geology = declaration.orElseThrow();

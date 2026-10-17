@@ -102,8 +102,8 @@ final class FrontierV3WorksiteProjection {
     private static io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block generatedBase(ServerLevel level, BlockPos position) {
         // The native generator supplies the initial terrain preimage. A foreign observed
         // block is not a permission to carve it just because a plan wants an empty pit.
-        var column = level.getChunkSource().getGenerator().getBaseColumn(position.getX(), position.getZ(), level, level.getChunkSource().randomState());
-        return FrontierV3MinecraftBlockExtraction.describe(column.getBlock(position.getY()));
+        return FrontierV3MinecraftBlockExtraction.describe(
+                io.farfrontier.palemirror.internal.world.GeneratedTerrainBaseline.block(level, position));
     }
     static BlockPos position(WorksiteBlock cell) { return new BlockPos(cell.position().x(), cell.position().y(), cell.position().z()); }
 }

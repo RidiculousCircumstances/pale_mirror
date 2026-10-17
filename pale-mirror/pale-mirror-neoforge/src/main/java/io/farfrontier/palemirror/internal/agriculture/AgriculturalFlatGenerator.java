@@ -19,7 +19,7 @@ import net.minecraft.world.level.levelgen.structure.StructureSet;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-/** Vanilla flat geometry by delegation, with an explicit multi-biome source. */
+/** Vanilla flat geometry with a shared biome map and height-preserving surface palette. */
 public final class AgriculturalFlatGenerator extends ChunkGenerator {
     public static final MapCodec<AgriculturalFlatGenerator> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
             FlatLevelGeneratorSettings.CODEC.fieldOf("settings").forGetter(value -> value.flat.settings()),
@@ -31,13 +31,27 @@ public final class AgriculturalFlatGenerator extends ChunkGenerator {
         flat = new FlatLevelSource(settings);
         if (settings.structureOverrides().isEmpty() || settings.structureOverrides().orElseThrow().size() != 0)
             throw new IllegalArgumentException("agricultural graybox requires explicit empty structures");
+        if (settings.getLayers().isEmpty() || settings.getLayers().getLast() == null
+                || !settings.getLayers().getLast().isSolid())
+            throw new IllegalArgumentException("agricultural graybox requires a solid top layer");
     }
     @Override protected MapCodec<? extends ChunkGenerator> codec() { return CODEC; }
     @Override public ChunkGeneratorStructureState createState(HolderLookup<StructureSet> lookup, RandomState random, long seed) {
         return ChunkGeneratorStructureState.createForFlat(random, seed, biomeSource, java.util.stream.Stream.empty());
     }
     @Override public CompletableFuture<ChunkAccess> fillFromNoise(Blender blender, RandomState random, StructureManager structures, ChunkAccess chunk) {
-        return flat.fillFromNoise(blender, random, structures, chunk);
+        return flat.fillFromNoise(blender, random, structures, chunk).thenApply(filled -> {
+            int y = surfaceY(filled);
+            var cursor = new BlockPos.MutableBlockPos();
+            for (int x = 0; x < 16; x++) for (int z = 0; z < 16; z++) {
+                int worldX = filled.getPos().getMinBlockX() + x, worldZ = filled.getPos().getMinBlockZ() + z;
+                var surface = AgriculturalSurface.at(worldX, worldZ);
+                filled.setBlockState(cursor.set(worldX, y, worldZ), surface, false);
+                filled.getOrCreateHeightmapUnprimed(Heightmap.Types.OCEAN_FLOOR_WG).update(x, y, z, surface);
+                filled.getOrCreateHeightmapUnprimed(Heightmap.Types.WORLD_SURFACE_WG).update(x, y, z, surface);
+            }
+            return filled;
+        });
     }
     @Override public void buildSurface(WorldGenRegion region, StructureManager structures, RandomState random, ChunkAccess chunk) {
         flat.buildSurface(region, structures, random, chunk);
@@ -52,7 +66,12 @@ public final class AgriculturalFlatGenerator extends ChunkGenerator {
         return flat.getBaseHeight(x, z, type, height, random);
     }
     @Override public NoiseColumn getBaseColumn(int x, int z, LevelHeightAccessor height, RandomState random) {
-        return flat.getBaseColumn(x, z, height, random);
+        var column = flat.getBaseColumn(x, z, height, random);
+        column.setBlock(surfaceY(height), AgriculturalSurface.at(x, z));
+        return column;
+    }
+    private int surfaceY(LevelHeightAccessor height) {
+        return height.getMinBuildHeight() + Math.min(height.getHeight(), flat.settings().getLayers().size()) - 1;
     }
     @Override public int getMinY() { return flat.getMinY(); }
     @Override public int getGenDepth() { return flat.getGenDepth(); }

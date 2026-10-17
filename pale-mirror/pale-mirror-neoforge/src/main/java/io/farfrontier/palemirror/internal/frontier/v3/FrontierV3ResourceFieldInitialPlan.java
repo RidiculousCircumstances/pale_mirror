@@ -119,7 +119,9 @@ final class FrontierV3ResourceFieldInitialPlan {
         boolean cropStep = step.index() >= water && ((step.index() - water) & 1) == 1;
         boolean baseline = cropStep ? current.isAir()
                 : (current.is(Blocks.DIRT) || current.is(Blocks.GRASS_BLOCK)
-                        || current.is(Blocks.LIGHT_GRAY_CONCRETE))
+                        || current.is(Blocks.LIGHT_GRAY_CONCRETE)
+                        || current.isSolidRender(level, position)
+                            && io.farfrontier.palemirror.internal.world.GeneratedTerrainBaseline.matches(level, position, current))
                         && !level.getBlockState(position.below()).isAir();
         Disposition disposition = current.equals(step.target()) ? Disposition.APPLIED
                 : baseline ? Disposition.BEFORE : Disposition.FOREIGN;
