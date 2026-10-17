@@ -9,7 +9,7 @@ final class FrontierV3EconomicDiagnosticJson {
     static String render(EconomicPlan plan) {
         return "{\"horizonTicks\":" + plan.horizonTicks()
                 + ",\"domesticTargets\":" + quantities(plan.domesticTargets())
-                + ",\"productionTargets\":" + quantities(plan.productionTargets())
+                + ",\"additionalProduction\":" + quantities(plan.additionalProduction())
                 + ",\"purchaseBudgetsRaw\":" + quantities(plan.purchaseBudgets())
                 + ",\"retainedLiquidityRaw\":" + plan.retainedLiquidity()
                 + ",\"unfundedRequirementsRaw\":" + plan.unfundedRequirements()

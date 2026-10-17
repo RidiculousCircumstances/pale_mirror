@@ -11,10 +11,8 @@ final class FieldSupplyCapacity implements SupplyCapacityPort {
         if (state.bootstrap().ruleset().fields().agriculture().isEmpty()) return List.of();
         var definition = state.bootstrap().ruleset().workCatalog().require(FieldHarvestExtraction.ITEM, WorkOperation.HARVEST);
         var assignments = HumanAssignmentProjection.compile(state);
-        var workers = SettlementWorkPolicy.permissions(state, home).workers(ResidentWorkKind.AGRICULTURE).stream()
-                .map(id -> state.humanPopulation().resident(id))
-                .filter(r -> state.actorLocations().get(r.id()).condition().status() == ActorLifeStatus.ALIVE
-                        && r.capability(definition.capability()) > 0)
+        var workers = SupplyLabourCapacity.candidates(state, home, ResidentWorkKind.AGRICULTURE, definition.capability(),
+                        r -> assignments.assignment(r.id()).kind() == HumanAssignmentKind.FIELD_HARVEST).stream()
                 .filter(r -> !assignments.assignment(r.id()).active()
                         || assignments.assignment(r.id()).kind() == HumanAssignmentKind.FIELD_HARVEST).toList();
         if (workers.isEmpty()) return List.of();

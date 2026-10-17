@@ -45,7 +45,10 @@ public final class EconomicPlanner {
                     || supply.preferredPurchaseSpending().getOrDefault(item, 0L) > 0;
             // An uncovered need still reaches source-development owners: opening
             // the next mining face is what creates capacity, not its prerequisite.
-            production.put(item, selectedSource ? Math.min(domestic.get(item), Math.addExact(stock.covered(), own)) : domestic.get(item));
+            // Admission receives an incremental quantity, not an absolute target
+            // measured against this snapshot's usable-stock accounting scope.
+            long uncovered = Math.max(0, domestic.get(item) - stock.covered());
+            production.put(item, selectedSource ? Math.min(uncovered, own) : uncovered);
         });
         for (var export : exports) production.merge(export.item(), export.additionalProduction(), Math::addExact);
         var constraints = EnumSet.noneOf(EconomicPlan.Constraint.class);

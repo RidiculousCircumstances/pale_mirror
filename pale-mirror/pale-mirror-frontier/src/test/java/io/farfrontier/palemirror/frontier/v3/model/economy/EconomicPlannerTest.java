@@ -56,7 +56,7 @@ class EconomicPlannerTest {
         var input = facts(100, 0, 0, 0, List.of(oven(), field),
                 List.of(new EconomicSnapshot.ExportInterest("neighbour", "grain", 100, 1, 100)));
         var plan = new EconomicPlanner().plan(input, RULES).economy().orElseThrow();
-        assertEquals(50, plan.productionTargets().get("grain"));
+        assertEquals(50, plan.additionalProduction().get("grain"));
         assertEquals(50, plan.exports().getFirst().conditionalRevenue());
         assertEquals(0, plan.purchaseBudgets().values().stream().mapToLong(Long::longValue).sum());
         assertTrue(plan.constraints().contains(EconomicPlan.Constraint.CONDITIONAL_EXPORT_INCOME));
@@ -94,7 +94,7 @@ class EconomicPlannerTest {
         var plan = new EconomicPlanner().plan(input, RULES);
         assertTrue(plan.preferredPurchaseSpending().get("grain") > 0);
         assertEquals(0, plan.require("grain").production());
-        assertEquals(0, plan.economy().orElseThrow().productionTargets().get("grain"));
+        assertEquals(0, plan.economy().orElseThrow().additionalProduction().get("grain"));
         assertTrue(plan.economy().orElseThrow().domesticTargets().get("grain") > 0);
     }
     @Test void chosenFinishedFoodPurchaseDoesNotAlsoPurchaseItsRecipeAndForecastUsesItsPrice() {
@@ -106,7 +106,7 @@ class EconomicPlannerTest {
         var plan = new EconomicPlanner().plan(input, RULES); var economy = plan.economy().orElseThrow();
         assertEquals(20, plan.preferredPurchaseQuantities().get("food"));
         assertEquals(0, plan.require("grain").purchase()); assertEquals(0, plan.require("fuel").purchase());
-        assertEquals(0, economy.productionTargets().get("grain"));
+        assertEquals(0, economy.additionalProduction().get("grain"));
         assertEquals(0, economy.purchaseBudgets().get("fuel"));
         assertEquals(60, economy.checkpoints().getLast().importCost());
         assertEquals(440, economy.checkpoints().getLast().cashWithoutNewSales());

@@ -42,18 +42,16 @@ final class BakeryProcessingForecast {
         if (recipe.processingMode() == ProductionRecipe.ProcessingMode.AUTOMATIC)
             return java.util.Optional.of(new Capacity(station.id(), definition.workUnits(), definition.workUnits(), 0, java.util.Map.of()));
         var assignments = HumanAssignmentProjection.compile(state);
-        var workers = SettlementWorkPolicy.permissions(state, home).workers(ResidentWorkKind.BAKING).stream()
-                .map(id -> state.humanPopulation().resident(id))
-                .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE
-                        && resident.capability(definition.capability()) > 0)
-                .filter(resident -> {
+        java.util.function.Predicate<ResidentProfile> eligible = resident -> {
                     var assignment = assignments.assignment(resident.id());
                     if (!assignment.active()) return true;
                     if (assignment.kind() != HumanAssignmentKind.PRODUCTION) return false;
                     var job = state.productionJobs().get(assignment.ownerId().orElseThrow());
                     return job != null && job.facilityId().equals(facility.id()) && job.bakeryWork().isPresent()
                             && job.bakeryWork().orElseThrow().block().isEmpty();
-                }).toList();
+                };
+        var workers = SupplyLabourCapacity.candidates(state, home, ResidentWorkKind.BAKING, definition.capability(), eligible)
+                .stream().filter(eligible).toList();
         int speed = workers.stream().mapToInt(resident -> ResidentWorkStatistics.speedPermille(resident, definition,
                 state.bootstrap().ruleset().workCatalog())).min().orElse(0);
         if (speed == 0) return java.util.Optional.empty();

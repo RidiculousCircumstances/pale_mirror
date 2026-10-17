@@ -15,6 +15,9 @@ public final class ProductionStockDemand {
     public static StockTargetDemand read(FrontierWorldState state, SubjectId settlement, String itemKind,
                                         Optional<SubjectId> completingSubject) {
         var supply = readSupply(state, settlement, itemKind, completingSubject);
+        // Unified planning already expands obligations and selects own work vs
+        // imports. Adding a protected input target here would override that choice.
+        if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().economics().isPresent()) return supply;
         long inputs = StockSupplyComposition.inputDemand(state, settlement, itemKind);
         return new StockTargetDemand(SettlementReservePlanning.enabled(state) ? Math.max(supply.target(), inputs) : Math.addExact(supply.target(), inputs),
                 supply.held(), supply.incoming(), supply.outgoing());
@@ -45,7 +48,11 @@ public final class ProductionStockDemand {
             var plan = GoodsParticipantView.read(state, participant).supplyPlan().orElseThrow();
             var demand = plan.require(itemKind);
             if (plan.economy().isPresent()) {
-                target = plan.economy().orElseThrow().productionTargets().get(itemKind);
+                // The planner has already netted usable stock and accepted output.
+                // Its incremental order must not be compared again with total title
+                // (which also includes personal provisions and work-in-progress).
+                long covered = new StockTargetDemand(0, stock, incoming, outgoing).covered();
+                target = Math.addExact(covered, plan.economy().orElseThrow().additionalProduction().get(itemKind));
                 return new StockTargetDemand(target, stock, incoming, outgoing);
             }
             // Existing export demand remains in outgoing. Replenishment advice alone

@@ -28,10 +28,8 @@ final class ExtractionSupplyCapacity implements SupplyCapacityPort {
             var product = material.coldOutput().getFirst();
             if (!stocks.containsKey(product.itemKind())) continue;
             var definition = state.bootstrap().ruleset().workCatalog().require(material.before().kind(), WorkOperation.EXTRACT);
-            var candidates = SettlementWorkPolicy.permissions(state, home).workers(ResidentWorkKind.EXTRACTION).stream()
-                    .map(id -> state.humanPopulation().resident(id))
-                    .filter(r -> state.actorLocations().get(r.id()).condition().status() == ActorLifeStatus.ALIVE
-                            && r.capability(definition.capability()) > 0)
+            var candidates = SupplyLabourCapacity.candidates(state, home, ResidentWorkKind.EXTRACTION, definition.capability(),
+                            r -> assignments.assignment(r.id()).kind() == HumanAssignmentKind.EXTRACTION).stream()
                     .filter(r -> !assignments.assignment(r.id()).active()
                             || assignments.assignment(r.id()).kind() == HumanAssignmentKind.EXTRACTION)
                     .sorted(Comparator.comparing(ResidentProfile::id)).toList();
