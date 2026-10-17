@@ -246,16 +246,19 @@ public final class StrategicObjectiveProcess {
 
 
     private static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean recurring, String eventIdentity, long currentTick) {
+        List<ProposedEvent> presence = List.of();
         if (!action.subject().equals(state.bootstrap().hive().id())) {
+            var fleet = TransportFleetPresence.select(state, action.subject(), currentTick);
+            state = fleet.state(); presence = fleet.events();
             var policy = SettlementStaffingComposition.change(state, action.subject(), currentTick);
             if (policy.isPresent()) {
                 var changed = policy.orElseThrow();
                 var projected = SettlementStaffingComposition.reduce(state, action.subject(), changed);
-                return concatenate(List.of(new ProposedEvent(action.subject(), changed)),
-                        planWithStaffing(projected, action, recurring, eventIdentity, currentTick));
+                return concatenate(presence, concatenate(List.of(new ProposedEvent(action.subject(), changed)),
+                        planWithStaffing(projected, action, recurring, eventIdentity, currentTick)));
             }
         }
-        return planWithStaffing(state, action, recurring, eventIdentity, currentTick);
+        return concatenate(presence, planWithStaffing(state, action, recurring, eventIdentity, currentTick));
     }
 
     private static List<ProposedEvent> planWithStaffing(FrontierWorldState state, ScheduledAction action, boolean recurring, String eventIdentity, long currentTick) {
