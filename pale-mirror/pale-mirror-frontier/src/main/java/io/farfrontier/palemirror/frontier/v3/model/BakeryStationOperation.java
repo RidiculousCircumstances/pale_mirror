@@ -6,6 +6,56 @@ import java.util.Optional;
 /** Bakery binds its order to the shared machine; the machine service never inspects this family. */
 public final class BakeryStationOperation {
     private BakeryStationOperation() { }
+    public record Loaded(ProductionJob job, ExactInventory inventory, ProductionStations machines) { }
+    public static ProductionStationProcessing.StartReadiness loadReadiness(FrontierWorldState state, ProductionJob job) {
+        var work = job.bakeryWork().orElseThrow();
+        int quantity = feasibleInput(state, job);
+        // Preserve the station's precise occupied/pending/energy diagnosis even
+        // when not one recipe batch can run yet.
+        return ProductionStationProcessing.startReadiness(state, work.stationId(), work.recipeId(),
+                quantity == 0 ? job.inputCount() : quantity);
+    }
+    private static int feasibleInput(FrontierWorldState state, ProductionJob job) {
+        if (job.rights().mode() != ProductionRights.Mode.PUBLIC_PRODUCTION
+                || job.inputHold() instanceof ProductionInputHold.Materialized) return job.inputCount();
+        var work = job.bakeryWork().orElseThrow();
+        return ProductionBatchSizing.inputQuantity(state.bootstrap().ruleset().production().require(work.recipeId()),
+                job.inputCount(), 64, state.productionStations().require(work.stationId()).storedHeat());
+    }
+    /** Resource transfer is already positively settled. Only reservation metadata
+     * changes here; surplus input stays at the station, available to later work. */
+    public static Loaded settleLoad(FrontierWorldState before, ProductionJob job, ExactInventory deposited, long epoch) {
+        int quantity = feasibleInput(before, job);
+        if (quantity == 0) throw new IllegalArgumentException("station load has no executable recipe portion");
+        var inventory = deposited;
+        if (quantity < job.inputCount()) {
+            var selected = new java.util.TreeMap<SubjectId, Integer>(); int remaining = quantity;
+            for (var entry : new java.util.TreeMap<>(job.inputQuantities()).entrySet()) {
+                int take = Math.min(remaining, entry.getValue());
+                if (take > 0) selected.put(entry.getKey(), take);
+                remaining -= take;
+            }
+            var work = job.bakeryWork().orElseThrow(); var claim = claimId(job);
+            var ledger = inventory.fungibleResources();
+            ledger = epoch == 0 ? ledger.releaseClaim(work.stationAccountId(), claim)
+                    : ledger.releaseBoundClaim(work.stationAccountId(), claim, epoch);
+            var allocation = new ClaimAllocation(claim, job.id(), job.rights().resourceOwner().id(), work.inputItemKind(),
+                    quantity, selected, ClaimPurpose.PRODUCTION_WORK);
+            ledger = epoch == 0 ? ledger.reserve(allocation, work.stationAccountId())
+                    : ledger.reserveBound(allocation, work.stationAccountId(), epoch);
+            ProductionInputHold hold = switch (job.inputHold()) {
+                case ProductionInputHold.FungibleCold value -> new ProductionInputHold.FungibleCold(selected.firstKey(), value.accountId(), claim, selected);
+                case ProductionInputHold.FungibleBound value -> new ProductionInputHold.FungibleBound(selected.firstKey(), value.accountId(), claim, value.authorityEpoch(), selected);
+                default -> throw new IllegalArgumentException("indivisible input cannot be partially assigned");
+            };
+            job = job.withLoadedPortion(hold, before.bootstrap().ruleset().production().require(work.recipeId()));
+            inventory = inventory.withFungibleResources(ledger);
+        }
+        var station = ProductionStationEnergy.record(before, job.bakeryWork().orElseThrow().stationId()).productionStation().orElseThrow();
+        var machines = loaded(before, job, station);
+        inventory = ProductionStationProcessing.adoptInputOwnership(inventory, machines.require(station.id()).operation().orElseThrow());
+        return new Loaded(job.withBakeryWork(job.bakeryWork().orElseThrow().advance(BakeryWorkState.Phase.PROCESSING)), inventory, machines);
+    }
     public static ProductionOperation.Id operationId(ProductionJob job) {
         return new ProductionOperation.Id(new SubjectId("operation:production-" + job.id().value().replace(':', '-')));
     }

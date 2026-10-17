@@ -73,6 +73,16 @@ public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, T
                 previous.transportMissionId(), previous.mobileContainerId()));
         return new ShipmentState(next, missions);
     }
+    public ShipmentState returned(Shipment previous, Map<SubjectId, Integer> lots) {
+        if (!previous.equals(shipments.get(previous.id()))) throw new IllegalArgumentException("stale returned shipment");
+        var next = new LinkedHashMap<>(shipments); next.put(previous.id(), previous.returned(lots));
+        return new ShipmentState(next, missions);
+    }
+    public ShipmentState recallMission(TransportMission previous) {
+        if (!previous.equals(missions.get(previous.id()))) throw new IllegalArgumentException("stale mission recall");
+        var next = new LinkedHashMap<>(missions); next.put(previous.id(), previous.recallLoading());
+        return new ShipmentState(shipments, next);
+    }
     public ShipmentState retire(SubjectId id, long revision) {
         Shipment current = shipments.get(id);
         if (current == null || !current.terminal() || current.revision() != revision || current.reception().isPresent())

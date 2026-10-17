@@ -44,6 +44,7 @@ class UnitGroupTransportTest {
             assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
         }
         assertNotNull(ready, "must stop after actual goods/food loading and assembly, before departure");
+        assertUnavailableProvisioningReturnsCargo(engine.canonicalState().state(), ready.mission().id(), engine.checkpoint().instant().ticks());
         var groupId = ready.id(); var missionId = ready.mission().id();
         long loadedAt = engine.checkpoint().instant().ticks();
         assertEquals(loadedAt + 1, engine.checkpoint().schedules().stream()
@@ -266,6 +267,64 @@ class UnitGroupTransportTest {
         assertTrue(engine.checkpoint().schedules().stream().noneMatch(action -> action.subject().equals(completed.id())
                 || action.subject().equals(completed.mission().id())));
     }
+    private static void assertUnavailableProvisioningReturnsCargo(FrontierWorldState state, SubjectId missionId, long tick) throws Exception {
+        var mission = state.shipments().missions().get(missionId);
+        assertFalse(TransportPreparationRecovery.needed(state, mission, tick), "funded travel must not be recalled");
+        var ledger = state.inventory().fungibleResources();
+        // Model consumption/loss of the unclaimed provisions after cargo loading.
+        // Commercial cargo claims and ownership are deliberately untouched.
+        for (var account : new ArrayList<>(ledger.accounts().values())) {
+            if (!account.claimQuantities().isEmpty()) continue;
+            var food = new LinkedHashMap<SubjectId, Integer>();
+            for (var entry : account.lotQuantities().entrySet())
+                if (ledger.lots().get(entry.getKey()).itemKind().equals(FoodCatalog.BREAD)) food.put(entry.getKey(), entry.getValue());
+            if (!food.isEmpty()) ledger = ledger.destroy(account.id(), food, Map.of());
+        }
+        state = state.withInventory(state.inventory().withFungibleResources(ledger));
+        assertTrue(TransportPreparationRecovery.needed(state, mission, tick));
+        var before = state;
+        try (var planning = PedestrianRoutePlanning.bind((geometry, origin, target) -> {
+            throw new AssertionError("replaying preparation failure must not search routes");
+        })) {
+            state = TransportMissionProcess.advance(state, missionId, new TransportMissionAdvanced(missionId, mission.revision(), TransportMission.Stage.RECOVERING), tick);
+        }
+        var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
+        assertEquals(TransportMission.Stage.RECOVERING, state.shipments().missions().get(missionId).stage());
+        assertEquals(before.inventory(), state.inventory(), "recall cannot teleport loaded cargo or spend the buyer's money");
+        for (var id : mission.shipmentIds()) {
+            var shipment = state.shipments().shipments().get(id);
+            assertEquals(Shipment.Status.RETURNING, shipment.status());
+            assertEquals(shipment.sender().station(), shipment.movementOrder().legalStations().getFirst());
+            // Isolated exact-arrival fixture; real movement is covered by the registered journey below.
+            var actors = new LinkedHashMap<>(state.actorLocations());
+            actors.put(shipment.execution().actorId(), actors.get(shipment.execution().actorId()).withBody(shipment.unloadingEndpoint().station().standingBody()));
+            state = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
+            assertTrue(ShipmentStateSupport.coldTransferAvailable(state, shipment));
+            if (shipment.quantity() > 1) {
+                var first = shipment.lotQuantities().keySet().stream().sorted().findFirst().orElseThrow();
+                var portion = Map.of(first, 1);
+                var transfer = ActorResourceTransferComposition.cold(state, shipment.itemOrder(portion));
+                state = ShipmentStateSupport.transferred(state, shipment, portion, transfer);
+                state = codec.decode(codec.encode(state));
+                assertEquals(shipment.quantity() - 1, state.shipments().shipments().get(id).quantity());
+                assertEquals(Shipment.Status.RETURNING, state.shipments().shipments().get(id).status());
+                shipment = state.shipments().shipments().get(id);
+            }
+            var arrived = state;
+            state = ShipmentStateSupport.transferCold(state, id, id, shipment.revision(), shipment.status());
+            assertEquals(Shipment.Status.RETURNED, state.shipments().shipments().get(id).status());
+            assertFalse(state.inventory().fungibleResources().claims().containsKey(shipment.authorization().claimId()));
+            assertEquals(arrived.inventory().economics().accounts(), state.inventory().economics().accounts(), "return does not pay a seller");
+            var expected = shipment;
+            assertThrows(IllegalArgumentException.class, () -> ShipmentStateSupport.transferCold(
+                    codec.decode(codec.encode(arrived)), id, id, expected.revision() - 1, expected.status()));
+            state = codec.decode(codec.encode(state));
+        }
+        var current = state.shipments().missions().get(missionId);
+        state = TransportMissionProcess.advance(state, missionId, new TransportMissionAdvanced(missionId, current.revision(), TransportMission.Stage.RETURNING), tick + 1);
+        assertEquals(TransportMission.Stage.RETURNING, state.shipments().missions().get(missionId).stage());
+    }
+
     private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> completeNeedClocks(
             FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base) {
         // The original trade fixture ends at delivery. A return journey crosses hunger thresholds,

@@ -87,10 +87,24 @@ public final class ShipmentStateSupport {
         validateOrder(state, order);
         if (!ShipmentServiceAccess.available(state, shipment))
             throw new IllegalArgumentException("shipment has not acquired its shared endpoint access turn");
-        if (shipment.status() == Shipment.Status.CARRYING && !ContainerStorageAdmission.receive(state,
-                shipment.receiver().containerId(), shipment.itemKind(), order.portion().quantity(), ShipmentAuthorizationComposition.capacityCompletionOwner(shipment)))
+        if (shipment.carrying() && !ContainerStorageAdmission.receive(state,
+                shipment.unloadingEndpoint().containerId(), shipment.itemKind(), order.portion().quantity(), ShipmentAuthorizationComposition.capacityCompletionOwner(shipment)))
             throw new IllegalArgumentException("shipment receiver cannot fit its retained cargo");
         var transfer = ActorResourceTransferComposition.cold(state, order);
+        return transferred(state, shipment, lots, transfer);
+    }
+    /** Shared HOT/COLD closure: transport confirms custody; its issuer alone
+     * releases the financial/resource promise of a returned allocation. */
+    static FrontierWorldState transferred(FrontierWorldState state, Shipment shipment,
+            java.util.Map<SubjectId, Integer> lots, FrontierWorldStateUpdate transfer) {
+        if (shipment.status() == Shipment.Status.RETURNING) {
+            var changes = ShipmentAuthorizationComposition.cancelledAtSource(state, shipment,
+                    ShipmentReception.unloaded(shipment, lots), transfer);
+            var shipments = state.shipments().returned(shipment, lots);
+            changes.shipments(shipments);
+            if (shipments.shipments().get(shipment.id()).terminal()) changes.actorExecutions(TransportCargoExecution.afterParcelClosed(state, shipment));
+            return state.withChanges(changes);
+        }
         Shipment replacement = shipment.status() == Shipment.Status.AWAITING_LOAD ? shipment.withStatus(Shipment.Status.CARRYING)
                 : shipment.unloaded(ShipmentReception.unloaded(shipment, lots));
         var changes = transfer.shipments(state.shipments().replace(shipment, replacement));
@@ -103,7 +117,7 @@ public final class ShipmentStateSupport {
                 || !shipment.movementOrder().arrivedAt(state.actorLocations().get(shipment.execution().actorId()).supportingSurface())
                 || !ShipmentServiceAccess.available(state, shipment)) return false;
         if (!ResourceSourceComposition.coldAvailable(state,
-                shipment.status() == Shipment.Status.AWAITING_LOAD ? shipment.sender() : shipment.receiver())) return false;
+                shipment.status() == Shipment.Status.AWAITING_LOAD ? shipment.sender() : shipment.unloadingEndpoint())) return false;
         if (shipment.mobileContainerId().filter(container -> ReferenceContainerCustody.hasLiveCustody(state, container)
                 || ReferenceContainerCustody.blocksCanonicalUse(state, container)).isPresent()) return false;
         return !coldTransferLots(state, shipment).isEmpty();
@@ -113,7 +127,7 @@ public final class ShipmentStateSupport {
                 !ContainerStorageAdmission.receive(state, container, shipment.itemKind(), shipment.quantity(), java.util.Optional.empty())).isPresent()
                 ? java.util.Map.of() : shipment.lotQuantities();
         int quantity = shipment.quantity();
-        while (quantity > 0 && !ContainerStorageAdmission.receive(state, shipment.receiver().containerId(),
+        while (quantity > 0 && !ContainerStorageAdmission.receive(state, shipment.unloadingEndpoint().containerId(),
                 shipment.itemKind(), quantity, ShipmentAuthorizationComposition.capacityCompletionOwner(shipment))) quantity--;
         return portion(shipment.lotQuantities(), quantity);
     }
@@ -178,7 +192,7 @@ public final class ShipmentStateSupport {
     static void requireSourceWithdrawal(FrontierWorldState state, SubjectId claim) {
         for (Shipment shipment : state.shipments().shipments().values()) {
             if (shipment.terminal() || !shipment.authorization().claimId().equals(claim)) continue;
-            boolean deadAttachedCargo = shipment.status() == Shipment.Status.CARRYING && shipment.mobileContainerId().isPresent()
+            boolean deadAttachedCargo = shipment.carrying() && shipment.mobileContainerId().isPresent()
                     && state.actorLocations().get(shipment.execution().actorId()).condition().status() == ActorLifeStatus.DEAD;
             if ((shipment.status() != Shipment.Status.AWAITING_LOAD && !deadAttachedCargo)
                     || shipment.pendingPhysicalStep().isPresent()
@@ -198,7 +212,7 @@ public final class ShipmentStateSupport {
         if (assignment.kind() != HumanAssignmentKind.COURIER || shipment == null || shipment.terminal()
                 || !shipment.execution().actorId().equals(assignment.residentId()))
             throw new IllegalArgumentException("courier carried view lacks its exact assignment");
-        return shipment.status() == Shipment.Status.CARRYING && shipment.mobileContainerId().isEmpty() ? java.util.Optional.of(new ActorCarriedResources.Presentation(
+        return shipment.carrying() && shipment.mobileContainerId().isEmpty() ? java.util.Optional.of(new ActorCarriedResources.Presentation(
                 shipment.execution().actorId(), shipment.carriedAccountId(), new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN))) : java.util.Optional.empty();
     }
     static FrontierWorldStateUpdate withdrawSourceClaim(FrontierWorldState state, SubjectId claim) {
@@ -214,7 +228,7 @@ public final class ShipmentStateSupport {
         boolean changed = false;
         for (Shipment shipment : transaction.shipments().shipments().values()) {
             if (shipment.terminal() || !shipment.authorization().claimId().equals(claim)) continue;
-            shipments = shipments.replace(shipment, shipment.withStatus(shipment.status() == Shipment.Status.CARRYING
+            shipments = shipments.replace(shipment, shipment.withStatus(shipment.carrying()
                     ? Shipment.Status.CARGO_DISPOSED : Shipment.Status.ALLOCATION_WITHDRAWN));
             var movement = movements.get(shipment.execution().actorId());
             if (movement != null && movement.order().ownerId().equals(shipment.id())) {

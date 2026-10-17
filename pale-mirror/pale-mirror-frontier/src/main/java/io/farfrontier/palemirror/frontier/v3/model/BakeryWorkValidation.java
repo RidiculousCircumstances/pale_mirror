@@ -15,7 +15,9 @@ final class BakeryWorkValidation {
                 || !recipe.ingredient().accepts(work.inputItemKind()) || recipe.outputForInput(work.inputQuantity()) != job.outputCount())
             throw new IllegalArgumentException("bakery work has a foreign declared recipe or output");
         var sourceStorage = inventory.containers().get(work.sourceContainerId());
-        if (sourceStorage == null || !sourceStorage.ownerId().equals(job.settlementId()) || sourceStorage.storage().isEmpty())
+        if (sourceStorage == null || !sourceStorage.ownerId().equals(job.settlementId())
+                || sourceStorage.storage().isEmpty() && sourceStorage.productionStation().filter(s -> s.id().equals(work.stationId())
+                    && s.facilityId().equals(job.facilityId())).isEmpty())
             throw new IllegalArgumentException("bakery source lost its retained owned storage capability");
         var destination = inventory.fungibleResources().accounts().get(work.destinationAccountId());
         if (destination != null && !destination.custody().equals(new ResourceCustody.Container(job.rights().destinationContainerId())))

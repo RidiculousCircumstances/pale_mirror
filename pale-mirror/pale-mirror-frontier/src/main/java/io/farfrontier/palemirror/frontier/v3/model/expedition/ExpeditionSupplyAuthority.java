@@ -73,7 +73,7 @@ public final class ExpeditionSupplyAuthority {
         var group = state.unitGroups().groups().get(mission.groupId());
         return ExpeditionSupplyPlanning.walkingLoad(state, mission, group, now, Math.addExact(load.revision(), 1), released(state, load));
     }
-    private static boolean mayReconsider(FrontierWorldState state, TransportMission mission) {
+    public static boolean mayReconsider(FrontierWorldState state, TransportMission mission) {
         var load = mission.supplies().orElseThrow();
         var group = state.unitGroups().groups().get(mission.groupId());
         if (!mission.preparingSupplies() || load.allocations().stream().anyMatch(a -> a.pending().isPresent())

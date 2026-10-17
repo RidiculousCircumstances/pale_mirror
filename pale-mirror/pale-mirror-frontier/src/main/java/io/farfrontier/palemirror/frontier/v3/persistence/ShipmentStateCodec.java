@@ -70,13 +70,14 @@ final class ShipmentStateCodec {
         return lots;
     }
     static void status(DataOutputStream out, Shipment.Status status) throws IOException {
-        out.writeByte(switch (status) { case AWAITING_LOAD -> 1; case CARRYING -> 2; case DELIVERED -> 3; case ALLOCATION_WITHDRAWN -> 4; case CARGO_DISPOSED -> 5; });
+        out.writeByte(switch (status) { case AWAITING_LOAD -> 1; case CARRYING -> 2; case DELIVERED -> 3; case ALLOCATION_WITHDRAWN -> 4; case CARGO_DISPOSED -> 5; case RETURNING -> 6; case RETURNED -> 7; });
     }
     static Shipment.Status status(DataInputStream in) throws IOException {
         return switch (in.readUnsignedByte()) {
             case 1 -> Shipment.Status.AWAITING_LOAD; case 2 -> Shipment.Status.CARRYING;
             case 3 -> Shipment.Status.DELIVERED; case 4 -> Shipment.Status.ALLOCATION_WITHDRAWN;
             case 5 -> Shipment.Status.CARGO_DISPOSED;
+            case 6 -> Shipment.Status.RETURNING; case 7 -> Shipment.Status.RETURNED;
             default -> throw new IllegalArgumentException("unknown shipment status tag");
         };
     }

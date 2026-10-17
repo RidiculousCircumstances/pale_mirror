@@ -7,6 +7,21 @@ import java.util.*;
 /** Extraction owns mandate/frontier policy; shared activity, navigation and inventory retain their authorities. */
 public final class ExtractionWorkPolicy {
     private ExtractionWorkPolicy() { }
+    /** An admitted source is an owned work commitment, not spare production
+     * capacity. Recomputing marginal demand after reserving it cannot withdraw
+     * that commitment. Permission withdrawal and source invalidation still apply;
+     * selecting any successor separately requires fresh demand. */
+    public static boolean mayFinishTarget(FrontierWorldState state, ExtractionWork job) {
+        if (!SettlementWorkPolicy.permissions(state, ExtractionWorkAuthority.site(state, job).settlementId())
+                .permits(ResidentWorkKind.EXTRACTION, job.execution().actorId())) return false;
+        var deposit = state.extractionSites().deposits().get(job.siteId());
+        return job.target().filter(target -> {
+            var source = deposit.cells().get(target.key().cell());
+            return source != null && source.revision() == target.revision()
+                    && source.disposition() == ExtractionDeposit.Disposition.PRESENT;
+        }).isPresent() || requested(state, job);
+    }
+    /** Demand for another source, never permission to cancel an admitted one. */
     public static boolean requested(FrontierWorldState state, ExtractionWork job) {
         return SettlementWorkPolicy.permissions(state, ExtractionWorkAuthority.site(state, job).settlementId())
                 .permits(ResidentWorkKind.EXTRACTION, job.execution().actorId())

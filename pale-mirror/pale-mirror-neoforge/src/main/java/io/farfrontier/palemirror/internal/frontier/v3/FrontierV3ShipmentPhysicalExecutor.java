@@ -45,7 +45,7 @@ final class FrontierV3ShipmentPhysicalExecutor {
         if (!shipment.equals(state.shipments().shipments().get(shipment.id()))) return false;
         var bindings = state.inventory().fungibleResources().bindings().values().stream()
                 .filter(binding -> binding.accountId().equals(shipment.carriedAccountId())).toList();
-        if (shipment.mobileContainerId().isEmpty() && shipment.status() == Shipment.Status.CARRYING && bindings.isEmpty() && shipment.pendingPhysicalStep().isEmpty()) {
+        if (shipment.mobileContainerId().isEmpty() && shipment.carrying() && bindings.isEmpty() && shipment.pendingPhysicalStep().isEmpty()) {
             if (!FrontierV3ActorCarryProjection.witnessed(state, actor, worker)) return false;
             return accepted(level, runtime, shipment, "shipment-hand-materialized", new ShipmentHandCustodyObserved(
                     shipment.id(), actuation.id(), ShipmentHandCustodyObserved.Boundary.MATERIALIZED, hand(shipment, worker.getUUID())));
@@ -65,7 +65,7 @@ final class FrontierV3ShipmentPhysicalExecutor {
                 != ShipmentPhysicalStateSupport.PreparationAdmission.READY) return false;
         ShipmentPhysicalStep step;
         try {
-            boolean containerDestination = shipment.status() == Shipment.Status.CARRYING || attached != null;
+            boolean containerDestination = shipment.carrying() || attached != null;
             var destination = pending == null && containerDestination
                     ? ShipmentPhysicalStateSupport.destination(state, shipment).orElse(null) : null;
             if (containerDestination && pending == null && destination == null) return false;
@@ -74,7 +74,7 @@ final class FrontierV3ShipmentPhysicalExecutor {
             var source = pending == null ? MaterialSourcePreparation.review(state, order).requireReady() : pending.source();
             int destinationSlot = !containerDestination ? -1
                     : pending == null ? destination.slot() : pending.destinationSlot();
-            if (shipment.status() == Shipment.Status.CARRYING && destinationSlot < 0) return false;
+            if (shipment.carrying() && destinationSlot < 0) return false;
             long destinationEpoch = ShipmentPhysicalStateSupport.destinationEpoch(state, shipment, actuation.id().body().physicalEpoch());
             step = pending == null ? new ShipmentPhysicalStep(shipment.status(), shipment.revision(),
                     new ActorHotObservation(actuation.id(), lease.revision()), source, destinationSlot, destinationEpoch,
@@ -111,7 +111,7 @@ final class FrontierV3ShipmentPhysicalExecutor {
 
     private static boolean savedDeparture(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             FrontierWorldState state, Shipment shipment) {
-        if (shipment.mobileContainerId().isPresent() || shipment.status() != Shipment.Status.CARRYING || shipment.pendingPhysicalStep().isPresent()
+        if (shipment.mobileContainerId().isPresent() || !shipment.carrying() || shipment.pendingPhysicalStep().isPresent()
                 || state.inventory().fungibleResources().bindings().values().stream()
                     .noneMatch(binding -> binding.accountId().equals(shipment.carriedAccountId()))) return false;
         var actor = shipment.execution().actorId();

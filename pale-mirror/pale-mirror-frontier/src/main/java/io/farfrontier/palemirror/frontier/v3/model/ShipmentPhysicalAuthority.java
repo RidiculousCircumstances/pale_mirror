@@ -17,11 +17,11 @@ public final class ShipmentPhysicalAuthority {
         for (Shipment shipment : shipments.shipments().values()) {
             var step = shipment.pendingPhysicalStep().orElse(null);
             if (step == null) continue;
-            if (shipment.status() == Shipment.Status.CARRYING)
+            if (shipment.carrying())
                 result.add(new ContainerSlotClaim(new ContainerSlotClaim.Owner(ContainerSlotClaim.Family.SHIPMENT, shipment.id()), new InventoryCustody.ContainerSlot(
-                        shipment.receiver().containerId(), step.destinationSlot()),
+                        shipment.unloadingEndpoint().containerId(), step.destinationSlot()),
                         ShipmentAuthorizationComposition.capacityCompletionOwner(shipment).map(owner -> new ContainerInboundCapacity.Demand(
-                                owner, shipment.receiver().containerId(), shipment.itemKind(), step.lotQuantities().values().stream().mapToInt(Integer::intValue).sum()))));
+                                owner, shipment.unloadingEndpoint().containerId(), shipment.itemKind(), step.lotQuantities().values().stream().mapToInt(Integer::intValue).sum()))));
             else if (shipment.status() == Shipment.Status.AWAITING_LOAD && shipment.mobileContainerId().isPresent())
                 result.add(new ContainerSlotClaim(new ContainerSlotClaim.Owner(ContainerSlotClaim.Family.SHIPMENT, shipment.id()), new InventoryCustody.ContainerSlot(
                         shipment.mobileContainerId().orElseThrow(), step.destinationSlot())));

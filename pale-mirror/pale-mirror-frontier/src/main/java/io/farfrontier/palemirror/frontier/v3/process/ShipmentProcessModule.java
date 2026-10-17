@@ -67,7 +67,7 @@ final class ShipmentProcessModule implements FrontierWorldProcessModule {
                     id = value.shipmentId();
                     var preview = ShipmentPhysicalStateSupport.observed(state, value.shipmentId(), value);
                     Shipment shipment = state.shipments().shipments().get(value.shipmentId());
-                    if (shipment.status() == Shipment.Status.CARRYING)
+                    if (shipment.carrying())
                         events.addAll(ShipmentDeliveryNotifications.delivered(preview.shipments().shipments().get(shipment.id()), command.submittedAt().ticks()));
                     else events.addAll(ShipmentDeliveryNotifications.loaded(preview.shipments().shipments().get(shipment.id()), command.submittedAt().ticks()));
                     events.add(ShipmentProcess.wake(shipment.id(), command.submittedAt().ticks()));

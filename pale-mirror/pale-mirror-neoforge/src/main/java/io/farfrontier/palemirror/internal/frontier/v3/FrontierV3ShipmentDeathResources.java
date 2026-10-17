@@ -27,8 +27,8 @@ final class FrontierV3ShipmentDeathResources {
         var shipment = retainedExecution.activityKind() == ActorActivityKind.COURIER
                 ? state.shipments().shipments().get(retainedExecution.activityOwnerId())
                 : TransportCargoExecution.parcels(state, state.unitGroups().groups().get(retainedExecution.activityOwnerId()), retainedExecution)
-                    .stream().filter(s -> !s.terminal() && s.status() == Shipment.Status.CARRYING).findFirst().orElse(null);
-        if (shipment == null || shipment.mobileContainerId().isPresent() || shipment.status() != Shipment.Status.CARRYING || shipment.pendingPhysicalStep().isPresent()
+                    .stream().filter(s -> !s.terminal() && s.carrying()).findFirst().orElse(null);
+        if (shipment == null || shipment.mobileContainerId().isPresent() || !shipment.carrying() || shipment.pendingPhysicalStep().isPresent()
                 || shipment.reception().isPresent()) return () -> { }; // Possibly applied endpoint effects retain their exact owner.
         ItemStack witness = body.getMainHandItem().copy();
         if (!witness.isEmpty() && !matches(witness, shipment)) return () -> { }; // Unclassified substitution is not fictional loss.

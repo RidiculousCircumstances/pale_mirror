@@ -30,7 +30,7 @@ final class FrontierV3ShipmentDiagnosticJson {
                 : movement != null ? "JOURNEY" : !selected ? "MANIFEST_COORDINATION"
                 : mission.filter(value -> value.stage() == TransportMission.Stage.OUTBOUND).isPresent()
                     ? "GROUP_COORDINATION" : admission != null && admission != ShipmentPhysicalStateSupport.PreparationAdmission.READY
-                    ? admission.name() : shipment.status() == Shipment.Status.CARRYING
+                    ? admission.name() : shipment.carrying()
                     && ShipmentStateSupport.coldTransferLots(state, shipment).isEmpty() ? "RECEIVER_CAPACITY" : "ENDPOINT_HANDOFF";
         String schedules = checkpoint.schedules().stream().filter(s -> s.subject().equals(shipment.id()) || s.subject().equals(actor))
                 .sorted().limit(8).map(s -> "{\"id\":" + string(s.id().value()) + ",\"kind\":" + string(s.kind())

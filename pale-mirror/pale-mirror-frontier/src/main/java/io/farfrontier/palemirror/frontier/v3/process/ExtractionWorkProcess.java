@@ -78,7 +78,7 @@ final class ExtractionWorkProcess {
                     ExtractionWorkProgressed.Operation.SELECT_STORAGE, Optional.of(selected.orElseThrow())), action, now));
             return List.copyOf(events);
         }
-        if (!ExtractionWorkPolicy.requested(state, job)
+        if (!ExtractionWorkPolicy.mayFinishTarget(state, job)
                 && (job.phase() == ExtractionWork.Phase.TAKE_TOOL || job.phase() == ExtractionWork.Phase.EXTRACT))
             return advance(state, job, ExtractionWorkProgressed.Operation.END_WORK, action, now);
         if (job.phase() == ExtractionWork.Phase.SELECT_SOURCE) {

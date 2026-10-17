@@ -9,6 +9,32 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ExtractionStockDemandTest {
+    @Test void withdrawnMarginalDemandDoesNotCancelAnAcceptedPhysicalSource() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:admitted-mining-commitment"), 41,
+                FrontierRulesets.installed("frontier-v3-quarry-graybox-r8")));
+        var deposit = state.extractionSites().deposits().values().iterator().next();
+        var home = deposit.site().settlementId();
+        var permissions = SettlementWorkPolicy.permissions(state, home);
+        var resident = state.humanPopulation().residents().values().stream().filter(r -> r.settlementId().equals(home))
+                .filter(r -> permissions.permits(ResidentWorkKind.EXTRACTION, r.id()))
+                .findFirst().orElseThrow();
+        var offered = new ExtractionWorkAdmission(deposit.site().id()).discover(state, resident, 100).orElseThrow().execution();
+        state = ExtractionWorkAdmission.start(state, offered, 100);
+        for (var settlement : state.bootstrap().settlements()) {
+            var lot = new SubjectId("lot:admitted-mining-reserve-" + settlement.id().value().replace(':', '-'));
+            var account = new SubjectId("custody:admitted-mining-reserve-" + settlement.id().value().replace(':', '-'));
+            int quantity = state.bootstrap().ruleset().extraction().reserveItems();
+            var ledger = state.inventory().fungibleResources().issue(new ResourceLot(lot, settlement.id(), "minecraft:cobblestone", quantity,
+                    "fixture:reserve-arrived", List.of()), new CustodyAccount(account, new ResourceCustody.Container(FrontierWorldState.depotId(settlement.id())), Map.of(lot, quantity), Map.of()));
+            ledger = ledger.transfer(account, ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(settlement.id())), Map.of(lot, quantity), Map.of());
+            state = state.withInventory(state.inventory().withFungibleResources(ledger));
+        }
+        var codec = new FrontierWorldStateCodec(); var restored = codec.decode(codec.encode(state));
+        assertFalse(ExtractionWorkPolicy.requested(restored, offered.work()));
+        assertTrue(ExtractionWorkPolicy.mayFinishTarget(restored, offered.work()));
+        assertThrows(IllegalArgumentException.class, () -> ExtractionColdWork.apply(restored, offered.work().id(),
+                new ExtractionWorkProgressed(offered.work().id(), offered.work().revision(), ExtractionWorkProgressed.Operation.END_WORK), 101));
+    }
     @Test void anAdmittedCoalSourceCoversOnlyItsOwnYieldAndLeavesTheNextMinerForNeededStone() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:assigned-mining-demand"), 41,
                 FrontierRulesets.fuelledQuarryGraybox()));

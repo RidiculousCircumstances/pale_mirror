@@ -2,6 +2,28 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 /** Commercial owner supplies transport consent without exporting price logic into logistics. */
 final class GoodsShipmentAuthorization implements ShipmentAuthorizationPort {
+    @Override public boolean recallable(FrontierWorldState state, Shipment shipment) {
+        var contract = state.companies().goodsTrade().contracts().get(shipment.authorization().claimantId());
+        return contract != null && contract.fulfillment().mode() == GoodsTradeFulfillment.Mode.SELLER_DELIVERY;
+    }
+    @Override public FrontierWorldStateUpdate cancelledAtSource(FrontierWorldState state, Shipment shipment,
+            ShipmentReception receipt, ExactInventory inventory, CompanyRegistry companies) {
+        validate(state, shipment, false);
+        if (!recallable(state, shipment)) throw new IllegalArgumentException("commercial cargo cannot be recalled after sale");
+        var account = inventory.fungibleResources().accounts().get(shipment.sourceAccountId());
+        if (account == null || !account.custody().equals(shipment.sender().custody())
+                || account.claimQuantities().getOrDefault(receipt.claimId(), 0) != receipt.quantity()
+                || !inventory.fungibleResources().claims().get(receipt.claimId()).lotQuantities().equals(receipt.lotQuantities()))
+            throw new IllegalArgumentException("cancelled cargo lacks exact source custody");
+        var contract = companies.goodsTrade().contracts().get(shipment.authorization().claimantId());
+        var disposition = new GoodsTradeDisposition(receipt.id(), contract.id(), contract.revision(), receipt.claimId(), receipt.quantity(),
+                shipment.status() == Shipment.Status.AWAITING_LOAD ? GoodsTradeDisposition.Reason.CANCELLED_BEFORE_LOADING
+                        : GoodsTradeDisposition.Reason.RETURNED_BEFORE_DEPARTURE);
+        return FrontierWorldStateUpdate.begin().inventory(inventory.withFungibleResources(
+                inventory.fungibleResources().releaseClaims(java.util.Set.of(receipt.claimId()))).withEconomics(
+                inventory.economics().releasePortion(contract.financialReservationId(), contract.deliveredUnitPrice().multiply(receipt.quantity()))))
+                .companies(companies.withGoodsTrade(companies.goodsTrade().dispose(disposition)));
+    }
     @Override public boolean departureReady(Shipment shipment, TransportOrganization organization) {
         // Collected goods must first leave commercial custody through the exact
         // paid-title transition; delivery keeps that obligation until reception.

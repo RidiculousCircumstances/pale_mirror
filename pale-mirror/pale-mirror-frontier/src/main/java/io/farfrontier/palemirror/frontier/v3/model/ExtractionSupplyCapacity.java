@@ -5,23 +5,22 @@ import io.farfrontier.palemirror.frontier.v3.model.extraction.*;
 import io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner;
 import java.util.*;
 
-/** Only opened, accessible, unclaimed sources are production alternatives; buried geology is not stock. */
+/** Sequential declared sources are conditional production capacity, never available stock. */
 final class ExtractionSupplyCapacity implements SupplyCapacityPort {
     @Override public Key key() { return Key.EXTRACTION; }
     @Override public List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks) {
         if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().isEmpty()) return List.of();
-        var quantities = new HashMap<BlockExtraction.Definition, Integer>();
+        var materials = new HashSet<BlockExtraction.Definition>();
         for (var deposit : state.extractionSites().deposits().values()) if (deposit.site().settlementId().equals(home))
-            for (var cell : deposit.available(state.extractionSites().reservedCells(deposit.site().id())))
-                quantities.merge(cell.definition(), 1, Math::addExact);
+            for (var cell : deposit.site().layout().cells())
+                if (deposit.cells().get(cell.id()).disposition() == ExtractionDeposit.Disposition.PRESENT) materials.add(cell.definition());
         var assignments = HumanAssignmentProjection.compile(state);
         var schedule = state.humanPopulation().schedule(home);
         long daily = schedule.segments().stream().filter(s -> s.window() == SettlementDailySchedule.Window.WORK)
                 .mapToLong(s -> s.endExclusive() - s.startInclusive()).sum();
         if (daily == 0) return List.of();
         var result = new ArrayList<SupplyPlanner.Process>();
-        for (var entry : quantities.entrySet().stream().sorted(Comparator.comparing(e -> e.getKey().id())).toList()) {
-            var material = entry.getKey();
+        for (var material : materials.stream().sorted(Comparator.comparing(BlockExtraction.Definition::id)).toList()) {
             // The current single-output process capability cannot promise independent
             // co-products. Extraction itself still supports its full output vector.
             if (material.coldOutput().size() != 1) continue;
@@ -40,13 +39,17 @@ final class ExtractionSupplyCapacity implements SupplyCapacityPort {
                         && !ReferenceContainerCustody.blocksCanonicalUse(state, slot.containerId()))).count();
             var workers = candidates.stream().limit(tools).toList();
             if (workers.isEmpty()) continue;
-            int speed = workers.stream().mapToInt(r -> ResidentWorkStatistics.speedPermille(r, definition,
-                    state.bootstrap().ruleset().workCatalog())).min().orElseThrow();
-            long work = Math.ceilDiv(Math.multiplyExact(definition.workUnits(), 1000L), speed);
+            var forecasts = state.extractionSites().deposits().values().stream().filter(d -> d.site().settlementId().equals(home))
+                    .map(d -> ExtractionProductionForecast.assess(state, d, material, workers)).filter(f -> f.outputs() > 0).toList();
+            if (forecasts.isEmpty()) continue;
+            long quantity = forecasts.stream().mapToLong(f -> f.outputs()).sum();
+            long work = Math.max(1, Math.ceilDiv(forecasts.stream().mapToLong(f -> f.labourTicks()).sum(), quantity));
+            long first = forecasts.stream().mapToLong(f -> f.firstOutputTicks()).min().orElseThrow();
             long period = Math.max(1, Math.ceilDiv(Math.multiplyExact(work, schedule.dayTicks()), Math.multiplyExact(daily, workers.size())));
+            long opening = Math.ceilDiv(Math.multiplyExact(first, schedule.dayTicks()), daily);
             result.add(new SupplyPlanner.Process("extraction-capacity:" + home.value() + ":" + material.id(),
                     product.itemKind(), product.quantity(), Map.of(), 0, Map.of(), 0,
-                    Math.addExact(schedule.dayTicks(), period), period, entry.getValue(), work,
+                    Math.addExact(schedule.dayTicks(), Math.max(opening, period)), period, Math.toIntExact(quantity), work,
                     SupplyLabourCapacity.day(state, home, workers.stream().map(ResidentProfile::id).toList())));
         }
         return List.copyOf(result);

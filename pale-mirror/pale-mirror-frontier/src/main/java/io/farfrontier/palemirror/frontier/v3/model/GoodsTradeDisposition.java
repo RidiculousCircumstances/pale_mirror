@@ -8,7 +8,7 @@ public record GoodsTradeDisposition(SubjectId id, SubjectId contractId, long exp
                                     SubjectId claimId, int quantity, Reason reason) {
     public enum Reason {
         CANCELLED_BEFORE_LOADING(1), OBSERVED_ALLOCATION_CHANGED(2),
-        LOCAL_RESERVE_REQUIRED(3), DISPATCH_UNFUNDED(4);
+        LOCAL_RESERVE_REQUIRED(3), DISPATCH_UNFUNDED(4), RETURNED_BEFORE_DEPARTURE(5);
         private final int wireTag;
         Reason(int wireTag) { this.wireTag = wireTag; }
         public int wireTag() { return wireTag; }

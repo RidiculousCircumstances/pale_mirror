@@ -38,6 +38,19 @@ final class ShipmentAuthorizationComposition {
         return port.departureReady(shipment, organization);
     }
     private ShipmentAuthorizationComposition() { }
+    static boolean recallable(FrontierWorldState state, Shipment shipment) {
+        return PORTS.get(shipment.authorization().kind()).recallable(state, shipment);
+    }
+    static FrontierWorldStateUpdate cancelledAtSource(FrontierWorldState state, Shipment shipment,
+            ShipmentReception receipt, FrontierWorldStateUpdate transferred) {
+        var owned = java.util.EnumSet.of(FrontierWorldStateUpdate.Component.INVENTORY, FrontierWorldStateUpdate.Component.COMPANIES);
+        if (!owned.containsAll(transferred.changedComponents()))
+            throw new IllegalArgumentException("source cancellation cannot discard unrelated transfer contributions");
+        var result = PORTS.get(shipment.authorization().kind()).cancelledAtSource(state, shipment, receipt,
+                transferred.inventory(state), transferred.companies(state));
+        if (!owned.equals(result.changedComponents())) throw new IllegalArgumentException("return issuer omitted custody or competed with logistics authority");
+        return result;
+    }
     static FrontierWorldStateUpdate allocationPartitioned(FrontierWorldState state, Shipment shipment, ResourceClaimPartition partition) {
         var port = PORTS.get(shipment.authorization().kind());
         if (port == null) throw new IllegalArgumentException("unregistered shipment allocation owner");
@@ -49,6 +62,7 @@ final class ShipmentAuthorizationComposition {
         return port.receptionAccepted(state, shipment, reception);
     }
     static java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> capacityCompletionOwner(Shipment shipment) {
+        if (shipment.status() == Shipment.Status.RETURNING) return java.util.Optional.empty();
         var port = PORTS.get(shipment.authorization().kind());
         if (port == null) throw new IllegalArgumentException("unregistered shipment storage permission provider");
         return port.capacityCompletionOwner(shipment);

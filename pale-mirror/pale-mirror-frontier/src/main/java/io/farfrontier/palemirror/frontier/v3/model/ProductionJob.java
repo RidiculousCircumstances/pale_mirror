@@ -112,6 +112,22 @@ public record ProductionJob(
                 workProgress, workTraversal, traversalCursor, bakeryWork, spatial, rights);
     }
 
+    /** The bakery owner selects a recipe-consistent part only after deposit;
+     * resource reservation changes must be committed with this value. */
+    public ProductionJob withLoadedPortion(ProductionInputHold next, ProductionRecipe recipe) {
+        if (rights.mode() != ProductionRights.Mode.PUBLIC_PRODUCTION || bakeryWork.isEmpty()
+                || !bakeryWork.orElseThrow().recipeId().equals(recipe.id()))
+            throw new IllegalArgumentException("partial public order cannot rewrite a commercial promise");
+        int quantity = switch (next) {
+            case ProductionInputHold.FungibleCold value -> value.inputLots().values().stream().mapToInt(Integer::intValue).sum();
+            case ProductionInputHold.FungibleBound value -> value.inputLots().values().stream().mapToInt(Integer::intValue).sum();
+            default -> throw new IllegalArgumentException("partial loading requires divisible resource custody");
+        };
+        return new ProductionJob(id, taskId, settlementId, facilityId, workerId, next.itemId(), next,
+                outputItemId, outputItemKind, recipe.outputForInput(quantity), workProgress, workTraversal, traversalCursor,
+                java.util.Optional.of(bakeryWork.orElseThrow().withLoadedQuantity(quantity)), spatial, rights);
+    }
+
     public ProductionJob retargetBakeryOutput(SubjectId container) {
         var work = bakeryWork.orElseThrow().withDestination(ReferenceContainerCustody.scopeId(container));
         var nextRights = new ProductionRights(rights.mode(), rights.resourceOwner(), container, rights.employer());

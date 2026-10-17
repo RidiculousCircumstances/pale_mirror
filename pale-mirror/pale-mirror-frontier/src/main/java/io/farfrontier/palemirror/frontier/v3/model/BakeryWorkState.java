@@ -38,7 +38,7 @@ public record BakeryWorkState(Phase phase, SubjectId stationId, ProductionRecipe
         Objects.requireNonNull(destinationAccountId, "bakery destination account");
         pendingPhysicalStep = Objects.requireNonNull(pendingPhysicalStep, "bakery pending physical effect");
         block = Objects.requireNonNull(block, "bakery local block");
-        if (sourceAccountId.equals(actorAccountId) || sourceAccountId.equals(stationAccountId)
+        if (sourceAccountId.equals(actorAccountId)
                 || actorAccountId.equals(stationAccountId) || actorAccountId.equals(destinationAccountId)
                 || stationAccountId.equals(destinationAccountId)) {
             throw new IllegalArgumentException("bakery work must retain distinct custody accounts and a bounded station clock");
@@ -64,6 +64,16 @@ public record BakeryWorkState(Phase phase, SubjectId stationId, ProductionRecipe
             throw new IllegalArgumentException("delivered bakery job cannot be blocked");
         return new BakeryWorkState(phase, stationId, recipeId, inputItemKind, inputQuantity, sourceAccountId, sourceContainerId, actorAccountId,
                 stationAccountId, destinationAccountId, pendingPhysicalStep, next);
+    }
+
+    /** After the full hand is deposited, an unbegun order may select a smaller
+     * recipe portion. Its surplus remains physically at the input port. */
+    public BakeryWorkState withLoadedQuantity(int quantity) {
+        if (phase != Phase.STATION_LOAD || pendingPhysicalStep.isPresent() || block.isPresent()
+                || quantity < 1 || quantity > inputQuantity)
+            throw new IllegalArgumentException("only a settled unbegun station load may select its recipe portion");
+        return new BakeryWorkState(phase, stationId, recipeId, inputItemKind, quantity, sourceAccountId,
+                sourceContainerId, actorAccountId, stationAccountId, destinationAccountId);
     }
 
     public BakeryWorkState withDestination(SubjectId account) {

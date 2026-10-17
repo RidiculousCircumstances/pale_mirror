@@ -13,7 +13,7 @@ public record ShipmentPhysicalStep(Shipment.Status status, long shipmentRevision
     public ShipmentPhysicalStep {
         Objects.requireNonNull(status); Objects.requireNonNull(observation); source = List.copyOf(source);
         lotQuantities = Map.copyOf(lotQuantities);
-        if (status != Shipment.Status.AWAITING_LOAD && status != Shipment.Status.CARRYING
+        if (status != Shipment.Status.AWAITING_LOAD && status != Shipment.Status.CARRYING && status != Shipment.Status.RETURNING
                 || shipmentRevision < 1 || source.isEmpty() || source.size() > 27 || destinationEpoch < 1
                 || source.stream().map(MaterialSourceSelection.Slice::address).distinct().count() != source.size()
                 || source.stream().map(MaterialSourceSelection.Slice::epoch).distinct().count() != 1
@@ -24,7 +24,7 @@ public record ShipmentPhysicalStep(Shipment.Status status, long shipmentRevision
                 || destinationBefore < 0 || destinationBefore + source.stream().mapToInt(MaterialSourceSelection.Slice::moved).sum() > 64
                 || destinationSlot < -1 || destinationSlot > 26
                 || destinationSlot == -1 && destinationBefore != 0
-                || status == Shipment.Status.CARRYING && (destinationSlot < 0 || destinationSlot > 26))
+                || (status == Shipment.Status.CARRYING || status == Shipment.Status.RETURNING) && (destinationSlot < 0 || destinationSlot > 26))
             throw new IllegalArgumentException("shipment physical step lacks bounded exact pre-effect evidence");
     }
     public long sourceEpoch() { return source.getFirst().epoch(); }

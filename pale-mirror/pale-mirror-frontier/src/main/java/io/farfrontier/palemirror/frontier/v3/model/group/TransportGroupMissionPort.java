@@ -207,7 +207,7 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
         var mission = mission(state, group); group.member(member.actorId());
         var carried = mission.shipmentIds().stream().map(state.shipments().shipments()::get)
                 .filter(s -> TransportCargoExecution.shared(s) && s.execution().actorId().equals(member.actorId())
-                        && s.mobileContainerId().isEmpty() && !s.terminal() && s.status() == Shipment.Status.CARRYING).toList();
+                        && s.mobileContainerId().isEmpty() && !s.terminal() && s.carrying()).toList();
         if (carried.size() > 1) throw new IllegalArgumentException("resident manifest exceeds one work hand");
         return carried.isEmpty() ? Optional.empty() : Optional.of(new ActorCarriedResources.Presentation(member.actorId(),
                 carried.getFirst().carriedAccountId(), new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN)));

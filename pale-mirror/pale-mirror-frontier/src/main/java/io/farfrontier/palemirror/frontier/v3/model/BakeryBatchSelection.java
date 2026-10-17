@@ -61,11 +61,22 @@ public record BakeryBatchSelection(Optional<ExactItemStack> exactInput,
                                                          java.util.function.BiPredicate<SubjectId, Integer> capacity, boolean requireAccess) {
         var home = FrontierWorldStateSupport.settlement(state.bootstrap(), rights.employer().settlementId());
         var workshop = home.structures().stream().filter(value -> value.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
-        if (ProductionStationSelection.usable(state, workshop.id(), BakeryRecipes.BREAD).isEmpty()) return Optional.empty();
+        var machine = ProductionStationSelection.usable(state, workshop.id(), BakeryRecipes.BREAD);
+        if (machine.isEmpty()) return Optional.empty();
         var origin = SettlementWorkshopServicePort.forWorkshop(workshop).exteriorApproach();
+        // A partially processed load leaves real ingredients at the input port.
+        // Reuse them before hauling another batch into that same port.
+        var station = machine.orElseThrow();
+        if (ProductionInputAccess.eligible(state, station.containerId(), home.id(), workshop.id(), BakeryRecipes.BREAD)) {
+            var retained = selectAt(state, rights, station.containerId(), capacity, station.id());
+            if (retained.isPresent()) {
+                if (requireAccess) ResourceStorageNavigation.plannedPath(state, origin, ProductionInputAccess.at(state, station.containerId()).endpoint());
+                return retained;
+            }
+        }
         for (var storage : ResourceStorageSelection.candidates(state, rights.employer().settlementId(), "minecraft:wheat",
                 origin, java.util.Set.of(ResourceStorageRole.WAREHOUSE))) {
-            var choice = selectAt(state, rights, storage.containerId(), capacity);
+            var choice = selectAt(state, rights, storage.containerId(), capacity, station.id());
             if (choice.isEmpty()) continue;
             if (requireAccess) {
                 try { ResourceStorageNavigation.plannedPath(state, origin, storage); }
@@ -79,7 +90,7 @@ public record BakeryBatchSelection(Optional<ExactItemStack> exactInput,
         return Optional.empty();
     }
     private static Optional<BakeryBatchSelection> selectAt(FrontierWorldState state, ProductionRights rights,
-            SubjectId depot, java.util.function.BiPredicate<SubjectId, Integer> capacity) {
+            SubjectId depot, java.util.function.BiPredicate<SubjectId, Integer> capacity, SubjectId stationId) {
         SubjectId resourceOwner = rights.resourceOwner().id();
         var exact = state.inventory().items().values().stream()
                 .filter(item -> item.itemKind().equals("minecraft:wheat") && item.economicOwnerId().equals(resourceOwner)
@@ -93,6 +104,14 @@ public record BakeryBatchSelection(Optional<ExactItemStack> exactInput,
         var account = FungibleResourceCustodySupport.accountAtContainer(state, depot);
         int maximum = account.map(value -> Math.min(64, state.inventory().fungibleResources()
                 .unclaimedQuantity(value.id(), resourceOwner, "minecraft:wheat"))).orElse(0);
+        var recipe = BakeryRecipes.bread(state);
+        if (rights.mode() == ProductionRights.Mode.PUBLIC_PRODUCTION) {
+            int feasible = ProductionBatchSizing.inputQuantity(recipe, maximum, 64,
+                    state.productionStations().require(stationId).storedHeat());
+            // One restart batch keeps its explicit fuel obligation when no heat
+            // exists; it must not reserve an entire unavailable production run.
+            maximum = Math.min(maximum, Math.max(recipe.ingredient().quantity(), feasible));
+        }
         // A bounded stack-sized search also handles a nearly full output container.
         for (int quantity = maximum; quantity >= 1; quantity--) {
             if (quantity % BakeryRecipes.bread(state).ingredient().quantity() != 0) continue;

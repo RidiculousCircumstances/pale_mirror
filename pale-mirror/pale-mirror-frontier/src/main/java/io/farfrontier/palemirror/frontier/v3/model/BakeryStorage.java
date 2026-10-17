@@ -13,5 +13,8 @@ public final class BakeryStorage {
             case STATION_UNLOAD, DEPOT_DELIVERY, DELIVERED -> destination(job);
         };
     }
-    public static ResourceStorageAccess access(FrontierWorldState state, ProductionJob job) { return ResourceStorageAccess.at(state, current(job)); }
+    public static ResourceStorageAccess access(FrontierWorldState state, ProductionJob job) {
+        return current(job).equals(source(job)) ? ProductionInputAccess.at(state, source(job))
+                : ResourceStorageAccess.at(state, destination(job));
+    }
 }

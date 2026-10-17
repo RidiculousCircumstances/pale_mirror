@@ -127,9 +127,11 @@ public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Dire
             case ContainerEndpoint.FungibleStation value -> value.spec();
             default -> null;
         };
+        // Input/fuel ports contain resources too. An authorized order may take
+        // uncommitted material back; live recipe claims remain protected by the
+        // common custody/claim owner. Only the machine may create output there.
         if (stationSpec != null && (!stationSpec.workerStation().equals(station)
-                || direction == Direction.PLACE && stationPort(containerEndpoint) == StationPort.OUTPUT
-                || direction == Direction.TAKE && stationPort(containerEndpoint) != StationPort.OUTPUT))
+                || direction == Direction.PLACE && stationPort(containerEndpoint) == StationPort.OUTPUT))
             throw new IllegalArgumentException("actor order uses the wrong declared station surface or port");
         if (portion instanceof Portion.Exact exact) {
             if (!(actorSlot instanceof ActorItemSlot.Hand))

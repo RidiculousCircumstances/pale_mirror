@@ -89,7 +89,20 @@ public final class ExpeditionSupplyPlanning {
         }
         return Optional.empty();
     }
-    /** Departure rechecks current need/capacity/route independently of depot stock availability. */
+    /** Pure material feasibility over the retained journey; not new route or departure authority. */
+    public static boolean supplyAvailableForRetainedJourney(FrontierWorldState state, TransportMission mission,
+            UnitGroup group, long now, FungibleResourceLedger resources) {
+        var journey = mission.supplies().orElseThrow().journey();
+        var source = FungibleResourceCustodySupport.accountAtContainer(state, mission.organization().home().containerId());
+        // This is material feasibility for the already committed journey, not a
+        // new route/departure proof. No search or formation selection in replay.
+        for (var food : state.bootstrap().ruleset().residentLife().foods().foods().values()) {
+            var input = walkingInputs(state, mission, group, now, food, resources, journey.outward().edges(), journey.returning().edges());
+            int stock = source.map(a -> resources.unclaimedQuantity(a.id(), mission.organization().sponsor().id(), food.itemKind())).orElse(0);
+            if (input.isPresent() && forecast(state, mission, group, input.orElseThrow(), food, stock).feasible()) return true;
+        }
+        return false;
+    }
     public static Optional<ExpeditionProvisioning.Plan> walkingForecast(FrontierWorldState state, TransportMission mission,
                                                                        UnitGroup group, long now, String foodKind) {
         var life = state.bootstrap().ruleset().residentLife(); var food = life.foods().foods().get(foodKind);

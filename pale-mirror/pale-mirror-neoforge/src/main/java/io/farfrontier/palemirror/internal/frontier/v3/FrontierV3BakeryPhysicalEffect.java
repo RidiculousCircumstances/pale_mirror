@@ -26,7 +26,7 @@ final class FrontierV3BakeryPhysicalEffect {
                      FrontierWorldState state, SceneLease lease, ProductionJob job, Villager worker) {
         BakeryWorkState work = job.bakeryWork().orElseThrow();
         if (work.phase() == BakeryWorkState.Phase.STATION_LOAD && work.pendingPhysicalStep().isEmpty()
-                && !ProductionStationProcessing.canStart(state, work.stationId(), work.recipeId(), job.inputCount())) return;
+                && BakeryStationOperation.loadReadiness(state, job) != ProductionStationProcessing.StartReadiness.READY) return;
         if (work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
                 && work.block().map(value -> value.reason() == BakeryWorkBlock.Reason.SOURCE_CHANGED).orElse(false)
                 && state.inventory().fungibleResources().claims().values().stream()

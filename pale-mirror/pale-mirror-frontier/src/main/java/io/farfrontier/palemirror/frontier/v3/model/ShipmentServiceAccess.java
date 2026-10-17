@@ -46,15 +46,16 @@ public final class ShipmentServiceAccess implements ServiceAccessCapability {
             var mission = state.shipments().missions().get(shipment.transportMissionId().orElseThrow());
             if (mission == null) throw new IllegalArgumentException("shipment service lost its exact transport mission");
             var operation = shipment.status() == Shipment.Status.AWAITING_LOAD
-                    ? TransportMission.Stage.LOADING : TransportMission.Stage.UNLOADING;
+                    ? TransportMission.Stage.LOADING : shipment.status() == Shipment.Status.RETURNING
+                        ? TransportMission.Stage.RECOVERING : TransportMission.Stage.UNLOADING;
             // A retained cargo claim is not a service turn. During assembly, travel,
             // replenishment or return the workflow owns a different operation.
             if (mission.stage() != operation || mission.replenishment().isPresent()) return false;
         }
         if (shipment.pendingPhysicalStep().isPresent()) return true;
         if (shipment.reception().isPresent()) return false;
-        if (shipment.status() == Shipment.Status.CARRYING
-                && ReferenceContainerCustody.hasLiveCustody(state, shipment.receiver().containerId()))
+        if (shipment.carrying()
+                && ReferenceContainerCustody.hasLiveCustody(state, shipment.unloadingEndpoint().containerId()))
             return ShipmentPhysicalStateSupport.destination(state, shipment).isPresent();
         return !ShipmentStateSupport.coldTransferLots(state, shipment).isEmpty();
     }
@@ -63,7 +64,7 @@ public final class ShipmentServiceAccess implements ServiceAccessCapability {
     }
     public static java.util.Optional<SubjectId> point(Shipment shipment) {
         return shipment.status() == Shipment.Status.AWAITING_LOAD ? shipment.sender().container()
-                : java.util.Optional.of(shipment.receiver().containerId());
+                : java.util.Optional.of(shipment.unloadingEndpoint().containerId());
     }
     private static ServiceAccessDemand.Identity identity(Shipment shipment, SubjectId point) {
         return new ServiceAccessDemand.Identity(ServiceAccessDemand.Kind.COURIER, shipment.id(), shipment.execution().actorId(), point);

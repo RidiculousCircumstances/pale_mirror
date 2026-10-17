@@ -21,7 +21,7 @@ public record ShipmentProgressObligation(SubjectId subject, ActorExecutionId exe
                 : !shipment.terminal() && !TransportCargoExecution.selected(state, shipment) ? Disposition.MANIFEST_COORDINATION
                 : !shipment.terminal() && shipment.movementOrder().arrivedAt(state.actorLocations().get(actor).supportingSurface())
                     && !ShipmentStateSupport.serviceAvailable(state, shipment) ? Disposition.SERVICE_ACCESS
-                : shipment.status() == Shipment.Status.CARRYING && shipment.reception().isEmpty()
+                : shipment.carrying() && shipment.reception().isEmpty()
                     && ShipmentStateSupport.coldTransferLots(state, shipment).isEmpty() ? Disposition.RECEIVER_CAPACITY : Disposition.ELIGIBLE;
         var next = closed ? Next.CLOSED : shipment.reception().isPresent() ? Next.RECEIVER_ACKNOWLEDGEMENT
                 : shipment.status() == Shipment.Status.AWAITING_LOAD ? Next.LOAD : Next.UNLOAD;

@@ -87,6 +87,8 @@ public final class TransportMissionProcess {
         if (mission == null || !subject.equals(mission.id()) || mission.revision() != value.expectedRevision())
             throw new IllegalArgumentException("transport transition has a stale or foreign predecessor");
         if (mission.replenishment().isPresent()) throw new IllegalArgumentException("transport transition retains an unfinished stock handoff");
+        if (value.next() == TransportMission.Stage.RECOVERING)
+            return TransportPreparationRecovery.recall(state, mission, now);
         var group = state.unitGroups().groups().get(mission.groupId());
         var shipments = mission.shipmentIds().stream().map(id -> state.shipments().shipments().get(id)).toList();
         boolean ready = switch (value.next()) {
@@ -108,6 +110,7 @@ public final class TransportMissionProcess {
                     || group.members().stream().allMatch(m -> state.actorLocations().get(m.actorId()).condition().status() == ActorLifeStatus.DEAD));
             case LOADING -> mission.stage() == TransportMission.Stage.TO_SOURCE && group.phase() == UnitGroup.Phase.AT_GOAL && group.goalOrdinal() == 1;
             case PREPARING -> false;
+            case RECOVERING -> throw new IllegalStateException("preparation recovery handled above");
         };
         if (!ready) throw new IllegalArgumentException("transport workflow lacks its actual loading, arrival or delivery evidence");
         var economics = state.inventory().economics();
@@ -145,6 +148,14 @@ public final class TransportMissionProcess {
             }
             return List.of(new ProposedEvent(mission.id(), new ScheduleEffect.Rescheduled(action.id(), progress(mission.id(),
                     now + state.bootstrap().ruleset().cadence().transportReviewInterval()))));
+        }
+        if (TransportPreparationRecovery.needed(state, mission, now)) {
+            var recovery = new ArrayList<ProposedEvent>();
+            recovery.add(new ProposedEvent(mission.id(), new TransportMissionAdvanced(mission.id(), mission.revision(),
+                    TransportMission.Stage.RECOVERING, Optional.empty())));
+            for (var id : mission.shipmentIds()) recovery.add(ShipmentProcess.wake(id, now));
+            recovery.add(wake(mission.id(), now));
+            return List.copyOf(recovery);
         }
         var group = state.unitGroups().groups().get(mission.groupId()); var events = new ArrayList<ProposedEvent>();
         if (mission.replenishment().isPresent()) {
@@ -207,6 +218,7 @@ public final class TransportMissionProcess {
                     : group.phase() == UnitGroup.Phase.AT_GOAL && group.goalOrdinal() == mission.deliveryOrdinal() ? TransportMission.Stage.UNLOADING : null;
             case UNLOADING -> mayReturn(state, mission, group)
                     ? TransportMission.Stage.RETURNING : null;
+            case RECOVERING -> mayReturn(state, mission, group) ? TransportMission.Stage.RETURNING : null;
             case RETURNING -> (group.phase() == UnitGroup.Phase.AT_GOAL && group.goalOrdinal() == 2 || group.phase() == UnitGroup.Phase.CLOSED)
                     && group.members().stream().noneMatch(m -> state.humanPopulation().meals().containsKey(m.actorId()) || state.actorMovements().containsKey(m.actorId()))
                     ? TransportMission.Stage.COMPLETE : null;

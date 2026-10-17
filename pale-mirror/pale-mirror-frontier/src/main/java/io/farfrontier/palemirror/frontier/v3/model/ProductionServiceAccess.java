@@ -107,7 +107,7 @@ public final class ProductionServiceAccess implements ServiceAccessCapability {
         if (work.pendingPhysicalStep().isEmpty() && work.phase() == BakeryWorkState.Phase.STATION_LOAD) {
             var station = ProductionStationEnergy.record(state, work.stationId());
             if (ReferenceContainerCustody.blocksCanonicalUse(state, station.id())) return java.util.Optional.of(ServiceWait.STATION_CUSTODY);
-            var readiness = ProductionStationProcessing.startReadiness(state, work.stationId(), work.recipeId(), job.inputCount());
+            var readiness = BakeryStationOperation.loadReadiness(state, job);
             return readiness == ProductionStationProcessing.StartReadiness.READY ? java.util.Optional.empty()
                     : java.util.Optional.of(new StationWait(readiness));
         }

@@ -26,6 +26,8 @@ final class ShipmentDeliveryNotifications {
             throw new IllegalArgumentException("missing shipment receiver-notification owner");
     }
     static List<ProposedEvent> delivered(Shipment shipment, long atTick) {
+        if (shipment.status() == Shipment.Status.RETURNING || shipment.status() == Shipment.Status.RETURNED)
+            return shipment.transportMissionId().map(id -> List.of(TransportMissionProcess.wake(id, atTick))).orElseGet(List::of);
         if (shipment.reception().isEmpty()) throw new IllegalArgumentException("unloaded notification has no exact delivery");
         var port = PORTS.get(shipment.authorization().kind());
         if (port == null) throw new IllegalArgumentException("unknown shipment receiver-notification owner");

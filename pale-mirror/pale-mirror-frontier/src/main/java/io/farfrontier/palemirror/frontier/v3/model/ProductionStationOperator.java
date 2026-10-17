@@ -27,11 +27,10 @@ public final class ProductionStationOperator {
             var binding = ledger.bindings().values().stream().filter(value -> value.accountId().equals(account.id())
                     && value.address().equals(address)).findFirst().orElseThrow(() -> new IllegalArgumentException("station input port is empty"));
             if (!recipe.ingredient().accepts(binding.itemKind())) throw new IllegalArgumentException("station input is not accepted by its selected recipe");
-            int batches = Math.min(64 / recipe.product().quantity(),
-                    ledger.unclaimedQuantity(account.id(), record.ownerId(), binding.itemKind()) / recipe.ingredient().quantity());
-            if (recipe.heatPerBatch() > 0) batches = (int) Math.min(batches, machine.storedHeat() / recipe.heatPerBatch());
-            if (batches == 0) throw new IllegalArgumentException("station lacks a complete ingredient/fuel batch");
-            int inputQuantity = batches * recipe.ingredient().quantity();
+            int inputQuantity = ProductionBatchSizing.inputQuantity(recipe,
+                    ledger.unclaimedQuantity(account.id(), record.ownerId(), binding.itemKind()), 64, machine.storedHeat());
+            if (inputQuantity == 0) throw new IllegalArgumentException("station lacks a complete ingredient/fuel batch");
+            int batches = inputQuantity / recipe.ingredient().quantity();
             if (!ProductionStationProcessing.canStart(state, subject, recipe.id(), inputQuantity))
                 throw new IllegalArgumentException("station output or processing capacity is occupied");
             var selected = FungibleResourceCustodySupport.selectAtAccount(ledger, account.id(), record.ownerId(), binding.itemKind(), inputQuantity).orElseThrow();

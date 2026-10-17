@@ -26,7 +26,7 @@ public final class ExtractionColdWork {
                     job, job.transition(ExtractionWork.Phase.STORE, Optional.empty()))));
         }
         if (event.operation() == ExtractionWorkProgressed.Operation.END_WORK) {
-            if (ExtractionWorkPolicy.requested(state, job)
+            if (ExtractionWorkPolicy.mayFinishTarget(state, job)
                     || job.phase() != ExtractionWork.Phase.TAKE_TOOL && job.phase() != ExtractionWork.Phase.EXTRACT)
                 throw new IllegalArgumentException("mining shutdown lacks a withdrawn settlement mandate");
             if (job.phase() == ExtractionWork.Phase.TAKE_TOOL) {

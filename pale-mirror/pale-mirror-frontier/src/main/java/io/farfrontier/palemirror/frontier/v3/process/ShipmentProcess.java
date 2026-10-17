@@ -37,10 +37,11 @@ public final class ShipmentProcess {
         if (!TransportCargoExecution.selected(state, shipment)) return true;
         if (shipment.transportMissionId().map(state.shipments().missions()::get).flatMap(TransportMission::supplies)
                 .filter(load -> !load.complete()).isPresent()) return true;
-        if (shipment.transportMissionId().isPresent() && shipment.status() == Shipment.Status.CARRYING) {
+        if (shipment.transportMissionId().isPresent() && shipment.carrying()) {
             var mission = state.shipments().missions().get(shipment.transportMissionId().orElseThrow());
             if (mission == null) throw new IllegalArgumentException("shipment lost its exact transport mission");
-            if (mission.stage() != TransportMission.Stage.UNLOADING) return true;
+            if (mission.stage() != (shipment.status() == Shipment.Status.RETURNING
+                    ? TransportMission.Stage.RECOVERING : TransportMission.Stage.UNLOADING)) return true;
         }
         if (state.actorMovements().containsKey(shipment.execution().actorId())) {
             return !(needsStorage(state, shipment) && new ActorMovementInterruptionPlanner().assess(state,
@@ -107,7 +108,7 @@ public final class ShipmentProcess {
         if (!ShipmentStateSupport.coldTransferAvailable(state, shipment)) return retry(state, shipment, now);
         var events = new java.util.ArrayList<ProposedEvent>();
         events.add(new ProposedEvent(shipment.id(), new ShipmentColdTransferred(shipment.id(), shipment.revision(), shipment.status())));
-        if (shipment.status() == Shipment.Status.CARRYING)
+        if (shipment.carrying())
             events.addAll(ShipmentDeliveryNotifications.delivered(ShipmentStateSupport.transferCold(state, shipment.id(), shipment.id(),
                     shipment.revision(), shipment.status()).shipments().shipments().get(shipment.id()), now));
         else events.addAll(ShipmentDeliveryNotifications.loaded(ShipmentStateSupport.transferCold(state, shipment.id(), shipment.id(),

@@ -97,6 +97,7 @@ final class FrontierV3TownTradeCards {
                 String label = switch (shipment.status()) {
                     case AWAITING_LOAD -> "Load "; case CARRYING -> "Carrying "; case DELIVERED -> "Unloaded ";
                     case ALLOCATION_WITHDRAWN -> "Withdrawn "; case CARGO_DISPOSED -> "Lost ";
+                    case RETURNING -> "Returning unsold "; case RETURNED -> "Returned unsold ";
                 };
                 if (shipment.quantity() > 0) cargo.merge(label + item(shipment.itemKind()), shipment.quantity(), Integer::sum);
                 shipment.reception().ifPresent(receipt -> cargo.merge("Awaiting acceptance " + item(shipment.itemKind()), receipt.quantity(), Integer::sum));
@@ -125,6 +126,7 @@ final class FrontierV3TownTradeCards {
         return switch (stage) {
             case PREPARING -> "Preparing"; case TO_SOURCE -> "Going to supplier"; case LOADING -> "Loading";
             case OUTBOUND -> "Delivering"; case UNLOADING -> "Unloading"; case RETURNING -> "Returning home"; case COMPLETE -> "Complete";
+            case RECOVERING -> "Preparation failed: recovering cargo";
         };
     }
 }

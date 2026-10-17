@@ -10,12 +10,11 @@ public final class BakeryAdmissionNavigation {
     private static Access access(FrontierWorldState state, ProductionJob job) {
         if (job.bakeryWork().isEmpty() || job.bakeryWork().orElseThrow().phase() != BakeryWorkState.Phase.DEPOT_PICKUP)
             throw new IllegalArgumentException("bakery admission access requires a fresh selected station job");
-        if (!ResourceStorageSelection.containers(state, job.settlementId(), "minecraft:wheat", Set.of(ResourceStorageRole.WAREHOUSE))
-                    .contains(BakeryStorage.source(job))
+        if (!ProductionInputAccess.eligible(state, BakeryStorage.source(job), job.settlementId(), job.facilityId(), job.bakeryWork().orElseThrow().recipeId())
                 || !ResourceStorageSelection.containers(state, job.settlementId(), "minecraft:bread", Set.of(ResourceStorageRole.WAREHOUSE))
                     .contains(BakeryStorage.destination(job)))
             throw new IllegalArgumentException("bakery admission has a missing, fenced or incompatible warehouse");
-        var source = ResourceStorageAccess.at(state, BakeryStorage.source(job)).endpoint();
+        var source = ProductionInputAccess.at(state, BakeryStorage.source(job)).endpoint();
         var destination = ResourceStorageAccess.at(state, BakeryStorage.destination(job)).endpoint();
         var home = FrontierWorldStateSupport.settlement(state.bootstrap(), job.settlementId());
         var facility = home.structures().stream().filter(value -> value.id().equals(job.facilityId())).findFirst().orElseThrow();

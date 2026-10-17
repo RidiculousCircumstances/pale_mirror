@@ -52,7 +52,7 @@ public record TransportMission(SubjectId id, SubjectId groupId, List<SubjectId> 
         this(id, groupId, shipmentIds, sender, receiver, organization, homeRendezvous, destinationRendezvous, stage, revision,
                 java.util.Optional.empty());
     }
-    public enum Stage { PREPARING, TO_SOURCE, LOADING, OUTBOUND, UNLOADING, RETURNING, COMPLETE }
+    public enum Stage { PREPARING, TO_SOURCE, LOADING, OUTBOUND, UNLOADING, RETURNING, COMPLETE, RECOVERING }
     public boolean preparingSupplies() { return stage == Stage.PREPARING || stage == Stage.LOADING && organization.itinerary() == TransportOrganization.Itinerary.SOURCE_DELIVERY; }
     public long deliveryOrdinal() { return organization.itinerary() == TransportOrganization.Itinerary.DESTINATION_COLLECTION ? 2 : 1; }
     public long returnOrdinal() { return 2; }
@@ -76,12 +76,13 @@ public record TransportMission(SubjectId id, SubjectId groupId, List<SubjectId> 
     }
     public TransportMission advance(Stage next) {
         boolean legal = switch (stage) {
-            case PREPARING -> next == Stage.TO_SOURCE || next == Stage.RETURNING;
+            case PREPARING -> next == Stage.TO_SOURCE || next == Stage.RETURNING || next == Stage.RECOVERING;
             case TO_SOURCE -> next == Stage.LOADING || next == Stage.RETURNING;
-            case LOADING -> next == Stage.OUTBOUND || next == Stage.RETURNING;
+            case LOADING -> next == Stage.OUTBOUND || next == Stage.RETURNING || next == Stage.RECOVERING;
             case OUTBOUND -> next == Stage.UNLOADING || next == Stage.RETURNING;
             case UNLOADING -> next == Stage.RETURNING;
             case RETURNING -> next == Stage.COMPLETE;
+            case RECOVERING -> next == Stage.RETURNING;
             case COMPLETE -> false;
         };
         if (!legal) throw new IllegalArgumentException("illegal transport workflow transition");
@@ -103,6 +104,11 @@ public record TransportMission(SubjectId id, SubjectId groupId, List<SubjectId> 
         if (!preparingSupplies()) throw new IllegalArgumentException("only loading promises can be withdrawn before departure");
         return new TransportMission(id, groupId, shipmentIds, sender, receiver, organization, homeRendezvous, destinationRendezvous,
                 Stage.RETURNING, Math.addExact(revision, 1), financialBudgetId, java.util.Optional.empty(), transportAssetId);
+    }
+    public TransportMission recallLoading() {
+        if (!preparingSupplies()) throw new IllegalArgumentException("only unstarted expeditions can recover at home");
+        return new TransportMission(id, groupId, shipmentIds, sender, receiver, organization, homeRendezvous, destinationRendezvous,
+                Stage.RECOVERING, Math.addExact(revision, 1), financialBudgetId, java.util.Optional.empty(), transportAssetId);
     }
     public TransportMission withTransportAsset(SubjectId actorId) {
         if (!preparingSupplies() || revision != 1 || transportAssetId.isPresent() || supplies.isPresent())

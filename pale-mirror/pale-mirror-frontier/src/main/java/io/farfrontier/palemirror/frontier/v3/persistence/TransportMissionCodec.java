@@ -49,12 +49,13 @@ final class TransportMissionCodec {
         return new io.farfrontier.palemirror.frontier.v3.model.TransportOrganization(sponsor, home, itinerary);
     }
     static void stage(DataOutputStream out, TransportMission.Stage stage) throws IOException {
-        out.writeByte(switch (stage) { case LOADING -> 1; case OUTBOUND -> 2; case UNLOADING -> 3; case RETURNING -> 4; case COMPLETE -> 5; case PREPARING -> 6; case TO_SOURCE -> 7; });
+        out.writeByte(switch (stage) { case LOADING -> 1; case OUTBOUND -> 2; case UNLOADING -> 3; case RETURNING -> 4; case COMPLETE -> 5; case PREPARING -> 6; case TO_SOURCE -> 7; case RECOVERING -> 8; });
     }
     static TransportMission.Stage stage(DataInputStream in) throws IOException {
         return switch (in.readUnsignedByte()) { case 1 -> TransportMission.Stage.LOADING; case 2 -> TransportMission.Stage.OUTBOUND; case 3 -> TransportMission.Stage.UNLOADING; case
                 4 -> TransportMission.Stage.RETURNING; case 5 -> TransportMission.Stage.COMPLETE;
                 case 6 -> TransportMission.Stage.PREPARING; case 7 -> TransportMission.Stage.TO_SOURCE;
+                case 8 -> TransportMission.Stage.RECOVERING;
                 default -> throw new IllegalArgumentException("unknown transport stage tag"); };
     }
 }

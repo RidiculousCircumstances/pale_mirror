@@ -34,7 +34,7 @@ public final class TransportCargoExecution {
         var mission = io.farfrontier.palemirror.frontier.v3.model.group.TransportGroupMissionPort.mission(state, group);
         return parcels(state, group, execution).stream().filter(s -> !s.terminal() || s.reception().isPresent())
                 .filter(s -> mission.stage() == TransportMission.Stage.LOADING ? s.status() == Shipment.Status.AWAITING_LOAD
-                        : mission.stage() == TransportMission.Stage.UNLOADING)
+                        : mission.stage() == TransportMission.Stage.UNLOADING || mission.stage() == TransportMission.Stage.RECOVERING)
                 .findFirst(); // Explicit retained manifest order, not discovery by collection membership.
     }
     public static boolean selected(FrontierWorldState state, Shipment shipment) {

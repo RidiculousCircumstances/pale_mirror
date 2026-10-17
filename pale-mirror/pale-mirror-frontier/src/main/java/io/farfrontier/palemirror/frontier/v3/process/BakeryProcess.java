@@ -162,7 +162,7 @@ public final class BakeryProcess {
             return Optional.of("STATION_UNAVAILABLE");
         if (phase == BakeryWorkState.Phase.STATION_LOAD
                 && state.actorLocations().get(job.workerId()).supportingSurface().equals(station.workerStation())
-                && !ProductionStationProcessing.canStart(state, station.id(), job.bakeryWork().orElseThrow().recipeId(), job.inputCount()))
+                && BakeryStationOperation.loadReadiness(state, job) != ProductionStationProcessing.StartReadiness.READY)
             return Optional.of("STATION_ENERGY_OR_OPERATION_WAIT");
         if (phase != BakeryWorkState.Phase.PROCESSING && phase != BakeryWorkState.Phase.DELIVERED
                 && BakeryWorkGoal.current(state, job).station().equals(state.actorLocations().get(job.workerId()).supportingSurface())
@@ -321,21 +321,21 @@ public final class BakeryProcess {
         }
         ActorContainerItemOrder order = itemOrder(state, job, step.action());
         inventory = ActorItemCustody.transferCold(state, order);
+        if (step.action() == BakeryColdStep.Action.LOAD) {
+            var loaded = BakeryStationOperation.settleLoad(state, job, inventory, 0);
+            return replace(state, loaded.job(), loaded.inventory(), loaded.machines());
+        }
         if (step.action() == BakeryColdStep.Action.DELIVER)
             return replace(state, job.withBakeryWork(work.advance(BakeryWorkState.Phase.DELIVERED)), inventory);
         BakeryWorkState.Phase next = switch (step.action()) {
             case PICKUP -> BakeryWorkState.Phase.STATION_LOAD;
-            case LOAD -> BakeryWorkState.Phase.PROCESSING;
             case UNLOAD -> BakeryWorkState.Phase.DEPOT_DELIVERY;
             default -> throw new IllegalArgumentException("bakery transfer has no next custody phase");
         };
         ProductionStations machines = switch (step.action()) {
-            case LOAD -> BakeryStationOperation.loaded(state, job, station(state, job));
             case UNLOAD -> ProductionStationProcessing.unloaded(state, BakeryStationOperation.require(state, job));
             default -> state.productionStations();
         };
-        if (step.action() == BakeryColdStep.Action.LOAD)
-            inventory = ProductionStationProcessing.adoptInputOwnership(inventory, machines.require(work.stationId()).operation().orElseThrow());
         if (step.action() == BakeryColdStep.Action.UNLOAD)
             inventory = ProductionStationProcessing.collectedOutput(inventory, BakeryStationOperation.require(state, job), work.actorAccountId(), 0);
         return replace(state, job.withBakeryWork(work.advance(next)), inventory, machines);
@@ -399,7 +399,7 @@ public final class BakeryProcess {
                 || prepared.phase() == BakeryWorkState.Phase.PROCESSING
                 && !BakeryLabour.complete(state, job)
                 || prepared.phase() == BakeryWorkState.Phase.STATION_LOAD
-                && !ProductionStationProcessing.canStart(state, station.id(), work.recipeId(), job.inputCount())
+                && BakeryStationOperation.loadReadiness(state, job) != ProductionStationProcessing.StartReadiness.READY
                 || prepared.phase() != BakeryWorkState.Phase.PROCESSING && !ProductionServiceAccess.available(state, job))
             throw new IllegalArgumentException("bakery HOT effect is not at a ready current station");
         int requiredSlot = switch (prepared.phase()) {
@@ -593,21 +593,21 @@ public final class BakeryProcess {
         ActorContainerItemOrder order = itemOrder(state, job, action);
         inventory = ActorItemCustody.transferObserved(state, order, observed.sourceEpoch(), observed.destinationEpoch(),
                 observed.remainingSource(), observed.destination());
+        if (action == BakeryColdStep.Action.LOAD) {
+            var loaded = BakeryStationOperation.settleLoad(state, job.withBakeryWork(ready), inventory, observed.destinationEpoch());
+            return replace(state, loaded.job(), loaded.inventory(), loaded.machines());
+        }
         if (action == BakeryColdStep.Action.DELIVER)
             return replace(state, job.withBakeryWork(ready.advance(BakeryWorkState.Phase.DELIVERED)), inventory);
         BakeryWorkState.Phase next = switch (action) {
             case PICKUP -> BakeryWorkState.Phase.STATION_LOAD;
-            case LOAD -> BakeryWorkState.Phase.PROCESSING;
             case UNLOAD -> BakeryWorkState.Phase.DEPOT_DELIVERY;
             default -> throw new IllegalStateException("observed bakery transfer has no successor");
         };
         ProductionStations machines = switch (action) {
-            case LOAD -> BakeryStationOperation.loaded(state, job, station(state, job));
             case UNLOAD -> ProductionStationProcessing.unloaded(state, BakeryStationOperation.require(state, job));
             default -> state.productionStations();
         };
-        if (action == BakeryColdStep.Action.LOAD)
-            inventory = ProductionStationProcessing.adoptInputOwnership(inventory, machines.require(work.stationId()).operation().orElseThrow());
         if (action == BakeryColdStep.Action.UNLOAD)
             inventory = ProductionStationProcessing.collectedOutput(inventory, BakeryStationOperation.require(state, job), work.actorAccountId(), observed.destinationEpoch());
         return replace(state, job.withBakeryWork(ready.advance(next)), inventory, machines);
@@ -686,7 +686,8 @@ public final class BakeryProcess {
                         : output ? Optional.empty() : Optional.of(claimId(job)), output ? job.outputItemKind() : work.inputItemKind(),
                     output ? Map.of(job.outputItemId(), job.outputCount()) : job.inputQuantities());
             endpoint = switch (action) {
-                case PICKUP, DELIVER -> new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(depotId);
+                case PICKUP -> ProductionInputAccess.at(state, depotId).endpoint().receivingPort();
+                case DELIVER -> new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(depotId);
                 case LOAD -> new ActorContainerItemOrder.ContainerEndpoint.FungibleStation(station, ActorContainerItemOrder.StationPort.INPUT);
                 case UNLOAD -> new ActorContainerItemOrder.ContainerEndpoint.FungibleStation(station, ActorContainerItemOrder.StationPort.OUTPUT);
                 default -> throw new IllegalArgumentException("not a station transfer step");
