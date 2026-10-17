@@ -92,10 +92,14 @@ public final class SupplyPlanner {
         }
     }
     public record Plan(Map<String, Demand> demands, Map<String, SupplyReservePlanner.Target> reserves,
-                       Map<String, Long> preferredPurchaseSpending) {
+                       Map<String, Long> preferredPurchaseSpending,
+                       Optional<io.farfrontier.palemirror.frontier.v3.model.economy.EconomicPlan> economy) {
+        public Plan(Map<String, Demand> demands, Map<String, SupplyReservePlanner.Target> reserves,
+                    Map<String, Long> preferredPurchaseSpending) { this(demands, reserves, preferredPurchaseSpending, Optional.empty()); }
         public Plan(Map<String, Demand> demands, Map<String, SupplyReservePlanner.Target> reserves) { this(demands, reserves, Map.of()); }
         public Plan(Map<String, Demand> demands) { this(demands, Map.of()); }
         public Plan { demands = Map.copyOf(demands); reserves = Map.copyOf(reserves);
+            economy = Objects.requireNonNull(economy);
             preferredPurchaseSpending = Map.copyOf(preferredPurchaseSpending);
             if (!demands.keySet().containsAll(preferredPurchaseSpending.keySet())
                     || preferredPurchaseSpending.values().stream().anyMatch(value -> value < 0))

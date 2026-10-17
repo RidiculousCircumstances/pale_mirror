@@ -5,7 +5,13 @@ import java.util.*;
 /** Ruleset-owned policy, not inferred from recipe names or resource identifier prefixes. */
 public record SupplyPlanningRules(Map<String, SupplyPolicy> commodities, int maximumOrderItems,
                                   int workCargoSlots, int personalFoodItems, int maximumTripCargoStacks,
-                                  Optional<ReservePolicy> reserves, Optional<SourcingRules> sourcing) {
+                                  Optional<ReservePolicy> reserves, Optional<SourcingRules> sourcing,
+                                  Optional<io.farfrontier.palemirror.frontier.v3.model.economy.EconomicPlanningRules> economics) {
+    public SupplyPlanningRules(Map<String, SupplyPolicy> commodities, int maximumOrderItems,
+            int workCargoSlots, int personalFoodItems, int maximumTripCargoStacks, Optional<ReservePolicy> reserves,
+            Optional<SourcingRules> sourcing) {
+        this(commodities, maximumOrderItems, workCargoSlots, personalFoodItems, maximumTripCargoStacks, reserves, sourcing, Optional.empty());
+    }
     public SupplyPlanningRules(Map<String, SupplyPolicy> commodities, int maximumOrderItems,
             int workCargoSlots, int personalFoodItems, int maximumTripCargoStacks, Optional<ReservePolicy> reserves) {
         this(commodities, maximumOrderItems, workCargoSlots, personalFoodItems, maximumTripCargoStacks, reserves, Optional.empty());
@@ -17,11 +23,14 @@ public record SupplyPlanningRules(Map<String, SupplyPolicy> commodities, int max
     public SupplyPlanningRules {
         reserves = Objects.requireNonNull(reserves);
         sourcing = Objects.requireNonNull(sourcing);
+        economics = Objects.requireNonNull(economics);
         commodities = Map.copyOf(commodities);
         if (commodities.size() > 256 || maximumOrderItems < 1 || maximumOrderItems > 4096
                 || workCargoSlots != 1 || personalFoodItems < 1 || personalFoodItems > 64
                 || maximumTripCargoStacks < 1 || maximumTripCargoStacks > 32)
             throw new IllegalArgumentException("invalid bounded supply rules");
+        if (economics.isPresent() && (reserves.isEmpty() || sourcing.isEmpty()))
+            throw new IllegalArgumentException("economic planning requires reserve and sourcing facts");
     }
     public static SupplyPlanningRules disabled() { return new SupplyPlanningRules(Map.of(), 64, 1, 8, 1); }
     public boolean enabled() { return !commodities.isEmpty(); }
@@ -29,6 +38,7 @@ public record SupplyPlanningRules(Map<String, SupplyPolicy> commodities, int max
     public String canonicalText() {
         return reserves.map(value -> "reserves=" + value.canonicalText() + "|").orElse("")
                 + sourcing.map(value -> "sourcing=" + value.canonicalText() + "|").orElse("")
+                + economics.map(value -> "economics=" + value.canonicalText() + "|").orElse("")
                 + maximumOrderItems + ":" + workCargoSlots + ":" + personalFoodItems + ":" + maximumTripCargoStacks + "|"
                 + commodities.entrySet().stream().sorted(Map.Entry.comparingByKey())
                     .map(e -> e.getKey() + "=" + e.getValue().canonicalText()).collect(java.util.stream.Collectors.joining("|"));

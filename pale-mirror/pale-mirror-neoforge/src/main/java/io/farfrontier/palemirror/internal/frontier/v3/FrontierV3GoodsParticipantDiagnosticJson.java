@@ -92,6 +92,8 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
         // The common byte budget preserves current stock/planning facts when retained
         // trade history grows. Explicit omissions are not empty orders or no caravans.
         return FrontierV3DiagnosticDetailBudget.finish(essential, java.util.List.of(
+                new FrontierV3DiagnosticDetailBudget.Section("economy", view.supplyPlan().flatMap(plan -> plan.economy())
+                    .map(FrontierV3EconomicDiagnosticJson::render).orElse("null")),
                 new FrontierV3DiagnosticDetailBudget.Section("expeditions", FrontierV3ExpeditionDiagnosticJson.render(checkpoint, state, participant)),
                 new FrontierV3DiagnosticDetailBudget.Section("knownCounterparties", "[" + known + "]"),
                 new FrontierV3DiagnosticDetailBudget.Section("orders", "[" + orders + "]"),

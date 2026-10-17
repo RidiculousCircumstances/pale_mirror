@@ -42,7 +42,12 @@ public final class ProductionStockDemand {
         long target = SettlementReservePlanning.enabled(state) ? SettlementReservePlanning.read(state, settlement).get(itemKind).quantity()
                 : StockTargetDemand.target(commodity, residents, minimum);
         if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().enabled()) {
-            var demand = GoodsParticipantView.read(state, participant).supplyPlan().orElseThrow().require(itemKind);
+            var plan = GoodsParticipantView.read(state, participant).supplyPlan().orElseThrow();
+            var demand = plan.require(itemKind);
+            if (plan.economy().isPresent()) {
+                target = plan.economy().orElseThrow().productionTargets().get(itemKind);
+                return new StockTargetDemand(target, stock, incoming, outgoing);
+            }
             // Existing export demand remains in outgoing. Replenishment advice alone
             // must not restart production for every one-item drop above the lower mark.
             if (demand.production() == 0 && demand.purchase() == 0) target = Math.min(target, Math.addExact(stock, incoming));

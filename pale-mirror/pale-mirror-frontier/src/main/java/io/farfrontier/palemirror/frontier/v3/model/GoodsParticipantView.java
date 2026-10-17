@@ -67,7 +67,7 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
             for (var container : containers) incoming = Math.addExact(incoming, InternalShipmentIncomingStock.quantity(
                     state.shipments(), participant.party().id(), container, commodity.itemKind()));
             int protectedMinimum = participant.policy() == GoodsPolicyKind.PUBLIC_SETTLEMENT
-                    ? PublicStockProtection.minimum(state, participant.party().id(), commodity.itemKind()) : 0;
+                    ? PublicStockProtection.initialMinimum(state, participant.party().id(), commodity.itemKind()) : 0;
             result.put(commodity.itemKind(), new Stock(owned, unclaimed, incoming, protectedMinimum));
         }
         int residents = (int) state.humanPopulation().residents().values().stream()
@@ -81,8 +81,10 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
                 : new SettlementFoodPurchases.Advice(Map.of(), Map.of());
         advice.protectedInputs().forEach((kind, minimum) -> {
             var stock = result.get(kind);
+            int local = plan.flatMap(value -> value.economy()).isPresent()
+                    ? Math.toIntExact(plan.orElseThrow().reserves().get(kind).protectedQuantity()) : stock.protectedMinimum();
             result.put(kind, new Stock(stock.ownedInStorage(), stock.unclaimedInStorage(), stock.expectedIncoming(),
-                    Math.max(minimum, stock.protectedMinimum())));
+                    Math.max(minimum, local)));
         });
         return new GoodsParticipantView(participant, residents, state.inventory().economics().availableToReserve(participant.party().id()), result, advice.limits(), plan);
     }

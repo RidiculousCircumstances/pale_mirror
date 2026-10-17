@@ -7,6 +7,27 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SettlementSourcingMarketTest {
+    @Test void activeProfileSharesEconomicPlanAcrossProductionFundingProtectionAndRecovery() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:economic-plan-boundaries"),
+                20260918065L, FrontierRulesets.marketQuarryGraybox()));
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        var restored = codec.decode(codec.encode(state));
+        assertEquals(state, restored);
+        for (var participant : state.companies().goodsTrade().participants().participants().values()) {
+            var view = GoodsParticipantView.read(state, participant);
+            var plan = view.supplyPlan().orElseThrow(); var economy = plan.economy().orElseThrow();
+            assertEquals(view, GoodsParticipantView.read(restored, restored.companies().goodsTrade().participants().participants().get(participant.party().id())));
+            long funds = 0;
+            for (var item : view.stocks().keySet()) {
+                funds += GoodsParticipantFunding.purchase(view, state.bootstrap().ruleset().goodsTrade(), item).raw();
+                assertEquals(view.stocks().get(item).protectedMinimum(), PublicStockProtection.minimum(state, participant.party().id(), item));
+                var demand = ProductionStockDemand.read(state, participant.party().id(), item);
+                assertEquals(Math.max(economy.productionTargets().get(item), plan.require(item).protectedInput()), demand.target());
+            }
+            assertTrue(funds <= view.availableMoney().raw(), "shared budgets must not spend a treasury twice");
+            assertEquals(plan.reserves().get(SettlementFoodPolicy.BREAD).reorderPoint(), SettlementFoodPolicy.reserveRequirement(state, participant.party().id()));
+        }
+    }
     @Test void firstAffordableQuoteCanRankWithoutAnExistingCaravanAndWithoutInventingIncomingStock() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:first-economic-quote"),
                 125L, FrontierRulesets.marketQuarryGraybox()));

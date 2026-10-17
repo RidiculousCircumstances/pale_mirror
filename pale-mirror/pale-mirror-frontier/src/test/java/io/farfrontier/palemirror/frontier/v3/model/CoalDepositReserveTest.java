@@ -14,7 +14,7 @@ class CoalDepositReserveTest {
     }
     @Test void longReserveIsFinitePhysicalOreNotFreeInventoryOrAnExpandedInitialJobPool() {
         var state = initial(); var rules = state.bootstrap().ruleset();
-        assertEquals("frontier-v3-quarry-graybox-r15", rules.id());
+        assertTrue(rules.goodsTrade().supplyPlanning().economics().isPresent());
         assertTrue(rules.initialSettlementStocks().stream().noneMatch(stock -> stock.itemKind().equals("minecraft:coal")));
         assertTrue(state.inventory().fungibleResources().lots().values().stream().noneMatch(lot -> lot.itemKind().equals("minecraft:coal")));
         assertTrue(rules.goodsTrade().supplyPlanning().reserves().isPresent());
@@ -40,7 +40,7 @@ class CoalDepositReserveTest {
     }
 
     @Test void depletedInitialFaceStillRequestsAndAdmitsOreFromDeclaredNeighbouringTerrain() {
-        var state = initial();
+        var state = withoutFinishedFood(initial());
         // Isolated stock fixture removes stone demand; only coal can justify resuming development.
         for (var home : state.bootstrap().settlements()) {
             var lot = new SubjectId("lot:full-stone-" + home.id().value().replace(':', '-'));
@@ -71,5 +71,16 @@ class CoalDepositReserveTest {
         assertTrue(after.extractionSites().deposits().get(prior.site().id()).site().layout().cells().stream()
                 .anyMatch(cell -> cell.id() > 64 && cell.definition().before().kind().equals("minecraft:coal_ore")));
         assertEquals(state.inventory(), after.inventory(), "admitting a front never credits coal");
+    }
+    static FrontierWorldState withoutFinishedFood(FrontierWorldState state) {
+        var ledger = state.inventory().fungibleResources();
+        for (var account : List.copyOf(ledger.accounts().values())) {
+            var bread = new TreeMap<SubjectId, Integer>();
+            for (var lot : account.lotQuantities().entrySet())
+                if (ledger.lots().get(lot.getKey()).itemKind().equals("minecraft:bread") && lot.getValue() > 1)
+                    bread.put(lot.getKey(), lot.getValue() - 1);
+            if (!bread.isEmpty()) ledger = ledger.destroy(account.id(), bread, Map.of());
+        }
+        return state.withInventory(state.inventory().withFungibleResources(ledger));
     }
 }

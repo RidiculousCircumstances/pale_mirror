@@ -10,9 +10,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class GoodsMarketPolicyTest {
     @Test void aSmallBudgetKeepsInterestInCheaperPartialOffersWithoutInventingFunds() {
-        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:small-buy-budget"),
-                20260918065L, FrontierRulesets.marketQuarryGraybox()));
-        var participant = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:9"));
+        // Explicit unmet production input, not an assumption that a stocked new
+        // settlement must buy something under every economic policy.
+        var state = BakeryPartialBatchTest.fixture(63, FrontierRulesets.marketQuarryGraybox());
+        var participant = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
         var view = GoodsParticipantView.read(state, participant);
         var small = new GoodsParticipantView(participant, view.residents(), new FixedScalar(1), view.stocks(), view.purchaseLimits(), view.supplyPlan());
         var intents = GoodsParticipantPolicies.require(participant).decide(small, state.bootstrap().ruleset().goodsTrade());

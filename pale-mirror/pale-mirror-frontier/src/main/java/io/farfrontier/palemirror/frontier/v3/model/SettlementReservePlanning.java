@@ -10,6 +10,10 @@ public final class SettlementReservePlanning {
     private static final Map<ReserveSupplyPort.Key, ReserveSupplyPort> PORTS = register(List.of(
             new NutritionReserveSupply(), new BakeryReserveSupply(), new FieldReserveSupply(), new ExtractionReserveSupply(), new LogisticsReserveSupply()));
     private static final ImmutableInputView<Map<SubjectId, Map<String, Target>>> CACHE = new ImmutableInputView<>();
+    private static final ImmutableInputView<Map<SubjectId, Basis>> BASIS = new ImmutableInputView<>();
+    public record Basis(Map<String, Need> needs, List<Flow> flows, Map<String, Timing> timing) {
+        public Basis { needs = Map.copyOf(needs); flows = List.copyOf(flows); timing = Map.copyOf(timing); }
+    }
     private SettlementReservePlanning() { }
     public static Map<ReserveSupplyPort.Key, ReserveSupplyPort> register(List<ReserveSupplyPort> ports) {
         var result = new EnumMap<ReserveSupplyPort.Key, ReserveSupplyPort>(ReserveSupplyPort.Key.class);
@@ -25,6 +29,14 @@ public final class SettlementReservePlanning {
     private static Map<String, Target> project(FrontierWorldState state, SubjectId home) {
         var rules = state.bootstrap().ruleset().goodsTrade().supplyPlanning();
         var policy = rules.reserves().orElseThrow(() -> new IllegalArgumentException("dynamic reserves not selected"));
+        var basis = basis(state, home);
+        return new SupplyReservePlanner().plan(basis.needs(), basis.flows(), basis.timing(), policy);
+    }
+    public static synchronized Basis basis(FrontierWorldState state, SubjectId home) {
+        return BASIS.get(List.of(state), HashMap::new).computeIfAbsent(home, ignored -> collect(state, home));
+    }
+    private static Basis collect(FrontierWorldState state, SubjectId home) {
+        var rules = state.bootstrap().ruleset().goodsTrade().supplyPlanning();
         var needs = new TreeMap<String, Need>(); var timing = new TreeMap<String, Timing>(); var flows = new ArrayList<Flow>();
         rules.commodities().forEach((item, rule) -> {
             needs.put(item, new Need(Rate.ZERO, 0)); timing.put(item, new Timing(rule.leadTicks(), TimingBasis.INITIAL_ESTIMATE));
@@ -41,6 +53,6 @@ public final class SettlementReservePlanning {
                     (a, b) -> a.leadTicks() <= b.leadTicks() ? a : b));
         }
         timing.putAll(estimates);
-        return new SupplyReservePlanner().plan(needs, flows, timing, policy);
+        return new Basis(needs, flows, timing);
     }
 }

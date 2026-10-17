@@ -21,6 +21,10 @@ public final class GoodsParticipantPolicies {
     private record StockTargetPolicy(GoodsPolicyKind kind) implements GoodsParticipantPolicy {
         @Override public String explain(GoodsParticipantView view, GoodsTradeRules rules) {
             var result = new StringBuilder("moneyRaw=" + view.availableMoney().raw());
+            view.supplyPlan().flatMap(plan -> plan.economy()).ifPresent(plan -> result.append("; economyHorizon=")
+                    .append(plan.horizonTicks()).append("; liquidityRaw=").append(plan.retainedLiquidity())
+                    .append("; unfundedRaw=").append(plan.unfundedRequirements()).append("; constraints=")
+                    .append(plan.constraints().stream().sorted().toList()));
             for (var commodity : rules.policies().get(kind)) {
                 var stock = view.stocks().get(commodity.itemKind());
                 int target = view.target(commodity);

@@ -11,14 +11,18 @@ public final class BuyerCollectionFixture {
         var seller = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
         var buyer = state.companies().goodsTrade().participants().participants().get(seller.known().getFirst().party().id());
         var ledger = state.inventory().fungibleResources();
-        var lot = new SubjectId("lot:collection-provisions"); var staging = new SubjectId("custody:collection-provisions");
+        var lot = new SubjectId("lot:collection-provisions");
         // Empty accounts retire with their last lot; an empty physical chest remains a valid destination.
-        var destination = FungibleResourceCustodySupport.accountAtContainer(state, FrontierWorldState.depotId(buyer.settlementId()))
-                .map(CustodyAccount::id).orElse(staging);
-        ledger = ledger.issue(new ResourceLot(lot, buyer.party().id(), "minecraft:bread", 384, "fixture:collection-provisions", List.of()),
-                new CustodyAccount(staging, new ResourceCustody.Container(FrontierWorldState.depotId(buyer.settlementId())), Map.of(lot, 384), Map.of()));
-        if (!destination.equals(staging)) ledger = ledger.transfer(staging, destination, Map.of(lot, 384), Map.of());
-        // Source stock must exceed the actual protected stone reserve; do not wait for hunger to create a different sale.
+        var existing = FungibleResourceCustodySupport.accountAtContainer(state, FrontierWorldState.depotId(buyer.settlementId()));
+        var staging = existing.isPresent() ? new SubjectId("custody:collection-provisions")
+                : ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(buyer.settlementId()));
+        var destination = existing.map(CustodyAccount::id).orElse(staging);
+        // Enough to provision the journey, not four days of finished food that
+        // legitimately eliminate every input purchase under net requirements.
+        ledger = ledger.issue(new ResourceLot(lot, buyer.party().id(), "minecraft:bread", 32, "fixture:collection-provisions", List.of()),
+                new CustodyAccount(staging, new ResourceCustody.Container(FrontierWorldState.depotId(buyer.settlementId())), Map.of(lot, 32), Map.of()));
+        if (!destination.equals(staging)) ledger = ledger.transfer(staging, destination, Map.of(lot, 32), Map.of());
+        // Finite additional sale stock; an unused commodity does not create buyer demand.
         var export = new SubjectId("lot:collection-export-stone");
         var exportStage = new SubjectId("custody:collection-export-stone");
         var source = FungibleResourceCustodySupport.accountAtContainer(state, FrontierWorldState.depotId(seller.settlementId())).orElseThrow();

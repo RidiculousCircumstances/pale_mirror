@@ -13,6 +13,7 @@ class DistributedExtractionGeologyTest {
     @Test void secondaryCoalDepositCanOpenFromExistingAccessWithoutArtificialStoneDemand() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:secondary-coal-access"), 20260918065L,
                 FrontierRulesets.marketQuarryGraybox()));
+        state = CoalDepositReserveTest.withoutFinishedFood(state);
         var secondary = state.extractionSites().deposits().values().stream().filter(deposit -> !deposit.site().mineralDeposits().isEmpty()
                 && !deposit.site().layout().outputKinds().contains("minecraft:coal")).toList();
         assertEquals(3, secondary.size());

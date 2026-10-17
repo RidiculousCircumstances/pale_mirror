@@ -22,6 +22,9 @@ final class TradeStockSupply implements StockSupplyPort {
         // A bounded sales opportunity is production demand, not a sale/claim/payment.
         // Without it, producing exactly the local target can never create the first surplus quote.
         var rules = state.bootstrap().ruleset().goodsTrade();
+        // Economic planning owns conditional export production. Only actual
+        // contracts belong in this commitment projection; never count both.
+        if (rules.supplyPlanning().economics().isPresent()) return List.copyOf(result);
         var participants = state.companies().goodsTrade().participants().participants();
         var intentions = new HashMap<io.farfrontier.palemirror.frontier.v3.api.SubjectId, List<GoodsParticipantPolicy.Intent>>();
         for (var seller : participants.values()) for (var commodity : rules.policies().get(seller.policy())) {

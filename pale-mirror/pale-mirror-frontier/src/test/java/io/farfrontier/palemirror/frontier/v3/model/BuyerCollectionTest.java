@@ -115,7 +115,10 @@ class BuyerCollectionTest {
             assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
             if (boundary % 64 == 0) engine.compact(engine.checkpoint().revision());
         }
-        assertNotNull(admitted);
+        var last = engine.canonicalState().state();
+        assertNotNull(admitted, () -> "no collection admitted: buyer=" + GoodsParticipantView.read(last,
+                last.companies().goodsTrade().participants().participants().get(buyer.party().id()))
+                + "; seller=" + GoodsParticipantView.read(last, last.companies().goodsTrade().participants().participants().get(seller.party().id())));
         assertTrue(reachedSource, "never reached source: " + engine.canonicalState().state().shipments());
         assertTrue(paid, "never purchased: " + engine.canonicalState().state().shipments()); assertTrue(recovered);
         assertTrue(returned, "collection must unload and release its crew; state=" + engine.canonicalState().state().shipments());
