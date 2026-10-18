@@ -443,6 +443,12 @@ must never mutate, repair, advance or reclassify canonical state.
 
 ## Verification and commits
 
+Standing user instruction (2026-10-18): after completing a coherent implementation,
+commit the reviewed task changes and deploy the verified build to the disposable
+test server. Do not stop at source-only delivery unless the user requests it.
+Follow the execution protocol's delivery rule; report an actual verification or
+deployment blocker explicitly. This does not authorize an automatic push.
+
 Choose affected checks from the actual change and applicable acceptance criteria.
 The release-verification reference provides available gates and a module matrix;
 consult it when needed, not as a mandatory prerequisite to source work or a

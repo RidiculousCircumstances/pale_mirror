@@ -287,10 +287,22 @@ scope and owned-process state. Do not claim completion because work is expensive
 
 ## Safety, resources and handoff
 
+Standing delivery authority (user, 2026-10-18): complete implementation with a
+reviewed scoped commit and deployment of the verified build to the disposable
+test server, unless the current request explicitly excludes either operation.
+Use a clean detached source ref and the existing server-operation safeguards;
+verify the actual installed artifact and fresh runtime. This applies to completed
+increments, not every intermediate edit. Preserve unrelated WIP and commit each
+repository separately. Push remains separately authorized. An unresolved safety
+or verification blocker must be reported, not silently bypassed or described as
+successful delivery. Diagnostic deployments retain their explicit evidence limits
+and must not be presented as full product acceptance.
+
 Preserve dirty WIP, histories and unrelated services. Repository access is not
 permission to publish, deploy, reset or delete unrelated data. Confirm real
 operational targets and existing grants; follow server-ops for authorized work.
-No destructive cleanup, world reset, commit or push is implied by this protocol.
+No unrelated destructive cleanup or push is implied by this protocol. Test-world
+reset follows the separate standing disposable-world authority in AGENTS.md.
 
 Choose isolated run directories to avoid collisions and preserve relevant
 evidence; their count is not a workflow gate. Retained raw proof storage is
