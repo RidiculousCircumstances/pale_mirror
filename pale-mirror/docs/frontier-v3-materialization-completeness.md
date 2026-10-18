@@ -2,6 +2,14 @@
 
 Status: normative completion gate and active gap register.
 
+R192 dynamic-farming amendment (implementation, not acceptance):
+`frontier-v3-dynamic-farming.md` owns the current feature cut. Verify visible
+separate tilling, sowing and harvest on both initial and newly admitted land,
+without irrigation. A reduced sowing plan must leave existing plants intact;
+COLD-to-HOT projection displays current plants/bare ground rather than replaying
+historical work. Multiple fields share real workers and conserved harvest custody.
+Current acceptance evidence and unresolved boundaries belong in CONTINUITY.
+
 This document closes a recurring ambiguity in Frontier v3: a canonical process
 can be deterministic, conserve exact actors/items and have a correct physical
 postcondition while still not exist as a believable Minecraft process. A wheat

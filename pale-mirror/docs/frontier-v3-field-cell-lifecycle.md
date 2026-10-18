@@ -6,6 +6,15 @@ does not authorize a live-world reset or an implicit persistence migration.
 Current assignment remains main alone. Main owns source review, focused checks
 and client verification; human product judgement may be requested separately.
 
+R192 amendment, 2026-10-19: the accepted dynamic-farming plan supersedes older
+combined harvest/replant and till/plant descriptions below. TILL, SOW and HARVEST
+are distinct timed operations; harvesting leaves bare farmland. Persisted sowing
+intent governs only future plants, not the lifetime of standing crops. Runtime
+site declarations and exact extension history own geometry beyond bootstrap.
+No irrigation is required or generated for managed fields. Historical evidence
+below remains evidence only for the revision and boundary originally recorded;
+R192 implementation/acceptance status is maintained in CONTINUITY.
+
 ## Identity and geometry
 
 - A field is a stable domain object, not a square template, one output stack,
