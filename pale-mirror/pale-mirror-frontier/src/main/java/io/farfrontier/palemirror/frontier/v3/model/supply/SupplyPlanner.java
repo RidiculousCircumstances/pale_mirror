@@ -43,11 +43,24 @@ public final class SupplyPlanner {
                     Math.multiplyExact(target, policy.reorderPermille()) / 1000));
         }
     }
+    /** Cumulative recipes available after a bounded biological/production phase. */
+    public record OutputRelease(long afterTicks, int recipes) {
+        public OutputRelease {
+            if (afterTicks < 0 || recipes < 1) throw new IllegalArgumentException("invalid production release");
+        }
+    }
     /** Capacity owner supplies feasible recipes and conservative timing, not an executor. */
     public record Process(String id, String product, int outputPerBatch, Map<String, Integer> inputs,
                           long heatPerBatch, Map<String, Long> fuels, long availableHeat,
                           long firstOutputDelayTicks, long operationTicks, int maximumBatches, long labourTicksPerOperation,
-                          Map<String, Long> labourCapacity, int recipesPerOperation) {
+                          Map<String, Long> labourCapacity, int recipesPerOperation, List<OutputRelease> releases) {
+        public Process(String id, String product, int outputPerBatch, Map<String, Integer> inputs,
+                long heatPerBatch, Map<String, Long> fuels, long availableHeat, long firstOutputDelayTicks,
+                long operationTicks, int maximumBatches, long labourTicksPerOperation,
+                Map<String, Long> labourCapacity, int recipesPerOperation) {
+            this(id, product, outputPerBatch, inputs, heatPerBatch, fuels, availableHeat, firstOutputDelayTicks,
+                    operationTicks, maximumBatches, labourTicksPerOperation, labourCapacity, recipesPerOperation, List.of());
+        }
         public Process(String id, String product, int outputPerBatch, Map<String, Integer> inputs,
                 long heatPerBatch, Map<String, Long> fuels, long availableHeat, long firstOutputDelayTicks,
                 long batchTicks, int maximumBatches, long labourTicksPerBatch, Map<String, Long> labourCapacity) {
@@ -70,6 +83,7 @@ public final class SupplyPlanner {
             Objects.requireNonNull(id); Objects.requireNonNull(product);
             inputs = Map.copyOf(inputs); fuels = Map.copyOf(fuels);
             labourCapacity = Map.copyOf(labourCapacity);
+            releases = List.copyOf(releases);
             if (id.isBlank() || product.isBlank() || outputPerBatch < 1 || recipesPerOperation < 1
                     || inputs.entrySet().stream().anyMatch(e -> e.getKey().isBlank() || e.getValue() < 1)
                     || heatPerBatch < 0 || availableHeat < 0 || firstOutputDelayTicks < 0
@@ -79,6 +93,14 @@ public final class SupplyPlanner {
                     || fuels.entrySet().stream().anyMatch(e -> e.getKey().isBlank() || e.getValue() < 1)
                     || heatPerBatch > 0 && fuels.isEmpty())
                 throw new IllegalArgumentException("invalid supplied production capacity");
+            if (releases.size() > 4096 || !releases.isEmpty()
+                    && (releases.getFirst().afterTicks() != firstOutputDelayTicks
+                        || releases.getLast().recipes() != maximumBatches))
+                throw new IllegalArgumentException("inconsistent dated production capacity");
+            for (int i = 1; i < releases.size(); i++)
+                if (releases.get(i).afterTicks() <= releases.get(i - 1).afterTicks()
+                        || releases.get(i).recipes() <= releases.get(i - 1).recipes())
+                    throw new IllegalArgumentException("production releases must increase");
         }
         /** Inputs/output are per recipe; occupied processing/labour are per executable operation. */
         public long labourTicks(long recipes) {
@@ -92,7 +114,16 @@ public final class SupplyPlanner {
         }
         public long completionTicks(long recipes) {
             if (recipes < 1) throw new IllegalArgumentException("empty processing forecast");
+            if (!releases.isEmpty()) return releases.stream().filter(release -> release.recipes() >= recipes)
+                    .findFirst().orElseThrow(() -> new IllegalArgumentException("production exceeds dated capacity")).afterTicks();
             return Math.addExact(firstOutputDelayTicks, Math.multiplyExact(Math.ceilDiv(recipes, recipesPerOperation) - 1, operationTicks));
+        }
+        public long recipesAvailableBy(long afterTicks) {
+            if (afterTicks < firstOutputDelayTicks) return 0;
+            if (!releases.isEmpty()) return releases.stream().filter(release -> release.afterTicks() <= afterTicks)
+                    .mapToLong(OutputRelease::recipes).max().orElse(0);
+            return Math.min(maximumBatches, Math.multiplyExact(recipesPerOperation,
+                    Math.addExact(1, (afterTicks - firstOutputDelayTicks) / operationTicks)));
         }
     }
     public record Demand(long purchase, long production, long recoveryProduction, long protectedInput, long deadlineTicks,

@@ -8,7 +8,12 @@ final class PedestrianRegionCache {
     private static final int MAX_BUILDERS = 64;
     private final Map<PedestrianRouteGeometry, Bucket<PedestrianRegion.Tile>> views = new WeakHashMap<>();
     private record RegionalKey(PedestrianRegion.Tile tile, Object revision, io.farfrontier.palemirror.frontier.v3.model.WorldBounds bounds) { }
-    private final Map<Object, Bucket<RegionalKey>> scoped = new WeakHashMap<>();
+    // These are reconstructible value keys (terrain epoch + body profile), not
+    // the lifetime of a geometry object. A weak key can disappear while an equal
+    // current view is still in use, discarding all reusable regional graphs.
+    // Keep the small declared scope set strongly and evict by actual use; graph
+    // contents remain bounded below and revision/bounds still fence every hit.
+    private final Map<Object, Bucket<RegionalKey>> scoped = new LinkedHashMap<>(16, 0.75f, true);
     private static final class Entry {
         private final java.util.concurrent.locks.ReentrantLock builderLock = new java.util.concurrent.locks.ReentrantLock();
         private PedestrianRegionBuild build;

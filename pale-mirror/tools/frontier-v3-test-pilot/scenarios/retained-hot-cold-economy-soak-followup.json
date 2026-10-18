@@ -1,0 +1,227 @@
+{
+  "schema": 1,
+  "id": "retained_hot_cold_economy_soak_followup",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 26720,
+    "profile": "world",
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/tick rate 20"
+    }
+  ],
+  "actions": [
+    {
+      "type": "fast_forward",
+      "ticks": 6000,
+      "timeoutMs": 90000
+    },
+    {
+      "type": "fast_forward",
+      "ticks": 6000,
+      "timeoutMs": 90000
+    },
+    {
+      "type": "fast_forward",
+      "ticks": 6000,
+      "timeoutMs": 90000
+    },
+    {
+      "type": "fast_forward",
+      "ticks": 6000,
+      "timeoutMs": 90000
+    },
+    {
+      "type": "fast_forward",
+      "ticks": 6000,
+      "timeoutMs": 90000
+    },
+    {
+      "type": "fast_forward",
+      "ticks": 6000,
+      "timeoutMs": 90000
+    },
+    {
+      "type": "fast_forward",
+      "ticks": 6000,
+      "timeoutMs": 90000
+    },
+    {
+      "type": "fast_forward",
+      "ticks": 6000,
+      "timeoutMs": 90000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:7-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -10,
+        "y": -1,
+        "z": -10
+      },
+      "settleMs": 3000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:7-wheat-field",
+          "field": "firstCrop"
+        }
+      }
+    },
+    {
+      "type": "wait",
+      "ms": 20000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:7"
+    },
+    {
+      "type": "inspect",
+      "view": "site",
+      "id": "site:7-wheat-field"
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "settlement:7"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:12-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -10,
+        "y": -1,
+        "z": -10
+      },
+      "settleMs": 3000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:12-wheat-field",
+          "field": "firstCrop"
+        }
+      }
+    },
+    {
+      "type": "wait",
+      "ms": 20000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement",
+      "id": "settlement:12"
+    },
+    {
+      "type": "inspect",
+      "view": "site",
+      "id": "site:12-wheat-field"
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "settlement:12"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 15,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "diagnosticVerdict": "green",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    },
+    {
+      "after": 23,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "diagnosticVerdict": "green",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    },
+    {
+      "after": 24,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "diagnosticVerdict": "green",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 11,
+      "name": "settlement-7-soak-reentry-3",
+      "presentation": "player"
+    },
+    {
+      "after": 19,
+      "name": "settlement-12-soak-reentry-4",
+      "presentation": "player"
+    }
+  ]
+}

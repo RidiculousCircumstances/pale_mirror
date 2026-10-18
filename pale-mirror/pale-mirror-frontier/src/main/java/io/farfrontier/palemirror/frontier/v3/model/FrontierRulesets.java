@@ -48,7 +48,10 @@ public final class FrontierRulesets {
     private static final FrontierRuleset DYNAMIC_RESERVE_QUARRY_GRAYBOX = dynamicReserves(PREVIOUS_DEPOSIT_QUARRY_GRAYBOX);
     private static final FrontierRuleset DISTRIBUTED_QUARRY_GRAYBOX = distributedDeposits(DYNAMIC_RESERVE_QUARRY_GRAYBOX);
     private static final FrontierRuleset TERRITORIAL_QUARRY_GRAYBOX = territorialAgriculture(DISTRIBUTED_QUARRY_GRAYBOX);
-    private static final FrontierRuleset MARKET_QUARRY_GRAYBOX = economicPlanning(TERRITORIAL_QUARRY_GRAYBOX);
+    private static final FrontierRuleset PREVIOUS_ECONOMIC_QUARRY_GRAYBOX = economicPlanning(TERRITORIAL_QUARRY_GRAYBOX);
+    private static final FrontierRuleset PREVIOUS_FUEL_TRADE_QUARRY_GRAYBOX = balancedFuelTrade(PREVIOUS_ECONOMIC_QUARRY_GRAYBOX);
+    private static final FrontierRuleset PREVIOUS_PRODUCTIVE_QUARRY_GRAYBOX = productiveMiningTerritories(PREVIOUS_FUEL_TRADE_QUARRY_GRAYBOX);
+    private static final FrontierRuleset MARKET_QUARRY_GRAYBOX = coherentEconomy(PREVIOUS_PRODUCTIVE_QUARRY_GRAYBOX);
     /** Existing worlds retain their exact selector and timing; they are never silently retuned. */
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R6 = ruleset("frontier-v3-production-r6", 8, 1L, 20L, 1L);
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R4 = ruleset("frontier-v3-production-r4", 6, 1L, 20L, 1L);
@@ -63,6 +66,9 @@ public final class FrontierRulesets {
     private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L, 200L);
     private static final Map<String, FrontierRuleset> INSTALLED = Map.ofEntries(
             Map.entry(MARKET_QUARRY_GRAYBOX.id(), MARKET_QUARRY_GRAYBOX),
+            Map.entry(PREVIOUS_PRODUCTIVE_QUARRY_GRAYBOX.id(), PREVIOUS_PRODUCTIVE_QUARRY_GRAYBOX),
+            Map.entry(PREVIOUS_FUEL_TRADE_QUARRY_GRAYBOX.id(), PREVIOUS_FUEL_TRADE_QUARRY_GRAYBOX),
+            Map.entry(PREVIOUS_ECONOMIC_QUARRY_GRAYBOX.id(), PREVIOUS_ECONOMIC_QUARRY_GRAYBOX),
             Map.entry(TERRITORIAL_QUARRY_GRAYBOX.id(), TERRITORIAL_QUARRY_GRAYBOX),
             Map.entry(DISTRIBUTED_QUARRY_GRAYBOX.id(), DISTRIBUTED_QUARRY_GRAYBOX),
             Map.entry(DYNAMIC_RESERVE_QUARRY_GRAYBOX.id(), DYNAMIC_RESERVE_QUARRY_GRAYBOX),
@@ -95,6 +101,45 @@ public final class FrontierRulesets {
     public static FrontierRuleset fuelledQuarryGraybox() { return FUELLED_QUARRY_GRAYBOX; }
     public static FrontierRuleset supplyQuarryGraybox() { return SUPPLY_QUARRY_GRAYBOX; }
     public static FrontierRuleset marketQuarryGraybox() { return MARKET_QUARRY_GRAYBOX; }
+
+    private static FrontierRuleset coherentEconomy(FrontierRuleset base) {
+        var prior = base.expedition();
+        var expedition = new io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionRules(prior.personalStackSlots(),
+                prior.personalFoodItems(), prior.packAnimalStackSlots(), prior.ticksPerRouteEdge(), prior.destinationWorkTicks(),
+                prior.durationMarginPermille(), io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO,
+                prior.formationSpacing(), prior.maxFormationStretch());
+        return new FrontierRuleset("frontier-v3-quarry-graybox-r20", base.schemaVersion(), base.cadence(), base.spatial(), base.rates(),
+                base.facilityCapacity(), base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
+                base.workCatalog(), base.goodsTrade().withPricing(io.farfrontier.palemirror.frontier.v3.model.market.MarketPricingRules.adaptive()),
+                base.initialSettlementStocks(), base.labour(), expedition, base.extraction(), base.execution(), base.production(), base.fields());
+    }
+
+    /** Mining towns have small fields: their export opportunity must be in the
+     * finite terrain, not an initial stock grant or a guaranteed buyer. */
+    private static FrontierRuleset productiveMiningTerritories(FrontierRuleset base) {
+        java.util.function.UnaryOperator<io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionPocketProfile> everyProducer =
+                pocket -> new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionPocketProfile(1,
+                        pocket.firstDepth(), pocket.depthCells(), pocket.firstRow(), pocket.rowCells(), pocket.material());
+        var extraction = base.extraction().withPocket(everyProducer.apply(base.extraction().pocket().orElseThrow()))
+                .withAdditionalPockets(base.extraction().additionalPockets().stream().map(everyProducer).toList());
+        return new FrontierRuleset("frontier-v3-quarry-graybox-r19", base.schemaVersion(), base.cadence(), base.spatial(), base.rates(),
+                base.facilityCapacity(), base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
+                base.workCatalog(), base.goodsTrade(), base.initialSettlementStocks(), base.labour(), base.expedition(), extraction,
+                base.execution(), base.production(), base.fields());
+    }
+
+    /** A price seed, not a guaranteed sale or subsidy. One coal heats twenty
+     * bread (sixty wheat); the old two-unit seed made fuel exports negligible
+     * against a mining settlement's recurring grain imports. Recipes and cash
+     * stay unchanged, and the existing market still adapts both quotes. */
+    private static FrontierRuleset balancedFuelTrade(FrontierRuleset base) {
+        var trade = base.goodsTrade().withPriceSeeds(GoodsPolicyKind.PUBLIC_SETTLEMENT,
+                "minecraft:coal", FixedScalar.whole(20), FixedScalar.whole(30));
+        return new FrontierRuleset("frontier-v3-quarry-graybox-r18", base.schemaVersion(), base.cadence(), base.spatial(), base.rates(),
+                base.facilityCapacity(), base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
+                base.workCatalog(), trade, base.initialSettlementStocks(), base.labour(), base.expedition(), base.extraction(),
+                base.execution(), base.production(), base.fields());
+    }
 
     private static FrontierRuleset economicPlanning(FrontierRuleset base) {
         var prior = base.goodsTrade().supplyPlanning();

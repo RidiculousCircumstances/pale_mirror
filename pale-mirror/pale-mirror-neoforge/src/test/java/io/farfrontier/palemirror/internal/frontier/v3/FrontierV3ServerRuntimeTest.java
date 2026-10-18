@@ -91,6 +91,31 @@ class FrontierV3ServerRuntimeTest {
     private static final SubjectId SUBJECT = new SubjectId("settlement:runtime");
 
     @Test
+    void skippedPersistenceTurnsRetainHostTimeWithoutAddingItToOperatorAdvances(@TempDir Path directory) {
+        var definition = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:host-time-debt"), 91L);
+        var ordinary = FrontierV3ServerRuntime.start(definition,
+                new FrontierFileStore(directory.resolve("ordinary"), FrontierWorldRuntimeDefinition.payloadCodecs()), 37);
+        var delayed = FrontierV3ServerRuntime.start(definition,
+                new FrontierFileStore(directory.resolve("delayed"), FrontierWorldRuntimeDefinition.payloadCodecs()), 37);
+        var budget = new WorkBudget(64, 512);
+        for (int i = 0; i < 120; i++) {
+            ordinary.tick(budget).orElseThrow();
+            delayed.observeOrdinaryHostTick();
+        }
+        assertEquals(120, delayed.pendingOrdinaryTicks());
+        while (delayed.pendingOrdinaryTicks() > 0) delayed.advanceOrdinaryTime(budget).orElseThrow();
+        assertEquals(ordinary.checkpointImage().orElseThrow(), delayed.checkpointImage().orElseThrow());
+        delayed.observeOrdinaryHostTick();
+        delayed.advance(3, budget).orElseThrow();
+        assertEquals(123, delayed.canonicalState().orElseThrow().instant().ticks());
+        assertEquals(1, delayed.pendingOrdinaryTicks(), "operator time neither consumes nor duplicates ordinary debt");
+        delayed.advanceOrdinaryTime(budget).orElseThrow();
+        assertEquals(124, delayed.canonicalState().orElseThrow().instant().ticks());
+        assertTrue(delayed.advanceOrdinaryTime(budget).isEmpty());
+        ordinary.shutdown(); delayed.shutdown();
+    }
+
+    @Test
     void boundedColdIntervalsMatchOrdinaryTicksAndRecoverTheSameWorld(@TempDir Path directory) {
         WorldId world = new WorldId("frontier:cold-interval-equivalence");
         var definition = FrontierWorldRuntimeDefinition.configuration(world, 91L);

@@ -136,6 +136,17 @@ public record EconomicLedger(Map<SubjectId, EconomicAccount> accounts, Map<Subje
         return new EconomicLedger(accounts, reservations, next);
     }
 
+    /** Change only uncommitted funds; existing purchase reservations remain intact. */
+    public EconomicLedger resizeBudget(FinancialBudget previous, FixedScalar remaining) {
+        Objects.requireNonNull(previous); Objects.requireNonNull(remaining);
+        if (!previous.equals(budgets.get(previous.id())) || remaining.raw() < 0
+                || require(previous.payerId()).status() != EconomicAccountStatus.ACTIVE
+                || remaining.compareTo(previous.remaining().plus(availableToReserve(previous.payerId()))) > 0)
+            throw new IllegalArgumentException("budget resize has stale authority or exceeds available treasury");
+        var next = new LinkedHashMap<>(budgets); next.put(previous.id(), previous.withRemaining(remaining));
+        return new EconomicLedger(accounts, reservations, next);
+    }
+
     /** Move a budget slice into an exact purchase hold, without changing balances or total held funds. */
     public EconomicLedger reserveFromBudget(SubjectId budgetId, FinancialReservation purchase) {
         var budget = budgets.get(Objects.requireNonNull(budgetId)); Objects.requireNonNull(purchase);

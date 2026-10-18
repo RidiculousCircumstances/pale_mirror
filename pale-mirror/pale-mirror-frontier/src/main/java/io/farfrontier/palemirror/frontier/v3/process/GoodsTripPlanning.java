@@ -35,6 +35,12 @@ final class GoodsTripPlanning {
             if (other == null || !other.party().equals(peer.party()) || !other.settlementId().equals(peer.settlementId())) continue;
             var reviewedPairs = new EnumMap<GoodsTradeFulfillment.Mode, Integer>(GoodsTradeFulfillment.Mode.class);
             for (var endpoints : GoodsOrderMatching.endpointPairs(initial, other, buyer, now)) {
+            // An optimistic manifest is only a rejection preflight. If even all
+            // compatible quoted goods must wait, no smaller affordable allocation
+            // can depart. Actual stock/cash/capacity still use exact draft admission.
+            if (!mayDispatchQuotedLoad(initial, other, buyer, endpoints, now)) {
+                decision = "ACCUMULATING_PREFERRED_LOAD"; continue;
+            }
             for (var mode : GoodsTradeFulfillment.Mode.values()) {
                 var seller = other;
                 var state = initial; var reservations = new ArrayList<ProposedEvent>(); var parcels = new ArrayList<GoodsTripAssembly.Parcel>();
@@ -166,6 +172,24 @@ final class GoodsTripPlanning {
             long wait = Math.max(0, now - Math.max(0, order.expiresAtTick() - rules.orderLifetime()));
             age.merge(contract.itemKind(), wait, Math::max);
         }
+        return dispatchCause(rules, view, quantities, age);
+    }
+    static boolean mayDispatchQuotedLoad(FrontierWorldState state, GoodsParticipant seller, GoodsParticipant buyer,
+            GoodsOrderMatching.Endpoints endpoints, long now) {
+        var rules = state.bootstrap().ruleset().goodsTrade();
+        var quantities = new TreeMap<String, Integer>(); var age = new HashMap<String, Long>();
+        for (var pair : GoodsOrderMatching.quotes(state, seller, buyer, now)) {
+            if (!pair.sell().containerId().equals(endpoints.source()) || !pair.buy().containerId().equals(endpoints.receiver())
+                    || pair.sell().unitPriceLimit().compareTo(pair.buy().unitPriceLimit()) > 0) continue;
+            String item = pair.buy().itemKind();
+            quantities.merge(item, Math.min(pair.sell().availableQuantity(), pair.buy().availableQuantity()), Math::addExact);
+            age.merge(item, Math.max(0, now - Math.max(0, pair.buy().expiresAtTick() - rules.orderLifetime())), Math::max);
+        }
+        return !quantities.isEmpty() && dispatchCause(rules, GoodsParticipantView.read(state, buyer), quantities, age)
+                != TripDispatchPolicy.Cause.ACCUMULATING;
+    }
+    private static TripDispatchPolicy.Cause dispatchCause(GoodsTradeRules rules, GoodsParticipantView view,
+            Map<String, Integer> quantities, Map<String, Long> age) {
         return TripDispatchPolicy.assess(quantities.entrySet().stream().map(e -> new TripDispatchPolicy.Goods(e.getValue(), age.get(e.getKey()),
                 rules.supplyPlanning().require(e.getKey()), view.supplyPlan().map(p -> p.require(e.getKey()))
                     .orElseGet(() -> new SupplyPlanner.Demand(0, 0, 0, Long.MAX_VALUE, Set.of(), Optional.empty())))).toList());

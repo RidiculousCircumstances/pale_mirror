@@ -110,6 +110,9 @@ class FrontierV3ResidentLifeDiagnosticTest {
         assertTrue(json.get("mealActionDueAt").isJsonNull());
         assertTrue(json.get("mealTravelArrivalAt").isJsonNull());
         assertFalse(json.get("mealActionHeld").getAsBoolean());
+        assertFalse(json.get("physicalBodyCustody").getAsBoolean());
+        assertEquals("NONE", json.get("ambientStatus").getAsString());
+        assertEquals(0, json.get("mealOverdueTicks").getAsLong());
         assertEquals(configuration.initialState(), state);
     }
 

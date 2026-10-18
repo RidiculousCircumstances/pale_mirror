@@ -26,8 +26,7 @@ public final class GoodsParticipantFunding {
     public static boolean fundsRestart(GoodsParticipantView view, GoodsTradeRules rules, String item) {
         var economy = view.supplyPlan().flatMap(plan -> plan.economy());
         if (economy.isPresent()) {
-            var restart = needs(view, rules).stream().filter(need -> need.restartQuantity() > 0).toList();
-            return !restart.isEmpty() && ProcurementBudget.fundsRestart(view.availableMoney(), needs(view, rules), item);
+            return economy.orElseThrow().fundedRestarts().contains(item);
         }
         return ProcurementBudget.fundsRestart(view.availableMoney(), needs(view, rules), item);
     }
@@ -47,7 +46,8 @@ public final class GoodsParticipantFunding {
             long restart = Math.min(demand.purchase(), Math.max(0,
                     demand.protectedInput() - stock.unclaimedInStorage() - (long) stock.expectedIncoming()));
             return new ProcurementBudget.Need(commodity.itemKind(), demand.purchase(),
-                    GoodsParticipantPricing.bid(view.participant(), commodity), demand.deadlineTicks(), restart);
+                    plan.economy().map(economy -> new FixedScalar(economy.purchasePrices().get(commodity.itemKind())))
+                            .orElseGet(() -> GoodsParticipantPricing.bid(view.participant(), commodity)), demand.deadlineTicks(), restart);
         }).toList()).orElse(List.of());
     }
 }

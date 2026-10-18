@@ -128,6 +128,11 @@ public final class PedestrianRoutePlanning {
     /** Pure deterministic execution for isolated engines; caches change cost, never readiness. */
     private static final class CachedDirectPlanner implements PedestrianRoutePlanner {
         private final Map<PedestrianRouteGeometry, Map<Endpoints, PedestrianRouteResult>> views = new java.util.WeakHashMap<>();
+        private record RegionalQuery(PedestrianGeometryRevision revision,
+                io.farfrontier.palemirror.frontier.v3.model.WorldBounds bounds, Endpoints endpoints) { }
+        // Full declared query revision, not just the traversed corridor: even a
+        // negative result or a cheaper newly opened alternative must invalidate.
+        private final Map<RegionalQuery, PedestrianRouteResult> regional = new LinkedHashMap<>();
         private final PedestrianRegionCache regions = new PedestrianRegionCache();
         private Object version;
         @Override public synchronized java.util.Optional<PedestrianRouteResult> peek(
@@ -136,6 +141,8 @@ public final class PedestrianRoutePlanning {
         }
         @Override public synchronized java.util.Optional<PedestrianRouteResult> peek(
                 PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target, PedestrianRouteExtent extent) {
+            if (geometry.regionalRevision().isPresent()) return java.util.Optional.ofNullable(regional.get(
+                    new RegionalQuery(geometry.regionalRevision().orElseThrow(), geometry.bounds(), new Endpoints(start, target, extent))));
             if (geometry.regionalRevision().isEmpty() && version != geometry.version()) return java.util.Optional.empty();
             var results = views.get(geometry);
             return results == null ? java.util.Optional.empty()
@@ -146,27 +153,29 @@ public final class PedestrianRoutePlanning {
         }
         @Override public synchronized PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target,
                                                                  PedestrianRouteExtent extent) {
+            var retained = peek(geometry, start, target, extent);
+            if (retained.isPresent()) return retained.orElseThrow();
             if (geometry.regionalRevision().isEmpty() && version != geometry.version()) {
                 views.keySet().removeIf(view -> view.regionalRevision().isEmpty()); version = geometry.version();
             }
-            var results = views.get(geometry);
-            if (results == null) {
-                if (views.size() >= 32) views.clear();
-                results = new LinkedHashMap<>(); views.put(geometry, results);
-            }
             Endpoints key = new Endpoints(start, target, extent);
-            PedestrianRouteResult previous = results.get(key);
-            if (previous != null) return previous;
             var search = new HierarchicalPedestrianSearch(geometry, start, target, regions, null, extent);
             PedestrianRouteResult result;
             do { result = search.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2); }
             while (result.status() == PedestrianRouteResult.Status.PLANNING);
-            int count = views.values().stream().mapToInt(Map::size).sum();
-            int surfaces = views.values().stream().flatMap(value -> value.values().stream()).mapToInt(value -> value.route().size()).sum();
+            int count = regional.size() + views.values().stream().mapToInt(Map::size).sum();
+            int surfaces = regional.values().stream().mapToInt(value -> value.route().size()).sum()
+                    + views.values().stream().flatMap(value -> value.values().stream()).mapToInt(value -> value.route().size()).sum();
             if (count >= 128 || surfaces + result.route().size() > 131_072) {
-                views.clear(); results = new LinkedHashMap<>(); views.put(geometry, results);
+                views.clear(); regional.clear();
             }
-            results.put(key, result); return result;
+            if (geometry.regionalRevision().isPresent())
+                regional.put(new RegionalQuery(geometry.regionalRevision().orElseThrow(), geometry.bounds(), key), result);
+            else {
+                if (views.size() >= 32 && !views.containsKey(geometry)) views.clear();
+                views.computeIfAbsent(geometry, ignored -> new LinkedHashMap<>()).put(key, result);
+            }
+            return result;
         }
     }
     private record Endpoints(SurfaceAnchor start, SurfaceAnchor target, PedestrianRouteExtent extent) { }

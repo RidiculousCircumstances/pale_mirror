@@ -16,10 +16,25 @@ public final class GoodsParticipantPricing {
     }
     public static FrontierWorldState apply(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
                                            GoodsParticipantPricesReviewed event, long now) {
+        var participant = Objects.requireNonNull(state.companies().goodsTrade().participants().participants().get(subject));
+        if (!event.prices().equals(review(state, participant, event.atTick())))
+            throw new IllegalArgumentException("price proposal differs from its authorized participant policy");
+        return applyCommitted(state, subject, event, now);
+    }
+    public static FrontierWorldState applyCommitted(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
+                                                    GoodsParticipantPricesReviewed event, long now) {
         var trade = state.companies().goodsTrade();
         var participant = Objects.requireNonNull(trade.participants().participants().get(subject), "price policy participant");
-        if (event.atTick() > now || !event.prices().equals(review(state, participant, event.atTick())))
-            throw new IllegalArgumentException("price review differs from its authorized participant policy");
+        // The scheduled participant owner calculated this committed decision.
+        // Recovery validates its envelope, not a new pricing strategy against
+        // historical facts. No external command can submit this event family.
+        var catalog = state.bootstrap().ruleset().goodsTrade().policies().get(participant.policy()).stream()
+                .map(GoodsTradeRules.Commodity::itemKind).collect(java.util.stream.Collectors.toSet());
+        if (event.atTick() > now || !event.prices().keySet().equals(catalog)
+                || event.prices().entrySet().stream().anyMatch(entry -> entry.getValue().reviewedAt() > event.atTick()
+                    || Optional.ofNullable(participant.prices().get(entry.getKey()))
+                        .filter(old -> entry.getValue().reviewedAt() < old.reviewedAt()).isPresent()))
+            throw new IllegalArgumentException("price review has a foreign catalog or time boundary");
         return state.withCompanies(state.companies().withGoodsTrade(trade.withParticipants(trade.participants().prices(subject, event))));
     }
     public static Map<String, MarketPricePolicy.Quote> review(FrontierWorldState state, GoodsParticipant participant, long now) {
@@ -40,6 +55,7 @@ public final class GoodsParticipantPricing {
                 : ask(participant, commodity)));
         var floors = GoodsProductionPricing.floors(state.bootstrap().ruleset().production(), prices);
         var alternatives = GoodsProductionPricing.alternatives(state, view, prices);
+        var bids = GoodsMarketDemand.fundedBids(state, participant, now);
         for (var commodity : catalog) {
             var stock = view.stocks().get(commodity.itemKind());
             var reference = history.reference(commodity.itemKind(), rules.pricing().recencyTicks()).orElse(commodity.minimumSellPrice());
@@ -52,10 +68,10 @@ public final class GoodsParticipantPricing {
             int pressure = (int) Math.min(1000, Math.multiplyExact(shortage, 1000) / Math.max(1, target));
             var context = new MarketPricePolicy.Context(floors.getOrDefault(commodity.itemKind(), io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO),
                     Optional.ofNullable(alternatives.get(commodity.itemKind())), pressure,
-                    GoodsParticipantStorage.containers(state, participant, commodity.itemKind()).stream()
-                            .anyMatch(container -> TransportMarketAccess.confirmed(state, container, commodity.itemKind())));
+                    GoodsMarketDemand.offered(state, participant, commodity.itemKind(), now),
+                    Optional.ofNullable(bids.get(commodity.itemKind())));
             next.put(commodity.itemKind(), policy.review(commodity.minimumSellPrice(), commodity.maximumBuyPrice(), reference,
-                    Math.max(0, stock.unclaimedInStorage() - target), sale, Optional.ofNullable(participant.prices().get(commodity.itemKind())), now, rules.pricing(), context));
+                    view.saleable(commodity), sale, Optional.ofNullable(participant.prices().get(commodity.itemKind())), now, rules.pricing(), context));
         }
         return Map.copyOf(next);
     }

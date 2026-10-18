@@ -143,10 +143,14 @@ final class FrontierV3AmbientActorExecutor {
                 continue;
             }
             var lease = state.ambientLeases().get(actorId);
-            if (lease != null && (lease.status() == AmbientLeaseStatus.HOT || lease.status() == AmbientLeaseStatus.DRAINING
-                    || lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART)) {
+            if (lease != null && FrontierV3AmbientDeparture.acceptsSavedDeparture(lease.status())) {
                 var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-                if (ledger.hasBodyDeparture(actorId)) {
+                // An older fenced departure survives until successor adoption. It must
+                // not intercept an unattempted successor's admission/cancellation. Only
+                // the body owner can prove that absence; PREPARED or an empty UUID lookup
+                // alone is not enough (an insertion may already have completed).
+                if (ledger.hasBodyDeparture(actorId) && !(lease.status() == AmbientLeaseStatus.PREPARED
+                        && FrontierV3ActorBodyCustody.unstartedAbsenceProven(level, runtime, state, actorId))) {
                     Entity returned = level.getEntity(entityId(state, actorId));
                     if (returned != null) FrontierV3ActorBodyController.observeJoin(level, runtime, returned);
                     if (ledger.hasBodyDeparture(actorId)) {

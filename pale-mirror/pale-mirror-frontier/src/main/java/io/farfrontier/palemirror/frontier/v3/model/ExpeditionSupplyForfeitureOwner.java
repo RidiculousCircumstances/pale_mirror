@@ -31,7 +31,7 @@ final class ExpeditionSupplyForfeitureOwner implements FungibleClaimForfeitureOw
                 throw new IllegalArgumentException("supply withdrawal precedes its accounted physical release");
             var mission = shipments.missions().get(claim.claimantId());
             if (mission.replenishment().filter(t -> t.claimId().equals(claim.id())).isPresent()) {
-                if (mission.replenishmentPurchase().isPresent()) inventory = GoodsSpotPurchaseAuthority.cancel(inventory, mission.replenishmentPurchase().orElseThrow());
+                if (mission.replenishmentPurchase().isPresent()) inventory = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionFundingAuthority.cancelPurchase(inventory, mission.replenishmentPurchase().orElseThrow());
                 shipments = shipments.replaceReplenishment(mission, java.util.Optional.empty());
                 continue;
             }

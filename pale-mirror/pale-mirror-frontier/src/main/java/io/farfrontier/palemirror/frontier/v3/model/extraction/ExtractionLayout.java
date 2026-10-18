@@ -100,6 +100,9 @@ public final class ExtractionLayout {
                 || cells.stream().anyMatch(cell -> !surfaces.contains(cell.workstation()))
                 || accessSurfaces.stream().anyMatch(surface -> !protectedBlocks.containsKey(surface.support())
                     && !naturalBlocks.containsKey(surface.support())
+                    && !sources.contains(surface.support())
+                    || sources.contains(surface.support())
+                        && sourcesByPosition.get(surface.support()).definition().before().kind().equals("minecraft:air")
                     || protectedBlocks.containsKey(surface.support())
                         && protectedBlocks.get(surface.support()).kind().equals("minecraft:air")))
             throw new IllegalArgumentException("extraction source competes with protected access or storage geometry");

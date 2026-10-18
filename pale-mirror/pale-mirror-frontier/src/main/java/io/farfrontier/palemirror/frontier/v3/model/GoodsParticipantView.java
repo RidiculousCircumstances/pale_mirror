@@ -30,6 +30,11 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
                     supplyPlan.orElseThrow().require(commodity.itemKind()).protectedInput()));
         return StockTargetDemand.target(commodity, residents, stocks.get(commodity.itemKind()).protectedMinimum());
     }
+    public int saleable(GoodsTradeRules.Commodity commodity) {
+        return supplyPlan.flatMap(plan -> plan.economy())
+                .map(plan -> Math.toIntExact(plan.saleableStock().get(commodity.itemKind())))
+                .orElseGet(() -> Math.max(0, stocks.get(commodity.itemKind()).unclaimedInStorage() - target(commodity)));
+    }
     public GoodsParticipantView {
         Objects.requireNonNull(participant); Objects.requireNonNull(availableMoney); stocks = Map.copyOf(stocks);
         supplyPlan = Objects.requireNonNull(supplyPlan);

@@ -6,6 +6,17 @@ simulation control plane: it sends ordinary client packets and read-only
 
 ## Profiles and isolation
 
+The retained economy observation is split into
+`retained-hot-cold-economy-soak.json` and
+`retained-hot-cold-economy-soak-followup.json`. Run the follow-up on the same
+retained world, not a newly created fixture. Together they request 120,000 COLD
+ticks in bounded 6,000-tick portions, with ordinary-time HOT visits between them.
+The split preserves the runner's wall-time ceiling and the server's per-request
+advance bound; it does not enlarge either limit. These scenarios observe retained
+conflicts and linked frames, not continuous economic solvency or every production
+completion. A resumed partial run must retain its earlier receipt and be reported
+as a continuation, not a fresh full pass.
+
 `runFrontierV3PilotClient` is the default **lite** profile: NeoForge and the
 current Pale Mirror source, with no installed modpack. It must connect to
 `runFrontierV3PilotServer`, which has the same minimal dependency set. The

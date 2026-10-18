@@ -15,9 +15,10 @@ public final class SupplyCapacityComposition {
         if (result.size() != SupplyCapacityPort.Key.values().length) throw new IllegalArgumentException("missing supply capacity owner");
         return Map.copyOf(result);
     }
-    public static List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks) {
+    public static List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
+                                                  SupplyPlanningWindow window) {
         var result = new ArrayList<SupplyPlanner.Process>();
-        for (var key : SupplyCapacityPort.Key.values()) result.addAll(PORTS.get(key).read(state, home, stocks));
+        for (var key : SupplyCapacityPort.Key.values()) result.addAll(PORTS.get(key).read(state, home, stocks, window));
         return List.copyOf(result);
     }
     public static List<SupplyPlanner.Dependency> dependencies(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks) {

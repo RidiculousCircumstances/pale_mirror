@@ -32,7 +32,7 @@ class CoalDepositReserveTest {
             assertEquals(io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockGeometry.Sample.Permission.PUBLIC, sample.permission());
             assertTrue(state.bootstrap().bounds().contains(outside.position()));
         }
-        assertEquals(6, producers); assertEquals(5160, coal);
+        assertEquals(12, producers); assertEquals(10320, coal);
         long required = ProductionFuelReserve.requiredItems(rules.production(), rules.workCatalog(), BakeryRecipes.BREAD,
                 "minecraft:coal", 64, state.bootstrap().settlements().size(), 100_000);
         assertTrue(coal >= required, "finite veins cover every existing bakery at the maximum normal rate");

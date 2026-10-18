@@ -166,7 +166,8 @@ class ExpeditionSupplyFlowTest {
         io.farfrontier.palemirror.frontier.v3.model.navigation.ActorPositionView physicallyTogether = actor -> route.get(25).standingBody();
         assertTrue(io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.permits(lagging, formed, fast,
                 route.get(26), physicallyTogether), "current HOT neighbours must override stale durable checkpoints for cohesion");
-        io.farfrontier.palemirror.frontier.v3.model.navigation.ActorPositionView physicallyBehind = actor -> route.get(0).standingBody();
+        io.farfrontier.palemirror.frontier.v3.model.navigation.ActorPositionView physicallyBehind = actor ->
+                route.get(actor.equals(fast) ? 25 : 0).standingBody();
         var hold = io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.assess(formationState, formed, fast,
                 route.get(26), physicallyBehind);
         assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.MovementPermission.Reason.GROUP_SPATIAL_STRETCH, hold.reason());
@@ -278,7 +279,7 @@ class ExpeditionSupplyFlowTest {
         var terminal = eater.canonicalState().state();
         assertTrue(terminal.transportFleet().require(asset.actorId()).missionId().isEmpty());
         assertEquals(ActorLifeStatus.ALIVE, terminal.actorLocations().get(asset.actorId()).condition().status());
-        assertFalse(terminal.inventory().economics().budgets().containsKey(mission.financialBudgetId().orElseThrow()));
+        assertTrue(terminal.inventory().economics().budgets().values().stream().noneMatch(b -> b.ownerId().equals(mission.id())));
     }
     private static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> completeNeedClocks(
             FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> base) {
@@ -377,7 +378,7 @@ class ExpeditionSupplyFlowTest {
         assertEquals(initial.transportFleet().assets().size(), survivors.canonicalState().state().transportFleet().assets().size());
         assertTrue(survivors.canonicalState().state().transportFleet().require(actor).missionId().isEmpty());
     }
-    @Test void observedSourceRemovalWithdrawsPromisesAtomicallyWithoutFoodDuplicationOrPayment() {
+    @Test void observedSourceRemovalWithdrawsPromisesAtomicallyWithoutFoodDuplicationOrPayment() throws Exception {
         var config = FrontierV3FixtureCatalog.autonomousGoodsConfiguration(new WorldId("frontier:expedition-source-change"), 41,
                 FrontierRulesets.installed("frontier-v3-expedition-candidate-r1"));
         var engine = FrontierEngines.createCanonicalStateAccess(config);
@@ -391,6 +392,23 @@ class ExpeditionSupplyFlowTest {
         var mission = state.shipments().missions().values().iterator().next();
         var allocation = mission.supplies().orElseThrow().next().orElseThrow();
         var resources = state.inventory().fungibleResources();
+        // A stocked source can still have no food. That impossible provisioning
+        // proposal must be rejected before an expensive complete journey search.
+        var sourceAccount = resources.accounts().get(allocation.sourceAccountId());
+        var stone = new SubjectId("lot:expedition-preflight-stone");
+        var withoutFood = FungibleResourceLedger.empty().issue(new ResourceLot(stone,
+                mission.organization().sponsor().id(), "minecraft:stone", 1, "fixture:no-provisions", List.of()),
+                sourceAccount.withQuantities(Map.of(stone, 1), Map.of()));
+        var proposal = new TransportMission(mission.id(), mission.groupId(), mission.shipmentIds(),
+                mission.sender(), mission.receiver(), mission.organization(), mission.homeRendezvous(),
+                mission.destinationRendezvous(), mission.stage(), mission.revision(), mission.financialBudgetId(),
+                Optional.empty(), mission.transportAssetId());
+        try (var ignored = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind(
+                (geometry, from, to) -> { throw new AssertionError("materially impossible trip requested a route"); })) {
+            assertTrue(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyPlanning.walkingLoad(
+                    state, proposal, state.unitGroups().groups().get(mission.groupId()),
+                    engine.checkpoint().instant().ticks() + 96_000, 1, withoutFood).isEmpty());
+        }
         var quantities = new TreeMap<String, Integer>();
         resources.accounts().get(allocation.sourceAccountId()).lotQuantities().forEach((lot, q) -> quantities.merge(resources.lots().get(lot).itemKind(), q, Integer::sum));
         var layout = new ArrayList<FungiblePhysicalObservation.Stack>(); int slot = 0;
@@ -435,8 +453,9 @@ class ExpeditionSupplyFlowTest {
                 new TransportMissionAdvanced(mission.id(), mission.revision(), TransportMission.Stage.RETURNING), engine.checkpoint().instant().ticks());
         assertEquals(beforeBread, bread(returning));
         assertTrue(returning.shipments().missions().get(mission.id()).supplies().isEmpty());
-        assertTrue(returning.inventory().economics().budgets().containsKey(mission.financialBudgetId().orElseThrow()),
-                "return still owns its finite budget; loading abort does not fabricate completed return");
+        assertTrue(mission.financialBudgetId().isEmpty(), "fully provisioned departure does not immobilize speculative cash");
+        assertEquals(TransportMission.Stage.RETURNING, returning.shipments().missions().get(mission.id()).stage(),
+                "loading abort does not fabricate completed return");
         assertEquals(returning, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(returning)));
     }
     @Test void actualLoadingConservesStockAndResumesItsRetainedObligationAfterCheckpoint() {

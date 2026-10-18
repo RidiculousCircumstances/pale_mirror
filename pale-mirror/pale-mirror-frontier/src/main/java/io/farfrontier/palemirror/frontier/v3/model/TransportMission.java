@@ -120,6 +120,16 @@ public record TransportMission(SubjectId id, SubjectId groupId, List<SubjectId> 
         return new TransportMission(id, groupId, shipmentIds, sender, receiver, organization, homeRendezvous, destinationRendezvous,
                 stage, revision, financialBudgetId, supplies, transportAssetId, transfer, transfer.isPresent() ? replenishmentPurchase : java.util.Optional.empty());
     }
+    public TransportMission withFundedReplenishment(UnitResourceTransfer transfer, GoodsSpotPurchase purchase) {
+        var budget = purchase.payment().budgetId().orElseThrow();
+        if (replenishment.isPresent() || !purchase.payment().reasonId().equals(id)
+                || !purchase.payment().payerId().equals(organization.sponsor().id())
+                || financialBudgetId.filter(existing -> !existing.equals(budget)).isPresent())
+            throw new IllegalArgumentException("funded replenishment has foreign or occupied mission authority");
+        return new TransportMission(id, groupId, shipmentIds, sender, receiver, organization, homeRendezvous, destinationRendezvous,
+                stage, revision, java.util.Optional.of(budget), supplies, transportAssetId,
+                java.util.Optional.of(transfer), java.util.Optional.of(purchase));
+    }
     public TransportMission withReplenishment(java.util.Optional<UnitResourceTransfer> transfer, java.util.Optional<GoodsSpotPurchase> purchase) {
         return new TransportMission(id, groupId, shipmentIds, sender, receiver, organization, homeRendezvous, destinationRendezvous,
                 stage, revision, financialBudgetId, supplies, transportAssetId, transfer, purchase);

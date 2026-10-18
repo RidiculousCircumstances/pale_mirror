@@ -9,7 +9,7 @@ public interface SupplyCapacityPort {
     enum Key { BAKERY, FIELD, EXTRACTION }
     Key key();
     List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home,
-                                    Map<String, SupplyPlanner.Stock> stocks);
+                                    Map<String, SupplyPlanner.Stock> stocks, SupplyPlanningWindow window);
     List<SupplyPlanner.Dependency> dependencies(FrontierWorldState state, SubjectId home,
                                                Map<String, SupplyPlanner.Stock> stocks);
 }

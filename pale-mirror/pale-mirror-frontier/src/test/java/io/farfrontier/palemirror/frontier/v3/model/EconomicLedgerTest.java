@@ -28,6 +28,13 @@ class EconomicLedgerTest {
         var ordered = funded.reserveFromBudget(budget.id(), purchase);
         assertEquals(FixedScalar.whole(80), ordered.availableToReserve(sender));
         assertEquals(FixedScalar.whole(13), ordered.budgets().get(budget.id()).remaining());
+        var releasedIdle = ordered.resizeBudget(ordered.budgets().get(budget.id()), FixedScalar.ZERO);
+        assertEquals(FixedScalar.whole(93), releasedIdle.availableToReserve(sender));
+        assertEquals(purchase, releasedIdle.reservations().get(purchase.id()), "resizing cannot release committed payment");
+        assertEquals(FixedScalar.whole(7), releasedIdle.settle(purchase.id()).require(host).balance());
+        assertThrows(IllegalArgumentException.class, () -> releasedIdle.resizeBudget(budget, FixedScalar.ONE));
+        assertThrows(IllegalArgumentException.class, () -> releasedIdle.resizeBudget(
+                releasedIdle.budgets().get(budget.id()), FixedScalar.whole(94)));
         assertThrows(IllegalArgumentException.class, () -> ordered.reserveFromBudget(budget.id(), purchase));
         assertThrows(IllegalArgumentException.class, () -> ordered.closeBudget(budget.id()));
         assertThrows(IllegalArgumentException.class, () -> ordered.reserve(new FinancialReservation(

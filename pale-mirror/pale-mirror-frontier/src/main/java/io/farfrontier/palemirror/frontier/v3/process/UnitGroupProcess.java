@@ -124,12 +124,12 @@ public final class UnitGroupProcess {
         if (replacement.phase() == UnitGroup.Phase.CLOSED) {
             var executions = state.actorExecutions();
             for (var member : group.members()) {
-                var current = executions.actors().get(member.actorId());
-                if (current != null && current.current().isPresent()) {
-                    var id = current.current().orElseThrow();
-                    if (id.activityKind() == io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.GROUP_MEMBER
-                            && id.activityOwnerId().equals(group.id())) executions = executions.finish(id);
-                }
+                var kind = io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.GROUP_MEMBER;
+                // A completed meal/yield can leave the exact group purpose suspended until
+                // its next activity turn. Closure ends that purpose, not the independent successor.
+                if (executions.owns(member.actorId(), kind, group.id())
+                        || executions.retainsSuspended(member.actorId(), kind, group.id()))
+                    executions = ActorExecutionComposition.LIFECYCLE.retire(executions, member.actorId(), kind, group.id());
             }
             update.actorExecutions(executions);
         }

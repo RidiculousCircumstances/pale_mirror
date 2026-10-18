@@ -31,6 +31,56 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Explicit Wave 4 exit-gate evidence; excluded from ordinary fast tests by its annual-audit tag. */
 @Tag("annual-audit")
 class FrontierV3AnnualAutonomyAuditTest {
+    /** Reuses the real canonical engine for current-profile calibration, not a second simulator. */
+    @Test void currentEconomicProfileOwnerFacts() throws java.io.IOException {
+        long seed = Long.getLong("pale_mirror.frontier_v3.economy.seed", 20260918065L);
+        long target = Long.getLong("pale_mirror.frontier_v3.economy.ticks", 24000L);
+        if (target < 1 || target > 720000) throw new IllegalArgumentException("bounded economic diagnostic horizon");
+        var config = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:economy-calibration"), seed,
+                FrontierRulesets.marketQuarryGraybox());
+        var engine = FrontierEngines.createCanonicalStateAccess(config);
+        long compacted = 0, observed = 0; boolean recovered = false;
+        var resume = System.getProperty("pale_mirror.frontier_v3.economy.snapshot");
+        if (resume != null) {
+            var snapshot = io.farfrontier.palemirror.frontier.v3.persistence.FrontierPersistenceCodec.decodeSnapshot(
+                    java.nio.file.Files.readAllBytes(java.nio.file.Path.of(resume)));
+            engine = FrontierEngines.recoverCanonicalStateAccess(config,
+                    new RecoveryImage(config.worldId(), Optional.of(snapshot), List.of()));
+            assertEquals(seed, engine.canonicalState().state().bootstrap().seed());
+            assertEquals(FrontierRulesets.marketQuarryGraybox(), engine.canonicalState().state().bootstrap().ruleset());
+            observed = snapshot.checkpoint().instant().ticks(); compacted = snapshot.checkpoint().revision().value();
+            if (observed >= target) throw new IllegalArgumentException("resume checkpoint already reaches the requested horizon");
+            recovered = observed >= 360000;
+            System.out.println("PMV3_ECONOMY_RESUMED seed=" + seed + " tick=" + observed);
+        }
+        while (engine.canonicalState().instant().ticks() < target) {
+            var current = engine.canonicalState().instant();
+            var result = engine.advanceTo(new SimInstant(nextTarget(engine.nextScheduledInstantAfter(current), target)), new WorkBudget(128, 1024));
+            assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
+            if (result.revision().value() - compacted >= 1024) {
+                engine.compact(result.revision()); compacted = result.revision().value();
+            }
+            if (result.instant().ticks() - observed >= 24000 || result.instant().ticks() == target) {
+                observed = result.instant().ticks();
+                var directory = java.nio.file.Path.of("build", "economic-capacity"); java.nio.file.Files.createDirectories(directory);
+                java.nio.file.Files.writeString(directory.resolve(seed + "-" + observed + ".json"),
+                        FrontierV3EconomicCapacityDiagnostic.render(engine.canonicalState().state(), observed, 720000));
+                // One replaceable diagnostic checkpoint, not an accumulating proof archive.
+                var checkpoint = engine.checkpoint();
+                java.nio.file.Files.write(directory.resolve(seed + "-latest.snapshot"),
+                        io.farfrontier.palemirror.frontier.v3.persistence.FrontierPersistenceCodec.encodeSnapshot(
+                                new SnapshotRecord(checkpoint, checkpoint.revision().value())));
+                if (!recovered && observed >= 360000) {
+                    engine = FrontierEngines.recoverCanonicalStateAccess(config,
+                            new RecoveryImage(config.worldId(), Optional.of(new SnapshotRecord(checkpoint, checkpoint.revision().value())), List.of()));
+                    assertEquals(checkpoint.schedules(), engine.checkpoint().schedules());
+                    assertEquals(new FrontierWorldStateCodec().decode(checkpoint.canonicalState()), engine.canonicalState().state());
+                    recovered = true;
+                }
+                System.out.println("PMV3_ECONOMY_CAPACITY seed=" + seed + " tick=" + observed);
+            }
+        }
+    }
     private static final long NOMINAL_DAY_TICKS = 24_000L;
     // Population ages use the same 360-day civil year; this is a simulation-year, not a wall-clock benchmark.
     private static final long YEAR_TICKS = Math.multiplyExact(360L, NOMINAL_DAY_TICKS);

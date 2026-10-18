@@ -5,6 +5,26 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResidentNutritionNeedTest {
+    @Test void consumptionForecastCountsClippedNutritionAndSmallFoodPortions() {
+        for (var rules : java.util.List.of(FrontierRuleset.ResidentLife.initial(),
+                new FrontierRuleset.ResidentLife(24_000, 12_000, 100L, 30, 90, 50, 100))) {
+            var food = rules.foods().require(FoodCatalog.BREAD);
+            var forecast = FoodConsumptionForecast.atThreshold(food, rules);
+            var before = ResidentNutrition.nourishedAtTick(0, rules);
+            long tick = before.nextThresholdTick(rules, 1000);
+            var hungry = before.accrueThrough(tick, rules);
+            var after = hungry;
+            for (int item = 0; item < forecast.items(); item++) after = after.consumeBreadAt(tick, rules);
+            assertEquals(forecast.usefulNutrition(), after.satietyUnits() - hungry.satietyUnits());
+            assertEquals(Math.multiplyExact(forecast.usefulNutrition(), rules.satietyUnitTicks()),
+                    after.nextThresholdTick(rules, 1000) - tick);
+            assertEquals(forecast.items() * 10L, forecast.itemsFor(forecast.usefulNutrition() * 10L));
+        }
+        var life = FrontierRuleset.ResidentLife.initial();
+        assertEquals(new FoodConsumptionForecast.MealYield(1, 333),
+                FoodConsumptionForecast.atThreshold(life.foods().require(FoodCatalog.BREAD), life));
+    }
+
     @Test void nutritionUsesBoundedContentsAndConsumptionNotMovement() {
         var rules = FrontierRuleset.ResidentLife.initial();
         var full = ResidentNutrition.nourishedAtTick(0, rules);

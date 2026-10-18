@@ -45,8 +45,19 @@ final class ExtractionWorkingSurfaces {
                 new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBlockState(block.kind(), block.properties())));
     }
     Map<TerrainColumn, SurfaceAnchor> current() {
+        return highestContacts(deposit.site().layout().accessSurfaces());
+    }
+    /** Candidate work contacts include exposed source tops. They are not all
+     * established passages that every later extraction must permanently retain. */
+    Map<TerrainColumn, SurfaceAnchor> availableFront() {
+        return highestContacts(allCurrent());
+    }
+    private Map<TerrainColumn, SurfaceAnchor> highestContacts(Collection<SurfaceAnchor> candidates) {
         var result = new LinkedHashMap<TerrainColumn, SurfaceAnchor>();
-        for (var surface : deposit.site().layout().accessSurfaces()) {
+        // A partially completed cut can expose a safe resource top before its
+        // planned lower floor is clear. Mining and navigation must derive their
+        // contacts from the same current geometry, not only historical work floors.
+        for (var surface : candidates) {
             if (!standable(surface)) continue;
             var column = new TerrainColumn(surface.x(), surface.z());
             result.merge(column, surface, (left, right) -> left.y() >= right.y() ? left : right);

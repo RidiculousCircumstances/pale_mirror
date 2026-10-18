@@ -14,7 +14,7 @@ final class ParticipantPriceCodec {
             out.writeLong(quote.ask().raw()); out.writeLong(quote.bid().raw()); out.writeLong(quote.reference().raw());
             out.writeLong(quote.reviewedAt()); out.writeLong(quote.surplus()); out.writeBoolean(quote.lastSale().isPresent());
             if (quote.lastSale().isPresent()) out.writeUTF(quote.lastSale().orElseThrow().value());
-            out.writeLong(quote.unsoldAccessibleTicks());
+            out.writeLong(quote.unsoldOfferedTicks());
         }
     }
     static Map<String, MarketPricePolicy.Quote> read(DataInputStream in) throws IOException {

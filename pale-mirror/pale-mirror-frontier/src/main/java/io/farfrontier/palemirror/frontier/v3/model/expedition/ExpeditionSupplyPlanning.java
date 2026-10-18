@@ -27,6 +27,7 @@ public final class ExpeditionSupplyPlanning {
         var rules = state.bootstrap().ruleset(); var life = rules.residentLife();
         var source = availableSource(state, mission.organization().home().containerId()).orElse(null);
         if (source == null) return Optional.empty();
+        if (!couldSupplyShortestJourney(state, mission, group, now, availableResources, source)) return Optional.empty();
         var knowledge = TransportGroupMissionPort.knowledgeForEndpoints(state, mission.sender(), mission.receiver()).forActors(state, group.members().stream().map(UnitGroup.Member::actorId).toList());
         ExpeditionJourneyProof journey;
         try { journey = ExpeditionJourneyProof.select(state, mission, group); }
@@ -93,6 +94,20 @@ public final class ExpeditionSupplyPlanning {
             }
         }
         return Optional.empty();
+    }
+    /** Rejection only: every cardinal route is at least this long. Stock, personal
+     * provisions and actual transport capacity use the same owner forecast as the
+     * full journey. A positive answer grants neither a route nor departure. */
+    private static boolean couldSupplyShortestJourney(FrontierWorldState state, TransportMission mission,
+            UnitGroup group, long now, FungibleResourceLedger resources, CustodyAccount source) {
+        var home = mission.homeRendezvous(); var remote = mission.destinationRendezvous();
+        long edges = Math.abs((long) home.x() - remote.x()) + Math.abs((long) home.z() - remote.z());
+        for (var food : state.bootstrap().ruleset().residentLife().foods().foods().values()) {
+            var input = walkingInputs(state, mission, group, now, food, resources, edges, edges);
+            int stock = resources.unclaimedQuantity(source.id(), mission.organization().sponsor().id(), food.itemKind());
+            if (input.isPresent() && forecast(state, mission, group, input.orElseThrow(), food, stock).feasible()) return true;
+        }
+        return false;
     }
     /** Pure material feasibility over the retained journey; not new route or departure authority. */
     public static boolean supplyAvailableForRetainedJourney(FrontierWorldState state, TransportMission mission,

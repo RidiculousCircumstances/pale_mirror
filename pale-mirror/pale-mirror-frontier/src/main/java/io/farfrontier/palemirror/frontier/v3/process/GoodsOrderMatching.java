@@ -6,13 +6,23 @@ import java.util.*;
 
 /** Matches explicit mutual consent. It cannot invent targets, change limits or read unknown stocks. */
 final class GoodsOrderMatching {
+    private static final ImmutableInputView<Map<Long, io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook>> BOOKS = new ImmutableInputView<>();
+    private static synchronized io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook book(FrontierWorldState state, long now) {
+        var orders = state.companies().goodsTrade().orders();
+        var times = BOOKS.get(List.of(orders), HashMap::new);
+        if (times.size() >= 8 && !times.containsKey(now)) times.clear();
+        return times.computeIfAbsent(now, ignored -> new io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook(orders.values(), now));
+    }
     record Endpoints(SubjectId source, SubjectId receiver) { }
     record Match(GoodsTradeContract contract, List<GoodsTradeStockAllocation> allocations) { }
     record Search(Optional<Match> match, String disposition, int checkedPairs) { }
+    static List<io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook.Pair> quotes(
+            FrontierWorldState state, GoodsParticipant seller, GoodsParticipant buyer, long now) {
+        return book(state, now).offers(buyer.party(), Optional.of(seller.party()), Set.of());
+    }
     static List<Endpoints> endpointPairs(FrontierWorldState state, GoodsParticipant seller, GoodsParticipant buyer, long now) {
-        return new io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook(
-                state.companies().goodsTrade().orders().values(), now)
-                .offers(buyer.party(), Optional.of(seller.party()), Set.of()).stream()
+        return quotes(state, seller, buyer, now).stream()
+                .filter(pair -> pair.sell().unitPriceLimit().compareTo(pair.buy().unitPriceLimit()) <= 0)
                 .filter(pair -> GoodsParticipantStorage.eligible(state, seller, pair.sell().containerId(), pair.sell().itemKind())
                         && GoodsParticipantStorage.eligible(state, buyer, pair.buy().containerId(), pair.buy().itemKind()))
                 .map(pair -> new Endpoints(pair.sell().containerId(), pair.buy().containerId())).distinct()
@@ -33,7 +43,7 @@ final class GoodsOrderMatching {
                         Optional<GoodsTradeParty> selectedSeller, Optional<GoodsTradeParty> selectedBuyer,
                         Set<String> excludedCommodities, Optional<Endpoints> endpoints) {
         var trade = state.companies().goodsTrade();
-        var book = new io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook(trade.orders().values(), now);
+        var book = book(state, now);
         var offers = book.buyers().stream().filter(buyer -> selectedBuyer.filter(value -> !value.equals(buyer)).isEmpty())
                 .flatMap(buyer -> book.offers(buyer, selectedSeller, excludedCommodities).stream())
                 .filter(pair -> endpoints.map(points -> points.source().equals(pair.sell().containerId())
@@ -51,14 +61,14 @@ final class GoodsOrderMatching {
                 checked++;
                 var buyer = trade.participants().participants().get(buy.party().id());
                 if (buyer == null || !buyer.party().equals(buy.party()) || !known(seller, buyer) || !known(buyer, seller)) continue;
-                long funding = GoodsParticipantFunding.purchase(GoodsParticipantView.read(state, buyer),
-                        state.bootstrap().ruleset().goodsTrade(), buy.itemKind()).raw();
-                if (funding < sell.unitPriceLimit().raw()) { disposition = "INSUFFICIENT_PROCUREMENT_FUNDS"; continue; }
                 if (sell.unitPriceLimit().compareTo(buy.unitPriceLimit()) > 0) { disposition = "PRICE_LIMIT"; continue; }
                 if (!GoodsParticipantStorage.eligible(state, seller, sell.containerId(), sell.itemKind())
                         || !GoodsParticipantStorage.eligible(state, buyer, buy.containerId(), buy.itemKind())) {
                     disposition = "STORAGE_UNAVAILABLE"; continue;
                 }
+                long funding = GoodsParticipantFunding.purchase(GoodsParticipantView.read(state, buyer),
+                        state.bootstrap().ruleset().goodsTrade(), buy.itemKind()).raw();
+                if (funding < sell.unitPriceLimit().raw()) { disposition = "INSUFFICIENT_PROCUREMENT_FUNDS"; continue; }
                 var sellerIntent = intent(state, seller, sell.itemKind(), GoodsTradeOrder.Side.SELL, cachedIntents);
                 var buyerIntent = intent(state, buyer, buy.itemKind(), GoodsTradeOrder.Side.BUY, cachedIntents);
                 if (sellerIntent.isEmpty() || buyerIntent.isEmpty()) { disposition = "CURRENT_RESERVE_STOCK_OR_FUNDS"; continue; }

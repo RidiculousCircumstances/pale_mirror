@@ -29,6 +29,6 @@ class ProductionValuationTest {
         var pending = new MarketPricePolicy.Context(FixedScalar.whole(3), Optional.empty(), 0, false);
         var unchanged = policy.review(FixedScalar.whole(4), FixedScalar.whole(6), quote.reference(), 64,
                 Optional.empty(), Optional.of(quote), 50400, rules, pending);
-        assertEquals(quote.ask(), unchanged.ask()); assertEquals(0, unchanged.unsoldAccessibleTicks());
+        assertEquals(quote.ask(), unchanged.ask()); assertEquals(0, unchanged.unsoldOfferedTicks());
     }
 }

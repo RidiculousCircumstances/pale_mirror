@@ -28,7 +28,9 @@ final class GoodsProductionPricing {
         view.stocks().forEach((item, stock) -> facts.put(item, new SupplyPlanner.Stock(stock.unclaimedInStorage(), stock.expectedIncoming(),
                 0, 0, stock.protectedMinimum(), 0, 1, rules.supplyPlanning().require(item))));
         var result = new HashMap<String, FixedScalar>();
-        var capacities = SupplyCapacityComposition.read(state, view.participant().party().id(), facts);
+        var home = view.participant().party().id();
+        var window = SupplyPlanningWindow.forSettlement(state, home, view.supplyPlan().orElseThrow().reserves().values());
+        var capacities = SupplyCapacityComposition.read(state, home, facts, window);
         var economic = state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().isPresent()
                 ? SettlementSourcingMarket.read(state, view.participant(), capacities).processUnitCosts() : Map.<String, Long>of();
         for (var process : capacities) {

@@ -21,7 +21,7 @@ final class GoodsTradeProcessModule implements FrontierWorldProcessModule {
     }
     private static FrontierWorldState apply(FrontierWorldState state, SubjectId subject, long now, FrontierPayload payload) {
         if (payload instanceof GoodsTradeCollected collected) return GoodsTradeCollectionSupport.accept(state, subject, collected, now);
-        if (payload instanceof GoodsParticipantPricesReviewed prices) return GoodsParticipantPricing.apply(state, subject, prices, now);
+        if (payload instanceof GoodsParticipantPricesReviewed prices) return GoodsParticipantPricing.applyCommitted(state, subject, prices, now);
         if (payload instanceof GoodsTradeOrderWithdrawn withdrawn) return state.withCompanies(state.companies()
                 .withGoodsTrade(state.companies().goodsTrade().withdraw(subject, withdrawn)));
         if (payload instanceof GoodsParticipantReviewed reviewed) {

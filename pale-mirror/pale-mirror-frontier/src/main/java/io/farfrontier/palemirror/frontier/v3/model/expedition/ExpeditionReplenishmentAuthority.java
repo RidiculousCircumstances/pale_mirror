@@ -25,14 +25,16 @@ public final class ExpeditionReplenishmentAuthority {
     }
     private static boolean requiresPersonalStock(FrontierWorldState state, TransportMission mission) {
         var life = state.bootstrap().ruleset().residentLife(); var resources = state.inventory().fungibleResources();
+        var returnDemand = supplierVisit(state, mission) ? ExpeditionReturnProvisioning.missing(state, mission, 0) : Map.<SubjectId, Integer>of();
         return state.unitGroups().groups().get(mission.groupId()).members().stream().anyMatch(member -> {
             var resident = state.humanPopulation().resident(member.actorId());
             return resident != null && state.actorLocations().get(member.actorId()).condition().status() == ActorLifeStatus.ALIVE
                     && !state.humanPopulation().meals().containsKey(member.actorId())
                     && UnitInventoryPresentation.freeSlot(state, member.actorId()).isPresent()
-                    && state.humanPopulation().nutrition(member.actorId()).wantsFood(life)
-                    && life.foods().foods().keySet().stream().noneMatch(kind -> UnitInventory.available(resources,
-                        member.actorId(), mission.organization().sponsor().id(), kind) > 0);
+                    && (returnDemand.getOrDefault(member.actorId(), 0) > 0
+                        || state.humanPopulation().nutrition(member.actorId()).wantsFood(life)
+                            && life.foods().foods().keySet().stream().noneMatch(kind -> UnitInventory.available(resources,
+                                member.actorId(), mission.organization().sponsor().id(), kind) > 0));
         });
     }
     private static boolean hasLocalStock(FrontierWorldState state, TransportMission mission) {
@@ -44,8 +46,7 @@ public final class ExpeditionReplenishmentAuthority {
             if (account == null) continue;
             for (var kind : state.bootstrap().ruleset().residentLife().foods().foods().keySet()) {
                 int quantity = source.mobile() ? resources.unclaimedQuantity(account.id(), source.owner(), kind)
-                        : GoodsSpotPurchaseAuthority.availableQuantity(state, source.container(), source.owner(), mission.organization().sponsor().id(),
-                            mission.financialBudgetId().orElseThrow(), kind);
+                        : purchasable(state, mission, source, kind);
                 if (quantity > 0) return true;
             }
         }
@@ -60,25 +61,27 @@ public final class ExpeditionReplenishmentAuthority {
         var sources = sources(state, mission, group);
         if (sources.isEmpty()) return Optional.empty();
         var resources = state.inventory().fungibleResources(); var life = state.bootstrap().ruleset().residentLife();
+        var returnDemand = supplierVisit(state, mission) ? ExpeditionReturnProvisioning.missing(state, mission, now) : Map.<SubjectId, Integer>of();
         for (var member : group.members()) {
             var profile = state.humanPopulation().resident(member.actorId()); if (profile == null) continue;
             var body = state.actorLocations().get(member.actorId());
             if (body.condition().status() != ActorLifeStatus.ALIVE || state.humanPopulation().meals().containsKey(member.actorId())) continue;
             var nutrition = state.humanPopulation().nutrition(member.actorId()).accrueThrough(now, life,
                     profile.characteristics().effectiveMetabolismPermille(now));
-            if (nutrition.satietyUnits() >= life.eatBelowUnits()) continue;
+            int remaining = returnDemand.getOrDefault(member.actorId(), 0);
+            if (nutrition.satietyUnits() >= life.eatBelowUnits() && remaining == 0) continue;
             var execution = UnitGroupMissionPorts.require(group).execution(state, group, member);
             var slot = UnitInventoryPresentation.freeSlot(state, member.actorId());
             if (execution.isEmpty() || slot.isEmpty()
-                    || life.foods().foods().keySet().stream().anyMatch(kind -> UnitInventory.available(resources, member.actorId(), profile.settlementId(), kind) > 0)) continue;
+                    || remaining == 0 && life.foods().foods().keySet().stream().anyMatch(kind -> UnitInventory.available(resources, member.actorId(), profile.settlementId(), kind) > 0)) continue;
             for (var location : sources) for (var food : new TreeMap<>(life.foods().foods()).values()) {
                 if (ReferenceContainerCustody.blocksCanonicalUse(state, location.container())) continue;
                 var source = FungibleResourceCustodySupport.accountAtContainer(state, location.container()).orElse(null);
                 if (source == null) continue;
                 int available = resources.unclaimedQuantity(source.id(), location.owner(), food.itemKind());
-                if (!location.mobile()) available = Math.min(available, GoodsSpotPurchaseAuthority.availableQuantity(state, location.container(),
-                        location.owner(), mission.organization().sponsor().id(), mission.financialBudgetId().orElseThrow(), food.itemKind()));
-                int quantity = food.portionFor(nutrition.nutritionWanted(life), available);
+                if (!location.mobile()) available = Math.min(available, purchasable(state, mission, location, food.itemKind()));
+                int quantity = !location.mobile() && mission.supplies().orElseThrow().foodKind().equals(food.itemKind())
+                        ? Math.min(64, Math.min(available, remaining)) : food.portionFor(nutrition.nutritionWanted(life), available);
                 if (quantity == 0) continue;
                 var station = location.mobile() ? MobileContainerAccess.station(state, member.actorId(), location.container(),
                         TransportGroupMissionPort.knowledgeForEndpoints(state, mission.sender(), mission.receiver()))
@@ -96,6 +99,11 @@ public final class ExpeditionReplenishmentAuthority {
         return Optional.empty();
     }
     private record Source(SubjectId container, SubjectId owner, boolean mobile) { }
+    private static int purchasable(FrontierWorldState state, TransportMission mission, Source source, String kind) {
+        return GoodsSpotPurchaseAuthority.quote(state, source.container(), source.owner(), mission.organization().sponsor().id(), kind)
+                .map(quote -> (int) Math.min(quote.quantity(), ExpeditionFundingAuthority.available(state, mission).raw()
+                        / quote.unitPrice().raw())).orElse(0);
+    }
     private static List<Source> sources(FrontierWorldState state, TransportMission mission, UnitGroup group) {
         var sources = new ArrayList<Source>();
         mission.transportAssetId().ifPresent(id -> {
@@ -103,16 +111,20 @@ public final class ExpeditionReplenishmentAuthority {
             if (state.actorLocations().get(id).condition().status() == ActorLifeStatus.ALIVE)
                 sources.add(new Source(asset.containerId(), mission.organization().sponsor().id(), true));
         });
-        boolean supplierVisit = switch (mission.organization().itinerary()) {
-            case SOURCE_DELIVERY -> mission.stage() == TransportMission.Stage.UNLOADING
-                    && mission.shipmentIds().stream().allMatch(id -> state.shipments().shipments().get(id).terminal());
-            case DESTINATION_COLLECTION -> mission.stage() == TransportMission.Stage.LOADING;
-        };
-        if (group.phase() == UnitGroup.Phase.AT_GOAL && group.goalOrdinal() == 1 && supplierVisit && mission.financialBudgetId().isPresent()) {
+        if (supplierVisit(state, mission)) {
             var supplier = visitedSupplier(mission);
             sources.add(new Source(supplier.containerId(), supplier.settlementId(), false));
         }
         return List.copyOf(sources);
+    }
+    private static boolean supplierVisit(FrontierWorldState state, TransportMission mission) {
+        var group = state.unitGroups().groups().get(mission.groupId());
+        boolean visit = switch (mission.organization().itinerary()) {
+            case SOURCE_DELIVERY -> mission.stage() == TransportMission.Stage.UNLOADING
+                    && mission.shipmentIds().stream().allMatch(id -> state.shipments().shipments().get(id).terminal());
+            case DESTINATION_COLLECTION -> mission.stage() == TransportMission.Stage.LOADING;
+        };
+        return group.phase() == UnitGroup.Phase.AT_GOAL && group.goalOrdinal() == 1 && visit;
     }
     private static ShipmentEndpoint visitedSupplier(TransportMission mission) {
         return switch (mission.organization().itinerary()) {
@@ -127,13 +139,21 @@ public final class ExpeditionReplenishmentAuthority {
         var claim = new ClaimAllocation(transfer.claimId(), mission.id(), transfer.sourceEconomicOwnerId(), transfer.itemKind(), transfer.quantity(), transfer.lots(), ClaimPurpose.EXPEDITION_SUPPLY);
         var bindings = resources.bindings().values().stream().filter(b -> b.accountId().equals(transfer.sourceAccountId())).toList();
         resources = bindings.isEmpty() ? resources.reserve(claim, transfer.sourceAccountId()) : resources.reserveBound(claim, transfer.sourceAccountId(), bindings.getFirst().authorityEpoch());
-        var purchase = transfer.sourceEconomicOwnerId().equals(mission.organization().sponsor().id()) ? Optional.<GoodsSpotPurchase>empty()
-                : Optional.of(GoodsSpotPurchaseAuthority.offer(state, transfer, mission.organization().sponsor().id(), mission.financialBudgetId().orElseThrow(), mission.id()).orElseThrow(
-                        () -> new IllegalArgumentException("foreign food lacks seller consent and finite paid terms")));
         var inventory = state.inventory().withFungibleResources(resources);
-        if (purchase.isPresent()) inventory = GoodsSpotPurchaseAuthority.reserve(inventory, purchase.orElseThrow());
+        var shipments = state.shipments();
+        if (!transfer.sourceEconomicOwnerId().equals(mission.organization().sponsor().id())) {
+            var quote = GoodsSpotPurchaseAuthority.quote(state, transfer.containerId(), transfer.sourceEconomicOwnerId(),
+                    mission.organization().sponsor().id(), transfer.itemKind()).orElseThrow();
+            var budget = ExpeditionFundingAuthority.purchaseBudget(state, mission, quote.unitPrice().multiply(transfer.quantity()));
+            var purchase = GoodsSpotPurchaseAuthority.offer(state, transfer, mission.organization().sponsor().id(), budget, mission.id())
+                    .orElseThrow(() -> new IllegalArgumentException("foreign food lacks seller consent and finite paid terms"));
+            var ledger = inventory.economics(); var previous = ledger.budgets().get(budget.id());
+            ledger = previous == null ? ledger.reserveBudget(budget) : ledger.resizeBudget(previous, budget.remaining());
+            inventory = GoodsSpotPurchaseAuthority.reserve(inventory.withEconomics(ledger), purchase);
+            shipments = shipments.fundReplenishment(mission, transfer, purchase);
+        } else shipments = shipments.replaceReplenishment(mission, Optional.of(transfer));
         var changes = FrontierWorldStateUpdate.begin().inventory(inventory)
-                .shipments(state.shipments().replaceReplenishment(mission, Optional.of(transfer), purchase));
+                .shipments(shipments);
         var current = state.actorExecutions().actors().get(transfer.actorId());
         return current != null && current.current().equals(Optional.of(transfer.execution())) ? state.withChanges(changes)
                 : ActorExecutionComposition.LIFECYCLE.prepareVacant(state, transfer.execution()).commit(state, changes);

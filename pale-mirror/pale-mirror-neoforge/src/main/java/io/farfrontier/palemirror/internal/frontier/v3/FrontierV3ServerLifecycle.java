@@ -128,7 +128,8 @@ public final class FrontierV3ServerLifecycle {
                 FAST_FORWARD_OUTCOMES.get(server), FAST_FORWARD_SLICE_TELEMETRY.get(server), fastForwardRequests(server),
                 FrontierV3PedestrianPlanning.diagnostic(runtime),
                 FrontierV3ActorProbeSchedule.diagnostic(runtime, FrontierV3PhysicalWorld.require(server).getGameTime()),
-                FrontierV3PhysicalStores.diagnostic(FrontierV3PhysicalWorld.require(server)), runtime.persistencePressure().orElse(null));
+                FrontierV3PhysicalStores.diagnostic(FrontierV3PhysicalWorld.require(server)), runtime.persistencePressure().orElse(null),
+                runtime.pendingOrdinaryTicks());
     }
     static FrontierV3PilotSceneDemandSnapshot pilotSceneDemandSnapshot(ServerLevel level, SubjectId assaultId) {
         Objects.requireNonNull(level, "pilot demand level");
@@ -366,6 +367,8 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
         if (runtime == null) return;
         try (var hostTurn = FrontierV3HostTiming.beginPmTurn(runtime.executionMetrics())) {
+            if (!INITIAL_CANONICAL_HOLDS.containsKey(server) && !FAST_FORWARD_TARGETS.containsKey(server)
+                    && !FAST_FORWARD_REMAINING.containsKey(server)) runtime.observeOrdinaryHostTick();
             // Planning and canonical validation revisit the same immutable input.
             // Keep bounded derived views through this whole turn, not just one planner;
             // changed drafts still use distinct keys and no view survives as authority.
@@ -387,7 +390,7 @@ public final class FrontierV3ServerLifecycle {
                 } else if (active) {
                     ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
                     runObservedPhysicalTurn(physicalWorld, runtime);
-                    runtime.tick(FrontierV3RuntimeBudgets.ordinaryTick(runtime.decodedState().orElseThrow().bootstrap().ruleset()));
+                    runtime.advanceOrdinaryTime(FrontierV3RuntimeBudgets.ordinaryTick(runtime.decodedState().orElseThrow().bootstrap().ruleset()));
                     if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) advanceQueuedCanonicalTime(server, runtime);
                 }
                 return null;

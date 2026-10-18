@@ -101,11 +101,27 @@ class ExtractionTerrainFactsTest {
         assertEquals(state, codec.decode(codec.encode(state)));
         var invalid = retained.invalidate(new BlockPosition(10000, 62, 0));
         assertThrows(IllegalArgumentException.class, () -> ExtractionTerrainFacts.validateExclusions(known, invalid));
-        var full = new java.util.HashSet<BlockPosition>();
-        for (int x = 0; x < KnownBlockExclusions.MAX_POSITIONS; x++) full.add(new BlockPosition(x, 62, 0));
-        var exhausted = new KnownBlockExclusions(full);
-        assertThrows(IllegalArgumentException.class, () -> exhausted.invalidate(new BlockPosition(-1, 62, 0)));
-        assertSame(exhausted, exhausted.invalidate(new BlockPosition(0, 62, 0)));
+    }
+
+    @Test void normalWorldProjectionCanCrossOldLifetimeLimitAndRecoverWithoutForgettingEdits() {
+        var before = FrontierWorldState.initial(bootstrap("frontier-v3-quarry-graybox-r7"));
+        var positions = new java.util.HashSet<BlockPosition>();
+        for (int x = -128; x < 128; x++) for (int z = 0; z < 128; z++)
+            positions.add(new BlockPosition(x, 65, z));
+        var old = new KnownBlockExclusions(positions);
+        var added = Set.of(new BlockPosition(-129, 65, -1), new BlockPosition(129, 65, 0));
+        var next = old.invalidate(added);
+        assertEquals(32770, next.positions().size());
+        assertEquals(added, next.additionsSince(old).orElseThrow());
+        assertEquals(32768, old.positions().size());
+        assertTrue(old.additionsSince(next).isEmpty());
+        var after = before.withChanges(FrontierWorldStateUpdate.begin().extractionSites(
+                new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState(
+                        java.util.Map.of(), java.util.Map.of(), 1, next)));
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        assertEquals(after, codec.decode(codec.encode(after)));
+        assertEquals(before.inventory(), after.inventory());
+        assertTrue(before.extractionSites().geologicalExclusions().positions().isEmpty());
     }
 
     @Test void remoteChangesDoNotRebuildSitesButLocalInvalidationsStillReachTheirProviderAndRecovery() {

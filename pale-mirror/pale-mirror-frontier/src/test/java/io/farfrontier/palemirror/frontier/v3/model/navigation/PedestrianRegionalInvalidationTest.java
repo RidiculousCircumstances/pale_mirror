@@ -11,6 +11,29 @@ import java.util.function.Predicate;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianRegionalInvalidationTest {
+    @Test void directReplayReusesReconstructedExactKnowledgeButNotChangedPermissionsOrBounds() {
+        var revision = PedestrianGeometryRevision.initial(); var bounds = new WorldBounds(0, 0, 32, 16);
+        var start = SurfaceAnchor.at(1, 63, 1); var end = SurfaceAnchor.at(10, 63, 1);
+        var first = PedestrianRoutePlanning.calculate(flat(revision, bounds, s -> false), start, end);
+        assertEquals(PedestrianRouteResult.Status.FOUND, first.status());
+        var equal = new PedestrianGeometryRevision(revision.scope(), revision.geometryScope(), revision.baseline(), revision.revisions());
+        var reads = new AtomicInteger();
+        var reconstructed = geometry(equal, bounds, (x, z) -> {
+            reads.incrementAndGet(); return SurfaceAnchor.at(x, 63, z);
+        }, s -> false);
+        assertSame(first, PedestrianRoutePlanning.calculate(reconstructed, start, end));
+        assertEquals(0, reads.get(), "an identical query must not restart search or survey");
+        var changed = revision.changed(Set.of(new PedestrianGeometryRevision.Region(0, 0)));
+        assertEquals(PedestrianRouteResult.Status.NO_PATH,
+                PedestrianRoutePlanning.calculate(flat(changed, bounds, s -> s.x() == 8), start, end).status());
+        var reopened = changed.changed(Set.of(new PedestrianGeometryRevision.Region(0, 0)));
+        assertEquals(PedestrianRouteResult.Status.FOUND,
+                PedestrianRoutePlanning.calculate(flat(reopened, bounds, s -> false), start, end).status());
+        assertEquals(PedestrianRouteResult.Status.NO_PATH, PedestrianRoutePlanning.calculate(
+                flat(revision, new WorldBounds(0, 0, 8, 16), s -> false), start, end).status());
+        assertEquals(PedestrianRouteResult.Status.NO_PATH, PedestrianRoutePlanning.calculate(
+                flat(PedestrianGeometryRevision.initial(), bounds, s -> s.x() == 8), start, end).status());
+    }
     @Test void completedEstimateRetainsItsConnectedItineraryNotTheExploredAlternatives() {
         var revision = PedestrianGeometryRevision.initial(); var bounds = new WorldBounds(0, 0, 256, 256);
         var start = SurfaceAnchor.at(1, 63, 1); var target = SurfaceAnchor.at(240, 63, 240);

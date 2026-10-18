@@ -16,7 +16,7 @@ class DistributedExtractionGeologyTest {
         state = CoalDepositReserveTest.withoutFinishedFood(state);
         var secondary = state.extractionSites().deposits().values().stream().filter(deposit -> !deposit.site().mineralDeposits().isEmpty()
                 && !deposit.site().layout().outputKinds().contains("minecraft:coal")).toList();
-        assertEquals(3, secondary.size());
+        assertEquals(6, secondary.size());
         for (var deposit : secondary) {
             assertFalse(ProductionStockDemand.read(state, deposit.site().settlementId(), "minecraft:cobblestone").requested());
             assertTrue(ExtractionStockDemand.requested(state, deposit, Optional.empty()));
@@ -55,7 +55,7 @@ class DistributedExtractionGeologyTest {
         var counts = sites.deposits().values().stream().collect(java.util.stream.Collectors.groupingBy(
                 deposit -> deposit.site().settlementId(), java.util.stream.Collectors.counting()));
         assertTrue(counts.values().stream().allMatch(count -> count == 2));
-        assertEquals(6, sites.geology().deposits().size());
+        assertEquals(12, sites.geology().deposits().size());
         assertEquals(2, sites.geology().deposits().values().stream().flatMap(deposit -> deposit.sections().stream())
                 .map(section -> section.volume().blocks()).distinct().count(), "different finite sizes, not duplicate stock bags");
         var deposit = sites.deposits().values().stream().filter(value -> !value.site().mineralDeposits().isEmpty()

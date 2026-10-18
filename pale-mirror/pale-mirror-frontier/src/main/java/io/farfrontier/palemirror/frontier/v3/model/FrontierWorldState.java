@@ -543,7 +543,11 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
     /** Pre-WAL sparse-field audit; unknown construction paths use the complete audit. */
     void validateTransitionFrom(FrontierWorldState previous) {
         Objects.requireNonNull(previous, "previous state");
-        if (onlyNavigationGeometryChangedFrom(previous)) { navigationGeometry.requireWithin(bootstrap.bounds()); return; }
+        if (onlyTerrainKnowledgeChangedFrom(previous)) {
+            navigationGeometry.requireWithin(bootstrap.bounds());
+            ExtractionTerrainFacts.validateExclusions(bootstrap, extractionSites.geologicalExclusions());
+            return;
+        }
         if (onlyInfectionPlannerAndHealthChangedFrom(previous)) {
             FrontierPlannerHealthValidation.validate(bootstrap, humanPopulation, strategicPlans, routeTopology, hiveColony, actorLocations, fencedRecovery);
             validateInfectionTransition(previous);
@@ -556,7 +560,8 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
         if (!onlyInfectionChangedFrom(previous)) { validateOwnedState(); return; }
         validateInfectionTransition(previous);
     }
-    private boolean onlyNavigationGeometryChangedFrom(FrontierWorldState previous) {
+    /** Terrain invalidation changes no producer, ownership, inventory or execution relationship. */
+    private boolean onlyTerrainKnowledgeChangedFrom(FrontierWorldState previous) {
         return bootstrap == previous.bootstrap && actorLocations == previous.actorLocations && structureConditions == previous.structureConditions
                 && infection == previous.infection && inventory == previous.inventory && productionJobs == previous.productionJobs
                 && serviceWorks == previous.serviceWorks && physicalIntents == previous.physicalIntents && physicalObservations == previous.physicalObservations
@@ -567,7 +572,12 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
                 && replicaCustody == previous.replicaCustody && deferredAftermath == previous.deferredAftermath && fencedRecovery == previous.fencedRecovery
                 && diagnosticIncidents == previous.diagnosticIncidents && actorMovements == previous.actorMovements && actorExecutions == previous.actorExecutions
                 && shipments == previous.shipments && unitGroups == previous.unitGroups && transportFleet == previous.transportFleet
-                && extractionSites == previous.extractionSites && productionStations == previous.productionStations;
+                && extractionSites.deposits() == previous.extractionSites.deposits()
+                && extractionSites.work() == previous.extractionSites.work()
+                && extractionSites.nextWorkOrdinal() == previous.extractionSites.nextWorkOrdinal()
+                && extractionSites.geology() == previous.extractionSites.geology()
+                && extractionSites.knowledge() == previous.extractionSites.knowledge()
+                && productionStations == previous.productionStations;
     }
     /** Hive infection tasks may atomically change their cell and planner state. */
     private boolean onlyInfectionPlannerAndHealthChangedFrom(FrontierWorldState previous) {

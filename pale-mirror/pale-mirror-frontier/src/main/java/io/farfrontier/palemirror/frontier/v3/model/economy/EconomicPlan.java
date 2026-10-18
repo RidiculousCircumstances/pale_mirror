@@ -7,7 +7,8 @@ import java.util.*;
 public record EconomicPlan(long horizonTicks, Map<String, Long> domesticTargets,
         Map<String, Long> additionalProduction, Map<String, Long> purchaseBudgets,
         long retainedLiquidity, long unfundedRequirements, long contractReceivables, List<Checkpoint> checkpoints,
-        List<Export> exports, Set<Constraint> constraints) {
+        List<Export> exports, Set<Constraint> constraints, Map<String, Long> purchasePrices,
+        Set<String> fundedRestarts, Map<String, Long> saleableStock) {
     public enum Constraint { MATERIAL_SHORTFALL, CASH_SHORTFALL, CONDITIONAL_EXPORT_INCOME, NO_EXPORT_MARKET }
     public record Checkpoint(long afterTicks, Map<String, Long> netRequirements, long importCost, long cashWithoutNewSales) {
         public Checkpoint {
@@ -26,12 +27,19 @@ public record EconomicPlan(long horizonTicks, Map<String, Long> domesticTargets,
         domesticTargets = Map.copyOf(domesticTargets); additionalProduction = Map.copyOf(additionalProduction);
         purchaseBudgets = Map.copyOf(purchaseBudgets); checkpoints = List.copyOf(checkpoints);
         exports = List.copyOf(exports); constraints = Set.copyOf(constraints);
+        purchasePrices = Map.copyOf(purchasePrices); fundedRestarts = Set.copyOf(fundedRestarts);
+        saleableStock = Map.copyOf(saleableStock);
         if (horizonTicks < 1 || retainedLiquidity < 0 || unfundedRequirements < 0 || contractReceivables < 0
                 || !domesticTargets.keySet().equals(additionalProduction.keySet())
                 || !domesticTargets.keySet().containsAll(purchaseBudgets.keySet())
+                || !domesticTargets.keySet().equals(purchasePrices.keySet())
+                || !domesticTargets.keySet().equals(saleableStock.keySet())
+                || !domesticTargets.keySet().containsAll(fundedRestarts)
                 || domesticTargets.values().stream().anyMatch(v -> v < 0)
                 || additionalProduction.values().stream().anyMatch(v -> v < 0)
-                || purchaseBudgets.values().stream().anyMatch(v -> v < 0))
+                || purchaseBudgets.values().stream().anyMatch(v -> v < 0)
+                || purchasePrices.values().stream().anyMatch(v -> v < 1)
+                || saleableStock.values().stream().anyMatch(v -> v < 0))
             throw new IllegalArgumentException("invalid economic plan");
     }
 }

@@ -27,15 +27,17 @@ public final class SettlementSupplyPlanning {
             promised = Math.addExact(promised, StockSupplyComposition.pending(state, StockSupplyPort.Key.FIELD).stream()
                     .filter(c -> c.economicOwner().equals(home) && c.itemKind().equals(commodity.itemKind())).mapToLong(StockSupplyPort.Commitment::incoming).sum());
             var food = life.foods().foods().get(commodity.itemKind());
-            long period = food == null ? 1 : Math.multiplyExact(Math.multiplyExact(life.satietyUnitTicks(), 1000L), food.nutritionPerItem());
+            var meal = food == null ? null : FoodConsumptionForecast.atThreshold(food, life);
+            long period = meal == null ? 1 : Math.multiplyExact(Math.multiplyExact(life.satietyUnitTicks(), 1000L), meal.usefulNutrition());
             var reserve = reserves.get(commodity.itemKind());
             facts.put(commodity.itemKind(), new SupplyPlanner.Stock(stock.unclaimedInStorage(), stock.expectedIncoming(), promised,
                     reserve == null ? StockTargetDemand.target(commodity, residents, stock.protectedMinimum()) : reserve.quantity(), stock.protectedMinimum(),
-                    food == null ? 0 : metabolism, period, trade.supplyPlanning().require(commodity.itemKind()),
+                    meal == null ? 0 : Math.multiplyExact(metabolism, meal.items()), period, trade.supplyPlanning().require(commodity.itemKind()),
                     deliveries.getOrDefault(commodity.itemKind(), List.of()),
                     reserve == null ? OptionalLong.empty() : OptionalLong.of(reserve.reorderPoint())));
         }
-        var capacities = SupplyCapacityComposition.read(state, home, facts);
+        var window = SupplyPlanningWindow.forSettlement(state, home, reserves.values());
+        var capacities = SupplyCapacityComposition.read(state, home, facts, window);
         var commitments = SupplyCapacityComposition.dependencies(state, home, facts);
         var market = SettlementSourcingMarket.read(state, participant, capacities);
         if (trade.supplyPlanning().economics().isPresent())

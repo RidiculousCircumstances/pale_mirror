@@ -114,6 +114,10 @@ final class FrontierV3ResidentLifeDiagnostic {
                         io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.processRegistry(),
                         state, action)).orElse(false)
                 + ",\"executionColdAvailable\":" + ActorExecutionCoordinator.coldAvailable(state, subject)
+                + ",\"physicalBodyCustody\":" + ActorBodyAuthority.retainsPhysicalCustody(state, subject)
+                + ",\"ambientStatus\":\"" + (state.ambientLeases().containsKey(subject)
+                    ? state.ambientLeases().get(subject).status().name() : "NONE") + "\""
+                + ",\"mealOverdueTicks\":" + mealAction.map(action -> Math.max(0, now - action.dueAt().ticks())).orElse(0L)
                 + ",\"mealFood\":\"" + (meal == null ? "" : quote(meal.portion().itemKind())) + "\""
                 + ",\"mealQuantity\":" + (meal == null ? 0 : meal.portion().quantity())
                 + ",\"mealResourceObligation\":" + (mealResources == null ? "null" : "{\"custodyState\":\""

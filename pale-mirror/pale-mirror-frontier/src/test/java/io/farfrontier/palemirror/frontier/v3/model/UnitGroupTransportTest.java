@@ -188,7 +188,7 @@ class UnitGroupTransportTest {
                     }
                 });
         var engine = FrontierEngines.createCanonicalStateAccess(configuration);
-        UnitGroup admitted = null; boolean recovered = false, acceptedBeforeReturn = false, closed = false, nonflat = false;
+        UnitGroup admitted = null; boolean recovered = false, acceptedBeforeReturn = false, closed = false, nonflat = false, checkedPausedClosure = false;
         for (int boundary = 0; boundary < 4000; boundary++) {
             var state = engine.canonicalState().state();
             if (admitted == null && !state.unitGroups().groups().isEmpty()) {
@@ -224,6 +224,13 @@ class UnitGroupTransportTest {
                 }
                 assertEquals(admitted.members(), group.members(), "checkpoint/return cannot discover a replacement roster");
                 assertNotNull(mission);
+                if (!checkedPausedClosure && mission.stage() == TransportMission.Stage.RETURNING
+                        && group.phase() == UnitGroup.Phase.AT_GOAL && group.goalOrdinal() == 2
+                        && group.members().stream().noneMatch(m -> state.actorMovements().containsKey(m.actorId())
+                            || state.humanPopulation().meals().containsKey(m.actorId()))) {
+                    assertReturnedGroupRetiresPausedPurpose(state, group);
+                    checkedPausedClosure = true;
+                }
                 if (mission.stage() == TransportMission.Stage.UNLOADING) {
                     var port = UnitGroupMissionPorts.require(group);
                     var wake = port.reconsider(state, group, engine.checkpoint().instant().ticks());
@@ -244,6 +251,7 @@ class UnitGroupTransportTest {
             }
         }
         assertNotNull(admitted); assertTrue(recovered); assertTrue(acceptedBeforeReturn); assertTrue(nonflat);
+        assertTrue(checkedPausedClosure, "exercise closure between completed self-care and group resumption");
         assertTrue(closed, "mission must return and retire, not just deliver");
         var terminal = engine.canonicalState().state();
         assertTrue(terminal.shipments().missions().isEmpty()); assertTrue(terminal.unitGroups().groups().isEmpty());
@@ -266,6 +274,26 @@ class UnitGroupTransportTest {
         var completed = admitted;
         assertTrue(engine.checkpoint().schedules().stream().noneMatch(action -> action.subject().equals(completed.id())
                 || action.subject().equals(completed.mission().id())));
+    }
+    private static void assertReturnedGroupRetiresPausedPurpose(FrontierWorldState state, UnitGroup group) {
+        var actors = new LinkedHashMap<>(state.actorExecutions().actors());
+        var guide = group.members().stream().filter(m -> m.role() == UnitGroup.Role.GUIDE).findFirst().orElseThrow();
+        var retained = actors.get(guide.actorId());
+        var purpose = retained.current().orElseThrow();
+        assertEquals(ActorActivityKind.GROUP_MEMBER, purpose.activityKind());
+        // A completed independent activity has released current authority, but the
+        // registered activity turn has not resumed its exact saved purpose yet.
+        actors.put(guide.actorId(), new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecution(
+                guide.actorId(), retained.generation(), Optional.empty(), Optional.of(purpose)));
+        var paused = state.withChanges(FrontierWorldStateUpdate.begin().actorExecutions(
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState(actors)));
+        var closed = UnitGroupProcess.reduce(paused, group.id(), new UnitGroupAdvanced(group.id(), group.revision(),
+                UnitGroupAdvanced.Change.CLOSE, group.goalOrdinal(), Optional.empty(), Optional.empty()));
+        assertEquals(UnitGroup.Phase.CLOSED, closed.unitGroups().groups().get(group.id()).phase());
+        assertTrue(closed.actorExecutions().actors().get(guide.actorId()).suspended().isEmpty());
+        assertEquals(paused.inventory(), closed.inventory()); assertEquals(paused.actorLocations(), closed.actorLocations());
+        var codec = new FrontierWorldStateCodec();
+        assertEquals(closed, codec.decode(codec.encode(closed)));
     }
     private static void assertUnavailableProvisioningReturnsCargo(FrontierWorldState state, SubjectId missionId, long tick) throws Exception {
         var mission = state.shipments().missions().get(missionId);

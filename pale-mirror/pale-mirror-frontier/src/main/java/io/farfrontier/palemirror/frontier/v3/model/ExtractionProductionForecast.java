@@ -7,7 +7,20 @@ import java.util.*;
 
 /** The extraction owner describes known sequential work, never hypothetical unexplored geology. */
 final class ExtractionProductionForecast {
+    private static final ImmutableInputView<Map<BlockExtraction.Definition, FiniteWorkForecast.Estimate>> ESTIMATES = new ImmutableInputView<>();
     static FiniteWorkForecast.Estimate assess(FrontierWorldState state, ExtractionDeposit deposit,
+            BlockExtraction.Definition product, List<ResidentProfile> workers) {
+        // Reservations of trade stock/cash do not change geology, extraction
+        // commitments or worker capabilities. Key only the actual owner inputs.
+        var inputs = new ArrayList<Object>();
+        inputs.add(state.bootstrap().ruleset()); inputs.add(state.extractionSites()); inputs.add(deposit);
+        inputs.addAll(workers);
+        synchronized (ESTIMATES) {
+            var estimates = ESTIMATES.get(inputs, HashMap::new);
+            return estimates.computeIfAbsent(product, ignored -> project(state, deposit, product, workers));
+        }
+    }
+    private static FiniteWorkForecast.Estimate project(FrontierWorldState state, ExtractionDeposit deposit,
             BlockExtraction.Definition product, List<ResidentProfile> workers) {
         var reserved = state.extractionSites().reservedCells(deposit.site().id());
         var catalog = state.bootstrap().ruleset().workCatalog();

@@ -31,6 +31,41 @@ class EconomicPlannerTest {
         return new SupplyPlanner.Process("oven", "food", 1, Map.of("grain", 3), 1, Map.of("fuel", 20L),
                 0, 10, 1, 100, 1);
     }
+    @Test void unbackedGrainReserveCanFinanceMissingFuelWithoutSellingTheRestartIngredients() {
+        var plan = new EconomicPlanner().plan(facts(0, 90, 0, 0, List.of(oven()), List.of()), RULES);
+        var economy = plan.economy().orElseThrow();
+        assertTrue(economy.domesticTargets().get("grain") >= 90);
+        assertTrue(economy.saleableStock().get("grain") > 0, "desired reserve is not an unconditional export ban");
+        assertTrue(90 - economy.saleableStock().get("grain") >= 3, "retain ingredients for the backed restart boundary");
+        assertEquals(0, economy.purchaseBudgets().values().stream().mapToLong(Long::longValue).sum(),
+                "possible liquidation proceeds cannot be spent before sale");
+    }
+    @Test void actualSupplierQuoteFundsRestartButAnUnreachableOrLateOfferDoesNot() {
+        var original = facts(0, 200, 0, 6, List.of(oven()), List.of());
+        var market = new SourcingMarket(6, 100, Map.of("oven", 4L),
+                List.of(new SourcingMarket.Offer("coal-supplier", "fuel", 20, 5, 5, 0, 0)));
+        var input = new EconomicSnapshot(original.dayTicks(), original.stocks(), original.needs(), original.flows(),
+                original.reserves(), original.processes(), original.commitments(), market, original.replacementPrices(), List.of(), 0);
+        var plan = new EconomicPlanner().plan(input, RULES).economy().orElseThrow();
+        assertEquals(5, plan.purchasePrices().get("fuel"));
+        assertTrue(plan.fundedRestarts().contains("fuel"));
+        var late = new SourcingMarket(6, 100, Map.of("oven", 4L),
+                List.of(new SourcingMarket.Offer("coal-supplier", "fuel", 20, 5, 5, 10000, 0)));
+        var delayed = new EconomicSnapshot(input.dayTicks(), input.stocks(), input.needs(), input.flows(), input.reserves(),
+                input.processes(), input.commitments(), late, input.replacementPrices(), List.of(), 0);
+        assertFalse(new EconomicPlanner().plan(delayed, RULES).economy().orElseThrow().fundedRestarts().contains("fuel"));
+    }
+    @Test void forecastShortfallOffersOptionalFoodReserveBeforeTheNextRestartFails() {
+        var input = facts(20, 3, 2, 3, List.of(oven()), List.of());
+        var plan = new EconomicPlanner().plan(input, RULES);
+        var economy = plan.economy().orElseThrow();
+        assertTrue(economy.unfundedRequirements() > 0);
+        assertTrue(economy.saleableStock().get("food") > 0);
+        assertTrue(20 - economy.saleableStock().get("food") >= plan.reserves().get("food").protectedQuantity());
+        assertEquals(0, economy.saleableStock().get("grain"), "do not sell the next recipe's ingredients");
+        assertTrue(economy.purchaseBudgets().values().stream().mapToLong(Long::longValue).sum() <= 3);
+        assertEquals(3, input.market().availableMoney(), "offers cannot credit the treasury");
+    }
     @Test void storedFinishedGoodsOffsetInputReservesInsteadOfSpendingTreasuryTwice() {
         var facts = facts(100, 0, 0, 100, List.of(oven()), List.of());
         var plan = new EconomicPlanner().plan(facts, RULES);
@@ -60,6 +95,24 @@ class EconomicPlannerTest {
         assertEquals(50, plan.exports().getFirst().conditionalRevenue());
         assertEquals(0, plan.purchaseBudgets().values().stream().mapToLong(Long::longValue).sum());
         assertTrue(plan.constraints().contains(EconomicPlan.Constraint.CONDITIONAL_EXPORT_INCOME));
+
+        long horizon = plan.horizonTicks();
+        var lateField = new SupplyPlanner.Process("field", "grain", 1, Map.of(), 0, Map.of(), 0,
+                horizon + 1, 1, 100, 1, Map.of("worker", 50L), 1,
+                List.of(new SupplyPlanner.OutputRelease(horizon + 1, 100)));
+        var late = new EconomicPlanner().plan(facts(100, 7, 0, 0, List.of(oven(), lateField),
+                input.exportInterest()), RULES).economy().orElseThrow();
+        assertEquals(7, late.exports().getFirst().existingStock(), "already stored goods remain saleable");
+        assertEquals(0, late.exports().getFirst().additionalProduction(), "next wave misses this plan's horizon");
+        assertEquals(7, late.exports().getFirst().conditionalRevenue(), "late output cannot inflate expected receipts");
+
+        var datedField = new SupplyPlanner.Process("field", "grain", 1, Map.of(), 0, Map.of(), 0,
+                horizon, 1, 100, 1, Map.of("worker", 50L), 1,
+                List.of(new SupplyPlanner.OutputRelease(horizon, 12), new SupplyPlanner.OutputRelease(horizon + 1, 100)));
+        var dated = new EconomicPlanner().plan(facts(100, 7, 0, 0, List.of(oven(), datedField),
+                input.exportInterest()), RULES).economy().orElseThrow();
+        assertEquals(12, dated.exports().getFirst().additionalProduction(), "include only released capacity, with inclusive horizon");
+        assertEquals(19, dated.exports().getFirst().conditionalRevenue());
     }
     @Test void competingExportProductsShareWorkerAndBuyerBudgets() {
         var field = new SupplyPlanner.Process("field", "grain", 1, Map.of(), 0, Map.of(), 0, 10, 1, 100, 1, Map.of("worker", 50L));

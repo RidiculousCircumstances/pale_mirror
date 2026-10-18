@@ -43,9 +43,10 @@ public final class SettlementFoodPurchases {
                         && state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
                 .mapToLong(resident -> resident.characteristics().effectiveMetabolismPermille(
                         state.humanPopulation().nutrition(resident.id()).lastEvaluatedTick())).sum();
+        var meal = FoodConsumptionForecast.atThreshold(life.foods().require(SettlementFoodPolicy.BREAD), life);
         long foodTime = metabolism == 0 ? Long.MAX_VALUE : Math.multiplyExact(Math.multiplyExact(
-                (long) SettlementFoodPolicy.reserveCoverageBread(state, home), life.breadNutritionUnits()),
-                Math.multiplyExact(life.satietyUnitTicks(), 1_000L)) / metabolism;
+                (long) SettlementFoodPolicy.reserveCoverageBread(state, home), meal.usefulNutrition()),
+                Math.multiplyExact(life.satietyUnitTicks(), 1_000L)) / Math.multiplyExact(metabolism, meal.items());
         boolean processing = heat >= recipe.heatPerBatch() && delay.isPresent() && delay.orElseThrow() <= foodTime;
         var result = new HashMap<String, Integer>();
         var protectedInputs = new HashMap<String, Integer>();

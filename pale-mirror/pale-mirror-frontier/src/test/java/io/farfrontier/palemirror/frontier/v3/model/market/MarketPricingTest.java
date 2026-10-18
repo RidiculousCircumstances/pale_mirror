@@ -6,6 +6,19 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MarketPricingTest {
+    @Test void adaptivePricesCanLiquidateBelowSeedAndPastMaterialCostWithoutInventingSales() {
+        var policy = new MarketPricePolicy(); var rules = MarketPricingRules.adaptive();
+        var context = new MarketPricePolicy.Context(FixedScalar.whole(19), Optional.empty(), 0, false,
+                Optional.of(FixedScalar.ONE));
+        var quote = policy.review(FixedScalar.whole(20), FixedScalar.whole(30), FixedScalar.whole(20), 10,
+                Optional.empty(), Optional.empty(), 0, rules, context);
+        for (long tick = rules.reviewTicks(); tick <= 80 * rules.reviewTicks(); tick += rules.reviewTicks())
+            quote = policy.review(FixedScalar.whole(20), FixedScalar.whole(30), FixedScalar.whole(20), 10,
+                    Optional.empty(), Optional.of(quote), tick, rules, context);
+        assertEquals(FixedScalar.ONE, quote.ask());
+        assertTrue(quote.lastSale().isEmpty());
+        assertEquals(0, quote.unsoldOfferedTicks());
+    }
     @Test void completedVolumeAndRecencySetReferenceWithoutTimeOnlyDriftOrDuplicateSales() {
         var first = sale(1, 100, 1, 10);
         var history = MarketPriceHistory.empty().record("grain", first).record("grain", sale(2, 100, 9, 2));
@@ -32,6 +45,39 @@ class MarketPricingTest {
         var accumulated = policy.review(FixedScalar.whole(2), FixedScalar.whole(3), FixedScalar.whole(2), 128,
                 sold.lastSale(), Optional.of(sold), 7200, rules);
         assertEquals(new FixedScalar(1_995_000), accumulated.ask());
+    }
+    @Test void fundedPriceGapCanClearWithoutRequiringAPreexistingCaravan() {
+        var policy = new MarketPricePolicy(); var rules = MarketPricingRules.initial();
+        var quote = policy.review(FixedScalar.whole(20), FixedScalar.whole(30), FixedScalar.whole(20), 10,
+                Optional.empty(), Optional.empty(), 0, rules);
+        var gap = new MarketPricePolicy.Context(FixedScalar.ZERO, Optional.empty(), 0, false, Optional.of(FixedScalar.whole(6)));
+        var initial = quote;
+        for (long now = rules.reviewTicks(); now <= 30 * rules.reviewTicks(); now += rules.reviewTicks())
+            quote = policy.review(FixedScalar.whole(20), FixedScalar.whole(30), FixedScalar.whole(20), 10,
+                    Optional.empty(), Optional.of(quote), now, rules, gap);
+        assertEquals(FixedScalar.whole(6), quote.ask(), "constant surplus and no journey must not lock out a funded lower bid");
+        assertEquals(0, quote.unsoldOfferedTicks(), "a funded bid alone is not a standing sell offer");
+        assertEquals(initial, policy.review(FixedScalar.whole(20), FixedScalar.whole(30), FixedScalar.whole(20), 10,
+                Optional.empty(), Optional.of(initial), 1, rules, gap));
+        var compatible = new MarketPricePolicy.Context(FixedScalar.ZERO, Optional.empty(), 0, false, Optional.of(FixedScalar.whole(21)));
+        assertEquals(initial.ask(), policy.review(FixedScalar.whole(20), FixedScalar.whole(30), FixedScalar.whole(20), 10,
+                Optional.empty(), Optional.of(initial), 2400, rules, compatible).ask());
+        var floor = new MarketPricePolicy.Context(FixedScalar.whole(19), Optional.empty(), 0, false, Optional.of(FixedScalar.ONE));
+        assertEquals(FixedScalar.whole(19), policy.review(FixedScalar.whole(20), FixedScalar.whole(30), FixedScalar.whole(20), 10,
+                Optional.empty(), Optional.of(initial), 2400, rules, floor).ask());
+    }
+    @Test void losingStandingOfferAgesEvenWhenBuyerCouldAffordItAndNoCaravanExists() {
+        var policy = new MarketPricePolicy(); var rules = MarketPricingRules.adaptive();
+        var context = new MarketPricePolicy.Context(FixedScalar.ZERO, Optional.empty(), 0, true,
+                Optional.of(FixedScalar.whole(11)));
+        var quote = policy.review(FixedScalar.whole(6), FixedScalar.ONE, FixedScalar.whole(6), 37,
+                Optional.empty(), Optional.empty(), 0, rules, context);
+        for (long tick = rules.reviewTicks(); tick <= rules.recencyTicks(); tick += rules.reviewTicks())
+            quote = policy.review(FixedScalar.whole(6), FixedScalar.ONE, FixedScalar.whole(6), 37,
+                    Optional.empty(), Optional.of(quote), tick, rules, context);
+        assertEquals(new FixedScalar(5_700_000), quote.ask());
+        assertEquals(rules.recencyTicks(), quote.unsoldOfferedTicks());
+        assertTrue(quote.lastSale().isEmpty());
     }
     private static MarketPriceHistory.Sale sale(int n, long tick, int count, long price) {
         return new MarketPriceHistory.Sale(new SubjectId("receipt:" + n), new SubjectId("settlement:1"),

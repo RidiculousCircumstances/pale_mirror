@@ -8,7 +8,8 @@ import java.util.*;
 /** Sequential declared sources are conditional production capacity, never available stock. */
 final class ExtractionSupplyCapacity implements SupplyCapacityPort {
     @Override public Key key() { return Key.EXTRACTION; }
-    @Override public List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks) {
+    @Override public List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
+                                                    SupplyPlanningWindow window) {
         if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().isEmpty()) return List.of();
         var materials = new HashSet<BlockExtraction.Definition>();
         for (var deposit : state.extractionSites().deposits().values()) if (deposit.site().settlementId().equals(home))
@@ -46,11 +47,11 @@ final class ExtractionSupplyCapacity implements SupplyCapacityPort {
             long work = Math.max(1, Math.ceilDiv(forecasts.stream().mapToLong(f -> f.labourTicks()).sum(), quantity));
             long first = forecasts.stream().mapToLong(f -> f.firstOutputTicks()).min().orElseThrow();
             long period = Math.max(1, Math.ceilDiv(Math.multiplyExact(work, schedule.dayTicks()), Math.multiplyExact(daily, workers.size())));
-            long opening = Math.ceilDiv(Math.multiplyExact(first, schedule.dayTicks()), daily);
+            long opening = SupplyPlanningWindow.completionDelay(schedule, first);
             result.add(new SupplyPlanner.Process("extraction-capacity:" + home.value() + ":" + material.id(),
                     product.itemKind(), product.quantity(), Map.of(), 0, Map.of(), 0,
-                    Math.addExact(schedule.dayTicks(), Math.max(opening, period)), period, Math.toIntExact(quantity), work,
-                    SupplyLabourCapacity.day(state, home, workers.stream().map(ResidentProfile::id).toList())));
+                    Math.max(opening, period), period, Math.toIntExact(quantity), work,
+                    SupplyLabourCapacity.over(state, home, workers.stream().map(ResidentProfile::id).toList(), window)));
         }
         return List.copyOf(result);
     }

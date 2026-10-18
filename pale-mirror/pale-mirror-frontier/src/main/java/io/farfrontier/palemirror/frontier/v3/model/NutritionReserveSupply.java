@@ -16,7 +16,9 @@ final class NutritionReserveSupply implements ReserveSupplyPort {
             metabolism = Math.addExact(metabolism, resident.characteristics().effectiveMetabolismPermille(nutrition.lastEvaluatedTick()));
             immediate = Math.addExact(immediate, Math.ceilDiv(nutrition.nutritionWanted(life), life.breadNutritionUnits()));
         }
-        long period = Math.multiplyExact(Math.multiplyExact(life.satietyUnitTicks(), 1000L), life.breadNutritionUnits());
-        return new Facts(Map.of(SettlementFoodPolicy.BREAD, new Need(Rate.of(metabolism, period), immediate)), List.of(), Map.of());
+        var yield = FoodConsumptionForecast.atThreshold(life.foods().require(SettlementFoodPolicy.BREAD), life);
+        long period = Math.multiplyExact(Math.multiplyExact(life.satietyUnitTicks(), 1000L), yield.usefulNutrition());
+        return new Facts(Map.of(SettlementFoodPolicy.BREAD,
+                new Need(Rate.of(Math.multiplyExact(metabolism, yield.items()), period), immediate)), List.of(), Map.of());
     }
 }

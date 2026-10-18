@@ -15,7 +15,7 @@ final class ExtractionAvailableFront {
     ExtractionAvailableFront(FrontierWorldState state, ExtractionDeposit deposit) {
         this.state = state; this.deposit = deposit;
         var geometry = KnownPedestrianRouteKnowledge.forFrontier(state).geometry();
-        current = new ExtractionWorkingSurfaces(state, deposit).current().entrySet().stream()
+        current = new ExtractionWorkingSurfaces(state, deposit).availableFront().entrySet().stream()
                 .filter(entry -> !geometry.blocked(entry.getValue()))
                 .collect(java.util.stream.Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
         var held = new HashSet<BlockPosition>();

@@ -153,4 +153,9 @@ public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, T
         }
         return new ShipmentState(retained, next);
     }
+    public ShipmentState fundReplenishment(TransportMission mission, UnitResourceTransfer transfer, GoodsSpotPurchase purchase) {
+        if (!mission.equals(missions.get(mission.id()))) throw new IllegalArgumentException("stale replenishment funding predecessor");
+        var next = new LinkedHashMap<>(missions); next.put(mission.id(), mission.withFundedReplenishment(transfer, purchase));
+        return new ShipmentState(shipments, next);
+    }
 }

@@ -39,7 +39,7 @@ public final class ExpeditionTransferDeathAuthority {
             requireUnapplied(state, order, receipt);
             inventory = inventory.withFungibleResources(inventory.fungibleResources().releaseClaims(Set.of(receipt.claimId())));
             if (refill != null && mission.replenishmentPurchase().isPresent())
-                inventory = GoodsSpotPurchaseAuthority.cancel(inventory, mission.replenishmentPurchase().orElseThrow());
+                inventory = ExpeditionFundingAuthority.cancelPurchase(inventory, mission.replenishmentPurchase().orElseThrow());
         }
         var shipments = refill != null ? state.shipments().replaceReplenishment(mission, Optional.empty())
                 : state.shipments().replaceSupplies(mission, mission.supplies().orElseThrow().replace(allocation,

@@ -9,7 +9,6 @@ public final class EconomicPlanner {
         long horizon = Math.max(Math.multiplyExact(facts.dayTicks(), policy.horizonDays()),
                 facts.reserves().values().stream().mapToLong(SupplyReservePlanner.Target::horizonTicks).max().orElseThrow());
         var requirements = new EconomicRequirements();
-        var critical = requirements.project(facts, facts.dayTicks());
         var stocks = new TreeMap<String, SupplyPlanner.Stock>(); var reserves = new TreeMap<String, SupplyReservePlanner.Target>();
         var domestic = new TreeMap<String, Long>();
         for (var entry : facts.stocks().entrySet()) {
@@ -26,7 +25,10 @@ public final class EconomicPlanner {
         var missing = new TreeMap<String, Long>();
         domestic.forEach((item, target) -> {
             var stock = facts.stocks().get(item); var reserve = facts.reserves().get(item);
-            long minimum = Math.min(target, Math.max(critical.gross().get(item), supply.require(item).protectedInput()));
+            var need = facts.needs().get(item);
+            long directProtection = Math.addExact(need.immediate(), need.consumption().over(
+                    Math.min(horizon, Math.max(facts.dayTicks(), reserve.timing().leadTicks()))));
+            long minimum = Math.min(target, Math.max(directProtection, supply.require(item).protectedInput()));
             reserves.put(item, new SupplyReservePlanner.Target(target, minimum, target, Math.max(horizon, reserve.timing().leadTicks()),
                     reserve.consumption(), reserve.timing()));
             long arriving = stock.arrivals().stream().filter(a -> a.afterTicks() <= horizon).mapToLong(SupplyPlanner.Arrival::quantity).sum();
@@ -34,7 +36,16 @@ public final class EconomicPlanner {
         });
         var projected = new EconomicRequirements.Projection(domestic, missing);
         var funding = new EconomicFunding().allocate(facts, supply, projected, horizon);
-        var exports = new EconomicExportPlanning().plan(facts, supply, domestic, policy);
+        var saleable = new TreeMap<String, Long>();
+        for (var entry : facts.stocks().entrySet()) {
+            String item = entry.getKey();
+            // Act on forecast cash shortfall before a restart actually stalls.
+            // Only optional upper reserves become offers; immediate needs and
+            // backed production inputs remain protected. Offers are not income.
+            long keep = funding.unfunded() > 0 ? reserves.get(item).protectedQuantity() : domestic.get(item);
+            saleable.put(item, Math.max(0, entry.getValue().available() - keep));
+        }
+        var exports = new EconomicExportPlanning().plan(facts, supply, saleable, policy, horizon);
         var production = new TreeMap<String, Long>();
         facts.stocks().forEach((item, stock) -> {
             var demand = supply.require(item);
@@ -73,7 +84,8 @@ public final class EconomicPlanner {
             checkpoints.add(new EconomicPlan.Checkpoint(after, projection.missing(), cost, Math.subtractExact(facts.market().availableMoney(), cost)));
         }
         var economy = new EconomicPlan(horizon, domestic, production, funding.budgets(), funding.liquidity(),
-                funding.unfunded(), facts.contractReceivables(), checkpoints, exports, constraints);
+                funding.unfunded(), facts.contractReceivables(), checkpoints, exports, constraints,
+                funding.prices(), funding.fundedRestarts(), saleable);
         return new SupplyPlanner.Plan(supply.demands(), reserves, supply.preferredPurchaseSpending(),
                 supply.preferredPurchaseQuantities(), supply.inputRequirements(), Optional.of(economy));
     }

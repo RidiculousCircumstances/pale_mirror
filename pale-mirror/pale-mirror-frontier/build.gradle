@@ -53,6 +53,10 @@ tasks.register('frontierV3AnnualAudit', Test) {
     classpath = sourceSets.test.runtimeClasspath
     useJUnitPlatform { includeTags 'annual-audit' }
     include '**/FrontierV3AnnualAutonomyAuditTest.class'
+    ['seed', 'ticks', 'snapshot'].each { key ->
+        def value = providers.systemProperty("pale_mirror.frontier_v3.economy.${key}").orNull
+        if (value != null) systemProperty "pale_mirror.frontier_v3.economy.${key}", value
+    }
     def selectedSeeds = providers.systemProperty('pale_mirror.frontier_v3.annual_audit.seeds').orNull
     if (selectedSeeds != null && !selectedSeeds.isBlank()) {
         systemProperty 'pale_mirror.frontier_v3.annual_audit.seeds', selectedSeeds

@@ -302,6 +302,7 @@ public final class ScheduledActionQueue {
 
         List<ScheduledAction> snapshot() {
             requireOpen();
+            if (removed.isEmpty() && created.isEmpty()) return base.snapshot();
             List<ScheduledAction> values = new java.util.ArrayList<>(base.ordered.size() - removed.size() + created.size());
             for (ScheduledAction action : base.ordered) if (!removed.contains(action.id())) values.add(action);
             values.addAll(created.values()); values.sort(ScheduledAction::compareTo);

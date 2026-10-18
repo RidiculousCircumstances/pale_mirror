@@ -158,8 +158,7 @@ public record ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits, Ma
         return invalidateGeology(java.util.List.of(position));
     }
     public ExtractionSiteState invalidateGeology(java.util.Collection<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> positions) {
-        var next = geologicalExclusions;
-        for (var position : positions) next = next.invalidate(position);
+        var next = geologicalExclusions.invalidate(positions);
         return next == geologicalExclusions ? this : new ExtractionSiteState(deposits, work, nextWorkOrdinal, next, geology, knowledge);
     }
 }

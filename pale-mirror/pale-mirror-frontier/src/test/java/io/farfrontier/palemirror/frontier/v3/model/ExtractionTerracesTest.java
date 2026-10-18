@@ -24,15 +24,22 @@ class ExtractionTerracesTest {
         var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state);
         assertTrue(knowledge.geometry().knowsSupport(origin), "known solid resource top is not limited to work stations");
         assertFalse(knowledge.geometry().blocked(origin));
+        assertTrue(new ExtractionAvailableFront(state, partial).stations().contains(origin),
+                "an exposed top is also a mining front, even before the planned lower floor is clear");
         assertTrue(knowledge.geometry().blocked(new SurfaceAnchor(cell.source().offset(0, -1, 0))),
                 "a walkable top remains a solid obstacle to a body on a lower level");
         assertEquals(layout.storagePort(), knowledge.plannedBetween(origin, layout.storagePort()).getLast());
         var codec = new FrontierWorldStateCodec();
+        var restored = codec.decode(codec.encode(state));
+        assertTrue(new ExtractionAvailableFront(restored, restored.extractionSites().deposits().get(partial.site().id()))
+                .stations().contains(origin), "recovery uses the same current contact for mining and navigation");
         assertEquals(layout.storagePort(), KnownPedestrianRouteKnowledge.forFrontier(codec.decode(codec.encode(state)))
                 .plannedBetween(origin, layout.storagePort()).getLast(), "recovery derives the same contacts without actor exceptions");
         var depleted = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(
                 partial.extracted(cell.id(), partial.cells().get(cell.id()).revision(), "fixture:last-source"))));
         assertFalse(KnownPedestrianRouteKnowledge.forFrontier(depleted).geometry().knowsSupport(origin));
+        assertFalse(new ExtractionAvailableFront(depleted, depleted.extractionSites().deposits().get(partial.site().id()))
+                .stations().contains(origin), "depletion withdraws the mining stance as well as the navigation contact");
         assertTrue(KnownPedestrianRouteKnowledge.forFrontier(depleted).geometry().supportExcluded(origin));
     }
     private static FrontierWorldState initial() {
@@ -164,6 +171,22 @@ class ExtractionTerracesTest {
         assertTrue(clearedUpper.available(Set.of()).contains(lower));
         var partial = admitted.withChanges(FrontierWorldStateUpdate.begin().extractionSites(admitted.extractionSites().replace(clearedUpper)));
         assertTrue(KnownPedestrianRouteKnowledge.forFrontier(partial).geometry().blocked(column.floor()));
+        var exposed = new SurfaceAnchor(lower.source());
+        var front = new ExtractionAvailableFront(partial, clearedUpper);
+        assertTrue(front.stations().contains(exposed));
+        var rules = partial.bootstrap().ruleset().extraction();
+        var access = KnownPedestrianRouteKnowledge.forFrontier(partial).accessSelection(old.site().layout().storagePort());
+        var cuts = io.farfrontier.palemirror.frontier.v3.model.geometry.AdjacentExcavationPlanner.propose(
+                List.of(exposed), ExtractionGroundKnowledge.forSite(partial, clearedUpper), access::reachable, ignored -> true,
+                block -> rules.definitionFor(block).isPresent(),
+                block -> block.kind().equals("minecraft:air") || rules.definitionFor(block).isPresent(), 1,
+                front.selection(), front::executable);
+        assertFalse(cuts.isEmpty(), "a partial cut must allow real adjacent work from its exposed top");
+        var continued = ExtractionAreaPlanning.preview(partial, id, new ExtractionAreaExtended(id,
+                clearedUpper.development().revision(), cuts, access.receipt(Set.of(exposed))));
+        assertTrue(deposit(continued).site().layout().accessSurfaces().contains(exposed));
+        assertEquals(partial.inventory(), continued.inventory(), "work-contact admission never grants mined output");
+        assertEquals(continued, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(continued)));
         var opened = partial.withChanges(FrontierWorldStateUpdate.begin().extractionSites(partial.extractionSites().replace(
                 clearedUpper.extracted(lower.id(), 1, "fixture:lower-clearance"))));
         assertFalse(KnownPedestrianRouteKnowledge.forFrontier(opened).geometry().blocked(column.floor()));

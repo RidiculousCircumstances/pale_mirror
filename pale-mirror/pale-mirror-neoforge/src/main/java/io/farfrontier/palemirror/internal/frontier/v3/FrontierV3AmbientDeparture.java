@@ -27,8 +27,7 @@ record FrontierV3AmbientDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier
         var actor = state.actorLocations().get(identity.actorId());
         var lease = state.ambientLeases().get(identity.actorId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE || lease == null
-                || (lease.status() != AmbientLeaseStatus.HOT && lease.status() != AmbientLeaseStatus.DRAINING
-                    && lease.status() != AmbientLeaseStatus.UNKNOWN_AFTER_RESTART)
+                || !acceptsSavedDeparture(lease.status())
                 || lease.revision() != carrier.ambientRevision()
                 || !(actor.body().equals(canonicalBodyAtCapture) && actor.condition().health().equals(canonicalHealthAtCapture)
                     || actor.body().equals(observed.body()) && actor.condition().health().equals(observed.health()))) return false;
@@ -38,6 +37,13 @@ record FrontierV3AmbientDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier
             return identity.equals(FrontierV3ActorCarrierComposition.fromCanonical(state, identity.actorId(), identity.kind(),
                     identity.owner(), identity.entityId(), identity.representation(), identity.authorityRevision(), identity.epoch()));
         } catch (IllegalArgumentException invalid) { return false; }
+    }
+
+    /** Insertion may have completed before presentation acknowledged HOT. Saved
+     * body evidence, not the presentation label, establishes attempted custody. */
+    static boolean acceptsSavedDeparture(AmbientLeaseStatus status) {
+        return status == AmbientLeaseStatus.PREPARED || status == AmbientLeaseStatus.HOT
+                || status == AmbientLeaseStatus.DRAINING || status == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART;
     }
 
     CompoundTag save() {

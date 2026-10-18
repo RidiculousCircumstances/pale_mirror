@@ -41,6 +41,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     private FrontierV3RuntimeStatus status;
     private SimInstant instant;
     private int ticksSinceCheckpoint;
+    private long pendingOrdinaryTicks;
     /**
      * One immutable defensive image for the current canonical tick/revision.  Physical adapters
      * routinely inspect it several times in one server tick; rebuilding it would clone the full
@@ -218,6 +219,29 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
 
     Optional<AdvanceResult> tick(WorkBudget budget) {
         return advanceOne(budget, true);
+    }
+
+    /** Host time is observed before the disk gate, but consumed only inside an
+     * admitted persistence turn. Pauses/operator advances do not accrue it. */
+    void observeOrdinaryHostTick() {
+        if (status.kind() == FrontierV3RuntimeStatus.Kind.ACTIVE)
+            pendingOrdinaryTicks = Math.addExact(pendingOrdinaryTicks, 1L);
+    }
+    long pendingOrdinaryTicks() { return pendingOrdinaryTicks; }
+
+    Optional<AdvanceResult> advanceOrdinaryTime(WorkBudget budget) {
+        if (pendingOrdinaryTicks == 0) return Optional.empty();
+        // The existing engine consumes due actions in causal order under the
+        // same action/weight budget. Never multiply physical turns to catch up,
+        // cross a checkpoint boundary, or acknowledge a queued WAL prefix.
+        long boundary = engine.nextExecutionBoundary().map(value -> Math.max(1L, value.ticks() - instant.ticks()))
+                .orElse(pendingOrdinaryTicks);
+        int ticks = Math.toIntExact(Math.min(Math.min(pendingOrdinaryTicks, boundary),
+                Math.max(1, checkpointIntervalTicks - ticksSinceCheckpoint)));
+        long before = instant.ticks();
+        var result = advanceInterval(ticks, budget, true);
+        pendingOrdinaryTicks = Math.subtractExact(pendingOrdinaryTicks, instant.ticks() - before);
+        return result;
     }
 
     /** The runtime owns pairing and gating; host callers cannot acknowledge a queued prefix. */

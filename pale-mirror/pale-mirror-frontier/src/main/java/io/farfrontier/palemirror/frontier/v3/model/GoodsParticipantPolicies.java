@@ -54,8 +54,11 @@ public final class GoodsParticipantPolicies {
                 int target = view.target(commodity);
                 int missing = view.supplyPlan().map(plan -> Math.toIntExact(plan.require(commodity.itemKind()).purchase()))
                         .orElseGet(() -> target - Math.addExact(stock.unclaimedInStorage(), stock.expectedIncoming()));
-                int surplus = stock.unclaimedInStorage() - target;
-                if (missing > 0) {
+                int surplus = view.saleable(commodity);
+                if (surplus > 0) {
+                    result.add(new Intent(commodity.itemKind(), GoodsTradeOrder.Side.SELL,
+                            Math.min(view.supplyPlan().isPresent() ? rules.supplyPlanning().maximumOrderItems() : rules.maximumBatch(), surplus), sellPrice));
+                } else if (missing > 0) {
                     int quantity = Math.min(view.supplyPlan().isPresent() ? rules.supplyPlanning().maximumOrderItems() : rules.maximumBatch(), Math.min(missing,
                             view.purchaseLimits().getOrDefault(commodity.itemKind(), Integer.MAX_VALUE)));
                     // A quote is interest, not a financial reservation. Preserve the
@@ -64,9 +67,6 @@ public final class GoodsParticipantPolicies {
                     var limit = new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(
                             Math.min(buyPrice.raw(), GoodsParticipantFunding.purchase(view, rules, commodity.itemKind()).raw()));
                     if (quantity > 0 && limit.raw() > 0) result.add(new Intent(commodity.itemKind(), GoodsTradeOrder.Side.BUY, quantity, limit));
-                } else if (surplus > 0) {
-                    result.add(new Intent(commodity.itemKind(), GoodsTradeOrder.Side.SELL,
-                            Math.min(view.supplyPlan().isPresent() ? rules.supplyPlanning().maximumOrderItems() : rules.maximumBatch(), surplus), sellPrice));
                 }
             }
             return List.copyOf(result);

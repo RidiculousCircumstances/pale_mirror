@@ -17,6 +17,46 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierRulesetTest {
+    @Test void miningTerritoriesHaveAnExtractableExportWithoutMoneyOrInventoryGrants() {
+        var prior = FrontierRulesets.installed("frontier-v3-quarry-graybox-r18");
+        var current = FrontierRulesets.marketQuarryGraybox();
+        assertEquals("frontier-v3-quarry-graybox-r20", current.id());
+        assertEquals(2, prior.extraction().pocket().orElseThrow().producerPeriod());
+        assertEquals(1, current.extraction().pocket().orElseThrow().producerPeriod());
+        assertEquals(prior.initialSettlementStocks(), current.initialSettlementStocks());
+        assertEquals(prior.goodsTrade().withPricing(io.farfrontier.palemirror.frontier.v3.model.market.MarketPricingRules.adaptive()),
+                current.goodsTrade());
+        assertEquals(prior.fields(), current.fields());
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:mining-territories"), 20260918065L, current));
+        var deposits = state.extractionSites().deposits().values();
+        assertEquals(6, deposits.stream().map(d -> d.site().settlementId()).distinct().count());
+        assertTrue(deposits.stream().allMatch(d -> !d.site().mineralDeposits().isEmpty()));
+        assertTrue(state.inventory().fungibleResources().lots().values().stream().noneMatch(l -> l.itemKind().equals("minecraft:coal")));
+    }
+    @Test void fuelTradeCalibrationChangesQuotesNotResourcesRecipesOrExistingWorlds() {
+        var prior = FrontierRulesets.installed("frontier-v3-quarry-graybox-r17");
+        var current = FrontierRulesets.installed("frontier-v3-quarry-graybox-r18");
+        assertEquals("frontier-v3-quarry-graybox-r18", current.id());
+        var oldCoal = prior.goodsTrade().policies().get(GoodsPolicyKind.PUBLIC_SETTLEMENT).stream()
+                .filter(c -> c.itemKind().equals("minecraft:coal")).findFirst().orElseThrow();
+        var coal = current.goodsTrade().policies().get(GoodsPolicyKind.PUBLIC_SETTLEMENT).stream()
+                .filter(c -> c.itemKind().equals("minecraft:coal")).findFirst().orElseThrow();
+        assertEquals(FixedScalar.whole(2), oldCoal.minimumSellPrice());
+        assertEquals(FixedScalar.whole(20), coal.minimumSellPrice());
+        assertEquals(FixedScalar.whole(30), coal.maximumBuyPrice());
+        assertEquals(prior.initialSettlementStocks(), current.initialSettlementStocks());
+        assertEquals(prior.production(), current.production());
+        assertEquals(prior.extraction(), current.extraction());
+        assertEquals(prior.residentLife(), current.residentLife());
+        assertNotEquals(prior.contentSha256(), current.contentSha256());
+        var recipe = current.production().require(BakeryRecipes.BREAD);
+        long outputs = current.production().requireFuel("minecraft:coal").heatUnits() / recipe.heatPerBatch();
+        assertEquals(20, outputs);
+        assertEquals(60, outputs * recipe.ingredient().quantity());
+        assertEquals(FixedScalar.ONE, new FixedScalar(coal.minimumSellPrice().raw() / outputs),
+                "fuel contributes one currency unit per bread at the seed quote, not a free input");
+    }
     @Test void quarryReserveTriplesWithoutRetuningOldWorldsOrExtractionGeometry() {
         var previous = FrontierRulesets.installed("frontier-v3-quarry-graybox-r7");
         var current = FrontierRulesets.installed("frontier-v3-quarry-graybox-r8");

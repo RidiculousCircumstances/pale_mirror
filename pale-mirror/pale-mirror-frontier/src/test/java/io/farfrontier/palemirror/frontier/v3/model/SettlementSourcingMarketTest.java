@@ -16,7 +16,8 @@ class SettlementSourcingMarketTest {
         for (var commodity : state.bootstrap().ruleset().goodsTrade().policies().get(GoodsPolicyKind.PUBLIC_SETTLEMENT))
             stocks.put(commodity.itemKind(), new SupplyPlanner.Stock(0, 0, 0, 0, 0, 0, 1,
                     state.bootstrap().ruleset().goodsTrade().supplyPlanning().require(commodity.itemKind())));
-        var processes = SupplyCapacityComposition.read(state, home, stocks);
+        var processes = SupplyCapacityComposition.read(state, home, stocks,
+                SupplyPlanningWindow.forSettlement(state, home, List.of()));
         assertTrue(processes.stream().anyMatch(p -> p.product().equals("minecraft:coal")));
         // The genesis field has not been prepared; potential workers must not invent crops.
         assertFalse(processes.stream().anyMatch(p -> p.product().equals("minecraft:wheat")));
@@ -63,12 +64,14 @@ class SettlementSourcingMarketTest {
             assertEquals(view, GoodsParticipantView.read(restored, restored.companies().goodsTrade().participants().participants().get(participant.party().id())));
             long funds = 0;
             for (var item : view.stocks().keySet()) {
-                funds += GoodsParticipantFunding.purchase(view, state.bootstrap().ruleset().goodsTrade(), item).raw();
+                funds += economy.purchaseBudgets().getOrDefault(item, 0L);
+                assertTrue(GoodsParticipantFunding.purchase(view, state.bootstrap().ruleset().goodsTrade(), item).raw()
+                        <= view.availableMoney().raw(), "a quote-time alternative cannot exceed remaining cash");
                 assertEquals(view.stocks().get(item).protectedMinimum(), PublicStockProtection.minimum(state, participant.party().id(), item));
                 var demand = ProductionStockDemand.read(state, participant.party().id(), item);
                 assertEquals(economy.additionalProduction().get(item), demand.missing());
             }
-            assertTrue(funds <= view.availableMoney().raw(), "shared budgets must not spend a treasury twice");
+            assertTrue(funds <= view.availableMoney().raw(), "simultaneously planned budgets cannot allocate a treasury twice");
             assertEquals(plan.reserves().get(SettlementFoodPolicy.BREAD).reorderPoint(), SettlementFoodPolicy.reserveRequirement(state, participant.party().id()));
         }
     }

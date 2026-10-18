@@ -5,17 +5,24 @@ import java.util.*;
 
 /** One shared spending envelope. Future liquidity is advice, never a second financial hold. */
 final class EconomicFunding {
-    record Allocation(Map<String, Long> budgets, long liquidity, long unfunded) { }
+    record Allocation(Map<String, Long> budgets, long liquidity, long unfunded,
+                      Map<String, Long> prices, Set<String> fundedRestarts, boolean restartCashShortfall) { }
     Allocation allocate(EconomicSnapshot facts, SupplyPlanner.Plan supply, EconomicRequirements.Projection horizon, long horizonTicks) {
         var prices = new TreeMap<>(facts.replacementPrices());
         var quoted = new TreeMap<String, Long>();
         for (var offer : facts.market().offers()) quoted.merge(offer.item(), offer.cashPerItem(), Math::min);
         prices.putAll(quoted); // An old cheaper reference cannot fund a currently dearer offer.
         var restart = new TreeMap<String, Long>(); var requested = new TreeMap<String, Long>();
+        var quotedRestarts = new HashSet<String>();
         var processes = new HashMap<String, SupplyPlanner.Process>(); facts.processes().forEach(p -> processes.put(p.id(), p));
         for (var entry : supply.demands().entrySet()) {
             String item = entry.getKey(); var demand = entry.getValue(); var stock = facts.stocks().get(item);
             long minimum = Math.min(demand.purchase(), Math.max(0, demand.protectedInput() - stock.covered()));
+            var actual = quotedUnitPrice(facts, item, Math.max(1, minimum), demand.deadlineTicks());
+            if (actual.isPresent()) {
+                prices.put(item, actual.getAsLong());
+                if (minimum > 0) quotedRestarts.add(item);
+            }
             restart.put(item, Math.multiplyExact(minimum, prices.get(item)));
             var process = demand.process().map(processes::get);
             // A missing manufactured output and its inputs are alternatives, not two
@@ -51,7 +58,24 @@ final class EconomicFunding {
             liquidity = Math.addExact(liquidity, Math.max(0, entry.getValue() - current));
         }
         long cost = requested.values().stream().reduce(0L, Math::addExact);
-        return new Allocation(Map.copyOf(budgets), liquidity, Math.max(0, cost - facts.market().availableMoney()));
+        var restartItems = restart.entrySet().stream().filter(e -> e.getValue() > 0)
+                .map(Map.Entry::getKey).collect(java.util.stream.Collectors.toUnmodifiableSet());
+        boolean fullyQuoted = quotedRestarts.containsAll(restartItems);
+        return new Allocation(Map.copyOf(budgets), liquidity, Math.max(0, cost - facts.market().availableMoney()),
+                Map.copyOf(prices), fullyQuoted && restartTotal <= facts.market().availableMoney() ? restartItems : Set.of(),
+                !restartItems.isEmpty() && restartTotal > facts.market().availableMoney());
+    }
+    /** A cheap single item cannot price a larger restart whose remaining supply is dearer or absent. */
+    private static OptionalLong quotedUnitPrice(EconomicSnapshot facts, String item, long quantity, long deadline) {
+        long remaining = quantity, cost = 0;
+        for (var offer : facts.market().offers().stream().filter(o -> o.item().equals(item) && o.deliveryTicks() <= deadline)
+                .sorted(Comparator.comparingLong(io.farfrontier.palemirror.frontier.v3.model.supply.SourcingMarket.Offer::cashPerItem)
+                        .thenComparing(io.farfrontier.palemirror.frontier.v3.model.supply.SourcingMarket.Offer::id)).toList()) {
+            long take = Math.min(remaining, offer.quantity());
+            cost = Math.addExact(cost, Math.multiplyExact(take, offer.cashPerItem())); remaining -= take;
+            if (remaining == 0) return OptionalLong.of(Math.ceilDiv(cost, quantity));
+        }
+        return OptionalLong.empty();
     }
     private static int priority(EconomicSnapshot facts, SupplyPlanner.Plan plan, String item, boolean restartImpossible) {
         var stock = facts.stocks().get(item); var demand = plan.require(item);

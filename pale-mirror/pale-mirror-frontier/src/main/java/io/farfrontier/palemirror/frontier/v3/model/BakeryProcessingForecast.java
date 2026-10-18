@@ -8,7 +8,8 @@ final class BakeryProcessingForecast {
     record Capacity(SubjectId station, long firstOutputDelay, long batchTicks, long labourTicks,
                     java.util.Map<String, Long> labourCapacity) { }
     static OptionalLong firstOutputDelay(FrontierWorldState state, SubjectId home) {
-        return capacity(state, home).map(c -> OptionalLong.of(c.firstOutputDelay())).orElseGet(OptionalLong::empty);
+        return capacity(state, home, new SupplyPlanningWindow(state.humanPopulation().schedule(home).dayTicks()))
+                .map(c -> OptionalLong.of(c.firstOutputDelay())).orElseGet(OptionalLong::empty);
     }
     /** Long-run buffer timing does not mistake a meal, occupied machine or current batch for lost capacity. */
     static long reserveLeadTicks(FrontierWorldState state, SubjectId home) {
@@ -25,9 +26,10 @@ final class BakeryProcessingForecast {
         long dailyWork = schedule.segments().stream().filter(s -> s.window() == SettlementDailySchedule.Window.WORK)
                 .mapToLong(s -> s.endExclusive() - s.startInclusive()).sum();
         long ticks = Math.ceilDiv(Math.multiplyExact(definition.workUnits(), 1000L), speed);
-        return Math.multiplyExact(Math.addExact(1L, Math.ceilDiv(Math.multiplyExact(ticks, 2L), dailyWork)), schedule.dayTicks());
+        if (dailyWork == 0) return state.bootstrap().ruleset().goodsTrade().supplyPlanning().require(recipe.product().itemKind()).leadTicks();
+        return SupplyPlanningWindow.completionDelay(schedule, ticks);
     }
-    static java.util.Optional<Capacity> capacity(FrontierWorldState state, SubjectId home) {
+    static java.util.Optional<Capacity> capacity(FrontierWorldState state, SubjectId home, SupplyPlanningWindow window) {
         var recipe = BakeryRecipes.bread(state);
         var facility = FrontierWorldStateSupport.settlement(state.bootstrap(), home).structures().stream()
                 .filter(value -> value.kind() == StructureKind.WORKSHOP).findFirst().orElseThrow();
@@ -60,11 +62,15 @@ final class BakeryProcessingForecast {
                 .mapToLong(segment -> segment.endExclusive() - segment.startInclusive()).sum();
         if (dailyWork == 0) return java.util.Optional.empty();
         long workTicks = Math.ceilDiv(Math.multiplyExact(definition.workUnits(), 1_000L), speed);
-        // Include the worst daily phase and one preceding batch; actual admission still proves travel/access.
-        long days = Math.addExact(1L, Math.ceilDiv(Math.multiplyExact(workTicks, 2L), dailyWork));
+        // Only an existing unfinished operation precedes the new one. Its owner
+        // supplies recorded work; no optimistic extrapolation across a suspension.
+        long preceding = machine.operation().filter(operation -> !operation.transformed()).map(operation ->
+                operation.progress().map(progress -> Math.ceilDiv(progress.requiredMilliWork()
+                        - progress.completedMilliWork(), speed)).orElse(workTicks)).orElse(0L);
         long batchTicks = Math.ceilDiv(Math.multiplyExact(workTicks, schedule.dayTicks()), dailyWork);
-        return java.util.Optional.of(new Capacity(station.id(), Math.multiplyExact(days, schedule.dayTicks()), batchTicks, workTicks,
-                SupplyLabourCapacity.day(state, home, workers.stream().map(ResidentProfile::id).toList())));
+        return java.util.Optional.of(new Capacity(station.id(), SupplyPlanningWindow.completionDelay(schedule,
+                Math.addExact(preceding, workTicks)), batchTicks, workTicks,
+                SupplyLabourCapacity.over(state, home, workers.stream().map(ResidentProfile::id).toList(), window)));
     }
     private BakeryProcessingForecast() { }
 }

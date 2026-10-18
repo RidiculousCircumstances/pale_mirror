@@ -15,6 +15,16 @@ class AutonomousGoodsTradeTest {
     private static final SubjectId COMPANY = CompanyFoundationProcess.companyId(HOME);
     private static final SubjectId DEPOT = FrontierWorldState.depotId(HOME);
 
+    @Test void standingSellerOfferIsPriceExposureWithoutAnyTransportMission() {
+        var state = review(issue(companyFixture(), HOME, "minecraft:wheat", 64, "unsold-public-grain"), HOME, 400);
+        var seller = state.companies().goodsTrade().participants().participants().get(HOME);
+        assertTrue(state.shipments().missions().isEmpty());
+        assertTrue(GoodsMarketDemand.offered(state, seller, "minecraft:wheat", 400));
+        assertFalse(GoodsMarketDemand.offered(state, seller, "minecraft:coal", 400));
+        assertFalse(GoodsMarketDemand.offered(state, seller, "minecraft:wheat",
+                401 + state.bootstrap().ruleset().goodsTrade().orderLifetime()));
+    }
+
     @Test void remoteBuyersFuelDeficitCreatesMiningDemandBeyondTheProducersOwnReserveWithoutCreatingStock() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:remote-fuel-demand"),
                 41, FrontierRulesets.fuelledQuarryGraybox()));

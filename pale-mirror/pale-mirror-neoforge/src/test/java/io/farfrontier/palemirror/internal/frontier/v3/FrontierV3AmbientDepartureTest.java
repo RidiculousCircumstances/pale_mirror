@@ -84,13 +84,34 @@ class FrontierV3AmbientDepartureTest {
     }
 
     private static FrontierWorldState hot() {
+        return AmbientLeaseStateProcess.transition(attempted(), ACTOR, AmbientLeaseStatus.HOT);
+    }
+
+    private static FrontierWorldState attempted() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:ambient-departure"), 91L));
         state = AmbientLeaseStateProcess.prepare(state, AmbientActorProcess.nextLease(state, ACTOR, SimInstant.ZERO));
         var location = state.actorLocations().get(ACTOR);
         state = ActorBodyAuthority.present(state, new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyPresent(
                 ActorBodyAuthority.current(state, ACTOR), location.body(), location.condition().health(),
                 location.body(), location.condition().health()));
-        return AmbientLeaseStateProcess.transition(state, ACTOR, AmbientLeaseStatus.HOT);
+        return state;
+    }
+
+    @Test void savedDepartureBeforeHotAcknowledgementClosesProjectionWithoutDiscardingBodyAuthority() {
+        var state = attempted();
+        var receipt = receipt(state);
+        assertEquals(AmbientLeaseStatus.PREPARED, state.ambientLeases().get(ACTOR).status());
+        assertTrue(FrontierV3AmbientDeparture.acceptsSavedDeparture(AmbientLeaseStatus.PREPARED));
+        assertTrue(receipt.current(state));
+        assertFalse(ActorExecutionCoordinator.coldAvailable(state, ACTOR));
+        state = inspectDeparture(state, receipt);
+        var release = new AmbientLeaseReleased(ACTOR, receipt.observed().body(), receipt.observed().health());
+        assertTrue(FrontierV3AmbientActorExecutor.releaseEligible(state, release));
+        state = AmbientLeaseStateProcess.release(AmbientLeaseStateProcess.transition(state, ACTOR, AmbientLeaseStatus.DRAINING), release);
+        assertFalse(receipt.current(state));
+        assertFalse(ActorExecutionCoordinator.coldAvailable(state, ACTOR), "projection closure alone must not release body custody");
+        state = ModeledActorBodyFacts.unloaded(state, ACTOR);
+        assertTrue(ActorExecutionCoordinator.coldAvailable(state, ACTOR));
     }
 
     private static FrontierV3AmbientDeparture receipt(FrontierWorldState state) {

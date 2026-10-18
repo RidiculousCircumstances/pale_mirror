@@ -123,7 +123,9 @@ final class ExtractionSiteStateCodec {
             if (work.putIfAbsent(job.id(), job) != null) throw new IllegalArgumentException("duplicate extraction work");
         }
         var exclusions = new HashSet<BlockPosition>();
-        for (int i = 0, count = count(in, io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockExclusions.MAX_POSITIONS); i < count; i++)
+        // The enclosing payload is byte-bounded; each retained position needs
+        // twelve bytes. Keep the wire grammar, not an arbitrary lifetime edit quota.
+        for (int i = 0, count = count(in, in.available() / (3 * Integer.BYTES)); i < count; i++)
             if (!exclusions.add(FrontierWorldStateCodec.readPosition(in))) throw new IllegalArgumentException("duplicate geological exclusion");
         return new ExtractionSiteState(deposits, work, ordinal, new io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockExclusions(exclusions),
                 geological.geology(), geological.knowledge());

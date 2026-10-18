@@ -6,35 +6,49 @@ import java.util.*;
 /** Reuses seller policy and ordinary resource/money settlement. No hunger, route or mission stage logic. */
 public final class GoodsSpotPurchaseAuthority {
     private GoodsSpotPurchaseAuthority() { }
-    public static int availableQuantity(FrontierWorldState state, SubjectId container, SubjectId sellerId,
-                                       SubjectId buyerId, SubjectId budgetId, String kind) {
+    /** Seller consent and actual stock, before any money is reserved. */
+    public record Quote(int quantity, io.farfrontier.palemirror.frontier.v3.api.FixedScalar unitPrice) {
+        public Quote {
+            Objects.requireNonNull(unitPrice);
+            if (quantity < 1 || unitPrice.raw() <= 0) throw new IllegalArgumentException("empty or unpriced spot quote");
+        }
+    }
+    public static Optional<Quote> quote(FrontierWorldState state, SubjectId container, SubjectId sellerId,
+                                        SubjectId buyerId, String kind) {
         var seller = state.companies().goodsTrade().participants().participants().get(sellerId);
         var buyer = state.companies().goodsTrade().participants().participants().get(buyerId);
-        var budget = state.inventory().economics().budgets().get(budgetId);
-        if (seller == null || buyer == null || !GoodsParticipantStorage.eligible(state, seller, container, kind) || sellerId.equals(buyerId)
-                || budget == null || !budget.payerId().equals(buyerId)) return 0;
+        if (seller == null || buyer == null || sellerId.equals(buyerId)
+                || !GoodsParticipantStorage.eligible(state, seller, container, kind)) return Optional.empty();
         var rules = state.bootstrap().ruleset().goodsTrade();
         var sale = GoodsParticipantPolicies.require(seller).decide(GoodsParticipantView.read(state, seller), rules).stream()
                 .filter(i -> i.side() == GoodsTradeOrder.Side.SELL && i.itemKind().equals(kind)).findFirst().orElse(null);
         if (sale == null || rules.policies().get(buyer.policy()).stream().noneMatch(c -> c.itemKind().equals(kind)
-                && GoodsParticipantPricing.bid(buyer, c).compareTo(sale.limit()) >= 0)) return 0;
-        return (int) Math.min(GoodsParticipantStorage.unclaimed(state, seller, container, kind),
-                Math.min(sale.quantity(), budget.remaining().raw() / sale.limit().raw()));
+                && GoodsParticipantPricing.bid(buyer, c).compareTo(sale.limit()) >= 0)) return Optional.empty();
+        int quantity = (int) Math.min(sale.quantity(), GoodsParticipantStorage.unclaimed(state, seller, container, kind));
+        return quantity > 0 ? Optional.of(new Quote(quantity, sale.limit())) : Optional.empty();
+    }
+    public static int availableQuantity(FrontierWorldState state, SubjectId container, SubjectId sellerId,
+                                       SubjectId buyerId, SubjectId budgetId, String kind) {
+        var budget = state.inventory().economics().budgets().get(budgetId);
+        if (budget == null || !budget.payerId().equals(buyerId)) return 0;
+        return quote(state, container, sellerId, buyerId, kind)
+                .map(q -> (int) Math.min(q.quantity(), budget.remaining().raw() / q.unitPrice().raw())).orElse(0);
     }
     public static Optional<GoodsSpotPurchase> offer(FrontierWorldState state, UnitResourceTransfer transfer,
                                                    SubjectId buyerId, SubjectId budgetId, SubjectId reasonId) {
+        return offer(state, transfer, buyerId, state.inventory().economics().budgets().get(budgetId), reasonId);
+    }
+    /** The owner publishes this budget and its exact purchase atomically, not as speculative cash. */
+    public static Optional<GoodsSpotPurchase> offer(FrontierWorldState state, UnitResourceTransfer transfer,
+                                                   SubjectId buyerId, FinancialBudget budget, SubjectId reasonId) {
         var seller = state.companies().goodsTrade().participants().participants().get(transfer.sourceEconomicOwnerId());
-        var budget = state.inventory().economics().budgets().get(budgetId);
         if (seller == null || !GoodsParticipantStorage.eligible(state, seller, transfer.containerId(), transfer.itemKind()) || seller.party().id().equals(buyerId)
                 || budget == null || !budget.payerId().equals(buyerId)) return Optional.empty();
-        var rules = state.bootstrap().ruleset().goodsTrade();
-        var sale = GoodsParticipantPolicies.require(seller).decide(GoodsParticipantView.read(state, seller), rules).stream()
-                .filter(i -> i.side() == GoodsTradeOrder.Side.SELL && i.itemKind().equals(transfer.itemKind()) && i.quantity() >= transfer.quantity()).findFirst();
+        var sale = quote(state, transfer.containerId(), transfer.sourceEconomicOwnerId(), buyerId, transfer.itemKind())
+                .filter(q -> q.quantity() >= transfer.quantity());
         if (sale.isEmpty()) return Optional.empty();
-        var amount = sale.orElseThrow().limit().multiply(transfer.quantity());
-        var buyer = state.companies().goodsTrade().participants().participants().get(buyerId);
-        if (buyer == null || rules.policies().get(buyer.policy()).stream().noneMatch(c -> c.itemKind().equals(transfer.itemKind())
-                && GoodsParticipantPricing.bid(buyer, c).compareTo(sale.orElseThrow().limit()) >= 0) || budget.remaining().compareTo(amount) < 0) return Optional.empty();
+        var amount = sale.orElseThrow().unitPrice().multiply(transfer.quantity());
+        if (budget.remaining().compareTo(amount) < 0) return Optional.empty();
         var splits = new LinkedHashMap<SubjectId, SubjectId>();
         for (var entry : new TreeMap<>(transfer.lots()).entrySet()) {
             var lot = state.inventory().fungibleResources().lots().get(entry.getKey());
@@ -43,7 +57,7 @@ public final class GoodsSpotPurchaseAuthority {
             if (entry.getValue() < lot.quantity()) splits.put(lot.id(), new SubjectId("lot:spot-purchase/" + identity(transfer.claimId().value() + "\n" + lot.id().value())));
         }
         var payment = new FinancialReservation(new SubjectId("reservation:spot-purchase/" + identity(transfer.claimId().value())),
-                buyerId, seller.party().id(), reasonId, amount, Optional.of(budgetId));
+                buyerId, seller.party().id(), reasonId, amount, Optional.of(budget.id()));
         return Optional.of(new GoodsSpotPurchase(payment, new ResourceTitleTransfer(transfer.destinationAccountId(), transfer.claimId(),
                 seller.party().id(), buyerId, transfer.lots(), splits)));
     }

@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model.expedition;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.FoodCatalog;
+import io.farfrontier.palemirror.frontier.v3.model.FoodConsumptionForecast;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierRuleset;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -87,13 +88,7 @@ public final class ExpeditionProvisioning {
             if (member.satiety() > life.satietyCapacityUnits() || member.metabolismPermille() > life.metabolismMaxPermille()
                     || member.metabolismPermille() < life.metabolismMinPermille())
                 throw new IllegalArgumentException("provisioning member differs from life policy");
-            long loss = Math.ceilDiv(Math.multiplyExact(duration, (long) member.metabolismPermille()),
-                    Math.multiplyExact(life.satietyUnitTicks(), 1_000L));
-            // Bound per-item usefulness at a normal eating threshold. Surplus nutrition that
-            // clips at satiety capacity must not create fictitious additional travel endurance.
-            int usefulNutrition = Math.min(food.nutritionPerItem(), life.mealTargetUnits() - life.eatBelowUnits() + 1);
-            int required = Math.toIntExact(Math.ceilDiv(Math.max(0L,
-                    Math.addExact(loss, (long) life.mealTargetUnits() - member.satiety())), usefulNutrition));
+            int required = requiredFoodItems(duration, member.satiety(), member.metabolismPermille(), food, life);
             int freeSlots = Math.max(0, policy.personalStackSlots() - member.occupiedStackSlots());
             int existing = Math.min(required, member.existingFoodItems());
             int foodSlots = Math.ceilDiv(Math.max(0, required - existing - member.existingFoodStackRoom()), 64);
@@ -121,5 +116,18 @@ public final class ExpeditionProvisioning {
                 ? Refusal.NO_TRANSPORT : transport == Transport.PACK_ANIMAL && animalSlots > Math.min(policy.packAnimalStackSlots(), actualAssetSlots)
                 ? Refusal.CAPACITY : Refusal.NONE;
         return new Plan(food.itemKind(), duration, supplies, shared, cargoStackSlots, transport, refusal);
+    }
+    /** Same nutritional estimate for departure and purchases for the remaining journey. */
+    public static int requiredFoodItems(long duration, int satiety, int metabolismPermille,
+                                        FoodCatalog.Food food, FrontierRuleset.ResidentLife life) {
+        if (duration < 0 || satiety < 0 || satiety > life.satietyCapacityUnits()
+                || metabolismPermille < life.metabolismMinPermille() || metabolismPermille > life.metabolismMaxPermille())
+            throw new IllegalArgumentException("invalid remaining provisioning inputs");
+        long loss = Math.ceilDiv(Math.multiplyExact(duration, (long) metabolismPermille),
+                Math.multiplyExact(life.satietyUnitTicks(), 1_000L));
+        // Excess nutrition clipped at stomach capacity is not additional travel endurance.
+        var meal = FoodConsumptionForecast.atThreshold(food, life);
+        return Math.toIntExact(meal.itemsFor(Math.max(0L,
+                Math.addExact(loss, (long) life.mealTargetUnits() - satiety))));
     }
 }

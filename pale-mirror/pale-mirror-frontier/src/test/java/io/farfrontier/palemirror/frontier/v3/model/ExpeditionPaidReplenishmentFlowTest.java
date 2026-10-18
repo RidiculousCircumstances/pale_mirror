@@ -65,12 +65,16 @@ class ExpeditionPaidReplenishmentFlowTest {
         }
         assertTrue(unloaded); precondition = engine.canonicalState().state(); tick = engine.checkpoint().instant().ticks();
         var retainedMission = precondition.shipments().missions().get(mission.id());
+        assertTrue(retainedMission.financialBudgetId().isEmpty(), "provisioned departure must not hold unrelated cash");
         var transfer = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.select(precondition, retainedMission, tick).orElseThrow();
         assertEquals(mission.receiver().containerId(), transfer.containerId());
         assertFalse(transfer.sourceEconomicOwnerId().equals(mission.sender().settlementId()));
         var held = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.start(precondition, mission.id(), transfer, tick);
         FrontierReferenceClosure.validateTransition(precondition, held, List.of());
         var heldMission = held.shipments().missions().get(mission.id()); var purchase = heldMission.replenishmentPurchase().orElseThrow();
+        assertEquals(FixedScalar.ZERO, held.inventory().economics().budgets().get(heldMission.financialBudgetId().orElseThrow()).remaining());
+        assertEquals(precondition.inventory().economics().availableToReserve(purchase.payment().payerId()).minus(purchase.payment().amount()),
+                held.inventory().economics().availableToReserve(purchase.payment().payerId()), "only the accepted actual food purchase holds money");
         assertEquals(held, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(held)));
         var schedules = new ArrayList<>(engine.checkpoint().schedules());
         schedules.removeIf(action -> group.members().stream().anyMatch(m -> m.actorId().equals(action.subject())) && action.kind().equals(ActorMovementProcess.PROGRESS));

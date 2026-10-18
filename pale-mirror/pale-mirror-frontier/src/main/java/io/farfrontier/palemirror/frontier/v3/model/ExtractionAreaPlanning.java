@@ -150,6 +150,10 @@ public final class ExtractionAreaPlanning {
         long terrainId = terrainIds.values().stream().mapToLong(Long::longValue).max().orElse(0);
         for (var column : event.columns()) {
             var floor = column.floor().support(); var prerequisites = new HashSet<Long>();
+            // A current exposed source top can be a new work stance before the
+            // lower planned floor opens. Retain that exact contact; its solid
+            // remains owned by the existing source cell, not a duplicate terrain row.
+            if (!surfaces.contains(column.station())) surfaces.add(column.station());
             for (int height : List.of(1, 2)) {
                 var dependency = sources.get(column.station().support().offset(0, height, 0));
                 if (dependency != null) prerequisites.add(dependency);

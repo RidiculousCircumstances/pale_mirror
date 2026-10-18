@@ -15,6 +15,24 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ScheduledActionQueueTest {
+    @Test void untouchedTransactionReusesSnapshotButQueueChangesNeverMutateAPublishedView() {
+        var queue = new ScheduledActionQueue();
+        var first = action("schedule:first-snapshot", 20, 0, "resident:a", 1);
+        var second = action("schedule:second-snapshot", 10, 0, "resident:b", 1);
+        queue.schedule(first);
+        var before = queue.snapshot();
+        org.junit.jupiter.api.Assertions.assertSame(before, queue.beginMutation().snapshot());
+        var edit = queue.beginMutation(); edit.schedule(second);
+        assertEquals(List.of(second, first), edit.snapshot());
+        assertEquals(List.of(first), before);
+        edit.commit();
+        var after = queue.snapshot();
+        assertEquals(List.of(second, first), after);
+        org.junit.jupiter.api.Assertions.assertSame(after, queue.beginMutation().snapshot());
+        assertEquals(List.of(first), before);
+        var remove = queue.beginMutation(); remove.cancel(second.id()); remove.commit();
+        assertEquals(List.of(first), queue.beginMutation().snapshot());
+    }
     @Test void aKnownReadyActionIsNotFencedByNewUncheckedOrUnaddressedWaiters() {
         var queue = new ScheduledActionQueue();
         var ready = action("schedule:known-ready", 2, 0, "resident:ready", 1);

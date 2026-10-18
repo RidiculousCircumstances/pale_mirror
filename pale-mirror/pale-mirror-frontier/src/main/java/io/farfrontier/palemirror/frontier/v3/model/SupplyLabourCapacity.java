@@ -26,10 +26,9 @@ final class SupplyLabourCapacity {
                         .thenComparing(ResidentProfile::id))
                 .limit(rule.targetWorkers()).toList();
     }
-    static Map<String, Long> day(FrontierWorldState state, SubjectId home, Collection<SubjectId> workers) {
-        long ticks = state.humanPopulation().schedule(home).segments().stream()
-                .filter(segment -> segment.window() == SettlementDailySchedule.Window.WORK)
-                .mapToLong(segment -> segment.endExclusive() - segment.startInclusive()).sum();
+    static Map<String, Long> over(FrontierWorldState state, SubjectId home, Collection<SubjectId> workers,
+                                  SupplyPlanningWindow window) {
+        long ticks = window.workTicks(state.humanPopulation().schedule(home));
         if (ticks == 0) return Map.of();
         var result = new TreeMap<String, Long>();
         for (var worker : workers) {

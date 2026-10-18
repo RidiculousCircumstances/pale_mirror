@@ -17,17 +17,23 @@ class SettlementReservePlanningTest {
             var targets = SettlementReservePlanning.read(state, home.id());
             var participant = state.companies().goodsTrade().participants().participants().get(home.id());
             var view = GoodsParticipantView.read(state, participant);
-            assertEquals(targets, view.supplyPlan().orElseThrow().reserves());
+            var plan = view.supplyPlan().orElseThrow();
+            assertEquals(plan, GoodsParticipantView.read(restored,
+                    restored.companies().goodsTrade().participants().participants().get(home.id())).supplyPlan().orElseThrow());
             assertEquals(targets, SettlementReservePlanning.read(restored, home.id()));
             assertEquals(0, targets.get("minecraft:cobblestone").quantity(), "no invented construction consumption");
             assertTrue(targets.get("minecraft:coal").quantity() > 0);
             assertEquals(targets.get("minecraft:bread").consumption().times(Rate.of(3, 1)), targets.get("minecraft:wheat").consumption());
             assertEquals(targets.get("minecraft:bread").consumption().times(Rate.of(1, 20)), targets.get("minecraft:coal").consumption());
             for (var commodity : state.bootstrap().ruleset().goodsTrade().policies().get(participant.policy())) {
-                var target = targets.get(commodity.itemKind());
-                assertEquals(target.protectedQuantity(), PublicStockProtection.minimum(state, home.id(), commodity.itemKind()));
+                var target = plan.reserves().get(commodity.itemKind());
+                assertEquals(targets.get(commodity.itemKind()).consumption(), target.consumption(),
+                        "economic allocation may change targets, never the owner's appetite");
+                assertEquals(view.stocks().get(commodity.itemKind()).protectedMinimum(), PublicStockProtection.minimum(state, home.id(), commodity.itemKind()));
                 assertTrue(view.target(commodity) >= target.quantity());
-                assertEquals(view.target(commodity), ProductionStockDemand.read(state, home.id(), commodity.itemKind()).target());
+                var work = ProductionStockDemand.read(state, home.id(), commodity.itemKind());
+                assertEquals(plan.economy().orElseThrow().additionalProduction().get(commodity.itemKind()).longValue(),
+                        work.target() - work.covered(), "production consumes the net new work order, not the reserve target twice");
             }
             assertEquals(0, PublicStockProtection.minimum(state, home.id(), "minecraft:pickaxe"));
         }

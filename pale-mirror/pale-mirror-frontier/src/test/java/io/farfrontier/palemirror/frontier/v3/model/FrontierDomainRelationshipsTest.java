@@ -12,6 +12,24 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 class FrontierDomainRelationshipsTest {
+    @Test void terrainOnlyAuditRetainsFullRejectionWhenAnotherOwnerAlsoChanges() {
+        var before = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:terrain-validation"), 20260918065L,
+                FrontierRulesets.marketQuarryGraybox()));
+        var observed = new BlockPosition(0, 64, 0);
+        var terrain = before.extractionSites().invalidateGeology(observed);
+        var next = FrontierWorldState.duringUnpublishedTransition(() ->
+                before.withChanges(FrontierWorldStateUpdate.begin().extractionSites(terrain)));
+        assertDoesNotThrow(() -> next.validateTransitionFrom(before));
+        assertDoesNotThrow(next::validateComplete);
+        var invalid = FrontierWorldState.duringUnpublishedTransition(() ->
+                next.withChanges(FrontierWorldStateUpdate.begin().structureConditions(java.util.Map.of())));
+        assertThrows(IllegalArgumentException.class, () -> invalid.validateTransitionFrom(before));
+        assertThrows(IllegalArgumentException.class, invalid::validateComplete);
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldState.duringUnpublishedTransition(() ->
+                before.withChanges(FrontierWorldStateUpdate.begin().extractionSites(
+                        before.extractionSites().invalidateGeology(new BlockPosition(Integer.MAX_VALUE, 64, 0))))));
+    }
     @Test void unpublishedCandidatesCannotBypassThePreWalAuditAndScopeCannotLeak() {
         var before = FrontierV3FixtureCatalog.productionWorkConfiguration(
                 new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:unpublished-validation"), 91L).initialState();

@@ -6,11 +6,11 @@ import java.util.*;
 /** Conditional export production consumes spare capacity, never a neighbour's money or an assumed sale. */
 final class EconomicExportPlanning {
     List<EconomicPlan.Export> plan(EconomicSnapshot facts, SupplyPlanner.Plan supply,
-                                  Map<String, Long> domestic, EconomicPlanningRules policy) {
+                                  Map<String, Long> saleable, EconomicPlanningRules policy, long horizonTicks) {
         var labour = new TreeMap<String, Long>(); var capacity = new HashMap<String, Long>();
         var heat = new HashMap<String, Long>();
         var inputs = new TreeMap<String, Long>();
-        facts.stocks().forEach((item, stock) -> inputs.put(item, Math.max(0, stock.available() - domestic.get(item))));
+        facts.stocks().forEach((item, stock) -> inputs.put(item, saleable.get(item)));
         for (var process : facts.processes()) process.labourCapacity().forEach((worker, ticks) -> {
             var previous = labour.putIfAbsent(worker, ticks);
             if (previous != null && !previous.equals(ticks)) throw new IllegalArgumentException("inconsistent economic labour capacity");
@@ -19,7 +19,9 @@ final class EconomicExportPlanning {
             var demand = supply.require(process.product());
             long domesticBatches = demand.process().filter(process.id()::equals).isPresent()
                     ? Math.ceilDiv(Math.addExact(demand.production(), demand.recoveryProduction()), process.outputPerBatch()) : 0;
-            capacity.put(process.id(), Math.max(0, process.maximumBatches() - domesticBatches));
+            // A later crop wave is not spare export capacity inside this plan.
+            // Use the same owner-dated release boundary as domestic forecasts.
+            capacity.put(process.id(), Math.max(0, process.recipesAvailableBy(horizonTicks) - domesticBatches));
             heat.put(process.id(), Math.max(0, process.availableHeat() - Math.multiplyExact(domesticBatches, process.heatPerBatch())));
             consumeLabour(labour, process, domesticBatches);
         }

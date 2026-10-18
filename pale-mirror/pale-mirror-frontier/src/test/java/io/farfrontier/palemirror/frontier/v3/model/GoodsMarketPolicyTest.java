@@ -9,6 +9,29 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GoodsMarketPolicyTest {
+    @Test void priceDiscoveryUsesCurrentUncommittedFundedQuotesWithoutStartingTransport() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:price-feedback"),
+                20260918065L, FrontierRulesets.marketQuarryGraybox()));
+        var trade = state.companies().goodsTrade();
+        var seller = trade.participants().participants().get(new SubjectId("settlement:1"));
+        var buyer = trade.participants().participants().get(new SubjectId("settlement:3"));
+        var quote = new GoodsTradeOrder(new SubjectId("order:funded-price-feedback"), buyer.party(), seller.party(),
+                GoodsTradeOrder.Side.BUY, new SubjectId("container:3-depot"), "minecraft:coal", 2, 0, FixedScalar.whole(6), 24000);
+        state = GoodsTradeStateSupport.place(state, buyer.party().id(), quote, 0);
+        assertEquals(FixedScalar.whole(6), GoodsMarketDemand.fundedBids(state, seller, 2400).get("minecraft:coal"));
+        assertTrue(state.shipments().missions().isEmpty());
+        assertTrue(GoodsMarketDemand.fundedBids(state, seller, 24000).isEmpty(), "expired consent cannot set prices");
+        var ledger = state.inventory().economics();
+        ledger = ledger.transfer(buyer.party().id(), seller.party().id(),
+                ledger.availableToReserve(buyer.party().id()).minus(FixedScalar.whole(3)));
+        state = state.withInventory(state.inventory().withEconomics(ledger));
+        assertEquals(FixedScalar.whole(3), GoodsMarketDemand.fundedBids(state, seller, 2400).get("minecraft:coal"),
+                "a retained quote cannot invent funds spent since publication");
+        ledger = ledger.transfer(buyer.party().id(), seller.party().id(), FixedScalar.whole(3));
+        state = state.withInventory(state.inventory().withEconomics(ledger));
+        assertTrue(GoodsMarketDemand.fundedBids(state, seller, 2400).isEmpty());
+        assertTrue(state.companies().goodsTrade().contracts().isEmpty(), "price advice cannot admit a sale");
+    }
     @Test void aSmallBudgetKeepsInterestInCheaperPartialOffersWithoutInventingFunds() {
         // Explicit unmet production input, not an assumption that a stocked new
         // settlement must buy something under every economic policy.
@@ -88,6 +111,16 @@ class GoodsMarketPolicyTest {
         var before = state;
         assertThrows(IllegalArgumentException.class, () -> GoodsParticipantPricing.apply(before, home,
                 new GoodsParticipantPricesReviewed(1, 400, price.prices()), 400));
+        var historical = new HashMap<>(price.prices());
+        var old = historical.get("minecraft:coal");
+        historical.put("minecraft:coal", new io.farfrontier.palemirror.frontier.v3.model.market.MarketPricePolicy.Quote(
+                old.ask().plus(FixedScalar.ONE), old.bid(), old.reference(), old.reviewedAt(), old.surplus(), old.lastSale(), 0));
+        var retained = new GoodsParticipantPricesReviewed(0, 400, historical);
+        assertThrows(IllegalArgumentException.class, () -> GoodsParticipantPricing.apply(before, home, retained, 400),
+                "new proposals must still use the current policy");
+        assertEquals(historical, GoodsParticipantPricing.applyCommitted(before, home, retained, 400)
+                .companies().goodsTrade().participants().participants().get(home).prices(),
+                "a committed historical decision is not recalculated using a newer strategy");
         state = GoodsTradeTest.applyEvents(state, events, 400, "goods-trade");
         assertEquals(price.prices(), state.companies().goodsTrade().participants().participants().get(home).prices());
         var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
