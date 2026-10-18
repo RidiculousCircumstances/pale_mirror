@@ -22,14 +22,19 @@ class ProductionSpecializationTest {
         var demandedState = state.withInventory(state.inventory().withFungibleResources(state.inventory().fungibleResources()
                 .destroy(account.id(), Map.of(bread.getKey(), bread.getValue() - 64), Map.of())));
         var priorities = ExtractionPriorities.read(demandedState, deposit, Optional.empty());
-        assertTrue(priorities.products().get("minecraft:coal").compareTo(priorities.products().get("minecraft:cobblestone")) < 0);
+        var coalPriority = priorities.products().get("minecraft:coal");
+        assertNotNull(coalPriority, "the food deficit requires fuel production");
+        var stonePriority = priorities.products().get("minecraft:cobblestone");
+        assertTrue(stonePriority == null || coalPriority.compareTo(stonePriority) < 0,
+                "unrelated stone is either not requested or ranks below the required fuel");
         var coal = deposit.site().layout().cells().stream()
                 .filter(cell -> cell.definition().before().kind().equals("minecraft:coal_ore")).findFirst().orElseThrow();
         for (long prerequisite : coal.prerequisites())
             assertTrue(priorities.require(prerequisite).compareTo(priorities.require(coal.id())) <= 0);
         var resident = state.humanPopulation().residents().values().stream().filter(value -> value.settlementId().equals(home))
                 .findFirst().orElseThrow();
-        var available = deposit.available(Set.of());
+        var required = ExtractionStockDemand.requiredCells(demandedState, deposit, Optional.empty());
+        var available = deposit.available(Set.of()).stream().filter(cell -> required.contains(cell.id())).toList();
         var selected = ExtractionWorkTargets.spatialSelection(demandedState, deposit, resident.id(), available,
                 AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION, Optional.empty()).orElseThrow();
         var best = available.stream().filter(cell -> ExtractionWorkSafety.available(demandedState, deposit, cell))
@@ -54,7 +59,7 @@ class ProductionSpecializationTest {
                 .filter(cell -> cell.definition().before().kind().equals("minecraft:coal_ore")).count());
         var producers = GrayboxQuarryPlan.producerSettlements(state.bootstrap()).stream().map(Settlement::id).collect(java.util.stream.Collectors.toSet());
         for (var site : FrontierResourceSitePlan.compile(state.bootstrap()).values())
-            assertEquals(producers.contains(site.settlementId()) ? 64 : 252, site.layout().cells().size());
+            assertEquals(producers.contains(site.settlementId()) ? 64 : 256, site.layout().cells().size());
         var coal = profile.extraction().definitionFor(new BlockExtraction.Block("minecraft:coal_ore", Map.of())).orElseThrow();
         assertEquals(List.of(new BlockExtraction.Output("minecraft:coal", 1)), coal.coldOutput());
         var codec = new FrontierWorldStateCodec(); assertEquals(state, codec.decode(codec.encode(state)));

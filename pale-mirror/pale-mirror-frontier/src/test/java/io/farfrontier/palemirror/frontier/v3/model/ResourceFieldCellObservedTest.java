@@ -63,7 +63,7 @@ class ResourceFieldCellObservedTest {
         var state = ResourceSiteHarvestProcessTest.ready(ResourceSiteHarvestProcessTest.initial());
         var cycle = state.resourceSites().cycle(new SubjectId("site:1-wheat-field"));
         var cell = cycle.layout().cells().getFirst().id();
-        cycle = cycle.harvested(cell);
+        cycle = cycle.harvested(cell).planted(cell);
         var regrown = cycle.observedGrowth(cell, new ResourceFieldPhysicalSurface.Condition(
                 ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.MATURE, 7));
         assertEquals(0, regrown.harvestedCount());

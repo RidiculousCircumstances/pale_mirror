@@ -76,6 +76,8 @@ class ResourceFieldCycleStateCodecTest {
         FrontierWorldStateCodec.writeString(output, "settlement:1");
         FrontierWorldStateCodec.writeString(output, "structure:1-farm");
         output.writeByte(io.farfrontier.palemirror.frontier.v3.model.ResourceSiteKind.WHEAT_FIELD.wireTag());
+        output.writeByte(io.farfrontier.palemirror.frontier.v3.model.FieldLandOrigin.Kind.AUTHORED.wireTag());
+        output.writeInt(0);
         FrontierWorldStateCodec.writeString(output, outerSite.value());
         output.writeByte(ResourceSitePhase.UNPREPARED.wireTag());
         output.writeLong(0L);
@@ -88,6 +90,7 @@ class ResourceFieldCycleStateCodecTest {
         ResourceFieldCycleStateCodec.write(output, ResourceFieldCycle.unsurveyed(foreignSite, layout, 0));
         output.writeInt(0);
         output.writeInt(0);
+        output.writeInt(0); // Cultivation reviews follow the complete site registry.
         var failure = assertThrows(IllegalArgumentException.class, () -> ResourceSiteStateCodec.read(
                 new DataInputStream(new ByteArrayInputStream(bytes.toByteArray()))));
         assertEquals("resource-site cell cycle declares another site owner", failure.getMessage());

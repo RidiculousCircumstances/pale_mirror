@@ -326,6 +326,7 @@ class FrontierWorldProcessCatalogTest {
                         new ActorBodyId(new SubjectId("resident:representative"), 1), new SubjectId("custody:representative"), 1,
                         UnitInventoryDispositionObserved.Outcome.MISSING_BEFORE_LOOT, Optional.empty())),
                 Map.entry("resource-sites", new ResourceSiteGrowthAdvanced(new SubjectId("site:representative"), 1L, 0)),
+                Map.entry("cultivation", new CultivationReviewed(-1L, 6000L)),
                 Map.entry("extraction", new ExtractionSourceBoundary(
                         new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRegion(new SubjectId("extraction:representative"), 0, 0),
                         ExtractionSourceBoundary.Operation.PREPARE, 0, 0, "source:representative")),

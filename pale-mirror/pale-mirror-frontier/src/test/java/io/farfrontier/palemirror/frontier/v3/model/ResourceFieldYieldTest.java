@@ -67,7 +67,8 @@ class ResourceFieldYieldTest {
     @Test void incompleteCycleOrUnresolvedPlayerActionCannotEnterTheYieldBoundary() {
         ResourceFieldCycle unworked = ResourceFieldCycle.seeded(SITE, layout(2), 1);
         assertThrows(IllegalArgumentException.class, () -> ResourceFieldYield.fromCompletedCycle(SITE, OWNER, unworked));
-        ResourceFieldCycle complete = completed(1, Set.of());
+        ResourceFieldCycle complete = ResourceFieldCycle.seeded(SITE, layout(1), 1)
+                .skipImmature(layout(1).cells().getFirst().id());
         var id = complete.layout().cells().getFirst().id();
         ResourceFieldCycle pending = complete.preparePlayerBreak(id, new ResourceFieldCycle.PendingPlayerBreak(
                 java.util.UUID.fromString("00000000-0000-0000-0000-000000000125"), "player:pending-yield",

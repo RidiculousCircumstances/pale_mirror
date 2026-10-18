@@ -19,8 +19,8 @@ class FrontierResourceSitePlanTest {
         var bootstrap = FrontierBootstrapper.create(new WorldId("frontier:graybox"), 20260918065L);
         var sites = FrontierResourceSitePlan.compile(bootstrap);
         assertEquals(12, sites.size());
-        assertTrue(sites.values().stream().allMatch(site -> site.layout().cells().size() == 252));
-        assertEquals(3024, sites.values().stream().flatMap(site -> site.cropSlots().stream()).distinct().count());
+        assertTrue(sites.values().stream().allMatch(site -> site.layout().cells().size() == 256));
+        assertEquals(3072, sites.values().stream().flatMap(site -> site.cropSlots().stream()).distinct().count());
         assertTrue(sites.values().stream().flatMap(site -> site.managedSlots().stream()).allMatch(bootstrap.bounds()::contains));
     }
 
@@ -48,15 +48,12 @@ class FrontierResourceSitePlanTest {
 
         assertEquals(first, second); assertEquals(12, first.size());
         for (ResourceSite site : first.values()) {
-            assertEquals(ResourceSiteKind.WHEAT_FIELD, site.kind()); assertEquals(252, site.cropSlots().size());
-            assertEquals(4, site.irrigationSlots().size());
+            assertEquals(ResourceSiteKind.WHEAT_FIELD, site.kind()); assertEquals(256, site.cropSlots().size());
+            assertEquals(0, site.irrigationSlots().size(), "managed agriculture neither requires nor constructs irrigation");
             assertEquals(15, site.cropSlots().stream().mapToInt(BlockPosition::x).max().orElseThrow()
                     - site.cropSlots().stream().mapToInt(BlockPosition::x).min().orElseThrow());
             assertEquals(15, site.cropSlots().stream().mapToInt(BlockPosition::z).max().orElseThrow()
                     - site.cropSlots().stream().mapToInt(BlockPosition::z).min().orElseThrow());
-            assertTrue(site.soilSlots().stream().allMatch(soil -> site.irrigationSlots().stream().anyMatch(water ->
-                    water.y() == soil.y() && Math.abs(water.x() - soil.x()) <= 4 && Math.abs(water.z() - soil.z()) <= 4)),
-                    "every crop must be within vanilla hydration range of its declared source");
             assertEquals(site.cropSlots().stream().map(slot -> slot.offset(0, -1, 0)).toList(), site.soilSlots());
             assertTrue(site.managedSlots().stream().allMatch(bootstrap.bounds()::contains));
             assertTrue(site.managedSlots().stream().noneMatch(structureCells::contains),

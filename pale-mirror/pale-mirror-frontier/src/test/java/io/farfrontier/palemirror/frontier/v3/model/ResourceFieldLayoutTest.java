@@ -93,8 +93,7 @@ class ResourceFieldLayoutTest {
         for (int x = 0; x < 8; x++) for (int z = 0; z < 8; z++) crops.add(new BlockPosition(x, 64, z));
         var layout = FrontierResourceSitePlan.initialGrayboxLayout(crops);
         assertEquals(crops, layout.cropSlots());
-        assertEquals(List.of(new BlockPosition(2, 63, -1), new BlockPosition(6, 63, -1),
-                new BlockPosition(2, 63, 8), new BlockPosition(6, 63, 8)), layout.irrigationSlots());
+        assertEquals(List.of(), layout.irrigationSlots(), "managed farming does not construct or require irrigation");
         assertFalse(ResourceSiteHarvestTraversal.supportsCurrentHarvest(new ResourceSite(new SubjectId("site:graybox"),
                 new SubjectId("settlement:1"), new SubjectId("structure:1-farm"), ResourceSiteKind.WHEAT_FIELD, layout)));
         var serpentine = new ArrayList<BlockPosition>();

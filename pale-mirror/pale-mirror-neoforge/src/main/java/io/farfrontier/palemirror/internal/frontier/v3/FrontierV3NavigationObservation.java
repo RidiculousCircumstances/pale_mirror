@@ -93,6 +93,8 @@ final class FrontierV3NavigationObservation {
         }
         changes.putAll(captureAvailable(batch,
                 position -> level.getChunkSource().getChunkNow(position.x() >> 4, position.z() >> 4) != null,
+                position -> FrontierV3GrayboxExecutor.staticVisibilityComplete(runtime,
+                        new net.minecraft.world.level.ChunkPos(position.x() >> 4, position.z() >> 4)),
                 position -> FrontierV3NavigationShapes.capture(level, position)));
         if (changes.isEmpty()) return false;
         var surveyed = Set.copyOf(changes.keySet());
@@ -119,12 +121,18 @@ final class FrontierV3NavigationObservation {
             window.dirty.add(position);
         }
     }
-    /** Loaded samples retain typed evidence; an absent chunk produces no sample at all. */
+    /** Native terrain is evidence only after authored geometry has been projected.
+     * Before then, air at a declared floor is an incomplete replica, not a world mutation.
+     * Keep the request queued, including any contextual shape dependencies. */
     static Map<BlockPosition, NavigationObservation> captureAvailable(List<BlockPosition> positions,
             java.util.function.Predicate<BlockPosition> available,
+            java.util.function.Predicate<BlockPosition> projected,
             java.util.function.Function<BlockPosition, NavigationObservation> capture) {
         var result = new LinkedHashMap<BlockPosition, NavigationObservation>();
-        for (var position : positions) if (available.test(position)) result.put(position, capture.apply(position));
+        for (var position : positions) if (available.test(position) && projected.test(position)) {
+            var observation = capture.apply(position);
+            if (observation.dependencies().keySet().stream().allMatch(projected)) result.put(position, observation);
+        }
         return result;
     }
     private static boolean registerDefinitions(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
