@@ -93,6 +93,9 @@ economic equilibrium.
 - `FieldDevelopmentLand` uses common reachable-surface search and
   `DevelopmentGroundKnowledge`/`LandUseExclusions`. `FieldLandAdmission` alone
   declares surveyed land or extends an idle field while preserving existing IDs.
+  The content-declared `TerrainSurfacePalette` is shared by COLD ground facts
+  and the native biome surface generator. Rocky land cannot be silently surveyed
+  as grass; clearing stone/coarse soil remains outside this no-earthworks cut.
 - `ResourceSiteState` owns declarations; `ResourceFieldCycle` owns actual biology
   and a separately versioned `FieldSowingPlan`. A declaration never grants a
   prepared field or a crop. Pending physical operations retain exact authority
@@ -109,6 +112,9 @@ economic equilibrium.
   older exact physical projection does not make it the newest plant state; the
   latest canonical state is projected separately. Player changes are still
   classified before writes. Context cards and diagnostics expose the decision.
+  External-cell observations retain two distinct predecessors: canonical biology
+  and the last committed physical condition. A delayed projection does not make
+  a real obstruction a global invariant failure or authorize overwriting it.
 - Navigation observations wait for initial structural projection, including
   contextual shape dependencies. A loaded but unfinished replica's air is not
   evidence that a declared support was removed. The request remains queued;
