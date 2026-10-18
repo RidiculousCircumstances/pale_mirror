@@ -12,7 +12,10 @@ class ProductionSpecializationTest {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:source-priority"),
                 41, FrontierRulesets.marketQuarryGraybox()));
         var deposit = state.extractionSites().deposits().values().stream()
-                .filter(value -> value.site().settlementId().equals(new SubjectId("settlement:1"))).findFirst().orElseThrow();
+                .filter(value -> value.site().settlementId().equals(new SubjectId("settlement:1")))
+                .filter(value -> value.site().layout().cells().stream()
+                        .anyMatch(cell -> cell.definition().before().kind().equals("minecraft:coal_ore")))
+                .findFirst().orElseThrow();
         var home = deposit.site().settlementId();
         // Stock fixture creates real replenishment demand, not an assertion that
         // an empty fuel reserve is automatically an emergency with full food stores.
