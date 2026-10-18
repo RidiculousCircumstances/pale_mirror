@@ -16,17 +16,32 @@ public final class EconomicPurchaseFunding {
         // same-deadline restart. Actual reservations reduce cash before the next match.
         var need = selected.orElseThrow();
         boolean restart = need.restartQuantity() > 0;
-        var protectedCash = restart ? ProcurementBudget.forOptionalSpending(cash, needs.stream()
-                .filter(other -> !other.item().equals(item) && (other.deadline() < need.deadline()
-                        || other.deadline() == need.deadline() && other.restartQuantity() > 0))
-                .map(other -> new ProcurementBudget.Need(other.item(), other.deadline() < need.deadline()
-                        ? other.quantity() : other.restartQuantity(), other.unitLimit(), other.deadline())).toList())
-                : ProcurementBudget.forPurchase(cash, needs, item);
+        var earlier = afterEarlierBudgets(plan, cash, needs, need.deadline());
+        var peers = needs.stream().filter(other -> other.deadline() == need.deadline()).toList();
+        var protectedCash = restart ? ProcurementBudget.forOptionalSpending(earlier, peers.stream()
+                .filter(other -> !other.item().equals(item) && other.restartQuantity() > 0)
+                .map(other -> new ProcurementBudget.Need(other.item(), other.restartQuantity(),
+                        other.unitLimit(), other.deadline())).toList())
+                : ProcurementBudget.forPurchase(earlier, peers, item);
         long estimate = plan.purchaseBudgets().getOrDefault(item, 0L);
         long optional = Math.max(0, cash.raw() - plan.purchaseBudgets().values().stream().reduce(0L, Math::addExact));
         // Only an immediate restart may displace fallback/reserve spending. Ordinary
         // purchases can use their envelope and genuinely unallocated liquidity.
         long envelope = restart ? cash.raw() : Math.min(cash.raw(), Math.addExact(estimate, optional));
         return new FixedScalar(Math.min(envelope, protectedCash.raw()));
+    }
+    private static FixedScalar afterEarlierBudgets(EconomicPlan plan, FixedScalar cash,
+            List<ProcurementBudget.Need> needs, long deadline) {
+        long left = cash.raw();
+        for (var other : needs) {
+            if (other.deadline() >= deadline || other.unitLimit().raw() == 0) continue;
+            // The planner already chose between manufacturing and buying its output.
+            // Gross fallback demand is not another independently funded obligation.
+            long budget = Math.min(left, plan.purchaseBudgets().getOrDefault(other.item(), 0L));
+            long cost = other.quantity() > budget / other.unitLimit().raw()
+                    ? budget : other.quantity() * other.unitLimit().raw();
+            left -= cost;
+        }
+        return new FixedScalar(left);
     }
 }

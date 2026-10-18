@@ -7,6 +7,21 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class EconomicPurchaseFundingTest {
+    @Test void unselectedEarlierFinishedGoodsCannotVetoTheirFundedProductionInputs() {
+        var budgets = Map.of("input", 4L, "output", 0L);
+        var plan = new EconomicPlan(96000, budgets, budgets, budgets, 0, 0, 0, List.of(), List.of(), Set.of(),
+                Map.of("input", 1L, "output", 4L), Set.of(), Map.of("input", 0L, "output", 0L));
+        var needs = List.of(new ProcurementBudget.Need("output", 200, new FixedScalar(4), 0),
+                new ProcurementBudget.Need("input", 500, FixedScalar.ONE, 100));
+        assertEquals(30, EconomicPurchaseFunding.available(plan, new FixedScalar(30), needs, "input").raw());
+        var allocated = Map.of("input", 4L, "output", 8L);
+        var withEmergencyPurchase = new EconomicPlan(96000, budgets, budgets, allocated, 0, 0, 0,
+                List.of(), List.of(), Set.of(), plan.purchasePrices(), Set.of(), plan.saleableStock());
+        assertEquals(22, EconomicPurchaseFunding.available(withEmergencyPurchase, new FixedScalar(30), needs, "input").raw(),
+                "an actual earlier allocation stays protected, not the whole hypothetical reserve");
+        assertEquals(0, EconomicPurchaseFunding.available(withEmergencyPurchase, new FixedScalar(5), needs, "input").raw(),
+                "money already spent elsewhere cannot be promised again");
+    }
     @Test void restartCanUseAnAffordableAlternativeWithoutSpendingItsComplementaryInputBudget() {
         var budgets = Map.of("coal", 2L, "wheat", 6L, "bread", 26L);
         var plan = new EconomicPlan(96000, budgets, budgets, budgets, 0, 0, 0, List.of(), List.of(), Set.of(),
