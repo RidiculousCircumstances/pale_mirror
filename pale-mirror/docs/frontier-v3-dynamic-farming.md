@@ -115,6 +115,10 @@ economic equilibrium.
   External-cell observations retain two distinct predecessors: canonical biology
   and the last committed physical condition. A delayed projection does not make
   a real obstruction a global invariant failure or authorize overwriting it.
+  Both block-write hooks refresh their chunk index on changed field layouts or
+  newly declared sites; growth alone retains the index. Observed soil/crop loss
+  during projection lag enters the explicit observation protocol, while ordinary
+  intermediate growth cannot roll canonical biology back.
 - Navigation observations wait for initial structural projection, including
   contextual shape dependencies. A loaded but unfinished replica's air is not
   evidence that a declared support was removed. The request remains queued;
