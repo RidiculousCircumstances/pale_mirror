@@ -241,7 +241,7 @@ public final class ResourceSitePhysicalIntentStateSupport {
                 || receipt.harvestedQuantity() < 1
                 || state.physicalObservations().containsKey(receipt.id()))
             throw new IllegalArgumentException("field batch delivery lacks its exact pending full hand and intent");
-        validateHarvestDeliveryReceipt(state.bootstrap(), intent, receipt);
+        validateHarvestDeliveryReceipt(state.resourceSites(), intent, receipt);
         SceneLease lease = FrontierResourceSiteHarvestSceneSupport.requireHotLease(state, job, receipt.leaseId());
         if (!lease.members().getFirst().entityId().equals(receipt.entityId()))
             throw new IllegalArgumentException("field batch delivery lacks its exact HOT farmer body and epoch");
@@ -329,8 +329,8 @@ public final class ResourceSitePhysicalIntentStateSupport {
         }
     }
 
-    static void validateHarvestReceipt(FrontierBootstrap bootstrap, PhysicalIntent intent, ResourceSiteHarvestObservation receipt) {
-        ResourceSite site = FrontierResourceSitePlan.compile(bootstrap).get(intent.causeSubjectId()); ExactItemStack output = receipt.output();
+    static void validateHarvestReceipt(ResourceSiteState sites, PhysicalIntent intent, ResourceSiteHarvestObservation receipt) {
+        ResourceSiteDeclaration site = sites.declarations().get(intent.causeSubjectId()); ExactItemStack output = receipt.output();
         if (site == null || intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED
                 || !intent.id().equals(receipt.intentId()) || !intent.causeSubjectId().equals(receipt.siteId())
                 || !intent.roles().require(PhysicalIntentSubjectRole.WORKER).equals(receipt.workerId()) || !intent.roles().require(PhysicalIntentSubjectRole.OUTPUT_ITEM).equals(output.id())
@@ -340,9 +340,9 @@ public final class ResourceSitePhysicalIntentStateSupport {
         }
     }
 
-    static void validateHarvestDeliveryReceipt(FrontierBootstrap bootstrap, PhysicalIntent intent,
+    static void validateHarvestDeliveryReceipt(ResourceSiteState sites, PhysicalIntent intent,
                                                ResourceSiteHarvestDeliveryObservation receipt) {
-        ResourceSite site = FrontierResourceSitePlan.compile(bootstrap).get(receipt.siteId());
+        ResourceSiteDeclaration site = sites.declarations().get(receipt.siteId());
         if (site == null || intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST
                 || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED
                 || !intent.id().equals(receipt.intentId()) || !intent.causeSubjectId().equals(receipt.siteId())
@@ -356,9 +356,9 @@ public final class ResourceSitePhysicalIntentStateSupport {
         }
     }
 
-    static void validateDeferredHarvestReceipt(FrontierBootstrap bootstrap, PhysicalIntent intent,
+    static void validateDeferredHarvestReceipt(ResourceSiteState sites, PhysicalIntent intent,
                                                ResourceSiteHarvestDeferredObservation receipt) {
-        ResourceSite site = FrontierResourceSitePlan.compile(bootstrap).get(receipt.siteId());
+        ResourceSiteDeclaration site = sites.declarations().get(receipt.siteId());
         if (site == null || intent.kind() != PhysicalIntentKind.RESOURCE_SITE_HARVEST
                 || intent.postcondition() != PhysicalPostcondition.RESOURCE_SITE_HARVESTED_OBSERVED
                 || !intent.id().equals(receipt.intentId()) || !intent.causeSubjectId().equals(receipt.siteId())

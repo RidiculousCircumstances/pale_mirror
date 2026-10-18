@@ -195,7 +195,21 @@ final class FrontierV3HarvestDiagnosticJson {
                 + "\",\"facility\":\"" + quote(site.facilityId().value()) + "\",\"phase\":\"" + lifecycle.phase()
                 + "\",\"growthEpoch\":" + lifecycle.growthEpoch() + ",\"growthStage\":" + lifecycle.growthStage()
                 + ",\"activeWork\":" + work + ",\"conflictDisposition\":" + conflict + ",\"terminalHarvest\":" + terminal + ",\"firstCrop\":" + position(site.cropSlots().getFirst())
-                + ",\"lastCrop\":" + position(site.cropSlots().getLast()) + ",\"boardPosition\":" + position(boardPosition) + "}";
+                + ",\"lastCrop\":" + position(site.cropSlots().getLast()) + ",\"boardPosition\":" + position(boardPosition)
+                + ",\"cultivation\":" + cultivation(state, site) + "}";
+    }
+
+    private static String cultivation(FrontierWorldState state, ResourceSite site) {
+        var cycle = state.resourceSites().cycle(site.id());
+        var review = state.resourceSites().cultivation().get(site.settlementId());
+        String decision = review == null ? "null" : "{\"atTick\":" + review.atTick()
+                + ",\"targetOutput\":" + review.targetOutput() + ",\"expectedOutput\":" + review.expectedOutput()
+                + ",\"firstHarvestAfterTicks\":" + (review.firstHarvestAfterTicks() == Long.MAX_VALUE ? "null" : review.firstHarvestAfterTicks())
+                + ",\"horizonTicks\":" + review.horizonTicks() + ",\"selectedCells\":" + review.selectedCells()
+                + ",\"plantedCells\":" + review.plantedCells() + ",\"reserveCells\":" + review.reserveCells()
+                + ",\"reason\":\"" + review.reason() + "\"}";
+        return "{\"area\":" + cycle.layout().cells().size() + ",\"sowingCells\":" + cycle.sowing().cells().size()
+                + ",\"layoutRevision\":" + cycle.layout().revision() + ",\"settlementDecision\":" + decision + "}";
     }
 
     /** Bounded retained COLD/HOT receipt lineage; this query never derives missing stages. */

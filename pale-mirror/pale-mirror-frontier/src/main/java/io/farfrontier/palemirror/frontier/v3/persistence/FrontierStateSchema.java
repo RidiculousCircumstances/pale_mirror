@@ -4,8 +4,8 @@ import java.io.*;
 
 /** Sole header grammar for early installed-world selection and complete aggregate hydration. */
 final class FrontierStateSchema {
-    // Goods price and agreed delivery price have separate durable terms.
-    static final int VERSION = 293;
+    // Runtime field declarations are explicit, not inferred from the genesis layout.
+    static final int VERSION = 294;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

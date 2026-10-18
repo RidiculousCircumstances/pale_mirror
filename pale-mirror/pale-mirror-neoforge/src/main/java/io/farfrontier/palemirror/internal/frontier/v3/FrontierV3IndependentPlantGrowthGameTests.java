@@ -66,6 +66,21 @@ public final class FrontierV3IndependentPlantGrowthGameTests {
             var retired = projection.acknowledgeCanonicalProjection(grownAgain, id, "projection:native:independent-growth", currentPhysical);
             helper.assertTrue(retired.cell(id).pending().isEmpty() && retired.cell(id).committed().growthStage() == 1
                     && grownAgain.state().cell(id).growthStage() == 2, "late projection receipt retains actual age1 before projecting current age2");
+            var laterBare = new FrontierCanonicalState<>(accepted.worldId(), new Revision(4), new SimInstant(4),
+                    grownAgain.state().cropRemoved(id));
+            var closedHistorical = FrontierV3ResourceFieldWitness.read(projection.acknowledgeCanonicalProjection(
+                    laterBare, id, "projection:native:independent-growth", currentPhysical).write());
+            var removal = ResourceFieldCellTransition.between(site, 1, 1, id,
+                    closedHistorical.cell(id).committed(), ResourceFieldPhysicalSurface.Condition.of(laterBare.state().cell(id)));
+            var beforeRemoval = FrontierV3ResourceFieldObservation.observe(level, laterBare.state(), closedHistorical, id, "native:bare-before");
+            var pendingRemoval = closedHistorical.beginCanonicalProjection(laterBare, removal, "projection:native:bare", beforeRemoval);
+            level.setBlock(soil.above(), Blocks.AIR.defaultBlockState(), 3);
+            var bareComplete = pendingRemoval.confirm(id, FrontierV3ResourceFieldObservation.observe(
+                    level, laterBare.state(), pendingRemoval, id, "native:bare-written"));
+            var bareClosed = bareComplete.acknowledgeCanonicalProjection(laterBare, id, "projection:native:bare",
+                    FrontierV3ResourceFieldObservation.observe(level, laterBare.state(), bareComplete, id, "native:bare-current"));
+            helper.assertTrue(bareClosed.cell(id).pending().isEmpty() && level.getBlockState(soil.above()).isAir(),
+                    "a historical growth receipt closes after a newer crop removal; ingress projects bare land, not a replayed plant");
             helper.succeed();
         });
     }

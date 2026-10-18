@@ -12,6 +12,43 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResourceFieldCycleTest {
+    @Test void matureFoodWinsBeforeResowingTheWorkersCurrentCell() {
+        var geometry = layout(2);
+        var cycle = ResourceFieldCycle.seeded(SITE, geometry, 1);
+        for (int stage = 0; stage < 7; stage++) cycle = cycle.advanceGrowthStage();
+        cycle = cycle.harvested(geometry.cells().getFirst().id());
+        assertEquals(1, cycle.spatialWorkSlot(geometry.cells().getFirst().workstation(), index -> true,
+                List.of(), AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION).orElseThrow());
+        assertEquals(0, cycle.spatialWorkSlot(geometry.cells().getFirst().workstation(), index -> index != 1,
+                List.of(), AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION).orElseThrow(),
+                "an unavailable ripe cell does not impose a whole-field barrier on sowing");
+    }
+
+    @Test void extendingPreservesOldPlantsAndRequiresAnExactGeometryAndGroundAdmission() {
+        var geometry = layout(2);
+        var cycle = ResourceFieldCycle.seeded(SITE, geometry, 1).advanceGrowthStage();
+        var support = SurfaceAnchor.at(8, 65, 3);
+        var cell = new ResourceFieldLayout.Cell(new ResourceFieldLayout.CellId(3),
+                support.support().offset(0, 1, 0), support, support);
+        var ground = Map.of(cell.id(), ResourceFieldCycle.Soil.GRASS);
+        var expanded = geometry.extend(List.of(cell), 4, ground);
+        var next = cycle.extended(expanded, ground);
+        assertEquals(cycle.cell(geometry.cells().getFirst().id()), next.cell(geometry.cells().getFirst().id()));
+        assertEquals(cycle.target(geometry.cells().getFirst().id()).generation(), next.generation(geometry.cells().getFirst().id()));
+        assertEquals(ResourceFieldCycle.Soil.GRASS, next.cell(cell.id()).soil());
+        assertFalse(next.workAvailable(cell.id()), "land admission alone cannot authorize sowing");
+        var selected = new java.util.HashSet<>(next.sowing().cells()); selected.add(cell.id());
+        next = next.withSowing(next.sowing().revise(selected));
+        assertEquals(ResourceFieldCycle.WorkOutcome.TILLED, next.expectedWorkOutcome(cell.id()));
+        next = next.tilled(cell.id());
+        assertEquals(ResourceFieldCycle.Crop.ABSENT, next.cell(cell.id()).crop());
+        assertEquals(ResourceFieldCycle.WorkOutcome.PLANTED, next.expectedWorkOutcome(cell.id()));
+        var old = cycle;
+        assertThrows(IllegalArgumentException.class, () -> old.extended(
+                new ResourceFieldLayout(2, 4, expanded.cells(), List.of()), ground));
+        assertThrows(IllegalArgumentException.class, () -> new ResourceFieldLayout(2, 4,
+                expanded.cells(), List.of(), List.of(new FieldLayoutExtension(1, 3, 2, "0".repeat(64), ground))));
+    }
     @Test void matureTargetsArePreferredOverNearbyImmaturePlants() {
         var geometry = layout(3);
         var cycle = ResourceFieldCycle.seeded(SITE, geometry, 1);
@@ -28,13 +65,15 @@ class ResourceFieldCycleTest {
         var cycle = ResourceFieldCycle.seeded(SITE, geometry, 1);
         for (int stage = 0; stage < 7; stage++) cycle = cycle.advanceGrowthStage();
         cycle = cycle.harvested(first);
+        assertEquals(ResourceFieldCycle.Crop.ABSENT, cycle.advanceGrowthStage().cell(first).crop());
+        cycle = cycle.planted(first);
         var grown = cycle.advanceGrowthStage();
         assertEquals(1, grown.cell(first).growthStage());
         assertEquals(7, grown.cell(second).growthStage());
         assertTrue(grown.cell(first).accounted());
-        assertTrue(grown.cell(first).yielded());
+        assertFalse(grown.cell(first).yielded());
         assertEquals(1, grown.accountedCount());
-        assertEquals(1, grown.harvestedCount());
+        assertEquals(0, grown.harvestedCount());
         for (int stage = 1; stage < 7; stage++) grown = grown.advanceGrowthStage();
         assertEquals(ResourceFieldCycle.Crop.MATURE, grown.cell(first).crop());
         assertFalse(grown.cell(first).accounted());
@@ -85,7 +124,7 @@ class ResourceFieldCycleTest {
         var next = cycle.nextEpoch();
         assertEquals(2, next.epoch());
         assertEquals(0, next.harvestedCount());
-        assertEquals(ResourceFieldCycle.Crop.GROWING, next.cell(third).crop(), "the previous farmer action planted the successor");
+        assertEquals(ResourceFieldCycle.Crop.ABSENT, next.cell(third).crop(), "harvest and epoch retirement do not sow");
         assertEquals(ResourceFieldCycle.Crop.GROWING, next.cell(second).crop());
     }
 
@@ -128,9 +167,9 @@ class ResourceFieldCycleTest {
         assertEquals(SITE, harvest.siteId());
         assertEquals(cycle.epoch(), harvest.epoch());
         assertEquals(List.of(ResourceFieldCellTransition.Part.CROP), plant.steps().stream().map(ResourceFieldCellTransition.Step::part).toList());
-        assertEquals(List.of(ResourceFieldCellTransition.Part.SOIL, ResourceFieldCellTransition.Part.CROP),
+        assertEquals(List.of(ResourceFieldCellTransition.Part.SOIL),
                 till.steps().stream().map(ResourceFieldCellTransition.Step::part).toList());
-        assertEquals(List.of(ResourceFieldCellTransition.Part.CROP, ResourceFieldCellTransition.Part.CROP),
+        assertEquals(List.of(ResourceFieldCellTransition.Part.CROP),
                 harvest.steps().stream().map(ResourceFieldCellTransition.Step::part).toList());
         assertEquals(new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND,
                 ResourceFieldCycle.Crop.ABSENT, 0), harvest.committedPrefix(1));
@@ -196,7 +235,8 @@ class ResourceFieldCycleTest {
         var supportBlocked = ResourceFieldCycle.unsurveyed(SITE, geometry, 1).prepared(id).soilObstructed(id);
         assertEquals(ResourceFieldCycle.Soil.UNKNOWN, supportBlocked.obstructionCleared(id).cell(id).soil());
         var observedDirt = supportBlocked.obstructionCleared(id).observedBareSoil(id, ResourceFieldCycle.Soil.DIRT);
-        assertEquals(ResourceFieldCycle.Crop.GROWING, observedDirt.worked(id).cell(id).crop());
+        assertEquals(ResourceFieldCycle.Crop.ABSENT, observedDirt.worked(id).cell(id).crop());
+        assertEquals(ResourceFieldCycle.Crop.GROWING, observedDirt.worked(id).worked(id).cell(id).crop());
     }
 
     @Test void cropObstructionOnMissingCropOrDirtRetainsExactRepairDuty() {
@@ -212,7 +252,8 @@ class ResourceFieldCycleTest {
         assertEquals(ResourceFieldCycle.Soil.DIRT, blockedDirt.obstructionCleared(id).cell(id).soil());
         var repaired = blockedDirt.obstructionCleared(id).worked(id);
         assertEquals(ResourceFieldCycle.Soil.FARMLAND, repaired.cell(id).soil());
-        assertEquals(ResourceFieldCycle.Crop.GROWING, repaired.cell(id).crop());
+        assertEquals(ResourceFieldCycle.Crop.ABSENT, repaired.cell(id).crop());
+        assertEquals(ResourceFieldCycle.Crop.GROWING, repaired.worked(id).cell(id).crop());
         assertEquals(0, repaired.harvestedCount());
 
         var soilDamagedUnderBlock = blockedFarmland.soilBecameDirt(id);

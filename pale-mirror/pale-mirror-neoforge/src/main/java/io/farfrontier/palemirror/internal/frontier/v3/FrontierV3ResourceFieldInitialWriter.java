@@ -62,7 +62,8 @@ final class FrontierV3ResourceFieldInitialWriter {
                 if (reading.disposition() == FrontierV3ResourceFieldInitialPlan.Disposition.FOREIGN) return Result.FOREIGN;
                 if (reading.disposition() == FrontierV3ResourceFieldInitialPlan.Disposition.APPLIED
                         && !reading.step().target().isAir()
-                        && !reading.step().target().is(net.minecraft.world.level.block.Blocks.DIRT)) return Result.AMBIGUOUS;
+                        && !reading.step().target().is(net.minecraft.world.level.block.Blocks.DIRT)
+                        && !reading.step().target().is(net.minecraft.world.level.block.Blocks.GRASS_BLOCK)) return Result.AMBIGUOUS;
                 before.add(reading);
             }
             ledger.prepareFieldInitializationBatch(site, before);

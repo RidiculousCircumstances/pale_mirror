@@ -27,7 +27,6 @@ final class ResourceSiteHarvestCellExclusion {
             throw new IllegalArgumentException("excluded field cell has a stale or physically unresolved work boundary");
         ResourceFieldLayout.Cell selected = cycle.layout().cells().get(job.progress().nextCropSlotIndex());
         if (!skipped.cellIds().equals(List.of(selected.id()))
-                || cycle.cell(selected.id()).accounted()
                 || cycle.expectedWorkOutcome(selected.id()) != skipped.outcome()
                 || cycle.pendingPlayerBreaks().containsKey(selected.id()))
             throw new IllegalArgumentException("excluded field skip lacks its exact selected no-effect outcome");

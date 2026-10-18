@@ -186,7 +186,7 @@ public final class StrategicObjectiveProcess {
     public static ScheduledAction resourceHarvestOpportunity(FrontierWorldState state, ResourceSiteLifecycle lifecycle,
                                                               long dueAt, String cause) {
         ResourceSite site = state.resourceSite(lifecycle.siteId());
-        if (site == null || lifecycle.phase() != ResourceSitePhase.READY && lifecycle.phase() != ResourceSitePhase.HARVESTING)
+        if (site == null || !ResourceFieldGrowthProcess.eligible(lifecycle))
             throw new IllegalArgumentException("resource harvest opportunity requires a workable known field");
         String suffix = lifecycle.siteId().value().substring("site:".length());
         return new ScheduledAction(new ScheduleId("schedule:objective-resource-harvest-" + suffix + "-"
@@ -207,26 +207,31 @@ public final class StrategicObjectiveProcess {
             return retained.map(task -> ResourceSiteHarvestPlanning.expandActiveTask(state, task, action.dueAt().ticks()))
                     .orElse(List.of());
         }
-        if (lifecycle.phase() != ResourceSitePhase.READY) return List.of();
+        if (!ResourceFieldGrowthProcess.eligible(lifecycle)
+                || !state.resourceSites().cycle(lifecycle.siteId()).hasAvailableWork()) return List.of();
         ResourceSite site = state.resourceSite(lifecycle.siteId());
         SubjectId owner = site.settlementId();
         if (!SettlementManagement.available(state, owner, new StrategicOperationProposal(
                 StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE, Optional.empty(), Optional.of(site.id()), FixedScalar.SCALE))) {
-            return List.of(new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(resourceHarvestOpportunity(state, lifecycle,
-                    Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval())))));
+            // The exact field already has a durable pending/active task. Its owner
+            // retains admission and completion wakes; another notification is not
+            // another retry loop competing with that task.
+            return List.of(new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Consumed(action.id())));
         }
         // Storage capacity is a reversible admission condition, not a failed harvest.
         // Keep the one exact opportunity alive without creating a doomed task.
         if (ResourceStorageSelection.newStackCandidates(state, owner, "minecraft:wheat", 64,
                 state.resourceSites().cycle(site.id()).layout().cells().getFirst().workstation(),
                 java.util.Set.of(ResourceStorageRole.WAREHOUSE)).isEmpty()) {
-            return List.of(new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Created(resourceHarvestOpportunity(state, lifecycle,
-                    Math.addExact(action.dueAt().ticks(), state.bootstrap().ruleset().cadence().strategicReviewInterval())))));
+            return List.of(new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Rescheduled(action.id(),
+                    new ScheduledAction(action.id(), new SimInstant(Math.addExact(action.dueAt().ticks(),
+                            state.bootstrap().ruleset().cadence().strategicReviewInterval())), action.priority(),
+                            action.subject(), action.kind(), action.weight()))));
         }
         int ordinal = FrontierWorldScheduleSupport.ordinal(action.id().value());
         StrategicOperationProposal candidate = new StrategicOperationProposal(StrategicObjectiveKind.SETTLEMENT_HARVEST_RESOURCE_SITE, Optional.empty(), Optional.of(lifecycle.siteId()), FixedScalar.SCALE);
         DecisionPolicyRegistry.require(state.strategicPlans().requireDecisionAuthority(owner));
-        StrategicObjective objective = objective(state, owner, candidate, ordinal); StrategicTask task = task(state, objective);
+        StrategicObjective objective = objective(state, owner, candidate, ordinal, action.id().value()); StrategicTask task = task(state, objective);
         // The ready-field opportunity has already passed its durable planner boundary.  The
         // bounded start offset reserves the planner's ordinary owner-handoff turn without
         // consuming the entire pre-ingress COLD window.  A full hundred ticks used to be harmless
@@ -307,7 +312,7 @@ public final class StrategicObjectiveProcess {
                 new ProposedEvent(owner, new StrategicTaskTransition(id, StrategicTaskStatus.BLOCKED)))));
         if (candidate.isEmpty()) return concatenate(observedAndHealth, next);
         StrategicOperationProposal value = candidate.orElseThrow(); StrategicObjective objective = objective(state, owner, value, ordinal, eventIdentity);
-        if (state.strategicPlans().hasActiveObjective(owner, objective.lane()) && preempted.isEmpty()) {
+        if (state.strategicPlans().hasActiveObjective(owner, objective.lane(), objective.resourceSiteTarget()) && preempted.isEmpty()) {
             return concatenate(observedAndHealth, next);
         }
         StrategicTask task = task(state, objective);
@@ -366,7 +371,8 @@ public final class StrategicObjectiveProcess {
     private static List<ProposedEvent> pendingHarvestStarts(FrontierWorldState state, SubjectId settlementId, long dueAt) {
         return state.strategicPlans().tasks().values().stream().filter(task -> task.ownerId().equals(settlementId))
                 .filter(task -> task.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE && task.status() == StrategicTaskStatus.PENDING)
-                .filter(task -> task.resourceSiteTarget().map(state.resourceSites()::site).map(site -> site.phase() == ResourceSitePhase.READY).orElse(false))
+                .filter(task -> task.resourceSiteTarget().map(state.resourceSites()::site)
+                        .map(ResourceFieldGrowthProcess::eligible).orElse(false))
                 .sorted(Comparator.comparing(StrategicTask::id)).map(task -> {
                     ScheduledAction replacement = ResourceSiteHarvestProcess.start(task, Math.addExact(dueAt, 1L));
                     // Resource-site opportunity admission owns this one stable start action.  A

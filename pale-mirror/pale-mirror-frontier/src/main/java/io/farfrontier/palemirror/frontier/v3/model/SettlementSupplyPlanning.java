@@ -10,6 +10,19 @@ public final class SettlementSupplyPlanning {
     private SettlementSupplyPlanning() { }
     public static SupplyPlanner.Plan read(FrontierWorldState state, SubjectId home, int residents,
                                          Map<String, GoodsParticipantView.Stock> observed) {
+        return read(state, home, residents, observed, (stocks, window) -> Optional.empty());
+    }
+    /** Uses the same economic solver; hypothetical capacity is never inserted into the world state. */
+    static SupplyPlanner.Plan assessCultivation(FrontierWorldState state, SubjectId home, int residents,
+            Map<String, GoodsParticipantView.Stock> observed, List<FieldSupplyCapacity.Cell> cells) {
+        return read(state, home, residents, observed, (stocks, window) -> Optional.of(
+                new SupplyCapacityComposition.Option(SupplyCapacityPort.Key.FIELD,
+                        FieldSupplyCapacity.assess(state, home, stocks, window, cells))));
+    }
+    private static SupplyPlanner.Plan read(FrontierWorldState state, SubjectId home, int residents,
+            Map<String, GoodsParticipantView.Stock> observed,
+            java.util.function.BiFunction<Map<String, SupplyPlanner.Stock>, SupplyPlanningWindow,
+                    Optional<SupplyCapacityComposition.Option>> option) {
         var rules = state.bootstrap().ruleset(); var trade = rules.goodsTrade(); var life = rules.residentLife();
         if (!trade.supplyPlanning().enabled()) throw new IllegalArgumentException("supply planning was not selected by ruleset");
         var facts = new TreeMap<String, SupplyPlanner.Stock>();
@@ -37,7 +50,7 @@ public final class SettlementSupplyPlanning {
                     reserve == null ? OptionalLong.empty() : OptionalLong.of(reserve.reorderPoint())));
         }
         var window = SupplyPlanningWindow.forSettlement(state, home, reserves.values());
-        var capacities = SupplyCapacityComposition.read(state, home, facts, window);
+        var capacities = SupplyCapacityComposition.read(state, home, facts, window, option.apply(facts, window));
         var commitments = SupplyCapacityComposition.dependencies(state, home, facts);
         var market = SettlementSourcingMarket.read(state, participant, capacities);
         if (trade.supplyPlanning().economics().isPresent())

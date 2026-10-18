@@ -31,7 +31,7 @@ final class ResourceSiteHarvestPlanning {
         if (task.kind() != StrategicTaskKind.HARVEST_RESOURCE_SITE || task.resourceSiteTarget().isEmpty()) {
             throw new IllegalArgumentException("resource-site harvest start requires its exact strategic task");
         }
-        return new ScheduledAction(new ScheduleId("schedule:resource-site-harvest-task-start-" + task.id().value().replace(':', '-')),
+        return new ScheduledAction(new ScheduleId("schedule:resource-site-harvest-task-start-" + WorkOpportunityIdentity.digest(task.id().value())),
                 new SimInstant(dueAt), 0, task.id(), "frontier.resource_site.harvest", 1);
     }
 
@@ -39,7 +39,7 @@ final class ResourceSiteHarvestPlanning {
         StrategicTask task = task(state, action.subject(), StrategicTaskStatus.PENDING);
         if (!action.id().equals(start(task, action.dueAt().ticks()).id())) return List.of();
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(task.resourceSiteTarget().orElseThrow());
-        if (lifecycle.phase() != ResourceSitePhase.READY) return blocked(task);
+        if (lifecycle.phase() != ResourceSitePhase.READY && lifecycle.phase() != ResourceSitePhase.GROWING) return blocked(task);
         if (state.structureConditions().get(site(state, lifecycle.siteId()).facilityId()) != StructureCondition.INTACT)
             return blocked(task);
         var admitted = admissions(state, task, action.dueAt().ticks());
@@ -73,6 +73,10 @@ final class ResourceSiteHarvestPlanning {
         FrontierWorldState projected = activate ? state.withStrategicPlans(
                 state.strategicPlans().transitionTask(task.id(), StrategicTaskStatus.ACTIVE)) : state;
         ResidentWorkProvider<ResourceSiteHarvestStarted> provider = provider(task, site);
+        boolean sharedFields = state.resourceSiteDescriptors().values().stream()
+                .filter(field -> field.settlementId().equals(settlement.id()))
+                .filter(field -> state.structureConditions().get(field.facilityId()) == StructureCondition.INTACT)
+                .filter(field -> FieldWorkDemand.requested(state, field)).limit(2).count() > 1;
         for (ResidentProfile farmer : candidates) {
             var offered = ResidentWorkComposition.SELECTION.offer(projected, farmer, atTick, provider);
             if (offered.isEmpty()) continue;
@@ -88,6 +92,9 @@ final class ResourceSiteHarvestPlanning {
             // This is immutable transaction planning, not a parallel reservation cache.
             projected = admitStarted(projected, site.id(), started)
                     .preparePhysicalIntent(intent);
+            // Give another field's durable admission a turn before this one takes the
+            // entire free workforce. Unavailable fields do not reserve idle workers.
+            if (sharedFields) break;
         }
         return List.copyOf(events);
     }
@@ -108,7 +115,7 @@ final class ResourceSiteHarvestPlanning {
     static SettlementStaffingPort.Demand staffingDemand(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules) {
         var fields = state.resourceSiteDescriptors().values().stream().filter(site -> site.settlementId().equals(home))
                 .filter(site -> state.structureConditions().get(site.facilityId()) == StructureCondition.INTACT).toList();
-        boolean workable = fields.stream().anyMatch(site -> state.resourceSites().site(site.id()).phase() == ResourceSitePhase.READY
+        boolean workable = fields.stream().anyMatch(site -> state.resourceSites().cycle(site.id()).hasAvailableWork()
                 || state.resourceSites().site(site.id()).phase() == ResourceSitePhase.HARVESTING);
         var retained = state.resourceSites().sites().values().stream().flatMap(site -> site.harvestJobs().values().stream())
                 .filter(job -> state.resourceSite(job.siteId()).settlementId().equals(home))
@@ -120,14 +127,14 @@ final class ResourceSiteHarvestPlanning {
 
     /** Family-owned executable opportunity; this probe creates no assignment, movement or reservation. */
     static boolean availableWork(FrontierWorldState state, ResidentProfile resident, long atTick) {
-        if (!ProductionStockDemand.read(state, resident.settlementId(), "minecraft:wheat").requested()) return false;
         for (var task : state.strategicPlans().tasks().values().stream()
                 .filter(task -> task.ownerId().equals(resident.settlementId())
                         && task.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE
                         && (task.status() == StrategicTaskStatus.PENDING || task.status() == StrategicTaskStatus.ACTIVE))
                 .sorted(java.util.Comparator.comparing(StrategicTask::id)).toList()) {
             var lifecycle = state.resourceSites().site(task.resourceSiteTarget().orElseThrow());
-            if (lifecycle.phase() != ResourceSitePhase.READY && lifecycle.phase() != ResourceSitePhase.HARVESTING) continue;
+            if (lifecycle.phase() != ResourceSitePhase.READY && lifecycle.phase() != ResourceSitePhase.HARVESTING
+                    && lifecycle.phase() != ResourceSitePhase.GROWING) continue;
             var site = site(state, lifecycle.siteId());
             if (state.structureConditions().get(site.facilityId()) != StructureCondition.INTACT) continue;
             var projected = task.status() == StrategicTaskStatus.PENDING
@@ -139,7 +146,7 @@ final class ResourceSiteHarvestPlanning {
 
     private static java.util.Optional<ResourceSiteHarvestStarted> offer(FrontierWorldState state, StrategicTask task,
             ResourceSite site, ResidentProfile farmer, long tick) {
-        if (!ProductionStockDemand.read(state, site.settlementId(), "minecraft:wheat").requested())
+        if (!FieldWorkDemand.requested(state, site))
             return java.util.Optional.empty();
         if (!ResidentActivityCoordinator.mayStartOrdinaryWork(state, farmer.id(), tick)
                 || !ActorExecutionCoordinator.ordinaryWorkAdmission(state, farmer.id()).permitted())
@@ -170,7 +177,10 @@ final class ResourceSiteHarvestPlanning {
                 new InventoryCustody.ContainerSlot(depot, slot.getAsInt()), field);
         if (!ActorCarriedResources.canAddAccount(state.inventory().fungibleResources(),
                 farmer.id(), job.actorAccountId())) return java.util.Optional.empty();
-        var selected = lifecycle.selectHarvestStart(job, field, worker.supportingSurface(), index -> actionable(field, index) && !state.resourceSites().hasPendingCellMutation(site.id(), field.layout().cells().get(index).id()));
+        boolean harvestDemand = ProductionStockDemand.read(state, site.settlementId(), FieldHarvestExtraction.ITEM).requested();
+        var selected = lifecycle.selectHarvestStart(job, field, worker.supportingSurface(), index ->
+                FieldWorkDemand.allowed(field, field.layout().cells().get(index).id(), harvestDemand)
+                        && !state.resourceSites().hasPendingCellMutation(site.id(), field.layout().cells().get(index).id()));
         if (selected.isEmpty()) return java.util.Optional.empty();
         job = job.withProgress(job.progress().withSelectedCropSlot(selected.getAsInt())).bindTarget(field);
         var outcome = field.expectedWorkOutcome(field.layout().cells().get(selected.getAsInt()).id());
@@ -196,16 +206,6 @@ final class ResourceSiteHarvestPlanning {
             }
         }
         return java.util.Optional.of(new ResourceSiteHarvestStarted(job, fieldRoute, storageRoute));
-    }
-
-    private static boolean actionable(ResourceFieldCycle field, int index) {
-        var cell = field.layout().cells().get(index).id();
-        var condition = field.cell(cell);
-        return !field.pendingPlayerBreaks().containsKey(cell) && !condition.workAccessBlocked()
-                && (condition.crop() == ResourceFieldCycle.Crop.MATURE
-                    || condition.crop() == ResourceFieldCycle.Crop.ABSENT
-                        && (condition.soil() == ResourceFieldCycle.Soil.FARMLAND
-                            || condition.soil() == ResourceFieldCycle.Soil.DIRT));
     }
 
     private static boolean livingFarmerExists(FrontierWorldState state, SubjectId settlementId) {

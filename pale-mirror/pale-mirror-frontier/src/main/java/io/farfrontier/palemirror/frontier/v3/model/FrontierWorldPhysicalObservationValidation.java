@@ -17,7 +17,7 @@ final class FrontierWorldPhysicalObservationValidation {
                          Map<PhysicalIntentId, PhysicalIntent> intents, Map<PhysicalObservationId, PhysicalEffectObservation> observations,
                          Map<SceneLeaseId, SceneLease> sceneLeases,
                          Map<SubjectId, RouteConstruction> constructions, Map<SubjectId, RouteMaintenance> maintenances,
-                         RouteTopology topology, Map<SubjectId, SettlementServiceWork> serviceWorks) {
+                         RouteTopology topology, Map<SubjectId, SettlementServiceWork> serviceWorks, ResourceSiteState resourceSites) {
         for (Map.Entry<PhysicalObservationId, PhysicalEffectObservation> entry : observations.entrySet()) {
             PhysicalEffectObservation observation = entry.getValue();
             if (!entry.getKey().equals(observation.id())) throw new IllegalArgumentException("physical observation map key must match observation identity");
@@ -56,11 +56,11 @@ final class FrontierWorldPhysicalObservationValidation {
             } else if (observation instanceof RouteMaintenanceMaterialLoadObservation loading) {
                 RouteMaintenanceStateSupport.validateMaterialLoadingReceiptForRecovery(inventory, maintenances, intents, observations, intent, loading);
             } else if (observation instanceof ResourceSiteHarvestObservation harvest) {
-                ResourceSitePhysicalIntentStateSupport.validateHarvestReceipt(bootstrap, intent, harvest);
+                ResourceSitePhysicalIntentStateSupport.validateHarvestReceipt(resourceSites, intent, harvest);
             } else if (observation instanceof ResourceSiteHarvestDeliveryObservation harvest) {
-                ResourceSitePhysicalIntentStateSupport.validateHarvestDeliveryReceipt(bootstrap, intent, harvest);
+                ResourceSitePhysicalIntentStateSupport.validateHarvestDeliveryReceipt(resourceSites, intent, harvest);
             } else if (observation instanceof ResourceSiteHarvestDeferredObservation harvest) {
-                ResourceSitePhysicalIntentStateSupport.validateDeferredHarvestReceipt(bootstrap, intent, harvest);
+                ResourceSitePhysicalIntentStateSupport.validateDeferredHarvestReceipt(resourceSites, intent, harvest);
             } else if (observation instanceof ResourceSitePreparationObservation preparation) {
                 ResourceSitePhysicalIntentStateSupport.validateReceipt(intent, preparation);
                 ResourceSite initial = FrontierResourceSitePlan.compile(bootstrap).get(preparation.siteId());

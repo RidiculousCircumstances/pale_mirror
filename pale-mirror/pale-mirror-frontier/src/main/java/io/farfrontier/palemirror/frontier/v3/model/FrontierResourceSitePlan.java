@@ -119,33 +119,24 @@ public final class FrontierResourceSitePlan {
         int soilY = crops.getFirst().y() - 1;
         if (maxX - minX != 7 || maxZ - minZ != 7
                 || crops.stream().anyMatch(crop -> crop.y() != soilY + 1))
-            throw new IllegalArgumentException("graybox producer cannot supply irregular field irrigation");
+            throw new IllegalArgumentException("small graybox field has an unexpected footprint");
         var cells = new java.util.ArrayList<ResourceFieldLayout.Cell>(crops.size());
         for (int index = 0; index < crops.size(); index++) {
             var soil = new SurfaceAnchor(crops.get(index).offset(0, -1, 0));
             cells.add(new ResourceFieldLayout.Cell(new ResourceFieldLayout.CellId(index + 1L), crops.get(index), soil, soil));
         }
-        return new ResourceFieldLayout(1L, crops.size() + 1L, cells,
-                List.of(new BlockPosition(minX + 2, soilY, minZ - 1), new BlockPosition(maxX - 1, soilY, minZ - 1),
-                        new BlockPosition(minX + 2, soilY, maxZ + 1), new BlockPosition(maxX - 1, soilY, maxZ + 1)));
+        return new ResourceFieldLayout(1L, crops.size() + 1L, cells, List.of());
     }
 
-    /** Default 16x16 footprint with four ordinary water sources covering every crop. */
+    /** Managed agriculture has no irrigation requirement or generated water works. */
     private static ResourceFieldLayout initialLargeGrayboxLayout(List<BlockPosition> footprint) {
-        int minX = footprint.stream().mapToInt(BlockPosition::x).min().orElseThrow();
-        int minZ = footprint.stream().mapToInt(BlockPosition::z).min().orElseThrow();
-        int soilY = footprint.getFirst().y() - 1;
-        var irrigation = new java.util.ArrayList<BlockPosition>();
-        for (int x : List.of(3, 11)) for (int z : List.of(3, 11))
-            irrigation.add(new BlockPosition(minX + x, soilY, minZ + z));
-        var water = Set.copyOf(irrigation);
         var cells = new java.util.ArrayList<ResourceFieldLayout.Cell>();
         for (BlockPosition crop : footprint) {
             var soil = new SurfaceAnchor(crop.offset(0, -1, 0));
-            if (!water.contains(soil.support())) cells.add(new ResourceFieldLayout.Cell(
+            cells.add(new ResourceFieldLayout.Cell(
                     new ResourceFieldLayout.CellId(cells.size() + 1L), crop, soil, soil));
         }
-        return new ResourceFieldLayout(1L, cells.size() + 1L, cells, irrigation);
+        return new ResourceFieldLayout(1L, cells.size() + 1L, cells, List.of());
     }
 
     /**

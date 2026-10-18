@@ -86,15 +86,15 @@ final class FrontierV3ResourceFieldGrowthProjector {
             if (cycle.pendingPlayerBreaks().containsKey(id) || ledger.hasPendingFieldMutation(siteId, id)) continue;
             var canonical = cycle.cell(id);
             var cell = witness.cell(id);
-            if (cell.foreign().isPresent() || canonical.soil() != ResourceFieldCycle.Soil.FARMLAND
-                    || canonical.crop() != ResourceFieldCycle.Crop.GROWING && canonical.crop() != ResourceFieldCycle.Crop.MATURE) continue;
+            if (cell.foreign().isPresent() || !canonical.soil().cultivable()
+                    || canonical.crop() != ResourceFieldCycle.Crop.ABSENT
+                        && canonical.crop() != ResourceFieldCycle.Crop.GROWING && canonical.crop() != ResourceFieldCycle.Crop.MATURE) continue;
             var target = ResourceFieldPhysicalSurface.Condition.of(canonical);
             if (cell.pending().isPresent()) {
                 var pending = cell.pending().orElseThrow();
                 if (pending.canonicalSource().isPresent()
                         && pending.canonicalSource().orElseThrow().worldId().equals(accepted.worldId())
-                        && pending.canonicalSource().orElseThrow().revision().compareTo(accepted.revision()) <= 0
-                        && target.equalsOrGrowsFrom(pending.transition().after())) admitted.add(id);
+                        && pending.canonicalSource().orElseThrow().revision().compareTo(accepted.revision()) <= 0) admitted.add(id);
                 continue;
             }
             if (cell.committed().equals(target)) continue;
@@ -148,8 +148,8 @@ final class FrontierV3ResourceFieldGrowthProjector {
         if (cycle.pendingPlayerBreaks().containsKey(cellId)) return Result.PENDING_PLAYER;
         if (ledger.hasPendingFieldMutation(site.id(), cellId)) return Result.PENDING_WORK;
         var canonicalCell = cycle.cell(cellId);
-        if (canonicalCell.soil() != ResourceFieldCycle.Soil.FARMLAND
-                || canonicalCell.crop() != ResourceFieldCycle.Crop.GROWING
+        if (!canonicalCell.soil().cultivable()
+                || canonicalCell.crop() != ResourceFieldCycle.Crop.ABSENT && canonicalCell.crop() != ResourceFieldCycle.Crop.GROWING
                 && canonicalCell.crop() != ResourceFieldCycle.Crop.MATURE) return Result.NEEDS_WORK;
         ResourceFieldPhysicalSurface.Condition target = ResourceFieldPhysicalSurface.Condition.of(canonicalCell);
         FrontierV3ResourceFieldWitness.Cell cell = witness.cell(cellId);
@@ -157,8 +157,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
         if (cell.pending().isPresent()) {
             var pending = cell.pending().orElseThrow();
             if (pending.canonicalSource().isEmpty()) return Result.PENDING_WORK;
-            if (!target.equalsOrGrowsFrom(pending.transition().after())
-                    || !pending.canonicalSource().orElseThrow().worldId().equals(accepted.worldId())
+            if (!pending.canonicalSource().orElseThrow().worldId().equals(accepted.worldId())
                     || pending.canonicalSource().orElseThrow().revision().compareTo(accepted.revision()) > 0)
                 return Result.STALE_CANONICAL;
         } else {
@@ -199,8 +198,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
             if (pending.completedSteps() < pending.transition().steps().size()) {
                 ResourceFieldCellTransition.Step step = pending.transition().steps().get(pending.completedSteps());
                 BlockState next = switch (step.part()) {
-                    case SOIL -> step.after().soil() == ResourceFieldCycle.Soil.FARMLAND
-                            ? Blocks.FARMLAND.defaultBlockState() : Blocks.DIRT.defaultBlockState();
+                    case SOIL -> FrontierV3FieldBlocks.soil(step.after().soil());
                     case CROP -> step.after().crop() == ResourceFieldCycle.Crop.ABSENT
                             ? Blocks.AIR.defaultBlockState()
                             : Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, step.after().growthStage());

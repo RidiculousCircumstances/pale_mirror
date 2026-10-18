@@ -121,7 +121,8 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
         return copy(nextPhase, growthEpoch, stage, preparationWork, conflictDisposition, harvestJobs, harvestLineages, harvestSequence);
     }
     public ResourceSiteLifecycle harvesting(ResourceSiteHarvestJob job) {
-        if (phase != ResourceSitePhase.READY && phase != ResourceSitePhase.HARVESTING || harvestJobs.containsKey(job.id()))
+        if (phase != ResourceSitePhase.READY && phase != ResourceSitePhase.HARVESTING && phase != ResourceSitePhase.GROWING
+                || harvestJobs.containsKey(job.id()))
             throw new IllegalStateException("field cannot admit this execution");
         var jobs = new LinkedHashMap<>(harvestJobs); jobs.put(job.id(), job);
         return copy(ResourceSitePhase.HARVESTING, growthEpoch, growthStage, preparationWork, Optional.empty(), jobs, harvestLineages,
@@ -187,7 +188,10 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
         var peers = harvestJobs.values().stream().filter(peer -> !peer.id().equals(job.id())
                 && !peer.progress().complete() && !peer.returningForBatch())
                 .map(peer -> cycle.layout().cells().get(peer.progress().selectedCropSlotIndex()).workstation()).toList();
-        return cycle.spatialWorkSlot(origin, index -> targetAvailable(index, job.id()) && eligible.test(index), peers, policy);
+        return cycle.spatialWorkSlot(origin, index -> targetAvailable(index, job.id()) && eligible.test(index)
+                && harvestJobs.values().stream().filter(peer -> !peer.id().equals(job.id()))
+                    .noneMatch(peer -> peer.progress().acceptance().filter(accepted ->
+                            accepted.receipt().cellId().equals(cycle.layout().cells().get(index).id())).isPresent()), peers, policy);
     }
     public ResourceSiteLifecycle skipSelectedHarvestCell(ResourceSiteHarvestJob job, int next, ResourceFieldCycle cycle) {
         return replace(require(job).withSelectedCellSkipped(next).bindTarget(cycle));

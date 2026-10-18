@@ -189,7 +189,7 @@ public final class ResourceSiteHarvestProcess {
         ResourceFieldCycle worked = field.worked(cell.id(), progressed.outcome());
         var extraction = progressed.outcome() == ResourceFieldCycle.WorkOutcome.HARVESTED
                 ? FieldHarvestExtraction.prepareKnown(field, cell.id(),
-                    "harvest-cell:" + job.id().value() + ':' + field.epoch() + ':' + cell.id().value(),
+                    FieldCellOperation.id(job.id(), field.epoch(), cell.id(), progressed.generation()),
                     state.actorExecutions().current(
                         io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST).get(job.workerId()),
                     FieldHarvestExtraction.definition(state.bootstrap(), cell.crop()))
@@ -748,7 +748,8 @@ public final class ResourceSiteHarvestProcess {
 
     static void validateJob(FrontierWorldState state, ResourceSiteLifecycle lifecycle, ResourceSiteHarvestJob job) {
         boolean admitted = lifecycle.harvestJobs().containsKey(job.id());
-        if (lifecycle.phase() != ResourceSitePhase.READY && lifecycle.phase() != ResourceSitePhase.HARVESTING) throw new IllegalArgumentException("resource-site harvest requires a ready field");
+        if (lifecycle.phase() != ResourceSitePhase.READY && lifecycle.phase() != ResourceSitePhase.HARVESTING
+                && lifecycle.phase() != ResourceSitePhase.GROWING) throw new IllegalArgumentException("field work requires a prepared field");
         if (admitted && lifecycle.harvestJob(job.id()).filter(job::equals).isEmpty()) {
             throw new IllegalArgumentException("resource-site harvest completion does not match active work");
         }
@@ -779,7 +780,7 @@ public final class ResourceSiteHarvestProcess {
             ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
             int selected = job.progress().nextCropSlotIndex();
             if (!lifecycle.targetAvailable(selected, job.id())
-                    || cycle.cell(cycle.layout().cells().get(selected).id()).accounted())
+                    || !cycle.workAvailable(cycle.layout().cells().get(selected).id()))
                 throw new IllegalArgumentException("field target is already claimed or processed");
             if (!job.target().current(cycle)
                     || !job.target().cellId().equals(cycle.layout().cells().get(selected).id()))

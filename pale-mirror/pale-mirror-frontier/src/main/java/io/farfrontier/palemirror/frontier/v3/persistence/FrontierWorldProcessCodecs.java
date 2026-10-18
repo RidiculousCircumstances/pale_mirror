@@ -59,6 +59,7 @@ public final class FrontierWorldProcessCodecs {
         result.put("unit-inventory", UnitInventoryPayloadCodecs.create());
         result.put("expedition-supplies", ExpeditionSupplyPayloadCodecs.create());
         result.put("resource-sites", FrontierWorldPayloadCodecs.resourceSiteCodecs());
+        result.put("cultivation", new PayloadCodecs(java.util.List.of(new CultivationReviewedCodec())));
         result.put("hive", FrontierWorldPayloadCodecs.hiveCodecs());
         result.put("infrastructure", FrontierWorldPayloadCodecs.infrastructureCodecs());
         result.put("settlement-service-work", FrontierWorldPayloadCodecs.settlementServiceWorkCodecs());

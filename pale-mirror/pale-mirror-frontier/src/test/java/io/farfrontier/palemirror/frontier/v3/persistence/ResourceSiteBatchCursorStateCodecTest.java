@@ -60,7 +60,10 @@ class ResourceSiteBatchCursorStateCodecTest {
                 cycle.target(cells.getLast().id()), 1L);
         ResourceSiteLifecycle lifecycle = new ResourceSiteLifecycle(site, ResourceSitePhase.HARVESTING, 1, 7,
                 Optional.of(job));
-        ResourceSiteState state = new ResourceSiteState(Map.of(site, lifecycle), Map.of(site, cycle));
+        var declarations = Map.of(site, new ResourceSiteDeclaration(site, new SubjectId("settlement:batch"),
+                new SubjectId("structure:batch-farm"), ResourceSiteKind.WHEAT_FIELD,
+                new FieldLandOrigin(FieldLandOrigin.Kind.AUTHORED, Map.of())));
+        ResourceSiteState state = new ResourceSiteState(declarations, Map.of(site, lifecycle), Map.of(site, cycle));
         var bytes = new ByteArrayOutputStream();
         ResourceSiteStateCodec.write(new DataOutputStream(bytes), state);
         ResourceSiteState recovered = ResourceSiteStateCodec.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));
@@ -79,7 +82,7 @@ class ResourceSiteBatchCursorStateCodecTest {
                     ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.GROWING, 0, true, false));
         }
         ResourceFieldCycle mismatched = ResourceFieldCycle.restore(site, layout, 1, nonYielding);
-        var laterPlants = new ResourceSiteState(Map.of(site, lifecycle), Map.of(site, mismatched));
+        var laterPlants = new ResourceSiteState(declarations, Map.of(site, lifecycle), Map.of(site, mismatched));
         assertEquals(job, laterPlants.site(site).harvestJob(job.id()).orElseThrow());
     }
 }

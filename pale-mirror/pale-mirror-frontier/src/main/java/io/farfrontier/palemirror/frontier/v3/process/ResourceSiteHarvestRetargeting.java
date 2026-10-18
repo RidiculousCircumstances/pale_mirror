@@ -60,9 +60,7 @@ public final class ResourceSiteHarvestRetargeting {
                 || retargeted.toSlot() >= cycle.layout().cells().size())
             throw new IllegalArgumentException("area work retarget has a stale or unresolved work boundary");
         ResourceFieldLayout.CellId target = cycle.layout().cells().get(retargeted.toSlot()).id();
-        ResourceFieldCycle.CellState condition = cycle.cell(target);
-        if (!lifecycle.targetAvailable(retargeted.toSlot(), job.id()) || condition.accounted() || condition.workAccessBlocked()
-                || condition.crop() == ResourceFieldCycle.Crop.OBSTRUCTED || condition.crop() == ResourceFieldCycle.Crop.GROWING
+        if (!lifecycle.targetAvailable(retargeted.toSlot(), job.id()) || !cycle.workAvailable(target)
                 || state.resourceSites().hasPendingCellMutation(subject, target))
             throw new IllegalArgumentException("area work retarget has no eligible alternate cell");
         ResourceSiteHarvestPlanning.requireContinuationBinding(job, new ScheduledAction(retargeted.coldScheduleId(),

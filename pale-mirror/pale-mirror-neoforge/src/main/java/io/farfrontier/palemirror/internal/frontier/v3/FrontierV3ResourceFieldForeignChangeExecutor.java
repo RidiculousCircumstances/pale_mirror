@@ -44,9 +44,10 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
         var inFlight = FrontierV3ResourceSiteLedger.get(level).fieldForeignChange(siteId, cell.id());
         if (inFlight != null) return true; // Keep the exact predecessor; after-write versions its observation.
         boolean alreadyForeign = foreign(before);
-        boolean willBeForeign = soilSlot && !replacement.is(Blocks.FARMLAND) && !replacement.is(Blocks.DIRT)
+        boolean willBeForeign = soilSlot && FrontierV3FieldBlocks.soil(replacement) == null
                 || cropSlot && !replacement.is(Blocks.AIR) && !replacement.is(Blocks.WHEAT);
-        boolean replacementGeneration = soilSlot && before.soil() == ResourceFieldCycle.Soil.DIRT && replacement.is(Blocks.FARMLAND)
+        boolean replacementGeneration = soilSlot && FrontierV3FieldBlocks.soil(replacement) != null
+                    && before.soil() != FrontierV3FieldBlocks.soil(replacement)
                 || cropSlot && replacement.is(Blocks.WHEAT) && (before.crop() == ResourceFieldCycle.Crop.ABSENT
                     || replacement.getValue(CropBlock.AGE) > 0 && replacement.getValue(CropBlock.AGE) < before.growthStage());
         if (!alreadyForeign && !willBeForeign && !replacementGeneration) return false;
@@ -113,10 +114,10 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
             drift = !(reading instanceof FrontierV3ResourceFieldObservation.Foreign observed)
                     || !sameBlocks(observed.incident(), retained.foreign().orElseThrow());
         } else {
-            if (retained.foreign().isPresent()
-                    || !retained.committed().equals(ResourceFieldPhysicalSurface.Condition.of(before))) return false;
+            if (retained.foreign().isPresent()) return false;
             drift = reading instanceof FrontierV3ResourceFieldObservation.Foreign
                     || reading instanceof FrontierV3ResourceFieldObservation.Owned owned
+                        && !owned.condition().equals(retained.committed())
                         && !owned.condition().equals(ResourceFieldPhysicalSurface.Condition.of(before))
                         && FrontierV3ResourceFieldWorldChangeExecutor.classify(
                             ResourceFieldPhysicalSurface.Condition.of(before), owned.condition()) == null;
@@ -281,9 +282,7 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
         }
         if (claim.foreign().isPresent()
                 || !claim.committed().equals(ResourceFieldPhysicalSurface.Condition.of(canonical))) return false;
-        if (soilSlot) return canonical.soil() == ResourceFieldCycle.Soil.FARMLAND
-                ? actual.is(Blocks.FARMLAND) : canonical.soil() == ResourceFieldCycle.Soil.DIRT
-                && actual.is(Blocks.DIRT);
+        if (soilSlot) return canonical.soil() == FrontierV3FieldBlocks.soil(actual);
         return switch (canonical.crop()) {
             case ABSENT -> actual.is(Blocks.AIR);
             case GROWING, MATURE -> actual.is(Blocks.WHEAT)

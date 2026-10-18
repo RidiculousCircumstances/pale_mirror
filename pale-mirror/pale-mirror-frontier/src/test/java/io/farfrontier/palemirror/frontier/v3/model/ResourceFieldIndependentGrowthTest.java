@@ -16,11 +16,17 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResourceFieldIndependentGrowthTest {
-    @Test void completedHarvestGrowsWhileItsExactWorkerStillCarriesUndeliveredWheatAcrossRecovery() {
+    @Test void separatelySownPlantGrowsWhileHarvesterStillCarriesUndeliveredWheatAcrossRecovery() {
         var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
         var state = ResourceSiteHarvestProcessTest.completeHarvestWorkHot(hot.state(), hot.site(), hot.job(), hot.lease().id());
         var job = (ResourceSiteHarvestJob) state.resourceSites().site(hot.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         assertEquals(64, job.undeliveredYieldQuantity());
+        // Biology fixture: a separate sowing operation has planted one empty cell.
+        // The harvester's custody is unchanged; harvest itself created no plant.
+        var cycle = state.resourceSites().cycle(hot.site());
+        assertTrue(cycle.cellStates().values().stream().allMatch(cell -> cell.crop() == ResourceFieldCycle.Crop.ABSENT));
+        cycle = cycle.planted(cycle.layout().cells().getFirst().id());
+        state = state.withResourceSites(state.resourceSites().replace(state.resourceSites().site(hot.site()), cycle));
         var clock = ResourceSiteProcess.nextGrowth(state.resourceSites().site(hot.site()), 22_301L);
         var base = FrontierWorldRuntimeDefinition.configuration(state.bootstrap());
         var journal = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord>();
@@ -36,7 +42,7 @@ class ResourceFieldIndependentGrowthTest {
         var grown = engine.canonicalState().state();
         assertEquals(job, grown.resourceSites().site(hot.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow());
         assertEquals(1, grown.resourceSites().cycle(hot.site()).plantGrowthStage());
-        assertEquals(64, grown.resourceSites().cycle(hot.site()).harvestedCount());
+        assertEquals(64, ResourceSiteHarvestCargo.quantity(grown, job));
         assertEquals(state.actorLocations(), grown.actorLocations());
         assertEquals(state.inventory(), grown.inventory());
         var recovered = FrontierEngines.recoverCanonicalStateAccess(config,
@@ -52,7 +58,7 @@ class ResourceFieldIndependentGrowthTest {
     @Test void retiringWorkAccountingPreservesPlantAgeAndTheSameClockIdentity() {
         var cold = ResourceSiteHarvestProcessTest.coldHarvestAfterSteps(125L, 0);
         var cycle = cold.state().resourceSites().cycle(cold.site());
-        for (var cell : cycle.layout().cells()) cycle = cycle.harvested(cell.id());
+        for (var cell : cycle.layout().cells()) cycle = cycle.harvested(cell.id()).planted(cell.id());
         for (int stage = 0; stage < 3; stage++) cycle = cycle.advanceGrowthStage();
         var successor = cycle.nextEpoch();
         var terminal = new ResourceSiteLifecycle(cold.site(), ResourceSitePhase.GROWING, successor.epoch(), 0,

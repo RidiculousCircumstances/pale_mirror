@@ -37,6 +37,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class InMemoryFrontierEngineTest {
+    @Test void maximumLegalScheduleCanCommitWithoutOverflowingItsCausalIdentity() {
+        var action = scheduled("n".repeat(32) + ":" + "a".repeat(128), SUBJECT.value(), 1, 1);
+        var engine = engine(List.of(action), false);
+        var result = engine.advanceTo(new SimInstant(1), new WorkBudget(2, 10));
+        assertEquals("ACTIVE", result.status().kind().name());
+        assertEquals(1, result.transactions().size());
+        assertEquals(1, engine.projection(ProjectionQuery.summary()).value());
+    }
     @Test void laterCausalBoundaryWaitsForBudgetRatherThanQuarantiningAValidAction() {
         var first = scheduled("schedule:first-weight", SUBJECT.value(), 1, 6);
         var second = scheduled("schedule:second-weight", SUBJECT.value(), 2, 6);

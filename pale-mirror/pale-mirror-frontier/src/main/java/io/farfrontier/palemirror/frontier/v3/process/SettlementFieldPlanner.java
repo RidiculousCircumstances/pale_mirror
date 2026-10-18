@@ -16,7 +16,9 @@ final class SettlementFieldPlanner implements SettlementOperationPlanner {
                 .filter(value -> value.ownerId().equals(settlement.id())
                         && value.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE
                         && value.status() == StrategicTaskStatus.ACTIVE)
-                .sorted(Comparator.comparing(StrategicTask::id)).toList()) {
+                .sorted(Comparator.comparingInt((StrategicTask task) -> state.resourceSites()
+                        .site(task.resourceSiteTarget().orElseThrow()).harvestJobs().size())
+                        .thenComparing(StrategicTask::id)).toList()) {
             var authority = state.strategicPlans().requireDecisionAuthority(settlement.id());
             if (!task.authorityId().equals(authority.ownerId())
                     || task.authorityEpoch() != authority.reconsiderationEpoch()) continue;
@@ -26,10 +28,11 @@ final class SettlementFieldPlanner implements SettlementOperationPlanner {
         return java.util.List.of();
     }
     @Override public Assessment assess(FrontierWorldState state, Settlement settlement) {
-        if (!ProductionStockDemand.read(state, settlement.id(), "minecraft:wheat").requested()) return Assessment.empty();
         Optional<ResourceSite> recoverableField = state.resourceSiteDescriptors().values().stream()
                 .filter(site -> site.settlementId().equals(settlement.id()))
-                .filter(site -> state.resourceSites().site(site.id()).phase() == ResourceSitePhase.READY)
+                .filter(site -> state.resourceSites().site(site.id()).phase() == ResourceSitePhase.READY
+                        || state.resourceSites().site(site.id()).phase() == ResourceSitePhase.GROWING)
+                .filter(site -> FieldWorkDemand.requested(state, site))
                 .filter(site -> state.structureConditions().get(site.facilityId()) == StructureCondition.INTACT)
                 .filter(site -> !site.layout().cells().isEmpty())
                 .filter(site -> ResourceStorageSelection.newStackDestination(state, settlement.id(), "minecraft:wheat", 64,

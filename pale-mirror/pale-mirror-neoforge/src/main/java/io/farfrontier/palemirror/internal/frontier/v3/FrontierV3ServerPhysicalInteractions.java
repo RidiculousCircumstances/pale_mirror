@@ -56,7 +56,7 @@ final class FrontierV3ServerPhysicalInteractions {
                         && structure.kind() == io.farfrontier.palemirror.frontier.v3.model.StructureKind.HALL).findFirst();
         if (hall.isPresent()) PaleMirrorPlayerPresentation.inspectPages(player, "frontier-v3:board:" + owner,
                 FrontierV3TownTradeCards.pages(state, hall.orElseThrow(), runtime.executionView().orElseThrow().instant().ticks()));
-        else PaleMirrorPlayerPresentation.inspect(player, "frontier-v3:board:" + owner, FrontierV3ObjectBoardCard.fromBoard(board));
+        else PaleMirrorPlayerPresentation.inspect(player, "frontier-v3:board:" + owner, FrontierV3ObjectBoardCard.fromBoard(state, board));
         return true;
     }
     static boolean presentTownHall(ServerLevel level, ServerPlayer player, BlockPos position) {

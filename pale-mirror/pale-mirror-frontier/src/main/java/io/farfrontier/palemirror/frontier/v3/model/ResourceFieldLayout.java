@@ -38,8 +38,14 @@ public final class ResourceFieldLayout {
     private final Map<ChunkColumn, List<Cell>> cellsByChunk;
     private final String fingerprint;
     private final String cellIdsFingerprint;
+    private final List<FieldLayoutExtension> extensions;
 
     public ResourceFieldLayout(long revision, long nextCellId, List<Cell> cells, List<BlockPosition> irrigationSlots) {
+        this(revision, nextCellId, cells, irrigationSlots, List.of());
+    }
+
+    public ResourceFieldLayout(long revision, long nextCellId, List<Cell> cells, List<BlockPosition> irrigationSlots,
+                               List<FieldLayoutExtension> extensions) {
         if (revision < 1 || nextCellId < 1) throw new IllegalArgumentException("invalid field layout revision/id allocator");
         this.revision = revision;
         this.nextCellId = nextCellId;
@@ -85,6 +91,45 @@ public final class ResourceFieldLayout {
         this.cellsByChunk = Map.copyOf(chunkCells);
         this.fingerprint = fingerprint(revision, nextCellId, this.cells, this.irrigationSlots);
         this.cellIdsFingerprint = fingerprintCellIds(this.byId.keySet());
+        this.extensions = List.copyOf(extensions);
+        if (extensions.size() > cells.size()) throw new IllegalArgumentException("unbounded field extension history");
+        for (int index = 0; index < extensions.size(); index++) {
+            var entry = extensions.get(index);
+            long successorRevision = index + 1 < extensions.size()
+                    ? extensions.get(index + 1).predecessorRevision() : revision;
+            int successorCount = index + 1 < extensions.size()
+                    ? extensions.get(index + 1).predecessorCellCount() : cells.size();
+            if (entry.predecessorCellCount() >= successorCount || successorCount > cells.size()
+                    || Math.addExact(entry.predecessorRevision(), 1) != successorRevision
+                    || !entry.predecessorFingerprint().equals(fingerprint(entry.predecessorRevision(),
+                        entry.predecessorNextCellId(), cells.subList(0, entry.predecessorCellCount()), irrigationSlots))
+                    || !entry.ground().keySet().equals(cells.subList(entry.predecessorCellCount(), successorCount)
+                        .stream().map(Cell::id).collect(java.util.stream.Collectors.toSet())))
+                throw new IllegalArgumentException("field extension lacks its exact preserved geometry predecessor");
+        }
+    }
+
+    public List<FieldLayoutExtension> extensions() { return extensions; }
+
+    /** Exact retained geometry only; cannot synthesize a predecessor from a revision number alone. */
+    public Optional<ResourceFieldLayout> predecessor(long expectedRevision, String expectedFingerprint) {
+        if (revision == expectedRevision && fingerprint.equals(expectedFingerprint)) return Optional.of(this);
+        for (int index = 0; index < extensions.size(); index++) {
+            var entry = extensions.get(index);
+            if (entry.predecessorRevision() == expectedRevision && entry.predecessorFingerprint().equals(expectedFingerprint))
+                return Optional.of(new ResourceFieldLayout(expectedRevision, entry.predecessorNextCellId(),
+                        cells.subList(0, entry.predecessorCellCount()), irrigationSlots, extensions.subList(0, index)));
+        }
+        return Optional.empty();
+    }
+
+    /** A geometry amendment carries its predecessor proof across COLD/HOT and recovery. */
+    public ResourceFieldLayout extend(List<Cell> added, long nextId,
+                                      Map<CellId, ResourceFieldCycle.Soil> ground) {
+        var replacement = new ArrayList<>(cells); replacement.addAll(added);
+        var amendment = new ArrayList<>(extensions); amendment.add(FieldLayoutExtension.from(this, ground));
+        revise(Math.addExact(revision, 1), nextId, replacement, irrigationSlots);
+        return new ResourceFieldLayout(Math.addExact(revision, 1), nextId, replacement, irrigationSlots, amendment);
     }
 
     /** Validates geometry evolution; domain job/relationship retirement remains the caller's responsibility. */
@@ -135,9 +180,9 @@ public final class ResourceFieldLayout {
 
     @Override public boolean equals(Object other) {
         return other instanceof ResourceFieldLayout value && revision == value.revision && nextCellId == value.nextCellId
-                && cells.equals(value.cells) && irrigationSlots.equals(value.irrigationSlots);
+                && cells.equals(value.cells) && irrigationSlots.equals(value.irrigationSlots) && extensions.equals(value.extensions);
     }
-    @Override public int hashCode() { return Objects.hash(revision, nextCellId, cells, irrigationSlots); }
+    @Override public int hashCode() { return Objects.hash(revision, nextCellId, cells, irrigationSlots, extensions); }
     @Override public String toString() { return "ResourceFieldLayout[revision=" + revision + ", cells=" + cells.size() + "]"; }
 
     private static String fingerprint(long revision, long nextCellId, List<Cell> cells, List<BlockPosition> irrigation) {

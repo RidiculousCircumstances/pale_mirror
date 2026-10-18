@@ -9,6 +9,14 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3ResourceFieldProjectionSelectionTest {
+    @Test void coldHarvestWithoutResowingSelectsBareFarmlandForProjection() {
+        var before = cycle(16, index -> 7); var id = before.layout().cells().getFirst().id();
+        var after = before.harvested(id);
+        var witness = claimed(before);
+        assertEquals(List.of(id), FrontierV3ResourceFieldProjectionSelection.select(after, witness, 0).cells());
+        assertEquals(ResourceFieldCycle.Crop.MATURE, witness.cell(id).committed().crop(),
+                "selection grants no receipt and cannot erase the observed predecessor");
+    }
     @Test void currentCellsDoNotSpendTheWriteSlotsNeededBySparseColdChanges() {
         var before = cycle(64, index -> 0);
         var after = cycle(64, index -> index == 7 || index == 63 ? 1 : 0);

@@ -9,7 +9,7 @@ public final class ResourceSiteHarvestLabour {
         return switch (cycle.expectedWorkOutcome(cell)) {
             case HARVESTED -> WorkOperation.HARVEST;
             case PLANTED -> WorkOperation.SOW;
-            case TILLED_AND_PLANTED -> WorkOperation.TILL_AND_SOW;
+            case TILLED -> WorkOperation.TILL;
             case SKIPPED_BLOCKED, SKIPPED_IMMATURE -> throw new IllegalArgumentException("excluded cell has no labour operation");
         };
     }

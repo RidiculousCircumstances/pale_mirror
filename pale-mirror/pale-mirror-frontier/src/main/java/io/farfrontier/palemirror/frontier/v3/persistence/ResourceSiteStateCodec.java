@@ -15,13 +15,21 @@ import java.util.Optional;
 
 /** Fail-closed snapshot fragment for bounded resource-site lifecycle and active physical work. */
 final class ResourceSiteStateCodec {
-    private static final int MAX_SITES = 64;
+    private static final int MAX_SITES = ResourceSiteState.MAX_SITES;
     private ResourceSiteStateCodec() { }
 
     static void write(DataOutputStream output, ResourceSiteState state) throws IOException {
         if (state.sites().size() > MAX_SITES) throw new IllegalArgumentException("resource-site retention limit exceeded");
-        output.writeByte(state.sites().size());
+        output.writeInt(state.sites().size());
         for (ResourceSiteLifecycle lifecycle : state.sites().values().stream().sorted(Comparator.comparing(ResourceSiteLifecycle::siteId)).toList()) {
+            var declaration = state.declarations().get(lifecycle.siteId());
+            FrontierWorldStateCodec.writeString(output, declaration.settlementId().value());
+            FrontierWorldStateCodec.writeString(output, declaration.facilityId().value());
+            output.writeByte(declaration.kind().wireTag());
+            output.writeByte(declaration.land().kind().wireTag()); output.writeInt(declaration.land().ground().size());
+            for (var entry : declaration.land().ground().entrySet().stream().sorted(Comparator.comparingLong(e -> e.getKey().value())).toList()) {
+                output.writeLong(entry.getKey().value()); output.writeByte(ResourceFieldCycleStateCodec.soilTag(entry.getValue()));
+            }
             FrontierWorldStateCodec.writeString(output, lifecycle.siteId().value()); output.writeByte(lifecycle.phase().wireTag());
             output.writeLong(lifecycle.growthEpoch()); output.writeByte(lifecycle.growthStage());
             output.writeBoolean(lifecycle.preparationWork().isPresent());
@@ -59,16 +67,33 @@ final class ResourceSiteStateCodec {
                 output.writeInt(encoded.length); output.write(encoded);
             }
         }
+        output.writeInt(state.cultivation().size());
+        for (var entry : state.cultivation().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            FrontierWorldStateCodec.writeString(output, entry.getKey().value());
+            CultivationReviewStateCodec.write(output, entry.getValue());
+        }
     }
 
     static ResourceSiteState read(DataInputStream input) throws IOException {
-        int count = input.readUnsignedByte(); if (count > MAX_SITES) throw new IllegalArgumentException("resource-site retention limit exceeded");
+        int count = input.readInt(); if (count < 0 || count > MAX_SITES) throw new IllegalArgumentException("resource-site retention limit exceeded");
         Map<SubjectId, ResourceSiteLifecycle> sites = new LinkedHashMap<>();
+        Map<SubjectId, ResourceSiteDeclaration> declarations = new LinkedHashMap<>();
         Map<SubjectId, ResourceFieldCycle> cycles = new LinkedHashMap<>();
         Map<CellMutationKey, ResourceFieldCellObserved> heldWorldChanges = new LinkedHashMap<>();
         Map<CellMutationKey, ResourceFieldForeignChangeHeld> heldForeignChanges = new LinkedHashMap<>();
         for (int index = 0; index < count; index++) {
+            var settlement = new SubjectId(FrontierWorldStateCodec.readString(input));
+            var facility = new SubjectId(FrontierWorldStateCodec.readString(input));
+            var kind = ResourceSiteKind.fromWireTag(input.readUnsignedByte());
+            var origin = FieldLandOrigin.Kind.decode(input.readUnsignedByte());
+            int groundCount = input.readInt();
+            if (groundCount < 0 || groundCount > ResourceFieldLayout.MAX_CELLS) throw new IllegalArgumentException("unbounded initial land");
+            var ground = new LinkedHashMap<ResourceFieldLayout.CellId, ResourceFieldCycle.Soil>();
+            for (int cell = 0; cell < groundCount; cell++)
+                if (ground.put(new ResourceFieldLayout.CellId(input.readLong()), ResourceFieldCycleStateCodec.soil(input.readUnsignedByte())) != null)
+                    throw new IllegalArgumentException("duplicate initial land cell");
             SubjectId siteId = new SubjectId(FrontierWorldStateCodec.readString(input)); int phase = input.readUnsignedByte();
+            declarations.put(siteId, new ResourceSiteDeclaration(siteId, settlement, facility, kind, new FieldLandOrigin(origin, ground)));
             long epoch = input.readLong(); int stage = input.readUnsignedByte(); boolean hasWork = input.readBoolean();
             if (phase >= ResourceSitePhase.values().length) throw new IllegalArgumentException("unknown resource-site phase");
             Optional<ResourceSitePreparationJob> work = Optional.empty();
@@ -136,7 +161,14 @@ final class ResourceSiteStateCodec {
                     throw new IllegalArgumentException("held foreign cell has a foreign declaration or duplicate address");
             }
         }
-        return new ResourceSiteState(sites, cycles, heldWorldChanges, heldForeignChanges);
+        int reviews = input.readInt();
+        if (reviews < 0 || reviews > ResourceSiteState.MAX_SITES) throw new IllegalArgumentException("unbounded cultivation reviews");
+        var cultivation = new LinkedHashMap<SubjectId, CultivationReview>();
+        for (int i = 0; i < reviews; i++) {
+            var home = new SubjectId(FrontierWorldStateCodec.readString(input));
+            if (cultivation.put(home, CultivationReviewStateCodec.read(input)) != null) throw new IllegalArgumentException("duplicate cultivation home");
+        }
+        return new ResourceSiteState(declarations, sites, cycles, heldWorldChanges, heldForeignChanges, cultivation);
     }
 
     private static void writeHarvestLineage(DataOutputStream output, ResourceSiteHarvestLineage lineage) throws IOException {

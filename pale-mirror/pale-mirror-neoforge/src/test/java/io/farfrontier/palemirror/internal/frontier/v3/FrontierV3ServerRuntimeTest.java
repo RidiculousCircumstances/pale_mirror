@@ -436,8 +436,9 @@ class FrontierV3ServerRuntimeTest {
                 io.farfrontier.palemirror.frontier.v3.model.FrontierRulesets.production());
 
         for (int tick = 0; tick < FrontierV3ServerLifecycle.MAX_FAST_FORWARD_TICKS; tick++) {
-            runtime.advance(1, budget).orElseThrow();
-            assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind(), "cold interval quarantined at tick " + (tick + 1));
+            var advanced = runtime.advance(1, budget);
+            assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind(), "cold interval quarantined at tick " + (tick + 1) + ": " + runtime.status());
+            assertTrue(advanced.isPresent(), "cold interval could not advance: " + runtime.status());
         }
 
         assertEquals(new SimInstant(FrontierV3ServerLifecycle.MAX_FAST_FORWARD_TICKS), runtime.checkpointImage().orElseThrow().instant());

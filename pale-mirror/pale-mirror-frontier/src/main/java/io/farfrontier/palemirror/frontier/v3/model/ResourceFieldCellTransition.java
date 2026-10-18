@@ -10,7 +10,9 @@ import java.util.Objects;
 public record ResourceFieldCellTransition(SubjectId siteId, long epoch, long layoutRevision, ResourceFieldLayout.CellId cellId,
                                           ResourceFieldPhysicalSurface.Condition before,
                                           ResourceFieldPhysicalSurface.Condition after,
-                                          List<Step> steps) {
+                                          List<Step> steps, Kind kind) {
+    /** Identical block deltas do not imply identical authority or resource effects. */
+    public enum Kind { DELTA, HARVEST }
     public enum Part { SOIL, CROP }
 
     public record Step(Part part, ResourceFieldPhysicalSurface.Condition before,
@@ -36,20 +38,17 @@ public record ResourceFieldCellTransition(SubjectId siteId, long epoch, long lay
         Objects.requireNonNull(before, "field projection predecessor");
         Objects.requireNonNull(after, "field projection target");
         steps = List.copyOf(Objects.requireNonNull(steps, "field projection steps"));
+        Objects.requireNonNull(kind, "declared field transition kind");
+        if (kind == Kind.HARVEST && (before.soil() != ResourceFieldCycle.Soil.FARMLAND
+                || before.crop() != ResourceFieldCycle.Crop.MATURE || after.soil() != before.soil()
+                || after.crop() != ResourceFieldCycle.Crop.ABSENT || steps.size() != 1))
+            throw new IllegalArgumentException("declared harvest has a foreign block transition");
         if (steps.isEmpty() || steps.size() > 2 || before.equals(after))
             throw new IllegalArgumentException("field projection needs one or two changed blocks");
         ResourceFieldPhysicalSurface.Condition cursor = before;
         var changedParts = java.util.EnumSet.noneOf(Part.class);
-        boolean harvestAndReplant = steps.size() == 2 && steps.get(0).part() == Part.CROP
-                && steps.get(1).part() == Part.CROP
-                && before.soil() == ResourceFieldCycle.Soil.FARMLAND
-                && before.crop() == ResourceFieldCycle.Crop.MATURE
-                && steps.get(0).after().equals(new ResourceFieldPhysicalSurface.Condition(
-                        ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.ABSENT, 0))
-                && after.equals(new ResourceFieldPhysicalSurface.Condition(
-                        ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.GROWING, 0));
         for (Step step : steps) {
-            if (!step.before().equals(cursor) || !changedParts.add(step.part()) && !harvestAndReplant)
+            if (!step.before().equals(cursor) || !changedParts.add(step.part()))
                 throw new IllegalArgumentException("field projection has a broken or repeated block prefix");
             cursor = step.after();
         }
@@ -78,25 +77,23 @@ public record ResourceFieldCellTransition(SubjectId siteId, long epoch, long lay
             cursor = changedSoil;
         }
         if (!cursor.equals(after)) steps.add(new Step(Part.CROP, cursor, after));
-        return new ResourceFieldCellTransition(siteId, epoch, layoutRevision, cellId, before, after, steps);
+        return new ResourceFieldCellTransition(siteId, epoch, layoutRevision, cellId, before, after, steps, Kind.DELTA);
     }
 
-    /** A farmer's ripe-crop visit exposes the AIR prefix between actual harvest and replant. */
-    public static ResourceFieldCellTransition harvestAndReplant(SubjectId siteId, long epoch, long layoutRevision, ResourceFieldLayout.CellId cellId,
+    /** Harvest removes the crop only. Sowing is separately admitted and performed. */
+    public static ResourceFieldCellTransition harvest(SubjectId siteId, long epoch, long layoutRevision, ResourceFieldLayout.CellId cellId,
                                                                  ResourceFieldPhysicalSurface.Condition before) {
         Objects.requireNonNull(before, "harvest predecessor");
         if (before.soil() != ResourceFieldCycle.Soil.FARMLAND || before.crop() != ResourceFieldCycle.Crop.MATURE)
             throw new IllegalArgumentException("harvest effect needs exact ripe farmland");
         var cut = new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND,
                 ResourceFieldCycle.Crop.ABSENT, 0);
-        var replanted = new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND,
-                ResourceFieldCycle.Crop.GROWING, 0);
-        return new ResourceFieldCellTransition(siteId, epoch, layoutRevision, cellId, before, replanted,
-                List.of(new Step(Part.CROP, before, cut), new Step(Part.CROP, cut, replanted)));
+        return new ResourceFieldCellTransition(siteId, epoch, layoutRevision, cellId, before, cut,
+                List.of(new Step(Part.CROP, before, cut)), Kind.HARVEST);
     }
 
-    public boolean isHarvestAndReplant() {
-        return steps.size() == 2 && steps.get(0).part() == Part.CROP && steps.get(1).part() == Part.CROP;
+    public boolean isHarvest() {
+        return kind == Kind.HARVEST;
     }
 
     public ResourceFieldPhysicalSurface.Condition committedPrefix(int completedSteps) {

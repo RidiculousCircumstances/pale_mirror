@@ -25,8 +25,8 @@ import java.util.Map;
 
 /** One current cell-owned field journal; no stage/prefix compatibility authority. */
 final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
-    private static final int FORMAT = 18;
-    static final int MAX_SITES = 12;
+    private static final int FORMAT = 19;
+    static final int MAX_SITES = ResourceSiteState.MAX_SITES;
     private final Map<SubjectId, FieldClaim> fieldClaims;
     /** A positive cell-owned delivery is fenced before either Vanilla inventory is edited. */
     private final Map<SubjectId, FrontierV3ResourceSiteDeliveryWitness> fieldDeliveries;
@@ -241,6 +241,22 @@ final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
         fieldDeliveries.remove(witness.siteId()); setDirty();
     }
     /** Reserve the one cell owner before any first-field block write. */
+    void adoptSurveyedField(io.farfrontier.palemirror.frontier.v3.model.ResourceSiteDeclaration declaration,
+                            ResourceFieldCycle current, PhysicalIntentId identity) {
+        if (declaration.land().kind() != io.farfrontier.palemirror.frontier.v3.model.FieldLandOrigin.Kind.SURVEYED
+                || !declaration.id().equals(current.siteId()) || fieldClaims.containsKey(declaration.id()))
+            throw new IllegalArgumentException("surveyed field admission requires its exact unclaimed declaration");
+        var ground = new java.util.LinkedHashMap<>(declaration.land().ground());
+        current.layout().extensions().forEach(extension -> ground.putAll(extension.ground()));
+        if (!ground.keySet().equals(current.cellStates().keySet())) throw new IllegalArgumentException("incomplete surveyed field predecessor");
+        var cells = new java.util.LinkedHashMap<io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout.CellId, ResourceFieldCycle.CellState>();
+        ground.forEach((id, soil) -> cells.put(id, new ResourceFieldCycle.CellState(soil, ResourceFieldCycle.Crop.ABSENT, 0, false, false)));
+        var baseline = ResourceFieldCycle.restore(current.siteId(), current.layout(), current.epoch(), cells);
+        var witness = FrontierV3ResourceFieldWitness.claimed(current.siteId(), current.epoch(), ResourceFieldPhysicalSurface.fromCycle(baseline));
+        if (fieldClaims.size() >= MAX_SITES) throw new IllegalStateException("v3 field claim limit exceeded");
+        fieldClaims.put(current.siteId(), new FieldOwnership(current.siteId(), identity, Status.ACTIVE, witness)); setDirty();
+    }
+
     void reserveFieldInitialization(ResourceSite site, PhysicalIntentId intentId) {
         reserveFieldInitialization(site, intentId, ResourceFieldCycle.seeded(site.id(), site.layout(), 1));
     }

@@ -65,7 +65,8 @@ public final class SettlementManagement {
         }
         var occupied = state.strategicPlans().objectives().values().stream()
                 .filter(value -> value.ownerId().equals(owner) && value.status() == StrategicObjectiveStatus.ACTIVE
-                        && value.lane() == StrategicObjectiveLane.forKind(offer.proposal().kind())).toList();
+                        && value.lane() == StrategicObjectiveLane.forKind(offer.proposal().kind())
+                        && value.resourceSiteTarget().equals(offer.proposal().resourceSiteTarget())).toList();
         return occupied.stream().allMatch(objective -> {
             var retained = state.strategicPlans().tasks().values().stream()
                     .filter(task -> task.objectiveId().equals(objective.id())

@@ -17,9 +17,13 @@ import java.util.UUID;
  * visits the declared field once, not once per simulation tick.
  */
 public final class ResourceFieldCycle {
-    public enum Soil { UNKNOWN, FARMLAND, DIRT, OBSTRUCTED }
+    public enum Soil {
+        UNKNOWN, FARMLAND, DIRT, OBSTRUCTED, GRASS;
+        public boolean untilled() { return this == DIRT || this == GRASS; }
+        public boolean cultivable() { return this == FARMLAND || untilled(); }
+    }
     public enum Crop { UNKNOWN, ABSENT, GROWING, MATURE, OBSTRUCTED }
-    public enum WorkOutcome { HARVESTED, PLANTED, TILLED_AND_PLANTED, SKIPPED_IMMATURE, SKIPPED_BLOCKED }
+    public enum WorkOutcome { HARVESTED, PLANTED, TILLED, SKIPPED_IMMATURE, SKIPPED_BLOCKED }
 
     /** WAL-backed permission for exactly one imminent Vanilla player crop removal. */
     public record PendingPlayerBreak(UUID playerId, String actionId, ResourceFieldPhysicalSurface.Condition before) {
@@ -48,7 +52,7 @@ public final class ResourceFieldCycle {
                     || yielded && !accounted
                     || (crop == Crop.GROWING || crop == Crop.MATURE) && soil != Soil.FARMLAND
                     || soil == Soil.UNKNOWN && crop != Crop.UNKNOWN
-                    || soil == Soil.DIRT && crop != Crop.ABSENT && crop != Crop.OBSTRUCTED
+                    || soil.untilled() && crop != Crop.ABSENT && crop != Crop.OBSTRUCTED
                     || soil == Soil.OBSTRUCTED && crop != Crop.OBSTRUCTED) {
                 throw new IllegalArgumentException("field cell condition is inconsistent");
             }
@@ -62,6 +66,7 @@ public final class ResourceFieldCycle {
     private final Map<ResourceFieldLayout.ChunkColumn, Map<ResourceFieldLayout.CellId, CellState>> byChunk;
     private final Map<ResourceFieldLayout.CellId, PendingPlayerBreak> pendingPlayerBreaks;
     private final Map<ResourceFieldLayout.CellId, Long> generations;
+    private final FieldSowingPlan sowing;
     private final int accountedCount;
     private final int harvestedCount;
     private final int accountedPrefixCount;
@@ -96,6 +101,16 @@ public final class ResourceFieldCycle {
             Map<ResourceFieldLayout.CellId, PendingPlayerBreak> pendingPlayerBreaks, boolean validateCells,
             int accountedCount, int harvestedCount, int accountedPrefixCount,
             Map<ResourceFieldLayout.CellId, Long> generations) {
+        this(siteId, layout, epoch, byChunk, pendingPlayerBreaks, validateCells, accountedCount,
+                harvestedCount, accountedPrefixCount, generations, FieldSowingPlan.initial(layout));
+    }
+    private ResourceFieldCycle(SubjectId siteId, ResourceFieldLayout layout, long epoch,
+            Map<ResourceFieldLayout.ChunkColumn, Map<ResourceFieldLayout.CellId, CellState>> byChunk,
+            Map<ResourceFieldLayout.CellId, PendingPlayerBreak> pendingPlayerBreaks, boolean validateCells,
+            int accountedCount, int harvestedCount, int accountedPrefixCount,
+            Map<ResourceFieldLayout.CellId, Long> generations, FieldSowingPlan sowing) {
+        this.sowing = Objects.requireNonNull(sowing);
+        sowing.validate(layout);
         this.siteId = Objects.requireNonNull(siteId, "field cycle site owner");
         if (!siteId.value().startsWith("site:"))
             throw new IllegalArgumentException("field cycle needs a declared site owner");
@@ -180,18 +195,34 @@ public final class ResourceFieldCycle {
     public long epoch() { return epoch; }
     public long generation(ResourceFieldLayout.CellId id) { layout.requireCell(id); return generations.get(id); }
     public Map<ResourceFieldLayout.CellId, Long> generations() { return generations; }
+    public FieldSowingPlan sowing() { return sowing; }
+    public ResourceFieldCycle withSowing(FieldSowingPlan next) {
+        if (next.equals(sowing)) return this;
+        if (next.revision() != Math.addExact(sowing.revision(), 1))
+            throw new IllegalArgumentException("sowing replacement must retain its exact successor revision");
+        return retaining(generations, next);
+    }
+    private ResourceFieldCycle retaining(Map<ResourceFieldLayout.CellId, Long> retained, FieldSowingPlan plan) {
+        return new ResourceFieldCycle(siteId, layout, epoch, byChunk, pendingPlayerBreaks, false,
+                accountedCount, harvestedCount, accountedPrefixCount, retained, plan);
+    }
     public ResourceFieldWorkTarget target(ResourceFieldLayout.CellId id) {
         return new ResourceFieldWorkTarget(siteId, layout.revision(), id, generation(id));
     }
     private ResourceFieldCycle retainGenerations(Map<ResourceFieldLayout.CellId, Long> retained) {
-        return new ResourceFieldCycle(siteId, layout, epoch, byChunk, pendingPlayerBreaks, false,
-                accountedCount, harvestedCount, accountedPrefixCount, retained);
+        return retaining(retained, sowing);
     }
     public static ResourceFieldCycle restore(SubjectId siteId, ResourceFieldLayout layout, long epoch,
             Map<ResourceFieldLayout.CellId, CellState> cells,
             Map<ResourceFieldLayout.CellId, PendingPlayerBreak> breaks,
             Map<ResourceFieldLayout.CellId, Long> generations) {
         return restore(siteId, layout, epoch, cells, breaks).retainGenerations(generations);
+    }
+    public static ResourceFieldCycle restore(SubjectId siteId, ResourceFieldLayout layout, long epoch,
+            Map<ResourceFieldLayout.CellId, CellState> cells,
+            Map<ResourceFieldLayout.CellId, PendingPlayerBreak> breaks,
+            Map<ResourceFieldLayout.CellId, Long> generations, FieldSowingPlan sowing) {
+        return restore(siteId, layout, epoch, cells, breaks).retaining(generations, sowing);
     }
     public Map<ResourceFieldLayout.CellId, CellState> cellStates() {
         var cells = new LinkedHashMap<ResourceFieldLayout.CellId, CellState>();
@@ -213,7 +244,7 @@ public final class ResourceFieldCycle {
         var next = new LinkedHashMap<>(pendingPlayerBreaks);
         next.put(id, pending);
         return new ResourceFieldCycle(siteId, layout, epoch, byChunk, next, false,
-                accountedCount, harvestedCount, accountedPrefixCount, generations);
+                accountedCount, harvestedCount, accountedPrefixCount, generations, sowing);
     }
 
     public ResourceFieldCycle closePlayerBreak(ResourceFieldLayout.CellId id, String actionId) {
@@ -223,7 +254,7 @@ public final class ResourceFieldCycle {
         var next = new LinkedHashMap<>(pendingPlayerBreaks);
         next.remove(id);
         return new ResourceFieldCycle(siteId, layout, epoch, byChunk, next, false,
-                accountedCount, harvestedCount, accountedPrefixCount, generations);
+                accountedCount, harvestedCount, accountedPrefixCount, generations, sowing);
     }
     public List<ResourceFieldLayout.Cell> pendingCellsIn(ResourceFieldLayout.ChunkColumn chunk) {
         return layout.cellsIn(chunk).stream().filter(cell -> !cell(cell.id()).accounted()).toList();
@@ -234,6 +265,15 @@ public final class ResourceFieldCycle {
     public int accountedCount() {
         return accountedCount;
     }
+    /** A new operation is selected from current biology and future sowing intent, not an old batch count. */
+    public boolean workAvailable(ResourceFieldLayout.CellId id) {
+        var value = cell(id);
+        if (value.workAccessBlocked() || pendingPlayerBreaks.containsKey(id)) return false;
+        return value.crop() == Crop.MATURE && !value.accounted()
+                || value.crop() == Crop.ABSENT && sowing.cells().contains(id)
+                    && value.soil().cultivable();
+    }
+    public boolean hasAvailableWork() { return layout.cells().stream().anyMatch(cell -> workAvailable(cell.id())); }
     /** Select from the outstanding CellIds, not from a completed list prefix. */
     public java.util.OptionalInt nextWorkSlot(SurfaceAnchor from) {
         return nextWorkSlot(from, index -> true);
@@ -243,7 +283,7 @@ public final class ResourceFieldCycle {
         Objects.requireNonNull(available, "field target availability");
         return AreaWorkSelection.choose(layout.cells().size(), index -> {
             ResourceFieldLayout.Cell cell = layout.cells().get(index);
-            return !cell(cell.id()).accounted() && available.test(index);
+            return workAvailable(cell.id()) && available.test(index);
         }, index -> {
             SurfaceAnchor station = layout.cells().get(index).workstation();
             long distance = Math.abs((long) station.x() - from.x())
@@ -259,14 +299,18 @@ public final class ResourceFieldCycle {
     /** Shared area ranking, with field eligibility kept in its domain owner. */
     public java.util.OptionalInt spatialWorkSlot(SurfaceAnchor from, java.util.function.IntPredicate available,
                                                 List<SurfaceAnchor> peers, AreaWorkSelection.SpatialPolicy policy) {
-        var preferred = AreaWorkSelection.spatiallySeparated(layout.cells().size(), index -> {
-            var id = layout.cells().get(index).id();
-            var condition = cell(id);
-            return !condition.accounted() && available.test(index) && !pendingPlayerBreaks.containsKey(id)
-                    && !condition.workAccessBlocked() && condition.crop() != Crop.OBSTRUCTED
-                    && condition.crop() != Crop.GROWING;
-        }, from, index -> layout.cells().get(index).workstation(), peers, policy);
-        return preferred.isPresent() ? preferred : nextWorkSlot(from, available);
+        // Ready food outranks investment in the next crop. In particular the
+        // newly bare cell under this worker must not win merely by distance.
+        // Availability is still per-cell: no whole-field completion barrier.
+        for (boolean harvestOnly : new boolean[]{true, false}) {
+            var selected = AreaWorkSelection.spatiallySeparated(layout.cells().size(), index -> {
+                var id = layout.cells().get(index).id();
+                return workAvailable(id) && (!harvestOnly || cell(id).crop() == Crop.MATURE)
+                        && available.test(index);
+            }, from, index -> layout.cells().get(index).workstation(), peers, policy);
+            if (selected.isPresent()) return selected;
+        }
+        return java.util.OptionalInt.empty();
     }
     /** Continuation starts after the last CellId slot and does not rescore the whole area by distance. */
     public java.util.OptionalInt nextWorkSlotAfter(int previousIndex) {
@@ -279,7 +323,7 @@ public final class ResourceFieldCycle {
             CellState condition = cell(id);
             return !pendingPlayerBreaks.containsKey(id) && !condition.workAccessBlocked()
                     && condition.crop() != Crop.OBSTRUCTED && condition.crop() != Crop.GROWING;
-        }, index -> !cell(layout.cells().get(index).id()).accounted() && available.test(index));
+        }, index -> workAvailable(layout.cells().get(index).id()) && available.test(index));
     }
     /** Route-failure fallback keeps the old target pending; it selects only a witnessed alternative. */
     public java.util.OptionalInt reachableWorkSlotAfter(int previousIndex, java.util.function.IntPredicate reachable) {
@@ -287,9 +331,7 @@ public final class ResourceFieldCycle {
         return AreaWorkSelection.reachableAfter(layout.cells().size(), previousIndex, index -> {
             ResourceFieldLayout.CellId id = layout.cells().get(index).id();
             CellState condition = cell(id);
-            return !condition.accounted() && !condition.workAccessBlocked()
-                    && condition.crop() != Crop.OBSTRUCTED && condition.crop() != Crop.GROWING && !pendingPlayerBreaks.containsKey(id)
-                    && reachable.test(index);
+            return workAvailable(id) && reachable.test(index);
         });
     }
     /** Exact contiguous work-order prefix, maintained incrementally and rebuilt on recovery. */
@@ -335,7 +377,7 @@ public final class ResourceFieldCycle {
     /** A foreign crop-space block is recorded locally and never overwritten by projection. */
     public ResourceFieldCycle cropObstructed(ResourceFieldLayout.CellId id) {
         CellState prior = cell(id);
-        if (prior.soil() != Soil.FARMLAND && prior.soil() != Soil.DIRT
+        if (!prior.soil().cultivable()
                 || prior.crop() != Crop.GROWING && prior.crop() != Crop.MATURE && prior.crop() != Crop.ABSENT)
             throw new IllegalArgumentException("field crop obstruction is stale or not an owned crop space");
         return replaceGeneration(id, new CellState(prior.soil(), Crop.OBSTRUCTED, 0, prior.accounted(), prior.yielded()));
@@ -344,7 +386,7 @@ public final class ResourceFieldCycle {
     /** A replaced support has unknown recoverable ground until another observation proves it. */
     public ResourceFieldCycle soilObstructed(ResourceFieldLayout.CellId id) {
         CellState prior = cell(id);
-        if (prior.soil() != Soil.FARMLAND && prior.soil() != Soil.DIRT)
+        if (!prior.soil().cultivable())
             throw new IllegalArgumentException("field support obstruction is stale or unknown");
         return replaceGeneration(id, new CellState(Soil.OBSTRUCTED, Crop.OBSTRUCTED, 0, prior.accounted(), prior.yielded()));
     }
@@ -353,7 +395,7 @@ public final class ResourceFieldCycle {
         CellState prior = cell(id);
         if (prior.crop() != Crop.OBSTRUCTED)
             throw new IllegalArgumentException("field cell has no observed obstruction to clear");
-        return prior.soil() == Soil.FARMLAND || prior.soil() == Soil.DIRT
+        return prior.soil().cultivable()
                 ? replaceGeneration(id, new CellState(prior.soil(), Crop.ABSENT, 0, prior.accounted(), prior.yielded()))
                 : replaceGeneration(id, new CellState(Soil.UNKNOWN, Crop.UNKNOWN, 0, prior.accounted(), prior.yielded()));
     }
@@ -362,7 +404,7 @@ public final class ResourceFieldCycle {
     public ResourceFieldCycle observedBareSoil(ResourceFieldLayout.CellId id, Soil observed) {
         CellState prior = cell(id);
         if (prior.soil() != Soil.UNKNOWN || prior.crop() != Crop.UNKNOWN
-                || observed != Soil.FARMLAND && observed != Soil.DIRT)
+                || !observed.cultivable())
             throw new IllegalArgumentException("bare-soil observation requires one unresolved exposed cell");
         return replaceGeneration(id, new CellState(observed, Crop.ABSENT, 0, prior.accounted(), prior.yielded()));
     }
@@ -402,7 +444,9 @@ public final class ResourceFieldCycle {
     /** The current work plan accounts for an inaccessible cell without changing its block. */
     public ResourceFieldCycle skipBlocked(ResourceFieldLayout.CellId id) {
         CellState prior = cell(id);
-        if ((prior.crop() != Crop.OBSTRUCTED && !prior.workAccessBlocked()) || prior.accounted())
+        boolean withdrawn = prior.crop() == Crop.ABSENT && !sowing.cells().contains(id);
+        if ((prior.crop() != Crop.OBSTRUCTED && !prior.workAccessBlocked() && !withdrawn)
+                || prior.accounted() && prior.crop() != Crop.ABSENT)
             throw new IllegalArgumentException("field cell has no pending obstruction to skip");
         return replace(id, new CellState(prior.soil(), prior.crop(), prior.growthStage(), true, false));
     }
@@ -464,7 +508,7 @@ public final class ResourceFieldCycle {
             }
             groups.computeIfAbsent(chunkOf(cell), ignored -> new LinkedHashMap<>()).put(cell.id(), current);
         }
-        return changed ? new ResourceFieldCycle(siteId, layout, epoch, groups, pendingPlayerBreaks, true).retainGenerations(generations) : this;
+        return changed ? new ResourceFieldCycle(siteId, layout, epoch, groups, pendingPlayerBreaks, true).retaining(generations, sowing) : this;
     }
 
     /** Read-only plant readiness, not the retained work epoch's historical maturity. */
@@ -474,18 +518,18 @@ public final class ResourceFieldCycle {
                 .mapToInt(CellState::growthStage).max().orElse(0);
     }
 
-    /** The farmer harvests one ripe crop and plants its successor at the same station. */
+    /** Harvest creates cargo, never another plant. */
     public ResourceFieldCycle harvested(ResourceFieldLayout.CellId id) {
         CellState prior = cell(id);
         if (prior.soil() != Soil.FARMLAND || prior.crop() != Crop.MATURE || prior.accounted())
             throw new IllegalArgumentException("field harvest cannot claim an absent or already processed crop");
-        return replaceGeneration(id, new CellState(prior.soil(), Crop.GROWING, 0, true, true));
+        return replaceGeneration(id, new CellState(prior.soil(), Crop.ABSENT, 0, true, true));
     }
 
     /** A work receipt, not projection, repairs dirt without creating a crop. */
     public ResourceFieldCycle tilled(ResourceFieldLayout.CellId id) {
         CellState prior = cell(id);
-        if (prior.soil() != Soil.DIRT || prior.crop() != Crop.ABSENT)
+        if (!prior.soil().untilled() || prior.crop() != Crop.ABSENT || !sowing.cells().contains(id))
             throw new IllegalArgumentException("field tillage requires observed plain dirt");
         return replaceGeneration(id, new CellState(Soil.FARMLAND, Crop.ABSENT, 0, prior.accounted(), prior.yielded()));
     }
@@ -493,8 +537,8 @@ public final class ResourceFieldCycle {
     /** The farmer plants a missing crop without claiming current-cycle yield. */
     public ResourceFieldCycle planted(ResourceFieldLayout.CellId id) {
         CellState prior = cell(id);
-        if (prior.soil() != Soil.FARMLAND || prior.crop() != Crop.ABSENT || prior.accounted())
-            throw new IllegalArgumentException("field planting requires unaccounted empty farmland");
+        if (prior.soil() != Soil.FARMLAND || prior.crop() != Crop.ABSENT || !sowing.cells().contains(id))
+            throw new IllegalArgumentException("field planting requires authorized empty farmland");
         return replaceGeneration(id, new CellState(Soil.FARMLAND, Crop.GROWING, 0, true, false));
     }
 
@@ -506,19 +550,21 @@ public final class ResourceFieldCycle {
         return replace(id, new CellState(prior.soil(), prior.crop(), prior.growthStage(), true, false));
     }
 
-    /** One retained farmer visit: harvest/replant, repair/plant, or leave a local skip. */
+    /** One independently timed operation: harvest, sow, till or an explicit no-effect exclusion. */
     public ResourceFieldCycle worked(ResourceFieldLayout.CellId id) {
         return worked(id, expectedWorkOutcome(id));
     }
 
     public WorkOutcome expectedWorkOutcome(ResourceFieldLayout.CellId id) {
         CellState prior = cell(id);
-        if (prior.accounted()) throw new IllegalArgumentException("field cell work was already accounted");
+        if (prior.accounted() && prior.crop() != Crop.ABSENT)
+            throw new IllegalArgumentException("field cell work was already accounted");
         if (prior.workAccessBlocked()) return WorkOutcome.SKIPPED_BLOCKED;
+        if (prior.crop() == Crop.ABSENT && !sowing.cells().contains(id)) return WorkOutcome.SKIPPED_BLOCKED;
         return switch (prior.crop()) {
             case MATURE -> WorkOutcome.HARVESTED;
             case GROWING -> WorkOutcome.SKIPPED_IMMATURE;
-            case ABSENT -> prior.soil() == Soil.DIRT ? WorkOutcome.TILLED_AND_PLANTED : WorkOutcome.PLANTED;
+            case ABSENT -> prior.soil().untilled() ? WorkOutcome.TILLED : WorkOutcome.PLANTED;
             case OBSTRUCTED -> WorkOutcome.SKIPPED_BLOCKED;
             case UNKNOWN -> throw new IllegalArgumentException("unsurveyed field cell cannot be worked");
         };
@@ -531,7 +577,7 @@ public final class ResourceFieldCycle {
             return java.util.Optional.empty();
         ResourceFieldPhysicalSurface.Condition before = ResourceFieldPhysicalSurface.Condition.of(cell(id));
         if (outcome == WorkOutcome.HARVESTED)
-            return java.util.Optional.of(ResourceFieldCellTransition.harvestAndReplant(siteId, epoch, layout.revision(), id, before));
+            return java.util.Optional.of(ResourceFieldCellTransition.harvest(siteId, epoch, layout.revision(), id, before));
         ResourceFieldPhysicalSurface.Condition after = ResourceFieldPhysicalSurface.Condition.of(worked(id, outcome).cell(id));
         return java.util.Optional.of(ResourceFieldCellTransition.between(siteId, epoch, layout.revision(), id, before, after));
     }
@@ -543,7 +589,7 @@ public final class ResourceFieldCycle {
         return switch (outcome) {
             case HARVESTED -> harvested(id);
             case PLANTED -> planted(id);
-            case TILLED_AND_PLANTED -> tilled(id).planted(id);
+            case TILLED -> tilled(id);
             case SKIPPED_IMMATURE -> skipImmature(id);
             case SKIPPED_BLOCKED -> skipBlocked(id);
         };
@@ -559,7 +605,26 @@ public final class ResourceFieldCycle {
                     false, false, prior.workAccessBlocked());
             groups.computeIfAbsent(chunkOf(cell), ignored -> new LinkedHashMap<>()).put(cell.id(), next);
         }
-        return new ResourceFieldCycle(siteId, layout, Math.addExact(epoch, 1), groups, true).retainGenerations(generations);
+        return new ResourceFieldCycle(siteId, layout, Math.addExact(epoch, 1), groups, true).retaining(generations, sowing);
+    }
+
+    /** Layout revisions must explicitly name every retired cell obligation. */
+    public ResourceFieldCycle extended(ResourceFieldLayout next, Map<ResourceFieldLayout.CellId, Soil> added) {
+        if (!pendingPlayerBreaks.isEmpty() || next.extensions().isEmpty()
+                || !next.extensions().getLast().equals(FieldLayoutExtension.from(layout, added))
+                || !next.irrigationSlots().equals(layout.irrigationSlots())
+                || next.cells().size() != layout.cells().size() + added.size()
+                || !next.cells().subList(0, layout.cells().size()).equals(layout.cells()))
+            throw new IllegalArgumentException("field extension must preserve current cells and unresolved effects");
+        layout.revise(next.revision(), next.nextCellId(), next.cells(), next.irrigationSlots());
+        var states = new LinkedHashMap<>(cellStates()); var nextGenerations = new LinkedHashMap<>(generations);
+        for (var cell : next.cells().subList(layout.cells().size(), next.cells().size())) {
+            var soil = Objects.requireNonNull(added.get(cell.id()), "new cell has no known soil");
+            if (!soil.cultivable()) throw new IllegalArgumentException("field extension requires known cultivable land");
+            states.put(cell.id(), new CellState(soil, Crop.ABSENT, 0, false, false)); nextGenerations.put(cell.id(), 0L);
+        }
+        // The development owner subsequently selects sowing; declaration itself does not authorize planting.
+        return restore(siteId, next, epoch, states, Map.of(), nextGenerations, sowing);
     }
 
     /** Layout revisions must explicitly name every retired cell obligation. */
@@ -588,7 +653,8 @@ public final class ResourceFieldCycle {
         }
         var retained = next.cells().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(
                 ResourceFieldLayout.Cell::id, cell -> generations.getOrDefault(cell.id(), 0L)));
-        return new ResourceFieldCycle(siteId, next, epoch, groups, true).retainGenerations(retained);
+        var retainedSowing = new HashSet<>(sowing.cells()); retainedSowing.removeAll(retired);
+        return new ResourceFieldCycle(siteId, next, epoch, groups, true).retaining(retained, sowing.revise(retainedSowing));
     }
 
     private ResourceFieldCycle replace(ResourceFieldLayout.CellId id, CellState next) {
@@ -631,7 +697,7 @@ public final class ResourceFieldCycle {
         }
         return new ResourceFieldCycle(siteId, layout, epoch, groups, pendingPlayerBreaks, false,
                 accountedCount + Boolean.compare(next.accounted(), prior.accounted()),
-                harvestedCount + Boolean.compare(next.yielded(), prior.yielded()), prefix, nextGenerations);
+                harvestedCount + Boolean.compare(next.yielded(), prior.yielded()), prefix, nextGenerations, sowing);
     }
 
     private static int accountedPrefix(ResourceFieldLayout layout,
@@ -652,7 +718,7 @@ public final class ResourceFieldCycle {
     @Override public boolean equals(Object other) {
         return other instanceof ResourceFieldCycle cycle && siteId.equals(cycle.siteId) && epoch == cycle.epoch
                 && layout.equals(cycle.layout) && byChunk.equals(cycle.byChunk)
-                && pendingPlayerBreaks.equals(cycle.pendingPlayerBreaks) && generations.equals(cycle.generations);
+                && pendingPlayerBreaks.equals(cycle.pendingPlayerBreaks) && generations.equals(cycle.generations) && sowing.equals(cycle.sowing);
     }
-    @Override public int hashCode() { return Objects.hash(siteId, layout, epoch, byChunk, pendingPlayerBreaks, generations); }
+    @Override public int hashCode() { return Objects.hash(siteId, layout, epoch, byChunk, pendingPlayerBreaks, generations, sowing); }
 }

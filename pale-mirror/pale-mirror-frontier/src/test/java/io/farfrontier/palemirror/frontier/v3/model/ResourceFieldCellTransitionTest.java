@@ -41,16 +41,17 @@ class ResourceFieldCellTransitionTest {
                         .map(ResourceFieldCellTransition.Step::part).toList());
     }
 
-    @Test void actualHarvestAndReplantRetainsTheEmptyCropBoundary() {
-        var work = ResourceFieldCellTransition.harvestAndReplant(SITE, 1, 4, CELL, RIPE);
-        assertEquals(List.of(ResourceFieldCellTransition.Part.CROP, ResourceFieldCellTransition.Part.CROP),
+    @Test void harvestEndsOnBareSoilAndProjectionCannotInferExtractionAuthority() {
+        var work = ResourceFieldCellTransition.harvest(SITE, 1, 4, CELL, RIPE);
+        assertEquals(List.of(ResourceFieldCellTransition.Part.CROP),
                 work.steps().stream().map(ResourceFieldCellTransition.Step::part).toList());
         assertEquals(RIPE, work.committedPrefix(0));
         assertEquals(BARE, work.committedPrefix(1));
-        assertEquals(PLANTED, work.committedPrefix(2));
-        assertEquals(true, work.isHarvestAndReplant());
+        assertThrows(IllegalArgumentException.class, () -> work.committedPrefix(2));
+        assertEquals(false, ResourceFieldCellTransition.between(SITE, 1, 4, CELL, RIPE, BARE).isHarvest());
+        assertEquals(true, work.isHarvest());
         assertThrows(IllegalArgumentException.class,
-                () -> ResourceFieldCellTransition.harvestAndReplant(SITE, 1, 4, CELL, PLANTED));
+                () -> ResourceFieldCellTransition.harvest(SITE, 1, 4, CELL, PLANTED));
     }
 
     @Test void malformedPrefixAndStaleCursorCannotBecomePhysicalAuthority() {
@@ -58,11 +59,12 @@ class ResourceFieldCellTransitionTest {
         assertThrows(IllegalArgumentException.class, () -> one.committedPrefix(2));
         assertThrows(IllegalArgumentException.class, () -> ResourceFieldCellTransition.between(SITE, 1, 4, CELL, BARE, BARE));
         assertThrows(IllegalArgumentException.class, () -> new ResourceFieldCellTransition(SITE, 1, 4, CELL, DIRT, PLANTED,
-                List.of(new ResourceFieldCellTransition.Step(ResourceFieldCellTransition.Part.CROP, BARE, PLANTED))));
+                List.of(new ResourceFieldCellTransition.Step(ResourceFieldCellTransition.Part.CROP, BARE, PLANTED)),
+                ResourceFieldCellTransition.Kind.DELTA));
         assertThrows(IllegalArgumentException.class, () -> new ResourceFieldCellTransition(SITE, 1, 4, CELL, RIPE, PLANTED,
                 List.of(new ResourceFieldCellTransition.Step(ResourceFieldCellTransition.Part.CROP, RIPE, PLANTED),
-                        new ResourceFieldCellTransition.Step(ResourceFieldCellTransition.Part.CROP, PLANTED, BARE))),
-                "repeated crop writes are valid only for the exact harvest/empty/replant sequence");
+                        new ResourceFieldCellTransition.Step(ResourceFieldCellTransition.Part.CROP, PLANTED, BARE)),
+                ResourceFieldCellTransition.Kind.DELTA), "one atomic operation cannot remove and replant a crop");
     }
 
     private static ResourceFieldPhysicalSurface.Condition condition(ResourceFieldCycle.Soil soil,

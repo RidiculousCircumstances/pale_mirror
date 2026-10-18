@@ -52,6 +52,7 @@ public final class FrontierRulesets {
     private static final FrontierRuleset PREVIOUS_FUEL_TRADE_QUARRY_GRAYBOX = balancedFuelTrade(PREVIOUS_ECONOMIC_QUARRY_GRAYBOX);
     private static final FrontierRuleset PREVIOUS_PRODUCTIVE_QUARRY_GRAYBOX = productiveMiningTerritories(PREVIOUS_FUEL_TRADE_QUARRY_GRAYBOX);
     private static final FrontierRuleset MARKET_QUARRY_GRAYBOX = coherentEconomy(PREVIOUS_PRODUCTIVE_QUARRY_GRAYBOX);
+    private static final FrontierRuleset DYNAMIC_FARMING_GRAYBOX = dynamicFarming(MARKET_QUARRY_GRAYBOX);
     /** Existing worlds retain their exact selector and timing; they are never silently retuned. */
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R6 = ruleset("frontier-v3-production-r6", 8, 1L, 20L, 1L);
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R4 = ruleset("frontier-v3-production-r4", 6, 1L, 20L, 1L);
@@ -65,6 +66,7 @@ public final class FrontierRulesets {
      */
     private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L, 200L);
     private static final Map<String, FrontierRuleset> INSTALLED = Map.ofEntries(
+            Map.entry(DYNAMIC_FARMING_GRAYBOX.id(), DYNAMIC_FARMING_GRAYBOX),
             Map.entry(MARKET_QUARRY_GRAYBOX.id(), MARKET_QUARRY_GRAYBOX),
             Map.entry(PREVIOUS_PRODUCTIVE_QUARRY_GRAYBOX.id(), PREVIOUS_PRODUCTIVE_QUARRY_GRAYBOX),
             Map.entry(PREVIOUS_FUEL_TRADE_QUARRY_GRAYBOX.id(), PREVIOUS_FUEL_TRADE_QUARRY_GRAYBOX),
@@ -101,6 +103,15 @@ public final class FrontierRulesets {
     public static FrontierRuleset fuelledQuarryGraybox() { return FUELLED_QUARRY_GRAYBOX; }
     public static FrontierRuleset supplyQuarryGraybox() { return SUPPLY_QUARRY_GRAYBOX; }
     public static FrontierRuleset marketQuarryGraybox() { return MARKET_QUARRY_GRAYBOX; }
+    public static FrontierRuleset dynamicFarmingGraybox() { return DYNAMIC_FARMING_GRAYBOX; }
+
+    private static FrontierRuleset dynamicFarming(FrontierRuleset base) {
+        return new FrontierRuleset("frontier-v3-quarry-graybox-r21", base.schemaVersion(), base.cadence(), base.spatial(), base.rates(),
+                base.facilityCapacity(), base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
+                base.workCatalog(), base.goodsTrade(), base.initialSettlementStocks(), base.labour(), base.expedition(), base.extraction(),
+                base.execution(), base.production(), new FieldBalance(base.fields().ordinarySide(), base.fields().extractiveSide(),
+                        base.fields().agriculture(), java.util.Optional.of(io.farfrontier.palemirror.frontier.v3.model.agriculture.CultivationRules.graybox())));
+    }
 
     private static FrontierRuleset coherentEconomy(FrontierRuleset base) {
         var prior = base.expedition();

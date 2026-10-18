@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceSiteStateTest {
     @Test
-    void currentDescriptorTakesIdentityFromBootstrapAndGeometryFromCanonicalCycle() {
+    void currentDescriptorTakesIdentityFromRegistryAndGeometryFromCanonicalCycle() {
         FrontierWorldState baseline = initial();
         SubjectId siteId = new SubjectId("site:1-wheat-field");
         ResourceSite bootstrapSite = FrontierResourceSitePlan.compile(baseline.bootstrap()).get(siteId);
@@ -26,7 +26,7 @@ class ResourceSiteStateTest {
         ResourceFieldCycle current = initial.revised(revised, java.util.Set.of());
         Map<SubjectId, ResourceFieldCycle> cycles = new java.util.LinkedHashMap<>(baseline.resourceSites().cycles());
         cycles.put(siteId, current);
-        ResourceSiteState sites = new ResourceSiteState(baseline.resourceSites().sites(), cycles);
+        ResourceSiteState sites = new ResourceSiteState(baseline.resourceSites().declarations(), baseline.resourceSites().sites(), cycles);
         ResourceSite descriptor = sites.descriptor(baseline.bootstrap(), siteId);
         assertEquals(bootstrapSite.settlementId(), descriptor.settlementId());
         assertEquals(bootstrapSite.facilityId(), descriptor.facilityId());
@@ -61,11 +61,11 @@ class ResourceSiteStateTest {
                 ResourceFieldCycle.seeded(siteId, site.layout(), 1).target(site.layout().cells().getFirst().id()));
         ResourceFieldCycle unworked = ResourceFieldCycle.seeded(siteId, site.layout(), 1);
         ResourceSiteLifecycle ready = growing;
-        assertThrows(IllegalArgumentException.class, () -> new ResourceSiteState(Map.of(siteId, ready),
+        assertThrows(IllegalArgumentException.class, () -> new ResourceSiteState(Map.of(siteId, ResourceSiteDeclaration.of(site)), Map.of(siteId, ready),
                 Map.of(siteId, ResourceFieldCycle.seeded(new SubjectId("site:foreign"), site.layout(), 1))),
                 "the map key and matching geometry cannot adopt another site's cycle");
         ResourceSiteLifecycle falselyComplete = growing.harvesting(harvest);
-        assertEquals(harvest, new ResourceSiteState(Map.of(siteId, falselyComplete), Map.of(siteId, unworked))
+        assertEquals(harvest, new ResourceSiteState(Map.of(siteId, ResourceSiteDeclaration.of(site)), Map.of(siteId, falselyComplete), Map.of(siteId, unworked))
                 .site(siteId).harvestJob(harvest.id()).orElseThrow(),
                 "execution accounting is independent of collective plant flags");
         SurfaceAnchor depotStation = SurfaceAnchor.at(1, 64, 1);
@@ -90,7 +90,7 @@ class ResourceSiteStateTest {
     @Test
     void registerRejectsMissingSitesAndIllegalLifecycleTransitions() {
         FrontierWorldState baseline = initial(); SubjectId siteId = new SubjectId("site:1-wheat-field");
-        assertThrows(IllegalArgumentException.class, () -> baseline.withResourceSites(new ResourceSiteState(Map.of(), Map.of())));
+        assertThrows(IllegalArgumentException.class, () -> baseline.withResourceSites(new ResourceSiteState(Map.of(), Map.of(), Map.of())));
         assertThrows(IllegalArgumentException.class, () -> new ResourceSiteLifecycle(siteId, ResourceSitePhase.READY, 0L,
                 ResourceSiteLifecycle.MATURE_STAGE, java.util.Optional.empty()));
         assertThrows(IllegalStateException.class, () -> baseline.resourceSites().site(siteId).advanceGrowth());

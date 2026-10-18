@@ -1,7 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
 import io.farfrontier.palemirror.frontier.v3.model.*;
-
 import io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessDescriptor;
 import io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessRegistry;
 import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
@@ -148,8 +147,9 @@ public final class FrontierWorldProcessCatalog {
     private static final Set<String> ALL_WORLD = union(PHYSICAL, REPLICA_CUSTODY, AMBIENT, SCENES, POPULATION, ACTOR_MOVEMENT, ACTOR_EXECUTION, ACTOR_BODY, ECONOMY, RESOURCE_SITES,
             HIVE, INFRASTRUCTURE, SETTLEMENT_SERVICE_WORK, STRATEGY, GoodsTradeProcessModule.TYPES, ShipmentProcessModule.TYPES,
             UnitGroupProcessModule.TYPES, TransportMissionProcessModule.TYPES, UnitInventoryProcessModule.TYPES, ExpeditionSupplyProcessModule.TYPES, ExtractionWorkProcessModule.TYPES,
-            DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.TYPES);
+            DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.TYPES, CultivationProcessModule.TYPES);
     private static final Map<String, FrontierWorldProcessModule> MODULES = Map.ofEntries(
+            Map.entry("cultivation", new CultivationProcessModule()),
             Map.entry("defender-equipment-return-visit", new DefenderEquipmentReturnVisitProcessModule()),
             Map.entry("extraction", new ExtractionWorkProcessModule()),
             Map.entry("physical-observation", new FrontierPhysicalProcessModule()),
@@ -215,6 +215,7 @@ public final class FrontierWorldProcessCatalog {
     }
 
     private static final Map<String, FrontierScheduledPlanner> SCHEDULED_PLANNERS = Map.ofEntries(
+            Map.entry(CultivationProcessModule.REVIEW, coalescedReview(atExecutionTime(CultivationProcessModule::plan))),
             Map.entry(ProductionStationProcessModule.REVIEW, atExecutionTime(ProductionStationProcessModule::plan)),
             Map.entry(ResourceHaulingPolicy.REVIEW, coalescedReview(withPlanningRecovery(atExecutionTime(ResourceHaulingPolicy::plan)))),
             Map.entry(ExtractionContinuation.REVIEW, withPlanningRecovery(atExecutionTime((state, action, instant) -> ExtractionWorkProcess.review(state, action, instant.ticks())))),
@@ -438,7 +439,7 @@ public final class FrontierWorldProcessCatalog {
                 ProductionStationProcessModule.DESCRIPTOR, GoodsTradeProcessModule.DESCRIPTOR, ShipmentProcessModule.DESCRIPTOR, UnitGroupProcessModule.DESCRIPTOR, ExtractionWorkProcessModule.DESCRIPTOR,
                 DefenderEquipmentReturnVisitProcessModule.DESCRIPTOR,
                 TransportMissionProcessModule.DESCRIPTOR, UnitInventoryProcessModule.DESCRIPTOR, ExpeditionSupplyProcessModule.DESCRIPTOR,
-                PedestrianPlanningProcessModule.DESCRIPTOR, NavigationGeometryProcessModule.DESCRIPTOR);
+                PedestrianPlanningProcessModule.DESCRIPTOR, NavigationGeometryProcessModule.DESCRIPTOR, CultivationProcessModule.DESCRIPTOR);
     }
 
     public static Set<String> allWorldPayloadTypes() { return ALL_WORLD; }
@@ -668,7 +669,7 @@ public final class FrontierWorldProcessCatalog {
             }
         }
         ResourceSite affectedSite = siteId == null ? null
-                : FrontierResourceSitePlan.compile(next.bootstrap()).get(siteId);
+                : next.resourceSite(siteId);
         for (Settlement settlement : next.bootstrap().settlements()) {
             var depot = FrontierWorldState.depotId(settlement.id());
             boolean localAccess = accessChanged && (event.subject().equals(settlement.id())
@@ -785,7 +786,6 @@ public final class FrontierWorldProcessCatalog {
     private static Set<String> serviceWorkSchedules() { return types("frontier.decontamination.scan"); }
     private static Set<String> strategySchedules() { return types(
             "frontier.objective.review", "frontier.objective.stock_reconsider", "frontier.objective.reconsider", "frontier.objective.assault"); }
-
 
     /**
      * Explicit durable output contract for each owner. These are intentionally individual wire

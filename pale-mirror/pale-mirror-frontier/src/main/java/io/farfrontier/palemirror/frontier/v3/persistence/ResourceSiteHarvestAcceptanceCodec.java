@@ -33,7 +33,7 @@ public final class ResourceSiteHarvestAcceptanceCodec implements PayloadCodec {
     private static void write(DataOutputStream output, ResourceSiteHarvestWorkAcceptance value) throws IOException {
         byte[] receipt = ResourceSitePayloadCodecs.harvestProgressed().encode(value.receipt());
         output.writeInt(receipt.length); output.write(receipt);
-        output.writeByte(value.transition().isHarvestAndReplant() ? 2 : 1);
+        output.writeByte(value.transition().isHarvest() ? 3 : 1);
         writeCondition(output, value.transition().before()); writeCondition(output, value.transition().after());
     }
     private static ResourceSiteHarvestWorkAcceptance read(DataInputStream input) throws IOException {
@@ -47,7 +47,7 @@ public final class ResourceSiteHarvestAcceptanceCodec implements PayloadCodec {
         var transition = switch (mode) {
             case 1 -> ResourceFieldCellTransition.between(receipt.siteId(), receipt.epoch(), receipt.layoutRevision(),
                     receipt.cellId(), before, after);
-            case 2 -> ResourceFieldCellTransition.harvestAndReplant(receipt.siteId(), receipt.epoch(), receipt.layoutRevision(),
+            case 3 -> ResourceFieldCellTransition.harvest(receipt.siteId(), receipt.epoch(), receipt.layoutRevision(),
                     receipt.cellId(), before);
             default -> throw new IllegalArgumentException("unknown accepted field work mode " + mode);
         };

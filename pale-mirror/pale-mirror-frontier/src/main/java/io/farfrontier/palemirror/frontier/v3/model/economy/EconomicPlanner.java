@@ -45,7 +45,8 @@ public final class EconomicPlanner {
             long keep = funding.unfunded() > 0 ? reserves.get(item).protectedQuantity() : domestic.get(item);
             saleable.put(item, Math.max(0, entry.getValue().available() - keep));
         }
-        var exports = new EconomicExportPlanning().plan(facts, supply, saleable, policy, horizon);
+        var exportPlan = new EconomicExportPlanning().plan(facts, supply, saleable, policy, horizon);
+        var exports = exportPlan.exports();
         var production = new TreeMap<String, Long>();
         facts.stocks().forEach((item, stock) -> {
             var demand = supply.require(item);
@@ -61,7 +62,7 @@ public final class EconomicPlanner {
             long uncovered = Math.max(0, domestic.get(item) - stock.covered());
             production.put(item, selectedSource ? Math.min(uncovered, own) : uncovered);
         });
-        for (var export : exports) production.merge(export.item(), export.additionalProduction(), Math::addExact);
+        exportPlan.additionalProduction().forEach((item, amount) -> production.merge(item, amount, Math::addExact));
         var constraints = EnumSet.noneOf(EconomicPlan.Constraint.class);
         if (supply.demands().values().stream().anyMatch(d -> d.recoveryProduction() > 0 || d.purchase() > 0))
             constraints.add(EconomicPlan.Constraint.MATERIAL_SHORTFALL);

@@ -256,7 +256,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                     continue;
                 }
                 if (transactions.size() == limits.maxTransactions()) {
-                    quarantine(CauseChain.root(new CommandId("scheduler:" + action.id().value().replace(':', '/'))),
+                    quarantine(CauseChain.root(ScheduledCauseIdentity.of(action.id())),
                             KernelQuarantineReporter.Boundary.DUE_CAPACITY, new IllegalStateException("transaction retention capacity exhausted during due work"));
                     return advanceResult(completed, Optional.of(action), consumption(budget, completed.size(), weight));
                 }
@@ -275,7 +275,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                     events.add(new ProposedEvent(action.subject(), new ScheduleEffect.Consumed(action.id())));
                 }
                 events.addAll(planned);
-                CommandId cause = new CommandId("scheduler:" + action.id().value().replace(':', '/'));
+                CommandId cause = ScheduledCauseIdentity.of(action.id());
                 // A held physical continuation can deliberately retain an already-due action
                 // until its owner observes or releases the physical work.  Its dueAt remains
                 // the sole deadline/ordering fact, but an eventual durable disposition occurs
@@ -284,7 +284,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 completed.add(commit(CauseChain.root(cause), executionAt, events, Optional.empty()));
                 weight = Math.addExact(weight, cost);
             } catch (RuntimeException error) {
-                quarantine(CauseChain.root(new CommandId("scheduler:" + action.id().value().replace(':', '/'))),
+                quarantine(CauseChain.root(ScheduledCauseIdentity.of(action.id())),
                         KernelQuarantineReporter.Boundary.DUE_TRANSACTION,
                         new IllegalStateException("scheduled action " + action.kind() + "/" + action.id().value() + " failed", error));
                 return advanceResult(completed, Optional.of(action), consumption(budget, completed.size(), weight));

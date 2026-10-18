@@ -113,7 +113,8 @@ class FrontierV3ResourceSiteExecutorTest {
                 new SubjectId("structure:99-farm"), ResourceSiteKind.WHEAT_FIELD, io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan.initialGrayboxLayout(slots));
 
         var order = FrontierV3ResourceSiteExecutor.initialProjectionSlotOrder(site);
-        assertEquals(132, order.size(), "the durable initial cursor retains the same exact footprint");
+        assertEquals(128, order.size(), "managed fields require only their 64 soil/crop pairs, no irrigation");
+        assertTrue(site.irrigationSlots().isEmpty());
         for (int index = 0; index < site.irrigationSlots().size(); index++) {
             assertEquals(site.irrigationSlots().get(index), order.get(index));
         }

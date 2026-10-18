@@ -12,6 +12,10 @@ import java.util.Set;
 
 /** Canonical bounded owner of retained utility decisions and their durable task graphs. */
 public final class StrategicPlanState {
+    private record ObjectiveSlot(SubjectId owner, StrategicObjectiveLane lane, java.util.Optional<SubjectId> resourceSite) { }
+    private static ObjectiveSlot slot(StrategicObjective objective) {
+        return new ObjectiveSlot(objective.ownerId(), objective.lane(), objective.resourceSiteTarget());
+    }
     static final int MAX_OBJECTIVES = 128;
     private static final ImmutableInvariantCheck<Void> VALIDATION = new ImmutableInvariantCheck<>();
     static final int MAX_TASKS = 512;
@@ -102,7 +106,7 @@ public final class StrategicPlanState {
             if (!id.equals(objective.id())) throw new IllegalArgumentException("strategic objective key must match identity");
         });
         objectives.values().stream().filter(objective -> objective.status() == StrategicObjectiveStatus.ACTIVE)
-                .collect(java.util.stream.Collectors.groupingBy(objective -> java.util.Map.entry(objective.ownerId(), objective.lane())))
+                .collect(java.util.stream.Collectors.groupingBy(StrategicPlanState::slot))
                 .values().forEach(values -> {
                     if (values.size() > 1) throw new IllegalArgumentException("objective owner has more than one active work lane entry");
                 });
@@ -268,11 +272,13 @@ public final class StrategicPlanState {
         return hiveDoctrine.equals(next) ? this : new StrategicPlanState(objectives, tasks, routePatrols, infectionKnowledge, hiveTerritoryKnowledge, hiveSettlementKnowledge, next, settlementAssaults, decisionAuthorities, frontEffects, scoutPatrols);
     }
 
-    void validate(FrontierBootstrap bootstrap, RouteTopology routeTopology, HumanPopulation humanPopulation) {
-        VALIDATION.validate(() -> validateCurrent(bootstrap, routeTopology, humanPopulation),
-                this, bootstrap, routeTopology, humanPopulation.residents());
+    void validate(FrontierBootstrap bootstrap, RouteTopology routeTopology, HumanPopulation humanPopulation,
+                  ResourceSiteState resourceSites) {
+        VALIDATION.validate(() -> validateCurrent(bootstrap, routeTopology, humanPopulation, resourceSites.declarations()),
+                this, bootstrap, routeTopology, humanPopulation.residents(), resourceSites.declarations());
     }
-    private void validateCurrent(FrontierBootstrap bootstrap, RouteTopology routeTopology, HumanPopulation humanPopulation) {
+    private void validateCurrent(FrontierBootstrap bootstrap, RouteTopology routeTopology, HumanPopulation humanPopulation,
+                                 Map<SubjectId, ResourceSiteDeclaration> resourceSites) {
         Objects.requireNonNull(routeTopology, "route topology");
         if (!decisionAuthorities.authorities().isEmpty()) {
             DecisionAuthorityState expected = DecisionAuthorityState.initial(bootstrap);
@@ -297,16 +303,12 @@ public final class StrategicPlanState {
             });
         }
         infectionKnowledge.validate(bootstrap);
-        // Resource-site geometry is immutable for one bootstrap.  Validation may visit many
-        // retained terminal objectives after an unrelated state transition, so compiling the
-        // same twelve-site catalogue per objective is needless allocation rather than safety.
-        Map<SubjectId, ResourceSite> resourceSites = FrontierResourceSitePlan.compile(bootstrap);
         objectives.values().forEach(objective -> {
             boolean knownOwner = bootstrap.hive().id().equals(objective.ownerId())
                     || bootstrap.settlements().stream().anyMatch(settlement -> settlement.id().equals(objective.ownerId()));
             if (!knownOwner) throw new IllegalArgumentException("strategic objective has a foreign owner");
             objective.resourceSiteTarget().ifPresent(siteId -> {
-                ResourceSite site = resourceSites.get(siteId);
+                ResourceSiteDeclaration site = resourceSites.get(siteId);
                 if (site == null || !site.settlementId().equals(objective.ownerId())) {
                     throw new IllegalArgumentException("strategic harvest objective has a foreign resource site");
                 }
@@ -338,11 +340,17 @@ public final class StrategicPlanState {
                 && objective.status() == StrategicObjectiveStatus.ACTIVE);
     }
 
+    public boolean hasActiveObjective(SubjectId ownerId, StrategicObjectiveLane lane, java.util.Optional<SubjectId> resourceSite) {
+        return objectives.values().stream().anyMatch(objective -> objective.ownerId().equals(ownerId)
+                && objective.lane() == lane && objective.resourceSiteTarget().equals(resourceSite)
+                && objective.status() == StrategicObjectiveStatus.ACTIVE);
+    }
+
     public StrategicPlanState addObjective(StrategicObjective objective) {
         Objects.requireNonNull(objective, "strategic objective");
         StrategicPlanState retained = compactFor(1, 0);
         retained.validateAuthorityStamp(objective.ownerId(), objective.authorityId(), objective.authorityEpoch());
-        if (retained.objectives.containsKey(objective.id()) || retained.hasActiveObjective(objective.ownerId(), objective.lane())) {
+        if (retained.objectives.containsKey(objective.id()) || retained.hasActiveObjective(objective.ownerId(), objective.lane(), objective.resourceSiteTarget())) {
             throw new IllegalArgumentException("strategic objective is duplicate or owner work lane is already active");
         }
         Map<SubjectId, StrategicObjective> next = new LinkedHashMap<>(retained.objectives); next.put(objective.id(), objective);

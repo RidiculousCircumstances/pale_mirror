@@ -203,6 +203,12 @@ final class FrontierV3ResourceSiteExecutor {
         STAGE_CURSORS.put(runtime, (index + 1) % candidates.size()); ResourceSiteLifecycle lifecycle = candidates.get(index);
         ResourceSite site = state.resourceSite(lifecycle.siteId());
         var siteClaim = ledger.siteClaim(site.id());
+        var declaration = state.resourceSites().declarations().get(site.id());
+        if (siteClaim == null && declaration.land().kind() == io.farfrontier.palemirror.frontier.v3.model.FieldLandOrigin.Kind.SURVEYED) {
+            ledger.adoptSurveyedField(declaration, state.resourceSites().cycle(site.id()), projectionClaim(site));
+            ledger.persist(level);
+            siteClaim = ledger.siteClaim(site.id());
+        }
         if (siteClaim == null && baseline(level, site)) {
             // A COLD-grown site may have no preparation intent at first player ingress.
             // The ordinary projector, not only the preparation-intent executor, is therefore
@@ -212,18 +218,30 @@ final class FrontierV3ResourceSiteExecutor {
         }
         if (siteClaim instanceof FrontierV3ResourceSiteLedger.CellSiteClaim cellClaim) {
             if (cellClaim.claim() instanceof FrontierV3ResourceSiteLedger.FieldInitialization initial) {
-                advanceCellInitialization(level, runtime, site, initial);
+                var exactLayout = site.layout().predecessor(initial.cursor().target().layoutRevision(),
+                        initial.cursor().target().layoutFingerprint()).orElseThrow(
+                        () -> new IllegalStateException("initial field writer lost its exact declared geometry"));
+                advanceCellInitialization(level, runtime, declaration.describe(exactLayout), initial);
                 return;
             }
             if (!(cellClaim.claim() instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
                     || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE) return;
             var cycle = state.resourceSites().cycle(site.id());
             var predecessor = owner.witness();
+            if (!predecessor.matchesLayout(site.id(), cycle.layout())
+                    && !ledger.hasPendingFieldMutation(site.id()) && !state.resourceSites().hasPendingWorldChange(site.id())
+                    && cycle.pendingPlayerBreaks().isEmpty()) {
+                ledger.replaceFieldClaim(owner, owner.withWitness(predecessor.extendDeclaration(cycle)));
+                ledger.persist(level);
+                owner = (FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(site.id());
+                predecessor = owner.witness();
+            }
+            var exactPredecessor = predecessor;
             if (predecessor.matchesLayout(site.id(), cycle.layout()) && predecessor.epoch() < cycle.epoch()
                     && !ledger.hasPendingFieldMutation(site.id())
                     && !state.resourceSites().hasPendingWorldChange(site.id())
                     && cycle.pendingPlayerBreaks().isEmpty()
-                    && cycle.layout().cells().stream().noneMatch(cell -> predecessor.cell(cell.id()).pending().isPresent())) {
+                    && cycle.layout().cells().stream().noneMatch(cell -> exactPredecessor.cell(cell.id()).pending().isPresent())) {
                 ledger.replaceFieldClaim(owner, owner.withWitness(predecessor.rebaseColdEpoch(cycle)));
                 ledger.persist(level);
                 owner = (FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(site.id());

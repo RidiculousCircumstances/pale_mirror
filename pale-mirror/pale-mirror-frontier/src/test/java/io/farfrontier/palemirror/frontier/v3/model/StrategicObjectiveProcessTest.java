@@ -96,8 +96,9 @@ class StrategicObjectiveProcessTest {
 
         var due = StrategicObjectiveProcess.resourceHarvestOpportunity(full, full.resourceSites().site(site), 22_000L);
         List<ProposedEvent> waiting = StrategicObjectiveProcess.planResourceHarvestOpportunity(full, due);
-        var deferred = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class,
-                waiting.getFirst().payload()).action();
+        var deferred = assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class,
+                waiting.getFirst().payload()).replacement();
+        assertEquals(due.id(), deferred.id(), "waiting retains its own causal identity instead of merging unrelated retries");
         assertEquals(1, waiting.size());
         assertEquals(22_000L + full.bootstrap().ruleset().cadence().strategicReviewInterval(), deferred.dueAt().ticks());
         assertTrue(full.strategicPlans().tasks().isEmpty(), "capacity pressure must not create a doomed task");
@@ -108,6 +109,9 @@ class StrategicObjectiveProcessTest {
                 assertInstanceOf(StrategicObjectiveSelected.class, admitted.getFirst().payload()));
         pending = StrategicObjectiveProcess.reduceTask(pending, settlement.id(),
                 assertInstanceOf(StrategicTaskPlanned.class, admitted.get(1).payload()));
+        assertInstanceOf(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Consumed.class,
+                StrategicObjectiveProcess.planResourceHarvestOpportunity(pending, due).getFirst().payload(),
+                "a notification cannot start a competing retry loop while this field already has a durable task");
         StrategicTask task = pending.strategicPlans().tasks().values().stream().findFirst().orElseThrow();
         var start = ResourceSiteHarvestProcess.start(task, 10_085L);
         List<ProposedEvent> retry = ResourceSiteHarvestProcess.plan(pending, start);

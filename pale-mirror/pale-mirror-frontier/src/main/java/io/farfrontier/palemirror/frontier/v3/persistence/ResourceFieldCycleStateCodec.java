@@ -23,9 +23,11 @@ final class ResourceFieldCycleStateCodec {
         ResourceFieldLayout layout = cycle.layout();
         FrontierWorldStateCodec.writeString(output, cycle.siteId().value());
         output.writeLong(layout.revision()); output.writeLong(layout.nextCellId()); output.writeLong(cycle.epoch());
+        output.writeLong(cycle.sowing().revision());
         output.writeInt(layout.cells().size());
         for (ResourceFieldLayout.Cell cell : layout.cells()) {
             output.writeLong(cell.id().value());
+            output.writeBoolean(cycle.sowing().cells().contains(cell.id()));
             output.writeLong(cycle.generation(cell.id()));
             writePosition(output, cell.crop()); writePosition(output, cell.soil().support());
             writePosition(output, cell.workstation().support());
@@ -45,11 +47,23 @@ final class ResourceFieldCycleStateCodec {
         }
         output.writeInt(layout.irrigationSlots().size());
         for (BlockPosition water : layout.irrigationSlots()) writePosition(output, water);
+        output.writeInt(layout.extensions().size());
+        for (var extension : layout.extensions()) {
+            output.writeLong(extension.predecessorRevision()); output.writeLong(extension.predecessorNextCellId());
+            output.writeInt(extension.predecessorCellCount());
+            FrontierWorldStateCodec.writeString(output, extension.predecessorFingerprint());
+            output.writeInt(extension.ground().size());
+            for (var entry : extension.ground().entrySet().stream().sorted(java.util.Comparator.comparingLong(e -> e.getKey().value())).toList()) {
+                output.writeLong(entry.getKey().value()); output.writeByte(soilTag(entry.getValue()));
+            }
+        }
     }
 
     static ResourceFieldCycle read(DataInputStream input) throws IOException {
         SubjectId siteId = new SubjectId(FrontierWorldStateCodec.readString(input));
         long revision = input.readLong(), nextCellId = input.readLong(), epoch = input.readLong();
+        long sowingRevision = input.readLong();
+        var sowing = new java.util.HashSet<ResourceFieldLayout.CellId>();
         int count = input.readInt();
         if (count < 0 || count > ResourceFieldLayout.MAX_CELLS)
             throw new IllegalArgumentException("field snapshot cell count exceeds its bound");
@@ -59,6 +73,7 @@ final class ResourceFieldCycleStateCodec {
         Map<ResourceFieldLayout.CellId, ResourceFieldCycle.PendingPlayerBreak> pending = new LinkedHashMap<>();
         for (int index = 0; index < count; index++) {
             ResourceFieldLayout.CellId id = new ResourceFieldLayout.CellId(input.readLong());
+            if (input.readBoolean()) sowing.add(id);
             long generation = input.readLong();
             if (generation < 0 || generations.put(id, generation) != null)
                 throw new IllegalArgumentException("invalid or duplicate field generation");
@@ -82,8 +97,25 @@ final class ResourceFieldCycleStateCodec {
             throw new IllegalArgumentException("field snapshot irrigation count exceeds its bound");
         List<BlockPosition> irrigation = new ArrayList<>(waterCount);
         for (int index = 0; index < waterCount; index++) irrigation.add(readPosition(input));
-        return ResourceFieldCycle.restore(siteId, new ResourceFieldLayout(revision, nextCellId, cells, irrigation),
-                epoch, states, pending, generations);
+        int extensionCount = input.readInt();
+        if (extensionCount < 0 || extensionCount > count) throw new IllegalArgumentException("unbounded field extension history");
+        var extensions = new ArrayList<io.farfrontier.palemirror.frontier.v3.model.FieldLayoutExtension>();
+        int addedCount = 0;
+        for (int index = 0; index < extensionCount; index++) {
+            long previousRevision = input.readLong(), previousNextId = input.readLong();
+            int previousCount = input.readInt(); String previousFingerprint = FrontierWorldStateCodec.readString(input);
+            int groundCount = input.readInt();
+            if (groundCount < 1 || groundCount > count - addedCount) throw new IllegalArgumentException("unbounded admitted field ground");
+            addedCount += groundCount;
+            var ground = new LinkedHashMap<ResourceFieldLayout.CellId, ResourceFieldCycle.Soil>();
+            for (int cell = 0; cell < groundCount; cell++)
+                if (ground.put(new ResourceFieldLayout.CellId(input.readLong()), soil(input.readUnsignedByte())) != null)
+                    throw new IllegalArgumentException("duplicate admitted field ground");
+            extensions.add(new io.farfrontier.palemirror.frontier.v3.model.FieldLayoutExtension(previousRevision,
+                    previousNextId, previousCount, previousFingerprint, ground));
+        }
+        return ResourceFieldCycle.restore(siteId, new ResourceFieldLayout(revision, nextCellId, cells, irrigation, extensions),
+                epoch, states, pending, generations, new io.farfrontier.palemirror.frontier.v3.model.FieldSowingPlan(sowingRevision, sowing));
     }
 
     private static void writePosition(DataOutputStream output, BlockPosition position) throws IOException {
@@ -93,12 +125,13 @@ final class ResourceFieldCycleStateCodec {
         return new BlockPosition(input.readInt(), input.readInt(), input.readInt());
     }
     static int soilTag(ResourceFieldCycle.Soil value) {
-        return switch (value) { case UNKNOWN -> 1; case FARMLAND -> 2; case DIRT -> 3; case OBSTRUCTED -> 4; };
+        return switch (value) { case UNKNOWN -> 1; case FARMLAND -> 2; case DIRT -> 3; case OBSTRUCTED -> 4; case GRASS -> 5; };
     }
     static ResourceFieldCycle.Soil soil(int tag) {
         return switch (tag) {
             case 1 -> ResourceFieldCycle.Soil.UNKNOWN; case 2 -> ResourceFieldCycle.Soil.FARMLAND;
             case 3 -> ResourceFieldCycle.Soil.DIRT; case 4 -> ResourceFieldCycle.Soil.OBSTRUCTED;
+            case 5 -> ResourceFieldCycle.Soil.GRASS;
             default -> throw new IllegalArgumentException("unknown field soil wire tag " + tag);
         };
     }

@@ -23,6 +23,7 @@ public record ResourceFieldForeignCellObserved(ResourceFieldForeignChangeHeld ho
             throw new IllegalArgumentException("foreign field result lacks an exact local postcondition");
         if (after.soil() == ResourceFieldCycle.Soil.FARMLAND && !soilBlockName.equals("minecraft:farmland")
                 || after.soil() == ResourceFieldCycle.Soil.DIRT && !soilBlockName.equals("minecraft:dirt")
+                || after.soil() == ResourceFieldCycle.Soil.GRASS && !soilBlockName.equals("minecraft:grass_block")
                 || after.soil() == ResourceFieldCycle.Soil.OBSTRUCTED
                 && (soilBlockName.equals("minecraft:farmland") || soilBlockName.equals("minecraft:dirt"))
                 || after.crop() == ResourceFieldCycle.Crop.ABSENT && !cropBlockName.equals("minecraft:air")

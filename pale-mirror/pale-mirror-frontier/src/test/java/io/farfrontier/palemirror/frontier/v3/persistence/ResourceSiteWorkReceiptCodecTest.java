@@ -25,7 +25,7 @@ class ResourceSiteWorkReceiptCodecTest {
         var ripe = new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldPhysicalSurface.Condition(
                 ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.MATURE, 7);
         var acceptance = new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestWorkAcceptance(receipt,
-                io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellTransition.harvestAndReplant(
+                io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCellTransition.harvest(
                         receipt.siteId(), 1, 1, receipt.cellId(), ripe));
         var value = new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestWorkAcknowledged(acceptance);
         var codecs = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs();
@@ -93,7 +93,7 @@ class ResourceSiteWorkReceiptCodecTest {
         var codec = ResourceSitePayloadCodecs.harvestProgressed();
         var receipt = new ResourceSiteHarvestProgressed(new SubjectId("site:test"), 3,
                 new SubjectId("job:site-harvest-test"), 1,
-                2, new ResourceFieldLayout.CellId(97), 0L, ResourceFieldCycle.WorkOutcome.TILLED_AND_PLANTED,
+                2, new ResourceFieldLayout.CellId(97), 0L, ResourceFieldCycle.WorkOutcome.TILLED,
                 new ScheduleId("schedule:resource-site-harvest-cold-progress-site-harvest-test"), 22_301L);
         byte[] encoded = codec.encode(receipt);
         assertEquals(receipt, codec.decode(encoded));

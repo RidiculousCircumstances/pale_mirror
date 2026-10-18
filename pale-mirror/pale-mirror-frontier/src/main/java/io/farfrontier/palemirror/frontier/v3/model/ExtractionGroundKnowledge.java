@@ -14,7 +14,6 @@ final class ExtractionGroundKnowledge implements KnownBlockGeometry<BlockExtract
     private final ExtractionDeposit deposit;
     private record Protection(Set<TerrainColumn> columns, Set<BlockPosition> blocks) { }
     private static final ImmutableInputView<Protection> VIEW = new ImmutableInputView<>();
-    private static final ImmutableInputView<Set<TerrainColumn>> BASE_COLUMNS = new ImmutableInputView<>();
     private static final Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ImmutableInputView<Protection>> SITE_VIEWS = new LinkedHashMap<>();
     private ExtractionGroundKnowledge(FrontierWorldState state, Set<TerrainColumn> protectedColumns, Set<BlockPosition> declared,
                                       ExtractionDeposit deposit) {
@@ -32,6 +31,7 @@ final class ExtractionGroundKnowledge implements KnownBlockGeometry<BlockExtract
             Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> localSite) {
         var inputs = new ArrayList<Object>(List.of(state.bootstrap(), state.routeTopology(), state.hiveColony().addedOrgans(),
                 state.physicalDeltas(), state.extractionSites().geologicalExclusions()));
+        inputs.add(LandUseExclusions.columns(state));
         state.extractionSites().deposits().entrySet().stream().sorted(Map.Entry.comparingByKey())
                 .forEach(entry -> { inputs.add(entry.getKey()); inputs.add(entry.getValue().site().layout()); });
         var view = VIEW;
@@ -66,24 +66,7 @@ final class ExtractionGroundKnowledge implements KnownBlockGeometry<BlockExtract
 
     /** Excavation fronts change frequently; immutable towns/roads do not. */
     static Set<TerrainColumn> baseColumns(FrontierWorldState state) {
-        return BASE_COLUMNS.get(List.of(state.bootstrap(), state.routeTopology(), state.hiveColony().addedOrgans()), () -> {
-            var columns = new HashSet<TerrainColumn>();
-            for (var settlement : state.bootstrap().settlements()) {
-                FrontierSettlementActorSlots.intactStructureOccupancy(state.bootstrap().terrain(), settlement.structures())
-                        .forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
-                settlement.residents().forEach(resident -> columns.add(new TerrainColumn(resident.home().x(), resident.home().z())));
-            }
-            for (var site : FrontierResourceSitePlan.compile(state.bootstrap()).values())
-                site.managedSlots().forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
-            var roads = FrontierRouteNetwork.footprint(state.bootstrap(), state.routeTopology());
-            roads.foundationCells().forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
-            roads.surfaceCells().forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
-            FrontierGrayboxPlan.intactOrganOccupancy(state.bootstrap().hive().organs())
-                    .forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
-            FrontierGrayboxPlan.intactOrganOccupancy(List.copyOf(state.hiveColony().addedOrgans().values()))
-                    .forEach(position -> columns.add(new TerrainColumn(position.x(), position.z())));
-            return Set.copyOf(columns);
-        });
+        return LandUseExclusions.columns(state);
     }
     @Override public Optional<Sample<BlockExtraction.Block>> at(BlockPosition position) {
         if (state.extractionSites().geologicalExclusions().positions().contains(position)) return Optional.empty();

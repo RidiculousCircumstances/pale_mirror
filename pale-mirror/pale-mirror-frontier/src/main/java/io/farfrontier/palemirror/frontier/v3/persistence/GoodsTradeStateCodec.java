@@ -15,6 +15,7 @@ final class GoodsTradeStateCodec {
         for (var entry : state.contracts().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) writeContract(out, entry.getValue());
         GoodsParticipantStateCodec.write(out, state.participants());
         MarketPriceHistoryCodec.write(out, state.priceHistory());
+        MarketDemandHistoryCodec.write(out, state.demandHistory());
     }
     static GoodsTradeState read(DataInputStream in) throws IOException {
         Map<SubjectId, GoodsTradeOrder> orders = new HashMap<>();
@@ -25,7 +26,8 @@ final class GoodsTradeStateCodec {
         for (int n = count(in, GoodsTradeState.MAX_CONTRACTS); n > 0; n--) {
             var contract = readContract(in); put(contracts, contract.id(), contract);
         }
-        return new GoodsTradeState(orders, contracts, GoodsParticipantStateCodec.read(in), MarketPriceHistoryCodec.read(in));
+        return new GoodsTradeState(orders, contracts, GoodsParticipantStateCodec.read(in), MarketPriceHistoryCodec.read(in),
+                MarketDemandHistoryCodec.read(in));
     }
     static void writeOrder(DataOutputStream out, GoodsTradeOrder order) throws IOException {
         id(out, order.id()); party(out, order.party()); party(out, order.counterparty()); out.writeByte(order.side().wireTag());

@@ -18,6 +18,18 @@ final class FrontierV3ObjectBoardCard {
 
     private FrontierV3ObjectBoardCard() { }
 
+    static PlayerContextCard fromBoard(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState state, FrontierObjectBoard board) {
+        var basic = fromBoard(board);
+        var site = state.resourceSiteDescriptors().get(board.ownerId());
+        if (site == null) return basic;
+        var lines = new java.util.ArrayList<>(basic.lines());
+        io.farfrontier.palemirror.frontier.v3.model.CultivationPresentation.decision(state, site).lines()
+                .filter(line -> !line.isBlank()).forEach(lines::add);
+        var review = state.resourceSites().cultivation().get(site.settlementId());
+        if (review != null) lines.add("Plan at tick " + review.atTick() + " · Horizon " + review.horizonTicks() + "t");
+        return new PlayerContextCard(basic.title(), lines, basic.accentRgb());
+    }
+
     static PlayerContextCard fromBoard(FrontierObjectBoard board) {
         Objects.requireNonNull(board, "board");
         List<String> lines = Arrays.stream(board.text().split("\\n"))

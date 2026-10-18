@@ -482,7 +482,7 @@ class ResourceSiteHarvestProcessTest {
             ResourceFieldLayout.CellId cell = field.layout().cells().get(selected).id();
             ScheduledAction due = ResourceSiteHarvestProcess.coldProgress(current, 22_301L);
             SceneLease lease = state.sceneLeases().get(leaseId);
-            int hand = field.harvestedCount() - current.deliveredYieldQuantity() +
+            int hand = ResourceSiteHarvestCargo.quantity(state, current) +
                     (field.expectedWorkOutcome(cell) == ResourceFieldCycle.WorkOutcome.HARVESTED ? 1 : 0);
             state = ResourceSiteHarvestProcess.reduceProgressed(state, site,
                     new ResourceSiteHarvestProgressed(site, field.epoch(), current.id(), current.progress().completedCropSlots() + 1,
@@ -606,8 +606,13 @@ class ResourceSiteHarvestProcessTest {
                 "aborting scene admission cannot invent physical absence");
         resumed = ActorBodyAuthority.released(resumed, ActorBodyAuthority.current(resumed, start.job().workerId()));
         assertFalse(ResourceSiteHarvestProcess.coldProgressHeld(resumed, due));
-        assertTrue(ResourceSiteHarvestProcess.planColdProgress(resumed, due).stream()
-                .anyMatch(step -> step.payload() instanceof ResourceSiteHarvestColdGoalAdvanced));
+        var continuation = ResourceSiteHarvestProcess.planColdProgress(resumed, due);
+        var held = continuation.stream().map(ProposedEvent::payload)
+                .filter(ResourceSiteHarvestColdGoalHeld.class::isInstance).map(ResourceSiteHarvestColdGoalHeld.class::cast)
+                .findFirst().orElseThrow();
+        assertEquals(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH, held.routeStatus(),
+                "releasing a body cannot turn a position inside the soil into a traversable origin");
+        assertEquals(staleBody, resumed.actorLocations().get(start.job().workerId()).body());
 
         FrontierWorldState restarted = state.transitionSceneLease(lease.id(), SceneLeaseStatus.UNKNOWN_AFTER_RESTART);
         ProposedEvent restartPlan = assertInstanceOf(CommandPlan.Accepted.class,
@@ -921,7 +926,7 @@ class ResourceSiteHarvestProcessTest {
                 worked.humanPopulation().schedule(new SubjectId("settlement:1")).windowAt(22_301L));
         assertFalse(ResidentActivityCoordinator.requestsYield(worked, completed.workerId(), 22_301L));
         assertTrue(ResidentActivityCoordinator.ordinaryWorkPermitted(worked, completed.workerId(), 22_301L));
-        worked = withBoundPersonalFood(worked, completed.workerId(), hot.lease().members().getFirst().entityId());
+        worked = HarvestFixtureOwners.withBoundPersonalFood(worked, completed.workerId(), hot.lease().members().getFirst().entityId());
         var pocketBefore = worked.inventory().fungibleResources().bindings().values().stream()
                 .filter(value -> value.address() instanceof PhysicalStackAddress.ActorPocket).toList();
         var body = worked.actorLocations().get(completed.workerId());
@@ -953,7 +958,7 @@ class ResourceSiteHarvestProcessTest {
         ResourceSiteHarvestJob job = hot.job();
         ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(hot.state(), job);
         BodyPosition next = ResourceSiteHarvestKnownNavigation.plannedPath(hot.state(), job).get(1).standingBody();
-        FrontierWorldState observed = ModeledActorBodyFacts.inspected(withBoundPersonalFood(hot.state(),
+        FrontierWorldState observed = ModeledActorBodyFacts.inspected(HarvestFixtureOwners.withBoundPersonalFood(hot.state(),
                 job.workerId(), hot.lease().members().getFirst().entityId()), job.workerId(), next);
         assertEquals(job.progress(), ((ResourceSiteHarvestJob) observed.resourceSites().site(hot.site())
                 .harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow()).progress());
@@ -965,18 +970,6 @@ class ResourceSiteHarvestProcessTest {
         assertEquals(observed.inventory(), released.inventory(), "an empty work hand leaves bound personal pockets untouched");
         assertEquals(next.supportingSurface(), ResourceSiteHarvestKnownNavigation.plannedPath(released, job).getFirst());
         assertEquals(released, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(released)));
-    }
-    private static FrontierWorldState withBoundPersonalFood(FrontierWorldState state, SubjectId actor, java.util.UUID body) {
-        var account = new SubjectId("custody:release-personal-food");
-        var lot = new SubjectId("lot:release-personal-food");
-        var resources = state.inventory().fungibleResources().issue(new ResourceLot(lot,
-                state.humanPopulation().resident(actor).settlementId(), "minecraft:bread", 2, "test:personal-food", List.of()),
-                new CustodyAccount(account, new ResourceCustody.Actor(actor), Map.of(lot, 2), Map.of(),
-                        Optional.of(new ActorItemSlot.Pocket(0))));
-        resources = resources.rebind(account, 37L, FungiblePhysicalObservation.bind(resources, account, 37L,
-                List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorPocket(actor, body, 0),
-                        "minecraft:bread", 2))));
-        return state.withInventory(state.inventory().withFungibleResources(resources));
     }
     /** Independent modeled physical fact; the field receipt only clears its own blocked goal. */
     static FrontierWorldState inspectGoal(FrontierWorldState state, SubjectId site, ResourceSiteHarvestJob job,

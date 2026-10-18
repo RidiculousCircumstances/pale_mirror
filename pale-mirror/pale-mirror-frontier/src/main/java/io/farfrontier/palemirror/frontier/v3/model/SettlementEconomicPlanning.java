@@ -27,10 +27,20 @@ final class SettlementEconomicPlanning {
                     || participant.known().stream().noneMatch(peer -> peer.party().equals(order.party()))) continue;
             long salePrice = asks.get(order.itemKind());
             if (order.unitPriceLimit().raw() < salePrice) continue;
+            long quantity = order.availableQuantity();
+            var cultivation = state.bootstrap().ruleset().fields().cultivation();
+            if (cultivation.isPresent()) {
+                var observation = trade.demandHistory().observations().get(
+                        new io.farfrontier.palemirror.frontier.v3.model.market.MarketDemandHistory.Key(order.party().id(), order.itemKind()));
+                long duration = Math.multiplyExact(state.humanPopulation().schedule(home).dayTicks(), cultivation.orElseThrow().stableDemandDays());
+                if (observation == null || !observation.sustained(now, duration, Math.multiplyExact(2, rules.reviewInterval()))
+                        || observation.minimumPrice() < salePrice) continue;
+                quantity = Math.min(quantity, observation.minimumQuantity());
+            }
             var buyer = trade.participants().participants().get(order.party().id());
             if (buyer == null || !GoodsParticipantStorage.eligible(state, buyer, order.containerId(), order.itemKind())) continue;
             String pool = order.party().id().value() + "|" + order.itemKind();
-            var interest = new EconomicSnapshot.ExportInterest(order.party().id().value(), order.itemKind(), order.availableQuantity(),
+            var interest = new EconomicSnapshot.ExportInterest(order.party().id().value(), order.itemKind(), quantity,
                     salePrice, state.inventory().economics().availableToReserve(order.party().id()).raw());
             // Alternative warehouses publish the same buyer requirement, not new demand.
             interests.merge(pool, interest, (a, b) -> a.quantity() >= b.quantity() ? a : b);

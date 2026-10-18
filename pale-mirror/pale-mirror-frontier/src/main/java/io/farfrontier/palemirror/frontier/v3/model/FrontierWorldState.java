@@ -269,7 +269,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
                     Map.of(ProductionOrderKind.BAKERY, BakeryStationOperation.activeOrders(productionJobs)));
             resourceSites.validate(bootstrap); HarvestContainerReservations.validate(inventory, resourceSites);
             HarvestContainerReservations.validateAccounts(inventory, resourceSites);
-            strategicPlans.validate(bootstrap, routeTopology, humanPopulation);
+            strategicPlans.validate(bootstrap, routeTopology, humanPopulation, resourceSites);
             strategicPlans.hiveSettlementKnowledge().validate(bootstrap, hiveColony, actorLocations);
             strategicPlans.hiveTerritoryKnowledge().validate(bootstrap, hiveColony, actorLocations, structureConditions);
         routeTopology.replacementRoutes().forEach((settlement, route) -> FrontierRouteNetwork.validateSettlementWaypoints(bootstrap, settlement, route));
@@ -497,7 +497,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
             }
         }
         if (physicalObservations.size() > MAX_PHYSICAL_OBSERVATIONS) throw new IllegalArgumentException("physical observation retention limit exceeded");
-        FrontierWorldPhysicalObservationValidation.validate(bootstrap, inventory, infection, physicalIntents, physicalObservations, sceneLeases, routeConstructions, routeMaintenances, routeTopology, serviceWorks);
+        FrontierWorldPhysicalObservationValidation.validate(bootstrap, inventory, infection, physicalIntents, physicalObservations, sceneLeases, routeConstructions, routeMaintenances, routeTopology, serviceWorks, resourceSites);
         ResourceSitePhysicalIntentStateSupport.validateState(resourceSites, physicalIntents, physicalObservations);
         for (PhysicalIntent intent : physicalIntents.values()) {
             if (intent.status() == PhysicalIntentStatus.CONFIRMED
@@ -549,12 +549,12 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
             return;
         }
         if (onlyInfectionPlannerAndHealthChangedFrom(previous)) {
-            FrontierPlannerHealthValidation.validate(bootstrap, humanPopulation, strategicPlans, routeTopology, hiveColony, actorLocations, fencedRecovery);
+            FrontierPlannerHealthValidation.validate(bootstrap, humanPopulation, strategicPlans, routeTopology, hiveColony, actorLocations, fencedRecovery, resourceSites);
             validateInfectionTransition(previous);
             return;
         }
         if (onlyPlannerAndHealthChangedFrom(previous)) {
-            FrontierPlannerHealthValidation.validate(bootstrap, humanPopulation, strategicPlans, routeTopology, hiveColony, actorLocations, fencedRecovery);
+            FrontierPlannerHealthValidation.validate(bootstrap, humanPopulation, strategicPlans, routeTopology, hiveColony, actorLocations, fencedRecovery, resourceSites);
             return;
         }
         if (!onlyInfectionChangedFrom(previous)) { validateOwnedState(); return; }
@@ -709,8 +709,10 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
     }
     ResourceSiteState resourceSitesForCondition(SubjectId facilityId, StructureCondition condition) {
         if (condition != StructureCondition.DESTROYED) return resourceSites;
-        return resourceSiteDescriptors().values().stream().filter(site -> site.facilityId().equals(facilityId)).findFirst()
-                .map(site -> resourceSites.replace(resourceSites.site(site.id()).destroyed())).orElse(resourceSites);
+        var next = resourceSites;
+        for (var declaration : resourceSites.declarations().values())
+            if (declaration.facilityId().equals(facilityId)) next = next.replace(next.site(declaration.id()).destroyed());
+        return next;
     }
     public FrontierWorldState recordStructureDamage(StructureDamaged damage) { return FrontierWorldPhysicalDeltaSupport.recordStructureDamage(this, damage); }
     public FrontierWorldState recordPhysicalDelta(PhysicalDelta delta) { return FrontierWorldPhysicalDeltaSupport.record(this, delta); }

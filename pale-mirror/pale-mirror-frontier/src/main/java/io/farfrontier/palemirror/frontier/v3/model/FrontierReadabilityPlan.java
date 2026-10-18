@@ -39,13 +39,19 @@ public final class FrontierReadabilityPlan {
     /** Geometry is independent of stock, job, nutrition and actor-motion revisions. */
     public record StableObjectGeometry(FrontierBootstrap bootstrap,
             Map<SubjectId, StructureCondition> conditions,
+            Map<SubjectId, ResourceFieldLayout> fields,
             Map<SubjectId, java.util.Set<BlockPosition>> cells) {
         public static StableObjectGeometry compile(FrontierWorldState state) {
             return new StableObjectGeometry(state.bootstrap(), state.structureConditions(),
+                    state.resourceSites().cycles().entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(
+                            Map.Entry::getKey, entry -> entry.getValue().layout())),
                     FrontierGrayboxPlan.stableObjectCellsByOwner(state));
         }
         public boolean matches(FrontierWorldState state) {
-            return bootstrap == state.bootstrap() && conditions == state.structureConditions();
+            return bootstrap == state.bootstrap() && conditions == state.structureConditions()
+                    && fields.size() == state.resourceSites().cycles().size()
+                    && fields.entrySet().stream().allMatch(entry -> state.resourceSites().cycles().containsKey(entry.getKey())
+                        && state.resourceSites().cycle(entry.getKey()).layout() == entry.getValue());
         }
     }
 
@@ -393,8 +399,7 @@ public final class FrontierReadabilityPlan {
     private static String fieldStateText(FrontierWorldState state, ResourceSite site, ResourceSiteLifecycle lifecycle) {
         return switch (lifecycle.phase()) {
             case UNPREPARED -> "PREPARING SOIL · KEEP CLEAR";
-            case GROWING -> "GROWING · STAGE " + state.resourceSites().cycle(site.id()).plantGrowthStage()
-                    + "/" + ResourceSiteLifecycle.MATURE_STAGE;
+            case GROWING -> CultivationPresentation.plants(state.resourceSites().cycle(site.id()));
             case READY -> readyFieldText(state, site);
             case HARVESTING -> lifecycle.harvestJobs().values().stream().sorted(java.util.Comparator.comparing(ResourceSiteHarvestJob::id))
                     .map(ResourceSiteHarvestJob::navigationBlock).flatMap(java.util.Optional::stream).findFirst()
@@ -411,10 +416,8 @@ public final class FrontierReadabilityPlan {
                         case KNOWN_GEOMETRY_UNAVAILABLE -> "KNOWN ROUTE UNAVAILABLE · RECONSIDERING";
                     }).orElseGet(() -> {
                         if (lifecycle.harvestJobs().values().stream().anyMatch(job -> !job.progress().complete()))
-                            return "HARVEST IN PROGRESS · WORKERS " + lifecycle.harvestJobs().size();
-                        int stage = state.resourceSites().cycle(site.id()).plantGrowthStage();
-                        return (stage == ResourceSiteLifecycle.MATURE_STAGE ? "CROPS READY" : "GROWING · STAGE " + stage + "/" + ResourceSiteLifecycle.MATURE_STAGE)
-                                + "\nHARVEST COLLECTED · DELIVERY PENDING";
+                            return CultivationPresentation.work(state, site, lifecycle);
+                        return CultivationPresentation.plants(state.resourceSites().cycle(site.id())) + "\nFIELD WORK COMPLETED · RETURN PENDING";
                     });
             case CONFLICT -> conflictFieldText(lifecycle);
             case DESTROYED -> "LOST · REBUILD NEEDED";
@@ -464,6 +467,7 @@ public final class FrontierReadabilityPlan {
         boolean facilityLaneActive = state.strategicPlans().objectives().values().stream()
                 .anyMatch(objective -> objective.ownerId().equals(site.settlementId())
                         && objective.lane() == StrategicObjectiveLane.FACILITY
+                        && objective.resourceSiteTarget().equals(java.util.Optional.of(site.id()))
                         && objective.status() == StrategicObjectiveStatus.ACTIVE);
         if (facilityLaneActive) return "READY TO HARVEST · FACILITY LANE BUSY";
         return FrontierWorldStateSupport.availableWorkResident(state, site.settlementId(), ResidentWorkKind.AGRICULTURE, HumanCapability.AGRICULTURE).isPresent()

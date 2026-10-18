@@ -27,8 +27,10 @@ final class GoodsTradeProcessModule implements FrontierWorldProcessModule {
         if (payload instanceof GoodsParticipantReviewed reviewed) {
             if (reviewed.atTick() > now) throw new IllegalArgumentException("participant review is in the future");
             var trade = state.companies().goodsTrade();
+            var demand = MarketDemandObservation.read(state, subject, reviewed.atTick());
             return state.withCompanies(state.companies().withGoodsTrade(trade.withParticipants(
-                    trade.participants().reviewed(subject, reviewed.expectedRevision(), reviewed.decision(), reviewed.atTick()))));
+                    trade.participants().reviewed(subject, reviewed.expectedRevision(), reviewed.decision(), reviewed.atTick()))
+                    .withDemandHistory(demand)));
         }
         if (payload instanceof GoodsTradeOrderPlaced placed) return GoodsTradeStateSupport.place(state, subject, placed.order(), now);
         if (payload instanceof GoodsTradeReserved reserved) return GoodsTradeStateSupport.reserve(state, subject, reserved.contract(), reserved.allocations(), now);

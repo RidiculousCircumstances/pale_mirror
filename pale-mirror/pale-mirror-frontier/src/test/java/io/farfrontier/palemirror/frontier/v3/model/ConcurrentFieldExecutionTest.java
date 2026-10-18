@@ -133,9 +133,11 @@ class ConcurrentFieldExecutionTest {
         var next = before.harvested(first);
         assertFalse(oldClaim.current(next));
         assertTrue(otherClaim.current(next));
+        assertEquals(ResourceFieldCycle.Crop.ABSENT, next.cell(first).crop());
+        next = next.planted(first);
         for (int growth = 0; growth < 7; growth++) next = next.advanceGrowthStage();
         assertFalse(next.cell(first).accounted(), "renewed maturity is new available work, not an old batch outcome");
-        assertEquals(before.generation(first) + 1L, next.generation(first));
+        assertEquals(before.generation(first) + 2L, next.generation(first));
         state = state.withResourceSites(state.resourceSites().replace(
                 state.resourceSites().site(site).withPlantReadiness(next), next));
         var codec = new FrontierWorldStateCodec();

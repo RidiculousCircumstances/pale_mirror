@@ -12,14 +12,14 @@ final class FrontierPlannerHealthValidation {
 
     static void validate(FrontierBootstrap bootstrap, HumanPopulation population, StrategicPlanState plans,
                          RouteTopology topology, HiveColony colony, Map<SubjectId, ActorLocation> actors,
-                         FencedRecoveryState bodyRecovery) {
+                         FencedRecoveryState bodyRecovery, ResourceSiteState resourceSites) {
         SettlementPolicyValidation.validate(bootstrap, population);
         Set<SubjectId> settlements = bootstrap.settlements().stream().map(Settlement::id)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         if (!population.quarantines().keySet().equals(settlements)) {
             throw new IllegalArgumentException("settlement quarantine index must own every and only canonical settlement");
         }
-        plans.validate(bootstrap, topology, population);
+        plans.validate(bootstrap, topology, population, resourceSites);
         validateActorClaims(population, plans);
         FrontierSettlementAssaultSupport.validate(bootstrap, colony, population, actors, plans);
     }

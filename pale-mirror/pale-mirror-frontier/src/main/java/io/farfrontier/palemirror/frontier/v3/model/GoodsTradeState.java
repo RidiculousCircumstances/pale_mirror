@@ -7,7 +7,14 @@ import java.util.Map;
 /** Bounded commercial registry, independent of the production-service order book. */
 public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<SubjectId, GoodsTradeContract> contracts,
                               GoodsParticipantState participants,
-                              io.farfrontier.palemirror.frontier.v3.model.market.MarketPriceHistory priceHistory) {
+                              io.farfrontier.palemirror.frontier.v3.model.market.MarketPriceHistory priceHistory,
+                              io.farfrontier.palemirror.frontier.v3.model.market.MarketDemandHistory demandHistory) {
+    public GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<SubjectId, GoodsTradeContract> contracts,
+                           GoodsParticipantState participants,
+                           io.farfrontier.palemirror.frontier.v3.model.market.MarketPriceHistory priceHistory) {
+        this(orders, contracts, participants, priceHistory,
+                io.farfrontier.palemirror.frontier.v3.model.market.MarketDemandHistory.empty());
+    }
     public GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<SubjectId, GoodsTradeContract> contracts,
                            GoodsParticipantState participants) {
         this(orders, contracts, participants, io.farfrontier.palemirror.frontier.v3.model.market.MarketPriceHistory.empty());
@@ -21,6 +28,7 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
         orders = Map.copyOf(orders);
         java.util.Objects.requireNonNull(participants);
         java.util.Objects.requireNonNull(priceHistory);
+        java.util.Objects.requireNonNull(demandHistory);
         contracts = Map.copyOf(contracts);
         if (orders.size() > MAX_ORDERS || orders.entrySet().stream().anyMatch(e -> !e.getKey().equals(e.getValue().id()))
                 || contracts.size() > MAX_CONTRACTS || contracts.entrySet().stream().anyMatch(e -> !e.getKey().equals(e.getValue().id()))) {
@@ -36,15 +44,18 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
         }
     }
     public GoodsTradeState recordSale(String item, io.farfrontier.palemirror.frontier.v3.model.market.MarketPriceHistory.Sale sale) {
-        return new GoodsTradeState(orders, contracts, participants, priceHistory.record(item, sale));
+        return new GoodsTradeState(orders, contracts, participants, priceHistory.record(item, sale), demandHistory);
     }
     public static GoodsTradeState empty() { return new GoodsTradeState(Map.of(), Map.of()); }
+    public GoodsTradeState withDemandHistory(io.farfrontier.palemirror.frontier.v3.model.market.MarketDemandHistory next) {
+        return new GoodsTradeState(orders, contracts, participants, priceHistory, next);
+    }
     public GoodsTradeState place(GoodsTradeOrder order) {
         if (orders.containsKey(order.id()) || order.committedQuantity() != 0) {
             throw new IllegalArgumentException("goods order must be a fresh participant authorization");
         }
         Map<SubjectId, GoodsTradeOrder> next = new HashMap<>(orders); next.put(order.id(), order);
-        return new GoodsTradeState(next, contracts, participants, priceHistory);
+        return new GoodsTradeState(next, contracts, participants, priceHistory, demandHistory);
     }
     public GoodsTradeState admit(GoodsTradeContract contract, long now) {
         if (contracts.containsKey(contract.id()) || contract.revision() != 0 || contract.terminal()) {
@@ -58,7 +69,7 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
         Map<SubjectId, GoodsTradeOrder> nextOrders = new HashMap<>(orders);
         nextOrders.put(sell.id(), sell.commit(contract.quantity())); nextOrders.put(buy.id(), buy.commit(contract.quantity()));
         Map<SubjectId, GoodsTradeContract> next = new HashMap<>(contracts); next.put(contract.id(), contract);
-        return new GoodsTradeState(nextOrders, next, participants, priceHistory);
+        return new GoodsTradeState(nextOrders, next, participants, priceHistory, demandHistory);
     }
     public GoodsTradeState withdraw(SubjectId participant, GoodsTradeOrderWithdrawn withdrawal) {
         var order = orders.get(withdrawal.orderId());
@@ -70,7 +81,7 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
         else next.put(order.id(), new GoodsTradeOrder(order.id(), order.party(), order.counterparty(), order.side(),
                 order.containerId(), order.itemKind(), order.committedQuantity(), order.committedQuantity(),
                 order.unitPriceLimit(), order.expiresAtTick()));
-        return new GoodsTradeState(next, contracts, participants, priceHistory);
+        return new GoodsTradeState(next, contracts, participants, priceHistory, demandHistory);
     }
     public GoodsTradeState accept(GoodsTradeAcceptance receipt, long now) {
         GoodsTradeContract contract = contracts.get(receipt.contractId());
@@ -84,7 +95,7 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
         return new GoodsTradeState(orders, contracts, participants, priceHistory.record(contract.itemKind(),
                 new io.farfrontier.palemirror.frontier.v3.model.market.MarketPriceHistory.Sale(receipt.id(),
                         contract.seller().id(), contract.buyer().id(), now, receipt.title().quantity(),
-                        contract.goodsUnitPrice(), contract.deliveryUnitPrice())));
+                        contract.goodsUnitPrice(), contract.deliveryUnitPrice())), demandHistory);
     }
     public GoodsTradeState dispose(GoodsTradeDisposition disposition) {
         GoodsTradeContract contract = contracts.get(disposition.contractId());
@@ -114,13 +125,13 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
         }
         Map<SubjectId, GoodsTradeOrder> nextOrders = new HashMap<>(orders); retired.orderIds().forEach(nextOrders::remove);
         Map<SubjectId, GoodsTradeContract> next = new HashMap<>(contracts); retired.contractIds().forEach(next::remove);
-        return new GoodsTradeState(nextOrders, next, participants, priceHistory);
+        return new GoodsTradeState(nextOrders, next, participants, priceHistory, demandHistory);
     }
     private GoodsTradeState put(GoodsTradeContract contract) {
         Map<SubjectId, GoodsTradeContract> next = new HashMap<>(contracts); next.put(contract.id(), contract);
-        return new GoodsTradeState(orders, next, participants, priceHistory);
+        return new GoodsTradeState(orders, next, participants, priceHistory, demandHistory);
     }
-    public GoodsTradeState withParticipants(GoodsParticipantState next) { return new GoodsTradeState(orders, contracts, next, priceHistory); }
+    public GoodsTradeState withParticipants(GoodsParticipantState next) { return new GoodsTradeState(orders, contracts, next, priceHistory, demandHistory); }
     static void validateTerms(GoodsTradeContract contract, GoodsTradeOrder sell, GoodsTradeOrder buy) {
         if (sell == null || buy == null || sell.side() != GoodsTradeOrder.Side.SELL || buy.side() != GoodsTradeOrder.Side.BUY
                 || !sell.party().equals(contract.seller()) || !buy.party().equals(contract.buyer())

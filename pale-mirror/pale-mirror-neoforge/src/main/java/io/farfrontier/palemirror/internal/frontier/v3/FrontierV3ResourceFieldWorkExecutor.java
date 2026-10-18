@@ -38,7 +38,7 @@ final class FrontierV3ResourceFieldWorkExecutor {
     private FrontierV3ResourceFieldWorkExecutor() { }
 
     static String cause(ResourceSiteHarvestJob job, ResourceFieldCycle cycle, ResourceFieldLayout.CellId id) {
-        return "harvest-cell:" + job.id().value() + ':' + cycle.epoch() + ':' + id.value();
+        return io.farfrontier.palemirror.frontier.v3.model.FieldCellOperation.id(job.id(), cycle.epoch(), id, job.target().generation());
     }
 
     static Result advance(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
@@ -249,8 +249,7 @@ final class FrontierV3ResourceFieldWorkExecutor {
 
     private static BlockState block(ResourceFieldCellTransition.Step step) {
         return switch (step.part()) {
-            case SOIL -> step.after().soil() == ResourceFieldCycle.Soil.FARMLAND
-                    ? Blocks.FARMLAND.defaultBlockState() : Blocks.DIRT.defaultBlockState();
+            case SOIL -> FrontierV3FieldBlocks.soil(step.after().soil());
             case CROP -> step.after().crop() == ResourceFieldCycle.Crop.ABSENT
                     ? Blocks.AIR.defaultBlockState()
                     : Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, step.after().growthStage());

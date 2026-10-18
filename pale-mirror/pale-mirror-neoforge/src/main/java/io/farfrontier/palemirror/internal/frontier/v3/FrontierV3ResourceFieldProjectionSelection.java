@@ -25,8 +25,8 @@ final class FrontierV3ResourceFieldProjectionSelection {
             var id = layout.get(index).id();
             var retained = witness.cell(id);
             var canonical = cycle.cell(id);
-            boolean ownedGrowth = canonical.soil() == ResourceFieldCycle.Soil.FARMLAND
-                    && (canonical.crop() == ResourceFieldCycle.Crop.GROWING
+            boolean ownedGrowth = canonical.soil().cultivable()
+                    && (canonical.crop() == ResourceFieldCycle.Crop.ABSENT || canonical.crop() == ResourceFieldCycle.Crop.GROWING
                         || canonical.crop() == ResourceFieldCycle.Crop.MATURE);
             if (ownedGrowth && !cycle.pendingPlayerBreaks().containsKey(id) && retained.foreign().isEmpty()
                     && (retained.pending().isPresent()

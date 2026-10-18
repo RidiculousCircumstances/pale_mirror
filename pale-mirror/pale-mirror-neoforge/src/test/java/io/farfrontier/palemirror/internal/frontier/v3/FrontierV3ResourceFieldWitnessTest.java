@@ -21,6 +21,23 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3ResourceFieldWitnessTest {
+    @Test void extensionPreservesOldObservedCellsAndRejectsChangedNewGround() {
+        var before = ResourceFieldCycle.seeded(SITE, layout(), 1).advanceGrowthStage();
+        var witness = FrontierV3ResourceFieldWitness.claimed(SITE, 1, ResourceFieldPhysicalSurface.fromCycle(before));
+        var support = SurfaceAnchor.at(12, 63, 10);
+        var id = new ResourceFieldLayout.CellId(3);
+        var ground = Map.of(id, ResourceFieldCycle.Soil.GRASS);
+        var nextLayout = before.layout().extend(List.of(new ResourceFieldLayout.Cell(id,
+                support.support().offset(0, 1, 0), support, support)), 4, ground);
+        var next = before.extended(nextLayout, ground);
+        var actual = new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.GRASS, ResourceFieldCycle.Crop.ABSENT, 0);
+        var extended = witness.extend(next, Map.of(id, actual));
+        assertTrue(extended.matchesCycle(next));
+        assertEquals(witness.cell(FIRST), extended.cell(FIRST));
+        assertEquals(extended, FrontierV3ResourceFieldWitness.read(extended.write()));
+        assertThrows(IllegalArgumentException.class, () -> witness.extend(next, Map.of(id, DIRT)));
+        assertThrows(IllegalArgumentException.class, () -> witness.extend(next, Map.of()));
+    }
     @Test void growthBeyondCanonicalTargetRecoversEvenWhenItsPhysicalProjectionWasLagging() {
         var projected = ResourceFieldCycle.seeded(SITE, layout(), 1).advanceGrowth(FIRST);
         var witness = FrontierV3ResourceFieldWitness.claimed(SITE, 1, ResourceFieldPhysicalSurface.fromCycle(projected));
@@ -230,7 +247,7 @@ class FrontierV3ResourceFieldWitnessTest {
                 ResourceFieldPhysicalSurface.Condition.of(later.cell(FIRST))));
         assertThrows(IllegalArgumentException.class, () -> original.rebaseColdEpoch(playerPending),
                 "a successor with an unresolved Vanilla action cannot be used as a physical hand-off");
-        var pending = original.begin(ResourceFieldCellTransition.harvestAndReplant(SITE, 1, 1, FIRST, RIPE),
+        var pending = original.begin(ResourceFieldCellTransition.harvest(SITE, 1, 1, FIRST, RIPE),
                 "farmer:unresolved:1");
         assertThrows(IllegalStateException.class, () -> pending.rebaseColdEpoch(later),
                 "even an unloaded later epoch must not erase an unfinished physical cause");
@@ -336,17 +353,17 @@ class FrontierV3ResourceFieldWitnessTest {
         assertThrows(IllegalStateException.class, () -> FrontierV3ResourceFieldWitness.read(wrongForeignType));
     }
 
-    @Test void actualHarvestRetainsAndRecoversTheBareCropBetweenCutAndReplant() {
+    @Test void actualHarvestRetainsItsExplicitOperationOnRecovery() {
         var original = FrontierV3ResourceFieldWitness.claimed(SITE, 1, ResourceFieldPhysicalSurface.restore(
                 layout(), Map.of(FIRST, RIPE, SECOND, PLANTED)));
-        var effect = ResourceFieldCellTransition.harvestAndReplant(SITE, 1, 1, FIRST, RIPE);
+        var effect = ResourceFieldCellTransition.harvest(SITE, 1, 1, FIRST, RIPE);
         var pending = FrontierV3ResourceFieldWitness.read(original.begin(effect, "farmer:harvest:1").write());
-        assertTrue(pending.cell(FIRST).pending().orElseThrow().transition().isHarvestAndReplant());
+        assertTrue(pending.cell(FIRST).pending().orElseThrow().transition().isHarvest());
         assertThrows(IllegalArgumentException.class, () -> pending.confirm(FIRST, review(pending, layout(), FIRST, BARE)),
                 "a predicted AIR prefix is not a physical observation");
         var wrongMode = pending.write();
         wrongMode.getList("cells", Tag.TAG_COMPOUND).getCompound(0).getCompound("pending")
-                .putString("mode", "DIRECT");
+                .putString("mode", "HARVEST_REPLANT");
         assertThrows(IllegalStateException.class, () -> FrontierV3ResourceFieldWitness.read(wrongMode));
     }
 
@@ -356,7 +373,7 @@ class FrontierV3ResourceFieldWitnessTest {
         var body = UUID.fromString("00000000-0000-0000-0000-000000000125");
         var hand = new FrontierV3ResourceFieldWitness.HandEffect(SITE,
                 new SubjectId("job:site-harvest-1"), actor, body, 3, 36, extraction());
-        var transition = ResourceFieldCellTransition.harvestAndReplant(SITE, 1, 1, FIRST, RIPE);
+        var transition = ResourceFieldCellTransition.harvest(SITE, 1, 1, FIRST, RIPE);
         var original = FrontierV3ResourceFieldWitness.claimed(SITE, 1, ResourceFieldPhysicalSurface.restore(
                 layout, Map.of(FIRST, RIPE, SECOND, PLANTED)));
         assertThrows(IllegalArgumentException.class, () -> original.beginHarvest(transition, "farmer:paired:1", hand,
@@ -381,7 +398,7 @@ class FrontierV3ResourceFieldWitnessTest {
                 "a caller-supplied wheat count cannot substitute for real world observation");
         assertThrows(IllegalArgumentException.class, () -> recovered.confirmHand(FIRST,
                 FrontierV3ActorHandObservation.classify(actor, body, "minecraft:wheat", 36)),
-                "even a real hand observation must not close before both crop writes");
+                "a hand observation must not close before the crop removal");
         assertThrows(IllegalArgumentException.class, () -> recovered.confirm(FIRST, review(recovered, layout, FIRST, PLANTED)),
                 "the correct synthetic crop terminal is not a physical receipt either");
 
@@ -405,7 +422,7 @@ class FrontierV3ResourceFieldWitnessTest {
         var layout = layout();
         var hand = new FrontierV3ResourceFieldWitness.HandEffect(SITE, new SubjectId("job:site-harvest-1"),
                 new SubjectId("resident:1-1"), UUID.fromString("00000000-0000-0000-0000-000000000125"), 3, 36, extraction());
-        var transition = ResourceFieldCellTransition.harvestAndReplant(SITE, 1, 1, FIRST, RIPE);
+        var transition = ResourceFieldCellTransition.harvest(SITE, 1, 1, FIRST, RIPE);
         var claimed = FrontierV3ResourceFieldWitness.claimed(SITE, 1, ResourceFieldPhysicalSurface.restore(
                 layout, Map.of(FIRST, RIPE, SECOND, PLANTED)));
         var physicallyReady = claimed.begin(transition, "farmer:paired:1").write();
@@ -467,7 +484,7 @@ class FrontierV3ResourceFieldWitnessTest {
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceFieldWitness.read(noHand));
         var unfinishedCrop = recovered.write();
         unfinishedCrop.getList("cells", Tag.TAG_COMPOUND).getCompound(0).getCompound("pending")
-                .putInt("completed", 1);
+                .putInt("completed", 0);
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceFieldWitness.read(unfinishedCrop));
     }
 
@@ -491,7 +508,7 @@ class FrontierV3ResourceFieldWitnessTest {
         var layout = layout();
         var witness = FrontierV3ResourceFieldWitness.claimed(SITE, 1, ResourceFieldPhysicalSurface.restore(
                 layout, Map.of(FIRST, RIPE, SECOND, PLANTED)));
-        var pending = witness.begin(ResourceFieldCellTransition.harvestAndReplant(SITE, 1, 1, FIRST, RIPE), "farmer:harvest:1");
+        var pending = witness.begin(ResourceFieldCellTransition.harvest(SITE, 1, 1, FIRST, RIPE), "farmer:harvest:1");
         var unloaded = FrontierV3ResourceFieldObservation.compare(pending, layout, FIRST,
                 FrontierV3ResourceFieldObservation.Unloaded.INSTANCE);
         assertEquals(FrontierV3ResourceFieldObservation.Disposition.UNLOADED, unloaded.disposition());

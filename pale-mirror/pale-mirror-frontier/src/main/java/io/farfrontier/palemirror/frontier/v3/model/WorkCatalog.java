@@ -33,7 +33,7 @@ public record WorkCatalog(List<Definition> definitions, int baseSpeedPermille,
                 new Definition("minecraft:bread", WorkOperation.PRODUCE, HumanCapability.INDUSTRY, 1_600),
                 new Definition("minecraft:wheat", WorkOperation.HARVEST, HumanCapability.AGRICULTURE, 200),
                 new Definition("minecraft:wheat", WorkOperation.SOW, HumanCapability.AGRICULTURE, 100),
-                new Definition("minecraft:wheat", WorkOperation.TILL_AND_SOW, HumanCapability.AGRICULTURE, 300)),
+                new Definition("minecraft:wheat", WorkOperation.TILL, HumanCapability.AGRICULTURE, 200)),
                 1_000, 5, 100, 4_000);
     }
     public String canonicalText() {

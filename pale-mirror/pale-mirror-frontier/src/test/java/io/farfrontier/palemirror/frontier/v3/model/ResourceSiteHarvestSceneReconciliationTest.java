@@ -29,22 +29,22 @@ class ResourceSiteHarvestSceneReconciliationTest {
                 SceneLease.deterministicEntityId(state.bootstrap().worldId(), selected.workerId()), 1L, 1, 1L,
                 java.util.List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
                         selected.outputSlot()), "minecraft:wheat", 1)), "sha256:" + "0".repeat(64), 3L, "witness:selected-storage");
-        ResourceSitePhysicalIntentStateSupport.validateHarvestDeliveryReceipt(state.bootstrap(), intent, observed);
+        ResourceSitePhysicalIntentStateSupport.validateHarvestDeliveryReceipt(state.resourceSites(), intent, observed);
         var deferred = new ResourceSiteHarvestDeferredObservation(observed.id(), selected.intentId(), selected.siteId(),
                 selected.id(), target, 1L, 1L, 3L, 1L, observed.depotFingerprint(), ReferenceContainerCustody.provenance(target));
-        ResourceSitePhysicalIntentStateSupport.validateDeferredHarvestReceipt(state.bootstrap(), intent, deferred);
+        ResourceSitePhysicalIntentStateSupport.validateDeferredHarvestReceipt(state.resourceSites(), intent, deferred);
         var wrong = new ResourceSiteHarvestDeliveryObservation(observed.id(), observed.intentId(), observed.siteId(),
                 observed.jobId(), observed.workerId(), observed.actorAccountId(), observed.depotAccountId(), observed.leaseId(),
                 observed.entityId(), 1L, 1, 1L, java.util.List.of(new FungiblePhysicalObservation.Stack(
                     new PhysicalStackAddress.ContainerSlot(job.outputSlot()), "minecraft:wheat", 1)),
                 observed.depotFingerprint(), 3L, observed.witnessId());
         assertThrows(IllegalArgumentException.class, () -> ResourceSitePhysicalIntentStateSupport
-                .validateHarvestDeliveryReceipt(state.bootstrap(), intent, wrong));
+                .validateHarvestDeliveryReceipt(state.resourceSites(), intent, wrong));
         var wrongDeferred = new ResourceSiteHarvestDeferredObservation(deferred.id(), deferred.intentId(), deferred.siteId(),
                 deferred.jobId(), job.outputSlot().containerId(), 1L, 1L, 3L, 1L, deferred.depotFingerprint(),
                 ReferenceContainerCustody.provenance(job.outputSlot().containerId()));
         assertThrows(IllegalArgumentException.class, () -> ResourceSitePhysicalIntentStateSupport
-                .validateDeferredHarvestReceipt(state.bootstrap(), intent, wrongDeferred));
+                .validateDeferredHarvestReceipt(state.resourceSites(), intent, wrongDeferred));
     }
     @ParameterizedTest @ValueSource(ints = {0, 1})
     void alreadyAppliedIsolatedCropAndHandSettleOnceThroughRegisteredCommandAndWal(int preceding) {

@@ -644,7 +644,7 @@ final class ResourceSitePayloadCodecs {
     }
     private static int workOutcomeTag(ResourceFieldCycle.WorkOutcome outcome) {
         return switch (outcome) {
-            case HARVESTED -> 1; case PLANTED -> 2; case TILLED_AND_PLANTED -> 3;
+            case HARVESTED -> 1; case PLANTED -> 2; case TILLED -> 6;
             case SKIPPED_IMMATURE -> 4; case SKIPPED_BLOCKED -> 5;
         };
     }
@@ -652,7 +652,7 @@ final class ResourceSitePayloadCodecs {
         return switch (tag) {
             case 1 -> ResourceFieldCycle.WorkOutcome.HARVESTED;
             case 2 -> ResourceFieldCycle.WorkOutcome.PLANTED;
-            case 3 -> ResourceFieldCycle.WorkOutcome.TILLED_AND_PLANTED;
+            case 6 -> ResourceFieldCycle.WorkOutcome.TILLED;
             case 4 -> ResourceFieldCycle.WorkOutcome.SKIPPED_IMMATURE;
             case 5 -> ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED;
             default -> throw new IllegalArgumentException("unknown resource-site cell work outcome wire tag " + tag);
@@ -799,7 +799,7 @@ final class ResourceSitePayloadCodecs {
 
     private static byte[] foreignCellBytes(ResourceFieldCycle.CellState cell) {
         return new byte[] {(byte) switch (cell.soil()) {
-            case FARMLAND -> 1; case DIRT -> 2; case OBSTRUCTED -> 3;
+            case FARMLAND -> 1; case DIRT -> 2; case OBSTRUCTED -> 3; case GRASS -> 4;
             case UNKNOWN -> throw new IllegalArgumentException("unknown foreign field soil");
         }, (byte) switch (cell.crop()) {
             case ABSENT -> 1; case GROWING -> 2; case MATURE -> 3; case OBSTRUCTED -> 4;
@@ -812,7 +812,7 @@ final class ResourceSitePayloadCodecs {
         if (input.remaining() < 6) throw new IllegalArgumentException("truncated foreign field cell");
         var soil = switch (Byte.toUnsignedInt(input.get())) {
             case 1 -> ResourceFieldCycle.Soil.FARMLAND; case 2 -> ResourceFieldCycle.Soil.DIRT;
-            case 3 -> ResourceFieldCycle.Soil.OBSTRUCTED;
+            case 3 -> ResourceFieldCycle.Soil.OBSTRUCTED; case 4 -> ResourceFieldCycle.Soil.GRASS;
             default -> throw new IllegalArgumentException("unknown foreign field soil tag");
         };
         var crop = switch (Byte.toUnsignedInt(input.get())) {

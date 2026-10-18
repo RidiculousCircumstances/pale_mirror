@@ -14,22 +14,25 @@ public record ResourceSiteHarvestWorkAcceptance(ResourceSiteHarvestProgressed re
                 || !receipt.siteId().equals(transition.siteId()) || receipt.epoch() != transition.epoch()
                 || receipt.layoutRevision() != transition.layoutRevision()
                 || !receipt.cellId().equals(transition.cellId())
-                || (receipt.outcome() == ResourceFieldCycle.WorkOutcome.HARVESTED) != transition.isHarvestAndReplant()
+                || (receipt.outcome() == ResourceFieldCycle.WorkOutcome.HARVESTED) != transition.isHarvest()
                 || receipt.outcome() != ResourceFieldCycle.WorkOutcome.HARVESTED
                     && receipt.outcome() != ResourceFieldCycle.WorkOutcome.PLANTED
-                    && receipt.outcome() != ResourceFieldCycle.WorkOutcome.TILLED_AND_PLANTED)
+                    && receipt.outcome() != ResourceFieldCycle.WorkOutcome.TILLED)
             throw new IllegalArgumentException("field acceptance has no exact physical work and actor receipt");
         var expected = switch (receipt.outcome()) {
-            case HARVESTED -> ResourceFieldCellTransition.harvestAndReplant(receipt.siteId(), receipt.epoch(),
+            case HARVESTED -> ResourceFieldCellTransition.harvest(receipt.siteId(), receipt.epoch(),
                     receipt.layoutRevision(), receipt.cellId(), transition.before());
-            case PLANTED, TILLED_AND_PLANTED -> {
-                var soil = receipt.outcome() == ResourceFieldCycle.WorkOutcome.PLANTED
-                        ? ResourceFieldCycle.Soil.FARMLAND : ResourceFieldCycle.Soil.DIRT;
+            case PLANTED, TILLED -> {
+                var soil = transition.before().soil();
+                if (receipt.outcome() == ResourceFieldCycle.WorkOutcome.PLANTED
+                        ? soil != ResourceFieldCycle.Soil.FARMLAND : !soil.untilled())
+                    throw new IllegalArgumentException("accepted cultivation has an unsuitable soil predecessor");
                 if (!transition.before().equals(new ResourceFieldPhysicalSurface.Condition(soil, ResourceFieldCycle.Crop.ABSENT, 0)))
                     throw new IllegalArgumentException("accepted sowing has a foreign declared work predecessor");
                 yield ResourceFieldCellTransition.between(receipt.siteId(), receipt.epoch(), receipt.layoutRevision(), receipt.cellId(),
                         transition.before(), new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND,
-                                ResourceFieldCycle.Crop.GROWING, 0));
+                                receipt.outcome() == ResourceFieldCycle.WorkOutcome.PLANTED
+                                        ? ResourceFieldCycle.Crop.GROWING : ResourceFieldCycle.Crop.ABSENT, 0));
             }
             default -> throw new IllegalArgumentException("a skipped cell cannot retain a physical work acceptance");
         };
@@ -37,6 +40,6 @@ public record ResourceSiteHarvestWorkAcceptance(ResourceSiteHarvestProgressed re
     }
 
     public String causationId() {
-        return "harvest-cell:" + receipt.jobId().value() + ":" + receipt.epoch() + ":" + receipt.cellId().value();
+        return FieldCellOperation.id(receipt.jobId(), receipt.epoch(), receipt.cellId(), receipt.generation());
     }
 }

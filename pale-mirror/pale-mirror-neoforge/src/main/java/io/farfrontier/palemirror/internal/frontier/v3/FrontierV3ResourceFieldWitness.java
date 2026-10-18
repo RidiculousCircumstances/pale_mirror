@@ -24,7 +24,7 @@ import java.util.UUID;
 
 /** Versioned value for the replacement SavedData field claim; not a second runtime owner. */
 final class FrontierV3ResourceFieldWitness {
-    private static final int FORMAT = 9;
+    private static final int FORMAT = 10;
 
     /** Raw block-state NBT is retained verbatim, never guessed from an OBSTRUCTED enum. */
     static final class ForeignIncident {
@@ -94,13 +94,13 @@ final class FrontierV3ResourceFieldWitness {
             if (causationId.isBlank()) throw new IllegalArgumentException("pending field effect has no cause");
             if (completedSteps < 0 || completedSteps > transition.steps().size())
                 throw new IllegalArgumentException("pending field projection has a terminal or invalid cursor");
-            if (handEffect.isPresent() && !transition.isHarvestAndReplant())
+            if (handEffect.isPresent() && !transition.isHarvest())
                 throw new IllegalArgumentException("only a yielding harvest may retain an actor-hand effect");
             if (handEffect.isPresent() && !handEffect.orElseThrow().extraction().operationId().equals(causationId))
                 throw new IllegalArgumentException("retained harvest has a foreign extraction operation");
             if (handConfirmed && (handEffect.isEmpty() || completedSteps != transition.steps().size()))
                 throw new IllegalArgumentException("confirmed harvest hand lacks its complete paired crop effect");
-            if (canonicalSource.isPresent() && (handEffect.isPresent() || handConfirmed || transition.isHarvestAndReplant()))
+            if (canonicalSource.isPresent() && (handEffect.isPresent() || handConfirmed || transition.isHarvest()))
                 throw new IllegalArgumentException("preaccepted canonical projection cannot masquerade as farmer work");
         }
         Pending(ResourceFieldCellTransition transition, int completedSteps, String causationId) {
@@ -149,12 +149,13 @@ final class FrontierV3ResourceFieldWitness {
     private final Map<Long, Map<ResourceFieldLayout.CellId, Cell>> byIdBucket;
     private final int cellCount;
     private final String cellIdsFingerprint;
+    private final Map<Long, String> precedingLayouts;
     /** Derived immutable-image proof; lazy so ordinary cell updates do not scan the field. */
     private volatile Boolean projectionImageOnly;
 
     private FrontierV3ResourceFieldWitness(SubjectId siteId, long epoch, long layoutRevision, String layoutFingerprint,
                                            Map<Long, Map<ResourceFieldLayout.CellId, Cell>> byIdBucket,
-                                           int cellCount, String cellIdsFingerprint, boolean validate) {
+                                           int cellCount, String cellIdsFingerprint, Map<Long, String> precedingLayouts, boolean validate) {
         this.siteId = Objects.requireNonNull(siteId, "physical field site owner");
         if (!siteId.value().startsWith("site:"))
             throw new IllegalArgumentException("physical field witness has no declared site owner");
@@ -168,6 +169,10 @@ final class FrontierV3ResourceFieldWitness {
         this.byIdBucket = Map.copyOf(byIdBucket);
         this.cellCount = cellCount;
         this.cellIdsFingerprint = Objects.requireNonNull(cellIdsFingerprint, "physical field cell identities");
+        this.precedingLayouts = Map.copyOf(precedingLayouts);
+        if (precedingLayouts.size() > cellCount || precedingLayouts.entrySet().stream().anyMatch(entry ->
+                entry.getKey() < 1 || entry.getKey() >= layoutRevision || !entry.getValue().matches("[0-9a-f]{64}")))
+            throw new IllegalArgumentException("invalid physical field geometry lineage");
         if (validate) {
             int counted = 0;
             for (var group : this.byIdBucket.entrySet()) {
@@ -176,7 +181,9 @@ final class FrontierV3ResourceFieldWitness {
                     var cell = Objects.requireNonNull(entry.getValue(), "physical field cell claim");
                     cell.retiredWork().ifPresent(seal -> {
                         if (!seal.receipt().siteId().equals(siteId) || !seal.receipt().cellId().equals(id)
-                                || seal.receipt().layoutRevision() != layoutRevision || seal.receipt().epoch() > epoch)
+                                || seal.receipt().layoutRevision() != layoutRevision
+                                    && !precedingLayouts.containsKey(seal.receipt().layoutRevision())
+                                || seal.receipt().epoch() > epoch)
                             throw new IllegalArgumentException("field work seal has a foreign cell, layout or future epoch");
                     });
                     if (bucket(id) != group.getKey()) throw new IllegalArgumentException("field witness has a foreign ID bucket");
@@ -199,12 +206,16 @@ final class FrontierV3ResourceFieldWitness {
 
     private static FrontierV3ResourceFieldWitness fromFlat(SubjectId siteId, long epoch, long layoutRevision, String layoutFingerprint,
                                                             Map<ResourceFieldLayout.CellId, Cell> cells) {
+        return fromFlat(siteId, epoch, layoutRevision, layoutFingerprint, cells, Map.of());
+    }
+    private static FrontierV3ResourceFieldWitness fromFlat(SubjectId siteId, long epoch, long layoutRevision, String layoutFingerprint,
+                                                            Map<ResourceFieldLayout.CellId, Cell> cells, Map<Long, String> precedingLayouts) {
         var groups = new HashMap<Long, Map<ResourceFieldLayout.CellId, Cell>>();
         for (var entry : cells.entrySet())
             groups.computeIfAbsent(bucket(entry.getKey()), ignored -> new LinkedHashMap<>()).put(entry.getKey(), entry.getValue());
         groups.replaceAll((ignored, group) -> Map.copyOf(group));
         return new FrontierV3ResourceFieldWitness(siteId, epoch, layoutRevision, layoutFingerprint, groups, cells.size(),
-                ResourceFieldLayout.fingerprintCellIds(cells.keySet()), true);
+                ResourceFieldLayout.fingerprintCellIds(cells.keySet()), precedingLayouts, true);
     }
 
     private static long bucket(ResourceFieldLayout.CellId id) {
@@ -231,10 +242,10 @@ final class FrontierV3ResourceFieldWitness {
                 && siteId.equals(witness.siteId) && epoch == witness.epoch
                 && layoutRevision == witness.layoutRevision && layoutFingerprint.equals(witness.layoutFingerprint)
                 && cellCount == witness.cellCount && cellIdsFingerprint.equals(witness.cellIdsFingerprint)
-                && byIdBucket.equals(witness.byIdBucket);
+                && byIdBucket.equals(witness.byIdBucket) && precedingLayouts.equals(witness.precedingLayouts);
     }
     @Override public int hashCode() {
-        return Objects.hash(siteId, epoch, layoutRevision, layoutFingerprint, byIdBucket, cellCount, cellIdsFingerprint);
+        return Objects.hash(siteId, epoch, layoutRevision, layoutFingerprint, byIdBucket, cellCount, cellIdsFingerprint, precedingLayouts);
     }
     long epoch() { return epoch; }
     long layoutRevision() { return layoutRevision; }
@@ -258,7 +269,9 @@ final class FrontierV3ResourceFieldWitness {
         return this.siteId.equals(Objects.requireNonNull(siteId, "field witness site owner"))
                 && layout.revision() == layoutRevision && layout.cells().size() == cellCount
                 && layout.fingerprint().equals(layoutFingerprint)
-                && layout.cellIdsFingerprint().equals(cellIdsFingerprint);
+                && layout.cellIdsFingerprint().equals(cellIdsFingerprint)
+                && precedingLayouts.entrySet().stream().allMatch(entry -> layout.extensions().stream().anyMatch(extension ->
+                    extension.predecessorRevision() == entry.getKey() && extension.predecessorFingerprint().equals(entry.getValue())));
     }
 
     boolean matchesCycle(ResourceFieldCycle cycle) {
@@ -281,7 +294,43 @@ final class FrontierV3ResourceFieldWitness {
                 throw new IllegalStateException("field witness cannot skip an unresolved physical cell effect");
         }
         return new FrontierV3ResourceFieldWitness(siteId, current.epoch(), layoutRevision, layoutFingerprint,
-                byIdBucket, cellCount, cellIdsFingerprint, false);
+                byIdBucket, cellCount, cellIdsFingerprint, precedingLayouts, false);
+    }
+
+    /** Preserve old observed cells and seals; new cells require the exact admitted bare-ground observation. */
+    FrontierV3ResourceFieldWitness extend(ResourceFieldCycle current,
+            Map<ResourceFieldLayout.CellId, ResourceFieldPhysicalSurface.Condition> observedGround) {
+        var layout = current.layout();
+        var predecessor = layout.extensions().stream().filter(entry -> entry.predecessorRevision() == layoutRevision
+                && entry.predecessorCellCount() == cellCount && entry.predecessorFingerprint().equals(layoutFingerprint))
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("field has no exact geometry successor"));
+        if (!siteId.equals(current.siteId()) || current.epoch() < epoch || !current.pendingPlayerBreaks().isEmpty()
+                || byIdBucket.values().stream().flatMap(bucket -> bucket.values().stream()).anyMatch(cell -> cell.pending().isPresent()))
+            throw new IllegalArgumentException("field extension overlaps an unresolved physical effect");
+        var added = new LinkedHashMap<ResourceFieldLayout.CellId, ResourceFieldCycle.Soil>();
+        layout.extensions().stream().filter(entry -> entry.predecessorRevision() >= predecessor.predecessorRevision())
+                .forEach(entry -> added.putAll(entry.ground()));
+        if (!added.keySet().equals(observedGround.keySet())) throw new IllegalArgumentException("incomplete new field ground observation");
+        var cells = new LinkedHashMap<ResourceFieldLayout.CellId, Cell>();
+        byIdBucket.values().forEach(cells::putAll);
+        added.forEach((id, soil) -> {
+            var expected = new ResourceFieldPhysicalSurface.Condition(soil, ResourceFieldCycle.Crop.ABSENT, 0);
+            if (!expected.equals(observedGround.get(id)) || cells.containsKey(id))
+                throw new IllegalArgumentException("new field ground differs from its admitted predecessor");
+            cells.put(id, new Cell(expected, Optional.empty(), Optional.empty()));
+        });
+        var history = new LinkedHashMap<Long, String>(precedingLayouts);
+        layout.extensions().forEach(entry -> history.put(entry.predecessorRevision(), entry.predecessorFingerprint()));
+        return fromFlat(siteId, current.epoch(), layout.revision(), layout.fingerprint(), cells, history);
+    }
+
+    /** Append only the exact canonical acquisition predecessors. This grants observation, never a block write. */
+    FrontierV3ResourceFieldWitness extendDeclaration(ResourceFieldCycle current) {
+        var ground = new LinkedHashMap<ResourceFieldLayout.CellId, ResourceFieldPhysicalSurface.Condition>();
+        current.layout().extensions().stream().filter(extension -> extension.predecessorRevision() >= layoutRevision)
+                .forEach(extension -> extension.ground().forEach((id, soil) -> ground.put(id,
+                        new ResourceFieldPhysicalSurface.Condition(soil, ResourceFieldCycle.Crop.ABSENT, 0))));
+        return extend(current, ground);
     }
 
     /** Adopt only a WAL-accepted player postcondition under its retained physical witness. */
@@ -415,7 +464,7 @@ final class FrontierV3ResourceFieldWitness {
         if (!matchesCycle(cycle) || !siteId.equals(transition.siteId())
                 || transition.epoch() != cycle.epoch() || transition.layoutRevision() != layoutRevision
                 || cycle.pendingPlayerBreaks().containsKey(transition.cellId())
-                || transition.isHarvestAndReplant()
+                || transition.isHarvest()
                 || !transition.after().equals(ResourceFieldPhysicalSurface.Condition.of(cycle.cell(transition.cellId())))
                 || physicalBefore.disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT
                 || !physicalBefore.matches(this, transition.cellId())
@@ -522,14 +571,15 @@ final class FrontierV3ResourceFieldWitness {
                     || !effect.entityId().equals(hand.address().entityId()) || effect.authorityEpoch() != hand.authorityEpoch()
                     || effect.afterCount() != hand.quantity())
                 throw new IllegalArgumentException("field retirement has a foreign or unconfirmed historical actor hand");
-        } else if (pending.handConfirmed() || accepted.transition().isHarvestAndReplant()) {
+        } else if (pending.handConfirmed() || accepted.transition().isHarvest()) {
             throw new IllegalArgumentException("yielding field retirement has no paired physical hand");
         }
         return replace(receipt.cellId(), new Cell(prior.committed(), Optional.empty(), prior.foreign(), Optional.of(accepted)));
     }
 
 
-    /** A preaccepted canonical target can retire its own complete physical projection, never a farmer work effect. */
+    /** Retire an exactly completed preaccepted projection, never farmer work. Later canonical
+     * crop cycles may supersede its target; retirement records history, not current convergence. */
     FrontierV3ResourceFieldWitness acknowledgeCanonicalProjection(FrontierCanonicalState<ResourceFieldCycle> current,
                                                                    ResourceFieldLayout.CellId id, String causationId,
                                                                    FrontierV3ResourceFieldObservation.Review observed) {
@@ -548,7 +598,6 @@ final class FrontierV3ResourceFieldWitness {
                 || pending.completedSteps() != pending.transition().steps().size()
                 || prior.foreign().isPresent() || pending.handEffect().isPresent()
                 || !prior.committed().equals(pending.transition().after())
-                || !ResourceFieldPhysicalSurface.Condition.of(cycle.cell(id)).equalsOrGrowsFrom(prior.committed())
                 || observed.disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT
                 || !observed.matches(this, id))
             throw new IllegalArgumentException("field projection lacks the same accepted canonical and loaded physical result");
@@ -592,13 +641,18 @@ final class FrontierV3ResourceFieldWitness {
         var group = new HashMap<>(next.get(bucket)); group.put(id, replacement);
         next.put(bucket, Map.copyOf(group));
         return new FrontierV3ResourceFieldWitness(siteId, epoch, layoutRevision, layoutFingerprint, next, cellCount,
-                cellIdsFingerprint, false);
+                cellIdsFingerprint, precedingLayouts, false);
     }
 
     CompoundTag writeHeader() {
         var tag = new CompoundTag(); tag.putInt("format", FORMAT); tag.putString("site", siteId.value());
         tag.putLong("epoch", epoch); tag.putLong("layoutRevision", layoutRevision);
-        tag.putString("layoutFingerprint", layoutFingerprint); return tag;
+        tag.putString("layoutFingerprint", layoutFingerprint);
+        var history = new ListTag();
+        precedingLayouts.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
+            var value = new CompoundTag(); value.putLong("revision", entry.getKey()); value.putString("fingerprint", entry.getValue()); history.add(value);
+        });
+        tag.put("precedingLayouts", history); return tag;
     }
     Map<Long, Map<ResourceFieldLayout.CellId, Cell>> journalBuckets() { return byIdBucket; }
     ListTag writeBucket(long identity) { return writeCells(byIdBucket.get(identity)); }
@@ -614,7 +668,7 @@ final class FrontierV3ResourceFieldWitness {
                         var effect = new CompoundTag();
                         writeCondition(effect, "before", pending.transition().before());
                         writeCondition(effect, "after", pending.transition().after());
-                        effect.putString("mode", pending.transition().isHarvestAndReplant() ? "HARVEST_REPLANT" : "DIRECT");
+                        effect.putString("mode", pending.transition().isHarvest() ? "HARVEST" : "DIRECT");
                         effect.putInt("steps", pending.transition().steps().size());
                         effect.putString("cause", pending.causationId());
                         effect.putInt("completed", pending.completedSteps());
@@ -657,9 +711,19 @@ final class FrontierV3ResourceFieldWitness {
         if (!tag.contains("format", Tag.TAG_INT) || tag.getInt("format") != FORMAT
                 || !tag.contains("site", Tag.TAG_STRING) || !tag.contains("epoch", Tag.TAG_LONG)
                 || !tag.contains("layoutRevision", Tag.TAG_LONG)
-                || !tag.contains("layoutFingerprint", Tag.TAG_STRING) || !tag.contains("cells", Tag.TAG_LIST))
+                || !tag.contains("layoutFingerprint", Tag.TAG_STRING) || !tag.contains("cells", Tag.TAG_LIST)
+                || !tag.contains("precedingLayouts", Tag.TAG_LIST))
             throw new IllegalStateException("incompatible or incomplete physical field witness");
         long revision = tag.getLong("layoutRevision");
+        var history = new LinkedHashMap<Long, String>();
+        var predecessors = tag.getList("precedingLayouts", Tag.TAG_COMPOUND);
+        if (predecessors.size() > ResourceFieldLayout.MAX_CELLS) throw new IllegalArgumentException("unbounded field geometry history");
+        for (Tag element : predecessors) {
+            var value = (CompoundTag) element;
+            if (!value.contains("revision", Tag.TAG_LONG) || !value.contains("fingerprint", Tag.TAG_STRING)
+                    || history.put(value.getLong("revision"), value.getString("fingerprint")) != null)
+                throw new IllegalArgumentException("invalid field geometry predecessor");
+        }
         ListTag entries = tag.getList("cells", Tag.TAG_COMPOUND);
         if (entries.size() > ResourceFieldLayout.MAX_CELLS)
             throw new IllegalStateException("physical field witness has an invalid cell count");
@@ -699,8 +763,8 @@ final class FrontierV3ResourceFieldWitness {
                 ResourceFieldCellTransition transition = switch (effect.getString("mode")) {
                     case "DIRECT" -> ResourceFieldCellTransition.between(new SubjectId(tag.getString("site")),
                             tag.getLong("epoch"), revision, id, before, after);
-                    case "HARVEST_REPLANT" -> {
-                        var work = ResourceFieldCellTransition.harvestAndReplant(new SubjectId(tag.getString("site")),
+                    case "HARVEST" -> {
+                        var work = ResourceFieldCellTransition.harvest(new SubjectId(tag.getString("site")),
                                 tag.getLong("epoch"), revision, id, before);
                         if (!work.after().equals(after))
                             throw new IllegalStateException("harvest field projection has a foreign terminal condition");
@@ -758,7 +822,7 @@ final class FrontierV3ResourceFieldWitness {
                 throw new IllegalStateException("duplicate physical field cell claim");
         }
         return fromFlat(new SubjectId(tag.getString("site")), tag.getLong("epoch"), revision,
-                tag.getString("layoutFingerprint"), claims);
+                tag.getString("layoutFingerprint"), claims, history);
     }
 
     private static void writeCondition(CompoundTag parent, String key, ResourceFieldPhysicalSurface.Condition condition) {
@@ -774,10 +838,10 @@ final class FrontierV3ResourceFieldWitness {
         return new ResourceFieldPhysicalSurface.Condition(soil(tag.getInt("soil")), crop(tag.getInt("crop")), tag.getInt("stage"));
     }
     private static int soilTag(ResourceFieldCycle.Soil soil) {
-        return switch (soil) { case FARMLAND -> 1; case DIRT -> 2; default -> throw new IllegalArgumentException("unowned soil claim"); };
+        return switch (soil) { case FARMLAND -> 1; case DIRT -> 2; case GRASS -> 3; default -> throw new IllegalArgumentException("unowned soil claim"); };
     }
     private static ResourceFieldCycle.Soil soil(int tag) {
-        return switch (tag) { case 1 -> ResourceFieldCycle.Soil.FARMLAND; case 2 -> ResourceFieldCycle.Soil.DIRT;
+        return switch (tag) { case 1 -> ResourceFieldCycle.Soil.FARMLAND; case 2 -> ResourceFieldCycle.Soil.DIRT; case 3 -> ResourceFieldCycle.Soil.GRASS;
             default -> throw new IllegalArgumentException("unknown physical soil tag " + tag); };
     }
     private static int cropTag(ResourceFieldCycle.Crop crop) {

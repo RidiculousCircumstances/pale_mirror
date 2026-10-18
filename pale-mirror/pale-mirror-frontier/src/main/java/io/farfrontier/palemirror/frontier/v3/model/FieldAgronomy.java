@@ -29,7 +29,7 @@ public final class FieldAgronomy {
     public static long expectedYield(FrontierBootstrap bootstrap, ResourceFieldCycle cycle) {
         return cycle.layout().cells().stream().filter(cell -> {
             var soil = cycle.cell(cell.id()).soil();
-            return soil == ResourceFieldCycle.Soil.FARMLAND || soil == ResourceFieldCycle.Soil.DIRT;
+            return soil.cultivable();
         }).mapToLong(cell -> FieldAgronomy.yield(bootstrap, cell.crop())).sum();
     }
 }

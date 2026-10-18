@@ -88,11 +88,7 @@ final class FrontierV3ResourceFieldInitialPlan {
             var condition = snapshot.cell(cell.id()).committed();
             if (((index - water) & 1) == 0) {
                 position = cell.soil().support();
-                target = switch (condition.soil()) {
-                    case FARMLAND -> Blocks.FARMLAND.defaultBlockState();
-                    case DIRT -> Blocks.DIRT.defaultBlockState();
-                    default -> throw new IllegalArgumentException("initial projection cannot invent unknown soil");
-                };
+                target = FrontierV3FieldBlocks.soil(condition.soil());
             } else {
                 position = cell.crop();
                 target = switch (condition.crop()) {
@@ -123,6 +119,14 @@ final class FrontierV3ResourceFieldInitialPlan {
                         || current.isSolidRender(level, position)
                             && io.farfrontier.palemirror.internal.world.GeneratedTerrainBaseline.matches(level, position, current))
                         && !level.getBlockState(position.below()).isAir();
+        if (step.index() >= water) {
+            var id = site.layout().cells().get((step.index() - water) >>> 1).id();
+            var admitted = site.layout().extensions().stream().filter(extension -> extension.ground().containsKey(id))
+                    .map(extension -> extension.ground().get(id)).findFirst();
+            // Newly acquired land has an exact ground predecessor, not the authored graybox replacement policy.
+            if (admitted.isPresent()) baseline = cropStep ? current.is(Blocks.AIR)
+                    : FrontierV3FieldBlocks.soil(current) == admitted.orElseThrow();
+        }
         Disposition disposition = current.equals(step.target()) ? Disposition.APPLIED
                 : baseline ? Disposition.BEFORE : Disposition.FOREIGN;
         return new Review(step, disposition, Optional.of(current), false);

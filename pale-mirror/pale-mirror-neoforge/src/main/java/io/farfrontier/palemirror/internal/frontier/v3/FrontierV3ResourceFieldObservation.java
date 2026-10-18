@@ -93,8 +93,7 @@ final class FrontierV3ResourceFieldObservation {
         Objects.requireNonNull(crop, "observed field crop");
         Objects.requireNonNull(causationId, "field observation cause");
         if (causationId.isBlank()) throw new IllegalArgumentException("field observation has no exact cause");
-        ResourceFieldCycle.Soil ownedSoil = soil.is(Blocks.FARMLAND) ? ResourceFieldCycle.Soil.FARMLAND
-                : soil.is(Blocks.DIRT) ? ResourceFieldCycle.Soil.DIRT : null;
+        ResourceFieldCycle.Soil ownedSoil = FrontierV3FieldBlocks.soil(soil);
         if (ownedSoil != null && crop.is(Blocks.AIR))
             return new Owned(new ResourceFieldPhysicalSurface.Condition(ownedSoil, ResourceFieldCycle.Crop.ABSENT, 0));
         if (ownedSoil == ResourceFieldCycle.Soil.FARMLAND && crop.is(Blocks.WHEAT)) {
