@@ -127,18 +127,24 @@ public final class SupplyPlanner {
         }
     }
     public record Demand(long purchase, long production, long recoveryProduction, long protectedInput, long deadlineTicks,
-                         Set<Reason> reasons, Optional<String> process) {
+                         Set<Reason> reasons, Optional<String> process, long urgentPurchase) {
+        public Demand(long purchase, long production, long recoveryProduction, long protectedInput, long deadlineTicks,
+                      Set<Reason> reasons, Optional<String> process) {
+            this(purchase, production, recoveryProduction, protectedInput, deadlineTicks, reasons, process,
+                    reasons.contains(Reason.CONSUMPTION_DEADLINE) || reasons.contains(Reason.CRITICAL_PRODUCTION_DEADLINE) ? purchase : 0);
+        }
         public Demand(long purchase, long production, long protectedInput, long deadlineTicks,
                       Set<Reason> reasons, Optional<String> process) {
             this(purchase, production, 0, protectedInput, deadlineTicks, reasons, process);
         }
         public Demand {
             reasons = Set.copyOf(reasons); process = Objects.requireNonNull(process);
-            if (purchase < 0 || production < 0 || recoveryProduction < 0 || protectedInput < 0 || deadlineTicks < 0)
+            if (purchase < 0 || production < 0 || recoveryProduction < 0 || protectedInput < 0 || deadlineTicks < 0
+                    || urgentPurchase < 0 || urgentPurchase > purchase)
                 throw new IllegalArgumentException("invalid supply demand");
         }
         public boolean urgent(long leadTicks) {
-            return (reasons.contains(Reason.CONSUMPTION_DEADLINE) || reasons.contains(Reason.CRITICAL_PRODUCTION_DEADLINE))
+            return urgentPurchase > 0 && (reasons.contains(Reason.CONSUMPTION_DEADLINE) || reasons.contains(Reason.CRITICAL_PRODUCTION_DEADLINE))
                     && deadlineTicks <= leadTicks;
         }
     }
@@ -218,7 +224,8 @@ public final class SupplyPlanner {
             var product = requireStock(stocks, committed.product());
             long deadline = product.policy().essential() ? product.deadline() : Long.MAX_VALUE;
             dependency(stocks, processes, demands, allocatedBatches, resources, committed.resource(), committed.quantity(), committed.quantity(),
-                    deadline, Set.of(), committed.reason(), new HashSet<>(Set.of(committed.product())), sourcing);
+                    deadline, deadline <= stocks.get(committed.resource()).policy().leadTicks() ? committed.quantity() : 0,
+                    Set.of(), committed.reason(), new HashSet<>(Set.of(committed.product())), sourcing);
         }
         for (var entry : stocks.entrySet().stream().sorted(Comparator
                 .<Map.Entry<String, Stock>>comparingLong(e -> e.getValue().policy().essential() ? e.getValue().deadline() : Long.MAX_VALUE)
@@ -242,7 +249,8 @@ public final class SupplyPlanner {
                 var combined = EnumSet.copyOf(reasons); combined.addAll(retained.reasons());
                 demands.put(entry.getKey(), new Demand(Math.addExact(retained.purchase(), pending), retained.production(),
                         retained.recoveryProduction(), retained.protectedInput(), Math.min(deadline, retained.deadlineTicks()),
-                        combined, retained.process()));
+                        combined, retained.process(), Math.min(Math.addExact(retained.purchase(), pending),
+                                Math.max(retained.urgentPurchase(), consumptionShortfall(stock, retained.production())))));
             }
             if (missing > pending) expand(stocks, processes, demands, allocatedBatches, resources,
                     entry.getKey(), missing - pending, deadline, reasons, new HashSet<>(), sourcing);
@@ -285,16 +293,21 @@ public final class SupplyPlanner {
             produced = Math.multiplyExact(secured, process.outputPerBatch());
             recovery = Math.multiplyExact(batches - secured, process.outputPerBatch());
             if (batches > 0) {
-                long inputDeadline = deadline == Long.MAX_VALUE ? Long.MAX_VALUE : Math.max(0,
-                        deadline - process.completionTicks(allocated + batches));
-                for (var input : process.inputs().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList())
+                for (var input : process.inputs().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+                    var timing = ProductionInputTiming.assess(stock, stocks.get(input.getKey()), process, allocated, batches,
+                            resources.inputRequired(input.getKey()), deadline, input.getValue(), 1, 0);
                     dependency(stocks, capacities, demands, allocatedBatches, resources, input.getKey(), Math.multiplyExact(batches, input.getValue()),
                             Math.multiplyExact(protectedBatches, input.getValue()),
-                            inputDeadline, reasons, Reason.PRODUCTION_INPUT, ancestors, sourcing);
+                            timing.deadline(), timing.urgentRequired(), reasons, Reason.PRODUCTION_INPUT, ancestors, sourcing);
+                }
                 if (fuel.isPresent()) {
+                    var timing = ProductionInputTiming.assess(stock, stocks.get(fuel.orElseThrow().item()), process, allocated, batches,
+                            resources.inputRequired(fuel.orElseThrow().item()), deadline, process.heatPerBatch(),
+                            process.fuels().get(fuel.orElseThrow().item()),
+                            Math.max(0, process.availableHeat() - Math.multiplyExact(allocated, process.heatPerBatch())));
                     dependency(stocks, capacities, demands, allocatedBatches, resources, fuel.orElseThrow().item(), fuel.orElseThrow().quantity(),
                             protectedFuel.map(FuelRequirement::quantity).orElse(0L),
-                            inputDeadline, reasons, Reason.PRODUCTION_FUEL, ancestors, sourcing);
+                            timing.deadline(), timing.urgentRequired(), reasons, Reason.PRODUCTION_FUEL, ancestors, sourcing);
                 }
             }
         }
@@ -306,26 +319,37 @@ public final class SupplyPlanner {
                 Math.addExact(previous.production(), produced),
                 Math.addExact(previous.recoveryProduction(), recovery), previous.protectedInput(),
                 Math.min(previous.deadlineTicks(), deadline), combined,
-                produced + recovery > 0 ? Optional.of(selected.orElseThrow().id()) : previous.process()));
+                produced + recovery > 0 ? Optional.of(selected.orElseThrow().id()) : previous.process(),
+                Math.min(Math.addExact(previous.purchase(), requested - produced), Math.max(previous.urgentPurchase(),
+                        consumptionShortfall(stock, Math.addExact(previous.production(), produced))))));
         ancestors.remove(item);
     }
+    private static long consumptionShortfall(Stock stock, long produced) {
+        return stock.consumptionUnits() == 0 ? 0 : Math.max(0, Math.ceilDiv(Math.multiplyExact(stock.consumptionUnits(),
+                stock.policy().leadTicks()), stock.consumptionPeriodTicks()) + 1 - stock.covered() - produced);
+    }
     private void dependency(Map<String, Stock> stocks, List<Process> capacities, Map<String, Demand> demands, Map<String, Long> allocatedBatches, SupplyResources resources,
-                            String item, long required, long protectedQuantity, long deadline, Set<Reason> reasons,
+                            String item, long required, long protectedQuantity, long deadline, long urgentRequired, Set<Reason> reasons,
                             Reason dependency, Set<String> ancestors, SourcingMarket.Allocation sourcing) {
         var stock = requireStock(stocks, item); var previous = demands.get(item);
         long total = resources.requireInput(item, required);
+        long urgentMissing = Math.max(0, resources.requireUrgentInput(item, urgentRequired) - stock.covered());
         long protection = Math.addExact(previous.protectedInput(), protectedQuantity);
         var combined = EnumSet.noneOf(Reason.class); combined.addAll(previous.reasons()); combined.add(dependency);
         long missing = Math.max(0, total - stock.covered());
         if (missing > 0 && deadline <= stock.policy().leadTicks()) combined.add(Reason.CRITICAL_PRODUCTION_DEADLINE);
         demands.put(item, new Demand(previous.purchase(), previous.production(), previous.recoveryProduction(), protection,
-                Math.min(previous.deadlineTicks(), deadline), combined, previous.process()));
+                Math.min(previous.deadlineTicks(), deadline), combined, previous.process(), previous.urgentPurchase()));
         long additional = Math.max(0, missing - previous.purchase() - previous.production());
         if (additional > 0) {
             combined.addAll(reasons); combined.add(dependency);
             if (deadline <= stock.policy().leadTicks()) combined.add(Reason.CRITICAL_PRODUCTION_DEADLINE);
             expand(stocks, capacities, demands, allocatedBatches, resources, item, additional, deadline, combined, ancestors, sourcing);
         }
+        var result = demands.get(item);
+        demands.put(item, new Demand(result.purchase(), result.production(), result.recoveryProduction(), result.protectedInput(),
+                result.deadlineTicks(), result.reasons(), result.process(), Math.min(result.purchase(),
+                Math.max(result.urgentPurchase(), urgentMissing - result.production()))));
     }
     private static long potentialBatches(Process process, long allocated, long amount, SupplyResources resources) {
         return Math.min(resources.labourBatches(process), Math.min(process.maximumBatches() - allocated, amount / process.outputPerBatch()));

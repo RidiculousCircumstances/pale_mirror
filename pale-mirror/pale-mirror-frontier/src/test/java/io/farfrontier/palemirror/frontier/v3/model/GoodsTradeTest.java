@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
+import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldPayloadCodecs;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget;
 import org.junit.jupiter.api.Test;
@@ -174,11 +175,10 @@ class GoodsTradeTest {
             assertEquals(EngineStatus.Kind.ACTIVE, advance.status().kind(), advance.status().failureDetail().orElse("active"));
         }
         var state = engine.canonicalState().state();
-        var shipment = state.shipments().shipments().get(ShipmentFixture.ID);
-        assertEquals(Shipment.Status.DELIVERED, shipment.status());
-        assertTrue(shipment.reception().isEmpty());
+        assertFalse(state.shipments().shipments().containsKey(ShipmentFixture.ID),
+                "an accepted reference-closed delivery is not executable transport history");
         assertTrue(state.companies().goodsTrade().contracts().get(new SubjectId("contract:development-goods")).fulfilled());
-        assertFalse(engine.checkpoint().schedules().stream().anyMatch(s -> s.subject().equals(shipment.id())));
+        assertFalse(engine.checkpoint().schedules().stream().anyMatch(s -> s.subject().equals(ShipmentFixture.ID)));
     }
     @Test void partialUnloadingRetainsTheCourierAndPaysOnlyTheExactReceivedPortionAcrossRecovery() {
         var state = reserved(); var shipment = shipment(state); var actor = shipment.execution().actorId();
@@ -467,14 +467,14 @@ class GoodsTradeTest {
         assertEquals(shipment.execution(), state.actorExecutions().actors().get(actor).current().orElseThrow());
         assertEquals(state, codec.decode(codec.encode(state)));
     }
-    private static final SubjectId SELLER = id("settlement:1"), BUYER = id("settlement:2");
+    static final SubjectId SELLER = id("settlement:1"), BUYER = id("settlement:2");
     private static final SubjectId SOURCE = FrontierWorldState.depotId(SELLER), RECEIVER = FrontierWorldState.depotId(BUYER);
     private static final SubjectId SOURCE_ACCOUNT = ReferenceContainerCustody.scopeId(SOURCE), RECEIVER_ACCOUNT = ReferenceContainerCustody.scopeId(RECEIVER);
     private static final SubjectId LOT = id("lot:bootstrap-1-wheat"), CLAIM = id("claim:goods-wheat"), CONTRACT = id("contract:goods-wheat");
-    private static final SubjectId HOLD = id("reservation:goods-wheat"), SELL_ORDER = id("order:goods-sell"), BUY_ORDER = id("order:goods-buy");
+    static final SubjectId HOLD = id("reservation:goods-wheat"), SELL_ORDER = id("order:goods-sell"), BUY_ORDER = id("order:goods-buy");
     private static final GoodsTradeParty SELLER_PARTY = new GoodsTradeParty(SELLER, EconomicOwnerKind.SETTLEMENT_TREASURY);
     private static final GoodsTradeParty BUYER_PARTY = new GoodsTradeParty(BUYER, EconomicOwnerKind.SETTLEMENT_TREASURY);
-    private static final FixedScalar PRICE = FixedScalar.whole(1);
+    static final FixedScalar PRICE = FixedScalar.whole(1);
 
     @Test void courierActuallyWalksBothColdLegsWithTheCommonClockAndDoesNotSellOnArrival() {
         FrontierWorldState state = reserved(); Shipment shipment = shipment(state);
@@ -567,6 +567,7 @@ class GoodsTradeTest {
         assertThrows(IllegalArgumentException.class, () -> fact(completed, BUYER,
                 new GoodsTradeAccepted(receipt("receipt:goods-two", 1, 40, "lot:goods-two"))));
     }
+
 
     @Test void sellerCannotInventBuyerConsentOrSpendSomeoneElsesBalance() {
         FrontierWorldState state = initial();
@@ -724,7 +725,9 @@ class GoodsTradeTest {
     }
 
     @Test void independentShipmentPortionCanArriveWhileTheOtherPortionIsCancelledWithoutPayment() {
-        FrontierWorldState state = reserved(); SubjectId child = id("claim:shipment-one");
+        var state = fact(fact(initial(), SELLER, new GoodsTradeOrderPlaced(sellOrder())), BUYER, new GoodsTradeOrderPlaced(buyOrder()));
+        state = fact(state, SELLER, new GoodsTradeReserved(reservation().contract().quoteDelivery(new FixedScalar(FixedScalar.SCALE / 2)), reservation().allocations()));
+        SubjectId child = id("claim:shipment-one");
         state = fact(state, SELLER, new GoodsTradeClaimPartitioned(CONTRACT,
                 new ResourceClaimPartition(SOURCE_ACCOUNT, CLAIM, child, Map.of(LOT, 20))));
         assertEquals(Map.of(CLAIM, 40, child, 20), state.companies().goodsTrade().contracts().get(CONTRACT).outstandingClaims());
@@ -743,7 +746,7 @@ class GoodsTradeTest {
         state = fact(state, SELLER, cancelled);
         assertTrue(state.companies().goodsTrade().contracts().get(CONTRACT).terminal());
         assertFalse(state.companies().goodsTrade().contracts().get(CONTRACT).fulfilled());
-        assertEquals(beforeBuyer.minus(FixedScalar.whole(20)), state.inventory().economics().require(BUYER).balance());
+        assertEquals(beforeBuyer.minus(FixedScalar.whole(30)), state.inventory().economics().require(BUYER).balance());
         assertFalse(state.inventory().economics().reservations().containsKey(HOLD));
         assertEquals(44, state.inventory().fungibleResources().accounts().get(SOURCE_ACCOUNT).lotQuantities().get(LOT));
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
@@ -833,7 +836,7 @@ class GoodsTradeTest {
         assertEquals(2, partitioned.bindings().get(before.id()).claimQuantities().size());
     }
 
-    private static FrontierWorldState initial() {
+    static FrontierWorldState initial() {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:goods-trade-core"), 17));
     }
 
@@ -915,15 +918,15 @@ class GoodsTradeTest {
         return state.bootstrap().settlements().stream().filter(s -> s.id().equals(settlementId)).findFirst().orElseThrow()
                 .structures().stream().filter(s -> s.kind() == StructureKind.DEPOT).findFirst().orElseThrow().id();
     }
-    private static GoodsTradeOrder sellOrder() {
+    static GoodsTradeOrder sellOrder() {
         return new GoodsTradeOrder(SELL_ORDER, SELLER_PARTY, BUYER_PARTY, GoodsTradeOrder.Side.SELL, SOURCE,
                 "minecraft:wheat", 60, 0, PRICE, 10_000);
     }
-    private static GoodsTradeOrder buyOrder() {
+    static GoodsTradeOrder buyOrder() {
         return new GoodsTradeOrder(BUY_ORDER, BUYER_PARTY, SELLER_PARTY, GoodsTradeOrder.Side.BUY, RECEIVER,
                 "minecraft:wheat", 60, 0, FixedScalar.whole(3), 10_000);
     }
-    private static GoodsTradeReserved reservation() {
+    static GoodsTradeReserved reservation() {
         var contract = new GoodsTradeContract(CONTRACT, SELL_ORDER, BUY_ORDER, SELLER_PARTY, BUYER_PARTY, new GoodsTradeFulfillment(GoodsTradeFulfillment.Mode.SELLER_DELIVERY, SELLER_PARTY), SOURCE, RECEIVER,
                 "minecraft:wheat", 60, PRICE, HOLD, 0, Map.of(CLAIM, 60), Map.of());
         var claim = new ClaimAllocation(CLAIM, CONTRACT, SELLER, "minecraft:wheat", 60, Map.of(LOT, 60), ClaimPurpose.GOODS_TRADE);
@@ -934,7 +937,7 @@ class GoodsTradeTest {
         return fact(fact(fact(initial(), SELLER, new GoodsTradeOrderPlaced(sellOrder())), BUYER,
                 new GoodsTradeOrderPlaced(buyOrder())), SELLER, reservation());
     }
-    private static FrontierWorldState arrive(FrontierWorldState state) {
+    static FrontierWorldState arrive(FrontierWorldState state) {
         // Shared COLD handoff fixture at declared stations. Body placement is test setup,
         // not navigation, elapsed travel or native unloading acceptance.
         SubjectId actor = state.bootstrap().settlements().getFirst().residents().getFirst().id();
@@ -967,11 +970,11 @@ class GoodsTradeTest {
         actors.put(actor, actors.get(actor).withBody(BodyPosition.above(station)));
         return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
     }
-    private static GoodsTradeAcceptance receipt(String id, long revision, int quantity, String child) {
+    static GoodsTradeAcceptance receipt(String id, long revision, int quantity, String child) {
         return new GoodsTradeAcceptance(id(id), CONTRACT, revision,
                 new ResourceTitleTransfer(RECEIVER_ACCOUNT, CLAIM, SELLER, BUYER, Map.of(LOT, quantity), Map.of(LOT, id(child))));
     }
-    private static FrontierWorldState fact(FrontierWorldState state, SubjectId actor, FrontierPayload payload) {
+    static FrontierWorldState fact(FrontierWorldState state, SubjectId actor, FrontierPayload payload) {
         return fact(state, actor, payload, 0);
     }
     private static FrontierWorldState fact(FrontierWorldState state, SubjectId actor, FrontierPayload payload, long atTick) {

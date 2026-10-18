@@ -13,8 +13,8 @@ final class FrontierV3TownTradeCards {
     private record Flow(boolean sold, SubjectId peer, String item) { }
     private record Total(long quantity, BigDecimal value, int receipts, long lastTick) {
         Total add(MarketPriceHistory.Sale sale) {
-            return new Total(quantity + sale.quantity(), value.add(BigDecimal.valueOf(sale.unitPrice().raw(), 6)
-                    .multiply(BigDecimal.valueOf(sale.quantity()))), receipts + 1, Math.max(lastTick, sale.atTick()));
+            return new Total(quantity + sale.quantity(), value.add(BigDecimal.valueOf(sale.totalPrice().raw(), 6)),
+                    receipts + 1, Math.max(lastTick, sale.atTick()));
         }
     }
     private FrontierV3TownTradeCards() { }

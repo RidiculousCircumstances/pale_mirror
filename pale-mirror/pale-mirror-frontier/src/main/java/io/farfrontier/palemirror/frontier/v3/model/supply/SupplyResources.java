@@ -8,12 +8,17 @@ final class SupplyResources {
     private final Map<String, String> fuels = new HashMap<>();
     private final Map<String, Long> processReady = new HashMap<>();
     private final Map<String, Long> inputRequirements = new HashMap<>();
+    private final Map<String, Long> urgentInputRequirements = new HashMap<>();
     private final Map<String, Long> labour = new TreeMap<>();
 
     long requireInput(String item, long quantity) {
         return inputRequirements.merge(item, quantity, Math::addExact);
     }
     Map<String, Long> inputRequirements() { return Map.copyOf(inputRequirements); }
+    long inputRequired(String item) { return inputRequirements.getOrDefault(item, 0L); }
+    long requireUrgentInput(String item, long quantity) {
+        return urgentInputRequirements.merge(item, quantity, Math::addExact);
+    }
 
     SupplyResources(Map<String, SupplyPlanner.Stock> stocks, List<SupplyPlanner.Process> processes) {
         for (var process : processes) process.labourCapacity().forEach((worker, ticks) -> {

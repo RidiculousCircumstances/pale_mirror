@@ -73,6 +73,9 @@ final class FrontierV3ObjectBoardExecutor {
         var index = BOARD_INDEXES.get(runtime);
         for (int count = 0; count < MAX_BOARDS_PER_TICK && cursor.hasNext(); count++) {
             var slot = cursor.next();
+            // The stable slot already supplies position. Do not derive stock,
+            // field or economy text for a board with no physical recipient.
+            if (!FrontierV3SceneExecutor.entityStorageReady(level, position(slot))) continue;
             var board = index.contains(slot.ownerId()) ? index.render(state, slot.ownerId()) : slot;
             project(level, ledger, runtime, state, board);
         }

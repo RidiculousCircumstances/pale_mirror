@@ -34,9 +34,26 @@ class ResourceHaulingTest {
         moved = moved.withActorBody(shipment.execution().actorId(), receiver.station().standingBody());
         moved = ShipmentStateSupport.transferCold(moved, shipment.id(), shipment.id(), 2, Shipment.Status.CARRYING);
         var delivered = moved.shipments().shipments().get(shipment.id());
+        var pendingReceipt = moved;
+        assertThrows(IllegalArgumentException.class, () -> ShipmentStateSupport.retire(pendingReceipt,
+                shipment.id(), shipment.id(), delivered.revision()), "unaccepted physical receipt remains a live obligation");
         moved = InternalShipmentStateSupport.receive(moved, shipment.id(), new InternalShipmentReceived(shipment.id(),
                 delivered.revision(), delivered.reception().orElseThrow().id()));
         var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(moved));
+        assertTrue(ShipmentStateSupport.closedForRetirement(recovered, recovered.shipments().shipments().get(shipment.id())));
+        var retired = ShipmentRetention.collect(recovered, ShipmentRetention.MAX_RETIREMENTS, 1202);
+        assertFalse(retired.state().shipments().shipments().containsKey(shipment.id()));
+        assertEquals(recovered.inventory(), retired.state().inventory(), "cleanup does not repay or move delivered cargo");
+        assertEquals(retired.state(), new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(retired.state())));
+        var proposal = retired.events().getFirst();
+        var event = new FrontierEvent(FrontierEvent.SCHEMA_VERSION, new EventId("event:retention"),
+                new TransactionId("transaction:retention"), recovered.bootstrap().worldId(), new Revision(1),
+                new SimInstant(1202), proposal.subject(), CauseChain.root(new CommandId("command:retention")), proposal.payload());
+        var owner = new ShipmentProcessModule(); var continuation = ShipmentProcess.progress(shipment.id(), 1202);
+        assertEquals(List.of(), owner.retiredSchedules(recovered, retired.state(), event, List::of),
+                "old safely completed records may already have no continuation");
+        assertEquals(List.of(continuation), owner.retiredSchedules(recovered, retired.state(), event, () -> List.of(continuation)),
+                "the kernel cancels an exact still-present continuation in the same retirement transaction");
         var next = InternalShipmentPlanning.prepare(recovered, workers.get(1), source, receiver, "minecraft:coal", 1, 1202).orElseThrow();
         assertEquals(1, next.shipment().quantity(), "a partial next batch becomes eligible after actual delivery, including recovery");
     }

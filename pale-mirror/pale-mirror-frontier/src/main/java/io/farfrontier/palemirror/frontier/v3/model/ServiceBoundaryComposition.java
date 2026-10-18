@@ -103,8 +103,23 @@ public final class ServiceBoundaryComposition {
         ordered.forEach(value -> {
             var point = geometry(state, value.identity());
             points.add(point);
-            point.boundary().occupiedSurfaces().forEach(surface -> surfaces.putIfAbsent(surface, value));
         });
+        // A broad input version can change without changing any local access
+        // geometry. Keep the spatial index instead of copying every apron.
+        if (turnoverIndex != null && turnoverIndex.declarations() == declared
+                && points.size() == turnoverIndex.points().size()) {
+            boolean unchanged = true;
+            for (int i = 0; unchanged && i < points.size(); i++) unchanged = points.get(i) == turnoverIndex.points().get(i);
+            if (unchanged) {
+                turnoverIndex = new TurnoverIndex(declared, versions, knowledge, residents,
+                        turnoverIndex.points(), turnoverIndex.bySurface());
+                return turnoverIndex;
+            }
+        }
+        for (int index = 0; index < ordered.size(); index++) {
+            var value = ordered.get(index);
+            points.get(index).boundary().occupiedSurfaces().forEach(surface -> surfaces.putIfAbsent(surface, value));
+        }
         // A real service boundary takes precedence over another facility's nearby waiting/egress apron.
         for (int index = 0; index < ordered.size(); index++) {
             var value = ordered.get(index);

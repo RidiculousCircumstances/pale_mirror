@@ -76,7 +76,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resident_health_transition", "frontier.settlement_quarantine_transition",
             "frontier.medical_treatment_started", "frontier.medical_treatment_transition",
             "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff");
-    private static final Set<String> ACTOR_MOVEMENT = types(
+    private static final Set<String> ACTOR_MOVEMENT = types("frontier.actor_movement_grounded",
             "frontier.actor_movement_cold_advanced", "frontier.actor_movement_cold_route_started",
             "frontier.actor_movement_hot_observed", "frontier.actor_movement_interrupted", "frontier.actor_movement_started");
     private static final Set<String> ACTOR_EXECUTION = types("frontier.actor_execution_resumed", "frontier.actor_presence_started");
@@ -874,7 +874,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff", "frontier.physical_delta_observed", "frontier.physical_deltas_observed",
                     "frontier.physical_intent_prepared", "frontier.physical_intent_transition", "frontier.structure_damaged", "frontier.resource_deposited",
                     "frontier.exact_item_custody_changed", "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition"));
-            case "actor-movement" -> types("frontier.actor_movement_cold_advanced", "frontier.actor_movement_hot_observed", "frontier.actor_movement_interrupted",
+            case "actor-movement" -> types("frontier.actor_movement_grounded", "frontier.actor_movement_cold_advanced", "frontier.actor_movement_hot_observed", "frontier.actor_movement_interrupted",
                     "frontier.actor_movement_cold_route_started",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled");
             case "economy" -> types(

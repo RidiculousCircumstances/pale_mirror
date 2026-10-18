@@ -5,6 +5,31 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SupplyPlannerTest {
+    @Test void reserveCompletionDoesNotInventAnImmediateInputShortage() {
+        var stocks = Map.of("bread", stock(19, 0, 300, 1, FOOD),
+                "wheat", stock(414, 0, 0, 0, MATERIAL), "coal", stock(0, 0, 0, 0, MATERIAL));
+        var process = new SupplyPlanner.Process("bakery", "bread", 1, Map.of("wheat", 3),
+                80, Map.of("coal", 1600L), 0, 100, 10, 300);
+        var plan = new SupplyPlanner().plan(stocks, List.of(process));
+        assertTrue(plan.require("wheat").purchase() > 0);
+        assertTrue(plan.require("wheat").deadlineTicks() > MATERIAL.leadTicks());
+        assertFalse(plan.require("wheat").urgent(MATERIAL.leadTicks()));
+        assertEquals(0, plan.require("wheat").urgentPurchase());
+    }
+
+    @Test void urgentRestartQuantityIsSeparateFromTheWholeDesiredReserve() {
+        var stocks = Map.of("bread", stock(0, 0, 100, 1, FOOD),
+                "wheat", stock(0, 0, 0, 0, MATERIAL), "coal", stock(0, 0, 0, 0, MATERIAL));
+        var process = new SupplyPlanner.Process("bakery", "bread", 1, Map.of("wheat", 3),
+                80, Map.of("coal", 1600L), 0, 100, 10, 100);
+        var plan = new SupplyPlanner().plan(stocks, List.of(process));
+        assertEquals(300, plan.require("wheat").purchase());
+        assertEquals(6, plan.require("wheat").urgentPurchase());
+        assertEquals(5, plan.require("coal").purchase());
+        assertEquals(1, plan.require("coal").urgentPurchase());
+        assertEquals(2, plan.require("bread").urgentPurchase());
+    }
+
     @Test void productionPriorityUsesDeadlineAndRelativeShortageNotACommodityNameOrRawStackSize() {
         var urgent = new SupplyPlanner.Demand(1, 0, 1, 100,
                 Set.of(SupplyPlanner.Reason.CRITICAL_PRODUCTION_DEADLINE, SupplyPlanner.Reason.PRODUCTION_FUEL), Optional.empty());

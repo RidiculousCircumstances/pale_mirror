@@ -79,6 +79,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -103,7 +104,13 @@ class FrontierV3ServerRuntimeTest {
             delayed.observeOrdinaryHostTick();
         }
         assertEquals(120, delayed.pendingOrdinaryTicks());
-        while (delayed.pendingOrdinaryTicks() > 0) delayed.advanceOrdinaryTime(budget).orElseThrow();
+        int turns = 0;
+        while (delayed.pendingOrdinaryTicks() > 0) {
+            var result = delayed.advanceOrdinaryTime(budget).orElseThrow();
+            assertDoesNotThrow(() -> result.consumed().remaining(budget));
+            turns++;
+        }
+        assertTrue(turns < 120, "unused turn capacity must repay more than one elapsed tick");
         assertEquals(ordinary.checkpointImage().orElseThrow(), delayed.checkpointImage().orElseThrow());
         delayed.observeOrdinaryHostTick();
         delayed.advance(3, budget).orElseThrow();

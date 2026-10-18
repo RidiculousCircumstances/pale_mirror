@@ -223,7 +223,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             throw new IllegalArgumentException("simulation time cannot move backwards");
         }
         if (status.kind() == EngineStatus.Kind.QUARANTINED) {
-            return advanceResult(List.of(), Optional.empty());
+            return advanceResult(List.of(), Optional.empty(), WorkConsumption.NONE);
         }
         admissionIndex.begin(budget);
         schedules.beginExecutionPass(target, budget.maxClassificationEvaluations());
@@ -239,14 +239,14 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             } catch (RuntimeException error) {
                 quarantine(CauseChain.root(new CommandId("scheduler:allocation")),
                         KernelQuarantineReporter.Boundary.DUE_TRANSACTION, error);
-                return advanceResult(completed, Optional.empty());
+                return advanceResult(completed, Optional.empty(), consumption(budget, completed.size(), weight));
             }
             if (action == null) break;
             try {
                 if (!schedules.containsExact(action) || action.dueAt().compareTo(target) > 0)
                     throw new IllegalStateException("ready index returned an obsolete or future action");
                 int cost = scheduledPlanner.admissionWeight(state, action);
-                if (cost < 1 || cost > budget.maxWeight())
+                if (cost < 1 || cost > budget.maxActionWeight())
                     throw new IllegalStateException("declared action cost cannot fit its execution budget: " + cost);
                 if (cost > budget.maxWeight() - weight) { blocked = action; break; }
                 var decision = admissionIndex.recheckSelected(state, action);
@@ -258,7 +258,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 if (transactions.size() == limits.maxTransactions()) {
                     quarantine(CauseChain.root(new CommandId("scheduler:" + action.id().value().replace(':', '/'))),
                             KernelQuarantineReporter.Boundary.DUE_CAPACITY, new IllegalStateException("transaction retention capacity exhausted during due work"));
-                    return advanceResult(completed, Optional.of(action));
+                    return advanceResult(completed, Optional.of(action), consumption(budget, completed.size(), weight));
                 }
                 List<ProposedEvent> planned;
                 SimInstant executionAt = laterOf(laterOf(instant, action.dueAt()), schedules.readyNotBefore(action));
@@ -287,7 +287,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 quarantine(CauseChain.root(new CommandId("scheduler:" + action.id().value().replace(':', '/'))),
                         KernelQuarantineReporter.Boundary.DUE_TRANSACTION,
                         new IllegalStateException("scheduled action " + action.kind() + "/" + action.id().value() + " failed", error));
-                return advanceResult(completed, Optional.of(action));
+                return advanceResult(completed, Optional.of(action), consumption(budget, completed.size(), weight));
             }
         }
         instant = target;
@@ -296,7 +296,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         if (blocked == null && admissionIndex.remainingChecks() == 0) blocked = schedules.firstChecking(target);
         var deferred = Optional.ofNullable(blocked).or(admissionIndex::deferredAction);
         observeQueue(target, schedules.size(), schedules.parkedCount(), deferred);
-        return advanceResult(completed, deferred);
+        return advanceResult(completed, deferred, consumption(budget, completed.size(), weight));
     }
 
     @Override
@@ -558,9 +558,14 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         status = new EngineStatus(EngineStatus.Kind.QUARANTINED, boundedFailure(error));
     }
 
-    private AdvanceResult advanceResult(List<TransactionId> completed, Optional<ScheduledAction> deferred) {
+    private WorkConsumption consumption(WorkBudget budget, int actions, int weight) {
+        return new WorkConsumption(actions, weight, budget.maxClassificationEvaluations() - admissionIndex.remainingChecks(),
+                budget.maxExecutionEvaluations() - admissionIndex.remainingExecutionChecks());
+    }
+
+    private AdvanceResult advanceResult(List<TransactionId> completed, Optional<ScheduledAction> deferred, WorkConsumption consumed) {
         long lag = deferred.map(action -> Math.max(0L, instant.ticks() - action.dueAt().ticks())).orElse(0L);
-        return new AdvanceResult(revision, instant, completed, deferred, lag, status);
+        return new AdvanceResult(revision, instant, completed, deferred, lag, status, consumed);
     }
 
     private void pruneReceipts() {

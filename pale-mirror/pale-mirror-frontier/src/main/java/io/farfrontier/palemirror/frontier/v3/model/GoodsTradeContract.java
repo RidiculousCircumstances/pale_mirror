@@ -10,31 +10,44 @@ import java.util.Objects;
 public record GoodsTradeContract(SubjectId id, SubjectId sellOrderId, SubjectId buyOrderId,
                                 GoodsTradeParty seller, GoodsTradeParty buyer, GoodsTradeFulfillment fulfillment,
                                 SubjectId sourceContainerId, SubjectId receiverContainerId,
-                                String itemKind, int quantity, FixedScalar deliveredUnitPrice,
+                                String itemKind, int quantity, FixedScalar goodsUnitPrice,
                                 SubjectId financialReservationId, long revision,
                                 Map<SubjectId, Integer> outstandingClaims,
                                 Map<SubjectId, GoodsTradeAcceptance> acceptances,
                                 Map<SubjectId, GoodsTradeDisposition> dispositions,
-                                int acceptedQuantity, int disposedQuantity) {
+                                int acceptedQuantity, int disposedQuantity, FixedScalar deliveryUnitPrice) {
     public static final int MAX_RECEIPTS = 128;
     public GoodsTradeContract(SubjectId id, SubjectId sellOrderId, SubjectId buyOrderId,
+            GoodsTradeParty seller, GoodsTradeParty buyer, GoodsTradeFulfillment fulfillment,
+            SubjectId sourceContainerId, SubjectId receiverContainerId, String itemKind, int quantity,
+            FixedScalar goodsUnitPrice, SubjectId financialReservationId, long revision,
+            Map<SubjectId, Integer> outstandingClaims, Map<SubjectId, GoodsTradeAcceptance> acceptances,
+            Map<SubjectId, GoodsTradeDisposition> dispositions, int acceptedQuantity, int disposedQuantity) {
+        this(id, sellOrderId, buyOrderId, seller, buyer, fulfillment, sourceContainerId, receiverContainerId,
+                itemKind, quantity, goodsUnitPrice, financialReservationId, revision, outstandingClaims, acceptances,
+                dispositions, acceptedQuantity, disposedQuantity, FixedScalar.ZERO);
+    }
+    public GoodsTradeContract(SubjectId id, SubjectId sellOrderId, SubjectId buyOrderId,
                               GoodsTradeParty seller, GoodsTradeParty buyer, GoodsTradeFulfillment fulfillment, SubjectId sourceContainerId,
-                              SubjectId receiverContainerId, String itemKind, int quantity, FixedScalar deliveredUnitPrice,
+                              SubjectId receiverContainerId, String itemKind, int quantity, FixedScalar goodsUnitPrice,
                               SubjectId financialReservationId, long revision, Map<SubjectId, Integer> outstandingClaims,
                               Map<SubjectId, GoodsTradeAcceptance> acceptances) {
         this(id, sellOrderId, buyOrderId, seller, buyer, fulfillment, sourceContainerId, receiverContainerId, itemKind, quantity,
-                deliveredUnitPrice, financialReservationId, revision, outstandingClaims, acceptances, Map.of(),
+                goodsUnitPrice, financialReservationId, revision, outstandingClaims, acceptances, Map.of(),
                 acceptances.values().stream().mapToInt(r -> r.title().quantity()).reduce(0, Math::addExact), 0);
     }
     public GoodsTradeContract {
         Objects.requireNonNull(id); Objects.requireNonNull(sellOrderId); Objects.requireNonNull(buyOrderId);
         Objects.requireNonNull(seller); Objects.requireNonNull(buyer); Objects.requireNonNull(fulfillment); fulfillment.require(seller, buyer);
         Objects.requireNonNull(sourceContainerId); Objects.requireNonNull(receiverContainerId);
-        Objects.requireNonNull(deliveredUnitPrice); Objects.requireNonNull(financialReservationId);
+        Objects.requireNonNull(goodsUnitPrice); Objects.requireNonNull(financialReservationId);
+        Objects.requireNonNull(deliveryUnitPrice);
         outstandingClaims = Map.copyOf(outstandingClaims); acceptances = Map.copyOf(acceptances); dispositions = Map.copyOf(dispositions);
         if (sellOrderId.equals(buyOrderId) || seller.id().equals(buyer.id()) || quantity < 1 || quantity > ResourceLot.MAX_QUANTITY
                 || itemKind == null || !itemKind.matches("[a-z][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9_./-]{0,127}")
-                || deliveredUnitPrice.raw() <= 0 || revision < 0 || revision > quantity
+                || goodsUnitPrice.raw() <= 0 || deliveryUnitPrice.raw() < 0
+                || fulfillment.mode() == GoodsTradeFulfillment.Mode.BUYER_COLLECTION && deliveryUnitPrice.raw() != 0
+                || revision < 0 || revision > quantity
                 || acceptedQuantity < 0 || disposedQuantity < 0 || acceptedQuantity > quantity || disposedQuantity > quantity
                 || outstandingClaims.size() > 64 || acceptances.size() + dispositions.size() != Math.min(revision, MAX_RECEIPTS)
                 || outstandingClaims.values().stream().anyMatch(q -> q < 1 || q > quantity)) {
@@ -69,12 +82,21 @@ public record GoodsTradeContract(SubjectId id, SubjectId sellOrderId, SubjectId 
                 || Math.addExact(sum(outstandingClaims), Math.addExact(acceptedQuantity, disposedQuantity)) != quantity) {
             throw new IllegalArgumentException("goods contract quantity or receipt history is not closed");
         }
-        deliveredUnitPrice.multiply(quantity); // Overflow fails at admission/hydration, not during payment.
+        goodsUnitPrice.plus(deliveryUnitPrice).multiply(quantity); // Overflow fails at admission/hydration, not during payment.
     }
     public int remainingQuantity() { return sum(outstandingClaims); }
     public boolean terminal() { return remainingQuantity() == 0; }
     public boolean fulfilled() { return terminal() && disposedQuantity == 0; }
-    public FixedScalar outstandingPrice() { return deliveredUnitPrice.multiply(remainingQuantity()); }
+    public FixedScalar deliveredUnitPrice() { return goodsUnitPrice.plus(deliveryUnitPrice); }
+    public FixedScalar outstandingPrice() { return deliveredUnitPrice().multiply(remainingQuantity()); }
+    /** Immutable quoted cash terms, before any reservation is published. No wages are paid here. */
+    public GoodsTradeContract quoteDelivery(FixedScalar unitPrice) {
+        if (revision != 0 || acceptedQuantity != 0 || disposedQuantity != 0)
+            throw new IllegalArgumentException("cannot reprice an executed delivery");
+        return new GoodsTradeContract(id, sellOrderId, buyOrderId, seller, buyer, fulfillment, sourceContainerId,
+                receiverContainerId, itemKind, quantity, goodsUnitPrice, financialReservationId, revision,
+                outstandingClaims, acceptances, dispositions, acceptedQuantity, disposedQuantity, unitPrice);
+    }
     public GoodsTradeContract accept(GoodsTradeAcceptance receipt) {
         if (!receipt.contractId().equals(id) || receipt.expectedContractRevision() != revision
                 || acceptances.containsKey(receipt.id()) || dispositions.containsKey(receipt.id()) || terminal()) {
@@ -87,8 +109,8 @@ public record GoodsTradeContract(SubjectId id, SubjectId sellOrderId, SubjectId 
         Map<SubjectId, GoodsTradeAcceptance> receipts = new HashMap<>(acceptances); receipts.put(receipt.id(), receipt);
         Map<SubjectId, GoodsTradeDisposition> dispositionWindow = new HashMap<>(dispositions); trim(receipts, dispositionWindow);
         return new GoodsTradeContract(id, sellOrderId, buyOrderId, seller, buyer, fulfillment, sourceContainerId, receiverContainerId, itemKind,
-                quantity, deliveredUnitPrice, financialReservationId, Math.addExact(revision, 1), claims, receipts, dispositionWindow,
-                Math.addExact(acceptedQuantity, receipt.title().quantity()), disposedQuantity);
+                quantity, goodsUnitPrice, financialReservationId, Math.addExact(revision, 1), claims, receipts, dispositionWindow,
+                Math.addExact(acceptedQuantity, receipt.title().quantity()), disposedQuantity, deliveryUnitPrice);
     }
     public GoodsTradeContract dispose(GoodsTradeDisposition disposition) {
         if (!disposition.contractId().equals(id) || disposition.expectedContractRevision() != revision
@@ -100,8 +122,8 @@ public record GoodsTradeContract(SubjectId id, SubjectId sellOrderId, SubjectId 
         Map<SubjectId, GoodsTradeDisposition> next = new HashMap<>(dispositions); next.put(disposition.id(), disposition);
         Map<SubjectId, GoodsTradeAcceptance> receipts = new HashMap<>(acceptances); trim(receipts, next);
         return new GoodsTradeContract(id, sellOrderId, buyOrderId, seller, buyer, fulfillment, sourceContainerId, receiverContainerId, itemKind,
-                quantity, deliveredUnitPrice, financialReservationId, Math.addExact(revision, 1), claims, receipts, next,
-                acceptedQuantity, Math.addExact(disposedQuantity, disposition.quantity()));
+                quantity, goodsUnitPrice, financialReservationId, Math.addExact(revision, 1), claims, receipts, next,
+                acceptedQuantity, Math.addExact(disposedQuantity, disposition.quantity()), deliveryUnitPrice);
     }
     /** Shipment preparation divides obligations, not receipts or commercial terms. */
     public GoodsTradeContract partition(ResourceClaimPartition partition) {
@@ -112,15 +134,15 @@ public record GoodsTradeContract(SubjectId id, SubjectId sellOrderId, SubjectId 
         Map<SubjectId, Integer> claims = new HashMap<>(outstandingClaims);
         claims.put(partition.claimId(), remaining); claims.put(partition.childClaimId(), quantity);
         return new GoodsTradeContract(id, sellOrderId, buyOrderId, seller, buyer, fulfillment, sourceContainerId, receiverContainerId, itemKind,
-                this.quantity, deliveredUnitPrice, financialReservationId, revision, claims, acceptances, dispositions, acceptedQuantity, disposedQuantity);
+                this.quantity, goodsUnitPrice, financialReservationId, revision, claims, acceptances, dispositions, acceptedQuantity, disposedQuantity, deliveryUnitPrice);
     }
     /** Change a local unadmitted draft only; accepted obligations are immutable. */
     public GoodsTradeContract declareFulfillment(GoodsTradeFulfillment value) {
         if (revision != 0 || acceptedQuantity != 0 || disposedQuantity != 0 || !acceptances.isEmpty() || !dispositions.isEmpty())
             throw new IllegalArgumentException("cannot redeclare fulfillment of a progressed obligation");
         return new GoodsTradeContract(id, sellOrderId, buyOrderId, seller, buyer, value, sourceContainerId, receiverContainerId,
-                itemKind, quantity, deliveredUnitPrice, financialReservationId, revision, outstandingClaims, acceptances,
-                dispositions, acceptedQuantity, disposedQuantity);
+                itemKind, quantity, goodsUnitPrice, financialReservationId, revision, outstandingClaims, acceptances,
+                dispositions, acceptedQuantity, disposedQuantity, deliveryUnitPrice);
     }
     private static void trim(Map<SubjectId, GoodsTradeAcceptance> receipts, Map<SubjectId, GoodsTradeDisposition> dispositions) {
         if (receipts.size() + dispositions.size() <= MAX_RECEIPTS) return;

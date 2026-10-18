@@ -671,14 +671,10 @@ final class FrontierV3ActorBodyController {
     static java.util.Optional<SurfaceAnchor> reconstructionContact(
             io.farfrontier.palemirror.frontier.v3.model.BodyPosition pose,
             io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry geometry) {
-        // One legal vertical settling step; a larger gap, unknown land or upward
-        // obstruction needs observation/reconciliation rather than a spawn fallback.
-        // Layered terrain retains natural ground below roads/floors. Its presence
-        // cannot replace an already-known exact contact with a point inside that floor.
-        if (geometry.knowsSupport(pose.supportingSurface())) return java.util.Optional.empty();
-        return geometry.surfacesAt(pose.x(), pose.z()).stream()
-                .filter(ground -> ground.x() == pose.x() && ground.z() == pose.z() && ground.y() == pose.y() - 2)
-                .findFirst();
+        // The same candidate policy as COLD; actual native placement still proves
+        // collision/clearance before creating the reconstructed body.
+        return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianVerticalSettlement.candidate(
+                pose, geometry, io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.VILLAGER.dropBlocks());
     }
 
     /** Whole-set recovery preflight uses the same common admission and exact pending ticket. */

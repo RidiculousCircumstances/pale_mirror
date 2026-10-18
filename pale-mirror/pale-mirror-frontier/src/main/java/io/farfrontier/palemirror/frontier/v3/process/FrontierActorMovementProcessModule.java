@@ -30,6 +30,11 @@ final class FrontierActorMovementProcessModule implements FrontierWorldProcessMo
 
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
         return switch (event.payload()) {
+            case io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementGrounded grounded -> {
+                if (event.instant().ticks() != grounded.atTick())
+                    throw new IllegalArgumentException("movement settlement belongs to another event instant");
+                yield ActorMovementGrounding.reduce(state, event.subject(), grounded);
+            }
             case ActorMovementStarted started -> ActorMovementProcess.reduceStarted(state, event.subject(), started);
             case ActorMovementColdAdvanced advanced -> ActorMovementProcess.reduceColdAdvanced(state, event.subject(), advanced);
             case ActorMovementColdRouteStarted started -> {

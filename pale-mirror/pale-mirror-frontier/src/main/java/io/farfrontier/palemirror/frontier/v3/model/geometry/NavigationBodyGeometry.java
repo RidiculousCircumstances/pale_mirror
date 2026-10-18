@@ -82,6 +82,14 @@ public final class NavigationBodyGeometry {
                 && sweep(view, profile, from.x(), top, from.z(), to.x(), top, to.z())
                 && sweep(view, profile, to.x(), top, to.z(), to.x(), to.feetY(), to.z());
     }
+    /** Vertical gravity continuation from a spatial pose, without inventing a source contact. */
+    public static boolean canDescend(NavigationCollisionView view, UnitNavigationProfile profile,
+                                    double x, double feetY, double z, NavigationContact landing) {
+        double drop = feetY - landing.feetY();
+        return landing.x() == x && landing.z() == z && drop > 0 && drop <= profile.dropBlocks() + 1e-7
+                && sweep(view, profile, x, feetY, z, landing.x(), landing.feetY(), landing.z());
+    }
+
     private static boolean sweep(NavigationCollisionView view, UnitNavigationProfile profile,
             double x0, double y0, double z0, double x1, double y1, double z1) {
         // Exact for axis-aligned edges; a shifted pose pair uses a conservative

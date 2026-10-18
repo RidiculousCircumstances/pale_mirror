@@ -41,8 +41,9 @@ final class ResourceHaulingPolicy {
         if (!REVIEW.equals(action.kind()) || !review(action.subject(), action.dueAt().ticks()).equals(action))
             throw new IllegalArgumentException("resource hauling review has foreign identity");
         long now = Math.max(instant.ticks(), action.dueAt().ticks());
-        var events = new ArrayList<ProposedEvent>(); var projected = state;
-        for (var worker : ResidentWorkComposition.SELECTION.eligible(state, action.subject(), ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS, now)) {
+        var retirement = ShipmentRetention.collect(state, ShipmentRetention.MAX_RETIREMENTS, now);
+        var events = new ArrayList<>(retirement.events()); var projected = retirement.state();
+        for (var worker : ResidentWorkComposition.SELECTION.eligible(projected, action.subject(), ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS, now)) {
             Optional<InternalShipmentDispatched> offer;
             try { offer = offer(projected, worker, now); }
             catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable pending) { break; }

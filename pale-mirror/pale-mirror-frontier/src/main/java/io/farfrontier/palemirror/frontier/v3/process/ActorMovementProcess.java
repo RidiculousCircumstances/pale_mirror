@@ -90,6 +90,10 @@ public final class ActorMovementProcess {
         if (movement == null || !action.id().equals(progress(movement, action.dueAt().ticks()).id()))
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
         long now = Math.max(currentTick, action.dueAt().ticks());
+        var grounding = ActorMovementGrounding.plan(state, movement, now);
+        if (grounding.isPresent()) return List.of(new ProposedEvent(action.subject(), grounding.orElseThrow()),
+                new ProposedEvent(action.subject(), new ScheduleEffect.Rescheduled(action.id(),
+                        progress(movement, Math.addExact(now, 1L)))));
         Optional<ActorMovementColdAdvanced> candidate = coldStep(state, movement, now);
         if (candidate.isEmpty()) {
             if (held(state, action)) throw new IllegalArgumentException("movement has no current COLD boundary");

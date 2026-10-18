@@ -151,7 +151,7 @@ public final class ShipmentStateSupport {
     }
     public static FrontierWorldState retire(FrontierWorldState state, SubjectId subject, SubjectId id, long revision) {
         Shipment shipment = state.shipments().shipments().get(id);
-        if (!subject.equals(id) || shipment == null || state.physicalIntents().values().stream().anyMatch(i -> i.causeSubjectId().equals(id)))
+        if (!subject.equals(id) || shipment == null || !closedForRetirement(state, shipment))
             throw new IllegalArgumentException("shipment retirement retains an unresolved effect or foreign authority");
         return state.withChanges(FrontierWorldStateUpdate.begin().shipments(state.shipments().retire(id, revision)));
     }

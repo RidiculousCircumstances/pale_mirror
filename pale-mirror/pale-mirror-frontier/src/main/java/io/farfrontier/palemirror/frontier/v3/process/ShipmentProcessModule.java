@@ -6,6 +6,16 @@ import java.util.Set;
 
 /** Registered transport owner; commercial settlement stays in the commercial reducer. */
 final class ShipmentProcessModule implements FrontierWorldProcessModule {
+    @Override public java.util.List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> retiredSchedules(
+            FrontierWorldState previous, FrontierWorldState next, FrontierEvent event,
+            java.util.function.Supplier<java.util.List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction>> pending) {
+        if (!(event.payload() instanceof ShipmentRetired retired)) return java.util.List.of();
+        var expected = ShipmentContinuation.at(retired.shipmentId(), 0);
+        return pending.get().stream().filter(action -> action.id().equals(expected.id())).peek(action -> {
+            if (!action.subject().equals(retired.shipmentId()) || !action.kind().equals(expected.kind()))
+                throw new IllegalArgumentException("retired shipment continuation has foreign authority");
+        }).toList();
+    }
     static final Set<String> TYPES = Set.of("frontier.shipment_storage_retargeted", "frontier.shipment_dispatched", "frontier.shipment_cold_transferred", "frontier.shipment_retired",
             "frontier.shipment_hot_prepared", "frontier.shipment_hot_transferred", "frontier.shipment_hand_custody_observed", "frontier.shipment_receipt_acknowledged", "frontier.shipment_cargo_disposition_observed",
             "frontier.internal_shipment_dispatched", "frontier.internal_shipment_received");

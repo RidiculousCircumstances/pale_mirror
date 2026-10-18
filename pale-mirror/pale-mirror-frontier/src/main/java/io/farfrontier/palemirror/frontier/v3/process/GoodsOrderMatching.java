@@ -42,6 +42,12 @@ final class GoodsOrderMatching {
     static Search first(FrontierWorldState state, GoodsParticipant reviewer, long now,
                         Optional<GoodsTradeParty> selectedSeller, Optional<GoodsTradeParty> selectedBuyer,
                         Set<String> excludedCommodities, Optional<Endpoints> endpoints) {
+        return first(state, reviewer, now, selectedSeller, selectedBuyer, excludedCommodities, endpoints, FixedScalar.ZERO);
+    }
+    static Search first(FrontierWorldState state, GoodsParticipant reviewer, long now,
+                        Optional<GoodsTradeParty> selectedSeller, Optional<GoodsTradeParty> selectedBuyer,
+                        Set<String> excludedCommodities, Optional<Endpoints> endpoints, FixedScalar unreservedDeliveryExpense) {
+        if (unreservedDeliveryExpense.raw() < 0) throw new IllegalArgumentException("negative anticipated delivery expense");
         var trade = state.companies().goodsTrade();
         var book = book(state, now);
         var offers = book.buyers().stream().filter(buyer -> selectedBuyer.filter(value -> !value.equals(buyer)).isEmpty())
@@ -68,6 +74,7 @@ final class GoodsOrderMatching {
                 }
                 long funding = GoodsParticipantFunding.purchase(GoodsParticipantView.read(state, buyer),
                         state.bootstrap().ruleset().goodsTrade(), buy.itemKind()).raw();
+                funding = Math.max(0, funding - unreservedDeliveryExpense.raw());
                 if (funding < sell.unitPriceLimit().raw()) { disposition = "INSUFFICIENT_PROCUREMENT_FUNDS"; continue; }
                 var sellerIntent = intent(state, seller, sell.itemKind(), GoodsTradeOrder.Side.SELL, cachedIntents);
                 var buyerIntent = intent(state, buyer, buy.itemKind(), GoodsTradeOrder.Side.BUY, cachedIntents);

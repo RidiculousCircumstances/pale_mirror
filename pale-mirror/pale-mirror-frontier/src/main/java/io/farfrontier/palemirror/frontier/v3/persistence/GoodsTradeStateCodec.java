@@ -37,11 +37,13 @@ final class GoodsTradeStateCodec {
                 id(in), in.readUTF(), in.readInt(), in.readInt(), new FixedScalar(in.readLong()), in.readLong());
     }
     static void writeContract(DataOutputStream out, GoodsTradeContract contract) throws IOException {
+        out.writeInt(0x47544332); // Explicit separate goods/freight grammar, including WAL payloads.
         id(out, contract.id()); id(out, contract.sellOrderId()); id(out, contract.buyOrderId());
         party(out, contract.seller()); party(out, contract.buyer());
         out.writeByte(switch (contract.fulfillment().mode()) { case SELLER_DELIVERY -> 1; case BUYER_COLLECTION -> 2; });
         party(out, contract.fulfillment().organizer()); id(out, contract.sourceContainerId()); id(out, contract.receiverContainerId());
-        out.writeUTF(contract.itemKind()); out.writeInt(contract.quantity()); out.writeLong(contract.deliveredUnitPrice().raw());
+        out.writeUTF(contract.itemKind()); out.writeInt(contract.quantity()); out.writeLong(contract.goodsUnitPrice().raw());
+        out.writeLong(contract.deliveryUnitPrice().raw());
         id(out, contract.financialReservationId()); out.writeLong(contract.revision()); quantities(out, contract.outstandingClaims());
         out.writeInt(contract.acceptedQuantity()); out.writeInt(contract.disposedQuantity());
         out.writeInt(contract.acceptances().size());
@@ -50,19 +52,21 @@ final class GoodsTradeStateCodec {
         for (var entry : contract.dispositions().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) disposition(out, entry.getValue());
     }
     static GoodsTradeContract readContract(DataInputStream in) throws IOException {
+        if (in.readInt() != 0x47544332) throw new IllegalArgumentException("unsupported goods/freight contract grammar");
         SubjectId id = id(in), sell = id(in), buy = id(in); GoodsTradeParty seller = party(in), buyer = party(in);
         var mode = switch (in.readUnsignedByte()) { case 1 -> GoodsTradeFulfillment.Mode.SELLER_DELIVERY; case 2 -> GoodsTradeFulfillment.Mode.BUYER_COLLECTION;
             default -> throw new IllegalArgumentException("unknown goods fulfillment mode"); };
         var fulfillment = new GoodsTradeFulfillment(mode, party(in));
         SubjectId source = id(in), receiver = id(in); String kind = in.readUTF(); int quantity = in.readInt();
-        FixedScalar price = new FixedScalar(in.readLong()); SubjectId reservation = id(in); long revision = in.readLong();
+        FixedScalar price = new FixedScalar(in.readLong()), delivery = new FixedScalar(in.readLong());
+        SubjectId reservation = id(in); long revision = in.readLong();
         Map<SubjectId, Integer> claims = quantities(in); int accepted = in.readInt(), disposed = in.readInt();
         Map<SubjectId, GoodsTradeAcceptance> receipts = new HashMap<>();
         for (int n = count(in, GoodsTradeContract.MAX_RECEIPTS); n > 0; n--) { var receipt = acceptance(in); put(receipts, receipt.id(), receipt); }
         Map<SubjectId, GoodsTradeDisposition> dispositions = new HashMap<>();
         for (int n = count(in, GoodsTradeContract.MAX_RECEIPTS); n > 0; n--) { var disposition = disposition(in); put(dispositions, disposition.id(), disposition); }
         return new GoodsTradeContract(id, sell, buy, seller, buyer, fulfillment, source, receiver, kind, quantity, price, reservation, revision, claims,
-                receipts, dispositions, accepted, disposed);
+                receipts, dispositions, accepted, disposed, delivery);
     }
     static void disposition(DataOutputStream out, GoodsTradeDisposition disposition) throws IOException {
         id(out, disposition.id()); id(out, disposition.contractId()); out.writeLong(disposition.expectedContractRevision());

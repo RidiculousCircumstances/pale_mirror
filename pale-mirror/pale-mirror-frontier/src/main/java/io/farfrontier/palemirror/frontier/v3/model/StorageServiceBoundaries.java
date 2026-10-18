@@ -4,9 +4,7 @@ import java.util.*;
 
 /** Ordinary declared storage participates in the same access/clearance protocol as existing service points. */
 final class StorageServiceBoundaries implements ServiceBoundaryProvider {
-    private record Geometry(KnownPedestrianRouteKnowledge knowledge, ShipmentEndpoint.Storage endpoint,
-                            int population, ServiceAccessPoint point) { }
-    private final Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, Geometry> geometries = new LinkedHashMap<>();
+    private final ServicePointGeometryCache geometries = new ServicePointGeometryCache();
     @Override public ServicePointId.Kind kind() { return ServicePointId.Kind.RESOURCE_STORAGE; }
     @Override public Object version(FrontierWorldState state) { return state.inventory().containers(); }
     @Override public List<Declaration> declarations(FrontierWorldState state) {
@@ -31,15 +29,8 @@ final class StorageServiceBoundaries implements ServiceBoundaryProvider {
         var endpoint = endpoint(state, declaration.pointId());
         var knowledge = knowledge(state, declaration);
         int population = SettlementServiceAccessPoints.population(state, endpoint.settlementId());
-        var previous = geometries.get(declaration.pointId());
-        if (previous != null && previous.knowledge() == knowledge && previous.endpoint().equals(endpoint)
-                && previous.population() == population) return previous.point();
-        var egress = ServiceClearanceTargets.egressRegion(declaration.boundary(), knowledge);
-        var waiting = ServiceWaitingTargets.select(declaration.boundary(), knowledge, endpoint.station(), List.of(), egress, population);
-        var point = new ServiceAccessPoint(endpoint.facilityId().orElse(endpoint.containerId()), endpoint.settlementId(), endpoint.station(),
-                declaration.boundary(), waiting, egress);
-        if (geometries.size() >= 64) geometries.clear();
-        geometries.put(declaration.pointId(), new Geometry(knowledge, endpoint, population, point));
-        return point;
+        return geometries.get(declaration.pointId(), new ServicePointGeometryCache.Request(
+                endpoint.facilityId().orElse(endpoint.containerId()), endpoint.settlementId(), endpoint.station(),
+                declaration.boundary(), endpoint.station(), List.of(), population, true), knowledge);
     }
 }

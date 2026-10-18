@@ -3,8 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import java.util.*;
 
 final class ExtractionServiceBoundaries implements ServiceBoundaryProvider {
-    private record Geometry(KnownPedestrianRouteKnowledge knowledge, ShipmentEndpoint.ExtractiveSite endpoint, ServiceAccessPoint point) { }
-    private final Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, Geometry> geometry = new HashMap<>();
+    private final ServicePointGeometryCache geometry = new ServicePointGeometryCache();
     @Override public ServicePointId.Kind kind() { return ServicePointId.Kind.EXTRACTIVE_STORAGE; }
     @Override public Object version(FrontierWorldState state) { return state.inventory().containers(); }
     @Override public List<Declaration> declarations(FrontierWorldState state) {
@@ -29,13 +28,8 @@ final class ExtractionServiceBoundaries implements ServiceBoundaryProvider {
     @Override public synchronized ServiceAccessPoint geometry(FrontierWorldState state, Declaration declaration) {
         var knowledge = knowledge(state, declaration);
         var endpoint = endpoint(state, declaration.pointId());
-        var prior = geometry.get(declaration.pointId());
-        if (prior != null && prior.knowledge() == knowledge && prior.endpoint().equals(endpoint)) return prior.point();
-        var egress = ServiceClearanceTargets.egressRegion(declaration.boundary(), knowledge);
-        var point = new ServiceAccessPoint(endpoint.siteId(), endpoint.settlementId(), endpoint.station(),
-                declaration.boundary(), List.of(), egress);
-        if (geometry.size() >= 64) geometry.clear();
-        geometry.put(declaration.pointId(), new Geometry(knowledge, endpoint, point));
-        return point;
+        return geometry.get(declaration.pointId(), new ServicePointGeometryCache.Request(
+                endpoint.siteId(), endpoint.settlementId(), endpoint.station(), declaration.boundary(),
+                endpoint.station(), List.of(), 0, false), knowledge);
     }
 }

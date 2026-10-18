@@ -16,6 +16,7 @@ final class MarketPriceHistoryCodec {
             for (var sale : entry.getValue()) {
                 out.writeUTF(sale.receipt().value()); out.writeUTF(sale.seller().value()); out.writeUTF(sale.buyer().value());
                 out.writeLong(sale.atTick()); out.writeInt(sale.quantity()); out.writeLong(sale.unitPrice().raw());
+                out.writeLong(sale.deliveryUnitPrice().raw());
             }
         }
     }
@@ -25,7 +26,7 @@ final class MarketPriceHistoryCodec {
             var item = in.readUTF(); var sales = new ArrayList<MarketPriceHistory.Sale>();
             for (int s = count(in, MarketPriceHistory.MAX_SALES); s > 0; s--)
                 sales.add(new MarketPriceHistory.Sale(new SubjectId(in.readUTF()), new SubjectId(in.readUTF()),
-                        new SubjectId(in.readUTF()), in.readLong(), in.readInt(), new FixedScalar(in.readLong())));
+                        new SubjectId(in.readUTF()), in.readLong(), in.readInt(), new FixedScalar(in.readLong()), new FixedScalar(in.readLong())));
             if (result.put(item, List.copyOf(sales)) != null) throw new IllegalArgumentException("duplicate market price commodity");
         }
         return new MarketPriceHistory(result);

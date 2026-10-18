@@ -98,7 +98,7 @@ class GoodsMarketPolicyTest {
         assertTrue(state.companies().goodsTrade().contracts().isEmpty());
         var history = state.companies().goodsTrade().priceHistory();
         assertEquals(contract.quantity(), history.commodities().get(contract.itemKind()).getFirst().quantity());
-        assertEquals(contract.deliveredUnitPrice(), history.reference(contract.itemKind(), 24000).orElseThrow());
+        assertEquals(contract.goodsUnitPrice(), history.reference(contract.itemKind(), 24000).orElseThrow());
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
     @Test void ordinaryReviewPersistsCurrentPricesAndRejectsForgedOrRepeatedPolicyEvidence() {

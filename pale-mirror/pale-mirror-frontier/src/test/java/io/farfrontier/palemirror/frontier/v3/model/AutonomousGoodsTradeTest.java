@@ -229,7 +229,7 @@ class AutonomousGoodsTradeTest {
         var contract = state.companies().goodsTrade().contracts().values().stream()
                 .filter(value -> value.buyer().id().equals(COMPANY)).findFirst().orElseThrow();
         assertEquals(5, contract.quantity(), "five affordable units must not disappear behind a ten-unit price ceiling");
-        assertEquals(FixedScalar.whole(1), contract.deliveredUnitPrice());
+        assertEquals(FixedScalar.whole(1), contract.goodsUnitPrice());
         assertEquals(FixedScalar.ZERO, state.inventory().economics().availableToReserve(COMPANY));
         state = review(state, COMPANY, 401);
         assertTrue(state.companies().goodsTrade().contracts().get(contract.id()).fulfilled());

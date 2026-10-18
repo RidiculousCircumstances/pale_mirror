@@ -314,12 +314,19 @@ public final class FrontierGrayboxPlan {
 
     /** Stable settlement and bootstrap-hive object cells, excluding the expandable hive overlay. */
     static Map<SubjectId, Set<BlockPosition>> currentStableObjectCellsByOwner(FrontierWorldState state) {
+        var values = new LinkedHashMap<SubjectId, Set<BlockPosition>>();
+        stableObjectCellsByOwner(state).forEach((id, positions) -> values.put(id, positions.stream()
+                .filter(position -> !state.physicalDeltas().containsKey(position)).collect(java.util.stream.Collectors.toUnmodifiableSet())));
+        return Map.copyOf(values);
+    }
+
+    /** Condition-owned geometry before local observed scars; reusable by board renderers. */
+    static Map<SubjectId, Set<BlockPosition>> stableObjectCellsByOwner(FrontierWorldState state) {
         Objects.requireNonNull(state, "state");
         Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
         state.bootstrap().settlements().forEach(settlement -> settlement.structures().forEach(structure ->
                 addStructure(cells, state.bootstrap().terrain(), structure, state.structureConditions().get(structure.id()))));
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(cells, state.bootstrap().terrain(), organ));
-        state.physicalDeltas().keySet().forEach(cells::remove);
         return objectCellsByOwner(cells);
     }
 

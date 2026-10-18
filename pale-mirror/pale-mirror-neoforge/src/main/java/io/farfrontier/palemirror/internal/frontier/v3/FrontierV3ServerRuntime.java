@@ -231,17 +231,33 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
 
     Optional<AdvanceResult> advanceOrdinaryTime(WorkBudget budget) {
         if (pendingOrdinaryTicks == 0) return Optional.empty();
-        // The existing engine consumes due actions in causal order under the
-        // same action/weight budget. Never multiply physical turns to catch up,
-        // cross a checkpoint boundary, or acknowledge a queued WAL prefix.
-        long boundary = engine.nextExecutionBoundary().map(value -> Math.max(1L, value.ticks() - instant.ticks()))
-                .orElse(pendingOrdinaryTicks);
-        int ticks = Math.toIntExact(Math.min(Math.min(pendingOrdinaryTicks, boundary),
+        // Preserve each causal readiness/audit boundary, but permit several in
+        // one durability turn. All share the original execution AND assessment
+        // allowance; physical executors are not replayed and checkpoint debt is
+        // never acknowledged merely because a WAL prefix was queued.
+        long target = Math.addExact(instant.ticks(), Math.min(pendingOrdinaryTicks,
                 Math.max(1, checkpointIntervalTicks - ticksSinceCheckpoint)));
-        long before = instant.ticks();
-        var result = advanceInterval(ticks, budget, true);
-        pendingOrdinaryTicks = Math.subtractExact(pendingOrdinaryTicks, instant.ticks() - before);
-        return result;
+        AdvanceResult latest = null;
+        var remaining = Optional.of(budget);
+        var transactions = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.api.TransactionId>();
+        int actions = 0, weight = 0, classifications = 0, executions = 0;
+        while (instant.ticks() < target && remaining.isPresent()) {
+            long before = instant.ticks();
+            long boundary = engine.nextExecutionBoundary().map(value -> Math.max(1L, value.ticks() - before))
+                    .orElse(target - before);
+            var result = advanceInterval(Math.toIntExact(Math.min(target - before, boundary)), remaining.orElseThrow(), true);
+            pendingOrdinaryTicks = Math.subtractExact(pendingOrdinaryTicks, instant.ticks() - before);
+            if (result.isEmpty()) return Optional.empty();
+            latest = result.orElseThrow(); transactions.addAll(latest.transactions());
+            var used = latest.consumed();
+            actions += used.actions(); weight += used.weight(); classifications += used.classifications(); executions += used.executions();
+            remaining = used.remaining(remaining.orElseThrow());
+            if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE || latest.deferredAction().isPresent()) break;
+        }
+        if (latest == null) return Optional.empty();
+        return Optional.of(new AdvanceResult(latest.revision(), latest.instant(), transactions, latest.deferredAction(),
+                latest.simulationLagTicks(), latest.status(), new io.farfrontier.palemirror.frontier.v3.kernel.WorkConsumption(
+                        actions, weight, classifications, executions)));
     }
 
     /** The runtime owns pairing and gating; host callers cannot acknowledge a queued prefix. */
@@ -300,8 +316,10 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             // retention ceiling. Only a confirmed snapshot/WAL compaction releases history.
             int actions = Math.min(budget.maxActions(), configuration.limits().maxTransactions());
             if (!ensureTransactionHeadroom(actions)) return Optional.empty();
-            WorkBudget retainedBudget = actions == budget.maxActions() ? budget : new WorkBudget(actions, budget.maxWeight());
+            WorkBudget retainedBudget = actions == budget.maxActions() ? budget : new WorkBudget(actions, budget.maxWeight(),
+                    budget.maxClassificationEvaluations(), Math.min(actions, budget.maxExecutionEvaluations()), budget.maxActionWeight());
             AdvanceResult result;
+            long before = instant.ticks();
             try (DiagnosticCaptureScope ignored = DiagnosticCaptureScope.open(diagnosticRuntimeIdentity)) {
                 result = engine.advanceTo(instant.plus(intervalTicks), retainedBudget);
             }
@@ -309,7 +327,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             // tick has a distinct immutable checkpoint image for adapter observation.
             cachedCheckpoint = null;
             instant = result.instant();
-            ticksSinceCheckpoint = Math.addExact(ticksSinceCheckpoint, intervalTicks);
+            ticksSinceCheckpoint = Math.addExact(ticksSinceCheckpoint, Math.toIntExact(instant.ticks() - before));
             if (result.status().kind() == io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.QUARANTINED) {
                 status = new FrontierV3RuntimeStatus(FrontierV3RuntimeStatus.Kind.QUARANTINED, result.status().failureDetail());
                 engine.failureCause().ifPresent(error -> io.farfrontier.palemirror.PaleMirrorMod.LOGGER.error(

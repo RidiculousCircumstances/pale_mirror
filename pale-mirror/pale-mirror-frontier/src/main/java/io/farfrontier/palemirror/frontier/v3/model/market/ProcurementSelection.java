@@ -24,12 +24,13 @@ public final class ProcurementSelection {
             unitPrice.multiply(quantity);
         }
     }
-    /** Transport cost is an explicit monetary estimate, distinct from goods payment and crew time. */
+    /** Transport resources are an explicit monetary estimate. Crew time includes
+     * either organizer's workers: seller delivery is not costless labour. */
     public record Offer(SubjectId id, Map<String, Line> goods, FixedScalar transportCost,
-                        long arrivalDelayTicks, long ownWorkerTicks) {
+                        long arrivalDelayTicks, long workerTicks) {
         public Offer {
             Objects.requireNonNull(id); goods = Map.copyOf(goods); Objects.requireNonNull(transportCost);
-            if (goods.isEmpty() || goods.size() > 256 || transportCost.raw() < 0 || arrivalDelayTicks < 0 || ownWorkerTicks < 0)
+            if (goods.isEmpty() || goods.size() > 256 || transportCost.raw() < 0 || arrivalDelayTicks < 0 || workerTicks < 0)
                 throw new IllegalArgumentException("invalid feasible procurement offer");
             long total = transportCost.raw();
             for (var line : goods.values()) total = Math.addExact(total, line.unitPrice().multiply(line.quantity()).raw());
@@ -37,7 +38,7 @@ public final class ProcurementSelection {
     }
 
     /** Earliest need first; prefer timely offers, otherwise useful recovery rate.
-     * Among equally useful offers compare delivered cost including valued own labour.
+     * Among equally useful offers compare delivered cost including valued crew labour.
      * Fixed trip overhead is allocated by quoted goods value, preserving the whole trip cost.
      * This is bounded greedy procurement, not a claim of optimal multi-trip packing. */
     public Optional<SubjectId> select(List<Requirement> requirements, List<Offer> offers) {
@@ -74,12 +75,12 @@ public final class ProcurementSelection {
             if (recovery != 0) return recovery;
         }
         var av = goodsValue(a); var bv = goodsValue(b);
-        var ac = av.add(BigInteger.valueOf(a.transportCost().raw())).add(BigInteger.valueOf(a.ownWorkerTicks()).multiply(BigInteger.valueOf(labourValuePerTick)));
-        var bc = bv.add(BigInteger.valueOf(b.transportCost().raw())).add(BigInteger.valueOf(b.ownWorkerTicks()).multiply(BigInteger.valueOf(labourValuePerTick)));
+        var ac = av.add(BigInteger.valueOf(a.transportCost().raw())).add(BigInteger.valueOf(a.workerTicks()).multiply(BigInteger.valueOf(labourValuePerTick)));
+        var bc = bv.add(BigInteger.valueOf(b.transportCost().raw())).add(BigInteger.valueOf(b.workerTicks()).multiply(BigInteger.valueOf(labourValuePerTick)));
         int price = BigInteger.valueOf(a.goods().get(need.item()).unitPrice().raw()).multiply(ac).multiply(bv)
                 .compareTo(BigInteger.valueOf(b.goods().get(need.item()).unitPrice().raw()).multiply(bc).multiply(av));
         if (price != 0) return price;
-        int labour = Long.compare(a.ownWorkerTicks(), b.ownWorkerTicks());
+        int labour = Long.compare(a.workerTicks(), b.workerTicks());
         if (labour != 0) return labour;
         int arrival = Long.compare(a.arrivalDelayTicks(), b.arrivalDelayTicks());
         if (arrival != 0) return arrival;

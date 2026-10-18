@@ -36,7 +36,7 @@ final class SettlementEconomicPlanning {
             interests.merge(pool, interest, (a, b) -> a.quantity() >= b.quantity() ? a : b);
         }
         long receivables = trade.contracts().values().stream().filter(c -> !c.terminal() && c.seller().equals(participant.party()))
-                .mapToLong(c -> c.deliveredUnitPrice().multiply(c.remainingQuantity()).raw()).reduce(0L, Math::addExact);
+                .mapToLong(c -> c.outstandingPrice().raw()).reduce(0L, Math::addExact);
         var facts = new EconomicSnapshot(state.humanPopulation().schedule(home).dayTicks(), stocks,
                 basis.needs(), basis.flows(), reserves, capacities, commitments, market, prices, List.copyOf(interests.values()), receivables);
         return new EconomicPlanner().plan(facts, rules.supplyPlanning().economics().orElseThrow());

@@ -38,15 +38,14 @@ public final class FrontierReadabilityPlan {
 
     /** Geometry is independent of stock, job, nutrition and actor-motion revisions. */
     public record StableObjectGeometry(FrontierBootstrap bootstrap,
-            Map<SubjectId, StructureCondition> conditions, Map<BlockPosition, PhysicalDelta> deltas,
+            Map<SubjectId, StructureCondition> conditions,
             Map<SubjectId, java.util.Set<BlockPosition>> cells) {
         public static StableObjectGeometry compile(FrontierWorldState state) {
-            return new StableObjectGeometry(state.bootstrap(), state.structureConditions(), state.physicalDeltas(),
-                    FrontierGrayboxPlan.currentStableObjectCellsByOwner(state));
+            return new StableObjectGeometry(state.bootstrap(), state.structureConditions(),
+                    FrontierGrayboxPlan.stableObjectCellsByOwner(state));
         }
         public boolean matches(FrontierWorldState state) {
-            return bootstrap == state.bootstrap() && conditions == state.structureConditions()
-                    && deltas == state.physicalDeltas();
+            return bootstrap == state.bootstrap() && conditions == state.structureConditions();
         }
     }
 
@@ -481,6 +480,10 @@ public final class FrontierReadabilityPlan {
         if (state.infection().isEmpty()) return Map.of();
         Map<SubjectId, InfectionOverlayStage> values = new LinkedHashMap<>();
         objectCellsByOwner.forEach((owner, positions) -> positions.forEach(position -> {
+            // A local scar changes this object's visible contamination, not the
+            // geometry/index of every board in all settlements. Restoration is
+            // also observed because the retained footprint is unfiltered.
+            if (state.physicalDeltas().containsKey(position)) return;
             var intensity = state.infection().get(InfectionCell.at(position));
             if (intensity != null && intensity.value().raw() > 0L) values.merge(owner, InfectionOverlayStage.fromRaw(intensity.value().raw()),
                     (left, right) -> left.ordinal() >= right.ordinal() ? left : right);

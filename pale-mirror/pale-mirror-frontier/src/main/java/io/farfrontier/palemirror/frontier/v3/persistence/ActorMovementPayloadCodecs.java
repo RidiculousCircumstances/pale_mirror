@@ -22,7 +22,26 @@ import java.util.Optional;
 final class ActorMovementPayloadCodecs {
     private ActorMovementPayloadCodecs() { }
 
-    static PayloadCodecs create() { return new PayloadCodecs(List.of(coldAdvanced(), coldRequested(), coldRouteStarted(), hotObserved(), interrupted(), started())); }
+    static PayloadCodecs create() { return new PayloadCodecs(List.of(grounded(), coldAdvanced(), coldRequested(), coldRouteStarted(), hotObserved(), interrupted(), started())); }
+
+    private static PayloadCodec grounded() { return new PayloadCodec() {
+        @Override public String type() { return "frontier.actor_movement_grounded"; }
+        @Override public byte[] encode(FrontierPayload payload) {
+            var value = (io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementGrounded) payload;
+            return FrontierWorldPayloadCodecs.encodeProduction(out -> {
+                ActorExecutionStateCodec.writeId(out, value.execution()); out.writeLong(value.goalRevision());
+                out.writeLong(value.atTick()); FrontierWorldPayloadCodecs.writePosition(out, value.from().supportingSurface().support());
+                FrontierWorldPayloadCodecs.writePosition(out, value.landing().support());
+            });
+        }
+        @Override public FrontierPayload decode(byte[] bytes) {
+            return FrontierWorldPayloadCodecs.decodeProduction(bytes, in ->
+                    new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementGrounded(
+                            ActorExecutionStateCodec.readId(in), in.readLong(), in.readLong(),
+                            BodyPosition.aboveSupportCell(FrontierWorldPayloadCodecs.readPosition(in)),
+                            new SurfaceAnchor(FrontierWorldPayloadCodecs.readPosition(in))));
+        }
+    }; }
 
     private static void writePositions(java.io.DataOutputStream out, MovementPositionSnapshot value) throws java.io.IOException {
         out.writeLong(value.atTick()); out.writeInt(value.hotPoints().size());

@@ -5,11 +5,12 @@ import java.util.*;
 /** Shared temporary-buffer geometry. Point providers supply orientation, never meal/job policy. */
 final class ServiceWaitingTargets {
     private ServiceWaitingTargets() { }
+    static int radius(int population) { return Math.min(16, Math.max(2, (int) Math.ceil(Math.sqrt(population)))); }
     static List<SurfaceAnchor> select(ServiceAccessBoundary boundary, KnownPedestrianRouteKnowledge knowledge,
             SurfaceAnchor center, List<SurfaceAnchor> preferred, Set<SurfaceAnchor> egress, int population) {
         Set<SurfaceAnchor> waiting = new LinkedHashSet<>();
         for (SurfaceAnchor surface : preferred) add(waiting, boundary, knowledge, surface.x(), surface.z());
-        int radius = Math.min(16, Math.max(2, (int) Math.ceil(Math.sqrt(population))));
+        int radius = radius(population);
         for (int ring = 1; ring <= radius; ring++)
             for (int dx = -ring; dx <= ring; dx++)
                 for (int dz = -ring; dz <= ring; dz++)

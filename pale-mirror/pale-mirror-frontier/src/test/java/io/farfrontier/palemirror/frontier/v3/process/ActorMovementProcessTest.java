@@ -17,6 +17,34 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ActorMovementProcessTest {
+    @Test void airborneDepartureSettlesBeforeRoutingAndPreservesTheExactOrderAcrossRecovery() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:airborne-movement"), 421L));
+        var home = state.bootstrap().settlements().getFirst(); var actor = home.residents().getFirst().id();
+        var point = ServiceBoundaryComposition.geometry(state, ServiceBoundaryComposition.declaration(state,
+                FrontierWorldState.depotId(home.id())).identity());
+        state = state.withActorBody(actor, point.waitingSurfaces().getFirst().standingBody());
+        var movement = ResidentServiceTurnover.select(state, actor, 1L).orElseThrow();
+        state = retainMovement(state, movement);
+        var floor = KnownPedestrianGround.forFrontier(state).at(home.anchor().x()+22, home.anchor().z()+22);
+        state = state.withActorBody(actor, floor.standingBody().offset(0,1,0));
+        var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
+        var plan = ActorMovementProcess.plan(state, ActorMovementProcess.progress(movement,2),2);
+        var event = assertInstanceOf(ActorMovementGrounded.class, plan.getFirst().payload());
+        var wire = FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(event, wire.decode(event.type(),wire.encode(event)));
+        var after = ActorMovementGrounding.reduce(state,actor,event);
+        assertEquals(floor.standingBody(),after.actorLocations().get(actor).body());
+        assertEquals(state.actorMovements(),after.actorMovements());
+        assertEquals(state.inventory(),after.inventory());
+        assertEquals(state.actorExecutions(),after.actorExecutions());
+        assertEquals(after,codec.decode(codec.encode(after)));
+        assertTrue(ActorMovementGrounding.plan(after,movement,3).isEmpty());
+        assertThrows(IllegalArgumentException.class,()->ActorMovementGrounding.reduce(after,actor,event));
+        var original = state;
+        var foreign = new ActorMovementGrounded(event.execution(),event.goalRevision()+1,event.atTick(),event.from(),event.landing());
+        assertThrows(IllegalArgumentException.class,()->ActorMovementGrounding.reduce(original,actor,foreign));
+    }
+
     @Test void serviceTurnoverQueueReadinessLeavesDestinationSearchToItsOwner() throws Exception {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:turnover-readiness"), 421L));

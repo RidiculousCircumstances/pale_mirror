@@ -389,6 +389,8 @@ class FrontierReadabilityPlanTest {
     @Test
     void makesAKnownRouteSurfaceLossLocallyVisibleAsAPatrolWarning() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:route-board-conflict"), 91L));
+        var geometry = FrontierReadabilityPlan.StableObjectGeometry.compile(state);
+        var index = new FrontierReadabilityPlan.StableBoardIndex(state, geometry);
         BlockPosition lost = FrontierRouteNetwork.surfaceCells(state.bootstrap()).iterator().next();
         java.util.Map<BlockPosition, PhysicalDelta> deltas = new java.util.LinkedHashMap<>(state.physicalDeltas());
         deltas.put(lost, new PhysicalDelta(lost, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
@@ -399,6 +401,10 @@ class FrontierReadabilityPlanTest {
         FrontierObjectBoard board = FrontierReadabilityPlan.compile(damaged).boards().get(FrontierRouteNetwork.OWNER);
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("ROUTE DAMAGE · PATROL NEEDED"));
+        assertTrue(geometry.matches(damaged), "physical scars must not rebuild every board's baseline geometry");
+        assertEquals(board, index.render(damaged, FrontierRouteNetwork.OWNER));
+        assertEquals(FrontierReadabilityPlan.compile(state).boards().get(FrontierRouteNetwork.OWNER),
+                index.render(state, FrontierRouteNetwork.OWNER), "same index must read restoration without stale damage text");
     }
 
     private static ResourceSiteState matureReadyField(FrontierWorldState state, ResourceSite site) {

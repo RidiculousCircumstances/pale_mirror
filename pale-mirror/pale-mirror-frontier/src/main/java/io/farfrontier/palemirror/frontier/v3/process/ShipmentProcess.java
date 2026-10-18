@@ -18,13 +18,9 @@ public final class ShipmentProcess {
     public static List<ProposedEvent> dispatch(FrontierWorldState state, SubjectId sender, Shipment shipment, long atTick) {
         var events = new java.util.ArrayList<ProposedEvent>();
         if (state.shipments().shipments().size() == ShipmentState.MAX_SHIPMENTS) {
-            var retained = state;
-            var closed = state.shipments().shipments().values().stream()
-                    .filter(s -> ShipmentStateSupport.closedForRetirement(retained, s)).sorted(java.util.Comparator.comparing(Shipment::id))
-                    .findFirst().orElseThrow(() -> new IllegalArgumentException("shipment capacity is held by live or unresolved obligations"));
-            events.add(new ProposedEvent(closed.id(), new ScheduleEffect.Cancelled(progress(closed.id(), atTick).id())));
-            events.add(new ProposedEvent(closed.id(), new ShipmentRetired(closed.id(), closed.revision())));
-            state = ShipmentStateSupport.retire(state, closed.id(), closed.id(), closed.revision());
+            var retirement = ShipmentRetention.collect(state, 1, atTick);
+            if (retirement.events().isEmpty()) throw new IllegalArgumentException("shipment capacity is held by live or unresolved obligations");
+            events.addAll(retirement.events()); state = retirement.state();
         }
         ShipmentStateSupport.dispatch(state, sender, shipment);
         events.add(new ProposedEvent(sender, new ShipmentDispatched(shipment)));
@@ -33,7 +29,8 @@ public final class ShipmentProcess {
     }
     public static boolean held(FrontierWorldState state, ScheduledAction action) {
         Shipment shipment = state.shipments().shipments().get(action.subject());
-        if (shipment == null || shipment.terminal()) return false;
+        if (shipment == null) return false;
+        if (shipment.terminal()) return !ShipmentStateSupport.closedForRetirement(state, shipment);
         if (!TransportCargoExecution.selected(state, shipment)) return true;
         if (shipment.transportMissionId().map(state.shipments().missions()::get).flatMap(TransportMission::supplies)
                 .filter(load -> !load.complete()).isPresent()) return true;
@@ -78,11 +75,12 @@ public final class ShipmentProcess {
         if (!action.kind().equals(PROGRESS) || !action.id().equals(progress(action.subject(), action.dueAt().ticks()).id()))
             throw new IllegalArgumentException("shipment progress lacks its exact schedule");
         Shipment shipment = state.shipments().shipments().get(action.subject());
-        if (shipment == null || shipment.terminal() && shipment.transportMissionId().isEmpty())
+        if (shipment == null)
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())));
         long now = Math.max(currentTick, action.dueAt().ticks());
-        if (shipment.terminal()) return List.of(new ProposedEvent(shipment.id(), new ScheduleEffect.Rescheduled(action.id(), progress(shipment.id(),
-                now + state.bootstrap().ruleset().cadence().transportReviewInterval()))));
+        if (ShipmentStateSupport.closedForRetirement(state, shipment)) return ShipmentRetention.retire(shipment, now);
+        // Receipt/mission owners retain the held continuation until reception
+        // or atomic mission retirement. No polling and no premature cancellation.
         if (held(state, action)) throw new IllegalArgumentException("shipment awaits its exact custody boundary");
         if (needsStorage(state, shipment)) {
             var interrupted = new ActorMovementInterruptionPlanner().assessForOwnerTransition(state, shipment.execution(), now);

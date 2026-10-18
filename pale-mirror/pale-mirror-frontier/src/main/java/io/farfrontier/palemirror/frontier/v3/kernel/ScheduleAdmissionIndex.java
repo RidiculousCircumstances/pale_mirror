@@ -31,6 +31,7 @@ final class ScheduleAdmissionIndex<S> {
         executionRemaining = budget.maxExecutionEvaluations();
     }
     int remainingChecks() { return remaining; }
+    int remainingExecutionChecks() { return executionRemaining; }
     Decision assess(S state, ScheduledAction action) {
         if (remaining == 0) { if (deferred == null) deferred = action; return Decision.DEFERRED; }
         remaining--;

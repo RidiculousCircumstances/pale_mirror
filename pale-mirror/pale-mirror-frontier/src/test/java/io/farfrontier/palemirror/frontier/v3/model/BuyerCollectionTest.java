@@ -79,7 +79,7 @@ class BuyerCollectionTest {
                         // balances over a journey with concurrent independent trades.
                         var accepted = GoodsTradeCollectionSupport.accept(state, buyer.party().id(), receipt, now);
                         var contract = state.companies().goodsTrade().contracts().get(receipt.receipt().contractId());
-                        var amount = contract.deliveredUnitPrice().multiply(receipt.receipt().title().quantity());
+                        var amount = contract.goodsUnitPrice().multiply(receipt.receipt().title().quantity());
                         assertEquals(state.inventory().economics().require(buyer.party().id()).balance().minus(amount),
                                 accepted.inventory().economics().require(buyer.party().id()).balance());
                         assertEquals(state.inventory().economics().require(seller.party().id()).balance().plus(amount),

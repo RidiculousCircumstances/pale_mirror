@@ -37,6 +37,23 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class InMemoryFrontierEngineTest {
+    @Test void laterCausalBoundaryWaitsForBudgetRatherThanQuarantiningAValidAction() {
+        var first = scheduled("schedule:first-weight", SUBJECT.value(), 1, 6);
+        var second = scheduled("schedule:second-weight", SUBJECT.value(), 2, 6);
+        var engine = engine(List.of(first, second), false);
+        var budget = new WorkBudget(2, 10);
+        var one = engine.advanceTo(new SimInstant(1), budget);
+        var remaining = one.consumed().remaining(budget).orElseThrow();
+        assertEquals(4, remaining.maxWeight());
+        var held = engine.advanceTo(new SimInstant(2), remaining);
+        assertEquals("ACTIVE", held.status().kind().name());
+        assertEquals(0, held.consumed().actions());
+        assertEquals(second, held.deferredAction().orElseThrow());
+        var resumed = engine.advanceTo(new SimInstant(3), budget);
+        assertEquals(1, resumed.transactions().size());
+        assertEquals(12, engine.projection(ProjectionQuery.summary()).value());
+    }
+
     @Test void capacityQuarantineCannotAppendAnUnrecoverableDiagnosticTransaction() {
         var actions = List.of(scheduled("schedule:capacity-a", SUBJECT.value(), 1, 1),
                 scheduled("schedule:capacity-b", SUBJECT.value(), 1, 1));

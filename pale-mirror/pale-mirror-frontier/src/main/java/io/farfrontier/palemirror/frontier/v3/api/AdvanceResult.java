@@ -13,7 +13,8 @@ public record AdvanceResult(
         List<TransactionId> transactions,
         Optional<ScheduledAction> deferredAction,
         long simulationLagTicks,
-        EngineStatus status
+        EngineStatus status,
+        io.farfrontier.palemirror.frontier.v3.kernel.WorkConsumption consumed
 ) {
     public AdvanceResult {
         Objects.requireNonNull(revision, "revision");
@@ -24,5 +25,6 @@ public record AdvanceResult(
             throw new IllegalArgumentException("simulation lag cannot be negative");
         }
         Objects.requireNonNull(status, "status");
+        Objects.requireNonNull(consumed, "consumed work");
     }
 }

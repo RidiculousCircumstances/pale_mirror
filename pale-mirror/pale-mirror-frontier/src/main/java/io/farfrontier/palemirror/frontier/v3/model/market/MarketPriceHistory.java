@@ -10,14 +10,18 @@ public record MarketPriceHistory(Map<String, List<Sale>> commodities) {
     public static final int MAX_COMMODITIES = 256;
     public static final int MAX_SALES = 32;
     public record Sale(SubjectId receipt, SubjectId seller, SubjectId buyer, long atTick,
-                       int quantity, FixedScalar unitPrice) {
+                       int quantity, FixedScalar unitPrice, FixedScalar deliveryUnitPrice) {
+        public Sale(SubjectId receipt, SubjectId seller, SubjectId buyer, long atTick, int quantity, FixedScalar unitPrice) {
+            this(receipt, seller, buyer, atTick, quantity, unitPrice, FixedScalar.ZERO);
+        }
         public Sale {
             Objects.requireNonNull(receipt); Objects.requireNonNull(seller); Objects.requireNonNull(buyer);
-            Objects.requireNonNull(unitPrice);
-            if (seller.equals(buyer) || atTick < 0 || quantity < 1 || unitPrice.raw() <= 0)
+            Objects.requireNonNull(unitPrice); Objects.requireNonNull(deliveryUnitPrice);
+            if (seller.equals(buyer) || atTick < 0 || quantity < 1 || unitPrice.raw() <= 0 || deliveryUnitPrice.raw() < 0)
                 throw new IllegalArgumentException("invalid completed market sale");
-            unitPrice.multiply(quantity);
+            unitPrice.plus(deliveryUnitPrice).multiply(quantity);
         }
+        public FixedScalar totalPrice() { return unitPrice.plus(deliveryUnitPrice).multiply(quantity); }
     }
     public MarketPriceHistory {
         var copy = new TreeMap<String, List<Sale>>();

@@ -83,7 +83,8 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
             throw new IllegalArgumentException("market history requires an actual accepted portion");
         return new GoodsTradeState(orders, contracts, participants, priceHistory.record(contract.itemKind(),
                 new io.farfrontier.palemirror.frontier.v3.model.market.MarketPriceHistory.Sale(receipt.id(),
-                        contract.seller().id(), contract.buyer().id(), now, receipt.title().quantity(), contract.deliveredUnitPrice())));
+                        contract.seller().id(), contract.buyer().id(), now, receipt.title().quantity(),
+                        contract.goodsUnitPrice(), contract.deliveryUnitPrice())));
     }
     public GoodsTradeState dispose(GoodsTradeDisposition disposition) {
         GoodsTradeContract contract = contracts.get(disposition.contractId());
@@ -126,7 +127,7 @@ public record GoodsTradeState(Map<SubjectId, GoodsTradeOrder> orders, Map<Subjec
                 || !sell.counterparty().equals(contract.buyer()) || !buy.counterparty().equals(contract.seller())
                 || !sell.containerId().equals(contract.sourceContainerId()) || !buy.containerId().equals(contract.receiverContainerId())
                 || !sell.itemKind().equals(contract.itemKind()) || !buy.itemKind().equals(contract.itemKind())
-                || !contract.deliveredUnitPrice().equals(sell.unitPriceLimit())
+                || !contract.goodsUnitPrice().equals(sell.unitPriceLimit())
                 || contract.deliveredUnitPrice().compareTo(buy.unitPriceLimit()) > 0) {
             throw new IllegalArgumentException("goods agreement violates its exact buyer or seller authorization");
         }
