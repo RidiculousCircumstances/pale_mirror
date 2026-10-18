@@ -12,10 +12,12 @@ public final class ExtractionTerrainFacts {
     // Weak references neither retain retired worlds nor serialize/cache physical facts.
     private static final ThreadLocal<CoverageProof> COVERAGE = new ThreadLocal<>();
     private static final ThreadLocal<TerrainView> TERRAIN = new ThreadLocal<>();
-    private record TerrainView(java.lang.ref.WeakReference<io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRules> rules,
+    private record TerrainView(java.lang.ref.WeakReference<FrontierBootstrap> bootstrap,
             Optional<KnownBlockGeometry.Sample<BlockExtraction.Block>> air,
             Optional<KnownBlockGeometry.Sample<BlockExtraction.Block>> cover,
-            Optional<KnownBlockGeometry.Sample<BlockExtraction.Block>> rock) { }
+            Optional<KnownBlockGeometry.Sample<BlockExtraction.Block>> rock,
+            Map<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBlockState,
+                KnownBlockGeometry.Sample<BlockExtraction.Block>> surfaces) { }
     private record CoverageProof(java.lang.ref.WeakReference<FrontierBootstrap> bootstrap,
             java.lang.ref.WeakReference<io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockExclusions> exclusions) { }
     private ExtractionTerrainFacts() { }
@@ -44,17 +46,26 @@ public final class ExtractionTerrainFacts {
         if (!bootstrap.bounds().contains(position)) return Optional.empty();
         var rules = bootstrap.ruleset().extraction();
         var view = TERRAIN.get();
-        if (view == null || view.rules().get() != rules) {
+        if (view == null || view.bootstrap().get() != bootstrap) {
             var air = rules.surfaceCut().map(cut -> new KnownBlockGeometry.Sample<>(AIR, cut.revision(), KnownBlockGeometry.Sample.Permission.PUBLIC));
             var cover = rules.surfaceCut().map(cut -> new KnownBlockGeometry.Sample<>(cut.cover().before(), cut.revision(), KnownBlockGeometry.Sample.Permission.PUBLIC));
             var rock = rules.geology().map(stratum -> new KnownBlockGeometry.Sample<>(new BlockExtraction.Block(stratum.blockKind(), Map.of()),
                     stratum.revision(), KnownBlockGeometry.Sample.Permission.PUBLIC));
-            view = new TerrainView(new java.lang.ref.WeakReference<>(rules), air, cover, rock);
+            var surfaces = new java.util.HashMap<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBlockState,
+                    KnownBlockGeometry.Sample<BlockExtraction.Block>>();
+            if (rules.surfaceCut().isPresent()) bootstrap.ruleset().fields().agriculture().ifPresent(map ->
+                    map.surfaces().values().forEach(palette -> palette.blocks().forEach(block -> surfaces.computeIfAbsent(block,
+                        value -> new KnownBlockGeometry.Sample<>(new BlockExtraction.Block(value.kind(), value.properties()),
+                            rules.surfaceCut().orElseThrow().revision(), KnownBlockGeometry.Sample.Permission.PUBLIC)))));
+            view = new TerrainView(new java.lang.ref.WeakReference<>(bootstrap), air, cover, rock, Map.copyOf(surfaces));
             TERRAIN.set(view);
         }
         if (rules.surfaceCut().isPresent() && position.y() > rules.surfaceCut().orElseThrow().topY())
             return view.air();
-        if (rules.surfaceCut().isPresent() && position.y() == rules.surfaceCut().orElseThrow().topY()) return view.cover();
+        if (rules.surfaceCut().isPresent() && position.y() == rules.surfaceCut().orElseThrow().topY()) {
+            var surface = bootstrap.ruleset().fields().agriculture().flatMap(map -> map.surfaceAt(position.x(), position.z()));
+            return surface.isPresent() ? Optional.of(java.util.Objects.requireNonNull(view.surfaces().get(surface.orElseThrow()))) : view.cover();
+        }
         return rules.geology().filter(stratum -> position.y() >= stratum.minY() && position.y() <= stratum.maxY()).isPresent()
                 ? view.rock() : Optional.empty();
     }

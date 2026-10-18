@@ -5,6 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.model.CellMutationKey;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldForeignChangeHeld;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout;
+import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldPhysicalSurface;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 
@@ -13,6 +14,7 @@ import java.util.Optional;
 
 /** Physical-before/WAL fence and exact post-write NBT for one foreign-cell cause. */
 record FrontierV3ResourceFieldForeignChangeWitness(ResourceFieldForeignChangeHeld hold,
+                                                    ResourceFieldPhysicalSurface.Condition physicalBefore,
                                                     Optional<Blocks> observed, long observationVersion) {
     record Blocks(CompoundTag soil, CompoundTag crop) {
         Blocks {
@@ -26,11 +28,13 @@ record FrontierV3ResourceFieldForeignChangeWitness(ResourceFieldForeignChangeHel
         @Override public CompoundTag crop() { return crop.copy(); }
     }
 
-    FrontierV3ResourceFieldForeignChangeWitness(ResourceFieldForeignChangeHeld hold, Optional<Blocks> observed) {
-        this(hold, observed, observed.isPresent() ? 1L : 0L);
+    FrontierV3ResourceFieldForeignChangeWitness(ResourceFieldForeignChangeHeld hold,
+            ResourceFieldPhysicalSurface.Condition physicalBefore, Optional<Blocks> observed) {
+        this(hold, physicalBefore, observed, observed.isPresent() ? 1L : 0L);
     }
     FrontierV3ResourceFieldForeignChangeWitness {
         Objects.requireNonNull(hold, "foreign field held cause");
+        Objects.requireNonNull(physicalBefore, "retained physical predecessor");
         observed = Objects.requireNonNull(observed, "foreign field postcondition");
         if (observationVersion < 0 || observed.isPresent() != (observationVersion > 0))
             throw new IllegalArgumentException("cell observation has no matching version");
@@ -45,7 +49,7 @@ record FrontierV3ResourceFieldForeignChangeWitness(ResourceFieldForeignChangeHel
                 && cycle.layout().cell(cellId()).isPresent();
     }
     FrontierV3ResourceFieldForeignChangeWitness observe(Blocks after) {
-        return new FrontierV3ResourceFieldForeignChangeWitness(hold, Optional.of(after), Math.addExact(observationVersion, 1L));
+        return new FrontierV3ResourceFieldForeignChangeWitness(hold, physicalBefore, Optional.of(after), Math.addExact(observationVersion, 1L));
     }
 
     CompoundTag write() {
@@ -59,6 +63,9 @@ record FrontierV3ResourceFieldForeignChangeWitness(ResourceFieldForeignChangeHel
         tag.putInt("beforeStage", before.growthStage());
         tag.putBoolean("beforeAccounted", before.accounted()); tag.putBoolean("beforeYielded", before.yielded());
         tag.putString("cause", hold.causationId()); tag.putBoolean("beforeWorkBlocked", hold.before().workAccessBlocked());
+        tag.putString("physicalSoil", physicalBefore.soil().name());
+        tag.putString("physicalCrop", physicalBefore.crop().name());
+        tag.putInt("physicalStage", physicalBefore.growthStage());
         observed.ifPresent(blocks -> { tag.put("observedSoil", blocks.soil()); tag.put("observedCrop", blocks.crop()); });
         return tag;
     }
@@ -74,6 +81,8 @@ record FrontierV3ResourceFieldForeignChangeWitness(ResourceFieldForeignChangeHel
                 || !tag.contains("beforeStage", Tag.TAG_INT) || !tag.contains("beforeAccounted", Tag.TAG_BYTE)
                 || !tag.contains("beforeWorkBlocked", Tag.TAG_BYTE)
                 || !tag.contains("beforeYielded", Tag.TAG_BYTE) || !tag.contains("cause", Tag.TAG_STRING)
+                || !tag.contains("physicalSoil", Tag.TAG_STRING) || !tag.contains("physicalCrop", Tag.TAG_STRING)
+                || !tag.contains("physicalStage", Tag.TAG_INT)
                 || tag.contains("observedSoil") != tag.contains("observedCrop"))
             throw new IllegalStateException("incomplete foreign field-change witness");
         var before = new ResourceFieldCycle.CellState(
@@ -89,6 +98,8 @@ record FrontierV3ResourceFieldForeignChangeWitness(ResourceFieldForeignChangeHel
                 : Optional.empty();
         if (tag.contains("observedSoil") && observed.isEmpty())
             throw new IllegalStateException("foreign field postcondition has invalid NBT types");
-        return new FrontierV3ResourceFieldForeignChangeWitness(hold, observed, tag.getLong("observationVersion"));
+        var physicalBefore = new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.valueOf(tag.getString("physicalSoil")),
+                ResourceFieldCycle.Crop.valueOf(tag.getString("physicalCrop")), tag.getInt("physicalStage"));
+        return new FrontierV3ResourceFieldForeignChangeWitness(hold, physicalBefore, observed, tag.getLong("observationVersion"));
     }
 }

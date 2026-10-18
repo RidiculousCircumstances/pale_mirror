@@ -7,6 +7,31 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ExtractionTerrainFactsTest {
+    @Test void cultivationReadsTheAuthoredNativeSurfaceRatherThanUniformGrass() {
+        var bootstrap = bootstrap("frontier-v3-quarry-graybox-r21");
+        var state = FrontierWorldState.initial(bootstrap);
+        var knowledge = new DevelopmentGroundKnowledge(state);
+        int y = bootstrap.ruleset().extraction().surfaceCut().orElseThrow().topY();
+        var seen = new java.util.HashSet<String>();
+        for (int x = 120; x < 130; x++) for (int z = 340; z < 350; z++) {
+            var position = new BlockPosition(x, y, z);
+            var expected = bootstrap.ruleset().fields().agriculture().orElseThrow().surfaceAt(x, z).orElseThrow();
+            var actual = ExtractionTerrainFacts.at(bootstrap, position).orElseThrow();
+            assertEquals(expected.kind(), actual.block().kind());
+            assertEquals(expected.properties(), actual.block().properties());
+            seen.add(actual.block().kind());
+            var sample = knowledge.at(position);
+            if (sample.isPresent()) {
+                assertEquals(expected, sample.orElseThrow().block());
+                assertThrows(IllegalArgumentException.class, () -> new FieldDevelopmentCell(new SurfaceAnchor(position),
+                        sample.orElseThrow(), knowledge.at(position.offset(0, 1, 0)).orElseThrow()),
+                        "rock or coarse dirt cannot become a farmland declaration without earthworks");
+            }
+        }
+        assertEquals(Set.of("minecraft:stone", "minecraft:coarse_dirt"), seen);
+        assertEquals("minecraft:grass_block", ExtractionTerrainFacts.at(bootstrap, new BlockPosition(150, y, 50))
+                .orElseThrow().block().kind());
+    }
     @Test void boundedGeologyFenceIsAllOrNothingAndRetainsEveryPositionThroughRecovery() throws Exception {
         var before = FrontierWorldState.initial(bootstrap("frontier-v3-quarry-graybox-r7"));
         var observations = new java.util.ArrayList<ExtractionGeologyInvalidated.Observation>();

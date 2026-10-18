@@ -181,7 +181,7 @@ class FrontierV3ResourceFieldWitnessTest {
                 cycle.cell(FIRST), "world:foreign-stone");
         var physical = new FrontierV3ResourceFieldForeignChangeWitness.Blocks(
                 block("minecraft:farmland"), block("minecraft:stone"));
-        var change = new FrontierV3ResourceFieldForeignChangeWitness(held, java.util.Optional.of(physical));
+        var change = new FrontierV3ResourceFieldForeignChangeWitness(held, PLANTED, java.util.Optional.of(physical));
         assertEquals(change, FrontierV3ResourceFieldForeignChangeWitness.read(change.write()));
         var blocked = new ResourceFieldCycle.CellState(ResourceFieldCycle.Soil.FARMLAND,
                 ResourceFieldCycle.Crop.OBSTRUCTED, 0, false, false);
@@ -214,7 +214,7 @@ class FrontierV3ResourceFieldWitnessTest {
                 blocked, "world:clear-stone");
         var clearBlocks = new FrontierV3ResourceFieldForeignChangeWitness.Blocks(
                 block("minecraft:farmland"), block("minecraft:air"));
-        var clearance = new FrontierV3ResourceFieldForeignChangeWitness(clearHold, java.util.Optional.of(clearBlocks));
+        var clearance = new FrontierV3ResourceFieldForeignChangeWitness(clearHold, PLANTED, java.util.Optional.of(clearBlocks));
         var cleared = accepted.observedForeignTransition(FIRST, new ResourceFieldCycle.CellState(
                 ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.ABSENT, 0, false, false));
         var clearedClaim = blockedClaim.acknowledgeForeignChange(clearance, cleared, clearBlocks,

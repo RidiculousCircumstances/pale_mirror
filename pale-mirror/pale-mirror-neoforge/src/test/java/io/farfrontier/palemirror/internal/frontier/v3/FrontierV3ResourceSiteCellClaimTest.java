@@ -21,6 +21,45 @@ class FrontierV3ResourceSiteCellClaimTest {
     private static final SubjectId SITE = new SubjectId("site:cell-claim-test");
     private static final PhysicalIntentId INTENT = new PhysicalIntentId("intent:cell-claim-test");
 
+    @Test void foreignObservationRetainsSeparatePhysicalAndCanonicalPredecessorsAcrossRecovery() {
+        var site = site();
+        var id = site.layout().cells().getFirst().id();
+        var projected = ResourceFieldCycle.seeded(SITE, site.layout(), 1);
+        var physical = ResourceFieldPhysicalSurface.Condition.of(projected.cell(id));
+        var canonical = projected.advanceGrowth(id).advanceGrowth(id);
+        var fixture = FrontierV3ResourceSiteLedger.fixture();
+        fixture.reserveFieldInitialization(site, INTENT, projected);
+        var image = fixture.save(new CompoundTag(), null);
+        var row = image.getList("fieldClaims", 10).getCompound(0);
+        row.putString("kind", "OWNED"); row.putString("status", "ACTIVE"); row.remove("initial");
+        row.put("witness", FrontierV3ResourceFieldWitness.claimed(SITE, 1,
+                ResourceFieldPhysicalSurface.fromCycle(projected)).write());
+        var ledger = FrontierV3ResourceSiteLedger.load(image, null);
+        var hold = new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldForeignChangeHeld(
+                SITE, 1, site.layout().revision(), id, canonical.cell(id), "world:lagging-obstruction");
+        var blocks = new FrontierV3ResourceFieldForeignChangeWitness.Blocks(block("minecraft:farmland"), block("minecraft:stone"));
+        var witness = new FrontierV3ResourceFieldForeignChangeWitness(hold, physical, java.util.Optional.of(blocks));
+        assertThrows(IllegalStateException.class, () -> ledger.beginFieldForeignChange(
+                new FrontierV3ResourceFieldForeignChangeWitness(hold,
+                    ResourceFieldPhysicalSurface.Condition.of(canonical.cell(id)), java.util.Optional.of(blocks))),
+                "canonical age is not evidence of the last projected age");
+        ledger.beginFieldForeignChange(witness);
+        var recovered = FrontierV3ResourceSiteLedger.load(ledger.save(new CompoundTag(), null), null);
+        assertEquals(witness, recovered.fieldForeignChange(SITE, id));
+        var missing = witness.write(); missing.remove("physicalSoil");
+        assertThrows(IllegalStateException.class, () -> FrontierV3ResourceFieldForeignChangeWitness.read(missing));
+        var accepted = canonical.observedForeignTransition(id, new ResourceFieldCycle.CellState(
+                ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.OBSTRUCTED, 0, false, false));
+        var owner = (FrontierV3ResourceSiteLedger.FieldOwnership) recovered.fieldClaim(SITE);
+        var updated = owner.witness().acknowledgeForeignChange(witness, accepted, blocks,
+                new FrontierV3ResourceFieldObservation.Foreign(new FrontierV3ResourceFieldWitness.ForeignIncident(
+                    blocks.soil(), blocks.crop(), hold.causationId())));
+        recovered.replaceFieldClaim(owner, owner.withWitness(updated));
+        recovered.retireFieldForeignChange(witness);
+        assertTrue(updated.cell(id).settledFor(accepted.cell(id)));
+        assertEquals(physical, updated.cell(id).committed(), "obstruction does not grant a projection write");
+    }
+
     @Test void laggingBiologyObservationSurvivesBothSidesOfItsSavedDataAcknowledgement() {
         var site = site();
         var id = site.layout().cells().getFirst().id();
@@ -168,7 +207,7 @@ class FrontierV3ResourceSiteCellClaimTest {
         var foreignHold = new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldForeignChangeHeld(
                 SITE, cycle.epoch(), cycle.layout().revision(), first.id(), cycle.cell(first.id()),
                 "world:cell-claim-foreign-test");
-        var foreignBefore = new FrontierV3ResourceFieldForeignChangeWitness(foreignHold, java.util.Optional.empty());
+        var foreignBefore = new FrontierV3ResourceFieldForeignChangeWitness(foreignHold, worldBefore, java.util.Optional.empty());
         activeLedger.beginFieldForeignChange(foreignBefore);
         var recoveredForeign = FrontierV3ResourceSiteLedger.load(activeLedger.save(new CompoundTag(), null), null);
         assertEquals(foreignBefore, recoveredForeign.fieldForeignChange(SITE, first.id()));
@@ -190,7 +229,8 @@ class FrontierV3ResourceSiteCellClaimTest {
         var neighbor = cycle.layout().cells().get(1);
         var neighborHold = new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldForeignChangeHeld(
                 SITE, cycle.epoch(), cycle.layout().revision(), neighbor.id(), cycle.cell(neighbor.id()), "world:neighbor-cell");
-        afterSupersession.beginFieldForeignChange(new FrontierV3ResourceFieldForeignChangeWitness(neighborHold, java.util.Optional.empty()));
+        afterSupersession.beginFieldForeignChange(new FrontierV3ResourceFieldForeignChangeWitness(neighborHold,
+                ResourceFieldPhysicalSurface.Condition.of(cycle.cell(neighbor.id())), java.util.Optional.empty()));
         assertEquals(2, FrontierV3ResourceSiteLedger.load(afterSupersession.save(new CompoundTag(), null), null)
                 .pendingFieldForeignChanges().size(), "distinct cells in one site own independent causes");
         var badFamily = recaptured.write(); badFamily.putInt("mutationFamily", 255);

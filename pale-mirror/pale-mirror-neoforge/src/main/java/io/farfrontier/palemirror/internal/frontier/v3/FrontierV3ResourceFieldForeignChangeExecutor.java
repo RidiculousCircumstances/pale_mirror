@@ -64,7 +64,7 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
                 + "-c" + cell.id().value() + "-r" + checkpoint.revision().value() + "-prewrite";
         var held = new ResourceFieldForeignChangeHeld(siteId, cycle.epoch(), cycle.layout().revision(),
                 cell.id(), before, cause);
-        var witness = new FrontierV3ResourceFieldForeignChangeWitness(held, Optional.empty());
+        var witness = new FrontierV3ResourceFieldForeignChangeWitness(held, retained.committed(), Optional.empty());
         ledger.beginFieldForeignChange(witness);
         ledger.persist(level);
         var accepted = submit(runtime, held, "field-foreign-hold");
@@ -130,7 +130,7 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
                 cellId, before, cause);
         var blocks = readBlocks(level, cell);
         if (blocks == null) return false;
-        var witness = new FrontierV3ResourceFieldForeignChangeWitness(held, Optional.of(blocks));
+        var witness = new FrontierV3ResourceFieldForeignChangeWitness(held, retained.committed(), Optional.of(blocks));
         ledger.beginFieldForeignChange(witness);
         ledger.persist(level);
         submit(runtime, held, "field-foreign-hold");
@@ -201,7 +201,8 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
                 var successor = new ResourceFieldForeignChangeHeld(held.siteId(), cycle.epoch(), cycle.layout().revision(),
                         held.cellId(), cycle.cell(held.cellId()), "world:foreign-cell-" + held.siteId().value() + "-e" + cycle.epoch()
                         + "-c" + held.cellId().value() + "-r" + checkpoint.revision().value() + "-successor");
-                var successorWitness = new FrontierV3ResourceFieldForeignChangeWitness(successor, Optional.of(currentBlocks));
+                var successorWitness = new FrontierV3ResourceFieldForeignChangeWitness(successor,
+                        next.cell(held.cellId()).committed(), Optional.of(currentBlocks));
                 ledger.replaceFieldForeignChange(witness, successorWitness); ledger.persist(level);
                 submit(runtime, successor, "field-foreign-hold");
             } else {

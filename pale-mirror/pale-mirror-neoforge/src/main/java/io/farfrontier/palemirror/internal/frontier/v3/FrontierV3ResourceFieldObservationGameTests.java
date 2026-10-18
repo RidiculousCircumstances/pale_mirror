@@ -703,7 +703,8 @@ public final class FrontierV3ResourceFieldObservationGameTests {
         level.setBlock(soil.above(), Blocks.WHEAT.defaultBlockState(), 3);
         var hold = new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldForeignChangeHeld(
                 SITE, 1, layout.revision(), cell.id(), cycle.cell(cell.id()), "world:native-chained-support");
-        var before = new FrontierV3ResourceFieldForeignChangeWitness(hold, java.util.Optional.empty());
+        var before = new FrontierV3ResourceFieldForeignChangeWitness(hold,
+                ResourceFieldPhysicalSurface.Condition.of(cycle.cell(cell.id())), java.util.Optional.empty());
         helper.runAtTickTime(1, () -> {
             level.setBlock(soil, Blocks.AIR.defaultBlockState(), 3);
             var firstBlocks = new FrontierV3ResourceFieldForeignChangeWitness.Blocks(

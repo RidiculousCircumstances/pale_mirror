@@ -44,6 +44,9 @@ public final class AgriculturalSurfaceGameTests {
                     var actual = chunk.getBlockState(new BlockPos(x, y, z));
                     seen.add(actual.getBlock());
                     helper.assertTrue(actual.equals(AgriculturalSurface.at(x, z)), "generated palette follows shared biome map");
+                    var declared = GrayboxAgriculture.rules().surfaceAt(x, z).orElseThrow();
+                    helper.assertTrue(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(actual.getBlock())
+                            .toString().equals(declared.kind()), "unloaded land discovery uses the actual generated material");
                     var column = generator.getBaseColumn(x, z, level, random);
                     helper.assertTrue(actual.equals(column.getBlock(y)), "unloaded geometry sees the same native surface");
                     helper.assertTrue(column.getBlock(y - 1).is(Blocks.STONE) && column.getBlock(y + 1).isAir(),

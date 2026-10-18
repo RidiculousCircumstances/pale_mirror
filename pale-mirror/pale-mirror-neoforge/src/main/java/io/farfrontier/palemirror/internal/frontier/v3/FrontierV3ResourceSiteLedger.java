@@ -129,8 +129,7 @@ final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
         var cell = owner.witness().cell(change.cellId());
         if (cell.foreign().isPresent() != (before.soil() == ResourceFieldCycle.Soil.OBSTRUCTED
                 || before.crop() == ResourceFieldCycle.Crop.OBSTRUCTED)
-                || cell.foreign().isEmpty()
-                && !cell.committed().equals(ResourceFieldPhysicalSurface.Condition.of(before)))
+                || !cell.committed().equals(change.physicalBefore()))
             throw new IllegalStateException("foreign field change has a different physical predecessor");
         var prior = fieldForeignChanges.putIfAbsent(change.mutationKey(), change);
         if (prior != null && !prior.equals(change)) throw new IllegalStateException("another foreign cause owns this field");
@@ -138,7 +137,8 @@ final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
     }
     void observeFieldForeignChange(FrontierV3ResourceFieldForeignChangeWitness before,
                                    FrontierV3ResourceFieldForeignChangeWitness observed) {
-        if (!before.hold().equals(observed.hold()) || observed.observed().isEmpty()
+        if (!before.hold().equals(observed.hold()) || !before.physicalBefore().equals(observed.physicalBefore())
+                || observed.observed().isEmpty()
                 || observed.observationVersion() != Math.addExact(before.observationVersion(), 1L)
                 || !fieldForeignChanges.replace(before.mutationKey(), before, observed))
             throw new IllegalStateException("foreign field postcondition lacks its exact retained cause");

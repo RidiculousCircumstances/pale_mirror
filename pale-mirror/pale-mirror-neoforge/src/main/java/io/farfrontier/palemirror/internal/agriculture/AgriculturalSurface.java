@@ -1,18 +1,22 @@
 package io.farfrontier.palemirror.internal.agriculture;
 
 import io.farfrontier.palemirror.frontier.v3.model.agriculture.GrayboxAgriculture;
-import net.minecraft.world.level.block.Blocks;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtUtils;
 import net.minecraft.world.level.block.state.BlockState;
 
-/** Visual content only. Fertility belongs to the shared biome map, never to these decorative blocks. */
+/** Native decoding of the same authored surface facts consumed by unloaded land discovery. */
 final class AgriculturalSurface {
     private AgriculturalSurface() { }
     static BlockState at(int x, int z) {
-        return switch (GrayboxAgriculture.rules().biomeAt(x, z)) {
-            case GrayboxAgriculture.FERTILE, GrayboxAgriculture.ORDINARY -> Blocks.GRASS_BLOCK.defaultBlockState();
-            case GrayboxAgriculture.ROCKY -> Math.floorMod(Math.floorDiv(x, 3) * 31L + Math.floorDiv(z, 3) * 17L, 5) == 0
-                    ? Blocks.COARSE_DIRT.defaultBlockState() : Blocks.STONE.defaultBlockState();
-            default -> throw new IllegalStateException("undeclared agricultural surface biome");
-        };
+        return STATES.computeIfAbsent(GrayboxAgriculture.rules().surfaceAt(x, z).orElseThrow(), fact -> {
+            var tag = new CompoundTag(); tag.putString("Name", fact.kind());
+            var properties = new CompoundTag(); fact.properties().forEach(properties::putString);
+            tag.put("Properties", properties);
+            return NbtUtils.readBlockState(BuiltInRegistries.BLOCK.asLookup(), tag);
+        });
     }
+    private static final java.util.Map<io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBlockState, BlockState> STATES =
+            new java.util.concurrent.ConcurrentHashMap<>();
 }
