@@ -7,6 +7,25 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class UnitNavigationProfileTest {
+    @Test void repeatedKnownAndUnknownClearanceQueriesStayLocalToTheirImmutableObservation() {
+        for (boolean known : new boolean[]{false, true}) {
+            var reads = new java.util.concurrent.atomic.AtomicInteger();
+            PedestrianRouteGeometry raw = new PedestrianRouteGeometry() {
+                public WorldBounds bounds() { return new WorldBounds(-32, -32, 64, 64); }
+                public SurfaceAnchor supportAt(int x, int z) { return floor(x, z); }
+                public boolean blocked(SurfaceAnchor surface) { return false; }
+                public boolean blockKnown(BlockPosition position) { reads.incrementAndGet(); return known; }
+            };
+            var geometry = new ProfiledPedestrianGeometry(raw, UnitNavigationProfile.DONKEY, ignored -> false);
+            assertEquals(known, geometry.clearanceKnown(floor(0, 0))); int first = reads.get();
+            assertTrue(first > 0);
+            for (int repeat = 0; repeat < 20; repeat++) {
+                assertEquals(known, geometry.clearanceKnown(floor(0, 0)));
+                assertEquals(known, geometry.clearBody(floor(0, 0)));
+            }
+            assertEquals(first, reads.get(), "edge expansion must not reread the same captured footprint");
+        }
+    }
     @Test void rebuildingWideFootprintTokensCannotDiscardAnUnchangedAcceptedRouteButRealLocalDamageDoes() {
         var source = PedestrianGeometryRevision.initial().changed(Set.of(new PedestrianGeometryRevision.Region(0, 0)))
                 .changed(Set.of(new PedestrianGeometryRevision.Region(1, 0)));

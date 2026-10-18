@@ -14,6 +14,8 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
     private static final int MAX_VOLUME_RESULTS = 8_192;
     private record Volume(double x, double z, int feetY) { }
     private final java.util.Map<Volume, Boolean> volumes = new java.util.LinkedHashMap<>(128, 0.75f, true);
+    private final java.util.Map<SurfaceAnchor, Boolean> knownClearance = new java.util.LinkedHashMap<>(128, 0.75f, true);
+    private final java.util.Map<io.farfrontier.palemirror.frontier.v3.model.TerrainColumn, Boolean> detailedColumns = new java.util.LinkedHashMap<>(128, 0.75f, true);
     private record Scope(Object terrain, UnitNavigationProfile profile) { }
     private record Version(Object terrain, UnitNavigationProfile profile) { }
     private final PedestrianRouteGeometry terrain;
@@ -56,7 +58,18 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
     @Override public boolean blockKnown(BlockPosition position) { return terrain.blockKnown(position); }
     @Override public Optional<NavigationCollisionView> collisions() { return terrain.collisions(); }
     private boolean detailed(SurfaceAnchor surface) {
-        return collisions().filter(view -> view.detailedAt(surface.x(), surface.z())).isPresent();
+        return remembered(detailedColumns, new io.farfrontier.palemirror.frontier.v3.model.TerrainColumn(surface.x(), surface.z()),
+                () -> collisions().filter(view -> view.detailedAt(surface.x(), surface.z())).isPresent());
+    }
+    /** Both positive and missing knowledge belong only to this captured immutable geometry. */
+    private static <K> boolean remembered(java.util.Map<K, Boolean> cache, K key, java.util.function.BooleanSupplier read) {
+        synchronized (cache) { var prior = cache.get(key); if (prior != null) return prior; }
+        boolean result = read.getAsBoolean();
+        synchronized (cache) {
+            if (cache.size() >= MAX_VOLUME_RESULTS && !cache.containsKey(key)) cache.remove(cache.keySet().iterator().next());
+            cache.put(key, result);
+        }
+        return result;
     }
     private java.util.List<NavigationContact> contacts(SurfaceAnchor surface) {
         synchronized (contacts) { var prior = contacts.get(surface); if (prior != null) return prior; }
@@ -81,6 +94,9 @@ public final class ProfiledPedestrianGeometry implements PedestrianRouteGeometry
         return immutable;
     }
     @Override public boolean clearanceKnown(SurfaceAnchor surface) {
+        return remembered(knownClearance, surface, () -> readClearanceKnown(surface));
+    }
+    private boolean readClearanceKnown(SurfaceAnchor surface) {
         if (detailed(surface)) return NavigationBodyGeometry.known(collisions().orElseThrow(), surface, profile);
         int radius = profile.footprintRadius();
         for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
