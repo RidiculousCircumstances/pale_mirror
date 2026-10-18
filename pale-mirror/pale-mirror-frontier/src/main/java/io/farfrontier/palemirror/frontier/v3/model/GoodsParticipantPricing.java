@@ -69,7 +69,8 @@ public final class GoodsParticipantPricing {
             var context = new MarketPricePolicy.Context(floors.getOrDefault(commodity.itemKind(), io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO),
                     Optional.ofNullable(alternatives.get(commodity.itemKind())), pressure,
                     GoodsMarketDemand.offered(state, participant, commodity.itemKind(), now),
-                    Optional.ofNullable(bids.get(commodity.itemKind())));
+                    Optional.ofNullable(bids.get(commodity.itemKind())),
+                    GoodsAcquisitionPricing.estimate(state, participant, commodity.itemKind(), shortage, now));
             next.put(commodity.itemKind(), policy.review(commodity.minimumSellPrice(), commodity.maximumBuyPrice(), reference,
                     view.saleable(commodity), sale, Optional.ofNullable(participant.prices().get(commodity.itemKind())), now, rules.pricing(), context));
         }

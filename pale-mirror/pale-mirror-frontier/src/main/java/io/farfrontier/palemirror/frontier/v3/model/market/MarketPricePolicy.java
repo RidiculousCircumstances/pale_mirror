@@ -17,7 +17,12 @@ public final class MarketPricePolicy {
         }
     }
     public record Context(FixedScalar materialFloor, Optional<FixedScalar> alternativeCeiling,
-                          int shortagePermille, boolean offeredSurplus, Optional<FixedScalar> highestFundedBid) {
+                          int shortagePermille, boolean offeredSurplus, Optional<FixedScalar> highestFundedBid,
+                          Optional<AcquisitionQuote> acquisition) {
+        public Context(FixedScalar materialFloor, Optional<FixedScalar> alternativeCeiling,
+                       int shortagePermille, boolean offeredSurplus, Optional<FixedScalar> highestFundedBid) {
+            this(materialFloor, alternativeCeiling, shortagePermille, offeredSurplus, highestFundedBid, Optional.empty());
+        }
         public Context(FixedScalar materialFloor, Optional<FixedScalar> alternativeCeiling,
                        int shortagePermille, boolean offeredSurplus) {
             this(materialFloor, alternativeCeiling, shortagePermille, offeredSurplus, Optional.empty());
@@ -25,6 +30,7 @@ public final class MarketPricePolicy {
         public Context {
             Objects.requireNonNull(materialFloor); Objects.requireNonNull(alternativeCeiling);
             highestFundedBid = Objects.requireNonNull(highestFundedBid);
+            acquisition = Objects.requireNonNull(acquisition);
             if (materialFloor.raw() < 0 || alternativeCeiling.filter(v -> v.raw() <= 0).isPresent()
                     || highestFundedBid.filter(v -> v.raw() <= 0).isPresent()
                     || shortagePermille < 0 || shortagePermille > 1000) throw new IllegalArgumentException("invalid economic price constraints");
@@ -41,7 +47,7 @@ public final class MarketPricePolicy {
         if (seedAsk.raw() <= 0 || seedBid.raw() <= 0 || reference.raw() <= 0 || surplus < 0 || now < 0)
             throw new IllegalArgumentException("invalid market price inputs");
         if (previous.isEmpty()) return new Quote(new FixedScalar(Math.max(seedAsk.raw(), rules.seedBounded() ? context.materialFloor().raw() : 0)),
-                constrainBid(seedBid, context), reference, now, surplus, lastSale, 0);
+                constrainBid(withDelivery(seedBid, context), context), reference, now, surplus, lastSale, 0);
         var before = previous.orElseThrow();
         if (now < before.reviewedAt()) throw new IllegalArgumentException("price policy time went backwards");
         if (!rules.enabled() || now - before.reviewedAt() < rules.reviewTicks()) return before;
@@ -60,9 +66,20 @@ public final class MarketPricePolicy {
         if (rules.seedBounded()) ask = new FixedScalar(Math.max(ask.raw(), context.materialFloor().raw()));
         var referenceBid = rules.seedBounded() ? new FixedScalar(BigInteger.valueOf(reference.raw()).multiply(BigInteger.valueOf(seedBid.raw()))
                 .divide(BigInteger.valueOf(seedAsk.raw())).longValueExact()) : reference;
-        var bidTarget = constrainBid(bounded(scale(referenceBid, 1000L + context.shortagePermille()), seedBid, rules), context);
+        var bidTarget = constrainBid(withDelivery(bounded(scale(referenceBid, 1000L + context.shortagePermille()), seedBid, rules), context), context);
         var bid = moveToward(before.bid(), bidTarget, rules.stepPermille());
+        // Goods-price discovery may be gradual; a newly known transport expense
+        // must not wait for repeated percentage increases of a goods-only bid.
+        // Never exceed either willingness for goods + delivery or a local alternative.
+        if (context.shortagePermille() > 0 && context.acquisition().isPresent()) {
+            long provisionalCost = Math.min(bidTarget.raw(), context.acquisition().orElseThrow().total().raw());
+            bid = new FixedScalar(Math.max(bid.raw(), provisionalCost));
+        }
+        bid = constrainBid(bid, context);
         return new Quote(ask, bid, reference, now, surplus, lastSale, unsold);
+    }
+    private static FixedScalar withDelivery(FixedScalar goods, Context context) {
+        return context.acquisition().map(quote -> goods.plus(quote.delivery())).orElse(goods);
     }
     private static FixedScalar constrainBid(FixedScalar value, Context context) {
         return context.alternativeCeiling().map(ceiling -> new FixedScalar(Math.min(value.raw(), ceiling.raw()))).orElse(value);

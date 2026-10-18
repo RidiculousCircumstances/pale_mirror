@@ -6,6 +6,28 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MarketPricingTest {
+    @Test void purchaseConsentIncludesDeliveryWithoutInflatingGoodsReferenceOrSellerAsk() {
+        var policy = new MarketPricePolicy(); var rules = MarketPricingRules.adaptive();
+        var reference = new FixedScalar(16000);
+        var previous = new MarketPricePolicy.Quote(reference, new FixedScalar(32000), reference, 0, 0, Optional.empty(), 0);
+        var acquisition = new AcquisitionQuote(new FixedScalar(13600), new FixedScalar(23507));
+        var context = new MarketPricePolicy.Context(FixedScalar.ZERO, Optional.empty(), 1000, false,
+                Optional.empty(), Optional.of(acquisition));
+        var quote = policy.review(reference, reference, reference, 0, Optional.empty(), Optional.of(previous), rules.reviewTicks(), rules, context);
+        assertEquals(acquisition.total(), quote.bid(), "known freight must not wait for goods-price discovery to catch up");
+        assertEquals(reference, quote.reference());
+        assertEquals(reference, quote.ask());
+        var ceiling = new FixedScalar(30000);
+        var alternative = new MarketPricePolicy.Context(FixedScalar.ZERO, Optional.of(ceiling), 1000, false,
+                Optional.empty(), Optional.of(acquisition));
+        assertEquals(ceiling, policy.review(reference, reference, reference, 0, Optional.empty(), Optional.of(previous),
+                rules.reviewTicks(), rules, alternative).bid());
+        var excessiveAsk = new MarketPricePolicy.Context(FixedScalar.ZERO, Optional.empty(), 1000, false,
+                Optional.empty(), Optional.of(new AcquisitionQuote(FixedScalar.whole(10), acquisition.delivery())));
+        assertEquals(new FixedScalar(32000).plus(acquisition.delivery()), policy.review(reference, reference, reference, 0,
+                Optional.empty(), Optional.of(previous), rules.reviewTicks(), rules, excessiveAsk).bid(),
+                "an arbitrary seller ask cannot replace the buyer's willingness for goods");
+    }
     @Test void adaptivePricesCanLiquidateBelowSeedAndPastMaterialCostWithoutInventingSales() {
         var policy = new MarketPricePolicy(); var rules = MarketPricingRules.adaptive();
         var context = new MarketPricePolicy.Context(FixedScalar.whole(19), Optional.empty(), 0, false,

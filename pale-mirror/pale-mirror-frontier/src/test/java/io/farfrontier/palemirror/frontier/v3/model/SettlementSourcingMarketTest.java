@@ -93,6 +93,13 @@ class SettlementSourcingMarketTest {
         var timing = ProcurementTravelForecast.read(state, offer, buyer).orElseThrow();
         var provisions = GoodsTransportValuation.estimate(state, buyer, timing.journeyTicks(), 1);
         assertTrue(provisions.resourceExpense().raw() > 0);
+        var acquisition = GoodsAcquisitionPricing.estimate(state, buyer, "minecraft:bread", 32, 0).orElseThrow();
+        assertEquals(offer.unitPriceLimit(), acquisition.goods());
+        assertEquals(Math.ceilDiv(provisions.resourceExpense().raw(), 32), acquisition.delivery().raw());
+        assertTrue(GoodsAcquisitionPricing.estimate(state, buyer, "minecraft:bread", 0, 0).isEmpty());
+        assertTrue(GoodsAcquisitionPricing.estimate(state, buyer, "minecraft:bread", 32, offer.expiresAtTick()).isEmpty());
+        assertTrue(GoodsAcquisitionPricing.estimate(state, buyer, "minecraft:bread", 1, 0).orElseThrow().delivery()
+                .compareTo(acquisition.delivery()) > 0, "a small requirement cannot amortize freight over nonexistent cargo");
         assertEquals(provisions.resourceExpense().raw() + timing.labourTicks()
                 * state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().orElseThrow().labourValuePerTick(),
                 market.offers().getFirst().tripCost(), "make-or-buy must include the same provisions as actual procurement");
