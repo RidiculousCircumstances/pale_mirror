@@ -62,7 +62,7 @@ final class GoodsTripPlanning {
                 while (parcels.size() < cargoLimit && state.companies().goodsTrade().contracts().size() < GoodsTradeState.MAX_CONTRACTS
                         && reviews < initial.bootstrap().ruleset().goodsTrade().maximumPairReviews()) {
                     var expense = mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY
-                            ? GoodsDeliveryPricing.estimate(initial, seller, estimate, parcels.size() + 1).resourceExpense() : FixedScalar.ZERO;
+                            ? GoodsTransportValuation.estimate(initial, seller, estimate, parcels.size() + 1).resourceExpense() : FixedScalar.ZERO;
                     var search = GoodsOrderMatching.first(state, reviewer, now, Optional.of(seller.party()), Optional.of(buyer.party()),
                             considered, Optional.of(endpoints), expense);
                     reviews += search.checkedPairs();
@@ -127,8 +127,8 @@ final class GoodsTripPlanning {
                 continue;
             }
             var declaration = trip.orElseThrow();
-            var cost = GoodsDeliveryPricing.exact(initial,
-                    candidate.mode() == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? candidate.seller() : buyer, declaration, now);
+            var cost = GoodsTransportValuation.exact(initial,
+                    candidate.mode() == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? candidate.seller() : buyer, declaration.mission(), now);
             var priced = GoodsDeliveryPricing.reserve(initial, candidate.reservations(), candidate.parcels(), cost, now);
             if (priced.isEmpty()) {
                 decision = "DELIVERED_PRICE_OR_FUNDS; expense=" + cost.resourceExpense().raw() + "; reserved=0";
@@ -177,7 +177,7 @@ final class GoodsTripPlanning {
         var lines = new TreeMap<String, ProcurementSelection.Line>();
         quantities.forEach((item, quantity) -> lines.put(item, new ProcurementSelection.Line(quantity,
                 new FixedScalar(Math.ceilDiv(amounts.get(item), quantity)))));
-        var cost = GoodsDeliveryPricing.estimate(state, organizer, estimatedDuration, parcels.size());
+        var cost = GoodsTransportValuation.estimate(state, organizer, estimatedDuration, parcels.size());
         // Both modes use real resources. Labour remains comparative value, while
         // the exact admitted seller-delivery quote is conserved cash settlement.
         return new ProcurementSelection.Offer(id, lines, cost.resourceExpense(), estimatedDuration, cost.workerTicks());

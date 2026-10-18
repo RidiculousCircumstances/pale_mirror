@@ -36,7 +36,9 @@ final class SettlementSourcingMarket {
             if (timing.isEmpty()) continue;
             // The actual organizer/escrow remain contract-owned. This conservative comparison
             // charges one carrier's round trip even when the seller ultimately organizes it.
-            long transport = Math.multiplyExact(timing.orElseThrow().labourTicks(), policy.labourValuePerTick());
+            var cost = GoodsTransportValuation.estimate(state, buyer, timing.orElseThrow().journeyTicks(), 1);
+            long transport = Math.addExact(cost.resourceExpense().raw(),
+                    Math.multiplyExact(timing.orElseThrow().labourTicks(), policy.labourValuePerTick()));
             offers.put(pool, new SourcingMarket.Offer(pool, order.itemKind(), quantity, order.unitPriceLimit().raw(),
                     order.unitPriceLimit().raw(), timing.orElseThrow().deliveryTicks(), transport));
         }

@@ -59,6 +59,16 @@ class EconomicSourcingTest {
         var bakery = process("bakery", "food", Map.of("grain", 3));
         assertEquals(80, SourcingValuation.processes(List.of(fertile, bakery), Map.of("grain", 100L, "food", 500L), List.of(), 2).get("bakery"));
     }
+    @Test void historicalCheapInputIsNotAnAvailableSupplierButRealLocalProductionRemainsAnAlternative() {
+        var bakery = process("bakery", "food", Map.of("grain", 3));
+        var prices = Map.of("grain", 1L, "food", 100L);
+        var offers = List.of(offer("dear", "grain", 64, 8), offer("actual", "grain", 64, 5));
+        assertEquals(25, SourcingValuation.processes(List.of(bakery), prices, offers, 1).get("bakery"));
+        var field = new SupplyPlanner.Process("field", "grain", 1, Map.of(), 0, Map.of(), 0, 1, 1, 64, 2);
+        assertEquals(16, SourcingValuation.processes(List.of(bakery, field), prices, offers, 1).get("bakery"));
+        assertEquals(13, SourcingValuation.processes(List.of(bakery), prices, List.of(), 1).get("bakery"),
+                "missing market evidence retains an explicitly estimated reference, not a supply promise");
+    }
     @Test void sharedWorkerCannotSupplyTwoWholeProductionCapacitiesAtOnce() {
         var first = new SupplyPlanner.Process("a", "a", 1, Map.of(), 0, Map.of(), 0, 1, 1, 100, 10, Map.of("worker", 50L));
         var second = new SupplyPlanner.Process("b", "b", 1, Map.of(), 0, Map.of(), 0, 1, 1, 100, 10, Map.of("worker", 50L));

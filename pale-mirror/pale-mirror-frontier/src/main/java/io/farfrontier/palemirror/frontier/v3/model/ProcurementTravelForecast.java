@@ -4,7 +4,7 @@ import java.util.*;
 
 /** Quote cost/timing advice, never arrival coverage or route authority. No asynchronous cache dependency. */
 final class ProcurementTravelForecast {
-    record Estimate(long deliveryTicks, long labourTicks) { }
+    record Estimate(long deliveryTicks, long labourTicks, long journeyTicks) { }
     static Optional<Estimate> read(FrontierWorldState state, GoodsTradeOrder offer, GoodsParticipant buyer) {
         var destinations = GoodsParticipantStorage.containers(state, buyer, offer.itemKind());
         for (var mission : state.shipments().missions().values().stream().sorted(Comparator.comparing(TransportMission::id)).toList()) {
@@ -21,7 +21,7 @@ final class ProcurementTravelForecast {
             long duration = rules.plannedDuration(proof.outward().edges(), proof.returning().edges());
             long labour = Math.addExact(Math.multiplyExact(Math.addExact(proof.outward().edges(), proof.returning().edges()),
                     rules.ticksPerRouteEdge()), rules.destinationWorkTicks());
-            return Optional.of(new Estimate(Math.addExact(duration, state.humanPopulation().schedule(buyer.settlementId()).dayTicks()), labour));
+            return Optional.of(new Estimate(Math.addExact(duration, state.humanPopulation().schedule(buyer.settlementId()).dayTicks()), labour, duration));
         }
         // A first quote still needs a cost estimate. Endpoint distance is explicitly
         // provisional: this may rank a BUY intention, never create incoming stock,
@@ -39,7 +39,7 @@ final class ProcurementTravelForecast {
                 state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().orElseThrow().provisionalDistancePermille()), 1000));
         long duration = rules.plannedDuration(edges, edges);
         long labour = Math.addExact(Math.multiplyExact(Math.multiplyExact(edges, 2), rules.ticksPerRouteEdge()), rules.destinationWorkTicks());
-        return Optional.of(new Estimate(Math.addExact(duration, state.humanPopulation().schedule(buyer.settlementId()).dayTicks()), labour));
+        return Optional.of(new Estimate(Math.addExact(duration, state.humanPopulation().schedule(buyer.settlementId()).dayTicks()), labour, duration));
     }
     private ProcurementTravelForecast() { }
 }

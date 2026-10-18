@@ -10,8 +10,12 @@ public final class SourcingValuation {
         if (labourValuePerTick < 1 || references.values().stream().anyMatch(value -> value <= 0))
             throw new IllegalArgumentException("invalid replacement valuation");
         var prices = new HashMap<>(references);
-        offers.forEach(offer -> prices.merge(offer.item(), Math.addExact(offer.deliveredCostPerItem(),
+        var quoted = new HashMap<String, Long>();
+        offers.forEach(offer -> quoted.merge(offer.item(), Math.addExact(offer.deliveredCostPerItem(),
                 Math.ceilDiv(offer.tripCost(), offer.quantity())), Math::min));
+        // A historical reference is a fallback, not an executable cheap supplier.
+        // Compare current quoted replacement costs with actual local capabilities.
+        prices.putAll(quoted);
         var result = new TreeMap<String, Long>();
         var visiting = new HashSet<String>();
         for (var process : capacities) cost(process, capacities, prices, result, visiting, labourValuePerTick);

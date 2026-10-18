@@ -90,7 +90,12 @@ class SettlementSourcingMarketTest {
                 0, Map.of(), 0, 1, 1, 32, 100000);
         var market = SettlementSourcingMarket.read(state, buyer, List.of(process));
         assertEquals(1, market.offers().size());
-        assertTrue(market.offers().getFirst().tripCost() > 0);
+        var timing = ProcurementTravelForecast.read(state, offer, buyer).orElseThrow();
+        var provisions = GoodsTransportValuation.estimate(state, buyer, timing.journeyTicks(), 1);
+        assertTrue(provisions.resourceExpense().raw() > 0);
+        assertEquals(provisions.resourceExpense().raw() + timing.labourTicks()
+                * state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().orElseThrow().labourValuePerTick(),
+                market.offers().getFirst().tripCost(), "make-or-buy must include the same provisions as actual procurement");
         assertEquals(32, market.allocate().preferPurchase("minecraft:bread", 32, Long.MAX_VALUE, Optional.of(process)));
         var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
         var restored = codec.decode(codec.encode(state));
