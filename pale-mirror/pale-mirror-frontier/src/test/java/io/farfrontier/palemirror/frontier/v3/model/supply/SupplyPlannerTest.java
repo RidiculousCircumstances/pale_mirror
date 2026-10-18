@@ -176,20 +176,36 @@ class SupplyPlannerTest {
         var b = new SupplyPlanner.Process("b", "wheat", 1, Map.of("bread", 1), 0, Map.of(), 0, 1, 1, 1);
         assertThrows(IllegalArgumentException.class, () -> new SupplyPlanner().plan(stocks, List.of(a, b)));
     }
-    @Test void aSmallOrdinaryOrderWaitsButEventuallyDispatchesAndCriticalFoodDoesNotWait() {
+    @Test void reserveRemaindersWaitForConsolidationButUsefulLoadsAndCriticalFoodDepart() {
         var ordinary = new SupplyPlanner.Demand(2, 0, 0, Long.MAX_VALUE, Set.of(SupplyPlanner.Reason.STOCK_REPLENISHMENT), Optional.empty());
-        assertEquals(TripDispatchPolicy.Cause.ACCUMULATING, TripDispatchPolicy.assess(List.of(new TripDispatchPolicy.Goods(2, 0, FOOD, ordinary))));
-        assertEquals(TripDispatchPolicy.Cause.MAXIMUM_WAIT, TripDispatchPolicy.assess(List.of(new TripDispatchPolicy.Goods(2, 500, FOOD, ordinary))));
+        assertEquals(TripDispatchPolicy.Cause.ACCUMULATING,
+                TripDispatchPolicy.assess(List.of(new TripDispatchPolicy.Goods(2, FOOD, ordinary)), 23225, 400));
         var urgent = new SupplyPlanner.Demand(2, 0, 0, 10, Set.of(SupplyPlanner.Reason.CONSUMPTION_DEADLINE), Optional.empty());
-        assertEquals(TripDispatchPolicy.Cause.SUPPLY_DEADLINE, TripDispatchPolicy.assess(List.of(new TripDispatchPolicy.Goods(2, 0, FOOD, urgent))));
-        assertEquals(TripDispatchPolicy.Cause.PREFERRED_LOAD, TripDispatchPolicy.assess(List.of(new TripDispatchPolicy.Goods(100, 0, FOOD, ordinary))));
+        assertEquals(TripDispatchPolicy.Cause.SUPPLY_DEADLINE,
+                TripDispatchPolicy.assess(List.of(new TripDispatchPolicy.Goods(2, FOOD, urgent)), 100, 10));
+        assertEquals(TripDispatchPolicy.Cause.PREFERRED_LOAD,
+                TripDispatchPolicy.assess(List.of(new TripDispatchPolicy.Goods(100, FOOD, ordinary)), 100, 10));
     }
-    @Test void anAgedLargeOrderDoesNotDispatchEachNewlyAvailableItem() {
-        var ordinary = new SupplyPlanner.Demand(192, 0, 0, Long.MAX_VALUE,
+    @Test void routeForecastNotFixedLeadDeterminesTheLastSafeReviewForSmallFuelLoads() {
+        var fuel = new SupplyPlanner.Demand(1, 0, 0, 23663,
+                Set.of(SupplyPlanner.Reason.PRODUCTION_FUEL), Optional.empty());
+        assertFalse(fuel.urgent(MATERIAL.leadTicks()), "not classified urgent by the old fixed lead");
+        var manifest = List.of(new TripDispatchPolicy.Goods(1, MATERIAL, fuel));
+        assertEquals(TripDispatchPolicy.Cause.ACCUMULATING, TripDispatchPolicy.assess(manifest, 23262, 400));
+        assertEquals(TripDispatchPolicy.Cause.SUPPLY_DEADLINE, TripDispatchPolicy.assess(manifest, 23263, 400));
+        assertEquals(TripDispatchPolicy.Cause.SUPPLY_DEADLINE, TripDispatchPolicy.assess(manifest, 50000, 400),
+                "late partial recovery remains useful; there is no hard minimum lot");
+        assertEquals(TripDispatchPolicy.Cause.ACCUMULATING, TripDispatchPolicy.assess(manifest, 1000, 400),
+                "shorter exact journey can leave room to consolidate after a conservative estimate");
+    }
+    @Test void mixedManifestCanConsolidateSmallNeedsWithoutInventingSupply() {
+        var ordinary = new SupplyPlanner.Demand(100, 0, 0, Long.MAX_VALUE,
                 Set.of(SupplyPlanner.Reason.STOCK_REPLENISHMENT), Optional.empty());
-        assertEquals(TripDispatchPolicy.Cause.ACCUMULATING, TripDispatchPolicy.assess(List.of(
-                new TripDispatchPolicy.Goods(1, 10000, MATERIAL, ordinary))));
-        assertEquals(TripDispatchPolicy.Cause.MAXIMUM_WAIT, TripDispatchPolicy.assess(List.of(
-                new TripDispatchPolicy.Goods(MATERIAL.preferredLot(), 10000, MATERIAL, ordinary))));
+        var a = new TripDispatchPolicy.Goods(FOOD.preferredTripLoad() / 2, FOOD, ordinary);
+        var b = new TripDispatchPolicy.Goods(MATERIAL.preferredTripLoad() / 2, MATERIAL, ordinary);
+        assertEquals(TripDispatchPolicy.Cause.ACCUMULATING, TripDispatchPolicy.assess(List.of(a), 100, 10));
+        assertEquals(TripDispatchPolicy.Cause.PREFERRED_LOAD, TripDispatchPolicy.assess(List.of(a, b), 100, 10));
+        assertThrows(IllegalArgumentException.class, () -> TripDispatchPolicy.assess(List.of(a), -1, 10));
+        assertEquals(TripDispatchPolicy.Cause.ACCUMULATING, TripDispatchPolicy.assess(List.of(a), Long.MAX_VALUE, 400));
     }
 }
