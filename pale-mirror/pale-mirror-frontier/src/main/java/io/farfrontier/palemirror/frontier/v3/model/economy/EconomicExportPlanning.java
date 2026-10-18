@@ -28,15 +28,18 @@ final class EconomicExportPlanning {
         var buyerCash = new TreeMap<String, Long>();
         for (var interest : facts.exportInterest()) buyerCash.merge(interest.buyer(), interest.availableCash(), Math::min);
         var result = new TreeMap<String, EconomicPlan.Export>();
+        var valuation = new ExportProductionValuation(facts);
         long remaining = policy.maximumExportItems();
-        for (var interest : facts.exportInterest().stream().sorted(Comparator.comparingLong(EconomicSnapshot.ExportInterest::unitPrice)
-                .reversed().thenComparing(EconomicSnapshot.ExportInterest::buyer).thenComparing(EconomicSnapshot.ExportInterest::item)).toList()) {
+        for (var interest : facts.exportInterest().stream().sorted(valuation.order(facts, capacity)).toList()) {
             long wanted = Math.min(remaining, Math.min(interest.quantity(), buyerCash.get(interest.buyer()) / interest.unitPrice()));
             String item = interest.item(); long held = Math.min(wanted, inputs.get(item)); inputs.merge(item, -held, Long::sum);
             long made = 0;
             for (var process : facts.processes().stream().filter(p -> p.product().equals(item))
-                    .sorted(Comparator.comparing(SupplyPlanner.Process::id)).toList()) {
-                if (facts.market().processUnitCosts().getOrDefault(process.id(), Long.MAX_VALUE) > interest.unitPrice()) continue;
+                    .sorted(Comparator.<SupplyPlanner.Process, ExportProductionValuation.Return>comparing(
+                            p -> valuation.returnOn(p, interest.unitPrice())).reversed().thenComparing(SupplyPlanner.Process::id)).toList()) {
+                // Sourcing's shadow labour price ranks make-or-buy alternatives;
+                // it is not a cash wage or a floor for otherwise idle public work.
+                if (valuation.returnOn(process, interest.unitPrice()).margin() == 0) continue;
                 long batches = Math.min(capacity.get(process.id()), (wanted - held - made) / process.outputPerBatch());
                 if (!process.labourCapacity().isEmpty()) batches = Math.min(batches,
                         process.recipesForLabour(process.labourCapacity().keySet().stream().mapToLong(labour::get).sum()));
