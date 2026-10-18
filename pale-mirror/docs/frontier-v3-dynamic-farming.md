@@ -109,6 +109,11 @@ economic equilibrium.
   older exact physical projection does not make it the newest plant state; the
   latest canonical state is projected separately. Player changes are still
   classified before writes. Context cards and diagnostics expose the decision.
+- Navigation observations wait for initial structural projection, including
+  contextual shape dependencies. A loaded but unfinished replica's air is not
+  evidence that a declared support was removed. The request remains queued;
+  later real player changes remain authoritative. This fixes the observed first
+  HOT visit abort at the settlement11 service floor `(134,64,355)`.
 
 Deployment requires ruleset `frontier-v3-quarry-graybox-r21`, state schema294 and
 a fresh disposable world. Live acceptance receipts belong in `CONTINUITY.md`;
