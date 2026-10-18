@@ -8,6 +8,7 @@ import java.util.*;
 /** Buyer policy ranks quoted alternatives. Exact logistics admission follows selection;
  * estimates never reserve goods, assign a crew or authorize movement. */
 public final class ProcurementSelection {
+    public enum Departure { READY, DEFERRED }
     public record Requirement(String item, int quantity, long deadlineHorizonTicks, boolean fundedProductionRestart) {
         public Requirement(String item, int quantity, long deadlineHorizonTicks) {
             this(item, quantity, deadlineHorizonTicks, false);
@@ -27,8 +28,9 @@ public final class ProcurementSelection {
     /** Transport resources are an explicit monetary estimate. Crew time includes
      * either organizer's workers: seller delivery is not costless labour. */
     public record Offer(SubjectId id, Map<String, Line> goods, FixedScalar transportCost,
-                        long arrivalDelayTicks, long workerTicks) {
+                        long arrivalDelayTicks, long workerTicks, Departure departure) {
         public Offer {
+            Objects.requireNonNull(departure);
             Objects.requireNonNull(id); goods = Map.copyOf(goods); Objects.requireNonNull(transportCost);
             if (goods.isEmpty() || goods.size() > 256 || transportCost.raw() < 0 || arrivalDelayTicks < 0 || workerTicks < 0)
                 throw new IllegalArgumentException("invalid feasible procurement offer");
@@ -58,8 +60,12 @@ public final class ProcurementSelection {
             // When all offers miss the deadline, partial recovery remains useful. Never
             // pretend no demand exists merely because timely provision has become impossible.
             boolean timely = candidates.stream().anyMatch(o -> o.arrivalDelayTicks() <= need.deadlineHorizonTicks());
-            return candidates.stream().filter(o -> !timely || o.arrivalDelayTicks() <= need.deadlineHorizonTicks())
-                    .min((a, b) -> compare(a, b, need, timely, labourValuePerTick)).map(Offer::id);
+            var selected = candidates.stream().filter(o -> !timely || o.arrivalDelayTicks() <= need.deadlineHorizonTicks())
+                    .min((a, b) -> compare(a, b, need, timely, labourValuePerTick)).orElseThrow();
+            // Waiting is an alternative, not a missing offer. Filtering it out
+            // first would select a longer, dearer journey merely because that
+            // journey must start earlier. Other requirements can still depart.
+            if (selected.departure() == Departure.READY) return Optional.of(selected.id());
         }
         return Optional.empty();
     }

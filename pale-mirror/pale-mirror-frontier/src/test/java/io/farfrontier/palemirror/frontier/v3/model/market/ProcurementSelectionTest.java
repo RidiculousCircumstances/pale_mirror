@@ -29,9 +29,9 @@ class ProcurementSelectionTest {
         var needs = List.of(new ProcurementSelection.Requirement("a-food", 60, 0),
                 new ProcurementSelection.Requirement("z-fuel", 1, 0, true));
         var food = new ProcurementSelection.Offer(new SubjectId("offer:food"),
-                Map.of("a-food", new ProcurementSelection.Line(4, FixedScalar.whole(3))), FixedScalar.ZERO, 100, 0);
+                Map.of("a-food", new ProcurementSelection.Line(4, FixedScalar.whole(3))), FixedScalar.ZERO, 100, 0, ProcurementSelection.Departure.READY);
         var fuel = new ProcurementSelection.Offer(new SubjectId("offer:fuel"),
-                Map.of("z-fuel", new ProcurementSelection.Line(1, FixedScalar.whole(8))), FixedScalar.ZERO, 100, 0);
+                Map.of("z-fuel", new ProcurementSelection.Line(1, FixedScalar.whole(8))), FixedScalar.ZERO, 100, 0, ProcurementSelection.Departure.READY);
         assertEquals(Optional.of(fuel.id()), new ProcurementSelection().select(needs, List.of(food, fuel)));
     }
     @Test void buyerChoosesDeliveredCostRatherThanCheapestGoodsOrInputOrder() {
@@ -54,8 +54,26 @@ class ProcurementSelectionTest {
         assertEquals(Optional.of(bulk.id()), planner.select(request, List.of(own, bulk)));
         assertEquals(Optional.of(late.id()), planner.select(request, List.of(late)), "late recovery remains a real option");
     }
+    @Test void cheaperDeferredJourneyIsAnAlternativeToSendingAnExpensiveDistantTripNow() {
+        var need = List.of(new ProcurementSelection.Requirement("grain", 1, 1000));
+        var nearby = new ProcurementSelection.Offer(new SubjectId("offer:nearby"),
+                Map.of("grain", new ProcurementSelection.Line(1, FixedScalar.whole(1))), FixedScalar.whole(1),
+                100, 100, ProcurementSelection.Departure.DEFERRED);
+        var distant = offer("distant", 1, 1, 8, 1000, 1000);
+        assertTrue(new ProcurementSelection().select(need, List.of(distant, nearby)).isEmpty(),
+                "longer journey must not manufacture urgency by excluding a cheaper deferred offer");
+        assertEquals(Optional.of(distant.id()), new ProcurementSelection().select(need, List.of(distant)),
+                "unavailable alternatives cannot prevent the only timely supply");
+        var otherNeed = new ProcurementSelection.Requirement("fuel", 1, 1100);
+        var fuel = new ProcurementSelection.Offer(new SubjectId("offer:fuel"),
+                Map.of("fuel", new ProcurementSelection.Line(1, FixedScalar.whole(1))), FixedScalar.whole(1),
+                1100, 1100, ProcurementSelection.Departure.READY);
+        assertEquals(Optional.of(fuel.id()), new ProcurementSelection().select(List.of(need.getFirst(), otherNeed),
+                List.of(distant, nearby, fuel)), "deferring one resource must not block another due requirement");
+    }
     private static ProcurementSelection.Offer offer(String id, long unit, int quantity, long freight, long arrival, long labour) {
         return new ProcurementSelection.Offer(new SubjectId("offer:" + id),
-                Map.of("grain", new ProcurementSelection.Line(quantity, FixedScalar.whole(unit))), FixedScalar.whole(freight), arrival, labour);
+                Map.of("grain", new ProcurementSelection.Line(quantity, FixedScalar.whole(unit))), FixedScalar.whole(freight), arrival, labour,
+                ProcurementSelection.Departure.READY);
     }
 }
