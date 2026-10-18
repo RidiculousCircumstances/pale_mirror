@@ -9,11 +9,11 @@ import io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionDeposit;
 final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
     private final ImmutableInputView<Object> version = new ImmutableInputView<>();
     private final ImmutableInputView<Set<BlockPosition>> queryFootprint = new ImmutableInputView<>();
-    private Set<BlockPosition> priorQueries;
-    private io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockExclusions priorExclusions;
-    private Set<BlockPosition> relevantExclusions = Set.of();
+    private final LocalBlockExclusions exclusions = new LocalBlockExclusions();
     private Object projectedBootstrap;
     private final Map<SubjectId, ImmutableInputView<KnownSiteGeometry.View>> deposits = new HashMap<>();
+    private final Map<SubjectId, ImmutableInputView<Set<BlockPosition>>> footprints = new HashMap<>();
+    private final Map<SubjectId, LocalBlockExclusions> localExclusions = new HashMap<>();
     private RegionalSurfaceContributions<SubjectId> surfaceParts = new RegionalSurfaceContributions<>();
     private RegionalBlockContributions<SubjectId> obstacleParts = new RegionalBlockContributions<>();
     private RegionalBlockContributions<SubjectId> withdrawnParts = new RegionalBlockContributions<>();
@@ -32,24 +32,14 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
             }
             return Set.copyOf(positions);
         });
-        var exclusions = state.extractionSites().geologicalExclusions();
-        if (priorQueries != queries || priorExclusions != exclusions) {
-            boolean unchanged = priorQueries == queries && priorExclusions != null
-                    && exclusions.additionsSince(priorExclusions)
-                        .filter(added -> Collections.disjoint(added, queries)).isPresent();
-            if (!unchanged) {
-                var relevant = new HashSet<BlockPosition>();
-                for (var position : queries) if (exclusions.positions().contains(position)) relevant.add(position);
-                if (!relevant.equals(relevantExclusions)) relevantExclusions = Set.copyOf(relevant);
-            }
-            priorQueries = queries; priorExclusions = exclusions;
-        }
+        var relevantExclusions = exclusions.read(queries, state.extractionSites().geologicalExclusions());
         return version.get(List.of(state.bootstrap(), state.extractionSites().deposits(),
-                relevantExclusions, state.navigationGeometry().definitions()), Object::new);
+                relevantExclusions, state.extractionSites().geology(), state.extractionSites().knowledge(),
+                state.navigationGeometry().definitions()), Object::new);
     }
     @Override public KnownSiteGeometry.View project(FrontierWorldState state) {
         if (projectedBootstrap != state.bootstrap()) {
-            deposits.clear(); surfaceParts = new RegionalSurfaceContributions<>();
+            deposits.clear(); footprints.clear(); localExclusions.clear(); surfaceParts = new RegionalSurfaceContributions<>();
             obstacleParts = new RegionalBlockContributions<>(); withdrawnParts = new RegionalBlockContributions<>();
             unknownParts = new RegionalBlockContributions<>();
             blockParts = new RegionalBlockMapContributions<>();
@@ -57,6 +47,7 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
         }
         var current = state.extractionSites().deposits();
         for (var removed : Set.copyOf(deposits.keySet())) if (!current.containsKey(removed)) {
+            footprints.remove(removed); localExclusions.remove(removed);
             deposits.remove(removed); surfaceParts.replace(removed, RegionalSurfaceMap.copyOf(Map.of()));
             obstacleParts.replace(removed, RegionalBlockSet.copyOf(Set.of())); withdrawnParts.replace(removed, RegionalBlockSet.copyOf(Set.of()));
             unknownParts.replace(removed, RegionalBlockSet.copyOf(Set.of()));
@@ -64,9 +55,14 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
         }
         for (var entry : current.entrySet()) {
             var deposit = entry.getValue();
+            var queries = footprints.computeIfAbsent(entry.getKey(), ignored -> new ImmutableInputView<>())
+                    .get(List.of(deposit.site().layout(), deposit.geometry()), () -> footprint(deposit));
+            var relevant = localExclusions.computeIfAbsent(entry.getKey(), ignored -> new LocalBlockExclusions())
+                    .read(queries, state.extractionSites().geologicalExclusions());
             var view = deposits.computeIfAbsent(entry.getKey(), ignored -> new ImmutableInputView<>())
-                    .get(List.of(deposit.site().layout(), deposit.cells(), deposit.geometry(), relevantExclusions, state.navigationGeometry().definitions()),
-                            () -> projectDeposit(state, deposit));
+                    .get(List.of(deposit.site(), deposit.cells(), deposit.geometry(), relevant,
+                            state.extractionSites().geology(), state.extractionSites().knowledge(), state.navigationGeometry().definitions()),
+                            () -> projectDeposit(state, deposit, queries));
             surfaceParts.replace(entry.getKey(), RegionalSurfaceMap.copyOf(view.supports()));
             obstacleParts.replace(entry.getKey(), RegionalBlockSet.copyOf(view.obstacles()));
             withdrawnParts.replace(entry.getKey(), RegionalBlockSet.copyOf(view.withdrawnSupports()));
@@ -75,12 +71,12 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
         }
         return new KnownSiteGeometry.View(surfaceParts.snapshot(), obstacleParts.snapshot(), withdrawnParts.snapshot(), unknownParts.snapshot(), blockParts.snapshot());
     }
-    private KnownSiteGeometry.View projectDeposit(FrontierWorldState state, ExtractionDeposit deposit) {
+    private KnownSiteGeometry.View projectDeposit(FrontierWorldState state, ExtractionDeposit deposit, Set<BlockPosition> queries) {
         var working = new ExtractionWorkingSurfaces(state, deposit);
         var blocks = new HashMap<BlockPosition, NavigationBlockState>();
-        for (var position : footprint(deposit)) working.at(position).ifPresent(block ->
+        for (var position : queries) working.at(position).ifPresent(block ->
                 blocks.put(position, new NavigationBlockState(block.kind(), block.properties())));
-        var projection = KnownBlockNavigationProjection.project(footprint(deposit), position -> {
+        var projection = KnownBlockNavigationProjection.project(queries, position -> {
             var block = blocks.get(position); if (block == null) return Optional.empty();
             return KnownBlockCollision.coarse(state.navigationGeometry(), block);
         });
