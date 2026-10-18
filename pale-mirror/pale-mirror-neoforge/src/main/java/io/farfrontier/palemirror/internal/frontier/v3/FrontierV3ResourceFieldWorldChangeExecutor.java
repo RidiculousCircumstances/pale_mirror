@@ -31,8 +31,14 @@ import java.util.Objects;
 
 /** Bounded local observation of an already changed, naturally loaded field cell. */
 final class FrontierV3ResourceFieldWorldChangeExecutor {
-    private static final Map<FrontierV3ServerRuntime<?, ?>, Map<Long, List<CellOwner>>> CELL_OWNERS = new IdentityHashMap<>();
-    private record CellOwner(SubjectId siteId, ResourceFieldLayout.Cell cell) { }
+    private static final Map<FrontierV3ServerRuntime<?, ?>, CellOwners> CELL_OWNERS = new IdentityHashMap<>();
+    record CellOwner(SubjectId siteId, ResourceFieldLayout.Cell cell) { }
+    record CellOwners(Map<SubjectId, ResourceFieldLayout> layouts, Map<Long, List<CellOwner>> columns) {
+        boolean matches(Map<SubjectId, ResourceFieldCycle> cycles) {
+            return layouts.size() == cycles.size() && cycles.entrySet().stream()
+                    .allMatch(entry -> layouts.get(entry.getKey()) == entry.getValue().layout());
+        }
+    }
 
     private FrontierV3ResourceFieldWorldChangeExecutor() { }
 
@@ -49,7 +55,7 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
                                  BlockPos position, BlockState replacement) {
         var state = runtime.decodedState().orElse(null);
         if (state == null) return;
-        var owners = CELL_OWNERS.computeIfAbsent(runtime, ignored -> cellOwners(state));
+        var owners = owners(runtime, state);
         List<CellOwner> column = owners.get(ChunkPos.asLong(position.getX() >> 4, position.getZ() >> 4));
         if (column == null || !level.hasChunkAt(position)) return;
         for (CellOwner owner : column) {
@@ -113,9 +119,18 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
         }
     }
 
-    private static Map<Long, List<CellOwner>> cellOwners(FrontierWorldState state) {
+    private static Map<Long, List<CellOwner>> owners(FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state) {
+        var index = CELL_OWNERS.get(runtime);
+        if (index == null || !index.matches(state.resourceSites().cycles())) {
+            index = cellOwners(state.resourceSites().cycles()); CELL_OWNERS.put(runtime, index);
+        }
+        return index.columns();
+    }
+    static CellOwners cellOwners(Map<SubjectId, ResourceFieldCycle> cycles) {
         Map<Long, List<CellOwner>> byColumn = new HashMap<>();
-        state.resourceSites().cycles().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
+        var layouts = new HashMap<SubjectId, ResourceFieldLayout>();
+        cycles.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
+            layouts.put(entry.getKey(), entry.getValue().layout());
             for (ResourceFieldLayout.Cell cell : entry.getValue().layout().cells()) {
                 long cropColumn = ChunkPos.asLong(cell.crop().x() >> 4, cell.crop().z() >> 4);
                 long soilColumn = ChunkPos.asLong(cell.soil().support().x() >> 4, cell.soil().support().z() >> 4);
@@ -127,7 +142,7 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
         });
         Map<Long, List<CellOwner>> closed = new HashMap<>();
         byColumn.forEach((column, cells) -> closed.put(column, List.copyOf(cells)));
-        return Map.copyOf(closed);
+        return new CellOwners(Map.copyOf(layouts), Map.copyOf(closed));
     }
 
     static boolean reconcileOne(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
@@ -250,7 +265,7 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
                                 BlockPos position, BlockState replacement) {
         var state = runtime.decodedState().orElse(null);
         if (state == null) return;
-        var owners = CELL_OWNERS.computeIfAbsent(runtime, ignored -> cellOwners(state));
+        var owners = owners(runtime, state);
         var column = owners.get(ChunkPos.asLong(position.getX() >> 4, position.getZ() >> 4));
         if (column == null) return;
         for (var owner : column) {

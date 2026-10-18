@@ -117,10 +117,8 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
             if (retained.foreign().isPresent()) return false;
             drift = reading instanceof FrontierV3ResourceFieldObservation.Foreign
                     || reading instanceof FrontierV3ResourceFieldObservation.Owned owned
-                        && !owned.condition().equals(retained.committed())
-                        && !owned.condition().equals(ResourceFieldPhysicalSurface.Condition.of(before))
-                        && FrontierV3ResourceFieldWorldChangeExecutor.classify(
-                            ResourceFieldPhysicalSurface.Condition.of(before), owned.condition()) == null;
+                        && needsIndependentObservation(ResourceFieldPhysicalSurface.Condition.of(before),
+                            retained.committed(), owned.condition());
         }
         if (!drift) return false;
         var checkpoint = runtime.canonicalState().orElseThrow();
@@ -135,6 +133,16 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
         ledger.persist(level);
         submit(runtime, held, "field-foreign-hold");
         return true;
+    }
+
+    /** Real changes during projection lag need their own physical predecessor, not a fabricated canonical one. */
+    static boolean needsIndependentObservation(ResourceFieldPhysicalSurface.Condition canonical,
+            ResourceFieldPhysicalSurface.Condition physical, ResourceFieldPhysicalSurface.Condition actual) {
+        if (actual.equals(physical) || actual.equals(canonical)) return false;
+        if (physical.crop() == ResourceFieldCycle.Crop.GROWING
+                && canonical.equalsOrGrowsFrom(physical) && actual.equalsOrGrowsFrom(physical))
+            return false; // Monotone biology belongs to the ordinary growth/projection acknowledgement.
+        return !physical.equals(canonical) || FrontierV3ResourceFieldWorldChangeExecutor.classify(canonical, actual) == null;
     }
 
     static boolean reconcileOne(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {

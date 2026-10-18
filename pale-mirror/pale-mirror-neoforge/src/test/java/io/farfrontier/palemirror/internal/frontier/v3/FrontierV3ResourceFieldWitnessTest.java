@@ -21,6 +21,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3ResourceFieldWitnessTest {
+    @Test void externalSoilChangeDuringProjectionLagIsObservedWithoutReplayingOlderBiology() {
+        var physical = new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.GRASS, ResourceFieldCycle.Crop.ABSENT, 0);
+        var canonical = new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.GROWING, 5);
+        assertTrue(FrontierV3ResourceFieldForeignChangeExecutor.needsIndependentObservation(canonical, physical, DIRT));
+        assertFalse(FrontierV3ResourceFieldForeignChangeExecutor.needsIndependentObservation(canonical, physical, physical));
+        var intermediate = new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.GROWING, 3);
+        assertFalse(FrontierV3ResourceFieldForeignChangeExecutor.needsIndependentObservation(canonical, PLANTED, intermediate));
+        assertTrue(FrontierV3ResourceFieldForeignChangeExecutor.needsIndependentObservation(canonical, PLANTED, BARE));
+    }
     @Test void extensionPreservesOldObservedCellsAndRejectsChangedNewGround() {
         var before = ResourceFieldCycle.seeded(SITE, layout(), 1).advanceGrowthStage();
         var witness = FrontierV3ResourceFieldWitness.claimed(SITE, 1, ResourceFieldPhysicalSurface.fromCycle(before));
@@ -30,6 +39,15 @@ class FrontierV3ResourceFieldWitnessTest {
         var nextLayout = before.layout().extend(List.of(new ResourceFieldLayout.Cell(id,
                 support.support().offset(0, 1, 0), support, support)), 4, ground);
         var next = before.extended(nextLayout, ground);
+        var index = FrontierV3ResourceFieldWorldChangeExecutor.cellOwners(Map.of(SITE, before));
+        assertTrue(index.matches(Map.of(SITE, before.advanceGrowthStage())), "biology does not rebuild the geometry index");
+        assertFalse(index.matches(Map.of(SITE, next)), "new land must enter both block-write hooks");
+        var updatedIndex = FrontierV3ResourceFieldWorldChangeExecutor.cellOwners(Map.of(SITE, next));
+        assertTrue(updatedIndex.columns().values().stream().flatMap(List::stream)
+                .anyMatch(owner -> owner.siteId().equals(SITE) && owner.cell().id().equals(id)));
+        var other = new SubjectId("site:additional");
+        assertFalse(updatedIndex.matches(Map.of(SITE, next, other, ResourceFieldCycle.seeded(other, layout(), 1))),
+                "a new field invalidates the same index even when old layouts stay unchanged");
         var actual = new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.GRASS, ResourceFieldCycle.Crop.ABSENT, 0);
         var extended = witness.extend(next, Map.of(id, actual));
         assertTrue(extended.matchesCycle(next));
