@@ -10,6 +10,12 @@ final class SettlementEconomicPlanning {
     static SupplyPlanner.Plan read(FrontierWorldState state, SubjectId home,
             Map<String, SupplyPlanner.Stock> stocks, Map<String, SupplyReservePlanner.Target> reserves,
             List<SupplyPlanner.Process> capacities, List<SupplyPlanner.Dependency> commitments, SourcingMarket market) {
+        return read(state, home, stocks, reserves, capacities, commitments, market, false);
+    }
+    static SupplyPlanner.Plan read(FrontierWorldState state, SubjectId home,
+            Map<String, SupplyPlanner.Stock> stocks, Map<String, SupplyReservePlanner.Target> reserves,
+            List<SupplyPlanner.Process> capacities, List<SupplyPlanner.Dependency> commitments, SourcingMarket market,
+            boolean requireSustainedExport) {
         var trade = state.companies().goodsTrade(); var rules = state.bootstrap().ruleset().goodsTrade();
         var participant = trade.participants().participants().get(home);
         var basis = SettlementReservePlanning.basis(state, home);
@@ -29,13 +35,14 @@ final class SettlementEconomicPlanning {
             if (order.unitPriceLimit().raw() < salePrice) continue;
             long quantity = order.availableQuantity();
             var cultivation = state.bootstrap().ruleset().fields().cultivation();
-            if (cultivation.isPresent()) {
+            if (requireSustainedExport && cultivation.isPresent()) {
                 var observation = trade.demandHistory().observations().get(
                         new io.farfrontier.palemirror.frontier.v3.model.market.MarketDemandHistory.Key(order.party().id(), order.itemKind()));
                 long duration = Math.multiplyExact(state.humanPopulation().schedule(home).dayTicks(), cultivation.orElseThrow().stableDemandDays());
-                if (observation == null || !observation.sustained(now, duration, Math.multiplyExact(2, rules.reviewInterval()))
-                        || observation.minimumPrice() < salePrice) continue;
-                quantity = Math.min(quantity, observation.minimumQuantity());
+                var sustained = observation == null ? Optional.<io.farfrontier.palemirror.frontier.v3.model.market.MarketDemandHistory.Quote>empty()
+                        : observation.sustainedQuote(now, duration, Math.multiplyExact(2, rules.reviewInterval()));
+                if (sustained.isEmpty() || sustained.orElseThrow().unitPrice() < salePrice) continue;
+                quantity = Math.min(quantity, sustained.orElseThrow().quantity());
             }
             var buyer = trade.participants().participants().get(order.party().id());
             if (buyer == null || !GoodsParticipantStorage.eligible(state, buyer, order.containerId(), order.itemKind())) continue;

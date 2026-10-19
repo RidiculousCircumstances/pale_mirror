@@ -11,7 +11,8 @@ public final class GoodsParticipantFunding {
     public static FixedScalar purchase(GoodsParticipantView view, GoodsTradeRules rules, String item) {
         var economy = view.supplyPlan().flatMap(plan -> plan.economy());
         if (economy.isPresent()) return io.farfrontier.palemirror.frontier.v3.model.economy.EconomicPurchaseFunding.available(
-                economy.orElseThrow(), view.availableMoney(), needs(view, rules), item);
+                economy.orElseThrow(), view.availableMoney(), needs(view, rules), item,
+                immediateAlternative(view, rules, item));
         var preferred = view.supplyPlan().map(plan -> plan.preferredPurchaseSpending()).orElse(java.util.Map.of());
         if (preferred.isEmpty()) return ProcurementBudget.forPurchase(view.availableMoney(), needs(view, rules), item);
         long other = preferred.entrySet().stream().filter(e -> !e.getKey().equals(item)).mapToLong(java.util.Map.Entry::getValue)
@@ -22,6 +23,14 @@ public final class GoodsParticipantFunding {
         if (preferred.containsKey(item)) return new FixedScalar(Math.min(remainder.raw(), preferred.get(item)));
         var unselected = needs(view, rules).stream().filter(need -> !preferred.containsKey(need.item())).toList();
         return ProcurementBudget.forPurchase(remainder, unselected, item);
+    }
+    private static long immediateAlternative(GoodsParticipantView view, GoodsTradeRules rules, String item) {
+        var demand = view.supplyPlan().orElseThrow().require(item);
+        // Dependencies inherit the parent's deadline reason; that does not turn
+        // every raw material into an immediate consumption alternative.
+        return rules.supplyPlanning().require(item).essential()
+                && demand.reasons().contains(io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Reason.CONSUMPTION_DEADLINE)
+                ? demand.urgentPurchase() : 0;
     }
     public static boolean fundsRestart(GoodsParticipantView view, GoodsTradeRules rules, String item) {
         var economy = view.supplyPlan().flatMap(plan -> plan.economy());

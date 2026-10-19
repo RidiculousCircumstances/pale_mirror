@@ -7,6 +7,19 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class EconomicPurchaseFundingTest {
+    @Test void immediateNeedCanUseUnbackedRecoveryEnvelopeButNotInventCashOrSpendBackedRestart() {
+        var budgets = Map.of("grain", 128L, "food", 0L);
+        var plan = new EconomicPlan(96000, budgets, budgets, budgets, 0, 0, 0, List.of(), List.of(), Set.of(),
+                Map.of("grain", 1L, "food", 3L), Set.of(), Map.of("grain", 0L, "food", 0L));
+        var needs = List.of(new ProcurementBudget.Need("grain", 566, new FixedScalar(1), 0, 2),
+                new ProcurementBudget.Need("food", 189, new FixedScalar(3), 0));
+        assertEquals(0, EconomicPurchaseFunding.available(plan, new FixedScalar(128), needs, "food").raw());
+        assertEquals(63, EconomicPurchaseFunding.available(plan, new FixedScalar(128), needs, "food", 21).raw());
+        assertEquals(5, EconomicPurchaseFunding.available(plan, new FixedScalar(5), needs, "food", 21).raw());
+        var backed = new EconomicPlan(96000, budgets, budgets, budgets, 0, 0, 0, List.of(), List.of(), Set.of(),
+                plan.purchasePrices(), Set.of("grain"), plan.saleableStock());
+        assertEquals(3, EconomicPurchaseFunding.available(backed, new FixedScalar(5), needs, "food", 21).raw());
+    }
     @Test void unselectedEarlierFinishedGoodsCannotVetoTheirFundedProductionInputs() {
         var budgets = Map.of("input", 4L, "output", 0L);
         var plan = new EconomicPlan(96000, budgets, budgets, budgets, 0, 0, 0, List.of(), List.of(), Set.of(),

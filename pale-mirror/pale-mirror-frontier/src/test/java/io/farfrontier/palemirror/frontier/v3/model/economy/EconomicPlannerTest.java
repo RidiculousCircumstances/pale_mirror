@@ -6,6 +6,15 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class EconomicPlannerTest {
+    @Test void solventSettlementMayOfferUpperReservesWhileProtectingReplenishmentInterval() {
+        var plan = new EconomicPlanner().plan(facts(30, 90, 2, 10000, List.of(oven()), List.of()), RULES);
+        var economy = plan.economy().orElseThrow();
+        assertEquals(0, economy.unfundedRequirements());
+        assertTrue(economy.saleableStock().get("food") > 0, "cash distress is not required for lawful export");
+        assertTrue(30 - economy.saleableStock().get("food") >= plan.reserves().get("food").protectedQuantity());
+        var poor = new EconomicPlanner().plan(facts(5, 90, 2, 10000, List.of(oven()), List.of()), RULES);
+        assertEquals(0, poor.economy().orElseThrow().saleableStock().get("food"));
+    }
     private static final EconomicPlanningRules RULES = new EconomicPlanningRules(4, 4, 256);
     private static final SupplyPolicy ORDINARY = new SupplyPolicy(1000, 1, 64, 100, 500, false);
     private static final SupplyPolicy ESSENTIAL = new SupplyPolicy(1000, 1, 64, 100, 500, true);

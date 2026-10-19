@@ -38,8 +38,12 @@ public final class CultivationPlanning {
                 new ResourceFieldCycle.CellState(cell.condition(), ResourceFieldCycle.Crop.ABSENT, 0, false, false), true));
         var participant = state.companies().goodsTrade().participants().participants().get(home);
         var view = GoodsParticipantView.read(state, participant);
-        var option = SettlementSupplyPlanning.assessCultivation(state, home, view.residents(), view.stocks(), possible);
+        var option = SettlementSupplyPlanning.assessCultivation(state, home, view.residents(), view.stocks(), possible, true);
         var economy = option.economy().orElseThrow();
+        // Current funded interest may use already developed soil. Only development
+        // of new land needs a sustained signal, not ordinary sowing or production.
+        var existingCells = possible.subList(0, possible.size() - land.size());
+        var current = SettlementSupplyPlanning.assessCultivation(state, home, view.residents(), view.stocks(), existingCells);
         long horizon = economy.horizonTicks();
         var basis = SettlementReservePlanning.basis(state, home);
         var reserves = SettlementReservePlanning.read(state, home);
@@ -74,12 +78,16 @@ public final class CultivationPlanning {
                         cycle.sowing().cells().contains(cell.id()), !planted && cycle.sowing().cells().contains(cell.id())));
             }
         }
+        long existingOutput = candidates.stream().filter(cell -> cell.harvestAfterTicks() <= horizon)
+                .mapToLong(CultivationAreaPlanner.Cell::yield).sum();
+        long desired = Math.max(economy.additionalProduction().get(FieldHarvestExtraction.ITEM), Math.min(existingOutput,
+                current.economy().orElseThrow().additionalProduction().get(FieldHarvestExtraction.ITEM)));
         for (var cell : land) candidates.add(new CultivationAreaPlanner.Cell(cell.crop(), CultivationAreaPlanner.Land.NEW,
                 FieldAgronomy.yield(state.bootstrap(), cell.crop()), estimate.lead(
                         new FieldSupplyCapacity.Cell(cell.crop(), new ResourceFieldCycle.CellState(cell.condition(),
                                 ResourceFieldCycle.Crop.ABSENT, 0, false, false), true)), false, false));
         var decision = new CultivationAreaPlanner().plan(new CultivationAreaPlanner.Request(
-                economy.additionalProduction().get(FieldHarvestExtraction.ITEM), safety, horizon, !safe, safe, rules, candidates));
+                desired, safety, horizon, !safe, safe, rules, candidates));
         var next = sites;
         // Existing plants and current effects survive contraction. Only their next sowing permission changes.
         for (var field : fields) next = next.planSowing(field.id(), field.layout().cells().stream()

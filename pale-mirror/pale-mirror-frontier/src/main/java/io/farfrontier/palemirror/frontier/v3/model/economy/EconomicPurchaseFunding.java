@@ -9,6 +9,13 @@ public final class EconomicPurchaseFunding {
     private EconomicPurchaseFunding() { }
     public static FixedScalar available(EconomicPlan plan, FixedScalar cash,
             List<ProcurementBudget.Need> needs, String item) {
+        return available(plan, cash, needs, item, 0);
+    }
+    /** An immediate direct need may substitute for an unbacked recovery chain.
+     * Alternative quotes share cash; only matching can reserve it, once. */
+    public static FixedScalar available(EconomicPlan plan, FixedScalar cash,
+            List<ProcurementBudget.Need> needs, String item, long immediateAlternativeQuantity) {
+        if (immediateAlternativeQuantity < 0) throw new IllegalArgumentException("negative procurement alternative");
         var selected = needs.stream().filter(need -> need.item().equals(item)).findFirst();
         if (selected.isEmpty() || selected.orElseThrow().quantity() == 0) return FixedScalar.ZERO;
         // Forecast budgets use an estimated price, not an exclusive supplier. Reprice
@@ -28,7 +35,16 @@ public final class EconomicPurchaseFunding {
         // Only an immediate restart may displace fallback/reserve spending. Ordinary
         // purchases can use their envelope and genuinely unallocated liquidity.
         long envelope = restart ? cash.raw() : Math.min(cash.raw(), Math.addExact(estimate, optional));
-        return new FixedScalar(Math.min(envelope, protectedCash.raw()));
+        long ordinary = Math.min(envelope, protectedCash.raw());
+        if (immediateAlternativeQuantity == 0) return new FixedScalar(ordinary);
+        var backed = needs.stream().filter(other -> !other.item().equals(item)
+                && other.deadline() <= need.deadline() && plan.fundedRestarts().contains(other.item()))
+                .map(other -> new ProcurementBudget.Need(other.item(), other.restartQuantity(), other.unitLimit(), other.deadline())).toList();
+        long substitutable = ProcurementBudget.forOptionalSpending(cash, backed).raw();
+        long unit = plan.purchasePrices().get(item);
+        long emergency = immediateAlternativeQuantity > substitutable / unit ? substitutable
+                : Math.multiplyExact(immediateAlternativeQuantity, unit);
+        return new FixedScalar(Math.max(ordinary, emergency));
     }
     private static FixedScalar afterEarlierBudgets(EconomicPlan plan, FixedScalar cash,
             List<ProcurementBudget.Need> needs, long deadline) {

@@ -9,6 +9,28 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GoodsMarketPolicyTest {
+    @Test void immediateConsumptionFundingDoesNotLeakIntoInheritedIngredientDeadlines() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:funding-alternative"),
+                125L, FrontierRulesets.dynamicFarmingGraybox()));
+        var rules = state.bootstrap().ruleset().goodsTrade();
+        var participant = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
+        var original = GoodsParticipantView.read(state, participant);
+        var zeros = new TreeMap<String, Long>(); var prices = new TreeMap<String, Long>();
+        var demands = new TreeMap<String, io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Demand>();
+        var stocks = new TreeMap<String, GoodsParticipantView.Stock>();
+        for (var item : original.stocks().keySet()) {
+            zeros.put(item, 0L); prices.put(item, 1L); stocks.put(item, new GoodsParticipantView.Stock(0, 0, 0));
+            demands.put(item, new io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Demand(20, 0, 0, 0,
+                    Set.of(io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Reason.CONSUMPTION_DEADLINE), Optional.empty()));
+        }
+        var budgets = new TreeMap<>(zeros); budgets.put("minecraft:coal", 100L);
+        var economy = new io.farfrontier.palemirror.frontier.v3.model.economy.EconomicPlan(96000, zeros, zeros, budgets,
+                0, 0, 0, List.of(), List.of(), Set.of(), prices, Set.of(), zeros);
+        var plan = new io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Plan(demands, Map.of(), Map.of(), Optional.of(economy));
+        var view = new GoodsParticipantView(participant, original.residents(), new FixedScalar(100), stocks, Map.of(), Optional.of(plan));
+        assertEquals(20, GoodsParticipantFunding.purchase(view, rules, "minecraft:bread").raw());
+        assertEquals(0, GoodsParticipantFunding.purchase(view, rules, "minecraft:wheat").raw());
+    }
     @Test void priceDiscoveryUsesCurrentUncommittedFundedQuotesWithoutStartingTransport() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:price-feedback"),
                 20260918065L, FrontierRulesets.marketQuarryGraybox()));

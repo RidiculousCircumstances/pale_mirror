@@ -27,7 +27,8 @@ public final class MarketDemandObservation {
             budget -= Math.multiplyExact(quantity, quote.unitPrice());
         }
         return trade.demandHistory().observe(buyerId, now,
-                Math.multiplyExact(state.bootstrap().ruleset().goodsTrade().reviewInterval(), 2), funded);
+                Math.multiplyExact(state.humanPopulation().schedule(buyer.settlementId()).dayTicks(),
+                        state.bootstrap().ruleset().fields().cultivation().map(value -> value.stableDemandDays()).orElse(1)), funded);
     }
     private MarketDemandObservation() { }
 }

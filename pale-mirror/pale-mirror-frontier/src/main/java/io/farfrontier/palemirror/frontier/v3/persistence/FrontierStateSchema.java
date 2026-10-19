@@ -5,7 +5,8 @@ import java.io.*;
 /** Sole header grammar for early installed-world selection and complete aggregate hydration. */
 final class FrontierStateSchema {
     // Runtime field declarations are explicit, not inferred from the genesis layout.
-    static final int VERSION = 294;
+    // Rolling funded-demand samples replace the lifetime-minimum grammar. Fresh worlds only.
+    static final int VERSION = 295;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

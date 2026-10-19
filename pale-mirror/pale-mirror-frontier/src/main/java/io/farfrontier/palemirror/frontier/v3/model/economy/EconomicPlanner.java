@@ -36,15 +36,7 @@ public final class EconomicPlanner {
         });
         var projected = new EconomicRequirements.Projection(domestic, missing);
         var funding = new EconomicFunding().allocate(facts, supply, projected, horizon);
-        var saleable = new TreeMap<String, Long>();
-        for (var entry : facts.stocks().entrySet()) {
-            String item = entry.getKey();
-            // Act on forecast cash shortfall before a restart actually stalls.
-            // Only optional upper reserves become offers; immediate needs and
-            // backed production inputs remain protected. Offers are not income.
-            long keep = funding.unfunded() > 0 ? reserves.get(item).protectedQuantity() : domestic.get(item);
-            saleable.put(item, Math.max(0, entry.getValue().available() - keep));
-        }
+        var saleable = EconomicStockRelease.assess(facts, supply, reserves);
         var exportPlan = new EconomicExportPlanning().plan(facts, supply, saleable, policy, horizon);
         var exports = exportPlan.exports();
         var production = new TreeMap<String, Long>();
