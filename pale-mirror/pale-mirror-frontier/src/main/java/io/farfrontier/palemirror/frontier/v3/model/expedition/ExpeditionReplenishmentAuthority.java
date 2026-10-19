@@ -242,7 +242,10 @@ public final class ExpeditionReplenishmentAuthority {
                     || account.claimQuantities().getOrDefault(t.claimId(), 0) != t.quantity()
                     || state.inventory().fungibleResources().accounts().containsKey(t.destinationAccountId()))
                 throw new IllegalArgumentException("mission refill lost exact resource ownership and custody");
-            state.unitGroups().groups().get(mission.groupId()).member(t.actorId()); state.actorExecutions().requireCurrent(t.execution());
+            state.unitGroups().groups().get(mission.groupId()).member(t.actorId());
+            // A retained promise survives self-care, but an issued physical effect cannot.
+            if (t.pending().isPresent()) state.actorExecutions().requireCurrent(t.execution());
+            else state.actorExecutions().requireRetained(t.execution());
             mission.replenishmentPurchase().ifPresent(p -> {
                 if (!p.payment().equals(state.inventory().economics().reservations().get(p.payment().id()))
                         || !p.payment().reasonId().equals(mission.id()) || !p.payment().budgetId().equals(mission.financialBudgetId())
@@ -255,5 +258,19 @@ public final class ExpeditionReplenishmentAuthority {
     public static boolean accessAvailable(FrontierWorldState state, TransportMission mission, UnitResourceTransfer transfer) {
         return state.inventory().surfaces().get(transfer.containerId()).location() instanceof ContainerLocation.Mobile
                 || ServiceAccessCoordinator.available(state, ExpeditionSupplyServiceAccess.identity(mission, transfer));
+    }
+    public static boolean current(FrontierWorldState state, UnitResourceTransfer transfer) {
+        var execution = state.actorExecutions().actors().get(transfer.actorId());
+        return execution != null && execution.current().equals(Optional.of(transfer.execution()));
+    }
+    /** The mission owns its continuation; common UAE orchestration never edits resource promises. */
+    public static ShipmentState resume(ShipmentState shipments, SubjectId missionId,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId predecessor,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId successor) {
+        var mission = shipments.missions().get(missionId);
+        if (mission == null) throw new IllegalArgumentException("refill resumption lost its declared mission");
+        var transfer = mission.replenishment().filter(t -> t.actorId().equals(predecessor.actorId()));
+        return transfer.isEmpty() ? shipments : shipments.replaceReplenishment(mission,
+                Optional.of(transfer.orElseThrow().resumed(predecessor, successor)));
     }
 }

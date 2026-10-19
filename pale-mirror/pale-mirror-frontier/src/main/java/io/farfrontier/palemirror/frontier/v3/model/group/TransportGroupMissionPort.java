@@ -200,8 +200,11 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
                 throw new IllegalArgumentException("transport body release retains a bound cargo/effect");
     }
     @Override public FrontierWorldStateUpdate resumption(FrontierWorldState state, UnitGroup group, ActorExecutionId predecessor, ActorExecutionId successor) {
-        return FrontierWorldStateUpdate.begin().shipments(state.shipments().resumeManifest(
-                TransportCargoExecution.parcels(state, group, predecessor), predecessor, successor));
+        var shipments = state.shipments().resumeManifest(
+                TransportCargoExecution.parcels(state, group, predecessor), predecessor, successor);
+        return FrontierWorldStateUpdate.begin().shipments(
+                io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.resume(
+                        shipments, mission(state, group).id(), predecessor, successor));
     }
     @Override public Optional<ActorCarriedResources.Presentation> workCargo(FrontierWorldState state, UnitGroup group, UnitGroup.Member member) {
         var mission = mission(state, group); group.member(member.actorId());

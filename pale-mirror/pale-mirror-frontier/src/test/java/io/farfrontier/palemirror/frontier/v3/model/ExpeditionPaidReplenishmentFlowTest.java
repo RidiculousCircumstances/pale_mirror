@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.kernel.*;
 import io.farfrontier.palemirror.frontier.v3.model.group.*;
+import io.farfrontier.palemirror.frontier.v3.model.execution.*;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.*;
 import io.farfrontier.palemirror.frontier.v3.process.*;
@@ -15,6 +16,12 @@ import static org.junit.jupiter.api.Assertions.*;
  * the initial placement is not native evidence or a claim that the outward trip was exercised here. */
 class ExpeditionPaidReplenishmentFlowTest {
     @Test void retainedPaidPurchaseSurvivesRecoveryAndClearsTheSupplierBeforePortableEating() {
+        purchaseFlow(false);
+    }
+    @Test void pausedPaidPurchaseReleasesServiceAndResumesExactPromiseAfterRecovery() {
+        purchaseFlow(true);
+    }
+    private void purchaseFlow(boolean interrupt) {
         var base = FrontierV3FixtureCatalog.autonomousGoodsConfiguration(new WorldId("frontier:paid-visited-supplies"), 41,
                 FrontierRulesets.installed("frontier-v3-expedition-candidate-r1"));
         var engine = FrontierEngines.createCanonicalStateAccess(base);
@@ -76,6 +83,10 @@ class ExpeditionPaidReplenishmentFlowTest {
         assertEquals(precondition.inventory().economics().availableToReserve(purchase.payment().payerId()).minus(purchase.payment().amount()),
                 held.inventory().economics().availableToReserve(purchase.payment().payerId()), "only the accepted actual food purchase holds money");
         assertEquals(held, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(held)));
+        if (interrupt) {
+            held = pauseAndResume(held, mission.id(), transfer, tick);
+            transfer = held.shipments().missions().get(mission.id()).replenishment().orElseThrow();
+        }
         var schedules = new ArrayList<>(engine.checkpoint().schedules());
         schedules.removeIf(action -> group.members().stream().anyMatch(m -> m.actorId().equals(action.subject())) && action.kind().equals(ActorMovementProcess.PROGRESS));
         var review = TransportMissionProcess.progress(mission.id(), tick + 1);
@@ -105,6 +116,49 @@ class ExpeditionPaidReplenishmentFlowTest {
         }
         assertTrue(received); assertTrue(cleared, "the paid pickup must free the supplier without replacing GROUP/COURIER responsibility");
         assertTrue(ate, "foreign food must become ordinary portable nutrition");
+    }
+    private static FrontierWorldState pauseAndResume(FrontierWorldState held, SubjectId mission,
+            UnitResourceTransfer transfer, long tick) {
+        var passive = held.actorExecutions().next(transfer.actorId(),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRESENCE, transfer.actorId());
+        var paused = ActorExecutionComposition.LIFECYCLE.prepareBegin(held, passive, tick)
+                .commit(held, FrontierWorldStateUpdate.begin());
+        FrontierReferenceClosure.validateTransition(held, paused, List.of());
+        paused = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(paused));
+        assertEquals(held.inventory(), paused.inventory(), "pause must neither spend cash nor move reserved food");
+        assertTrue(new ExpeditionSupplyServiceAccess().demands(paused, transfer.containerId()).stream()
+                .noneMatch(d -> d.identity().actorId().equals(transfer.actorId())), "paused promise cannot reserve service access");
+        var pausedBasis = paused;
+        assertThrows(IllegalArgumentException.class, () ->
+                io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.cold(
+                        pausedBasis, mission, transfer.claimId(), tick));
+        var successor = paused.actorExecutions().next(transfer.actorId(), transfer.execution().activityKind(),
+                transfer.execution().activityOwnerId());
+        var resumed = ActorExecutionComposition.LIFECYCLE.prepareResume(paused, transfer.execution(), successor,
+                Optional.of(passive), tick).commit(paused, FrontierWorldStateUpdate.begin());
+        FrontierReferenceClosure.validateTransition(paused, resumed, List.of());
+        assertEquals(transfer.resumed(transfer.execution(), successor), resumed.shipments().missions().get(mission).replenishment().orElseThrow());
+        assertEquals(held.inventory(), resumed.inventory());
+        assertThrows(IllegalArgumentException.class, () -> transfer.resumed(successor, transfer.execution()));
+        var foreign = new ActorExecutionId(transfer.actorId(), successor.activityKind(), new SubjectId("unit-group:foreign"), successor.generation());
+        assertThrows(IllegalArgumentException.class, () -> transfer.resumed(transfer.execution(), foreign));
+        // An issued physical effect is not a pausable promise, even if its actor
+        // still has spare food. Build only that negative precondition here.
+        var step = new ActorItemTransferStep(new ActorHotObservation(new ActorActuationId(
+                new ActorBodyId(transfer.actorId(), 1), transfer.execution()), 1), List.of(
+                new MaterialSourceSelection.Slice(new PhysicalStackAddress.ContainerSlot(
+                        new InventoryCustody.ContainerSlot(transfer.containerId(), 0)), 1, 1, 1)), 1);
+        var prepared = transfer.prepare(step);
+        assertThrows(IllegalArgumentException.class, () -> prepared.resumed(transfer.execution(), successor));
+        var pendingState = held.withChanges(FrontierWorldStateUpdate.begin().shipments(held.shipments()
+                .replaceReplenishment(held.shipments().missions().get(mission), Optional.of(prepared))));
+        assertThrows(IllegalArgumentException.class, () -> ActorExecutionComposition.LIFECYCLE.prepareBegin(pendingState, passive, tick));
+        var forgedPause = paused.withChanges(FrontierWorldStateUpdate.begin().shipments(paused.shipments()
+                .replaceReplenishment(paused.shipments().missions().get(mission), Optional.of(prepared))));
+        assertThrows(IllegalArgumentException.class, () ->
+                io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.validate(
+                        forgedPause, forgedPause.shipments().missions().get(mission)));
+        return resumed;
     }
     private static void advance(FrontierCanonicalStateAccess<FrontierWorldState, FrontierWorldProjection> engine, int budget) {
         var state = engine.canonicalState().state();

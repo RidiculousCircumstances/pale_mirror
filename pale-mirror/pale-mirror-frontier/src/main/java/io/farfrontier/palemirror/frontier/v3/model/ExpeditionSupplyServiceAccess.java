@@ -22,7 +22,9 @@ public final class ExpeditionSupplyServiceAccess implements ServiceAccessCapabil
                                 ? ServiceAccessDemand.Presence.OCCUPIED : ServiceAccessDemand.Presence.APPROACH,
                         m.supplies().orElseThrow().calculatedAtTick(), a.pending().isPresent())));
         var replenishing = state.shipments().missions().values().stream().flatMap(m -> m.replenishment().stream()
-                .filter(t -> t.containerId().equals(point)).map(t -> new ServiceAccessDemand(identity(m, t), priority(),
+                .filter(t -> t.containerId().equals(point)
+                        && io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.current(state, t))
+                .map(t -> new ServiceAccessDemand(identity(m, t), priority(),
                         ServiceAccessCoordinator.occupies(state, boundary, t.actorId()) ? ServiceAccessDemand.Presence.OCCUPIED : ServiceAccessDemand.Presence.APPROACH,
                         m.supplies().map(ExpeditionSupplyLoad::calculatedAtTick).orElse(0L), t.pending().isPresent())));
         return java.util.stream.Stream.concat(loading, replenishing).toList();

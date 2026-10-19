@@ -18,8 +18,11 @@ final class ShipmentExecutionCapability implements ActorActivityCapability {
         return request -> {
             validateReference(request.expectedState(), request.suspended());
             var shipment = request.expectedState().shipments().shipments().get(request.suspended().activityOwnerId());
-            return new ActorActivityResumption.Acknowledgement(request, FrontierWorldStateUpdate.begin()
-                    .shipments(request.expectedState().shipments().resume(shipment, request.successor())));
+            var shipments = request.expectedState().shipments().resume(shipment, request.successor());
+            if (shipment.transportMissionId().isPresent()) shipments =
+                    io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.resume(
+                            shipments, shipment.transportMissionId().orElseThrow(), request.suspended(), request.successor());
+            return new ActorActivityResumption.Acknowledgement(request, FrontierWorldStateUpdate.begin().shipments(shipments));
         };
     }
     @Override public Optional<ActorActivityDeath> deathAcknowledgement() {

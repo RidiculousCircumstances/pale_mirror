@@ -13,6 +13,7 @@ final class FrontierV3ExpeditionReplenishmentExecutor {
     static boolean progress(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                             FrontierWorldState state, TransportMission mission) {
         var transfer = mission.replenishment().orElseThrow();
+        if (!io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.current(state, transfer)) return false;
         var entity = level.getEntity(ActorBodyId.entityId(state.bootstrap().worldId(), transfer.actorId()));
         if (!(entity instanceof Mob actor) || !actor.isAlive() || !FrontierV3ActorBodyController.recognizesRecordedBody(level, state, actor)
                 || !FrontierV3SurfaceObservation.at(actor, transfer.station()) || state.actorMovements().containsKey(transfer.actorId())) return false;

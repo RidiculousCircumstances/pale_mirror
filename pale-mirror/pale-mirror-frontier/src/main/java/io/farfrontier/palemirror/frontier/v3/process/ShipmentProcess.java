@@ -31,6 +31,8 @@ public final class ShipmentProcess {
         Shipment shipment = state.shipments().shipments().get(action.subject());
         if (shipment == null) return false;
         if (shipment.terminal()) return !ShipmentStateSupport.closedForRetirement(state, shipment);
+        if (replenishing(state, shipment)) return !(replenishmentHandoff(state, shipment,
+                action.dueAt().ticks()) instanceof ActivityInterruptionPlanner.Ready);
         if (!TransportCargoExecution.selected(state, shipment)) return true;
         if (shipment.transportMissionId().map(state.shipments().missions()::get).flatMap(TransportMission::supplies)
                 .filter(load -> !load.complete()).isPresent()) return true;
@@ -82,6 +84,13 @@ public final class ShipmentProcess {
         // Receipt/mission owners retain the held continuation until reception
         // or atomic mission retirement. No polling and no premature cancellation.
         if (held(state, action)) throw new IllegalArgumentException("shipment awaits its exact custody boundary");
+        if (replenishing(state, shipment)) {
+            var handoff = (ActivityInterruptionPlanner.Ready) replenishmentHandoff(state, shipment, now);
+            var events = new java.util.ArrayList<>(handoff.events());
+            events.add(TransportMissionProcess.wake(shipment.transportMissionId().orElseThrow(), now));
+            events.add(wake(shipment.id(), now));
+            return List.copyOf(events);
+        }
         if (needsStorage(state, shipment)) {
             var interrupted = new ActorMovementInterruptionPlanner().assessForOwnerTransition(state, shipment.execution(), now);
             if (!(interrupted instanceof ActivityInterruptionPlanner.Ready ready)) return retry(state, shipment, now);
@@ -121,6 +130,21 @@ public final class ShipmentProcess {
     }
     private static boolean needsStorage(FrontierWorldState state, Shipment shipment) {
         return ShipmentStorageRetargeted.unbegun(shipment) && !ShipmentStorageRetargeted.retainedAvailable(state, shipment);
+    }
+    private static boolean replenishing(FrontierWorldState state, Shipment shipment) {
+        return shipment.transportMissionId().map(state.shipments().missions()::get)
+                .flatMap(TransportMission::replenishment).isPresent();
+    }
+    /** Retire only this parcel's approach through the shared interruption protocol.
+     * Self-care, refill and other parcel movements retain their own authority. */
+    private static ActivityInterruptionPlanner.Assessment replenishmentHandoff(FrontierWorldState state,
+            Shipment shipment, long tick) {
+        var movement = state.actorMovements().get(shipment.execution().actorId());
+        if (movement == null || !(movement.context() instanceof ActorMovementContext.ShipmentLeg leg)
+                || !leg.shipmentId().equals(shipment.id()))
+            return new ActivityInterruptionPlanner.Waiting(ActivityInterruptionPlanner.Reason.AUTHORITY_HANDOFF);
+        return new ActorMovementInterruptionPlanner().assessForOwnerTransition(state, shipment.execution(),
+                Math.max(tick, movement.coldTravel().map(TimedKnownRoute::departedAtTick).orElse(movement.issuedAtTick())));
     }
     private ShipmentProcess() { }
 }

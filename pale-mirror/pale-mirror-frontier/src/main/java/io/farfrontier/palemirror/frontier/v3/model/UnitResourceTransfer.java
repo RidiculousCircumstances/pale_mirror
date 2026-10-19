@@ -24,6 +24,16 @@ public record UnitResourceTransfer(SubjectId claimId, SubjectId actorId, Subject
         });
     }
     public int quantity() { return lots.values().stream().mapToInt(Integer::intValue).sum(); }
+    /** Resume the same obligation, never transfer an already prepared physical effect. */
+    public UnitResourceTransfer resumed(ActorExecutionId predecessor, ActorExecutionId successor) {
+        if (!execution.equals(predecessor) || pending.isPresent()
+                || !successor.actorId().equals(actorId) || successor.activityKind() != predecessor.activityKind()
+                || !successor.activityOwnerId().equals(predecessor.activityOwnerId())
+                || successor.generation() <= predecessor.generation())
+            throw new IllegalArgumentException("personal transfer resumption has stale, foreign or physically pending authority");
+        return new UnitResourceTransfer(claimId, actorId, containerId, sourceAccountId, destinationAccountId,
+                sourceEconomicOwnerId, itemKind, lots, slot, station, successor, Optional.empty());
+    }
     public ActorContainerItemOrder order(SubjectId ownerId, long revision) {
         return new ActorContainerItemOrder(ownerId, actorId, ActorContainerItemOrder.Direction.TAKE,
                 portion(sourceAccountId, destinationAccountId, containerId, actorId, claimId, itemKind, lots),
