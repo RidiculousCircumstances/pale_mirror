@@ -4,14 +4,16 @@ import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.supply.*;
 import io.farfrontier.palemirror.frontier.v3.model.market.ProcurementSelection;
+import io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionTiming;
 import java.util.*;
 
 /** One transaction publishes sales only after exact logistics admission has succeeded on an immutable draft. */
 final class GoodsTripPlanning {
     record Result(FrontierWorldState state, List<ProposedEvent> events, String decision) { }
+    private record RouteEdges(long sourceToReceiver, long receiverToSource) { }
     private record Candidate(FrontierWorldState draft, List<ProposedEvent> reservations,
             GoodsParticipant seller, List<GoodsTripAssembly.Parcel> parcels, GoodsTradeFulfillment.Mode mode,
-            ProcurementSelection.Offer offer, List<FrontierWorldState> prefixes) { }
+            ProcurementSelection.Offer offer, List<FrontierWorldState> prefixes, ExpeditionTiming timing) { }
     static Result plan(FrontierWorldState initial, GoodsParticipant reviewer, long now) {
         return ImmutablePlanningScope.within(() -> {
             var retirement = ShipmentRetention.collect(initial, ShipmentRetention.MAX_RETIREMENTS, now);
@@ -40,13 +42,18 @@ final class GoodsTripPlanning {
             if (other == null || !other.party().equals(peer.party()) || !other.settlementId().equals(peer.settlementId())) continue;
             var reviewedPairs = new EnumMap<GoodsTradeFulfillment.Mode, Integer>(GoodsTradeFulfillment.Mode.class);
             for (var endpoints : GoodsOrderMatching.endpointPairs(initial, other, buyer, now)) {
-            long estimate;
-            try { estimate = duration(initial, endpoints); }
+            RouteEdges edges;
+            try { edges = routeEdges(initial, endpoints); }
             catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 decision = "WAITING_FOR_REGIONAL_ESTIMATE; status=" + unavailable.status() + "; reserved=0";
                 continue;
             }
             for (var mode : GoodsTradeFulfillment.Mode.values()) {
+                var timing = ExpeditionTiming.assess(initial.bootstrap().ruleset().expedition(),
+                        mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? edges.sourceToReceiver() : edges.receiverToSource(),
+                        mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? edges.receiverToSource() : edges.sourceToReceiver(),
+                        itinerary(mode));
+                long estimate = timing.durationTicks();
                 var seller = other;
                 var state = initial; var reservations = new ArrayList<ProposedEvent>(); var parcels = new ArrayList<GoodsTripAssembly.Parcel>();
                 var reservedPrefixes = new ArrayList<FrontierWorldState>(); reservedPrefixes.add(initial);
@@ -90,7 +97,7 @@ final class GoodsTripPlanning {
                             + "|" + endpoints.source().value() + "|" + endpoints.receiver().value()));
                     candidates.add(new Candidate(selectedState, List.copyOf(selectedEvents), seller, selected, mode,
                             offer(initial, buyer, mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? seller : buyer,
-                                    id, selected, estimate), List.copyOf(reservedPrefixes.subList(0, count + 1))));
+                                    id, selected, timing), List.copyOf(reservedPrefixes.subList(0, count + 1)), timing));
                     break;
                 }
             }
@@ -122,16 +129,19 @@ final class GoodsTripPlanning {
                 continue;
             }
             var declaration = trip.orElseThrow();
+            var journey = declaration.mission().supplies().orElseThrow().journey();
+            var exactTiming = ExpeditionTiming.assess(initial.bootstrap().ruleset().expedition(),
+                    journey.outward().edges(), journey.returning().edges(), declaration.mission().organization().itinerary());
             var departure = dispatchCause(initial, buyer, candidate.parcels(),
-                    declaration.mission().supplies().orElseThrow().forecastDurationTicks());
+                    exactTiming.deliveryTicks());
             var cost = GoodsTransportValuation.exact(initial,
                     candidate.mode() == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? candidate.seller() : buyer, declaration.mission(), now);
             if (departure == TripDispatchPolicy.Cause.ACCUMULATING) {
                 decision = "DEFERRED_FOR_CONSOLIDATION; exactJourney=SAFE_TO_WAIT; reserved=0";
                 var deferred = new ProcurementSelection.Offer(candidate.offer().id(), candidate.offer().goods(), cost.resourceExpense(),
-                        declaration.mission().supplies().orElseThrow().forecastDurationTicks(), cost.workerTicks(), ProcurementSelection.Departure.DEFERRED);
+                        exactTiming.deliveryTicks(), cost.workerTicks(), ProcurementSelection.Departure.DEFERRED);
                 candidates.add(new Candidate(candidate.draft(), candidate.reservations(), candidate.seller(), candidate.parcels(),
-                        candidate.mode(), deferred, candidate.prefixes()));
+                        candidate.mode(), deferred, candidate.prefixes(), exactTiming));
                 continue;
             }
             var priced = GoodsDeliveryPricing.reserve(initial, candidate.reservations(), candidate.parcels(), cost, now);
@@ -157,20 +167,26 @@ final class GoodsTripPlanning {
             return Optional.of(new Candidate(previous.prefixes().get(count), List.copyOf(previous.reservations().subList(0, count)),
                     previous.seller(), parcels, previous.mode(),
                     offer(initial, buyer, previous.mode() == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? previous.seller() : buyer,
-                            previous.offer().id(), parcels, previous.offer().arrivalDelayTicks()), previous.prefixes()));
+                            previous.offer().id(), parcels, previous.timing()), previous.prefixes(), previous.timing()));
         }
         return Optional.empty();
     }
-    private static long duration(FrontierWorldState state, GoodsOrderMatching.Endpoints endpoints) {
+    private static TransportOrganization.Itinerary itinerary(GoodsTradeFulfillment.Mode mode) {
+        return switch (mode) {
+            case SELLER_DELIVERY -> TransportOrganization.Itinerary.SOURCE_DELIVERY;
+            case BUYER_COLLECTION -> TransportOrganization.Itinerary.DESTINATION_COLLECTION;
+        };
+    }
+    private static RouteEdges routeEdges(FrontierWorldState state, GoodsOrderMatching.Endpoints endpoints) {
         var source = GoodsParticipantStorage.endpoint(state, endpoints.source());
         var receiver = GoodsParticipantStorage.endpoint(state, endpoints.receiver());
         var knowledge = ShipmentEndpointComposition.knowledge(state, List.of(source, receiver));
         var outward = knowledge.estimateBetween(source.station(), receiver.station());
         var returning = knowledge.estimateBetween(receiver.station(), source.station());
-        return state.bootstrap().ruleset().expedition().plannedDuration(outward.estimatedEdges(), returning.estimatedEdges());
+        return new RouteEdges(outward.estimatedEdges(), returning.estimatedEdges());
     }
     private static ProcurementSelection.Offer offer(FrontierWorldState state, GoodsParticipant buyer, GoodsParticipant organizer,
-            SubjectId id, List<GoodsTripAssembly.Parcel> parcels, long estimatedDuration) {
+            SubjectId id, List<GoodsTripAssembly.Parcel> parcels, ExpeditionTiming timing) {
         var quantities = new TreeMap<String, Integer>(); var amounts = new TreeMap<String, Long>();
         for (var parcel : parcels) {
             var contract = parcel.contract();
@@ -180,12 +196,12 @@ final class GoodsTripPlanning {
         var lines = new TreeMap<String, ProcurementSelection.Line>();
         quantities.forEach((item, quantity) -> lines.put(item, new ProcurementSelection.Line(quantity,
                 new FixedScalar(Math.ceilDiv(amounts.get(item), quantity)))));
-        var cost = GoodsTransportValuation.estimate(state, organizer, estimatedDuration, parcels.size());
+        var cost = GoodsTransportValuation.estimate(state, organizer, timing.durationTicks(), parcels.size());
         // Both modes use real resources. Labour remains comparative value, while
         // the exact admitted seller-delivery quote is conserved cash settlement.
-        var departure = dispatchCause(state, buyer, parcels, estimatedDuration) == TripDispatchPolicy.Cause.ACCUMULATING
+        var departure = dispatchCause(state, buyer, parcels, timing.deliveryTicks()) == TripDispatchPolicy.Cause.ACCUMULATING
                 ? ProcurementSelection.Departure.DEFERRED : ProcurementSelection.Departure.READY;
-        return new ProcurementSelection.Offer(id, lines, cost.resourceExpense(), estimatedDuration, cost.workerTicks(), departure);
+        return new ProcurementSelection.Offer(id, lines, cost.resourceExpense(), timing.deliveryTicks(), cost.workerTicks(), departure);
     }
     static TripDispatchPolicy.Cause dispatchCause(FrontierWorldState state, GoodsParticipant buyer, List<GoodsTripAssembly.Parcel> parcels, long journeyTicks) {
         var rules = state.bootstrap().ruleset().goodsTrade(); var view = GoodsParticipantView.read(state, buyer);
@@ -193,13 +209,18 @@ final class GoodsTripPlanning {
         for (var parcel : parcels) {
             var contract = parcel.contract(); quantities.merge(contract.itemKind(), parcel.claim().quantity(), Math::addExact);
         }
-        return dispatchCause(rules, view, quantities, journeyTicks);
+        return dispatchCause(rules, view, quantities, journeyTicks, SettlementReservePlanning.basis(state, buyer.settlementId()).needs());
     }
     private static TripDispatchPolicy.Cause dispatchCause(GoodsTradeRules rules, GoodsParticipantView view,
-            Map<String, Integer> quantities, long journeyTicks) {
-        return TripDispatchPolicy.assess(quantities.entrySet().stream().map(e -> new TripDispatchPolicy.Goods(e.getValue(),
-                rules.supplyPlanning().require(e.getKey()), view.supplyPlan().map(p -> p.require(e.getKey()))
-                    .orElseGet(() -> new SupplyPlanner.Demand(0, 0, 0, Long.MAX_VALUE, Set.of(), Optional.empty())))).toList(),
+            Map<String, Integer> quantities, long journeyTicks, Map<String, SupplyReservePlanner.Need> needs) {
+        return TripDispatchPolicy.assess(quantities.entrySet().stream().map(e -> {
+            var demand = view.supplyPlan().map(p -> p.require(e.getKey()))
+                    .orElseGet(() -> new SupplyPlanner.Demand(0, 0, 0, Long.MAX_VALUE, Set.of(), Optional.empty()));
+            var stock = view.stocks().get(e.getKey());
+            return new TripDispatchPolicy.Goods(e.getValue(), rules.supplyPlanning().require(e.getKey()), demand,
+                    TripDispatchPolicy.uncovered(demand, needs.get(e.getKey()), stock.unclaimedInStorage(),
+                            stock.expectedIncoming(), journeyTicks, rules.reviewInterval()));
+        }).toList(),
                 journeyTicks, rules.reviewInterval());
     }
     private GoodsTripPlanning() { }

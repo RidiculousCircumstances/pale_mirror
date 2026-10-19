@@ -12,6 +12,55 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResourceSiteHarvestLabourTest {
+    @Test void economicWithdrawalOfSowingCanSuspendAlreadyStartedSowing() {
+        var fixture = ResourceSiteHarvestProcessTest.coldHarvestAfterSteps(125L, 0);
+        var job = fixture.job(); var state = fixture.state();
+        var cycle = state.resourceSites().cycle(job.siteId());
+        var cell = cycle.layout().cells().get(job.progress().nextCropSlotIndex()).id();
+        cycle = cycle.worked(cell);
+        state = state.withResourceSites(state.resourceSites().replace(
+                state.resourceSites().site(job.siteId()).bindHarvestTarget(job, cycle), cycle));
+        job = state.resourceSites().site(job.siteId()).harvestJob(job.id()).orElseThrow();
+        state = state.withActorBody(job.workerId(), ResourceSiteHarvestGoal.current(state, job).representative().standingBody());
+        assertEquals(WorkOperation.SOW, ResourceSiteHarvestLabour.operation(state, job));
+        var binding = ResourceSiteHarvestProcess.coldProgress(job, 22_301);
+        state = ResourceSiteHarvestWorkProcess.reduce(state, job.siteId(),
+                ResourceSiteHarvestWorkProcess.change(state, job, 22_301, true, binding, Optional.empty()));
+        state = state.withResourceSites(state.resourceSites().planSowing(job.siteId(), Set.of()));
+        job = state.resourceSites().site(job.siteId()).harvestJob(job.id()).orElseThrow();
+        var stop = ResourceSiteHarvestWorkProcess.change(state, job, 22_321, false, binding, Optional.empty());
+        state = ResourceSiteHarvestWorkProcess.reduce(state, job.siteId(), stop);
+        assertFalse(state.resourceSites().site(job.siteId()).harvestJob(job.id()).orElseThrow().progress().work().orElseThrow().running());
+        assertEquals(ResourceFieldCycle.Crop.ABSENT, state.resourceSites().cycle(job.siteId()).cell(cell).crop(),
+                "stopping labour never plants a revoked cell");
+    }
+    @Test void excludedCellCanStopItsRetainedClockButCannotStartMoreWork() {
+        var fixture = ResourceSiteHarvestProcessTest.coldHarvestAfterSteps(125L, 0);
+        var job = fixture.job();
+        var state = fixture.state().withActorBody(job.workerId(), ResourceSiteHarvestGoal.current(fixture.state(), job)
+                .representative().standingBody());
+        var binding = ResourceSiteHarvestProcess.coldProgress(job, 22_301);
+        state = ResourceSiteHarvestWorkProcess.reduce(state, fixture.site(),
+                ResourceSiteHarvestWorkProcess.change(state, job, 22_301, true, binding, Optional.empty()));
+        job = state.resourceSites().site(fixture.site()).harvestJob(job.id()).orElseThrow();
+        var cycle = state.resourceSites().cycle(fixture.site());
+        var cell = cycle.layout().cells().get(job.progress().nextCropSlotIndex()).id();
+        state = state.withResourceSites(state.resourceSites().replace(state.resourceSites().site(fixture.site()),
+                cycle.observedWorkAccess(cell, true)));
+        var invalid = state; var retained = job;
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestLabour.operation(invalid, retained));
+        var stopped = ResourceSiteHarvestWorkProcess.change(state, job, 22_321, false, binding, Optional.empty());
+        assertInstanceOf(ResourceSiteHarvestWorkSuspended.class, stopped);
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(stopped, codecs.decode(stopped.type(), codecs.encode(stopped)));
+        var after = ResourceSiteHarvestWorkProcess.reduce(state, fixture.site(), stopped);
+        var paused = after.resourceSites().site(fixture.site()).harvestJob(job.id()).orElseThrow();
+        assertFalse(paused.progress().work().orElseThrow().running());
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestWorkProcess.change(
+                after, paused, 22_322, true, binding, Optional.empty()));
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestWorkProcess.reduce(after, fixture.site(), stopped),
+                "a replayed predecessor cannot settle the clock twice");
+    }
     @Test void actualHotCommandAndColdOwnerAccrueEqualWorkAndSnapshotRetainsTheInterval() {
         var fixture = ResourceSiteHarvestProcessTest.coldHarvestAfterSteps(125L, 0);
         var job = fixture.job();
@@ -102,7 +151,7 @@ class ResourceSiteHarvestLabourTest {
         assertEquals(20L * start.next().ratePermille(), work.completedAt(100_000));
     }
 
-    private static void submit(FrontierEngine<?> engine, ResourceSiteHarvestWorkChanged payload) {
+    private static void submit(FrontierEngine<?> engine, ResourceSiteHarvestLabourChange payload) {
         var checkpoint = engine.checkpoint();
         var id = new CommandId("command:labour-" + checkpoint.revision().value());
         var result = engine.submit(new FrontierCommand(2, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),

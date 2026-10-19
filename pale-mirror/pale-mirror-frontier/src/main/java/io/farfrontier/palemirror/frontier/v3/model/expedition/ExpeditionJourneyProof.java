@@ -27,8 +27,7 @@ public record ExpeditionJourneyProof(PedestrianPathProof outward, PedestrianPath
             if (!prior.outward().origin().equals(mission.homeRendezvous())
                     || !prior.outward().destination().equals(mission.destinationRendezvous()))
                 throw new IllegalArgumentException("retained expedition changed its rendezvous");
-            if (KnownPedestrianNavigation.supportsRoute(knowledge.geometry(), prior.outward().surfaces())
-                    && KnownPedestrianNavigation.supportsRoute(knowledge.geometry(), prior.returning().surfaces())) return prior;
+            if (knowledge.supportsPath(prior.outward()) && knowledge.supportsPath(prior.returning())) return prior;
         }
         return new ExpeditionJourneyProof(knowledge.plannedBetween(mission.homeRendezvous(), mission.destinationRendezvous()),
                 knowledge.plannedBetween(mission.destinationRendezvous(), mission.homeRendezvous()));
@@ -41,7 +40,7 @@ public record ExpeditionJourneyProof(PedestrianPathProof outward, PedestrianPath
         if (!outward.origin().equals(mission.homeRendezvous()) || !outward.destination().equals(mission.destinationRendezvous()))
             throw new IllegalArgumentException("expedition estimate substituted its declared rendezvous");
         var knowledge = knowledge(state, mission, group);
-        knowledge.requireRoute(outward.surfaces()); knowledge.requireRoute(returning.surfaces());
+        knowledge.requirePath(outward); knowledge.requirePath(returning);
     }
     private static KnownPedestrianRouteKnowledge knowledge(FrontierWorldState state, TransportMission mission,
             io.farfrontier.palemirror.frontier.v3.model.group.UnitGroup group) {

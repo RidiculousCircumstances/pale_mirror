@@ -48,7 +48,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             new BakerySceneReconciledCodec(), new BakeryStationSceneReconciledCodec())),
             ProductionWorkScenePayloadCodecs.codecs(), ProductionWorkScenePayloadCodecs.productionEvents()); }
     static PayloadCodecs resourceSiteCodecs() { return PayloadCodecs.merge(new PayloadCodecs(List.of(ResourceSitePayloadCodecs.growthAdvanced(),
-            ResourceSitePayloadCodecs.preparationStarted(), ResourceSitePayloadCodecs.prepared(), ResourceSitePayloadCodecs.harvestStarted(), ResourceSitePayloadCodecs.harvestWorkChanged(),
+            ResourceSitePayloadCodecs.preparationStarted(), ResourceSitePayloadCodecs.prepared(), ResourceSitePayloadCodecs.harvestStarted(), ResourceSitePayloadCodecs.harvestWorkChanged(), new ResourceSiteHarvestSuspensionCodec(),
             ResourceSitePayloadCodecs.harvestCropPrepared(), ResourceSitePayloadCodecs.harvestProgressed(),
             new ResourceSiteHarvestAcceptanceCodec(),
             ResourceSitePayloadCodecs.harvestColdTraversalAdvanced(), ResourceSitePayloadCodecs.harvestColdGoalAdvanced(),

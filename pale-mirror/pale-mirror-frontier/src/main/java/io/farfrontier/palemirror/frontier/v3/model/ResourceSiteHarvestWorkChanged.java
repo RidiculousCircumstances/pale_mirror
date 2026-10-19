@@ -8,13 +8,13 @@ import java.util.Optional;
 public record ResourceSiteHarvestWorkChanged(SubjectId siteId, SubjectId jobId, SubjectId workerId,
         long epoch, long layoutRevision, ResourceFieldLayout.CellId cellId, WorkOperation operation,
         long atTick, Optional<WorkProgress> previous, WorkProgress next,
-        ScheduleId scheduleId, long dueAt, Optional<SceneLeaseId> hotLeaseId) implements FrontierPayload {
+        ScheduleId scheduleId, long dueAt, Optional<SceneLeaseId> hotLeaseId) implements ResourceSiteHarvestLabourChange {
     public ResourceSiteHarvestWorkChanged {
         Objects.requireNonNull(siteId); Objects.requireNonNull(jobId); Objects.requireNonNull(workerId);
         Objects.requireNonNull(cellId); Objects.requireNonNull(operation); Objects.requireNonNull(previous);
         Objects.requireNonNull(next); Objects.requireNonNull(scheduleId); Objects.requireNonNull(hotLeaseId);
         if (epoch < 1 || layoutRevision < 1 || atTick < 0 || dueAt < 0 || next.evaluatedAtTick() != atTick
-                || previous.equals(Optional.of(next))) throw new IllegalArgumentException("invalid labour transition");
+                || !next.running() || previous.equals(Optional.of(next))) throw new IllegalArgumentException("invalid labour start/resume transition");
     }
     @Override public String type() { return "frontier.resource_site_harvest_work_changed"; }
 }

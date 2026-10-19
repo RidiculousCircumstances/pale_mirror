@@ -135,7 +135,7 @@ public final class DiagnosticProducerContract {
         "frontier.resource_site_harvest_hot_traversal_advanced", "frontier.resource_site_harvest_hot_goal_arrived", "frontier.resource_site_harvest_progressed", "frontier.resource_site_harvest_work_acknowledged",
                 "frontier.resource_site_harvest_scene_reconciled", "frontier.resource_site_harvest_effect_reconciled", "frontier.resource_site_harvest_hand_projected",
                 "frontier.resource_site_harvest_hand_release", "frontier.resource_site_harvest_segment_renewed",
-                "frontier.resource_site_harvest_blocked_cell_skipped", "frontier.resource_site_harvest_immature_cell_skipped", "frontier.resource_site_harvest_work_changed",
+                "frontier.resource_site_harvest_blocked_cell_skipped", "frontier.resource_site_harvest_immature_cell_skipped", "frontier.resource_site_harvest_work_changed", "frontier.resource_site_harvest_work_suspended",
                 "frontier.resource_site_harvest_target_retargeted", "frontier.resource_site_harvest_storage_retargeted", "frontier.resource_site_harvest_route_blocked",
                 "frontier.resource_site_harvest_batch_prepared", "frontier.resource_site_harvest_batch_delivered",
                 "frontier.resource_site_harvest_scene_lease_handoff",

@@ -38,11 +38,11 @@ class ResourceSiteWorkReceiptCodecTest {
         assertThrows(IllegalArgumentException.class, () -> codecs.decode(value.type(), wrongMode));
     }
     @Test void labourWalRetainsExactPredecessorIntervalAndRejectsTruncation() {
-        var before = io.farfrontier.palemirror.frontier.v3.model.WorkProgress.pending(200, 100).resume(100, 1_250, 260);
+        var before = io.farfrontier.palemirror.frontier.v3.model.WorkProgress.pending(200, 100);
         var value = new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestWorkChanged(
                 new SubjectId("site:test"), new SubjectId("job:site-harvest-test"), new SubjectId("resident:test"),
                 1, 1, new ResourceFieldLayout.CellId(97), io.farfrontier.palemirror.frontier.v3.model.WorkOperation.HARVEST,
-                120, java.util.Optional.of(before), before.pause(120),
+                120, java.util.Optional.of(before), before.resume(120, 1_250, 280),
                 new ScheduleId("schedule:resource-site-harvest-cold-progress-site-harvest-test"), 260, java.util.Optional.empty());
         var codec = ResourceSitePayloadCodecs.harvestWorkChanged();
         byte[] bytes = codec.encode(value);

@@ -361,7 +361,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(renewed.siteId(), renewed)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
-        if (command.payload() instanceof ResourceSiteHarvestWorkChanged changed) {
+        if (command.payload() instanceof ResourceSiteHarvestLabourChange changed) {
             try {
                 var binding = command.scheduleBinding().orElseThrow(
                         () -> new IllegalArgumentException("labour command needs an exact continuation binding")).action();
@@ -505,6 +505,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
             case ResourceSiteHarvestSegmentRenewed renewed -> ResourceSiteHarvestProcess.reduceSegmentRenewed(state, event.subject(), renewed);
             case ResourceSiteHarvestBlockedCellSkipped skipped -> ResourceSiteHarvestProcess.reduceBlockedCellSkipped(state, event.subject(), skipped);
             case ResourceSiteHarvestWorkChanged changed -> ResourceSiteHarvestWorkProcess.reduce(state, event.subject(), changed);
+            case ResourceSiteHarvestWorkSuspended changed -> ResourceSiteHarvestWorkProcess.reduce(state, event.subject(), changed);
             case ResourceSiteHarvestImmatureCellSkipped skipped -> ResourceSiteHarvestProcess.reduceCellSkipped(state, event.subject(), skipped);
             case ResourceSiteHarvestTargetRetargeted retargeted -> ResourceSiteHarvestRetargeting.reduceTargetRetargeted(state, event.subject(), retargeted);
             case ResourceSiteHarvestRouteBlocked blocked -> ResourceSiteHarvestProcess.reduceRouteBlocked(state, event.subject(), blocked);

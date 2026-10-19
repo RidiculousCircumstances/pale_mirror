@@ -363,6 +363,12 @@ public final class KnownPedestrianRouteKnowledge {
         if (route.isEmpty()) throw new IllegalArgumentException("accepted route is empty");
         KnownPedestrianNavigation.requireRoute(geometryFrom(route.getFirst()), route);
     }
+    public boolean supportsPath(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPathProof path) {
+        return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPathValidation.supports(geometryFrom(path.origin()), path);
+    }
+    public void requirePath(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPathProof path) {
+        io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPathValidation.require(geometryFrom(path.origin()), path);
+    }
 
     /** Verify selected area access through the same retained-departure geometry as its producer. */
     public void requireAccess(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianAccessReceipt access,
