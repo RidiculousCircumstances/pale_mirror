@@ -6,12 +6,16 @@ import java.util.*;
 final class ProcurementTravelForecast {
     record Estimate(long deliveryTicks, long labourTicks, long journeyTicks) { }
     static Optional<Estimate> read(FrontierWorldState state, GoodsTradeOrder offer, GoodsParticipant buyer) {
-        var destinations = GoodsParticipantStorage.containers(state, buyer, offer.itemKind());
+        return read(state, offer.containerId(), offer.itemKind(), buyer);
+    }
+    static Optional<Estimate> read(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId source,
+                                   String item, GoodsParticipant buyer) {
+        var destinations = GoodsParticipantStorage.containers(state, buyer, item);
         for (var mission : state.shipments().missions().values().stream().sorted(Comparator.comparing(TransportMission::id)).toList()) {
-            if (!mission.sender().containerId().equals(offer.containerId())
+            if (!mission.sender().containerId().equals(source)
                     || !destinations.contains(mission.receiver().containerId()) || mission.supplies().isEmpty()
                     || mission.supplies().orElseThrow().needsReplan() || !state.unitGroups().groups().containsKey(mission.groupId())
-                    || !GoodsTradeStateSupport.receivingCapacity(state, mission.receiver().containerId(), offer.itemKind(), 1)) continue;
+                    || !GoodsTradeStateSupport.receivingCapacity(state, mission.receiver().containerId(), item, 1)) continue;
             var proof = mission.supplies().orElseThrow().journey();
             // This retained trip length is cost advice, not a fresh traversability
             // proof. Rewalking every physical edge here multiplies route validation
@@ -27,9 +31,9 @@ final class ProcurementTravelForecast {
         // provisional: this may rank a BUY intention, never create incoming stock,
         // accept a route or fund deadline-backed production. Matching must acquire
         // the real itinerary and supplies before admitting a contract/expedition.
-        var origin = state.inventory().surfaces().get(offer.containerId()).position(state);
+        var origin = state.inventory().surfaces().get(source).position(state);
         long distance = destinations.stream()
-                .filter(id -> GoodsTradeStateSupport.receivingCapacity(state, id, offer.itemKind(), 1))
+                .filter(id -> GoodsTradeStateSupport.receivingCapacity(state, id, item, 1))
                 .map(id -> state.inventory().surfaces().get(id).position(state))
                 .mapToLong(target -> Math.abs((long) target.x() - origin.x()) + Math.abs((long) target.y() - origin.y())
                         + Math.abs((long) target.z() - origin.z())).min().orElse(-1);

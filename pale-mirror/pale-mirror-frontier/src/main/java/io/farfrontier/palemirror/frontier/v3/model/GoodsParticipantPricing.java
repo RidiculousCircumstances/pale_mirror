@@ -55,7 +55,6 @@ public final class GoodsParticipantPricing {
                 : ask(participant, commodity)));
         var floors = GoodsProductionPricing.floors(state.bootstrap().ruleset().production(), prices);
         var alternatives = GoodsProductionPricing.alternatives(state, view, prices);
-        var bids = GoodsMarketDemand.fundedBids(state, participant, now);
         for (var commodity : catalog) {
             var stock = view.stocks().get(commodity.itemKind());
             var reference = history.reference(commodity.itemKind(), rules.pricing().recencyTicks()).orElse(commodity.minimumSellPrice());
@@ -66,13 +65,13 @@ public final class GoodsParticipantPricing {
             long shortage = view.supplyPlan().map(plan -> plan.require(commodity.itemKind()).purchase())
                     .orElse((long) Math.max(0, target - stock.unclaimedInStorage() - stock.expectedIncoming()));
             int pressure = (int) Math.min(1000, Math.multiplyExact(shortage, 1000) / Math.max(1, target));
+            long surplus = view.saleable(commodity);
             var context = new MarketPricePolicy.Context(floors.getOrDefault(commodity.itemKind(), io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO),
                     Optional.ofNullable(alternatives.get(commodity.itemKind())), pressure,
-                    GoodsMarketDemand.offered(state, participant, commodity.itemKind(), now),
-                    Optional.ofNullable(bids.get(commodity.itemKind())),
+                    GoodsMarketDemand.read(state, participant, commodity.itemKind(), surplus, now),
                     GoodsAcquisitionPricing.estimate(state, participant, commodity.itemKind(), shortage, now));
             next.put(commodity.itemKind(), policy.review(commodity.minimumSellPrice(), commodity.maximumBuyPrice(), reference,
-                    view.saleable(commodity), sale, Optional.ofNullable(participant.prices().get(commodity.itemKind())), now, rules.pricing(), context));
+                    surplus, sale, Optional.ofNullable(participant.prices().get(commodity.itemKind())), now, rules.pricing(), context));
         }
         return Map.copyOf(next);
     }

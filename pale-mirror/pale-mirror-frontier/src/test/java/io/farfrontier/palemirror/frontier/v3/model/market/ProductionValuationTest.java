@@ -16,19 +16,21 @@ class ProductionValuationTest {
         assertTrue(ProductionValuation.unitCost(Map.of("missing-input", 3), 1, 80, prices, fuel).isEmpty());
         assertTrue(ProductionValuation.unitCost(Map.of("grain", 3), 1, 80, prices, List.of()).isEmpty());
     }
-    @Test void constrainedQuotesRespectMaterialCostAlternativeAndPositiveUnsoldAccessEvidence() {
+    @Test void seedBoundedProfileRetainsItsExplicitConstraintsWithoutTimeDiscounts() {
         var policy = new MarketPricePolicy(); var rules = MarketPricingRules.initial();
-        var accessible = new MarketPricePolicy.Context(FixedScalar.whole(3), Optional.of(FixedScalar.whole(4)), 1000, true);
+        var accessible = new MarketPricePolicy.Context(FixedScalar.whole(3), Optional.of(FixedScalar.whole(4)), 1000,
+                SellerPriceDiscovery.Market.empty(), Optional.empty());
         var quote = policy.review(FixedScalar.whole(4), FixedScalar.whole(6), FixedScalar.whole(4), 64,
                 Optional.empty(), Optional.empty(), 0, rules, accessible);
         assertEquals(FixedScalar.whole(4), quote.bid());
         for (long tick = 2400; tick <= 48000; tick += 2400)
             quote = policy.review(FixedScalar.whole(4), FixedScalar.whole(6), FixedScalar.whole(4), 64,
                     Optional.empty(), Optional.of(quote), tick, rules, accessible);
-        assertEquals(FixedScalar.whole(3), quote.ask()); assertEquals(FixedScalar.whole(4), quote.bid());
-        var pending = new MarketPricePolicy.Context(FixedScalar.whole(3), Optional.empty(), 0, false);
+        assertEquals(FixedScalar.whole(4), quote.ask()); assertEquals(FixedScalar.whole(4), quote.bid());
+        var pending = new MarketPricePolicy.Context(FixedScalar.whole(3), Optional.empty(), 0,
+                SellerPriceDiscovery.Market.empty(), Optional.empty());
         var unchanged = policy.review(FixedScalar.whole(4), FixedScalar.whole(6), quote.reference(), 64,
                 Optional.empty(), Optional.of(quote), 50400, rules, pending);
-        assertEquals(quote.ask(), unchanged.ask()); assertEquals(0, unchanged.unsoldOfferedTicks());
+        assertEquals(quote.ask(), unchanged.ask());
     }
 }

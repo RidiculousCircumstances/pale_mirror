@@ -14,7 +14,6 @@ final class ParticipantPriceCodec {
             out.writeLong(quote.ask().raw()); out.writeLong(quote.bid().raw()); out.writeLong(quote.reference().raw());
             out.writeLong(quote.reviewedAt()); out.writeLong(quote.surplus()); out.writeBoolean(quote.lastSale().isPresent());
             if (quote.lastSale().isPresent()) out.writeUTF(quote.lastSale().orElseThrow().value());
-            out.writeLong(quote.unsoldOfferedTicks());
         }
     }
     static Map<String, MarketPricePolicy.Quote> read(DataInputStream in) throws IOException {
@@ -25,7 +24,7 @@ final class ParticipantPriceCodec {
             String item = in.readUTF();
             var quote = new MarketPricePolicy.Quote(new FixedScalar(in.readLong()), new FixedScalar(in.readLong()),
                     new FixedScalar(in.readLong()), in.readLong(), in.readLong(),
-                    in.readBoolean() ? Optional.of(new SubjectId(in.readUTF())) : Optional.empty(), in.readLong());
+                    in.readBoolean() ? Optional.of(new SubjectId(in.readUTF())) : Optional.empty());
             if (prices.put(item, quote) != null) throw new IllegalArgumentException("duplicate participant price");
         }
         return Map.copyOf(prices);
