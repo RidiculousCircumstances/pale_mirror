@@ -36,9 +36,11 @@ public final class MarketClearingProcess {
     }
 
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
+        return plan(state, action, action.dueAt().ticks());
+    }
+    public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, long now) {
         MarketDemand demand = state.companies().market().demands().get(action.subject());
         if (demand == null || demand.status() != MarketDemandStatus.OPEN) return List.of();
-        long now = action.dueAt().ticks();
         if (now > demand.expiresAtTick()) return List.of(new ProposedEvent(demand.buyerId(), new MarketDemandExpired(demand.id())),
                 taskTransition(state, demand, StrategicTaskStatus.PENDING, StrategicTaskStatus.BLOCKED));
         StrategicTask task = state.strategicPlans().tasks().get(demand.reasonId());
@@ -47,7 +49,7 @@ public final class MarketClearingProcess {
         }
         // Capacity may disappear between objective selection and market clearing. Keep the
         // pending demand rather than accepting work that cannot return its output.
-        if (BakeryBatchSelection.admissibleStock(state, ProductionRights.publicService(demand.buyerId())).isEmpty())
+        if (BakeryBatchSelection.admissibleStock(state, ProductionRights.publicService(demand.buyerId()), now).isEmpty())
             return retry(state, demand, action, now);
         List<ProposedEvent> start = ProductionProcess.planStart(state, ProductionProcess.start(task, now));
         ProductionStarted started = start.stream().map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)

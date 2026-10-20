@@ -27,12 +27,12 @@ final class SettlementFieldPlanner implements SettlementOperationPlanner {
         }
         return java.util.List.of();
     }
-    @Override public Assessment assess(FrontierWorldState state, Settlement settlement) {
+    @Override public Assessment assess(FrontierWorldState state, Settlement settlement, long atTick) {
         Optional<ResourceSite> recoverableField = state.resourceSiteDescriptors().values().stream()
                 .filter(site -> site.settlementId().equals(settlement.id()))
                 .filter(site -> state.resourceSites().site(site.id()).phase() == ResourceSitePhase.READY
                         || state.resourceSites().site(site.id()).phase() == ResourceSitePhase.GROWING)
-                .filter(site -> FieldWorkDemand.requested(state, site))
+                .filter(site -> FieldWorkDemand.requested(state, site, atTick))
                 .filter(site -> state.structureConditions().get(site.facilityId()) == StructureCondition.INTACT)
                 .filter(site -> !site.layout().cells().isEmpty())
                 .filter(site -> ResourceStorageSelection.newStackDestination(state, settlement.id(), "minecraft:wheat", 64,

@@ -5,15 +5,15 @@ import java.util.*;
 /** Recipe owner alone translates its retained batch into future supply and consumption. */
 final class BakeryStockSupply implements StockSupplyPort {
     @Override public Key key() { return Key.BAKERY; }
-    @Override public long inputDemand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner, String itemKind) {
+    @Override public long inputDemand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner, String itemKind, long atTick) {
         if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().enabled()) {
             var participant = state.companies().goodsTrade().participants().participants().get(owner);
-            var plan = GoodsParticipantView.read(state, participant).supplyPlan().orElseThrow();
+            var plan = GoodsParticipantAssessment.domestic(state, participant, atTick).view().supplyPlan().orElseThrow();
             return plan.require(itemKind).protectedInput();
         }
         var recipe = BakeryRecipes.bread(state);
         return recipe.ingredient().accepts(itemKind) ? Math.multiplyExact(
-                Math.ceilDiv(ProductionStockDemand.readSupply(state, owner, recipe.product().itemKind(), Optional.empty()).missing(),
+                Math.ceilDiv(ProductionStockDemand.readSupply(state, owner, recipe.product().itemKind(), Optional.empty(), atTick).missing(),
                         recipe.product().quantity()), recipe.ingredient().quantity()) : 0;
     }
     @Override public List<Commitment> pending(FrontierWorldState state) {

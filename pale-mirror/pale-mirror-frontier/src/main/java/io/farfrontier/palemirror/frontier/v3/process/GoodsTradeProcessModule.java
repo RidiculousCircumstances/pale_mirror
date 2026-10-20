@@ -35,7 +35,7 @@ final class GoodsTradeProcessModule implements FrontierWorldProcessModule {
         if (payload instanceof GoodsTradeOrderPlaced placed) return GoodsTradeStateSupport.place(state, subject, placed.order(), now);
         if (payload instanceof GoodsTradeReserved reserved) return GoodsTradeStateSupport.reserve(state, subject, reserved.contract(), reserved.allocations(), now);
         if (payload instanceof GoodsTradeAccepted accepted) return GoodsTradeStateSupport.accept(state, subject, accepted.receipt(), now);
-        if (payload instanceof GoodsTradeCancelled cancelled) return GoodsTradeStateSupport.cancelBeforeLoading(state, subject, cancelled.disposition());
+        if (payload instanceof GoodsTradeCancelled cancelled) return GoodsTradeStateSupport.cancelBeforeLoading(state, subject, cancelled.disposition(), now);
         if (payload instanceof GoodsTradeClaimPartitioned partitioned) return GoodsTradeStateSupport.partition(state, subject,
                 partitioned.contractId(), partitioned.partition());
         if (payload instanceof GoodsTradeRetired retired) return GoodsTradeStateSupport.retire(state, subject, retired, now);

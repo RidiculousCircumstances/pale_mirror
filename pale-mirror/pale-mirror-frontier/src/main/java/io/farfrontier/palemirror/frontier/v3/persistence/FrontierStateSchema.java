@@ -5,8 +5,8 @@ import java.io.*;
 /** Sole header grammar for early installed-world selection and complete aggregate hydration. */
 final class FrontierStateSchema {
     // Runtime field declarations are explicit, not inferred from the genesis layout.
-    // Remove the elapsed-unsold repricing counter. Fresh worlds only.
-    static final int VERSION = 296;
+    // Accounts retain exact cumulative cash turnover. Never invent history for old worlds.
+    static final int VERSION = 297;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

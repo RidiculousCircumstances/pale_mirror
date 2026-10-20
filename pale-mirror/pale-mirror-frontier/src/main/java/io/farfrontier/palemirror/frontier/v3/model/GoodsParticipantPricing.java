@@ -45,7 +45,8 @@ public final class GoodsParticipantPricing {
                 .collect(java.util.stream.Collectors.toUnmodifiableSet()))
                 && participant.prices().values().stream().allMatch(quote -> now >= quote.reviewedAt()
                     && now - quote.reviewedAt() < rules.pricing().reviewTicks())) return participant.prices();
-        var view = GoodsParticipantView.read(state, participant);
+        var assessment = GoodsParticipantAssessment.read(state, participant, now);
+        var view = assessment.view();
         var history = state.companies().goodsTrade().priceHistory();
         var next = new TreeMap<String, MarketPricePolicy.Quote>();
         var policy = new MarketPricePolicy();
@@ -54,7 +55,7 @@ public final class GoodsParticipantPricing {
                 ? history.reference(commodity.itemKind(), rules.pricing().recencyTicks()).orElse(commodity.minimumSellPrice())
                 : ask(participant, commodity)));
         var floors = GoodsProductionPricing.floors(state.bootstrap().ruleset().production(), prices);
-        var production = GoodsProductionPricing.assess(state, view, prices);
+        var production = GoodsProductionPricing.assess(assessment, prices);
         for (var commodity : catalog) {
             var stock = view.stocks().get(commodity.itemKind());
             var reference = history.reference(commodity.itemKind(), rules.pricing().recencyTicks()).orElse(commodity.minimumSellPrice());

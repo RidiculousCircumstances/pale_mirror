@@ -13,7 +13,7 @@ public final class SettlementStaffingPolicy {
                     .equals(EnumSet.allOf(ResidentWorkKind.class)))
             throw new IllegalArgumentException("staffing composition requires every kind exactly once");
     }
-    public ResidentWorkPermissions propose(FrontierWorldState state, SubjectId home) {
+    public ResidentWorkPermissions propose(FrontierWorldState state, SubjectId home, long atTick) {
         var old = SettlementWorkPolicy.permissions(state, home);
         var assignments = HumanAssignmentProjection.compile(state);
         var household = state.humanPopulation().residents().values().stream()
@@ -29,7 +29,7 @@ public final class SettlementStaffingPolicy {
         state.shipments().shipments().values().stream().filter(shipment -> !shipment.terminal())
                 .forEach(shipment -> away.add(shipment.execution().actorId()));
         var demands = ports.stream().filter(port -> state.bootstrap().ruleset().labour().entries().containsKey(port.kind())).map(port -> {
-            var demand = port.assess(state, home, state.bootstrap().ruleset().labour().entries().get(port.kind()));
+            var demand = port.assess(state, home, state.bootstrap().ruleset().labour().entries().get(port.kind()), atTick);
             if (demand.kind() != port.kind() || demand.capability() != port.capability())
                 throw new IllegalArgumentException("forged staffing family or capability declaration");
             return demand;

@@ -8,12 +8,12 @@ import java.util.*;
 /** Extraction policy supplies mandate, actual known clearance and reachability to generic area selection. */
 public final class ExtractionDevelopment {
     private ExtractionDevelopment() { }
-    public static Optional<ExtractionFrontierOpened> proposal(FrontierWorldState state, SubjectId siteId) {
+    public static Optional<ExtractionFrontierOpened> proposal(FrontierWorldState state, SubjectId siteId, long atTick) {
         var deposit = Objects.requireNonNull(state.extractionSites().deposits().get(siteId), "declared extraction site");
         var rules = state.bootstrap().ruleset().extraction();
         if (rules.developmentBatchCells() == 0 || SettlementWorkPolicy.permissions(state, deposit.site().settlementId())
                 .workers(ResidentWorkKind.EXTRACTION).isEmpty()) return Optional.empty();
-        var needed = ExtractionStockDemand.requiredCells(state, deposit, Optional.empty());
+        var needed = ExtractionStockDemand.requiredCells(state, deposit, Optional.empty(), atTick);
         var accessible = deposit.accessibleSources(Set.of()).stream().filter(cell -> needed.contains(cell.id())).map(ExtractionLayout.Cell::id)
                 .collect(java.util.stream.Collectors.toSet());
         var layout = deposit.site().layout(); var known = KnownPedestrianRouteKnowledge.forFrontier(state);
@@ -28,14 +28,14 @@ public final class ExtractionDevelopment {
         return Optional.of(new ExtractionFrontierOpened(siteId, deposit.development().revision(), additions,
                 access.receipt(additions.stream().map(id -> layout.require(id).workstation()).collect(java.util.stream.Collectors.toSet()))));
     }
-    public static FrontierWorldState apply(FrontierWorldState state, SubjectId subject, ExtractionFrontierOpened event) {
+    public static FrontierWorldState apply(FrontierWorldState state, SubjectId subject, ExtractionFrontierOpened event, long atTick) {
         var deposit = state.extractionSites().deposits().get(subject);
         var rules = state.bootstrap().ruleset().extraction();
         if (!subject.equals(event.siteId()) || deposit == null || deposit.development().revision() != event.expectedRevision()
                 || rules.developmentBatchCells() == 0 || event.cells().size() > rules.developmentBatchCells()
                 || SettlementWorkPolicy.permissions(state, deposit.site().settlementId()).workers(ResidentWorkKind.EXTRACTION).isEmpty())
             throw new IllegalArgumentException("stale, unavailable or foreign extraction development");
-        var needed = ExtractionStockDemand.requiredCells(state, deposit, Optional.empty());
+        var needed = ExtractionStockDemand.requiredCells(state, deposit, Optional.empty(), atTick);
         var accessible = deposit.accessibleSources(Set.of()).stream().filter(cell -> needed.contains(cell.id())).map(ExtractionLayout.Cell::id).collect(java.util.stream.Collectors.toSet());
         if (!accessible.containsAll(event.cells())) throw new IllegalArgumentException("developed source has changed physical prerequisites");
         var cells = deposit.site().layout().cells().stream().map(cell -> new AdjacentWorkArea.Cell(cell.id(), cell.source())).toList();

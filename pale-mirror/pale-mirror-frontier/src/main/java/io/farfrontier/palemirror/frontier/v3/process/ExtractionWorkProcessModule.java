@@ -25,7 +25,7 @@ final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
         return switch (event.payload()) {
             case ExtractionGeologyInvalidated invalidated -> invalidated.apply(state, event.subject());
             case ExtractionAreaExtended extended -> ExtractionAreaPlanning.apply(state, event.subject(), extended, event.revision().value());
-            case ExtractionFrontierOpened opened -> ExtractionDevelopment.apply(state, event.subject(), opened);
+            case ExtractionFrontierOpened opened -> ExtractionDevelopment.apply(state, event.subject(), opened, event.instant().ticks());
             case ExtractionGeometryChanged changed -> changed.apply(state, event.subject());
             case ExtractionWorkStarted start -> {
                 if (!event.subject().equals(start.work().id())) throw new IllegalArgumentException("mining admission has a foreign subject");
@@ -34,10 +34,10 @@ final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
             case ExtractionWorkProgressed step -> ExtractionColdWork.apply(state, event.subject(), step, event.instant().ticks());
             case ExtractionSourceBoundary boundary -> state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(
                     ExtractionSourceCustody.apply(state, event.subject(), boundary, event.revision().value())));
-            case ExtractionSourceChanged changed -> ExtractionExternalChanges.apply(state, event.subject(), changed, event.revision().value());
+            case ExtractionSourceChanged changed -> ExtractionExternalChanges.apply(state, event.subject(), changed, event.revision().value(), event.instant().ticks());
             case ExtractionHotPrepared prepared -> ExtractionPhysicalStateSupport.prepare(state, event.subject(), prepared, event.instant().ticks());
             case ExtractionHotObserved observed -> ResidentActivityProcess.retargetHotResident(
-                    ExtractionPhysicalStateSupport.observed(state, event.subject(), observed, event.revision().value()),
+                    ExtractionPhysicalStateSupport.observed(state, event.subject(), observed, event.revision().value(), event.instant().ticks()),
                     observed.step().observation().actuation().execution().actorId(), event.instant().ticks());
             case ExtractionHandCustodyObserved hand -> ExtractionPhysicalStateSupport.handCustody(state, event.subject(), hand);
             default -> throw new IllegalArgumentException("extraction owner rejects undeclared payload");
@@ -57,7 +57,7 @@ final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
                 }
                 case ExtractionSourceChanged changed -> {
                     id = changed.target().key().owner();
-                    var preview = ExtractionExternalChanges.apply(state, id, changed, command.expectedRevision().next().value());
+                    var preview = ExtractionExternalChanges.apply(state, id, changed, command.expectedRevision().next().value(), command.submittedAt().ticks());
                     preview = ExtractionDevelopmentContinuation.appendAfterObservation(preview, id, events, command.submittedAt().ticks());
                     changedContinuations(state, preview, events, command.submittedAt().ticks());
                     for (var job : state.extractionSites().work().values()) {
@@ -76,7 +76,7 @@ final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
                 }
                 case ExtractionHotObserved observed -> {
                     id = observed.jobId();
-                    var preview = ExtractionPhysicalStateSupport.observed(state, id, observed, command.expectedRevision().next().value());
+                    var preview = ExtractionPhysicalStateSupport.observed(state, id, observed, command.expectedRevision().next().value(), command.submittedAt().ticks());
                     var original = state.extractionSites().work().get(id);
                     preview = ExtractionDevelopmentContinuation.appendAfterObservation(preview, original.siteId(), events, command.submittedAt().ticks());
                     if (preview.extractionSites().work().containsKey(id)) {

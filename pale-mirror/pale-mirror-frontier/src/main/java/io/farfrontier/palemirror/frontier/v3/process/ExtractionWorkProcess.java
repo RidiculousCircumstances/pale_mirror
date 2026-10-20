@@ -78,12 +78,12 @@ final class ExtractionWorkProcess {
                     ExtractionWorkProgressed.Operation.SELECT_STORAGE, Optional.of(selected.orElseThrow())), action, now));
             return List.copyOf(events);
         }
-        if (!ExtractionWorkPolicy.mayFinishTarget(state, job)
+        if (!ExtractionWorkPolicy.mayFinishTarget(state, job, now)
                 && (job.phase() == ExtractionWork.Phase.TAKE_TOOL || job.phase() == ExtractionWork.Phase.EXTRACT))
             return advance(state, job, ExtractionWorkProgressed.Operation.END_WORK, action, now);
         if (job.phase() == ExtractionWork.Phase.SELECT_SOURCE) {
             boolean developmentWaiting = false;
-            if (ExtractionWorkAuthority.carried(state, job) == 0 && ExtractionWorkPolicy.requested(state, job)
+            if (ExtractionWorkAuthority.carried(state, job) == 0 && ExtractionWorkPolicy.requested(state, job, now)
                     && !ExtractionWorkPolicy.remaining(state.extractionSites().deposits().get(job.siteId()))) {
                 var development = new ArrayList<ProposedEvent>();
                 try {
@@ -96,21 +96,21 @@ final class ExtractionWorkProcess {
             ExtractionWorkDecision decision;
             if (ExtractionWorkAuthority.carried(state, job) > 0) decision = new ExtractionWorkDecision.StorePart(job.execution());
             else if (!ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.execution().actorId(), now)) {
-                if (developmentWaiting || !ExtractionWorkPolicy.finished(state, job)) return retry(state, job, now);
+                if (developmentWaiting || !ExtractionWorkPolicy.finished(state, job, now)) return retry(state, job, now);
                 decision = new ExtractionWorkDecision.Finished(job.execution());
             }
             else {
                 Optional<ExtractionWorkDecision.Source> selected = Optional.empty();
                 boolean waiting = developmentWaiting;
-                try { selected = ExtractionWorkPolicy.nextTarget(state, job); }
+                try { selected = ExtractionWorkPolicy.nextTarget(state, job, now); }
                 catch (KnownPedestrianNavigation.RouteUnavailable pending) { waiting = true; }
                 if (selected.isPresent()) decision = selected.orElseThrow();
                 else {
                     try {
-                        var relocated = ExtractionWorkRelocation.select(state, job);
+                        var relocated = ExtractionWorkRelocation.select(state, job, now);
                         if (relocated.isPresent()) return relocate(state, job, relocated.orElseThrow(), action, now);
                     } catch (KnownPedestrianNavigation.RouteUnavailable pending) { waiting = true; }
-                    if (waiting || !ExtractionWorkPolicy.finished(state, job)) return retry(state, job, now);
+                    if (waiting || !ExtractionWorkPolicy.finished(state, job, now)) return retry(state, job, now);
                     decision = new ExtractionWorkDecision.Finished(job.execution());
                 }
             }
@@ -165,14 +165,14 @@ final class ExtractionWorkProcess {
     private static List<ProposedEvent> alternative(FrontierWorldState state, ExtractionWork job, ScheduledAction action, long now) {
         Optional<ExtractionWorkDecision.Source> selected = Optional.empty();
         boolean waiting = false;
-        try { selected = ExtractionWorkTargets.alternative(state, job); }
+        try { selected = ExtractionWorkTargets.alternative(state, job, now); }
         catch (KnownPedestrianNavigation.RouteUnavailable pending) { waiting = true; }
         if (selected.isEmpty()) {
             if (job.phase() != ExtractionWork.Phase.EXTRACT) return retry(state, job, now);
             if (ExtractionWorkAuthority.carried(state, job) > 0)
                 return waiting ? retry(state, job, now) : advance(state, job, ExtractionWorkProgressed.Operation.STORE_PART, action, now);
             try {
-                var relocated = ExtractionWorkRelocation.select(state, job);
+                var relocated = ExtractionWorkRelocation.select(state, job, now);
                 return relocated.isPresent() ? relocate(state, job, relocated.orElseThrow(), action, now) : retry(state, job, now);
             } catch (KnownPedestrianNavigation.RouteUnavailable pending) { return retry(state, job, now); }
         }

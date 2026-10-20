@@ -37,16 +37,16 @@ public final class CultivationPlanning {
         for (var cell : land) possible.add(new FieldSupplyCapacity.Cell(cell.crop(),
                 new ResourceFieldCycle.CellState(cell.condition(), ResourceFieldCycle.Crop.ABSENT, 0, false, false), true));
         var participant = state.companies().goodsTrade().participants().participants().get(home);
-        var view = GoodsParticipantView.read(state, participant);
-        var option = SettlementSupplyPlanning.assessCultivation(state, home, view.residents(), view.stocks(), possible, true);
+        var view = GoodsParticipantView.observe(state, participant);
+        var option = SettlementSupplyPlanning.assessCultivation(state, home, view.residents(), view.stocks(), possible, true, atTick);
         var economy = option.economy().orElseThrow();
         // Current funded interest may use already developed soil. Only development
         // of new land needs a sustained signal, not ordinary sowing or production.
         var existingCells = possible.subList(0, possible.size() - land.size());
-        var current = SettlementSupplyPlanning.assessCultivation(state, home, view.residents(), view.stocks(), existingCells);
+        var current = SettlementSupplyPlanning.assessCultivation(state, home, view.residents(), view.stocks(), existingCells, atTick);
         long horizon = economy.horizonTicks();
-        var basis = SettlementReservePlanning.basis(state, home);
-        var reserves = SettlementReservePlanning.read(state, home);
+        var basis = SettlementReservePlanning.basis(state, home, atTick);
+        var reserves = SettlementReservePlanning.read(state, home, atTick);
         long restart = reserves.get(FieldHarvestExtraction.ITEM).timing().leadTicks();
         var arrivals = SettlementDeliveryForecast.read(state, participant);
         var required = new TreeMap<String, Long>(); var covered = new TreeMap<String, Long>();

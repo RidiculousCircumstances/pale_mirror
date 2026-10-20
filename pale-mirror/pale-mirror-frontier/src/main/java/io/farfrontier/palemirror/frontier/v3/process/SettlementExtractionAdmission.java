@@ -15,11 +15,11 @@ final class SettlementExtractionAdmission implements ResidentWorkProvider<Extrac
 
     @Override public Optional<ResidentWorkOffer<ExtractionWorkStarted>> discover(
             FrontierWorldState state, ResidentProfile resident, long tick) {
-        var candidates = ExtractionSiteSelection.ranked(state, resident.settlementId(), resident.id(), developing, Optional.empty());
+        var candidates = ExtractionSiteSelection.ranked(state, resident.settlementId(), resident.id(), developing, Optional.empty(), tick);
         KnownPedestrianNavigation.RouteUnavailable waiting = null;
         for (var candidate : candidates) {
             try {
-                var selected = ExtractionWorkAdmission.opportunity(state, resident, candidate);
+                var selected = ExtractionWorkAdmission.opportunity(state, resident, candidate, tick);
                 if (selected.isPresent()) return Optional.of(ExtractionWorkAdmission.offer(state, resident,
                         candidate, selected.orElseThrow()));
             } catch (KnownPedestrianNavigation.RouteUnavailable pending) {

@@ -12,9 +12,9 @@ public final class StockSupplyComposition {
     public static List<StockSupplyPort.Commitment> pending(FrontierWorldState state, StockSupplyPort.Key owner) {
         return PORTS.get(Objects.requireNonNull(owner)).pending(state);
     }
-    static long inputDemand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner, String itemKind) {
+    static long inputDemand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner, String itemKind, long atTick) {
         long quantity = 0;
-        for (var key : StockSupplyPort.Key.values()) quantity = Math.addExact(quantity, PORTS.get(key).inputDemand(state, owner, itemKind));
+        for (var key : StockSupplyPort.Key.values()) quantity = Math.addExact(quantity, PORTS.get(key).inputDemand(state, owner, itemKind, atTick));
         return quantity;
     }
     public static Map<StockSupplyPort.Key, StockSupplyPort> register(List<StockSupplyPort> ports) {

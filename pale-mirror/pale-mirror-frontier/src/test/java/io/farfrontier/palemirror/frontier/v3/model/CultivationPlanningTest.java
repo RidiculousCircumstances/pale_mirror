@@ -22,7 +22,7 @@ class CultivationPlanningTest {
         }
         assertFalse(engine.canonicalState().state().resourceSites().cultivation().isEmpty());
         assertEquals(12, engine.checkpoint().schedules().stream().filter(a -> a.kind().equals("frontier.cultivation.review")).count());
-        FrontierReadabilityPlan.compile(engine.canonicalState().state());
+        FrontierReadabilityPlan.compile(engine.canonicalState().state(), 0L);
     }
     @Test void economicReviewAdmitsBoundedLandWithoutGrowingPlantsOrAwardingStockAndSurvivesRecovery() {
         var state = prepared(); var home = new SubjectId("settlement:7");

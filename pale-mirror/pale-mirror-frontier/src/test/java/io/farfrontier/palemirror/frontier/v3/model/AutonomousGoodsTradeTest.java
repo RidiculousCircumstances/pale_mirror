@@ -27,12 +27,12 @@ class AutonomousGoodsTradeTest {
         }
         var before = state.inventory();
         var participant = state.companies().goodsTrade().participants().participants().get(buyer);
-        assertTrue(GoodsParticipantPolicies.require(participant).decide(GoodsParticipantView.read(state, participant),
+        assertTrue(GoodsParticipantPolicies.require(participant).decide(GoodsParticipantAssessment.view(state, participant, 0L),
                 state.bootstrap().ruleset().goodsTrade()).stream().anyMatch(intent -> intent.itemKind().equals("minecraft:coal")
                         && intent.side() == GoodsTradeOrder.Side.BUY));
         assertTrue(new TradeStockSupply().pending(state).stream().anyMatch(commitment -> commitment.economicOwner().equals(HOME)
                 && commitment.itemKind().equals("minecraft:coal") && commitment.outgoing() > 0));
-        assertTrue(ProductionStockDemand.read(state, HOME, "minecraft:coal", Optional.empty()).requested());
+        assertTrue(ProductionStockDemand.read(state, HOME, "minecraft:coal", Optional.empty(), 0L).requested());
         assertEquals(before, state.inventory(), "a potential buyer is demand, not a resource/financial reservation or output");
     }
 
@@ -49,7 +49,7 @@ class AutonomousGoodsTradeTest {
         state = issue(state, HOME, "minecraft:bread", 384, "dispatch-provisions-fixture");
         // Isolate the stone purchase: an underfed buyer correctly procures bread first.
         state = issueAt(state, FrontierWorldState.depotId(buyer), buyer, "minecraft:bread", 384, "buyer-food-fixture");
-        var view = GoodsParticipantView.read(state, state.companies().goodsTrade().participants().participants().get(HOME));
+        var view = GoodsParticipantAssessment.view(state, state.companies().goodsTrade().participants().participants().get(HOME), 0L);
         var stoneOffer = GoodsParticipantPolicies.require(view.participant()).decide(view, state.bootstrap().ruleset().goodsTrade()).stream()
                 .filter(intent -> intent.itemKind().equals("minecraft:cobblestone")).findFirst().orElseThrow();
         assertEquals(GoodsTradeOrder.Side.SELL, stoneOffer.side()); assertEquals(64, stoneOffer.quantity());
@@ -64,7 +64,7 @@ class AutonomousGoodsTradeTest {
         assertTrue(contract.quantity() > 0 && contract.quantity() <= 64, "normal funds/cargo limits may split the reserve purchase");
         assertEquals(HOME, contract.seller().id());
         assertEquals(treasury, state.inventory().economics().require(buyer).balance(), "dispatch is not acceptance/payment");
-        assertEquals(contract.quantity(), GoodsParticipantView.read(state, state.companies().goodsTrade().participants().participants().get(buyer))
+        assertEquals(contract.quantity(), GoodsParticipantAssessment.view(state, state.companies().goodsTrade().participants().participants().get(buyer), 0L)
                 .stocks().get("minecraft:cobblestone").expectedIncoming());
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
@@ -254,7 +254,7 @@ class AutonomousGoodsTradeTest {
         state = issue(state, COMPANY, "minecraft:wheat", 64, "company-grain");
         assertEquals(StrategicObjectiveKind.SETTLEMENT_COMPANY_PRODUCTION,
                 SettlementManagementComposition.MANAGEMENT.decide(state,
-                        FrontierWorldStateSupport.settlement(state.bootstrap(), HOME)).selected().orElseThrow().kind());
+                        FrontierWorldStateSupport.settlement(state.bootstrap(), HOME), 200L).selected().orElseThrow().kind());
         var planned = StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(HOME, 1, 200));
         var task = planned.stream().map(ProposedEvent::payload).filter(StrategicTaskPlanned.class::isInstance)
                 .map(StrategicTaskPlanned.class::cast).findFirst().orElseThrow().task();
@@ -311,7 +311,7 @@ class AutonomousGoodsTradeTest {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:policy-food-reserve"), 41));
         state = issue(state, HOME, "minecraft:bread", 200, "public-food");
         var participant = state.companies().goodsTrade().participants().participants().get(HOME);
-        var view = GoodsParticipantView.read(state, participant);
+        var view = GoodsParticipantAssessment.view(state, participant, 0L);
         var stock = view.stocks().get("minecraft:bread");
         int protectedQuantity = Math.max(stock.protectedMinimum(), state.bootstrap().ruleset().goodsTrade().policies()
                 .get(GoodsPolicyKind.PUBLIC_SETTLEMENT).stream().filter(value -> value.itemKind().equals("minecraft:bread"))

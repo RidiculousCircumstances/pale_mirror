@@ -86,20 +86,23 @@ public final class ProductionProcess {
     }
 
     public static List<ProposedEvent> planStart(FrontierWorldState state, ScheduledAction action) {
-        try { return planReadyStart(state, action); }
+        return planStart(state, action, action.dueAt().ticks());
+    }
+    public static List<ProposedEvent> planStart(FrontierWorldState state, ScheduledAction action, long now) {
+        try { return planReadyStart(state, action, now); }
         catch (KnownPedestrianNavigation.RouteUnavailable pending) {
-            return List.of(reschedule(action, new ScheduledAction(action.id(), new SimInstant(Math.addExact(action.dueAt().ticks(),
+            return List.of(reschedule(action, new ScheduledAction(action.id(), new SimInstant(Math.addExact(now,
                     state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval())), action.priority(), action.subject(), action.kind(), action.weight())));
         }
     }
-    private static List<ProposedEvent> planReadyStart(FrontierWorldState state, ScheduledAction action) {
+    private static List<ProposedEvent> planReadyStart(FrontierWorldState state, ScheduledAction action, long now) {
         StrategicTask task = task(state, action.subject(), StrategicTaskStatus.PENDING); Settlement settlement = settlement(state, task.ownerId());
         if (state.strategicPlans().objectives().get(task.objectiveId()).kind() == StrategicObjectiveKind.SETTLEMENT_COMPANY_PRODUCTION)
-            return CompanyBakeryPlanning.planStart(state, task, action);
+            return CompanyBakeryPlanning.planStart(state, task, action, now);
         SettlementStructure workshop = workshop(settlement);
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.FACILITY_UNAVAILABLE);
         if (!SettlementCommitmentComposition.ADMISSION.facilityAvailable(state, workshop.id()))
-            return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(),
+            return List.of(reschedule(action, start(task, Math.addExact(now,
                     state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval()))));
         Optional<ResidentProfile> availableBaker = FrontierWorldStateSupport.availableWorkResident(
                 state, settlement.id(), ResidentWorkKind.BAKING, HumanCapability.INDUSTRY);
@@ -107,33 +110,33 @@ public final class ProductionProcess {
             return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.WORKER_UNAVAILABLE);
         }
         List<ResidentProfile> eligible = ResidentWorkComposition.SELECTION.eligible(state, settlement.id(),
-                ResidentWorkKind.BAKING, HumanCapability.INDUSTRY, action.dueAt().ticks());
+                ResidentWorkKind.BAKING, HumanCapability.INDUSTRY, now);
         if (eligible.isEmpty())
-            return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(),
+            return List.of(reschedule(action, start(task, Math.addExact(now,
                     state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval()))));
         var availableInput = BakeryBatchSelection.available(state, settlement.id());
         if (availableInput.isEmpty()) {
             var stored = BakeryBatchSelection.storedInputContainers(state, settlement.id());
             if (stored.stream().anyMatch(id -> !ReferenceContainerCustody.blocksCanonicalUse(state, id)))
-                return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(), 20L))));
+                return List.of(reschedule(action, start(task, Math.addExact(now, 20L))));
             return blocked(task, settlement, workshop, stored.isEmpty() ? workshop.id() : stored.getFirst(), ProductionDiagnosticProducer.INPUT_UNAVAILABLE);
         }
         SubjectId depot = availableInput.orElseThrow().sourceContainer(state);
         boolean physicalCustody = ReferenceContainerCustody.hasLiveCustody(state, depot);
-        var batch = BakeryBatchSelection.admissible(state, settlement.id());
+        var batch = BakeryBatchSelection.admissible(state, settlement.id(), now);
         if (batch.isEmpty())
-            return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(),
+            return List.of(reschedule(action, start(task, Math.addExact(now,
                     state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval()))));
         Optional<ExactItemStack> input = batch.orElseThrow().exactInput();
         Optional<FungibleResourceCustodySupport.LotSelection> fungible = batch.orElseThrow().fungibleInput();
         if (ReferenceContainerCustody.hasLiveCustody(state, batch.orElseThrow().sourceContainer(state))
                     && !ReferenceContainerCustody.hasOperationalCustody(state, batch.orElseThrow().sourceContainer(state))
                 || fungible.isPresent() && !ProductionResourceCustody.canStart(state, fungible.orElseThrow(), batch.orElseThrow().quantity())) {
-            return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(), 20L))));
+            return List.of(reschedule(action, start(task, Math.addExact(now, 20L))));
         }
         // Exact and fungible stock remain distinct representations. A resource job admitted
         // under physical custody reserves the current bound epoch, never a COLD mirror.
-        Optional<ProductionJob> selectedJob = ResidentWorkComposition.SELECTION.offers(state, settlement.id(), action.dueAt().ticks(),
+        Optional<ProductionJob> selectedJob = ResidentWorkComposition.SELECTION.offers(state, settlement.id(), now,
                 BakeryJobAdmission.provider(task, settlement, workshop, input, fungible)).stream()
                 .map(ResidentWorkOffer::execution)
                 .filter(job -> ProductionCommercialProcess.canReserve(state, job)).findFirst();
@@ -143,13 +146,13 @@ public final class ProductionProcess {
         if (selectedJob.isEmpty()) {
             // This branch offers public work: municipal production has no invoice.
             // Company-owned or buyer-owned work retains its separate commercial admission.
-            return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(),
+            return List.of(reschedule(action, start(task, Math.addExact(now,
                     state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval()))));
         }
         ProductionJob job = selectedJob.orElseThrow();
         return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(settlement.id(),
                 new ProductionStarted(job, job.consumedItemId(), Optional.of(BakeryAdmissionNavigation.propose(state, job)))),
-                schedule(complete(job, action.dueAt().ticks() + 100L)));
+                schedule(complete(job, now + 100L)));
     }
 
     /** Restores the consumed completion action when an unstarted physical effect returns to COLD. */

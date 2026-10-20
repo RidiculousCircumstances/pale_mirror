@@ -60,7 +60,7 @@ final class FrontierV3ObjectBoardExecutor {
             geometry = FrontierReadabilityPlan.StableObjectGeometry.compile(state);
             GEOMETRIES.put(runtime, geometry);
             BOARD_INDEXES.put(runtime, new FrontierReadabilityPlan.StableBoardIndex(state, geometry));
-            FrontierReadabilityPlan baseline = FrontierReadabilityPlan.compileStableBaseline(state, geometry);
+            FrontierReadabilityPlan baseline = FrontierReadabilityPlan.compileStableBaseline(state, geometry, checkpoint.instant().ticks());
             FrontierReadabilityPlan dynamicHive = FrontierReadabilityPlan.compileDynamicHiveOverlay(state, 256 - baseline.boards().size());
             cursor = Cursor.from(input, sorted(baseline), sorted(dynamicHive), cursor);
             CURSORS.put(runtime, cursor);
@@ -76,7 +76,7 @@ final class FrontierV3ObjectBoardExecutor {
             // The stable slot already supplies position. Do not derive stock,
             // field or economy text for a board with no physical recipient.
             if (!FrontierV3SceneExecutor.entityStorageReady(level, position(slot))) continue;
-            var board = index.contains(slot.ownerId()) ? index.render(state, slot.ownerId()) : slot;
+            var board = index.contains(slot.ownerId()) ? index.render(state, slot.ownerId(), checkpoint.instant().ticks()) : slot;
             project(level, ledger, runtime, state, board);
         }
     }

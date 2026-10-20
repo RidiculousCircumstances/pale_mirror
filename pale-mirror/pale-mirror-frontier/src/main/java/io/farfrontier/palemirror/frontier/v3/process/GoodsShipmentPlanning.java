@@ -9,7 +9,7 @@ import java.util.*;
 
 /** Seller-arranged dispatch port: trade decisions never own motion or a second cargo inventory. */
 final class GoodsShipmentPlanning {
-    static SettlementStaffingPort.Demand staffingDemand(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules) {
+    static SettlementStaffingPort.Demand staffingDemand(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules, long atTick) {
         var retained = state.shipments().shipments().values().stream().filter(shipment -> !shipment.terminal())
                 .map(shipment -> shipment.execution().actorId())
                 .filter(id -> state.actorLocations().get(id).kind() == ActorKind.RESIDENT)

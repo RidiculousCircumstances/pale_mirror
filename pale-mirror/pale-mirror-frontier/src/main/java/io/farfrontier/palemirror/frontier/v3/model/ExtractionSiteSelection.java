@@ -13,12 +13,12 @@ public final class ExtractionSiteSelection {
             .thenComparingLong(Candidate::approach).thenComparing(Candidate::site);
 
     public static List<SubjectId> ranked(FrontierWorldState state, SubjectId home, SubjectId actor,
-            Set<SubjectId> excluded, Optional<SubjectId> completing) {
+            Set<SubjectId> excluded, Optional<SubjectId> completing, long atTick) {
         var candidates = new ArrayList<Candidate>();
         var origin = state.actorLocations().get(actor).supportingSurface().support();
         for (var deposit : state.extractionSites().deposits().values()) {
             if (!deposit.site().settlementId().equals(home) || excluded.contains(deposit.site().id())) continue;
-            var priorities = ExtractionPriorities.read(state, deposit, completing);
+            var priorities = ExtractionPriorities.read(state, deposit, completing, atTick);
             Candidate best = null;
             for (var cell : deposit.available(state.extractionSites().reservedCells(deposit.site().id()))) {
                 var priority = priorities.cells().get(cell.id());

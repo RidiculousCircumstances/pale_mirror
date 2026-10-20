@@ -16,5 +16,5 @@ public interface StockSupplyPort {
     Key key();
     List<Commitment> pending(FrontierWorldState state);
     /** Recipe owners declare upstream demand from the output-only supply view, never recursive input planning. */
-    long inputDemand(FrontierWorldState state, SubjectId owner, String itemKind);
+    long inputDemand(FrontierWorldState state, SubjectId owner, String itemKind, long atTick);
 }

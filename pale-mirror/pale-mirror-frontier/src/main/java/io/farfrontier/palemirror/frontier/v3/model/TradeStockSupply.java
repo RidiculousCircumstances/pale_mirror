@@ -5,7 +5,7 @@ import java.util.*;
 /** Trade owns remaining title-transfer obligations. Internal hauling changes custody, not supply. */
 final class TradeStockSupply implements StockSupplyPort {
     @Override public Key key() { return Key.TRADE; }
-    @Override public long inputDemand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner, String itemKind) { return 0; }
+    @Override public long inputDemand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner, String itemKind, long atTick) { return 0; }
     @Override public List<Commitment> pending(FrontierWorldState state) {
         var result = new ArrayList<Commitment>();
         for (var contract : state.companies().goodsTrade().contracts().values()) {
@@ -34,7 +34,7 @@ final class TradeStockSupply implements StockSupplyPort {
                 if (buyer == null || !buyer.party().equals(peer.party()) || !buyer.settlementId().equals(peer.settlementId())
                         || buyer.known().stream().noneMatch(value -> value.party().equals(seller.party()) && value.settlementId().equals(seller.settlementId()))) continue;
                 var intents = intentions.computeIfAbsent(buyer.party().id(), ignored -> GoodsParticipantPolicies.require(buyer)
-                        .decide(GoodsParticipantView.read(state, buyer), rules));
+                        .decide(GoodsParticipantView.planned(state, GoodsParticipantView.observe(state, buyer), Optional.empty()), rules));
                 int wanted = intents.stream().filter(intent -> intent.side() == GoodsTradeOrder.Side.BUY
                         && intent.itemKind().equals(commodity.itemKind())
                         && intent.limit().compareTo(GoodsParticipantPricing.ask(seller, commodity)) >= 0)

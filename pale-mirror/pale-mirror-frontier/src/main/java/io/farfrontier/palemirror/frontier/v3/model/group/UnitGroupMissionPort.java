@@ -15,9 +15,9 @@ public interface UnitGroupMissionPort {
     SurfaceAnchor destination(FrontierWorldState state, UnitGroup group, long ordinal);
     Optional<ActorExecutionId> execution(FrontierWorldState state, UnitGroup group, UnitGroup.Member member);
     boolean mayTravel(FrontierWorldState state, UnitGroup group, long ordinal);
-    io.farfrontier.palemirror.frontier.v3.model.navigation.MovementPermission movementPermission(FrontierWorldState state, UnitGroup group);
-    default boolean mayContinueMovement(FrontierWorldState state, UnitGroup group) {
-        return movementPermission(state, group).allowed();
+    io.farfrontier.palemirror.frontier.v3.model.navigation.MovementPermission movementPermission(FrontierWorldState state, UnitGroup group, long atTick);
+    default boolean mayContinueMovement(FrontierWorldState state, UnitGroup group, long atTick) {
+        return movementPermission(state, group, atTick).allowed();
     }
     /** Purpose requests cancellation of a journey, never fictional goal arrival. */
     boolean requestsJourneyStop(FrontierWorldState state, UnitGroup group);

@@ -18,9 +18,9 @@ class DistributedExtractionGeologyTest {
                 && !deposit.site().layout().outputKinds().contains("minecraft:coal")).toList();
         assertEquals(6, secondary.size());
         for (var deposit : secondary) {
-            assertFalse(ProductionStockDemand.read(state, deposit.site().settlementId(), "minecraft:cobblestone").requested());
-            assertTrue(ExtractionStockDemand.requested(state, deposit, Optional.empty()));
-            var extension = ExtractionAreaPlanning.proposal(state, deposit.site().id()).orElseThrow();
+            assertFalse(ProductionStockDemand.read(state, deposit.site().settlementId(), "minecraft:cobblestone", 0L).requested());
+            assertTrue(ExtractionStockDemand.requested(state, deposit, Optional.empty(), 0L));
+            var extension = ExtractionAreaPlanning.proposal(state, deposit.site().id(), 0L).orElseThrow();
             var extended = ExtractionAreaPlanning.preview(state, deposit.site().id(), extension);
             assertTrue(extended.extractionSites().deposits().get(deposit.site().id()).available(Set.of()).stream()
                     .anyMatch(cell -> cell.definition().coldOutput().stream().anyMatch(output -> output.itemKind().equals("minecraft:coal"))));

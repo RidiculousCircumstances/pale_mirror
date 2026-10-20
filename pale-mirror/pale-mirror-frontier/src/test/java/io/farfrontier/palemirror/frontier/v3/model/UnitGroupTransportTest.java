@@ -202,7 +202,7 @@ class UnitGroupTransportTest {
                 if (group == null) { closed = true; break; }
                 if (!recovered && group.phase() == UnitGroup.Phase.TRAVELLING && state.actorMovements().values().stream().anyMatch(m -> m.coldTravel().isPresent())) {
                     var home = state.shipments().missions().get(group.mission().id()).sender().settlementId();
-                    var permissions = SettlementStaffingComposition.POLICY.propose(state, home);
+                    var permissions = SettlementStaffingComposition.POLICY.propose(state, home, 200L);
                     for (var member : group.members()) {
                         assertTrue(permissions.permits(ResidentWorkKind.LOGISTICS, member.actorId()));
                         assertFalse(HumanAssignmentProjection.compile(state).idle(member.actorId()));

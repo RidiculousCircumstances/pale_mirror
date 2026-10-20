@@ -49,7 +49,7 @@ final class FrontierV3ServerPhysicalInteractions {
         if (state == null) return false;
         String owner = entity.getPersistentData().getString("pale_mirror.frontier_v3.board_owner");
         if (owner.isBlank()) return false;
-        var board = FrontierReadabilityPlan.compile(state).boards().get(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(owner));
+        var board = FrontierReadabilityPlan.compile(state, runtime.executionView().orElseThrow().instant().ticks()).boards().get(new io.farfrontier.palemirror.frontier.v3.api.SubjectId(owner));
         if (board == null || !FrontierV3ObjectBoardExecutor.isCurrentOwnedBoard(level, entity, board)) return false;
         var hall = state.bootstrap().settlements().stream().flatMap(home -> home.structures().stream())
                 .filter(structure -> structure.id().equals(board.ownerId())

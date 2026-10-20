@@ -6,7 +6,7 @@ import java.util.*;
 /** A prepared physical extraction still has to settle even if another worker fills the reserve. */
 final class ExtractionStockSupply implements StockSupplyPort {
     @Override public Key key() { return Key.EXTRACTION; }
-    @Override public long inputDemand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner, String itemKind) { return 0; }
+    @Override public long inputDemand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner, String itemKind, long atTick) { return 0; }
     @Override public List<Commitment> pending(FrontierWorldState state) {
         var result = new ArrayList<Commitment>();
         for (var job : state.extractionSites().work().values()) {

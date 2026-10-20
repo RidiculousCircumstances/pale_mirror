@@ -26,6 +26,7 @@ class EconomicLedgerTest {
         var purchase = new FinancialReservation(new SubjectId("reservation:food"), sender, host,
                 new SubjectId("contract:food"), FixedScalar.whole(7), java.util.Optional.of(budget.id()));
         var ordered = funded.reserveFromBudget(budget.id(), purchase);
+        assertEquals(initial.accounts(), ordered.accounts(), "holds are not turnover");
         assertEquals(FixedScalar.whole(80), ordered.availableToReserve(sender));
         assertEquals(FixedScalar.whole(13), ordered.budgets().get(budget.id()).remaining());
         var releasedIdle = ordered.resizeBudget(ordered.budgets().get(budget.id()), FixedScalar.ZERO);
@@ -47,6 +48,10 @@ class EconomicLedgerTest {
         assertEquals(FixedScalar.whole(17), cancelledRemainder.budgets().get(budget.id()).remaining());
         assertEquals(FixedScalar.whole(80), cancelledRemainder.availableToReserve(sender));
         var completed = cancelledRemainder.closeBudget(budget.id());
+        assertEquals(new FinancialTurnover(FixedScalar.whole(100), FixedScalar.ZERO, FixedScalar.whole(3)),
+                completed.require(sender).turnover());
+        assertEquals(new FinancialTurnover(FixedScalar.ZERO, FixedScalar.whole(3), FixedScalar.ZERO),
+                completed.require(host).turnover());
         assertEquals(FixedScalar.whole(97), completed.availableToReserve(sender));
         assertEquals(FixedScalar.whole(100), completed.require(sender).balance().plus(completed.require(host).balance()));
         assertTrue(completed.releaseBudget(budget.id()).budgets().isEmpty());
@@ -98,6 +103,15 @@ class EconomicLedgerTest {
         SubjectId payer = new SubjectId("settlement:1"), payee = state.bootstrap().hive().id();
         EconomicLedger after = state.inventory().economics().transfer(payer, payee, FixedScalar.whole(3));
         assertEquals(issued, after.accounts().values().stream().map(EconomicAccount::balance).reduce(FixedScalar.ZERO, FixedScalar::plus));
+        var changed = state.withInventory(state.inventory().withEconomics(after));
+        var codec = new FrontierWorldStateCodec();
+        assertEquals(changed, codec.decode(codec.encode(changed)), "recovery retains cumulative actual payments");
+        assertEquals(FixedScalar.whole(3), after.require(payer).turnover().paid());
+        assertEquals(FixedScalar.whole(3), after.require(payee).turnover().received());
+        assertEquals(after.require(payer).balance(), after.require(payer).turnover().balance());
+        assertThrows(IllegalArgumentException.class, () -> new EconomicAccount(payer,
+                EconomicOwnerKind.SETTLEMENT_TREASURY, EconomicAccountStatus.ACTIVE,
+                FixedScalar.ZERO, FixedScalar.ZERO, after.require(payer).turnover()));
         assertThrows(IllegalArgumentException.class, () -> after.transfer(payer, payee, state.bootstrap().ruleset().rates().initialSettlementTreasury()));
     }
 

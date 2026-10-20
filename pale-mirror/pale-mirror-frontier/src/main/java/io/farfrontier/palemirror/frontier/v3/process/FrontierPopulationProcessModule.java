@@ -314,7 +314,7 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             case ResidentTransitAdvanced advanced -> reduceTransit(state, event.subject(), advanced, event.instant().ticks());
             case ResidentMigrationBlocked blocked -> reduceBlocked(state, event.subject(), blocked);
             case ResidentMigrationResumed resumed -> reduceResumed(state, event.subject(), resumed);
-            case ResidentBirthStarted started -> PopulationBirthProcess.reduceStarted(state, event.subject(), started);
+            case ResidentBirthStarted started -> PopulationBirthProcess.reduceStarted(state, event.subject(), started, event.instant().ticks());
             case LegacySettlementProvisionStarted ignored -> throw new IllegalArgumentException("legacy settlement ration event is retired by resident nutrition");
             case SettlementProvisionStarted ignored -> throw new IllegalArgumentException("settlement provision start is retired by resident nutrition");
             case SettlementProvisionConsumed ignored -> throw new IllegalArgumentException("settlement provision consumption is retired by resident nutrition");

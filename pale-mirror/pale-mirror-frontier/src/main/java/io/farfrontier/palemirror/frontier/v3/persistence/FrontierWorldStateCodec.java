@@ -428,6 +428,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         for (EconomicAccount account : ledger.accounts().values().stream().sorted(Comparator.comparing(EconomicAccount::ownerId)).toList()) {
             writeString(output, account.ownerId().value()); output.writeByte(account.ownerKind().wireTag()); output.writeByte(account.status().wireTag());
             output.writeLong(account.balance().raw()); output.writeLong(account.creditLimit().raw());
+            output.writeLong(account.turnover().openingBalance().raw());
+            output.writeLong(account.turnover().received().raw()); output.writeLong(account.turnover().paid().raw());
         }
         writeCount(output, ledger.reservations().size());
         for (FinancialReservation reservation : ledger.reservations().values().stream().sorted(Comparator.comparing(FinancialReservation::id)).toList()) {
@@ -449,7 +451,9 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             SubjectId owner = new SubjectId(readString(input)); int kind = input.readUnsignedByte(); int status = input.readUnsignedByte();
             if (kind >= EconomicOwnerKind.values().length || status >= EconomicAccountStatus.values().length
                     || accounts.put(owner, new EconomicAccount(owner, FrontierWireTags.require(EconomicOwnerKind.class, kind), FrontierWireTags.require(EconomicAccountStatus.class, status),
-                    new FixedScalar(input.readLong()), new FixedScalar(input.readLong()))) != null) {
+                    new FixedScalar(input.readLong()), new FixedScalar(input.readLong()),
+                    new FinancialTurnover(new FixedScalar(input.readLong()), new FixedScalar(input.readLong()),
+                            new FixedScalar(input.readLong())))) != null) {
                 throw new IllegalArgumentException("invalid or duplicate economic account");
             }
         }

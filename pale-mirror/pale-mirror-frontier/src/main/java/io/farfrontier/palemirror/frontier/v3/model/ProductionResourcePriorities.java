@@ -8,14 +8,14 @@ import java.util.*;
 public final class ProductionResourcePriorities {
     private ProductionResourcePriorities() { }
     public static Map<String, SupplyPriority> read(FrontierWorldState state, SubjectId home,
-            Set<String> products, Optional<SubjectId> completing) {
+            Set<String> products, Optional<SubjectId> completing, long atTick) {
         var rules = state.bootstrap().ruleset().goodsTrade().supplyPlanning();
         var participant = Objects.requireNonNull(state.companies().goodsTrade().participants().participants().get(home));
-        var plan = rules.enabled() ? GoodsParticipantView.read(state, participant).supplyPlan() : Optional
+        var plan = rules.enabled() ? GoodsParticipantAssessment.view(state, participant, atTick).supplyPlan() : Optional
                 .<io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Plan>empty();
         var result = new LinkedHashMap<String, SupplyPriority>();
         for (var product : products.stream().sorted().toList()) {
-            var demand = ProductionStockDemand.read(state, home, product, completing);
+            var demand = ProductionStockDemand.read(state, home, product, completing, atTick);
             result.put(product, SupplyPriority.from(demand.missing(), demand.target(),
                     plan.map(value -> value.require(product)), rules.enabled() ? rules.require(product).leadTicks() : 0));
         }

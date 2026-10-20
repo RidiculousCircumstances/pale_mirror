@@ -9,10 +9,10 @@ import java.util.Set;
 
 /** Fresh-world bread admission: one baker, one declared facility and one station identity. */
 final class BakeryJobAdmission {
-    static SettlementStaffingPort.Demand staffingDemand(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules) {
+    static SettlementStaffingPort.Demand staffingDemand(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules, long atTick) {
         var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), home);
         boolean intact = state.structureConditions().get(ProductionProcess.workshop(settlement).id()) == StructureCondition.INTACT;
-        boolean input = intact && BakeryBatchSelection.admissibleStock(state, ProductionRights.publicService(home)).isPresent();
+        boolean input = intact && BakeryBatchSelection.admissibleStock(state, ProductionRights.publicService(home), atTick).isPresent();
         var retained = state.productionJobs().values().stream().filter(job -> job.settlementId().equals(home))
                 .map(ProductionJob::workerId).collect(java.util.stream.Collectors.toSet());
         int reserve = intact ? rules.minimumLocalStaff() : 0;
@@ -38,10 +38,10 @@ final class BakeryJobAdmission {
             var objective = state.strategicPlans().objectives().get(task.objectiveId());
             if (objective == null) throw new IllegalArgumentException("bakery opportunity lost its exact strategic objective");
             var rights = objective.kind() == StrategicObjectiveKind.SETTLEMENT_COMPANY_PRODUCTION
-                    ? CompanyBakeryPlanning.requestingCompany(state, settlement.id()).map(CompanyBakeryPlanning::rights)
+                    ? CompanyBakeryPlanning.requestingCompany(state, settlement.id(), atTick).map(CompanyBakeryPlanning::rights)
                     : Optional.of(ProductionRights.publicService(settlement.id()));
             if (rights.isEmpty()) continue;
-            var batch = BakeryBatchSelection.admissible(state, rights.orElseThrow());
+            var batch = BakeryBatchSelection.admissible(state, rights.orElseThrow(), atTick);
             if (batch.isEmpty() || batch.orElseThrow().fungibleInput().filter(input ->
                     !ProductionResourceCustody.canStart(state, input, batch.orElseThrow().quantity())).isPresent()) continue;
             var job = batch.orElseThrow().exactInput().isPresent()

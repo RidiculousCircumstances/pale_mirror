@@ -26,14 +26,14 @@ class SettlementFoodPolicyTest {
         assertEquals(0, SettlementFoodPolicy.reserveCoverageBread(state, buyer));
         assertEquals(0, SettlementFoodPolicy.coldUsableBread(state, buyer));
         assertEquals(0, SettlementFoodPolicy.usableBread(state, buyer));
-        assertTrue(SettlementFoodPolicy.exportableFungibleBread(state, buyer).isEmpty());
+        assertTrue(SettlementFoodPolicy.exportableFungibleBread(state, buyer, 0L).isEmpty());
     }
     @Test void exactDepotReserveAllowsOneSurplusFungibleStackToExport() {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:food-exact-reserve"), 408L));
         SubjectId settlement = initial.bootstrap().settlements().getFirst().id();
         SubjectId depot = FrontierWorldState.depotId(settlement);
-        int reserve = SettlementFoodPolicy.reserveRequirement(initial, settlement);
+        int reserve = SettlementFoodPolicy.reserveRequirement(initial, settlement, 0L);
         SubjectId accountId = new SubjectId("custody:food-exact-reserve");
         SubjectId lotId = new SubjectId("lot:food-exact-reserve-surplus");
         FungibleResourceLedger original = initial.inventory().fungibleResources();
@@ -52,8 +52,8 @@ class SettlementFoodPolicyTest {
             left -= count;
         }
         FrontierWorldState state = initial.withInventory(inventory);
-        assertTrue(SettlementFoodPolicy.exportableFungibleBread(state, settlement).isPresent());
-        assertEquals(lotId, SettlementFoodPolicy.exportableFungibleBread(state, settlement).orElseThrow().lot().id());
+        assertTrue(SettlementFoodPolicy.exportableFungibleBread(state, settlement, 0L).isPresent());
+        assertEquals(lotId, SettlementFoodPolicy.exportableFungibleBread(state, settlement, 0L).orElseThrow().lot().id());
     }
 
     @Test void exportSelectsAnUnclaimedLotAndKeepsResidentReserve() {
@@ -85,7 +85,7 @@ class SettlementFoodPolicyTest {
                 Map.of(claimedLot, 64), ClaimPurpose.EXTERNAL_RESERVATION), accountId);
         state = state.withInventory(state.inventory().withFungibleResources(reserved));
 
-        assertEquals(freeLot, SettlementFoodPolicy.exportableFungibleBread(state, settlement)
+        assertEquals(freeLot, SettlementFoodPolicy.exportableFungibleBread(state, settlement, 0L)
                 .orElseThrow().lot().id());
         assertEquals(256, SettlementFoodPolicy.breadStock(state, settlement));
         assertEquals(192, SettlementFoodPolicy.usableBread(state, settlement));

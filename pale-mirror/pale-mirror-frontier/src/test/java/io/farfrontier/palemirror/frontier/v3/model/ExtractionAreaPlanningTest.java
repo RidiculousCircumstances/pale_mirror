@@ -30,7 +30,7 @@ class ExtractionAreaPlanningTest {
     }
     @Test void admissionDiscoversOutsideOriginalPoolWithoutChangingOldHistoryOrCreditingWork() throws Exception {
         var before = exhausted(); var old = deposit(before); var id = old.site().id();
-        var event = ExtractionAreaPlanning.proposal(before, id).orElseThrow();
+        var event = ExtractionAreaPlanning.proposal(before, id, 0L).orElseThrow();
         FrontierWorldState after;
         var codec = new FrontierWorldStateCodec();
         try (var ignored = PedestrianRoutePlanning.bind((geometry, from, to) -> {
@@ -67,14 +67,14 @@ class ExtractionAreaPlanningTest {
         var payloads = FrontierWorldRuntimeDefinition.payloadCodecs(); assertEquals(event, payloads.decode(event.type(), payloads.encode(event)));
         assertThrows(IllegalArgumentException.class, () -> ExtractionAreaPlanning.apply(after, id, event, 1001));
         assertThrows(IllegalArgumentException.class, () -> ExtractionAreaPlanning.apply(before, new SubjectId("extraction:foreign"), event, 1001));
-        assertTrue(ExtractionAreaPlanning.proposal(after, id).isEmpty(), "an admitted live front is not depletion");
+        assertTrue(ExtractionAreaPlanning.proposal(after, id, 0L).isEmpty(), "an admitted live front is not depletion");
     }
     @Test void unresolvedAlternativeDoesNotBlockAnAlreadyCalculatedAccessibleFront() throws Exception {
         var before = exhausted(); var id = deposit(before).site().id();
         var retained = new LinkedHashMap<SurfaceAnchor, PedestrianRouteResult>();
         try (var ignored = PedestrianRoutePlanning.bind((geometry, from, to) -> {
             var result = PedestrianRoutePlanning.calculate(geometry, from, to); retained.put(to, result); return result;
-        })) { assertTrue(ExtractionAreaPlanning.proposal(before, id).isPresent()); }
+        })) { assertTrue(ExtractionAreaPlanning.proposal(before, id, 0L).isPresent()); }
         var pending = new java.util.concurrent.atomic.AtomicReference<SurfaceAnchor>();
         try (var ignored = PedestrianRoutePlanning.bind(new PedestrianRoutePlanner() {
             public PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor from, SurfaceAnchor to) {
@@ -86,7 +86,7 @@ class ExtractionAreaPlanningTest {
                 return to.equals(pending.get()) ? Optional.empty() : Optional.ofNullable(retained.get(to));
             }
         })) {
-            var observed = PedestrianRoutePlanning.observe(() -> ExtractionAreaPlanning.proposal(before, id));
+            var observed = PedestrianRoutePlanning.observe(() -> ExtractionAreaPlanning.proposal(before, id, 0L));
             var event = observed.result().orElseThrow();
             assertTrue(event.columns().stream().noneMatch(column -> column.station().equals(pending.get())));
             assertTrue(observed.requests().isEmpty(), "unused alternatives cannot park the successful continuation");
@@ -99,24 +99,24 @@ class ExtractionAreaPlanningTest {
         var before = exhausted(); var id = deposit(before).site().id();
         try (var ignored = PedestrianRoutePlanning.bind((geometry, from, to) -> new PedestrianRouteResult(
                 PedestrianRouteResult.Status.PLANNING, List.of(), 0, 0, "fixture:alternatives-pending"))) {
-            var observed = PedestrianRoutePlanning.observe(() -> ExtractionAreaPlanning.extensionAvailability(before, id));
+            var observed = PedestrianRoutePlanning.observe(() -> ExtractionAreaPlanning.extensionAvailability(before, id, 0L));
             assertEquals(ExtractionAreaPlanning.Availability.WAITING, observed.result());
             assertEquals(1, observed.requests().size(), "one selector must not flood the planner with speculative alternatives");
             assertEquals(0, deposit(before).available(Set.of()).size());
             var unavailable = assertThrows(KnownPedestrianNavigation.RouteUnavailable.class,
-                    () -> ExtractionAreaPlanning.proposal(before, id));
+                    () -> ExtractionAreaPlanning.proposal(before, id, 0L));
             assertEquals(PedestrianRouteResult.Status.PLANNING, unavailable.status());
         }
     }
     @Test void externalMutationOfUnadmittedRockRevokesBaselineRatherThanBeingMinedOrRegenerated() {
         var before = exhausted(); var id = deposit(before).site().id();
-        var original = ExtractionAreaPlanning.proposal(before, id).orElseThrow();
+        var original = ExtractionAreaPlanning.proposal(before, id, 0L).orElseThrow();
         var excluded = original.columns().getFirst().floor().support().offset(0, 2, 0);
         var mutation = new ExtractionGeologyInvalidated(excluded, 1);
         var changed = mutation.apply(before, ExtractionGeologyInvalidated.OWNER);
         assertTrue(ExtractionGroundKnowledge.forState(changed).at(excluded).isEmpty());
         assertEquals(changed.inventory(), before.inventory());
-        assertFalse(ExtractionAreaPlanning.proposal(changed, id).orElseThrow().columns().stream()
+        assertFalse(ExtractionAreaPlanning.proposal(changed, id, 0L).orElseThrow().columns().stream()
                 .anyMatch(column -> column.floor().support().offset(0, 2, 0).equals(excluded)));
         assertThrows(IllegalArgumentException.class, () -> ExtractionAreaPlanning.apply(changed, id, original, 1000));
         assertThrows(IllegalArgumentException.class, () -> mutation.apply(before, id));
@@ -126,7 +126,7 @@ class ExtractionAreaPlanningTest {
     }
     @Test void expansionRefreshesAWholeHeldSourceRegionWithoutClaimingObservationOrReleasingItsCustody() {
         var before = exhausted(); var site = deposit(before).site().id();
-        var plan = ExtractionAreaPlanning.proposal(before, site).orElseThrow();
+        var plan = ExtractionAreaPlanning.proposal(before, site, 0L).orElseThrow();
         var regions = plan.columns().stream().map(column -> new ExtractionRegion(site,
                 Math.floorDiv(column.floor().x(), 16), Math.floorDiv(column.floor().z(), 16))).distinct().toList();
         var existingRegions = ExtractionRegion.all(before.extractionSites());
@@ -189,7 +189,7 @@ class ExtractionAreaPlanningTest {
         var bounds = new WorldBounds(-1, -1, 2, 2);
         assertTrue(stratum.at(bounds, new BlockPosition(10, 60, 0)).isEmpty());
         assertTrue(stratum.at(bounds, new BlockPosition(0, 63, 0)).isEmpty());
-        assertTrue(ExtractionAreaPlanning.proposal(initial(), deposit(initial()).site().id()).isEmpty());
+        assertTrue(ExtractionAreaPlanning.proposal(initial(), deposit(initial()).site().id(), 0L).isEmpty());
     }
     @Test void originalKernelWorkersMineNewBlocksThroughSharedResourceCustody() {
         // End-to-end work needs the current complete approach/terrain declaration,

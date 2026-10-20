@@ -30,8 +30,8 @@ class ExtractionStockDemandTest {
             state = state.withInventory(state.inventory().withFungibleResources(ledger));
         }
         var codec = new FrontierWorldStateCodec(); var restored = codec.decode(codec.encode(state));
-        assertFalse(ExtractionWorkPolicy.requested(restored, offered.work()));
-        assertTrue(ExtractionWorkPolicy.mayFinishTarget(restored, offered.work()));
+        assertFalse(ExtractionWorkPolicy.requested(restored, offered.work(), 100L));
+        assertTrue(ExtractionWorkPolicy.mayFinishTarget(restored, offered.work(), 100L));
         assertThrows(IllegalArgumentException.class, () -> ExtractionColdWork.apply(restored, offered.work().id(),
                 new ExtractionWorkProgressed(offered.work().id(), offered.work().revision(), ExtractionWorkProgressed.Operation.END_WORK), 101));
     }
@@ -66,14 +66,14 @@ class ExtractionStockDemandTest {
         assertEquals("minecraft:coal", event.work().outputKind());
         var admitted = ExtractionWorkAdmission.start(state, event, 100);
         assertEquals(state.inventory(), admitted.inventory(), "assignment is neither a resource grant nor a transfer");
-        var priorities = ExtractionPriorities.read(admitted, opened, Optional.empty());
+        var priorities = ExtractionPriorities.read(admitted, opened, Optional.empty(), 100L);
         assertEquals(0, priorities.products().get("minecraft:coal").missing());
         assertEquals(1, priorities.products().get("minecraft:cobblestone").missing());
-        assertEquals(1, ExtractionPriorities.read(admitted, opened, Optional.of(event.work().id()))
+        assertEquals(1, ExtractionPriorities.read(admitted, opened, Optional.of(event.work().id()), 100L)
                 .products().get("minecraft:coal").missing(), "an execution cannot count its own target as already completed");
         var successor = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(admitted));
         var second = successor.humanPopulation().resident(new SubjectId("resident:1-11"));
-        assertEquals("minecraft:cobblestone", ExtractionWorkAdmission.opportunity(successor, second, deposit.site().id()).orElseThrow()
+        assertEquals("minecraft:cobblestone", ExtractionWorkAdmission.opportunity(successor, second, deposit.site().id(), 100L).orElseThrow()
                 .cell().definition().coldOutput().getFirst().itemKind());
     }
     @Test void toolAdmissionRejectsPhysicallyUnreachableStorageWithoutAcquiringWorkerOrStock() {
@@ -115,15 +115,15 @@ class ExtractionStockDemandTest {
         var deposit = state.extractionSites().deposits().values().iterator().next(); var home = deposit.site().settlementId();
         var rules = state.bootstrap().ruleset().labour().entries().get(ResidentWorkKind.EXTRACTION);
         var resident = state.humanPopulation().residents().values().stream().filter(value -> value.settlementId().equals(home)).findFirst().orElseThrow();
-        assertFalse(ExtractionWorkPlanning.demanded(state, home));
-        assertEquals(0, ExtractionWorkPlanning.staffingDemand(state, home, rules).targetWorkers());
+        assertFalse(ExtractionWorkPlanning.demanded(state, home, 100L));
+        assertEquals(0, ExtractionWorkPlanning.staffingDemand(state, home, rules, 100L).targetWorkers());
         assertFalse(ExtractionWorkPlanning.availableWork(state, resident, 100));
         var lot = new SubjectId("lot:test-stone-" + home.value().replace(':', '-'));
         var ledger = state.inventory().fungibleResources().destroy(ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(home)), Map.of(lot, 1), Map.of());
         state = state.withInventory(state.inventory().withFungibleResources(ledger));
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
-        assertTrue(ExtractionWorkPlanning.demanded(state, home));
-        assertEquals(rules.targetWorkers(), ExtractionWorkPlanning.staffingDemand(state, home, rules).targetWorkers());
+        assertTrue(ExtractionWorkPlanning.demanded(state, home, 100L));
+        assertEquals(rules.targetWorkers(), ExtractionWorkPlanning.staffingDemand(state, home, rules, 100L).targetWorkers());
         assertTrue(ExtractionWorkPlanning.availableWork(state, resident, 100));
     }
 }

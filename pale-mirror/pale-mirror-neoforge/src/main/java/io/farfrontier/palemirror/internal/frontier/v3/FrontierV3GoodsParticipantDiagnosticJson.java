@@ -7,7 +7,8 @@ import java.util.stream.Collectors;
 /** Read-only public/company policy, stock and obligation join. It grants no consent or title. */
 final class FrontierV3GoodsParticipantDiagnosticJson {
     static String render(FrontierScheduleView checkpoint, FrontierWorldState state, GoodsParticipant participant) {
-        var view = GoodsParticipantView.read(state, participant);
+        var assessment = GoodsParticipantAssessment.read(state, participant, checkpoint.instant().ticks());
+        var view = assessment.view();
         var stocks = view.stocks().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).map(entry ->
                 "{\"commodity\":" + string(entry.getKey()) + ",\"owned\":" + entry.getValue().ownedInStorage()
                         + ",\"unclaimed\":" + entry.getValue().unclaimedInStorage() + ",\"incoming\":" + entry.getValue().expectedIncoming()
@@ -81,6 +82,9 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                 + ",\"declaredStorages\":[" + GoodsParticipantStorage.declared(state, participant).stream().sorted()
                     .map(id -> string(id.value())).collect(Collectors.joining(",")) + "]"
                 + ",\"reviewRevision\":" + participant.reviewRevision() + ",\"reviewedAtTick\":" + participant.reviewedAtTick()
+                + ",\"assessedAtTick\":" + assessment.atTick()
+                + ",\"financialReport\":" + FrontierV3FinancialDiagnosticJson.render(
+                        FinancialAccountReport.read(state.inventory().economics(), participant.party().id()))
                 + ",\"decision\":" + string(participant.decision()) + ",\"currentPolicy\":" + string(GoodsParticipantPolicies.require(participant)
                     .explain(view, state.bootstrap().ruleset().goodsTrade())) + ",\"availableMoneyRaw\":" + view.availableMoney().raw()
                 + ",\"nextReviewTick\":" + (reviews.isPresent() ? Long.toString(reviews.orElseThrow()) : "null")
@@ -88,12 +92,15 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                 + "],\"supplyPlan\":[" + supply + "],\"reserves\":" + view.supplyPlan().map(FrontierV3ReserveDiagnosticJson::render).orElse("[]")
                 + ",\"acceptedCommodities\":{" + acceptedCommodities + "}"
                 + ",\"prices\":[" + prices + "],\"completedSales\":[" + completedSales + "]"
+                + ",\"completedSalesScope\":\"RETAINED_PRICE_HISTORY_NOT_LIFETIME\""
                 + ",\"completedCommodities\":{" + completedCommodities + "}";
         // The common byte budget preserves current stock/planning facts when retained
         // trade history grows. Explicit omissions are not empty orders or no caravans.
         return FrontierV3DiagnosticDetailBudget.finish(essential, java.util.List.of(
                 new FrontierV3DiagnosticDetailBudget.Section("economy", view.supplyPlan().flatMap(plan -> plan.economy())
                     .map(FrontierV3EconomicDiagnosticJson::render).orElse("null")),
+                new FrontierV3DiagnosticDetailBudget.Section("sourcingInputs", assessment.facts()
+                    .map(FrontierV3SourcingDiagnosticJson::render).orElse("null")),
                 new FrontierV3DiagnosticDetailBudget.Section("expeditions", FrontierV3ExpeditionDiagnosticJson.render(checkpoint, state, participant)),
                 new FrontierV3DiagnosticDetailBudget.Section("knownCounterparties", "[" + known + "]"),
                 new FrontierV3DiagnosticDetailBudget.Section("orders", "[" + orders + "]"),

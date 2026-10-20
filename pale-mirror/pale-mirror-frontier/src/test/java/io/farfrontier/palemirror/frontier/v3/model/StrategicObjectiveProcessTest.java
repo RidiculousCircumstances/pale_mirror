@@ -92,7 +92,7 @@ class StrategicObjectiveProcessTest {
         assertTrue(added > 0);
         FrontierWorldState full = state.withInventory(inventory);
         assertEquals("READY TO HARVEST · STORAGE UNAVAILABLE",
-                FrontierReadabilityPlan.compile(full).boards().get(site).text().split("\\n")[2]);
+                FrontierReadabilityPlan.compile(full, 0L).boards().get(site).text().split("\\n")[2]);
 
         var due = StrategicObjectiveProcess.resourceHarvestOpportunity(full, full.resourceSites().site(site), 22_000L);
         List<ProposedEvent> waiting = StrategicObjectiveProcess.planResourceHarvestOpportunity(full, due);
@@ -314,7 +314,7 @@ class StrategicObjectiveProcessTest {
                         new CustodyAccount(new SubjectId("custody:surplus-bread"), new ResourceCustody.Container(depot),
                                 Map.of(breadLot, 512), Map.of()));
         state = state.withInventory(state.inventory().withFungibleResources(resources));
-        assertTrue(SettlementFoodPolicy.exportableFungibleBread(state, settlement.id()).isPresent());
+        assertTrue(SettlementFoodPolicy.exportableFungibleBread(state, settlement.id(), 0L).isPresent());
 
         List<ProposedEvent> planned = StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(settlement.id(), 1, 60L));
 

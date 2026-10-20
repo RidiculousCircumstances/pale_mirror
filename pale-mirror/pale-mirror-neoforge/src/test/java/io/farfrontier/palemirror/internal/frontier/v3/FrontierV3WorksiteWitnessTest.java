@@ -88,7 +88,7 @@ class FrontierV3WorksiteWitnessTest {
         for (long id : exhausted.cells().keySet()) exhausted = exhausted.extracted(id, 1, "fixture:index-history-" + id);
         var cleared = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(exhausted)));
         assertSame(initialIndex, FrontierV3WorksiteRegistry.chunks(cleared), "depletion is not a declaration change");
-        var plan = ExtractionAreaPlanning.proposal(cleared, old.site().id()).orElseThrow();
+        var plan = ExtractionAreaPlanning.proposal(cleared, old.site().id(), 0L).orElseThrow();
         var next = ExtractionAreaPlanning.apply(cleared, old.site().id(), plan, 1000);
         var newPoint = plan.columns().getFirst().floor().support().offset(0, 2, 0);
         assertTrue(FrontierV3WorksiteRegistry.point(cleared, new net.minecraft.core.BlockPos(newPoint.x(), newPoint.y(), newPoint.z())).isEmpty());

@@ -894,7 +894,7 @@ class ProductionProcessTest {
                 else if (event.payload() instanceof ResourceSiteHarvestProgressed advanced)
                     harvesting = ResourceSiteHarvestProcess.reduceProgressed(harvesting, siteId, advanced);
                 else if (event.payload() instanceof ResourceSiteHarvestReturned returned)
-                    harvesting = ResourceSiteHarvestProcess.reduceReturned(harvesting, siteId, returned);
+                    harvesting = ResourceSiteHarvestProcess.reduceReturned(harvesting, siteId, returned, returned.coldDueAt());
                 else if (event.payload() instanceof StrategicTaskTransition transition)
                     harvesting = StrategicObjectiveProcess.reduceTaskTransition(harvesting, new SubjectId("settlement:1"), transition);
                 else if (event.payload() instanceof ScheduleEffect.Rescheduled rescheduled)

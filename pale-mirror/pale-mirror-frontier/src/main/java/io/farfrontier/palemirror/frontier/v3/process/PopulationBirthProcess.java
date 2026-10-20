@@ -29,12 +29,15 @@ public final class PopulationBirthProcess {
     }
 
     public static List<ProposedEvent> planReview(FrontierWorldState state, ScheduledAction action) {
+        return planReview(state, action, action.dueAt().ticks());
+    }
+    public static List<ProposedEvent> planReview(FrontierWorldState state, ScheduledAction action, long atTick) {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), action.subject());
         List<ProposedEvent> events = new java.util.ArrayList<>();
-        events.add(schedule(review(settlement.id(), nextOrdinal(action), action.dueAt().ticks() + state.bootstrap().ruleset().cadence().populationBirthReviewInterval())));
+        events.add(schedule(review(settlement.id(), nextOrdinal(action), atTick + state.bootstrap().ruleset().cadence().populationBirthReviewInterval())));
         if (hasActiveJob(state, settlement.id()) || !hasHousing(state, settlement.id())) return List.copyOf(events);
         // Growth is discretionary; the common food policy protects existing residents first.
-        if (!SettlementFoodPolicy.allowsPopulationGrowth(state, settlement.id())) return List.copyOf(events);
+        if (!SettlementFoodPolicy.allowsPopulationGrowth(state, settlement.id(), atTick)) return List.copyOf(events);
         Optional<ColdResourceConsumption> food = food(state, settlement);
         if (food.isEmpty()) return List.copyOf(events);
         Household household = household(state, settlement.id());
@@ -44,10 +47,10 @@ public final class PopulationBirthProcess {
                 .filter(resident -> resident.settlementId().equals(settlement.id())).count());
         ResidentBirthJob job = job(state.bootstrap().bounds(), state.bootstrap().terrain(), settlement,
                 Math.toIntExact(SettlementFacilityCapability.housingCapacity(state, settlement.id())), household, food.orElseThrow(), ordinal, placementOrdinal,
-                action.dueAt().ticks() + state.bootstrap().ruleset().cadence().populationBirthCompletionDelay(),
+                atTick + state.bootstrap().ruleset().cadence().populationBirthCompletionDelay(),
                 state.bootstrap().ruleset().residentLife(), state.bootstrap().seed());
         events.add(new ProposedEvent(settlement.id(), new ResidentBirthStarted(job)));
-        events.add(schedule(complete(job, action.dueAt().ticks() + state.bootstrap().ruleset().cadence().populationBirthCompletionDelay())));
+        events.add(schedule(complete(job, atTick + state.bootstrap().ruleset().cadence().populationBirthCompletionDelay())));
         return List.copyOf(events);
     }
 
@@ -65,10 +68,10 @@ public final class PopulationBirthProcess {
                 schedule(ResidentActivityProcess.review(job.resident().id(), Math.addExact(job.resident().birthTick(), 1L))));
     }
 
-    public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, ResidentBirthStarted started) {
+    public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, ResidentBirthStarted started, long atTick) {
         ResidentBirthJob job = started.job();
         if (!subject.equals(job.settlementId()) || !hasHousing(state, job.settlementId())
-                || !SettlementFoodPolicy.allowsPopulationGrowth(state, job.settlementId())
+                || !SettlementFoodPolicy.allowsPopulationGrowth(state, job.settlementId(), atTick)
                 || !ColdResourceConsumptionSupport.available(state, job.food(), java.util.Set.of(ResourceStorageRole.WAREHOUSE))) {
             throw new IllegalArgumentException("resident birth start lacks unfenced canonical food and housing");
         }

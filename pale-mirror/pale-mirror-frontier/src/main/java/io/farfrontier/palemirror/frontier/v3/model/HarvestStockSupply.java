@@ -6,7 +6,7 @@ import java.util.*;
 final class HarvestStockSupply implements StockSupplyPort {
     private static final ImmutableInputView<List<Commitment>> VIEW = new ImmutableInputView<>();
     @Override public Key key() { return Key.FIELD; }
-    @Override public long inputDemand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner, String itemKind) { return 0; }
+    @Override public long inputDemand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner, String itemKind, long atTick) { return 0; }
     @Override public List<Commitment> pending(FrontierWorldState state) {
         // Reservations/prices change many immutable trade drafts, but cannot
         // change crops or harvest jobs. Reuse only the exact field-owner inputs.

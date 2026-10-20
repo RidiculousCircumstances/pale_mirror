@@ -15,7 +15,7 @@ class GoodsTradeRetirementTest {
         var seller = contract.seller().id();
         var account = FungibleResourceCustodySupport.accountAtContainer(state, contract.sourceContainerId()).orElseThrow();
         var resources = state.inventory().fungibleResources().destroy(account.id(),
-                Map.of(new SubjectId("lot:trade-bread"), SettlementFoodPolicy.reserveRequirement(state, seller)), Map.of());
+                Map.of(new SubjectId("lot:trade-bread"), SettlementFoodPolicy.reserveRequirement(state, seller, 0L)), Map.of());
         state = state.withInventory(state.inventory().withFungibleResources(resources));
         long now = 10_001;
         var action = GoodsParticipantProcess.review(seller, now);

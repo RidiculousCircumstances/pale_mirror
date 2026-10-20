@@ -11,7 +11,7 @@ final class AutonomousTradeFixture {
     static FrontierWorldState initial(WorldId world, long seed, FrontierRuleset rules) {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(world, seed, rules));
         var seller = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
-        var view = GoodsParticipantView.read(state, seller);
+        var view = GoodsParticipantAssessment.view(state, seller, 0);
         var commodity = state.bootstrap().ruleset().goodsTrade().policies().get(seller.policy()).stream()
                 .filter(value -> value.itemKind().equals("minecraft:bread")).findFirst().orElseThrow();
         int stock = Math.max(commodity.target(view.residents()), view.stocks().get("minecraft:bread").protectedMinimum()) + 16;

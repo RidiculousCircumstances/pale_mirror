@@ -52,7 +52,7 @@ public final class FrontierV3ExactItemConsumptionGameTests {
                         "minecraft:bread", 64, new InventoryCustody.ContainerSlot(depot, 2))));
         ResidentBirthStarted started = PopulationBirthProcess.planReview(state, PopulationBirthProcess.review(settlement.id(), 1, 100L)).stream()
                 .map(event -> event.payload()).filter(ResidentBirthStarted.class::isInstance).map(ResidentBirthStarted.class::cast).findFirst().orElseThrow();
-        FrontierWorldState committed = PopulationBirthProcess.reduceStarted(state, settlement.id(), started);
+        FrontierWorldState committed = PopulationBirthProcess.reduceStarted(state, settlement.id(), started, 100L);
         helper.assertTrue(committed.inventory().items().get(food).count() == 63 && committed.physicalIntents().isEmpty(),
                 "birth removes one canonical ration without creating a player-materialization permit or fencing the remaining food");
         helper.succeed();

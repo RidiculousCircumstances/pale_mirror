@@ -14,7 +14,7 @@ class SettlementManagementTest {
         FrontierWorldState state = initial();
         Settlement settlement = state.bootstrap().settlements().getFirst();
         var before = new FrontierWorldStateCodec().encode(state);
-        var decision = SettlementManagementComposition.MANAGEMENT.decide(state, settlement);
+        var decision = SettlementManagementComposition.MANAGEMENT.decide(state, settlement, 60L);
         assertEquals(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, decision.selected().orElseThrow().kind());
         assertArrayEquals(before, new FrontierWorldStateCodec().encode(state), "planning cannot mutate commitments");
         for (var event : StrategicObjectiveProcess.plan(state, StrategicObjectiveProcess.review(settlement.id(), 1, 60L))) {
@@ -25,7 +25,7 @@ class SettlementManagementTest {
         }
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         assertEquals(1, state.strategicPlans().requireDecisionAuthority(settlement.id()).commitmentIds().size());
-        assertTrue(SettlementManagementComposition.MANAGEMENT.decide(state, settlement).selected().isEmpty());
+        assertTrue(SettlementManagementComposition.MANAGEMENT.decide(state, settlement, 60L).selected().isEmpty());
     }
 
     @Test void plannerOrderDoesNotChangePriorityAndScopedHoldDoesNotStopIndependentWork() {
@@ -36,12 +36,12 @@ class SettlementManagementTest {
         var first = planner("test:food", SettlementOperationPlanner.Assessment.offer(settlement.id(), food, SettlementOperationPlanner.Priority.CRITICAL));
         var second = planner("test:field", SettlementOperationPlanner.Assessment.offer(settlement.id(), field, SettlementOperationPlanner.Priority.BACKGROUND));
         assertEquals(food, new SettlementManagement(List.of(second, first), SettlementManagementPolicy.standard())
-                .decide(state, settlement).selected().orElseThrow());
+                .decide(state, settlement, 60L).selected().orElseThrow());
         assertEquals(food, new SettlementManagement(List.of(first, second), SettlementManagementPolicy.standard())
-                .decide(state, settlement).selected().orElseThrow());
+                .decide(state, settlement, 60L).selected().orElseThrow());
         var hold = planner("test:hold", SettlementOperationPlanner.Assessment.held(
                 SettlementOperationPlanner.Reason.ROUTE_RECOVERY_ALREADY_OWNED));
-        var decision = new SettlementManagement(List.of(first, hold, second), SettlementManagementPolicy.standard()).decide(state, settlement);
+        var decision = new SettlementManagement(List.of(first, hold, second), SettlementManagementPolicy.standard()).decide(state, settlement, 60L);
         assertEquals(field, decision.selected().orElseThrow());
         assertEquals(1, decision.holds().size());
     }
@@ -52,7 +52,7 @@ class SettlementManagementTest {
                 new StrategicOperationProposal(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), 10),
                 SettlementOperationPlanner.Priority.CRITICAL));
         assertThrows(IllegalArgumentException.class, () -> new SettlementManagement(List.of(foreign),
-                SettlementManagementPolicy.standard()).decide(state, settlement));
+                SettlementManagementPolicy.standard()).decide(state, settlement, 60L));
     }
 
     @Test void retainedFarmerCannotBeBorrowedButFieldParticipantAdmissionIsNotAnExclusiveStation() {
@@ -75,7 +75,7 @@ class SettlementManagementTest {
     private static SettlementOperationPlanner planner(String id, SettlementOperationPlanner.Assessment result) {
         return new SettlementOperationPlanner() {
             @Override public String id() { return id; }
-            @Override public Assessment assess(FrontierWorldState state, Settlement settlement) { return result; }
+            @Override public Assessment assess(FrontierWorldState state, Settlement settlement, long atTick) { return result; }
         };
     }
 }

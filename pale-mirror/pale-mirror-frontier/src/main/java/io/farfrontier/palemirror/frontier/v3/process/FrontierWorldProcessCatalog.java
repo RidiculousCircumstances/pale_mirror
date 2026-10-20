@@ -238,7 +238,8 @@ public final class FrontierWorldProcessCatalog {
                 }
             }),
             Map.entry("frontier.hive.infection.task", (state, action) -> HiveInfectionProcess.plan(state, action)),
-            Map.entry("frontier.settlement.production.task.start", withPlanningRecovery((state, action) -> ProductionProcess.planStart(state, action))),
+            Map.entry("frontier.settlement.production.task.start", withPlanningRecovery(atExecutionTime(
+                    (state, action, instant) -> ProductionProcess.planStart(state, action, instant.ticks())))),
             Map.entry("frontier.settlement.production.task.complete", withPlanningRecovery(new FrontierScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ProductionProcess.planCompletion(state, action);
@@ -256,7 +257,8 @@ public final class FrontierWorldProcessCatalog {
             Map.entry("frontier.hive.nutrient.transfer.progress", (state, action) -> HiveNutrientTransferProcess.plan(state, action)),
             Map.entry("frontier.hive.mobilization.assembly_progress", (state, action) -> HiveMobilizationProcess.planAssemblyProgress(state, action)),
             Map.entry("frontier.hive.mobilization.return_progress", (state, action) -> HiveMobilizationProcess.planReturnProgress(state, action)),
-            Map.entry("frontier.population.birth.review", (state, action) -> PopulationBirthProcess.planReview(state, action)),
+            Map.entry("frontier.population.birth.review", atExecutionTime(
+                    (state, action, instant) -> PopulationBirthProcess.planReview(state, action, instant.ticks()))),
             Map.entry("frontier.population.birth.complete", (state, action) -> PopulationBirthProcess.planCompletion(state, action)),
             Map.entry("frontier.population.migration.review", (state, action) -> PopulationMigrationProcess.planReview(state, action)),
             Map.entry("frontier.population.migration.progress", withPlanningRecovery((state, action) -> PopulationMigrationProcess.planProgress(state, action))),
@@ -340,7 +342,8 @@ public final class FrontierWorldProcessCatalog {
                     return ActorMovementProcess.held(state, action);
                 }
             })),
-            Map.entry("frontier.market.clear", withPlanningRecovery((state, action) -> MarketClearingProcess.plan(state, action))),
+            Map.entry("frontier.market.clear", withPlanningRecovery(atExecutionTime(
+                    (state, action, instant) -> MarketClearingProcess.plan(state, action, instant.ticks())))),
             Map.entry("frontier.resource_site.growth", new FrontierScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ResourceSiteProcess.planGrowth(state, action);
@@ -350,14 +353,8 @@ public final class FrontierWorldProcessCatalog {
                 }
             }),
             Map.entry("frontier.resource_site.prepare", (state, action) -> ResourceSiteProcess.planPreparation(state, action)),
-            Map.entry("frontier.resource_site.harvest", withPlanningRecovery(new FrontierScheduledPlanner() {
-                @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
-                    return ResourceSiteHarvestProcess.plan(state, action);
-                }
-                @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
-                    return false;
-                }
-            })),
+            Map.entry("frontier.resource_site.harvest", withPlanningRecovery(atExecutionTime(
+                    (state, action, instant) -> ResourceSiteHarvestProcess.plan(state, action, instant.ticks())))),
             Map.entry("frontier.resource_site.harvest.cold_progress", withPlanningRecovery(new FrontierScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ResourceSiteHarvestProcess.planColdProgress(state, action);

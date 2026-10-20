@@ -28,7 +28,7 @@ class GoodsSpotPurchaseTest {
     }
     @Test void foreignFoodRequiresConsentAndFundsAndSettlesOnlyAfterActualCustodyReceipt() {
         var f = fixture(FixedScalar.whole(20)); var before = f.state().inventory(); var t = f.transfer();
-        var purchase = GoodsSpotPurchaseAuthority.offer(f.state(), t, f.buyer(), f.budget(), t.execution().activityOwnerId()).orElseThrow();
+        var purchase = GoodsSpotPurchaseAuthority.offer(f.state(), t, f.buyer(), f.budget(), t.execution().activityOwnerId(), 0L).orElseThrow();
         var held = GoodsSpotPurchaseAuthority.reserve(before, purchase);
         assertEquals(before.economics().accounts(), held.economics().accounts(), "reservation cannot pay the supplier");
         assertThrows(IllegalArgumentException.class, () -> GoodsSpotPurchaseAuthority.receive(held, t, purchase));
@@ -48,11 +48,11 @@ class GoodsSpotPurchaseTest {
     }
     @Test void cancellationRestoresFiniteBudgetAndDoesNotTransferFoodOrTitle() {
         var f = fixture(FixedScalar.whole(20)); var t = f.transfer();
-        var purchase = GoodsSpotPurchaseAuthority.offer(f.state(), t, f.buyer(), f.budget(), t.execution().activityOwnerId()).orElseThrow();
+        var purchase = GoodsSpotPurchaseAuthority.offer(f.state(), t, f.buyer(), f.budget(), t.execution().activityOwnerId(), 0L).orElseThrow();
         var restored = GoodsSpotPurchaseAuthority.cancel(GoodsSpotPurchaseAuthority.reserve(f.state().inventory(), purchase), purchase);
         assertEquals(f.state().inventory(), restored);
         var poor = fixture(FixedScalar.ONE);
-        assertTrue(GoodsSpotPurchaseAuthority.offer(poor.state(), poor.transfer(), poor.buyer(), poor.budget(), t.execution().activityOwnerId()).isEmpty());
-        assertEquals(0, GoodsSpotPurchaseAuthority.availableQuantity(poor.state(), t.containerId(), t.sourceEconomicOwnerId(), poor.buyer(), poor.budget(), FoodCatalog.BREAD));
+        assertTrue(GoodsSpotPurchaseAuthority.offer(poor.state(), poor.transfer(), poor.buyer(), poor.budget(), t.execution().activityOwnerId(), 0L).isEmpty());
+        assertEquals(0, GoodsSpotPurchaseAuthority.availableQuantity(poor.state(), t.containerId(), t.sourceEconomicOwnerId(), poor.buyer(), poor.budget(), FoodCatalog.BREAD, 0L));
     }
 }

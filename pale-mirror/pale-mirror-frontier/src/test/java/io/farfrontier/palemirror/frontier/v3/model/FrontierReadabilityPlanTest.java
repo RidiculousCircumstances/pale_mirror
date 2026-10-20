@@ -26,19 +26,19 @@ class FrontierReadabilityPlanTest {
         var settlement = state.bootstrap().settlements().getFirst();
         var changed = state.withHumanPopulation(state.humanPopulation().accrueHunger(actor, 30_000L));
         assertTrue(geometry.matches(changed), "nutrition changes must not rebuild object cells");
-        var expected = FrontierReadabilityPlan.compileStableBaseline(changed).boards();
-        expected.forEach((owner, board) -> assertEquals(board, index.render(changed, owner)));
+        var expected = FrontierReadabilityPlan.compileStableBaseline(changed, 0L).boards();
+        expected.forEach((owner, board) -> assertEquals(board, index.render(changed, owner, 0L)));
         var conditions = new LinkedHashMap<>(state.structureConditions());
         conditions.put(settlement.structures().getFirst().id(), StructureCondition.DESTROYED);
         var damaged = state.withChanges(FrontierWorldStateUpdate.begin().structureConditions(conditions));
         assertTrue(!geometry.matches(damaged));
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
-                () -> index.render(damaged, settlement.structures().getFirst().id()));
+                () -> index.render(damaged, settlement.structures().getFirst().id(), 0L));
     }
     @Test
     void givesEveryFunctionalBuildingOrganAndResourceSiteOneStablePlayerFacingBoard() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-plan"), 91L));
-        FrontierReadabilityPlan plan = FrontierReadabilityPlan.compile(state);
+        FrontierReadabilityPlan plan = FrontierReadabilityPlan.compile(state, 0L);
         int expected = state.bootstrap().settlements().stream().mapToInt(value -> value.structures().size()).sum()
                 + state.bootstrap().hive().organs().size() + state.resourceSites().sites().size() + 1;
         assertEquals(expected, plan.boards().size());
@@ -60,7 +60,7 @@ class FrontierReadabilityPlanTest {
         assertEquals(FrontierObjectBoard.Scope.LANDMARK, routeBoard.scope());
         assertTrue(routeBoard.text().endsWith("ACTIVE · 12 SETTLEMENTS"));
         assertEquals(FrontierRouteNetwork.maintenanceContainerPosition(state.bootstrap()).offset(0, 3, -3), routeBoard.position());
-        assertEquals(plan.boards(), FrontierReadabilityPlan.compile(state).boards());
+        assertEquals(plan.boards(), FrontierReadabilityPlan.compile(state, 0L).boards());
     }
 
     @Test
@@ -93,15 +93,15 @@ class FrontierReadabilityPlanTest {
                 new SubjectId("nest:seed-east"), HiveOrganKind.RELAY, new BlockPosition(420, 64, 432), java.util.Optional.empty());
         FrontierWorldState grown = baseline.addHiveOrgan(organ);
 
-        FrontierReadabilityPlan stableBefore = FrontierReadabilityPlan.compileStableBaseline(baseline);
-        FrontierReadabilityPlan stableAfter = FrontierReadabilityPlan.compileStableBaseline(grown);
+        FrontierReadabilityPlan stableBefore = FrontierReadabilityPlan.compileStableBaseline(baseline, 0L);
+        FrontierReadabilityPlan stableAfter = FrontierReadabilityPlan.compileStableBaseline(grown, 0L);
         FrontierReadabilityPlan dynamic = FrontierReadabilityPlan.compileDynamicHiveOverlay(grown, 256 - stableAfter.boards().size());
         java.util.Map<SubjectId, FrontierObjectBoard> recomposed = new java.util.LinkedHashMap<>(stableAfter.boards());
         recomposed.putAll(dynamic.boards());
 
         assertEquals(stableBefore.boards(), stableAfter.boards(),
                 "one grown organ must retain every settlement, route, and bootstrap-hive board");
-        assertEquals(FrontierReadabilityPlan.compile(grown).boards(), java.util.Map.copyOf(recomposed),
+        assertEquals(FrontierReadabilityPlan.compile(grown, 0L).boards(), java.util.Map.copyOf(recomposed),
                 "the bounded overlay must retain the exact full-plan board grammar");
         assertTrue(dynamic.boards().containsKey(organ.id()), "the grown organ receives its own current local board");
         assertTrue(FrontierReadabilityPlan.input(baseline).matchesStableBaseline(FrontierReadabilityPlan.input(grown)),
@@ -115,7 +115,7 @@ class FrontierReadabilityPlanTest {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-condition"), 91L));
         SettlementStructure structure = state.bootstrap().settlements().getFirst().structures().getFirst();
         FrontierWorldState damaged = state.withStructureCondition(structure.id(), StructureCondition.DAMAGED);
-        FrontierObjectBoard board = FrontierReadabilityPlan.compile(damaged).boards().get(structure.id());
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(damaged, 0L).boards().get(structure.id());
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("DAMAGED · REPAIR NEEDED"));
         assertTrue(!board.text().contains(structure.id().value()));
@@ -126,7 +126,7 @@ class FrontierReadabilityPlanTest {
     void makesCanonicalInfectionContactVisibleOnTheAffectedHiveOrgan() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-infection"), 91L));
         HiveOrgan ganglion = state.bootstrap().hive().organs().stream().filter(organ -> organ.kind() == HiveOrganKind.GANGLION).findFirst().orElseThrow();
-        FrontierObjectBoard board = FrontierReadabilityPlan.compile(state).boards().get(ganglion.id());
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(state, 0L).boards().get(ganglion.id());
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("INFECTED\nSATURATED"));
         assertTrue(!board.text().contains(ganglion.id().value()));
@@ -143,7 +143,7 @@ class FrontierReadabilityPlanTest {
         FrontierWorldState conflicted = state.withResourceSites(state.resourceSites().replace(lifecycle.conflicted(
                 ResourceSiteConflictDisposition.terminal(site.cropSlots().getFirst(), ResourceSiteConflictReason.OBSERVED_MANAGED_CELL_MISMATCH,
                         ResourceSiteConflictIncidents.first(lifecycle, conflict)))));
-        FrontierObjectBoard board = FrontierReadabilityPlan.compile(conflicted).boards().get(site.id());
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(conflicted, 0L).boards().get(site.id());
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("DAMAGED · REPAIR NEEDED"));
         SettlementStructure farm = state.bootstrap().settlements().stream().flatMap(value -> value.structures().stream())
@@ -175,7 +175,7 @@ class FrontierReadabilityPlanTest {
                 ResourceSiteConflictDisposition.terminal(site.cropSlots().getFirst(), ResourceSiteConflictReason.FIELD_ROUTE_BLOCKED_SUPPORT,
                         ResourceSiteConflictIncidents.first(lifecycle, conflict)))));
 
-        FrontierObjectBoard board = FrontierReadabilityPlan.compile(conflicted).boards().get(site.id());
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(conflicted, 0L).boards().get(site.id());
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("HARVEST BLOCKED · ROUTE SUPPORT MISSING"));
     }
@@ -197,7 +197,7 @@ class FrontierReadabilityPlanTest {
         state = AmbientLeaseStateProcess.transition(state, farmer, AmbientLeaseStatus.HOT);
         FrontierWorldState unknown = AmbientLeaseStateProcess.transition(state, farmer, AmbientLeaseStatus.UNKNOWN_AFTER_RESTART);
 
-        FrontierObjectBoard board = FrontierReadabilityPlan.compile(unknown).boards().get(site.id());
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(unknown, 0L).boards().get(site.id());
 
         assertTrue(board.text().endsWith("READY TO HARVEST · FARMER RECOVERY IN PROGRESS"));
         assertTrue(!board.text().contains("FARMERS NEEDED"));
@@ -212,7 +212,7 @@ class FrontierReadabilityPlanTest {
         SubjectId resident = settlement.residents().getFirst().id();
         HumanPopulation population = state.humanPopulation().transitionHealth(resident, ResidentHealthStatus.EXPOSED, 100L)
                 .transitionQuarantine(settlement.id(), SettlementQuarantineStatus.QUARANTINED, 100L);
-        FrontierObjectBoard board = FrontierReadabilityPlan.compile(state.withHumanPopulation(population)).boards().get(settlement.structures().stream()
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(state.withHumanPopulation(population), 0L).boards().get(settlement.structures().stream()
                 .filter(structure -> structure.kind() == StructureKind.INFIRMARY).findFirst().orElseThrow().id());
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("QUARANTINE · 1 ACTIVE CASES"));
@@ -234,7 +234,7 @@ class FrontierReadabilityPlanTest {
         }
         FrontierWorldState hungry = state.withResourceSites(matureReadyField(state, site)).withHumanPopulation(population);
 
-        FrontierObjectBoard board = FrontierReadabilityPlan.compile(hungry).boards().get(site.id());
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(hungry, 0L).boards().get(site.id());
 
         assertTrue(board.text().endsWith("READY TO HARVEST · FARMER ASSIGNMENT PENDING"));
         assertTrue(!board.text().contains("FARMERS NEEDED"));
@@ -261,7 +261,7 @@ class FrontierReadabilityPlanTest {
         FrontierWorldState pending = state.withResourceSites(matureReadyField(state, site))
                 .withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
 
-        FrontierObjectBoard board = FrontierReadabilityPlan.compile(pending).boards().get(site.id());
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(pending, 0L).boards().get(site.id());
 
         assertTrue(board.text().endsWith("READY TO HARVEST · HARVEST START PENDING"));
         assertTrue(!board.text().contains("HARVEST LANE ACTIVE"));
@@ -273,7 +273,7 @@ class FrontierReadabilityPlanTest {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:board-food-shortage"), 91L));
         Settlement settlement = state.bootstrap().settlements().getFirst();
         SettlementStructure depot = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
-        FrontierObjectBoard board = FrontierReadabilityPlan.compile(state).boards().get(depot.id());
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(state, 0L).boards().get(depot.id());
 
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("FOOD SHORTAGE · BREAD NEEDED"));
@@ -295,7 +295,7 @@ class FrontierReadabilityPlanTest {
                 new SubjectId("item:board-restocked-bread"), settlement.id(), "minecraft:bread", 64,
                 new InventoryCustody.ContainerSlot(depotId, slot))));
         SettlementStructure depot = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
-        FrontierObjectBoard board = FrontierReadabilityPlan.compile(restocked).boards().get(depot.id());
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(restocked, 0L).boards().get(depot.id());
 
         assertTrue(recipients.stream().allMatch(resident ->
                 restocked.humanPopulation().nutrition(resident).status() == ResidentNutritionStatus.HUNGRY));
@@ -316,7 +316,7 @@ class FrontierReadabilityPlanTest {
         state = state.withResourceSites(matureReadyField(state, field));
         var original = FrontierWorldState.depotId(home.id());
         var unavailable = state.withInventory(state.inventory().withSurfaceStatus(original, ContainerSurfaceStatus.CONFLICT));
-        assertTrue(FrontierReadabilityPlan.compile(unavailable).boards().get(field.id()).text().contains("STORAGE UNAVAILABLE"));
+        assertTrue(FrontierReadabilityPlan.compile(unavailable, 0L).boards().get(field.id()).text().contains("STORAGE UNAVAILABLE"));
         var station = KnownPedestrianGround.forFrontier(state).at(home.anchor().x() + 22, home.anchor().z() + 22);
         var id = new SubjectId("container:alternative-board-storage");
         var endpoint = new ShipmentEndpoint.Storage(home.id(), id, station, java.util.Optional.empty(), station);
@@ -326,23 +326,23 @@ class FrontierReadabilityPlanTest {
                 java.util.List.of(new ResourceLot(new SubjectId("lot:alternative-board-bread"), home.id(), "minecraft:bread", 3,
                         "observed-alternative-storage", java.util.List.of())));
         var adopted = adoption.apply(unavailable, home.id());
-        assertTrue(FrontierReadabilityPlan.compile(adopted).boards().get(field.id()).text().contains("STORAGE UNAVAILABLE"),
+        assertTrue(FrontierReadabilityPlan.compile(adopted, 0L).boards().get(field.id()).text().contains("STORAGE UNAVAILABLE"),
                 "an unconfirmed adopted chest is not usable storage");
         var active = adopted.withInventory(adopted.inventory().withSurfaceStatus(id, ContainerSurfaceStatus.ACTIVE));
-        var board = FrontierReadabilityPlan.compile(active).boards().get(field.id());
+        var board = FrontierReadabilityPlan.compile(active, 0L).boards().get(field.id());
         assertFalse(board.text().contains("STORAGE UNAVAILABLE"));
         assertTrue(io.farfrontier.palemirror.frontier.v3.process.SettlementManagementComposition.MANAGEMENT
-                .decide(active, home).considerations().stream().anyMatch(candidate ->
+                .decide(active, home, 0L).considerations().stream().anyMatch(candidate ->
                         candidate.offer().proposal().resourceSiteTarget().equals(java.util.Optional.of(field.id()))),
                 "the real settlement policy must offer harvest against the same warehouse scope as the board");
         var depot = home.structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
-        var food = FrontierReadabilityPlan.compile(active).boards().get(depot.id()).text();
+        var food = FrontierReadabilityPlan.compile(active, 0L).boards().get(depot.id()).text();
         assertTrue(food.contains("FOOD RESERVE LOW · 3"));
         assertFalse(food.contains("FOOD CONFLICT"));
         assertFalse(food.contains("FOOD STORAGE UNAVAILABLE"));
         var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
         var restored = codec.decode(codec.encode(active));
-        assertEquals(board.text(), FrontierReadabilityPlan.compile(restored).boards().get(field.id()).text());
+        assertEquals(board.text(), FrontierReadabilityPlan.compile(restored, 0L).boards().get(field.id()).text());
     }
 
     @Test
@@ -363,7 +363,7 @@ class FrontierReadabilityPlanTest {
         FrontierWorldState stocked = hungry.withInventory(hungry.inventory().withFungibleResources(resources));
         SettlementStructure depot = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT).findFirst().orElseThrow();
 
-        FrontierObjectBoard board = FrontierReadabilityPlan.compile(stocked).boards().get(depot.id());
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(stocked, 0L).boards().get(depot.id());
         assertTrue(board.text().endsWith("RESIDENTS HUNGRY · " + recipients.size()
                 + " · BREAD 64 / " + (recipients.size() * 3)));
         assertFalse(board.text().contains("BREAD NEEDED"));
@@ -376,7 +376,7 @@ class FrontierReadabilityPlanTest {
         FrontierWorldState state = fixture.state();
         Settlement settlement = state.bootstrap().settlements().getFirst();
         SubjectId workshop = state.productionJobs().get(new SubjectId("job:production-development-input-theft")).facilityId();
-        FrontierObjectBoard board = FrontierReadabilityPlan.compile(state).boards().get(workshop);
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(state, 0L).boards().get(workshop);
 
         assertEquals(FrontierObjectBoard.Tone.SETTLEMENT, board.tone());
         assertTrue(board.text().contains("BAKERY"));
@@ -398,13 +398,13 @@ class FrontierReadabilityPlanTest {
         FrontierWorldState damaged = state.next(state.actorLocations(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
                 state.physicalIntents(), state.physicalObservations(), state.sceneLeases(), state.hiveColony(),
                 state.structureDamage(), deltas, state.ambientLeases());
-        FrontierObjectBoard board = FrontierReadabilityPlan.compile(damaged).boards().get(FrontierRouteNetwork.OWNER);
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(damaged, 0L).boards().get(FrontierRouteNetwork.OWNER);
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("ROUTE DAMAGE · PATROL NEEDED"));
         assertTrue(geometry.matches(damaged), "physical scars must not rebuild every board's baseline geometry");
-        assertEquals(board, index.render(damaged, FrontierRouteNetwork.OWNER));
-        assertEquals(FrontierReadabilityPlan.compile(state).boards().get(FrontierRouteNetwork.OWNER),
-                index.render(state, FrontierRouteNetwork.OWNER), "same index must read restoration without stale damage text");
+        assertEquals(board, index.render(damaged, FrontierRouteNetwork.OWNER, 0L));
+        assertEquals(FrontierReadabilityPlan.compile(state, 0L).boards().get(FrontierRouteNetwork.OWNER),
+                index.render(state, FrontierRouteNetwork.OWNER, 0L), "same index must read restoration without stale damage text");
     }
 
     private static ResourceSiteState matureReadyField(FrontierWorldState state, ResourceSite site) {

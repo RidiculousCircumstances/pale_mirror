@@ -36,16 +36,19 @@ final class ResourceSiteHarvestPlanning {
     }
 
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
+        return plan(state, action, action.dueAt().ticks());
+    }
+    public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, long atTick) {
         StrategicTask task = task(state, action.subject(), StrategicTaskStatus.PENDING);
         if (!action.id().equals(start(task, action.dueAt().ticks()).id())) return List.of();
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(task.resourceSiteTarget().orElseThrow());
         if (lifecycle.phase() != ResourceSitePhase.READY && lifecycle.phase() != ResourceSitePhase.GROWING) return blocked(task);
         if (state.structureConditions().get(site(state, lifecycle.siteId()).facilityId()) != StructureCondition.INTACT)
             return blocked(task);
-        var admitted = admissions(state, task, action.dueAt().ticks());
+        var admitted = admissions(state, task, atTick);
         if (!admitted.isEmpty()) return admitted;
         if (!livingFarmerExists(state, task.ownerId())) return blocked(task);
-        return List.of(reschedule(action, start(task, Math.addExact(action.dueAt().ticks(),
+        return List.of(reschedule(action, start(task, Math.addExact(atTick,
                 state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval()))));
     }
 
@@ -76,7 +79,7 @@ final class ResourceSiteHarvestPlanning {
         boolean sharedFields = state.resourceSiteDescriptors().values().stream()
                 .filter(field -> field.settlementId().equals(settlement.id()))
                 .filter(field -> state.structureConditions().get(field.facilityId()) == StructureCondition.INTACT)
-                .filter(field -> FieldWorkDemand.requested(state, field)).limit(2).count() > 1;
+                .filter(field -> FieldWorkDemand.requested(state, field, atTick)).limit(2).count() > 1;
         for (ResidentProfile farmer : candidates) {
             var offered = ResidentWorkComposition.SELECTION.offer(projected, farmer, atTick, provider);
             if (offered.isEmpty()) continue;
@@ -112,7 +115,7 @@ final class ResourceSiteHarvestPlanning {
         };
     }
 
-    static SettlementStaffingPort.Demand staffingDemand(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules) {
+    static SettlementStaffingPort.Demand staffingDemand(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules, long atTick) {
         var fields = state.resourceSiteDescriptors().values().stream().filter(site -> site.settlementId().equals(home))
                 .filter(site -> state.structureConditions().get(site.facilityId()) == StructureCondition.INTACT).toList();
         boolean workable = fields.stream().anyMatch(site -> state.resourceSites().cycle(site.id()).hasAvailableWork()
@@ -146,7 +149,7 @@ final class ResourceSiteHarvestPlanning {
 
     private static java.util.Optional<ResourceSiteHarvestStarted> offer(FrontierWorldState state, StrategicTask task,
             ResourceSite site, ResidentProfile farmer, long tick) {
-        if (!FieldWorkDemand.requested(state, site))
+        if (!FieldWorkDemand.requested(state, site, tick))
             return java.util.Optional.empty();
         if (!ResidentActivityCoordinator.mayStartOrdinaryWork(state, farmer.id(), tick)
                 || !ActorExecutionCoordinator.ordinaryWorkAdmission(state, farmer.id()).permitted())
@@ -177,7 +180,7 @@ final class ResourceSiteHarvestPlanning {
                 new InventoryCustody.ContainerSlot(depot, slot.getAsInt()), field);
         if (!ActorCarriedResources.canAddAccount(state.inventory().fungibleResources(),
                 farmer.id(), job.actorAccountId())) return java.util.Optional.empty();
-        boolean harvestDemand = ProductionStockDemand.read(state, site.settlementId(), FieldHarvestExtraction.ITEM).requested();
+        boolean harvestDemand = ProductionStockDemand.read(state, site.settlementId(), FieldHarvestExtraction.ITEM, tick).requested();
         var selected = lifecycle.selectHarvestStart(job, field, worker.supportingSurface(), index ->
                 FieldWorkDemand.allowed(field, field.layout().cells().get(index).id(), harvestDemand)
                         && !state.resourceSites().hasPendingCellMutation(site.id(), field.layout().cells().get(index).id()));

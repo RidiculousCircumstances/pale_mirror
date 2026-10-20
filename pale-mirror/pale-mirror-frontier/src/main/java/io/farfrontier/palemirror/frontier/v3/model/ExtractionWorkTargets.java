@@ -10,8 +10,8 @@ public final class ExtractionWorkTargets {
     /** Shared area-work ranking keeps separate miners local without excluding anyone's remaining work. */
     public static Optional<ExtractionLayout.Cell> spatialSelection(FrontierWorldState state, ExtractionDeposit deposit,
             io.farfrontier.palemirror.frontier.v3.api.SubjectId actor, List<ExtractionLayout.Cell> available,
-            AreaWorkSelection.SpatialPolicy policy, Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> completing) {
-        return spatialSelection(state, deposit, actor, available, policy, ExtractionPriorities.read(state, deposit, completing));
+            AreaWorkSelection.SpatialPolicy policy, Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> completing, long atTick) {
+        return spatialSelection(state, deposit, actor, available, policy, ExtractionPriorities.read(state, deposit, completing, atTick));
     }
     public static Optional<ExtractionLayout.Cell> spatialSelection(FrontierWorldState state, ExtractionDeposit deposit,
             io.farfrontier.palemirror.frontier.v3.api.SubjectId actor, List<ExtractionLayout.Cell> available,
@@ -76,27 +76,27 @@ public final class ExtractionWorkTargets {
         }
         return state;
     }
-    public static Optional<ExtractionWorkDecision.Source> alternative(FrontierWorldState state, ExtractionWork job) {
+    public static Optional<ExtractionWorkDecision.Source> alternative(FrontierWorldState state, ExtractionWork job, long atTick) {
         if (job.phase() != ExtractionWork.Phase.EXTRACT || job.pending().isPresent()) return Optional.empty();
         var deposit = state.extractionSites().deposits().get(job.siteId());
-        var required = ExtractionStockDemand.requiredCells(state, deposit, Optional.of(job.id()));
+        var required = ExtractionStockDemand.requiredCells(state, deposit, Optional.of(job.id()), atTick);
         var available = deposit.available(state.extractionSites().reservedCells(job.siteId())).stream()
                 .filter(cell -> required.contains(cell.id()))
                 .filter(cell -> cell.definition().coldOutput().size() == 1
                         && cell.definition().coldOutput().getFirst().itemKind().equals(job.outputKind()))
                 .toList();
-        return plannedSelection(state, job, available, AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION);
+        return plannedSelection(state, job, available, AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION, atTick);
     }
     public static Optional<ExtractionWorkDecision.Source> plannedSelection(FrontierWorldState state, ExtractionWork job,
-            List<ExtractionLayout.Cell> available, AreaWorkSelection.SpatialPolicy policy) {
+            List<ExtractionLayout.Cell> available, AreaWorkSelection.SpatialPolicy policy, long atTick) {
         var deposit = state.extractionSites().deposits().get(job.siteId());
-        return plannedAt(state, job, deposit, available, policy);
+        return plannedAt(state, job, deposit, available, policy, atTick);
     }
     static Optional<ExtractionWorkDecision.Source> plannedAt(FrontierWorldState state, ExtractionWork job,
-            ExtractionDeposit deposit, List<ExtractionLayout.Cell> available, AreaWorkSelection.SpatialPolicy policy) {
+            ExtractionDeposit deposit, List<ExtractionLayout.Cell> available, AreaWorkSelection.SpatialPolicy policy, long atTick) {
         var start = state.actorLocations().get(job.execution().actorId()).supportingSurface();
         var knowledge = knowledge(state, job);
-        var priorities = ExtractionPriorities.read(state, deposit, Optional.of(job.id()));
+        var priorities = ExtractionPriorities.read(state, deposit, Optional.of(job.id()), atTick);
         var cells = new ArrayList<>(available);
         while (!cells.isEmpty()) {
             var candidate = spatialSelection(state, deposit, job.execution().actorId(), cells, policy, priorities);
@@ -113,7 +113,7 @@ public final class ExtractionWorkTargets {
         }
         return Optional.empty();
     }
-    public static void requireSelection(FrontierWorldState state, ExtractionWork job, ExtractionWorkDecision.Source selected) {
+    public static void requireSelection(FrontierWorldState state, ExtractionWork job, ExtractionWorkDecision.Source selected, long atTick) {
         var deposit = state.extractionSites().deposits().get(job.siteId());
         var cell = deposit.available(state.extractionSites().reservedCells(job.siteId())).stream()
                 .filter(value -> ExtractionWorkEffects.target(deposit, value).equals(selected.target())).findFirst().orElseThrow(
@@ -121,9 +121,9 @@ public final class ExtractionWorkTargets {
         requireStationAvailable(state, deposit, job.execution().actorId(), cell);
         if (!ExtractionWorkSafety.available(state, deposit, cell))
             throw new IllegalArgumentException("selected mining source removes an occupied support or retained access edge");
-        if (!ExtractionStockDemand.requiredCells(state, deposit, Optional.of(job.id())).contains(cell.id()))
+        if (!ExtractionStockDemand.requiredCells(state, deposit, Optional.of(job.id()), atTick).contains(cell.id()))
             throw new IllegalArgumentException("selected mining source is not a requested product or prerequisite");
-        if (ExtractionPriorities.read(state, deposit, Optional.of(job.id())).require(cell.id()).missing() == 0)
+        if (ExtractionPriorities.read(state, deposit, Optional.of(job.id()), atTick).require(cell.id()).missing() == 0)
             throw new IllegalArgumentException("selected mining source duplicates assigned settlement demand");
         boolean emptyPart = job.phase() == ExtractionWork.Phase.SELECT_SOURCE && ExtractionWorkAuthority.carried(state, job) == 0;
         if (!job.execution().equals(selected.execution()) || !selected.origin().equals(

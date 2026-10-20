@@ -5,7 +5,24 @@ import java.util.*;
 
 /** Settlement-level coordination; the supply solver owns recipe feasibility and source selection. */
 public final class EconomicPlanner {
+    /** An assessed plan cannot be paired with another state's facts or policy. */
+    public static final class Domestic {
+        private final EconomicSnapshot facts;
+        private final EconomicPlanningRules policy;
+        private final SupplyPlanner.Plan plan;
+        private Domestic(EconomicSnapshot facts, EconomicPlanningRules policy, SupplyPlanner.Plan plan) {
+            this.facts = facts; this.policy = policy; this.plan = plan;
+        }
+        public SupplyPlanner.Plan plan() { return plan; }
+        public EconomicSnapshot facts() { return facts; }
+    }
     public SupplyPlanner.Plan plan(EconomicSnapshot facts, EconomicPlanningRules policy) {
+        return withExports(domestic(facts, policy), facts.exportInterest());
+    }
+
+    /** Independent of neighbours' plans: the funded domestic envelope is reusable
+     * by quotation and export evaluation without recursive settlement planning. */
+    public Domestic domestic(EconomicSnapshot facts, EconomicPlanningRules policy) {
         long horizon = Math.max(Math.multiplyExact(facts.dayTicks(), policy.horizonDays()),
                 facts.reserves().values().stream().mapToLong(SupplyReservePlanner.Target::horizonTicks).max().orElseThrow());
         var requirements = new EconomicRequirements();
@@ -37,8 +54,6 @@ public final class EconomicPlanner {
         var projected = new EconomicRequirements.Projection(domestic, missing);
         var funding = new EconomicFunding().allocate(facts, supply, projected, horizon);
         var saleable = EconomicStockRelease.assess(facts, supply, reserves);
-        var exportPlan = new EconomicExportPlanning().plan(facts, supply, saleable, policy, horizon);
-        var exports = exportPlan.exports();
         var production = new TreeMap<String, Long>();
         facts.stocks().forEach((item, stock) -> {
             var demand = supply.require(item);
@@ -54,13 +69,11 @@ public final class EconomicPlanner {
             long uncovered = Math.max(0, domestic.get(item) - stock.covered());
             production.put(item, selectedSource ? Math.min(uncovered, own) : uncovered);
         });
-        exportPlan.additionalProduction().forEach((item, amount) -> production.merge(item, amount, Math::addExact));
         var constraints = EnumSet.noneOf(EconomicPlan.Constraint.class);
         if (supply.demands().values().stream().anyMatch(d -> d.recoveryProduction() > 0 || d.purchase() > 0))
             constraints.add(EconomicPlan.Constraint.MATERIAL_SHORTFALL);
         if (funding.unfunded() > 0) constraints.add(EconomicPlan.Constraint.CASH_SHORTFALL);
-        if (!exports.isEmpty()) constraints.add(EconomicPlan.Constraint.CONDITIONAL_EXPORT_INCOME);
-        else if (funding.unfunded() > 0) constraints.add(EconomicPlan.Constraint.NO_EXPORT_MARKET);
+        if (funding.unfunded() > 0) constraints.add(EconomicPlan.Constraint.NO_EXPORT_MARKET);
         var checkpoints = new ArrayList<EconomicPlan.Checkpoint>();
         var manufactured = facts.flows().stream().map(SupplyReservePlanner.Flow::product).collect(java.util.stream.Collectors.toSet());
         for (int i = 1; i <= policy.checkpoints(); i++) {
@@ -77,9 +90,31 @@ public final class EconomicPlanner {
             checkpoints.add(new EconomicPlan.Checkpoint(after, projection.missing(), cost, Math.subtractExact(facts.market().availableMoney(), cost)));
         }
         var economy = new EconomicPlan(horizon, domestic, production, funding.budgets(), funding.liquidity(),
-                funding.unfunded(), facts.contractReceivables(), checkpoints, exports, constraints,
+                funding.unfunded(), facts.contractReceivables(), checkpoints, List.of(), constraints,
                 funding.prices(), funding.fundedRestarts(), saleable);
-        return new SupplyPlanner.Plan(supply.demands(), reserves, supply.preferredPurchaseSpending(),
-                supply.preferredPurchaseQuantities(), supply.inputRequirements(), Optional.of(economy));
+        return new Domestic(facts, policy, new SupplyPlanner.Plan(supply.demands(), reserves, supply.preferredPurchaseSpending(),
+                supply.preferredPurchaseQuantities(), supply.inputRequirements(), Optional.of(economy)));
+    }
+
+    /** Adds conditional sales to an already evaluated domestic plan. Does not
+     * re-run source selection, allocate the buyer's money or count future revenue as cash. */
+    public SupplyPlanner.Plan withExports(Domestic evaluated, List<EconomicSnapshot.ExportInterest> interests) {
+        var facts = evaluated.facts.withExportInterest(interests);
+        var domestic = evaluated.plan;
+        var base = domestic.economy().orElseThrow();
+        var exports = new EconomicExportPlanning().plan(facts, domestic, base.saleableStock(), evaluated.policy, base.horizonTicks());
+        var production = new TreeMap<>(base.additionalProduction());
+        exports.additionalProduction().forEach((item, amount) -> production.merge(item, amount, Math::addExact));
+        var constraints = EnumSet.noneOf(EconomicPlan.Constraint.class);
+        constraints.addAll(base.constraints());
+        if (!exports.exports().isEmpty()) {
+            constraints.remove(EconomicPlan.Constraint.NO_EXPORT_MARKET);
+            constraints.add(EconomicPlan.Constraint.CONDITIONAL_EXPORT_INCOME);
+        }
+        var economy = new EconomicPlan(base.horizonTicks(), base.domesticTargets(), production, base.purchaseBudgets(),
+                base.retainedLiquidity(), base.unfundedRequirements(), base.contractReceivables(), base.checkpoints(),
+                exports.exports(), constraints, base.purchasePrices(), base.fundedRestarts(), base.saleableStock());
+        return new SupplyPlanner.Plan(domestic.demands(), domestic.reserves(), domestic.preferredPurchaseSpending(),
+                domestic.preferredPurchaseQuantities(), domestic.inputRequirements(), Optional.of(economy));
     }
 }

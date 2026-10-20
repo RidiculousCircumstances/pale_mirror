@@ -53,22 +53,22 @@ public final class ExtractionWorkEffects {
                 new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(endpoint.containerId()), endpoint.station(),
                 ActorContainerItemOrder.Hand.OFF, job.phase().wireTag(), job.revision());
     }
-    public static ExtractionWork afterBlock(FrontierWorldState state, ExtractionWork job, ExtractionDeposit nextDeposit, int carried) {
+    public static ExtractionWork afterBlock(FrontierWorldState state, ExtractionWork job, ExtractionDeposit nextDeposit, int carried, long atTick) {
         var reserved = new HashSet<>(state.extractionSites().reservedCells(job.siteId()));
         reserved.remove(job.target().orElseThrow().key().cell());
-        var required = ExtractionStockDemand.requiredCells(state, nextDeposit, Optional.of(job.id()));
-        var next = carried < ActorCarriedResources.MAX_STACK_ITEMS && ExtractionWorkPolicy.requested(state, job)
+        var required = ExtractionStockDemand.requiredCells(state, nextDeposit, Optional.of(job.id()), atTick);
+        var next = carried < ActorCarriedResources.MAX_STACK_ITEMS && ExtractionWorkPolicy.requested(state, job, atTick)
                 ? ExtractionWorkTargets.spatialSelection(state, nextDeposit, job.execution().actorId(),
                     nextDeposit.available(reserved).stream().filter(cell -> required.contains(cell.id()))
                             .filter(cell -> ExtractionWorkPolicy.supportsTool(state, cell, job)).toList(),
-                    AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION, Optional.of(job.id()))
+                    AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION, Optional.of(job.id()), atTick)
                 : Optional.<ExtractionLayout.Cell>empty();
         // A more important different product switches only after this exact block
         // settles. Store the homogeneous carried part before selecting that source.
         return next.filter(cell -> ExtractionWorkPolicy.matchingOutput(cell, job))
                 .map(cell -> job.transition(ExtractionWork.Phase.EXTRACT, Optional.of(target(nextDeposit, cell))))
                 .orElseGet(() -> job.transition(carried < ActorCarriedResources.MAX_STACK_ITEMS
-                        && ExtractionWorkPolicy.requested(state, job) && ExtractionWorkPolicy.remaining(nextDeposit)
+                        && ExtractionWorkPolicy.requested(state, job, atTick) && ExtractionWorkPolicy.remaining(nextDeposit)
                         && nextDeposit.available(reserved).stream().noneMatch(cell -> !ExtractionWorkPolicy.matchingOutput(cell, job))
                         ? ExtractionWork.Phase.SELECT_SOURCE : ExtractionWork.Phase.STORE, Optional.empty()));
     }

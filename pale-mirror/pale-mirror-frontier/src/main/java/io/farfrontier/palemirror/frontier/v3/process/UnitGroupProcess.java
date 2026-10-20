@@ -150,7 +150,7 @@ public final class UnitGroupProcess {
             events.add(new ProposedEvent(group.id(), new ScheduleEffect.Cancelled(action.id())));
             return List.copyOf(events);
         }
-        if (!port.mayContinueMovement(state, group)) {
+        if (!port.mayContinueMovement(state, group, now)) {
             // Purpose owns the rest decision. Common movement acknowledges each exact current
             // position before stock policy can interact; nobody is teleported to a rendezvous.
             for (var member : group.members()) {

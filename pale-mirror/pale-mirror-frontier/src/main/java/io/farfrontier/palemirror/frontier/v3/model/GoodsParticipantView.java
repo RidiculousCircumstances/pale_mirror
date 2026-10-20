@@ -42,7 +42,8 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
         if (purchaseLimits.values().stream().anyMatch(value -> value < 0)) throw new IllegalArgumentException("negative purchase limit");
         if (residents < 0 || availableMoney.raw() < 0) throw new IllegalArgumentException("invalid participant economic view");
     }
-    public static synchronized GoodsParticipantView read(FrontierWorldState state, GoodsParticipant participant) {
+    /** Facts only. Economic evaluation belongs to GoodsParticipantAssessment. */
+    public static synchronized GoodsParticipantView observe(FrontierWorldState state, GoodsParticipant participant) {
         // Repeated matching, reserve and production-policy questions share one
         // immutable input. Never reuse a projection after even a draft mutation.
         var views = VIEWS.get(List.of(state), HashMap::new);
@@ -78,9 +79,14 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
         int residents = (int) state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(participant.settlementId())
                         && state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE).count();
-        var plan = participant.policy() == GoodsPolicyKind.PUBLIC_SETTLEMENT && state.bootstrap().ruleset().goodsTrade().supplyPlanning().enabled()
-                ? Optional.of(SettlementSupplyPlanning.read(state, participant.party().id(), residents, result))
-                : Optional.<io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Plan>empty();
+        return new GoodsParticipantView(participant, residents,
+                state.inventory().economics().availableToReserve(participant.party().id()), result);
+    }
+    static GoodsParticipantView planned(FrontierWorldState state, GoodsParticipantView observed,
+            Optional<io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Plan> plan) {
+        var participant = observed.participant();
+        var result = new HashMap<>(observed.stocks());
+        int residents = observed.residents();
         var advice = plan.isPresent() ? planningAdvice(plan.orElseThrow()) : participant.policy() == GoodsPolicyKind.PUBLIC_SETTLEMENT
                 ? SettlementFoodPurchases.assess(state, participant.party().id(), residents, result)
                 : new SettlementFoodPurchases.Advice(Map.of(), Map.of());
@@ -91,7 +97,7 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
             result.put(kind, new Stock(stock.ownedInStorage(), stock.unclaimedInStorage(), stock.expectedIncoming(),
                     Math.max(minimum, local)));
         });
-        return new GoodsParticipantView(participant, residents, state.inventory().economics().availableToReserve(participant.party().id()), result, advice.limits(), plan);
+        return new GoodsParticipantView(participant, residents, observed.availableMoney(), result, advice.limits(), plan);
     }
     private static SettlementFoodPurchases.Advice planningAdvice(io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Plan plan) {
         var limits = new HashMap<String, Integer>(); var protection = new HashMap<String, Integer>();

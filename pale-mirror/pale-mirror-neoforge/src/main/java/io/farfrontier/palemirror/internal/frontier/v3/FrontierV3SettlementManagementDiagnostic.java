@@ -13,7 +13,7 @@ final class FrontierV3SettlementManagementDiagnostic {
         SubjectId owner = FrontierV3DiagnosticJson.subject(id).orElse(null);
         Settlement settlement = state.bootstrap().settlements().stream().filter(value -> value.id().equals(owner)).findFirst().orElse(null);
         if (settlement == null) return FrontierV3DiagnosticJson.unavailable("settlement_management", id, checkpoint, "not_found");
-        var decision = SettlementManagementComposition.MANAGEMENT.decide(state, settlement);
+        var decision = SettlementManagementComposition.MANAGEMENT.decide(state, settlement, checkpoint.instant().ticks());
         var authority = state.strategicPlans().requireDecisionAuthority(owner);
         String offers = decision.considerations().stream().limit(32).map(value -> "{\"planner\":\""
                 + FrontierV3DiagnosticJson.quote(value.planner()) + "\",\"operation\":\"" + value.offer().proposal().kind()

@@ -2,9 +2,9 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 /** Execution reads the admitted sowing intent; it never invents an economic area target. */
 public final class FieldWorkDemand {
-    public static boolean requested(FrontierWorldState state, ResourceSite site) {
+    public static boolean requested(FrontierWorldState state, ResourceSite site, long atTick) {
         var cycle = state.resourceSites().cycle(site.id());
-        boolean harvest = ProductionStockDemand.read(state, site.settlementId(), FieldHarvestExtraction.ITEM).requested();
+        boolean harvest = ProductionStockDemand.read(state, site.settlementId(), FieldHarvestExtraction.ITEM, atTick).requested();
         return cycle.layout().cells().stream().anyMatch(cell -> allowed(cycle, cell.id(), harvest));
     }
 

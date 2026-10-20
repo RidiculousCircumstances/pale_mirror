@@ -315,7 +315,7 @@ class FrontierV3FixtureCatalogTest {
         SubjectId hibernaculum = state.hiveColony().bioformLifecycles().get(first).homeSlot().orElseThrow().hibernaculumId();
         assertEquals(new HiveCocoonSlot(new SubjectId("organ:east-hibernaculum-1"), 3),
                 state.hiveColony().bioformLifecycles().get(first).homeSlot().orElseThrow());
-        FrontierObjectBoard board = FrontierReadabilityPlan.compile(state).boards().get(hibernaculum);
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(state, 0L).boards().get(hibernaculum);
         assertEquals(FrontierObjectBoard.Tone.WARNING, board.tone());
         assertTrue(board.text().endsWith("WAKE SEQUENCE · 0/4"), "the physical tray must explain its own waking state without a HUD");
     }

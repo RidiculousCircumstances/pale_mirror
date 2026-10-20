@@ -39,10 +39,10 @@ public final class GoodsParticipantFunding {
         }
         return ProcurementBudget.fundsRestart(view.availableMoney(), needs(view, rules), item);
     }
-    public static FixedScalar optional(FrontierWorldState state, SubjectId sponsor) {
+    public static FixedScalar optional(FrontierWorldState state, SubjectId sponsor, long atTick) {
         var participant = state.companies().goodsTrade().participants().participants().get(sponsor);
         if (participant == null) return state.inventory().economics().availableToReserve(sponsor);
-        var view = GoodsParticipantView.read(state, participant);
+        var view = GoodsParticipantAssessment.domestic(state, participant, atTick).view();
         var economy = view.supplyPlan().flatMap(plan -> plan.economy());
         if (economy.isPresent()) return new FixedScalar(Math.max(0, view.availableMoney().raw()
                 - economy.orElseThrow().purchaseBudgets().values().stream().reduce(0L, Math::addExact)));

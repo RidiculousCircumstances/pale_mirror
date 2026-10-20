@@ -31,13 +31,19 @@ final class EconomicExportPlanning {
             consumeLabour(labour, process, domesticBatches);
         }
         var buyerCash = new TreeMap<String, Long>();
+        record BudgetKey(String buyer, String item) { }
+        var budgets = new HashMap<BudgetKey, Long>();
         for (var interest : facts.exportInterest()) buyerCash.merge(interest.buyer(), interest.availableCash(), Math::min);
+        for (var interest : facts.exportInterest())
+            budgets.merge(new BudgetKey(interest.buyer(), interest.item()), interest.commodityBudget(), Math::min);
         var result = new TreeMap<String, EconomicPlan.Export>();
         var valuation = new ExportProductionValuation(facts);
         var allocation = new ProductionChainAllocation(facts.processes(), inputs, usedRecipes, labour, heat, facts.replacementPrices());
         long remaining = policy.maximumExportItems();
         for (var interest : facts.exportInterest().stream().sorted(valuation.order(facts, capacity)).toList()) {
-            long wanted = Math.min(remaining, Math.min(interest.quantity(), buyerCash.get(interest.buyer()) / interest.unitPrice()));
+            var budget = new BudgetKey(interest.buyer(), interest.item());
+            long spending = Math.min(buyerCash.get(interest.buyer()), budgets.get(budget));
+            long wanted = Math.min(remaining, Math.min(interest.quantity(), spending / interest.buyerUnitExpense()));
             String item = interest.item();
             var allowed = facts.processes().stream().filter(p -> p.product().equals(item)
                             && valuation.returnOn(p, interest.unitPrice()).margin() >= 0)
@@ -46,7 +52,10 @@ final class EconomicExportPlanning {
             allocation = selected.next();
             long held = selected.existingStock(), made = selected.quantity() - held;
             long quantity = selected.quantity(); if (quantity == 0) continue;
-            long proceeds = Math.multiplyExact(quantity, interest.unitPrice()); buyerCash.merge(interest.buyer(), -proceeds, Long::sum); remaining -= quantity;
+            long proceeds = Math.multiplyExact(quantity, interest.unitPrice());
+            long expense = Math.multiplyExact(quantity, interest.buyerUnitExpense());
+            buyerCash.merge(interest.buyer(), -expense, Long::sum); remaining -= quantity;
+            budgets.merge(budget, -expense, Long::sum);
             var previous = result.getOrDefault(item, new EconomicPlan.Export(item, 0, 0, 0));
             result.put(item, new EconomicPlan.Export(item, Math.addExact(previous.existingStock(), held),
                     Math.addExact(previous.additionalProduction(), made), Math.addExact(previous.conditionalRevenue(), proceeds)));

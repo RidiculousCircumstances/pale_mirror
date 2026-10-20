@@ -37,7 +37,7 @@ final class FrontierV3ExtractionDiagnosticJson {
                     && siteContainers.contains(holder.containerId()))
                 .flatMap(account -> account.lotQuantities().entrySet().stream())
                 .filter(entry -> resources.lots().get(entry.getKey()).itemKind().equals(output)).mapToInt(Map.Entry::getValue).sum();
-        var demand = ProductionStockDemand.read(state, site.settlementId(), output);
+        var demand = ProductionStockDemand.read(state, site.settlementId(), output, checkpoint.instant().ticks());
         var terrace = ExtractionTerraceView.read(state, deposit);
         return FrontierV3DiagnosticJson.base("process", site.id().value(), checkpoint)
                 + ",\"status\":\"ok\",\"family\":\"frontier.extraction.site\",\"containers\":["
@@ -67,23 +67,23 @@ final class FrontierV3ExtractionDiagnosticJson {
                 + ",\"stockTarget\":" + demand.target() + ",\"stockHeld\":" + demand.held()
                 + ",\"stockIncoming\":" + demand.incoming() + ",\"stockOutgoingDemand\":" + demand.outgoing()
                 + ",\"productionRequested\":" + demand.requested()
-                + ",\"resourceStocks\":" + resourceStocks(state, deposit)
+                + ",\"resourceStocks\":" + resourceStocks(state, deposit, checkpoint.instant().ticks())
                 + ",\"terraceDepthLimit\":" + terrace.depthLimit() + ",\"plannedDepth\":" + terrace.plannedDepth()
                 + ",\"openDepth\":" + terrace.openDepth() + ",\"preparationBlocks\":" + terrace.preparationBlocks()
                 + ",\"terraceOpened\":" + terrace.lowerLanding().isPresent()
                 + "},\"workers\":[" + workers + "],\"workerDetails\":[" + details + "]}";
     }
     /** Mixed deposits retain the primary-output fields above for older diagnostic consumers. */
-    private static String resourceStocks(FrontierWorldState state, ExtractionDeposit deposit) {
+    private static String resourceStocks(FrontierWorldState state, ExtractionDeposit deposit, long atTick) {
         var layout = deposit.site().layout();
-        var priorities = ExtractionPriorities.read(state, deposit, Optional.empty());
+        var priorities = ExtractionPriorities.read(state, deposit, Optional.empty(), atTick);
         var kinds = new TreeSet<>(layout.outputKinds()); kinds.addAll(priorities.products().keySet());
         return "{" + kinds.stream().map(kind -> {
             var cells = layout.cells().stream().filter(cell -> cell.definition().coldOutput().stream()
                     .anyMatch(output -> output.itemKind().equals(kind))).toList();
             long extracted = cells.stream().filter(cell -> deposit.cells().get(cell.id()).disposition() == ExtractionDeposit.Disposition.EXTRACTED).count();
             long external = cells.stream().filter(cell -> deposit.cells().get(cell.id()).disposition() == ExtractionDeposit.Disposition.EXTERNALLY_CHANGED).count();
-            var demand = ProductionStockDemand.read(state, deposit.site().settlementId(), kind);
+            var demand = ProductionStockDemand.read(state, deposit.site().settlementId(), kind, atTick);
             var priority = priorities.products().get(kind);
             return string(kind) + ":{\"totalCells\":" + cells.size() + ",\"extractedCells\":" + extracted
                     + ",\"externalCells\":" + external + ",\"remainingCells\":" + (cells.size() - extracted - external)
@@ -155,7 +155,7 @@ final class FrontierV3ExtractionDiagnosticJson {
                 + ",\"result\":{\"stage\":" + string(job.phase().name()) + ",\"revision\":" + job.revision() + ",\"wait\":" + string(wait)
                 + ",\"routeStatus\":" + calculation.map(value -> string(value.status().name())).orElse("null")
                 + ",\"routeReason\":" + calculation.map(value -> string(value.reason())).orElse("null")
-                + ",\"deliveredBatches\":" + job.batch() + ",\"mandateActive\":" + ExtractionWorkPolicy.requested(state, job)
+                + ",\"deliveredBatches\":" + job.batch() + ",\"mandateActive\":" + ExtractionWorkPolicy.requested(state, job, now)
                 + ",\"cargoKind\":" + string(job.outputKind())
                 + ",\"labourMilliWork\":" + labour + ",\"carried\":" + ExtractionWorkAuthority.carried(state, job)
                 + ",\"pendingPhysicalEffect\":" + job.pending().isPresent() + "}"

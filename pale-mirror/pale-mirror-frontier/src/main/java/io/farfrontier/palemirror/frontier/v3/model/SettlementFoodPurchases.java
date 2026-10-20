@@ -20,7 +20,7 @@ public final class SettlementFoodPurchases {
                 .mapToLong(StockSupplyPort.Commitment::incoming).sum();
         long deficit = Math.max(0, StockTargetDemand.target(commodity, residents, food.protectedMinimum())
                 - food.unclaimedInStorage() - food.expectedIncoming() - promisedFood);
-        boolean urgent = SettlementFoodPolicy.reserveCoverageBread(state, home) < SettlementFoodPolicy.reserveRequirement(state, home);
+        boolean urgent = SettlementFoodPolicy.reserveCoverageBread(state, home) < SettlementFoodPolicy.baselineReserveRequirement(state, home);
         var catalog = state.bootstrap().ruleset().production();
         long heat = state.inventory().containers().values().stream().filter(record -> record.ownerId().equals(home)
                 && record.productionStation().isPresent() && !ReferenceContainerCustody.blocksCanonicalUse(state, record.id())

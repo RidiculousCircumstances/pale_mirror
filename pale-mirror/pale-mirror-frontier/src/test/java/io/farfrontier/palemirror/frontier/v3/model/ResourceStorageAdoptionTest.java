@@ -15,11 +15,11 @@ class ResourceStorageAdoptionTest {
         var draft = adoption.apply(state, participant.party().id());
         var changed = draft.withInventory(draft.inventory().withSurfaceStatus(adoption.declaration().container().id(), ContainerSurfaceStatus.ACTIVE));
         ImmutablePlanningScope.within(() -> {
-            var before = GoodsParticipantView.read(state, participant);
-            var after = ImmutablePlanningScope.within(() -> GoodsParticipantView.read(changed, participant));
+            var before = GoodsParticipantView.observe(state, participant);
+            var after = ImmutablePlanningScope.within(() -> GoodsParticipantView.observe(changed, participant));
             assertEquals(before.stocks().get("minecraft:bread").ownedInStorage() + 3,
                     after.stocks().get("minecraft:bread").ownedInStorage());
-            assertSame(before, GoodsParticipantView.read(state, participant),
+            assertSame(before, GoodsParticipantView.observe(state, participant),
                     "canonical validation revisits the exact pre-state after planner-local scope exits");
             return null;
         });
@@ -62,7 +62,7 @@ class ResourceStorageAdoptionTest {
         var codec = new FrontierWorldStateCodec();
         for (var current : List.of(state, codec.decode(codec.encode(state)))) {
             var participant = current.companies().goodsTrade().participants().participants().get(home.id());
-            var view = GoodsParticipantView.read(current, participant);
+            var view = GoodsParticipantView.observe(current, participant);
             assertEquals(3, view.stocks().get("minecraft:bread").ownedInStorage());
             assertEquals(17, view.stocks().get("minecraft:cobblestone").unclaimedInStorage());
             assertEquals(oldPoint, ServiceBoundaryComposition.declaration(current, old), "retained work can still resolve old identity");
@@ -90,7 +90,7 @@ class ResourceStorageAdoptionTest {
             assertTrue(io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantWakeup.container(current, id, "changed-stock", 1)
                     .stream().anyMatch(event -> event.subject().equals(home.id())));
             var unavailable = current.withInventory(current.inventory().withSurfaceStatus(id, ContainerSurfaceStatus.CONFLICT));
-            assertEquals(0, GoodsParticipantView.read(unavailable, participant).stocks().get("minecraft:bread").unclaimedInStorage());
+            assertEquals(0, GoodsParticipantView.observe(unavailable, participant).stocks().get("minecraft:bread").unclaimedInStorage());
             var retired = current.withInventory(current.inventory().withSurfaceStatus(id, ContainerSurfaceStatus.RETIRED));
             assertFalse(ServiceBoundaryComposition.operationalDeclarations(retired).containsKey(id));
             assertFalse(ServiceBoundaryComposition.occupancyChanged(retired, station.standingBody(), station.standingBody().offset(1, 0, 0)));

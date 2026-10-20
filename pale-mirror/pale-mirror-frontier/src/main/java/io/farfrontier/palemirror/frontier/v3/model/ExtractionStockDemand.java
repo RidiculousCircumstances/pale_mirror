@@ -7,8 +7,8 @@ import java.util.*;
 /** Desired products select source cells and their resource-bearing prerequisites, not a second mining engine. */
 public final class ExtractionStockDemand {
     private static final ImmutableInputView<Map<SubjectId, Set<String>>> UNDEVELOPED = new ImmutableInputView<>();
-    public static Set<Long> requiredCells(FrontierWorldState state, ExtractionDeposit deposit, Optional<SubjectId> completing) {
-        var demanded = demandedProducts(state, deposit, completing);
+    public static Set<Long> requiredCells(FrontierWorldState state, ExtractionDeposit deposit, Optional<SubjectId> completing, long atTick) {
+        var demanded = demandedProducts(state, deposit, completing, atTick);
         var result = new HashSet<Long>(); var pending = new ArrayDeque<Long>();
         for (var cell : deposit.site().layout().cells())
             if (deposit.cells().get(cell.id()).disposition() == ExtractionDeposit.Disposition.PRESENT
@@ -19,23 +19,23 @@ public final class ExtractionStockDemand {
         }
         return Set.copyOf(result);
     }
-    public static boolean requested(FrontierWorldState state, ExtractionDeposit deposit, Optional<SubjectId> completing) {
+    public static boolean requested(FrontierWorldState state, ExtractionDeposit deposit, Optional<SubjectId> completing, long atTick) {
         // A boolean work-admission query needs no prerequisite closure or allocated cell set.
         // The primary material also admits future extensions beyond this finite declaration.
         if (state.bootstrap().ruleset().extraction().source().coldOutput().stream().anyMatch(output ->
-                ProductionStockDemand.read(state, deposit.site().settlementId(), output.itemKind(), completing).requested())) return true;
-        var demanded = demandedProducts(state, deposit, completing);
+                ProductionStockDemand.read(state, deposit.site().settlementId(), output.itemKind(), completing, atTick).requested())) return true;
+        var demanded = demandedProducts(state, deposit, completing, atTick);
         return !demanded.isEmpty() && (deposit.site().layout().cells().stream().anyMatch(cell ->
                 deposit.cells().get(cell.id()).disposition() == ExtractionDeposit.Disposition.PRESENT
                         && cell.definition().coldOutput().stream().anyMatch(output -> demanded.contains(output.itemKind())))
                 || undevelopedProducts(state).get(deposit.site().id()).stream().anyMatch(demanded::contains));
     }
-    static Set<String> demandedProducts(FrontierWorldState state, ExtractionDeposit deposit, Optional<SubjectId> completing) {
+    static Set<String> demandedProducts(FrontierWorldState state, ExtractionDeposit deposit, Optional<SubjectId> completing, long atTick) {
         var products = new HashSet<>(deposit.site().layout().outputKinds());
         products.addAll(undevelopedProducts(state).get(deposit.site().id()));
         return state.bootstrap().ruleset().goodsTrade().policies().get(GoodsPolicyKind.PUBLIC_SETTLEMENT).stream()
                 .map(GoodsTradeRules.Commodity::itemKind).filter(products::contains)
-                .filter(kind -> ProductionStockDemand.read(state, deposit.site().settlementId(), kind, completing).requested())
+                .filter(kind -> ProductionStockDemand.read(state, deposit.site().settlementId(), kind, completing, atTick).requested())
                 .collect(java.util.stream.Collectors.toSet());
     }
     /** Declared but not yet admitted natural sources keep demand alive after
@@ -59,9 +59,9 @@ public final class ExtractionStockDemand {
             return Map.copyOf(result);
         });
     }
-    public static boolean requested(FrontierWorldState state, SubjectId home) {
+    public static boolean requested(FrontierWorldState state, SubjectId home, long atTick) {
         return state.bootstrap().ruleset().extraction().enabled() && state.extractionSites().deposits().values().stream()
-                .filter(deposit -> deposit.site().settlementId().equals(home)).anyMatch(deposit -> requested(state, deposit, Optional.empty()));
+                .filter(deposit -> deposit.site().settlementId().equals(home)).anyMatch(deposit -> requested(state, deposit, Optional.empty(), atTick));
     }
     private ExtractionStockDemand() { }
 }

@@ -7,7 +7,7 @@ import java.util.Optional;
 /** Profile owner proposes operations; it never commits goals or takes a resident body. */
 final class SettlementHealthPlanner implements SettlementOperationPlanner {
     @Override public String id() { return "frontier:health"; }
-    @Override public Assessment assess(FrontierWorldState state, Settlement settlement) {
+    @Override public Assessment assess(FrontierWorldState state, Settlement settlement, long atTick) {
         Optional<SettlementStructure> infirmary = settlement.structures().stream().filter(structure -> structure.kind() == StructureKind.INFIRMARY)
                 .filter(structure -> state.structureConditions().get(structure.id()) != StructureCondition.DESTROYED).min(Comparator.comparing(SettlementStructure::id));
         if (infirmary.isPresent()) {

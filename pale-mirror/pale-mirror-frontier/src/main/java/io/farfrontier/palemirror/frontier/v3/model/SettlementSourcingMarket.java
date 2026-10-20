@@ -5,26 +5,23 @@ import java.util.*;
 
 /** Canonical economic facts -> pure sourcing advice; no recursive participant views or ledger writes. */
 final class SettlementSourcingMarket {
-    static SourcingMarket read(FrontierWorldState state, GoodsParticipant buyer, List<SupplyPlanner.Process> capacities) {
+    static SourcingMarket read(FrontierWorldState state, GoodsParticipant buyer, List<SupplyPlanner.Process> capacities, long now) {
+        if (now < 0) throw new IllegalArgumentException("negative sourcing instant");
         var tradeRules = state.bootstrap().ruleset().goodsTrade();
         var selection = tradeRules.supplyPlanning().sourcing();
         if (selection.isEmpty()) return SourcingMarket.none();
         var policy = selection.orElseThrow();
         var trade = state.companies().goodsTrade();
-        long now = trade.participants().participants().values().stream().mapToLong(GoodsParticipant::reviewedAtTick).max().orElse(0);
         var references = new TreeMap<String, Long>();
-        var limits = new TreeMap<String, Long>();
         tradeRules.policies().get(buyer.policy()).forEach(commodity -> {
             references.put(commodity.itemKind(), trade.priceHistory().reference(commodity.itemKind(), tradeRules.pricing().recencyTicks())
                     .orElse(commodity.minimumSellPrice()).raw());
-            limits.put(commodity.itemKind(), GoodsParticipantPricing.bid(buyer, commodity).raw());
         });
         var offers = new TreeMap<String, SourcingMarket.Offer>();
         for (var order : trade.orders().values().stream().sorted(Comparator.comparing(GoodsTradeOrder::unitPriceLimit)
                 .thenComparing(GoodsTradeOrder::id)).toList()) {
             if (order.side() != GoodsTradeOrder.Side.SELL || !order.counterparty().equals(buyer.party())
                     || order.expiresAtTick() <= now || order.availableQuantity() == 0 || !references.containsKey(order.itemKind())
-                    || order.unitPriceLimit().raw() > limits.get(order.itemKind())
                     || buyer.known().stream().noneMatch(known -> known.party().equals(order.party()))) continue;
             var seller = trade.participants().participants().get(order.party().id());
             if (seller == null || !GoodsParticipantStorage.eligible(state, seller, order.containerId(), order.itemKind())) continue;

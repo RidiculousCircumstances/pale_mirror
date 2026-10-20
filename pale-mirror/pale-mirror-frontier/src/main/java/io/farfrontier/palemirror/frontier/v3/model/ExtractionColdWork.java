@@ -16,7 +16,7 @@ public final class ExtractionColdWork {
             throw new IllegalArgumentException("mining selected successor has stale execution authority");
         var site = ExtractionWorkAuthority.site(state, job);
         if (event.operation() == ExtractionWorkProgressed.Operation.RELOCATE_SITE) {
-            var next = ExtractionWorkRelocation.require(state, job, (ExtractionWorkDecision.Relocate) event.decision().orElseThrow());
+            var next = ExtractionWorkRelocation.require(state, job, (ExtractionWorkDecision.Relocate) event.decision().orElseThrow(), tick);
             return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().relocateWork(job, next)));
         }
         if (event.operation() == ExtractionWorkProgressed.Operation.STORE_PART) {
@@ -26,7 +26,7 @@ public final class ExtractionColdWork {
                     job, job.transition(ExtractionWork.Phase.STORE, Optional.empty()))));
         }
         if (event.operation() == ExtractionWorkProgressed.Operation.END_WORK) {
-            if (ExtractionWorkPolicy.mayFinishTarget(state, job)
+            if (ExtractionWorkPolicy.mayFinishTarget(state, job, tick)
                     || job.phase() != ExtractionWork.Phase.TAKE_TOOL && job.phase() != ExtractionWork.Phase.EXTRACT)
                 throw new IllegalArgumentException("mining shutdown lacks a withdrawn settlement mandate");
             if (job.phase() == ExtractionWork.Phase.TAKE_TOOL) {
@@ -57,9 +57,9 @@ public final class ExtractionColdWork {
             var decision = event.decision().orElseThrow();
             ExtractionWork next;
             if (decision instanceof ExtractionWorkDecision.Source selected) {
-                if (!ExtractionWorkPolicy.requested(state, job))
+                if (!ExtractionWorkPolicy.requested(state, job, tick))
                     throw new IllegalArgumentException("mining selected source has a withdrawn mandate");
-                ExtractionWorkTargets.requireSelection(state, job, selected);
+                ExtractionWorkTargets.requireSelection(state, job, selected, tick);
                 var kind = site.layout().require(selected.target().key().cell()).definition().coldOutput().getFirst().itemKind();
                 if (!kind.equals(job.outputKind()) && ExtractionWorkAuthority.carried(state, job) != 0)
                     throw new IllegalArgumentException("new mining resource part would mix an undelivered held cargo");
@@ -69,7 +69,7 @@ public final class ExtractionColdWork {
                     throw new IllegalArgumentException("empty mining cargo cannot authorize a part delivery");
                 next = job.transition(ExtractionWork.Phase.STORE, Optional.empty());
             } else {
-                if (!ExtractionWorkPolicy.finished(state, job))
+                if (!ExtractionWorkPolicy.finished(state, job, tick))
                     throw new IllegalArgumentException("temporarily unavailable mining frontier is not completion");
                 next = job.transition(ExtractionWorkAuthority.carried(state, job) > 0
                         ? ExtractionWork.Phase.STORE : ExtractionWork.Phase.RETURN_TOOL, Optional.empty());
@@ -81,7 +81,7 @@ public final class ExtractionColdWork {
             if (job.phase() != ExtractionWork.Phase.EXTRACT)
                 throw new IllegalArgumentException("alternative mining source lacks its working phase");
             var selected = (ExtractionWorkDecision.Source) event.decision().orElseThrow();
-            ExtractionWorkTargets.requireSelection(state, job, selected);
+            ExtractionWorkTargets.requireSelection(state, job, selected, tick);
             return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replaceWork(
                     job, job.transition(ExtractionWork.Phase.EXTRACT, Optional.of(selected.target())))));
         }
@@ -141,7 +141,7 @@ public final class ExtractionColdWork {
                 var ledger = state.inventory().fungibleResources().accrueColdActorExtractionPart(output,
                         ExtractionWorkEffects.output(state, job, output), job.carriedAccountId(), job.execution().actorId());
                 var depleted = deposit.extracted(cell.id(), target.revision(), effect.operationId());
-                var next = ExtractionWorkEffects.afterBlock(state, job, depleted, ExtractionWorkAuthority.carried(state, job) + output.quantity());
+                var next = ExtractionWorkEffects.afterBlock(state, job, depleted, ExtractionWorkAuthority.carried(state, job) + output.quantity(), tick);
                 return state.withChanges(update.inventory(state.inventory().withFungibleResources(ledger))
                         .extractionSites(state.extractionSites().settle(job, next, depleted)));
             }

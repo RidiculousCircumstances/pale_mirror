@@ -151,7 +151,7 @@ class ExtractionAdmissionReplayTest {
         assertTrue(ExtractionWorkAuthority.carried(state, job) > 0);
         var selecting = job.transition(ExtractionWork.Phase.SELECT_SOURCE, Optional.empty());
         var beforeSource = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replaceWork(job, selecting)));
-        var selection = ExtractionWorkPolicy.nextTarget(beforeSource, selecting).orElseThrow();
+        var selection = ExtractionWorkPolicy.nextTarget(beforeSource, selecting, 100L).orElseThrow();
         var sourceEvent = new ExtractionWorkProgressed(selecting.id(), selecting.revision(),
                 ExtractionWorkProgressed.Operation.SELECT_SOURCE, Optional.of(selection));
         var codec = new FrontierWorldStateCodec(); var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();

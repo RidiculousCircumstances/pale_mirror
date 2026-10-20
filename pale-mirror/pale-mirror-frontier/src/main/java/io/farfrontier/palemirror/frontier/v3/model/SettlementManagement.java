@@ -24,11 +24,11 @@ public final class SettlementManagement {
             replacePendingTasks = List.copyOf(replacePendingTasks);
         }
     }
-    public Decision decide(FrontierWorldState state, Settlement settlement) {
+    public Decision decide(FrontierWorldState state, Settlement settlement, long atTick) {
         requireAuthority(state, settlement.id());
         List<Consideration> offers = new ArrayList<>(); List<Hold> holds = new ArrayList<>();
         for (SettlementOperationPlanner planner : planners) {
-            var result = planner.assess(state, settlement);
+            var result = planner.assess(state, settlement, atTick);
             result.hold().ifPresent(reason -> holds.add(new Hold(planner.id(), reason)));
             for (var offer : result.offers()) offers.add(new Consideration(planner.id(), offer,
                     available(state, settlement.id(), offer)));

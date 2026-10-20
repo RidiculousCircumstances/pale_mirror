@@ -168,7 +168,7 @@ class BakeryPartialBatchTest {
         var state = fixture(0);
         var owner = state.bootstrap().settlements().getFirst().id();
         assertTrue(BakeryBatchSelection.available(state, owner).isEmpty());
-        assertTrue(BakeryBatchSelection.admissible(state, owner).isEmpty());
+        assertTrue(BakeryBatchSelection.admissible(state, owner, 0L).isEmpty());
         var recipe = ProductionCatalog.initial().require(BakeryRecipes.BREAD);
         assertThrows(IllegalArgumentException.class, () -> recipe.outputForInput(0));
         assertThrows(IllegalArgumentException.class, () -> recipe.outputForInput(65));
@@ -199,7 +199,7 @@ class BakeryPartialBatchTest {
         }
         state = state.withInventory(inventory);
         assertEquals(60, BakeryBatchSelection.available(state, owner).orElseThrow().quantity());
-        assertEquals(4, BakeryBatchSelection.admissible(state, owner).orElseThrow().quantity(),
+        assertEquals(4, BakeryBatchSelection.admissible(state, owner, 0L).orElseThrow().quantity(),
                 "only four bread fit; the other owner's wheat cannot free the input slot");
         assertEquals(resources.claims(), state.inventory().fungibleResources().claims(), "selection is read-only");
     }

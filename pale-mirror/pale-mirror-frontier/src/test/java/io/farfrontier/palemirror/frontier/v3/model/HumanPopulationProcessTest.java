@@ -97,7 +97,7 @@ class HumanPopulationProcessTest {
         assertTrue(active.actorLocations().values().stream().noneMatch(actor -> FrontierTestPositions.supportOf(actor).equals(birthPosition)),
                 "the next resident slot must not overlap an existing exact actor");
         assertEquals(started, FrontierWorldRuntimeDefinition.payloadCodecs().decode(started.type(), FrontierWorldRuntimeDefinition.payloadCodecs().encode(started)));
-        active = PopulationBirthProcess.reduceStarted(active, started.job().settlementId(), started);
+        active = PopulationBirthProcess.reduceStarted(active, started.job().settlementId(), started, 100L);
         assertEquals(started.job(), active.humanPopulation().birthJobs().get(started.job().id()));
         assertEquals(63, active.inventory().items().get(started.job().foodItemId()).count());
         assertTrue(active.physicalIntents().isEmpty(), "birth food is a COLD semantic commitment, not an unfenced physical intent");
@@ -163,7 +163,7 @@ class HumanPopulationProcessTest {
 
         assertEquals(3, proposed.size(), "COLD birth emits only its review, semantic commitment and delayed completion");
         assertEquals(activeStarted, coldStarted, "historical replica materialization cannot alter the canonical birth subject");
-        FrontierWorldState committed = PopulationBirthProcess.reduceStarted(released, coldStarted.job().settlementId(), coldStarted);
+        FrontierWorldState committed = PopulationBirthProcess.reduceStarted(released, coldStarted.job().settlementId(), coldStarted, 100L);
         assertEquals(127, SettlementFoodPolicy.coldUsableBread(committed, new SubjectId("settlement:1")),
                 "the semantic birth consumes one ration and leaves the remaining exact stack available to provisioning");
         assertTrue(committed.physicalIntents().isEmpty(), "COLD birth creates no physical consumption permit");
@@ -177,7 +177,7 @@ class HumanPopulationProcessTest {
         assertEquals(1, PopulationBirthProcess.planReview(held, review).size(),
                 "a live reference custodian excludes competing canonical spending until its current lease is released");
         assertThrows(IllegalArgumentException.class,
-                () -> PopulationBirthProcess.reduceStarted(held, coldStarted.job().settlementId(), coldStarted),
+                () -> PopulationBirthProcess.reduceStarted(held, coldStarted.job().settlementId(), coldStarted, 100L),
                 "the reducer also rejects a forged commitment while the current custodian holds the scope");
     }
 
@@ -230,7 +230,7 @@ class HumanPopulationProcessTest {
         var planned = PopulationBirthProcess.planReview(state, review);
         ResidentBirthStarted started = planned.stream().map(event -> event.payload()).filter(ResidentBirthStarted.class::isInstance)
                 .map(ResidentBirthStarted.class::cast).findFirst().orElseThrow();
-        state = PopulationBirthProcess.reduceStarted(state, started.job().settlementId(), started);
+        state = PopulationBirthProcess.reduceStarted(state, started.job().settlementId(), started, 100L);
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         assertEquals(63, state.inventory().items().get(started.job().foodItemId()).count());
         assertTrue(state.physicalIntents().isEmpty());
@@ -267,7 +267,7 @@ class HumanPopulationProcessTest {
                 new SubjectId("commitment:resident-birth-housing-blocked"), newborn, settlement.anchor());
         assertThrows(IllegalArgumentException.class, () -> destroyed.startResidentBirth(permit));
 
-        FrontierObjectBoard board = FrontierReadabilityPlan.compile(state).boards().get(housing.id());
+        FrontierObjectBoard board = FrontierReadabilityPlan.compile(state, 100L).boards().get(housing.id());
         assertTrue(board.text().contains(settlement.residents().size() + " / " + state.bootstrap().ruleset().facilityCapacity().intactHousingBeds() + " RESIDENTS"));
     }
 

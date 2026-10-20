@@ -8,10 +8,10 @@ import java.util.*;
 /** Extraction translates product demand to finite source/prerequisite priorities, not economic policy. */
 public record ExtractionPriorities(Map<String, SupplyPriority> products, Map<Long, SupplyPriority> cells) {
     public ExtractionPriorities { products = Map.copyOf(products); cells = Map.copyOf(cells); }
-    public static ExtractionPriorities read(FrontierWorldState state, ExtractionDeposit deposit, Optional<SubjectId> completing) {
+    public static ExtractionPriorities read(FrontierWorldState state, ExtractionDeposit deposit, Optional<SubjectId> completing, long atTick) {
         var home = deposit.site().settlementId();
         var products = new HashMap<>(ProductionResourcePriorities.read(state, home,
-                ExtractionStockDemand.demandedProducts(state, deposit, completing), completing));
+                ExtractionStockDemand.demandedProducts(state, deposit, completing, atTick), completing, atTick));
         var assigned = new HashMap<String, Long>();
         for (var job : state.extractionSites().work().values()) {
             if (completing.filter(job.id()::equals).isPresent()

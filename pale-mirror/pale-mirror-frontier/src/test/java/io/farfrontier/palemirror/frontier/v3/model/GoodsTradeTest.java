@@ -601,7 +601,7 @@ class GoodsTradeTest {
 
     @Test void breadPromisedForDeliveryIsNotCountedAsAvailablePublicFood() {
         var state = breadReserved();
-        int minimum = SettlementFoodPolicy.reserveRequirement(state, SELLER);
+        int minimum = SettlementFoodPolicy.reserveRequirement(state, SELLER, 0L);
         assertEquals(minimum + 60, SettlementFoodPolicy.breadStock(state, SELLER));
         assertEquals(minimum, SettlementFoodPolicy.reserveCoverageBread(state, SELLER));
         assertEquals(minimum, SettlementFoodPolicy.coldUsableBread(state, SELLER));
@@ -627,7 +627,7 @@ class GoodsTradeTest {
             assertThrows(IllegalArgumentException.class, () -> fact(protectedStock, SELLER, new GoodsTradeCancelled(
                     new GoodsTradeDisposition(id("receipt:forged-deficit"), CONTRACT, 0, CLAIM, 60,
                             GoodsTradeDisposition.Reason.LOCAL_RESERVE_REQUIRED))));
-            int minimum = SettlementFoodPolicy.reserveRequirement(state, SELLER);
+            int minimum = SettlementFoodPolicy.reserveRequirement(state, SELLER, 0L);
             var resources = state.inventory().fungibleResources().destroy(SOURCE_ACCOUNT,
                     Map.of(id("lot:trade-bread"), minimum), Map.of());
             state = state.withInventory(state.inventory().withFungibleResources(resources));
@@ -700,7 +700,7 @@ class GoodsTradeTest {
         FrontierWorldState state = initial(); var resources = state.inventory().fungibleResources();
         resources = resources.destroy(SOURCE_ACCOUNT, Map.of(LOT, 64), Map.of());
         SubjectId bread = id("lot:trade-bread");
-        int quantity = SettlementFoodPolicy.reserveRequirement(state, SELLER) + 60;
+        int quantity = SettlementFoodPolicy.reserveRequirement(state, SELLER, 0L) + 60;
         resources = resources.issue(new ResourceLot(bread, SELLER, "minecraft:bread", quantity, "fixture:trade-bread", List.of()),
                 new CustodyAccount(SOURCE_ACCOUNT, new ResourceCustody.Container(SOURCE), Map.of(bread, quantity), Map.of()));
         state = state.withInventory(state.inventory().withFungibleResources(resources));

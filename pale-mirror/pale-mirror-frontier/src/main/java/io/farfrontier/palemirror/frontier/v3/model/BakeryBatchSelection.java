@@ -39,20 +39,20 @@ public record BakeryBatchSelection(Optional<ExactItemStack> exactInput,
     }
 
     /** Strategic demand and staffing use stock facts, not executable route admission. */
-    public static Optional<BakeryBatchSelection> admissibleStock(FrontierWorldState state, ProductionRights rights) {
+    public static Optional<BakeryBatchSelection> admissibleStock(FrontierWorldState state, ProductionRights rights, long atTick) {
         if (rights.mode() == ProductionRights.Mode.PUBLIC_PRODUCTION
-                && !ProductionStockDemand.read(state, rights.resourceOwner().id(), SettlementFoodPolicy.BREAD).requested())
+                && !ProductionStockDemand.read(state, rights.resourceOwner().id(), SettlementFoodPolicy.BREAD, atTick).requested())
             return Optional.empty();
         return select(state, rights, (source, quantity) -> ProductionOutputCapacity.stockDestination(state, rights, quantity, source).isPresent(), false);
     }
 
-    public static Optional<BakeryBatchSelection> admissible(FrontierWorldState state, SubjectId settlementId) {
-        return admissible(state, ProductionRights.publicService(settlementId));
+    public static Optional<BakeryBatchSelection> admissible(FrontierWorldState state, SubjectId settlementId, long atTick) {
+        return admissible(state, ProductionRights.publicService(settlementId), atTick);
     }
-    public static Optional<BakeryBatchSelection> admissible(FrontierWorldState state, ProductionRights rights) {
+    public static Optional<BakeryBatchSelection> admissible(FrontierWorldState state, ProductionRights rights, long atTick) {
         // An accepted batch finishes normally; this policy gates only new public batches.
         if (rights.mode() == ProductionRights.Mode.PUBLIC_PRODUCTION
-                && !ProductionStockDemand.read(state, rights.resourceOwner().id(), SettlementFoodPolicy.BREAD).requested())
+                && !ProductionStockDemand.read(state, rights.resourceOwner().id(), SettlementFoodPolicy.BREAD, atTick).requested())
             return Optional.empty();
         return select(state, rights, (source, quantity) -> ProductionOutputCapacity.selectDestination(state, rights, quantity, source).isPresent(), true);
     }

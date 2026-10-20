@@ -99,7 +99,7 @@ class ExtractionSourceCustodyTest {
                 new BlockExtraction.Block("minecraft:air", Map.of()), 1, 1, Optional.empty());
         assertEquals(event, FrontierWorldRuntimeDefinition.payloadCodecs().decode(event.type(),
                 FrontierWorldRuntimeDefinition.payloadCodecs().encode(event)));
-        var successor = ExtractionExternalChanges.apply(state, region.siteId(), event, 11);
+        var successor = ExtractionExternalChanges.apply(state, region.siteId(), event, 11, 0L);
         assertEquals(state.inventory(), successor.inventory(), "external loss never grants mining output or changes tools");
         assertEquals(PhysicalReplicaState.EXPECTED, successor.replicaCustody().replicas().get(region.objectId()).state());
         assertEquals(PhysicalCustodyLeaseStatus.PREPARING, successor.replicaCustody().custodyByScope().get(region.scopeId()).status());
@@ -108,7 +108,7 @@ class ExtractionSourceCustodyTest {
                 successor.extractionSites().deposits().get(region.siteId()).cells().get(source.id()).disposition());
         assertTrue(ExtractionSourceCustody.blocksCold(successor, event.target()));
         assertThrows(IllegalArgumentException.class, () -> transition(successor, oldConfirmation, 12));
-        assertThrows(IllegalArgumentException.class, () -> ExtractionExternalChanges.apply(successor, region.siteId(), event, 12));
+        assertThrows(IllegalArgumentException.class, () -> ExtractionExternalChanges.apply(successor, region.siteId(), event, 12, 0L));
         var codec = new FrontierWorldStateCodec(); var recovered = codec.decode(codec.encode(successor));
         assertEquals(successor, recovered);
         var confirmed = transition(recovered, boundary(recovered, region, ExtractionSourceBoundary.Operation.CONFIRM), 12);
@@ -124,13 +124,13 @@ class ExtractionSourceCustodyTest {
         var lease = state.replicaCustody().custodyByScope().get(region.scopeId());
         var event = new ExtractionSourceChanged(ExtractionWorkEffects.target(deposit, source), source.definition().before(),
                 lease.authorityEpoch(), lease.expectedReplicaRevision(), Optional.empty());
-        var successor = ExtractionExternalChanges.apply(state, region.siteId(), event, 12);
+        var successor = ExtractionExternalChanges.apply(state, region.siteId(), event, 12, 0L);
         assertEquals(state.inventory(), successor.inventory());
         assertEquals(PhysicalCustodyLeaseStatus.PREPARING, successor.replicaCustody().custodyByScope().get(region.scopeId()).status());
         assertEquals(2, successor.replicaCustody().custodyByScope().get(region.scopeId()).authorityEpoch());
         assertFalse(successor.extractionSites().deposits().get(region.siteId()).available(Set.of()).contains(source));
         var stale = new ExtractionSourceChanged(event.target(), event.actual(), lease.authorityEpoch(), lease.expectedReplicaRevision() + 1, Optional.empty());
-        assertThrows(IllegalArgumentException.class, () -> ExtractionExternalChanges.apply(state, region.siteId(), stale, 12));
+        assertThrows(IllegalArgumentException.class, () -> ExtractionExternalChanges.apply(state, region.siteId(), stale, 12, 0L));
         var other = ExtractionRegion.all(state.extractionSites()).stream().filter(value -> !value.equals(region)).findFirst().orElseThrow();
         assertNull(successor.replicaCustody().custodyByScope().get(other.scopeId()));
     }

@@ -7,7 +7,7 @@ import java.util.Optional;
 final class SettlementInfrastructurePlanner implements SettlementOperationPlanner {
     @Override public String id() { return "frontier:infrastructure"; }
 
-    @Override public Assessment assess(FrontierWorldState state, Settlement settlement) {
+    @Override public Assessment assess(FrontierWorldState state, Settlement settlement, long atTick) {
         boolean constructionActive = state.routeConstructions().values().stream()
                 .anyMatch(project -> project.settlementId().equals(settlement.id()));
         boolean alreadyConfirmed = state.strategicPlans().routePatrols().values().stream()

@@ -60,11 +60,11 @@ class CoalDepositReserveTest {
         state = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(next)));
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         var exhausted = state.extractionSites().deposits().get(prior.site().id());
-        assertFalse(ProductionStockDemand.read(state, prior.site().settlementId(), "minecraft:cobblestone").requested());
-        assertTrue(ProductionStockDemand.read(state, prior.site().settlementId(), "minecraft:coal").requested());
-        assertTrue(ExtractionStockDemand.requiredCells(state, exhausted, Optional.empty()).isEmpty());
-        assertTrue(ExtractionStockDemand.requested(state, exhausted, Optional.empty()), "unadmitted geology is not depletion");
-        var extension = ExtractionAreaPlanning.proposal(state, prior.site().id()).orElseThrow();
+        assertFalse(ProductionStockDemand.read(state, prior.site().settlementId(), "minecraft:cobblestone", 0L).requested());
+        assertTrue(ProductionStockDemand.read(state, prior.site().settlementId(), "minecraft:coal", 0L).requested());
+        assertTrue(ExtractionStockDemand.requiredCells(state, exhausted, Optional.empty(), 0L).isEmpty());
+        assertTrue(ExtractionStockDemand.requested(state, exhausted, Optional.empty(), 0L), "unadmitted geology is not depletion");
+        var extension = ExtractionAreaPlanning.proposal(state, prior.site().id(), 0L).orElseThrow();
         assertTrue(extension.columns().stream().flatMap(column -> column.clearance().stream())
                 .anyMatch(sample -> sample.block().kind().equals("minecraft:coal_ore")));
         var territory = SettlementStorageTerritory.areas(state);

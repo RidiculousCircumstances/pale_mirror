@@ -24,7 +24,7 @@ class ProductionSpecializationTest {
                 .get(entry.getKey()).itemKind().equals("minecraft:bread")).findFirst().orElseThrow();
         var demandedState = state.withInventory(state.inventory().withFungibleResources(state.inventory().fungibleResources()
                 .destroy(account.id(), Map.of(bread.getKey(), bread.getValue() - 64), Map.of())));
-        var priorities = ExtractionPriorities.read(demandedState, deposit, Optional.empty());
+        var priorities = ExtractionPriorities.read(demandedState, deposit, Optional.empty(), 0L);
         var coalPriority = priorities.products().get("minecraft:coal");
         assertNotNull(coalPriority, "the food deficit requires fuel production");
         var stonePriority = priorities.products().get("minecraft:cobblestone");
@@ -36,16 +36,16 @@ class ProductionSpecializationTest {
             assertTrue(priorities.require(prerequisite).compareTo(priorities.require(coal.id())) <= 0);
         var resident = state.humanPopulation().residents().values().stream().filter(value -> value.settlementId().equals(home))
                 .findFirst().orElseThrow();
-        var required = ExtractionStockDemand.requiredCells(demandedState, deposit, Optional.empty());
+        var required = ExtractionStockDemand.requiredCells(demandedState, deposit, Optional.empty(), 0L);
         var available = deposit.available(Set.of()).stream().filter(cell -> required.contains(cell.id())).toList();
         var selected = ExtractionWorkTargets.spatialSelection(demandedState, deposit, resident.id(), available,
-                AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION, Optional.empty()).orElseThrow();
+                AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION, Optional.empty(), 0L).orElseThrow();
         var best = available.stream().filter(cell -> ExtractionWorkSafety.available(demandedState, deposit, cell))
                 .map(cell -> priorities.require(cell.id())).min(io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPriority::compareTo).orElseThrow();
         assertEquals(0, priorities.require(selected.id()).compareTo(best));
         var codec = new FrontierWorldStateCodec(); var recovered = codec.decode(codec.encode(demandedState));
         assertEquals(selected, ExtractionWorkTargets.spatialSelection(recovered, recovered.extractionSites().deposits().get(deposit.site().id()),
-                resident.id(), available, AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION, Optional.empty()).orElseThrow());
+                resident.id(), available, AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION, Optional.empty(), 0L).orElseThrow());
         assertEquals(demandedState.inventory(), recovered.inventory());
     }
     private FrontierWorldState initial() {
@@ -77,17 +77,17 @@ class ProductionSpecializationTest {
                 new CustodyAccount(staging, new ResourceCustody.Container(depot), Map.of(lot, 256), Map.of()));
         ledger = ledger.transfer(staging, ReferenceContainerCustody.scopeId(depot), Map.of(lot, 256), Map.of());
         state = state.withInventory(state.inventory().withFungibleResources(ledger));
-        assertFalse(ProductionStockDemand.read(state, home, "minecraft:cobblestone").requested());
-        assertTrue(ProductionStockDemand.read(state, home, "minecraft:coal").requested());
-        var needed = ExtractionStockDemand.requiredCells(state, deposit, Optional.empty());
+        assertFalse(ProductionStockDemand.read(state, home, "minecraft:cobblestone", 0L).requested());
+        assertTrue(ProductionStockDemand.read(state, home, "minecraft:coal", 0L).requested());
+        var needed = ExtractionStockDemand.requiredCells(state, deposit, Optional.empty(), 0L);
         assertTrue(needed.stream().anyMatch(id -> deposit.site().layout().require(id).definition().before().kind().equals("minecraft:stone")),
                 "needed coal retains its stone access prerequisites even when stone reserve is full");
         assertTrue(needed.size() < deposit.site().layout().cells().size());
-        assertTrue(ExtractionStockDemand.requested(state, deposit, Optional.empty()));
+        assertTrue(ExtractionStockDemand.requested(state, deposit, Optional.empty(), 0L));
         assertSame(deposit.site().layout().outputKinds(), deposit.site().layout().outputKinds(),
                 "immutable material declarations are not recompiled by each work-admission query");
         var participant = state.companies().goodsTrade().participants().participants().get(home);
-        var view = GoodsParticipantView.read(state, participant);
+        var view = GoodsParticipantAssessment.view(state, participant, 0L);
         assertEquals(3, view.stocks().get("minecraft:coal").protectedMinimum());
         assertTrue(GoodsParticipantPolicies.require(participant).decide(view, state.bootstrap().ruleset().goodsTrade()).stream()
                 .noneMatch(intent -> intent.itemKind().equals("minecraft:coal") && intent.side() == GoodsTradeOrder.Side.SELL));
@@ -97,27 +97,27 @@ class ProductionSpecializationTest {
                 Map.of(coalLot, 64), Map.of()));
         stocked = stocked.transfer(coalStaging, ReferenceContainerCustody.scopeId(depot), Map.of(coalLot, 64), Map.of());
         var fulfilled = state.withInventory(state.inventory().withFungibleResources(stocked));
-        assertTrue(ExtractionStockDemand.requiredCells(fulfilled, deposit, Optional.empty()).isEmpty());
-        assertFalse(ExtractionStockDemand.requested(fulfilled, deposit, Optional.empty()),
+        assertTrue(ExtractionStockDemand.requiredCells(fulfilled, deposit, Optional.empty(), 0L).isEmpty());
+        assertFalse(ExtractionStockDemand.requested(fulfilled, deposit, Optional.empty(), 0L),
                 "the cheap admission query agrees with the source-selection closure when both products are stocked");
     }
     @Test void safeFoodAndFuelFavourGrainButCriticalShortageStillAllowsBread() {
         var state = initial(); var home = state.bootstrap().settlements().getFirst().id();
         var participant = state.companies().goodsTrade().participants().participants().get(home);
-        var view = GoodsParticipantView.read(state, participant);
+        var view = GoodsParticipantAssessment.view(state, participant, 0L);
         assertEquals(0, view.purchaseLimits().get("minecraft:bread"));
         var permissions = SettlementWorkPolicy.permissions(state, home);
         for (var resident : state.humanPopulation().residents().values())
             if (resident.settlementId().equals(home)) permissions = permissions.withoutResident(resident.id());
         var withoutOperators = state.withStrategicPlans(state.strategicPlans().withWorkPermissions(home, permissions));
-        assertFalse(GoodsParticipantView.read(withoutOperators, participant).purchaseLimits().containsKey("minecraft:bread"),
+        assertFalse(GoodsParticipantAssessment.view(withoutOperators, participant, 0L).purchaseLimits().containsKey("minecraft:bread"),
                 "a physical station and fuel do not make grain usable without any permitted operator");
         // Policy receives current stock facts; removing real owned food changes its actual urgency.
         var account = FungibleResourceCustodySupport.accountAtContainer(state, FrontierWorldState.depotId(participant.settlementId())).orElseThrow();
         var bread = account.lotQuantities().entrySet().stream().filter(entry -> state.inventory().fungibleResources().lots()
                 .get(entry.getKey()).itemKind().equals("minecraft:bread")).collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
         var emptyFood = state.withInventory(state.inventory().withFungibleResources(state.inventory().fungibleResources().destroy(account.id(), bread, Map.of())));
-        var hungry = GoodsParticipantView.read(emptyFood, participant);
+        var hungry = GoodsParticipantAssessment.view(emptyFood, participant, 0L);
         assertFalse(hungry.purchaseLimits().containsKey("minecraft:bread"));
         assertTrue(GoodsParticipantPolicies.require(participant).decide(hungry, state.bootstrap().ruleset().goodsTrade()).stream()
                 .anyMatch(intent -> intent.itemKind().equals("minecraft:bread") && intent.side() == GoodsTradeOrder.Side.BUY));

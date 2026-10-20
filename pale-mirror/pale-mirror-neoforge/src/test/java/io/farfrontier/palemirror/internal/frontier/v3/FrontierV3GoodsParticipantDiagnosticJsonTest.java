@@ -18,6 +18,16 @@ class FrontierV3GoodsParticipantDiagnosticJsonTest {
         var parsed = JsonParser.parseString(rendered).getAsJsonObject();
         assertEquals("ok", parsed.get("status").getAsString());
         assertEquals(4, parsed.getAsJsonArray("reserves").size());
+        assertEquals(0, parsed.get("assessedAtTick").getAsLong());
+        var financial = parsed.getAsJsonObject("financialReport");
+        assertEquals("SINCE_ACCOUNT_REGISTRATION", financial.get("scope").getAsString());
+        assertEquals(financial.get("openingBalanceRaw"), financial.get("balanceRaw"));
+        assertEquals(0, financial.get("receivedRaw").getAsLong());
+        assertEquals(0, financial.get("paidRaw").getAsLong());
+        assertEquals("RETAINED_PRICE_HISTORY_NOT_LIFETIME", parsed.get("completedSalesScope").getAsString());
+        assertTrue(parsed.has("sourcingInputs") || parsed.getAsJsonArray("omittedSections").asList().stream()
+                .anyMatch(value -> value.getAsString().equals("sourcingInputs")),
+                "bounded reports must explicitly identify omitted decision inputs");
         assertTrue(rendered.getBytes(StandardCharsets.UTF_8).length <= FrontierV3DiagnosticJson.MAX_BYTES);
         var bounded = FrontierV3DiagnosticDetailBudget.finish("{\"status\":\"ok\",\"reserves\":" + parsed.get("reserves"),
                 List.of(new FrontierV3DiagnosticDetailBudget.Section("orders", "[\"" + "x".repeat(9000) + "\"]")));

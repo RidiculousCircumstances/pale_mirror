@@ -12,18 +12,18 @@ public final class ExpeditionReplenishmentAuthority {
     public enum TravelDecision { CONTINUE_ITINERARY, REST_FOR_LOCAL_SUPPLIES, COMPLETE_RETAINED_TRANSFER }
     /** No available local supply means continue the mission itinerary toward a supplier/home;
      * it must not become an endless individual home-food wait. A current transfer owns its fence. */
-    public static TravelDecision travelDecision(FrontierWorldState state, TransportMission mission) {
+    public static TravelDecision travelDecision(FrontierWorldState state, TransportMission mission, long now) {
         if (mission.replenishment().isPresent()) return TravelDecision.COMPLETE_RETAINED_TRANSFER;
         if (mission.supplies().isEmpty() || mission.preparingSupplies() || mission.stage() == TransportMission.Stage.COMPLETE)
             return TravelDecision.CONTINUE_ITINERARY;
-        return requiresPersonalStock(state, mission) && hasLocalStock(state, mission)
+        return requiresPersonalStock(state, mission) && hasLocalStock(state, mission, now)
                 ? TravelDecision.REST_FOR_LOCAL_SUPPLIES : TravelDecision.CONTINUE_ITINERARY;
     }
     /** A depleted personal stock requests a group-owned rest, never an individual trip home. */
-    public static boolean requiresLocalStock(FrontierWorldState state, TransportMission mission) {
-        return travelDecision(state, mission) == TravelDecision.REST_FOR_LOCAL_SUPPLIES;
+    public static boolean requiresLocalStock(FrontierWorldState state, TransportMission mission, long now) {
+        return travelDecision(state, mission, now) == TravelDecision.REST_FOR_LOCAL_SUPPLIES;
     }
-    private static boolean requiresPersonalStock(FrontierWorldState state, TransportMission mission) {
+    public static boolean requiresPersonalStock(FrontierWorldState state, TransportMission mission) {
         var life = state.bootstrap().ruleset().residentLife(); var resources = state.inventory().fungibleResources();
         var returnDemand = supplierVisit(state, mission) ? ExpeditionReturnProvisioning.missing(state, mission, 0) : Map.<SubjectId, Integer>of();
         return state.unitGroups().groups().get(mission.groupId()).members().stream().anyMatch(member -> {
@@ -37,7 +37,7 @@ public final class ExpeditionReplenishmentAuthority {
                                 member.actorId(), mission.organization().sponsor().id(), kind) > 0));
         });
     }
-    private static boolean hasLocalStock(FrontierWorldState state, TransportMission mission) {
+    private static boolean hasLocalStock(FrontierWorldState state, TransportMission mission, long now) {
         var group = state.unitGroups().groups().get(mission.groupId());
         var resources = state.inventory().fungibleResources();
         for (var source : sources(state, mission, group)) {
@@ -46,7 +46,7 @@ public final class ExpeditionReplenishmentAuthority {
             if (account == null) continue;
             for (var kind : state.bootstrap().ruleset().residentLife().foods().foods().keySet()) {
                 int quantity = source.mobile() ? resources.unclaimedQuantity(account.id(), source.owner(), kind)
-                        : purchasable(state, mission, source, kind);
+                        : purchasable(state, mission, source, kind, now);
                 if (quantity > 0) return true;
             }
         }
@@ -79,7 +79,7 @@ public final class ExpeditionReplenishmentAuthority {
                 var source = FungibleResourceCustodySupport.accountAtContainer(state, location.container()).orElse(null);
                 if (source == null) continue;
                 int available = resources.unclaimedQuantity(source.id(), location.owner(), food.itemKind());
-                if (!location.mobile()) available = Math.min(available, purchasable(state, mission, location, food.itemKind()));
+                if (!location.mobile()) available = Math.min(available, purchasable(state, mission, location, food.itemKind(), now));
                 int quantity = !location.mobile() && mission.supplies().orElseThrow().foodKind().equals(food.itemKind())
                         ? Math.min(64, Math.min(available, remaining)) : food.portionFor(nutrition.nutritionWanted(life), available);
                 if (quantity == 0) continue;
@@ -99,8 +99,8 @@ public final class ExpeditionReplenishmentAuthority {
         return Optional.empty();
     }
     private record Source(SubjectId container, SubjectId owner, boolean mobile) { }
-    private static int purchasable(FrontierWorldState state, TransportMission mission, Source source, String kind) {
-        return GoodsSpotPurchaseAuthority.quote(state, source.container(), source.owner(), mission.organization().sponsor().id(), kind)
+    private static int purchasable(FrontierWorldState state, TransportMission mission, Source source, String kind, long now) {
+        return GoodsSpotPurchaseAuthority.quote(state, source.container(), source.owner(), mission.organization().sponsor().id(), kind, now)
                 .map(quote -> (int) Math.min(quote.quantity(), ExpeditionFundingAuthority.available(state, mission).raw()
                         / quote.unitPrice().raw())).orElse(0);
     }
@@ -143,9 +143,9 @@ public final class ExpeditionReplenishmentAuthority {
         var shipments = state.shipments();
         if (!transfer.sourceEconomicOwnerId().equals(mission.organization().sponsor().id())) {
             var quote = GoodsSpotPurchaseAuthority.quote(state, transfer.containerId(), transfer.sourceEconomicOwnerId(),
-                    mission.organization().sponsor().id(), transfer.itemKind()).orElseThrow();
+                    mission.organization().sponsor().id(), transfer.itemKind(), now).orElseThrow();
             var budget = ExpeditionFundingAuthority.purchaseBudget(state, mission, quote.unitPrice().multiply(transfer.quantity()));
-            var purchase = GoodsSpotPurchaseAuthority.offer(state, transfer, mission.organization().sponsor().id(), budget, mission.id())
+            var purchase = GoodsSpotPurchaseAuthority.offer(state, transfer, mission.organization().sponsor().id(), budget, mission.id(), now)
                     .orElseThrow(() -> new IllegalArgumentException("foreign food lacks seller consent and finite paid terms"));
             var ledger = inventory.economics(); var previous = ledger.budgets().get(budget.id());
             ledger = previous == null ? ledger.reserveBudget(budget) : ledger.resizeBudget(previous, budget.remaining());

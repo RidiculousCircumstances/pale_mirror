@@ -98,7 +98,7 @@ class EconomicPlannerTest {
         var field = new SupplyPlanner.Process("field", "grain", 1, Map.of(), 0, Map.of(), 0,
                 10, 1, 100, 1, Map.of("worker", 50L));
         var input = facts(100, 0, 0, 0, List.of(oven(), field),
-                List.of(new EconomicSnapshot.ExportInterest("neighbour", "grain", 100, 1, 100)));
+                List.of(new EconomicSnapshot.ExportInterest("neighbour", "grain", 100, 1, 100, 100, 0)));
         var plan = new EconomicPlanner().plan(input, RULES).economy().orElseThrow();
         assertEquals(50, plan.additionalProduction().get("grain"));
         assertEquals(50, plan.exports().getFirst().conditionalRevenue());
@@ -127,17 +127,34 @@ class EconomicPlannerTest {
         var field = new SupplyPlanner.Process("field", "grain", 1, Map.of(), 0, Map.of(), 0, 10, 1, 100, 1, Map.of("worker", 50L));
         var mine = new SupplyPlanner.Process("mine", "fuel", 1, Map.of(), 0, Map.of(), 0, 10, 1, 100, 1, Map.of("worker", 50L));
         var input = facts(100, 0, 0, 0, List.of(oven(), field, mine), List.of(
-                new EconomicSnapshot.ExportInterest("neighbour", "grain", 100, 1, 30),
-                new EconomicSnapshot.ExportInterest("neighbour", "fuel", 100, 1, 30)));
+                new EconomicSnapshot.ExportInterest("neighbour", "grain", 100, 1, 30, 30, 0),
+                new EconomicSnapshot.ExportInterest("neighbour", "fuel", 100, 1, 30, 30, 0)));
         var exports = new EconomicPlanner().plan(input, RULES).economy().orElseThrow().exports();
         assertEquals(30, exports.stream().mapToLong(EconomicPlan.Export::additionalProduction).sum());
         assertEquals(30, exports.stream().mapToLong(EconomicPlan.Export::conditionalRevenue).sum());
+    }
+    @Test void exportAdviceUsesCommodityFundingIncludingFreightWithoutReallocatingDomesticMoney() {
+        var mine = new SupplyPlanner.Process("mine", "fuel", 1, Map.of(), 0, Map.of(), 0,
+                10, 1, 100, 1, Map.of("worker", 100L));
+        var input = facts(100, 0, 0, 0, List.of(oven(), mine), List.of());
+        var planner = new EconomicPlanner();
+        var domestic = planner.domestic(input, RULES);
+        var complete = planner.withExports(domestic, List.of(
+                new EconomicSnapshot.ExportInterest("neighbour", "fuel", 100, 1, 1000, 30, 2)));
+        var export = complete.economy().orElseThrow().exports().getFirst();
+        assertEquals(10, export.additionalProduction(), "goods and freight share the 30-unit commodity budget");
+        assertEquals(10, export.conditionalRevenue(), "freight is not the goods seller's proceeds");
+        assertEquals(domestic.plan().demands(), complete.demands());
+        assertEquals(domestic.plan().economy().orElseThrow().purchaseBudgets(),
+                complete.economy().orElseThrow().purchaseBudgets());
+        assertEquals(domestic.plan().economy().orElseThrow().checkpoints(),
+                complete.economy().orElseThrow().checkpoints(), "conditional receipts cannot fund domestic purchases");
     }
     @Test void liquidationDoesNotAuthorizeNewExportProductionBelowItsOpportunityCost() {
         var mine = new SupplyPlanner.Process("mine", "fuel", 1, Map.of(), 0, Map.of(), 0,
                 10, 1, 7, 134, Map.of("miner", 48000L));
         var original = facts(100, 0, 7, 0, List.of(oven(), mine),
-                List.of(new EconomicSnapshot.ExportInterest("neighbour", "fuel", 7, 25, 175)));
+                List.of(new EconomicSnapshot.ExportInterest("neighbour", "fuel", 7, 25, 175, 175, 0)));
         var input = new EconomicSnapshot(original.dayTicks(), original.stocks(), original.needs(), original.flows(),
                 original.reserves(), original.processes(), original.commitments(),
                 new SourcingMarket(0, 100, Map.of("oven", 4L, "mine", 134L), List.of()),
@@ -155,15 +172,15 @@ class EconomicPlannerTest {
         var mine = new SupplyPlanner.Process("mine", "fuel", 1, Map.of(), 0, Map.of(), 0,
                 10, 1, 100, 10, Map.of("worker", 50L));
         var input = facts(100, 0, 0, 0, List.of(oven(), field, mine), List.of(
-                new EconomicSnapshot.ExportInterest("neighbour", "grain", 100, 2, 1000),
-                new EconomicSnapshot.ExportInterest("neighbour", "fuel", 100, 5, 1000)));
+                new EconomicSnapshot.ExportInterest("neighbour", "grain", 100, 2, 1000, 1000, 0),
+                new EconomicSnapshot.ExportInterest("neighbour", "fuel", 100, 5, 1000, 1000, 0)));
         var plan = new EconomicPlanner().plan(input, RULES).economy().orElseThrow();
         assertEquals(50, plan.additionalProduction().get("grain"));
         assertEquals(0, plan.additionalProduction().get("fuel"));
     }
     @Test void spareLabourDoesNotAuthorizeDestroyingMoreValuableIngredients() {
         var input = facts(100, 200, 20, 0, List.of(oven()),
-                List.of(new EconomicSnapshot.ExportInterest("neighbour", "food", 100, 2, 200)));
+                List.of(new EconomicSnapshot.ExportInterest("neighbour", "food", 100, 2, 200, 200, 0)));
         var plan = new EconomicPlanner().plan(input, RULES).economy().orElseThrow();
         assertEquals(0, plan.additionalProduction().get("food"));
         assertTrue(plan.exports().stream().allMatch(e -> e.additionalProduction() == 0));

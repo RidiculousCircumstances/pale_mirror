@@ -84,7 +84,7 @@ class ExtractionExternalChangesTest {
                     ExtractionSourceCustody.fingerprint(state.extractionSites(), region)), 100000)));
         var before = state;
         var event = new ExtractionSourceChanged(target, new BlockExtraction.Block("minecraft:air", Map.of()), 1, 1, Optional.empty());
-        var changed = ExtractionExternalChanges.apply(before, site.id(), event, 100001);
+        var changed = ExtractionExternalChanges.apply(before, site.id(), event, 100001, 100L);
         assertEquals(clearance, changed.actorMovements().get(actor));
         assertEquals(before.actorExecutions(), changed.actorExecutions());
         assertEquals(suspended ? Optional.of(job.execution()) : Optional.empty(),
@@ -109,7 +109,7 @@ class ExtractionExternalChangesTest {
         state = ActorMovementProcess.reduceStarted(state, job.execution().actorId(), new ActorMovementStarted(movement));
         var before = state;
         var event = new ExtractionSourceChanged(target, new BlockExtraction.Block("minecraft:air", Map.of()), 1, 1, Optional.empty());
-        var changed = ExtractionExternalChanges.apply(before, site.id(), event, 100001);
+        var changed = ExtractionExternalChanges.apply(before, site.id(), event, 100001, 100L);
         var next = changed.extractionSites().work().get(job.id());
         assertEquals(job.execution(), next.execution());
         assertEquals(job.toolId(), next.toolId());

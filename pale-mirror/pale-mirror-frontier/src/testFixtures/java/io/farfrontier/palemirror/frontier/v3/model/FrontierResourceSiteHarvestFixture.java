@@ -196,7 +196,7 @@ final class FrontierResourceSiteHarvestFixture {
                 case ResourceSiteHarvestProgressed progressed ->
                         state = ResourceSiteHarvestProcess.reduceProgressed(state, siteId, progressed);
                 case ResourceSiteHarvestReturned returned ->
-                        state = ResourceSiteHarvestProcess.reduceReturned(state, siteId, returned);
+                        state = ResourceSiteHarvestProcess.reduceReturned(state, siteId, returned, action.dueAt().ticks());
                 case ResourceSiteHarvestSegmentRenewed renewed ->
                         state = ResourceSiteHarvestProcess.reduceSegmentRenewed(state, siteId, renewed);
                 case ResourceSiteHarvestBlockedCellSkipped skipped ->

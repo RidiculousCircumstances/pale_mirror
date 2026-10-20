@@ -101,7 +101,7 @@ class ExtractionTerracesTest {
         ExtractionAreaExtended event = null;
         FrontierWorldState after = null;
         for (int step = 0; step < 20; step++) {
-            event = ExtractionAreaPlanning.proposal(before, old.site().id()).orElseThrow();
+            event = ExtractionAreaPlanning.proposal(before, old.site().id(), 0L).orElseThrow();
             after = ExtractionAreaPlanning.apply(before, old.site().id(), event, 1000 + step);
             var chosen = event.columns().stream().map(column -> column.floor().support().offset(0, 1, 0))
                     .filter(old.site().layout().terrainSupports()::containsKey).findFirst();
@@ -149,7 +149,7 @@ class ExtractionTerracesTest {
     }
     @Test void lowerLandingsRequireSweptStepClearanceWithoutStrippingTheWholeColumnAndRetainHistory() {
         var before = clearDeclared(initial()); var old = deposit(before); var id = old.site().id();
-        var event = ExtractionAreaPlanning.proposal(before, id).orElseThrow();
+        var event = ExtractionAreaPlanning.proposal(before, id, 0L).orElseThrow();
         var column = event.columns().stream().filter(c -> c.floor().y() < old.site().layout().storagePort().y()).findFirst().orElseThrow();
         var admitted = ExtractionAreaPlanning.apply(before, id, event, 1000); var next = deposit(admitted);
         assertEquals(before.inventory(), admitted.inventory());
@@ -223,7 +223,7 @@ class ExtractionTerracesTest {
     @Test void successiveBenchesReachMultipleLevelsWithoutCreditingOrRewritingEarlierWork() {
         var state = clearDeclared(initial()); int root = deposit(state).site().layout().storagePort().y();
         for (int step = 0; step < 20 && ExtractionTerraceView.read(state, deposit(state)).openDepth() < 3; step++) {
-            var old = deposit(state); var proposal = ExtractionAreaPlanning.proposal(state, old.site().id()).orElseThrow();
+            var old = deposit(state); var proposal = ExtractionAreaPlanning.proposal(state, old.site().id(), 0L).orElseThrow();
             state = ExtractionAreaPlanning.apply(state, old.site().id(), proposal, 1000 + step);
             assertTrue(deposit(state).site().layout().fixedBlocks().entrySet().containsAll(old.site().layout().fixedBlocks().entrySet()));
             assertTrue(deposit(state).site().layout().accessSurfaces().stream().allMatch(surface -> surface.y() >= root - 4));
@@ -262,7 +262,7 @@ class ExtractionTerracesTest {
         var end = engine.canonicalState().state(); var mined = end.extractionSites().deposits().get(site.id());
         assertTrue(ExtractionTerraceView.read(end, mined).openDepth() > 0, () -> "no lower landing at " + engine.executionView().instant());
         assertTrue(mined.cells().values().stream().filter(c -> c.disposition() == ExtractionDeposit.Disposition.EXTRACTED).count() > 64);
-        assertTrue(ProductionStockDemand.read(end, site.settlementId(), "minecraft:cobblestone").held() > 0,
+        assertTrue(ProductionStockDemand.read(end, site.settlementId(), "minecraft:cobblestone", 0L).held() > 0,
                 "only actual new mining after the geometry fixture credits stone");
         assertEquals(end, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(end)));
     }

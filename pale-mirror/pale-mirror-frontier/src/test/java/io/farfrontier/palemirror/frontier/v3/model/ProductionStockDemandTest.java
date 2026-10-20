@@ -23,13 +23,13 @@ class ProductionStockDemandTest {
     @Test void enoughBreadRefusesNewBatchesAndPlayerWithdrawalReopensTheSamePolicy() {
         var state = BakeryPartialBatchTest.fixture(64);
         var owner = state.bootstrap().settlements().getFirst().id();
-        var demand = ProductionStockDemand.read(state, owner, SettlementFoodPolicy.BREAD);
+        var demand = ProductionStockDemand.read(state, owner, SettlementFoodPolicy.BREAD, 0L);
         state = supply(state, owner, SettlementFoodPolicy.BREAD, (int) (demand.target() + demand.outgoing()), "bread-reserve");
-        assertFalse(ProductionStockDemand.read(state, owner, SettlementFoodPolicy.BREAD).requested());
-        assertTrue(BakeryBatchSelection.admissible(state, owner).isEmpty());
+        assertFalse(ProductionStockDemand.read(state, owner, SettlementFoodPolicy.BREAD, 0L).requested());
+        assertTrue(BakeryBatchSelection.admissible(state, owner, 0L).isEmpty());
         var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
-        assertEquals(ProductionStockDemand.read(state, owner, SettlementFoodPolicy.BREAD),
-                ProductionStockDemand.read(recovered, owner, SettlementFoodPolicy.BREAD));
+        assertEquals(ProductionStockDemand.read(state, owner, SettlementFoodPolicy.BREAD, 0L),
+                ProductionStockDemand.read(recovered, owner, SettlementFoodPolicy.BREAD, 0L));
         var ledger = state.inventory().fungibleResources();
         var account = ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(owner));
         var lot = new SubjectId("lot:stock-test-bread-reserve");
@@ -39,8 +39,8 @@ class ProductionStockDemandTest {
                 new ResourceCustody.Player(UUID.fromString("00000000-0000-0000-0000-000000000099")),
                 Map.of(lot, count), Map.of()));
         state = state.withInventory(state.inventory().withFungibleResources(ledger));
-        assertTrue(ProductionStockDemand.read(state, owner, SettlementFoodPolicy.BREAD).requested());
-        assertTrue(BakeryBatchSelection.admissible(state, owner).isPresent());
+        assertTrue(ProductionStockDemand.read(state, owner, SettlementFoodPolicy.BREAD, 0L).requested());
+        assertTrue(BakeryBatchSelection.admissible(state, owner, 0L).isPresent());
     }
 
     @Test void activeBakeryOutputCountsBeforeRecipeAndOnlyOnceAfterRecipeThenFinishesDespiteFullReserve() {
@@ -52,11 +52,11 @@ class ProductionStockDemandTest {
         state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
                 new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
         state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
-        assertEquals(64, ProductionStockDemand.read(state, task.ownerId(), SettlementFoodPolicy.BREAD).incoming());
-        var needed = ProductionStockDemand.read(state, task.ownerId(), SettlementFoodPolicy.BREAD);
+        assertEquals(64, ProductionStockDemand.read(state, task.ownerId(), SettlementFoodPolicy.BREAD, 0L).incoming());
+        var needed = ProductionStockDemand.read(state, task.ownerId(), SettlementFoodPolicy.BREAD, 0L);
         state = supply(state, task.ownerId(), SettlementFoodPolicy.BREAD,
                 (int) (needed.target() + needed.outgoing()), "late-bread");
-        assertTrue(BakeryBatchSelection.admissible(state, task.ownerId()).isEmpty());
+        assertTrue(BakeryBatchSelection.admissible(state, task.ownerId(), 0L).isEmpty());
         boolean recipe = false;
         var job = started.job();
         for (long due = 300, steps = 0; state.productionJobs().containsKey(job.id()) && steps < 700; due += 20, steps++) {
@@ -67,7 +67,7 @@ class ProductionStockDemandTest {
             state = ProductionProcess.reduceBakeryColdStep(state, task.ownerId(), step);
             if (step.action() == BakeryColdStep.Action.RECIPE) {
                 recipe = true;
-                assertEquals(0, ProductionStockDemand.read(state, task.ownerId(), SettlementFoodPolicy.BREAD).incoming());
+                assertEquals(0, ProductionStockDemand.read(state, task.ownerId(), SettlementFoodPolicy.BREAD, 0L).incoming());
                 state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
             }
         }
@@ -81,7 +81,7 @@ class ProductionStockDemandTest {
         var site = state.extractionSites().deposits().values().stream().sorted(Comparator.comparing(value -> value.site().id()))
                 .findFirst().orElseThrow().site();
         var owner = site.settlementId();
-        var demand = ProductionStockDemand.read(state, owner, "minecraft:cobblestone");
+        var demand = ProductionStockDemand.read(state, owner, "minecraft:cobblestone", 0L);
         assertTrue(demand.requested());
         assertTrue(demand.outgoing() > 0, "known funded import demand must permit a bounded export surplus");
         int count = (int) (demand.target() + demand.outgoing());
@@ -90,7 +90,7 @@ class ProductionStockDemandTest {
         ledger = ledger.issue(new ResourceLot(lot, owner, "minecraft:cobblestone", count, "test:stock", List.of()),
                 new CustodyAccount(account, new ResourceCustody.Container(QuarryStorageFixture.container(state, site)), Map.of(lot, count), Map.of()));
         state = state.withInventory(state.inventory().withFungibleResources(ledger));
-        var filled = ProductionStockDemand.read(state, owner, "minecraft:cobblestone");
+        var filled = ProductionStockDemand.read(state, owner, "minecraft:cobblestone", 0L);
         assertFalse(filled.requested()); assertEquals(count, filled.held());
         var actor = state.bootstrap().settlements().stream().filter(value -> value.id().equals(owner)).findFirst().orElseThrow().residents().getFirst().id();
         var take = new ActorContainerItemOrder(site.id(), actor, ActorContainerItemOrder.Direction.TAKE,
@@ -101,7 +101,7 @@ class ProductionStockDemandTest {
                 ActorContainerItemOrder.Hand.OFF, 1, 1);
         ledger = ledger.transferActorOrderCold(take);
         state = state.withInventory(state.inventory().withFungibleResources(ledger));
-        assertEquals(filled, ProductionStockDemand.read(state, owner, "minecraft:cobblestone"));
+        assertEquals(filled, ProductionStockDemand.read(state, owner, "minecraft:cobblestone", 0L));
         var depot = FrontierWorldState.depotId(owner);
         var place = new ActorContainerItemOrder(site.id(), actor, ActorContainerItemOrder.Direction.PLACE,
                 new ActorContainerItemOrder.Portion.Fungible(new SubjectId("custody:stock-test-hauler"), new ResourceCustody.Actor(actor),
@@ -111,12 +111,12 @@ class ProductionStockDemandTest {
                         FrontierWorldStateSupport.settlement(state.bootstrap(), owner)).station(), ActorContainerItemOrder.Hand.OFF, 1, 1);
         ledger = ledger.transferActorOrderCold(place);
         state = state.withInventory(state.inventory().withFungibleResources(ledger));
-        assertEquals(filled, ProductionStockDemand.read(state, owner, "minecraft:cobblestone"));
+        assertEquals(filled, ProductionStockDemand.read(state, owner, "minecraft:cobblestone", 0L));
         var foreign = state.bootstrap().settlements().stream().filter(value -> !value.id().equals(owner)).findFirst().orElseThrow().id();
         state = supply(state, foreign, "minecraft:cobblestone", 64, "foreign-stone");
-        assertEquals(count, ProductionStockDemand.read(state, owner, "minecraft:cobblestone").held());
+        assertEquals(count, ProductionStockDemand.read(state, owner, "minecraft:cobblestone", 0L).held());
         var current = state;
-        assertThrows(IllegalArgumentException.class, () -> ProductionStockDemand.read(current, owner, "minecraft:diamond"));
+        assertThrows(IllegalArgumentException.class, () -> ProductionStockDemand.read(current, owner, "minecraft:diamond", 0L));
     }
 
     static FrontierWorldState supply(FrontierWorldState state, SubjectId owner, String kind, int quantity, String suffix) {

@@ -13,7 +13,7 @@ final class ShipmentFixture {
         var source = FrontierWorldState.depotId(seller.id()); var target = FrontierWorldState.depotId(buyer.id());
         var sourceAccount = ReferenceContainerCustody.scopeId(source);
         var lot = new SubjectId("lot:development-shipment-bread"); var staging = new SubjectId("custody:development-goods-setup");
-        int stock = 32 + SettlementFoodPolicy.reserveRequirement(state, seller.id());
+        int stock = 32 + SettlementFoodPolicy.reserveRequirement(state, seller.id(), 0);
         var resources = state.inventory().fungibleResources().issue(new ResourceLot(lot, seller.id(), "minecraft:bread", stock,
                 "fixture:shipment-initial-stock", List.of()), new CustodyAccount(staging, new ResourceCustody.Container(source), Map.of(lot, stock), Map.of()));
         resources = resources.transfer(staging, sourceAccount, Map.of(lot, stock), Map.of());

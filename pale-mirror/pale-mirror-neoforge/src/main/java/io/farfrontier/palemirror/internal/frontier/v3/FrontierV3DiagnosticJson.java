@@ -379,7 +379,7 @@ final class FrontierV3DiagnosticJson {
                 .filter(claim -> claim.economicOwnerId().equals(subject)).mapToInt(ClaimAllocation::quantity).sum();
         int activeMeals = (int) state.humanPopulation().meals().values().stream()
                 .filter(meal -> meal.settlementId().equals(subject)).count();
-        int reserve = SettlementFoodPolicy.reserveRequirement(state, subject);
+        int reserve = SettlementFoodPolicy.reserveRequirement(state, subject, checkpoint.instant().ticks());
         int nourished = (int) livingResidents.stream()
                 .filter(resident -> state.humanPopulation().nutrition(resident).status() == ResidentNutritionStatus.NOURISHED).count();
         int hungry = (int) livingResidents.stream()

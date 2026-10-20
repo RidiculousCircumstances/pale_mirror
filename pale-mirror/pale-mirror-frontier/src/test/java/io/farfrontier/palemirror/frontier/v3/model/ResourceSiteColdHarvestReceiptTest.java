@@ -64,7 +64,7 @@ class ResourceSiteColdHarvestReceiptTest {
         var task = state.strategicPlans().tasks().values().stream().filter(t -> t.kind() == StrategicTaskKind.HARVEST_RESOURCE_SITE).findFirst().orElseThrow();
         var start = ResourceSiteHarvestProcess.plan(state, ResourceSiteHarvestProcess.start(task, 5100));
         org.junit.jupiter.api.Assertions.assertInstanceOf(StrategicTaskTransition.class, start.getFirst().payload(),
-                "demand=" + ProductionStockDemand.read(state, owner, FieldHarvestExtraction.ITEM) + ";plan=" + start);
+                "demand=" + ProductionStockDemand.read(state, owner, FieldHarvestExtraction.ITEM, 5100L) + ";plan=" + start);
         state = StrategicObjectiveProcess.reduceTaskTransition(state, owner, (StrategicTaskTransition) start.getFirst().payload());
         var started = (ResourceSiteHarvestStarted) start.get(1).payload();
         state = ResourceSiteHarvestProcess.reduceStarted(state, site, started);
@@ -293,7 +293,7 @@ class ResourceSiteColdHarvestReceiptTest {
         assertTrue(returnedEvents.getFirst().payload() instanceof ResourceSiteHarvestReturned,
                 "expected exact returned receipt, got " + returnedEvents);
         FrontierWorldState completedHotReturn = ResourceSiteHarvestProcess.reduceReturned(hotReturned, site,
-                (ResourceSiteHarvestReturned) returnedEvents.getFirst().payload());
+                (ResourceSiteHarvestReturned) returnedEvents.getFirst().payload(), returnAction.dueAt().ticks());
         assertEquals(ResourceSitePhase.GROWING, completedHotReturn.resourceSites().site(site).phase());
         assertEquals(hotReturned.actorLocations().get(beforeReturn.workerId()).body(),
                 completedHotReturn.actorLocations().get(beforeReturn.workerId()).body(),
@@ -304,7 +304,7 @@ class ResourceSiteColdHarvestReceiptTest {
                 PhysicalIntentStatus.RUNNING, java.util.Optional.empty());
         var pendingReceiptEvents = ResourceSiteHarvestProcess.planColdProgress(startedHotReturn, returnAction);
         FrontierWorldState pendingReceipt = ResourceSiteHarvestProcess.reduceReturned(startedHotReturn, site,
-                (ResourceSiteHarvestReturned) pendingReceiptEvents.getFirst().payload());
+                (ResourceSiteHarvestReturned) pendingReceiptEvents.getFirst().payload(), returnAction.dueAt().ticks());
         assertEquals(ResourceSitePhase.GROWING, pendingReceipt.resourceSites().site(site).phase());
         assertTrue(pendingReceipt.resourceSites().site(site).harvestLineages().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow().receiptPending(),
                 "a started physical effect retains exactly one deferred receipt while canonical work finishes");
@@ -489,7 +489,7 @@ class ResourceSiteColdHarvestReceiptTest {
             for (ProposedEvent event : ResourceSiteHarvestProcess.planColdProgress(state, action[0])) {
                 if (event.payload() instanceof ResourceSiteHarvestColdTraversalAdvanced traversal) state = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(state, site, traversal);
                 else if (event.payload() instanceof ResourceSiteHarvestColdGoalAdvanced advanced) state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, site, advanced);
-                else if (event.payload() instanceof ResourceSiteHarvestReturned returned) state = ResourceSiteHarvestProcess.reduceReturned(state, site, returned);
+                else if (event.payload() instanceof ResourceSiteHarvestReturned returned) state = ResourceSiteHarvestProcess.reduceReturned(state, site, returned, returned.coldDueAt());
                 else if (event.payload() instanceof ResourceSiteHarvestCropPrepared crop) state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
                 else if (event.payload() instanceof ResourceSiteHarvestProgressed progressed) state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);
                 else if (event.payload() instanceof ResourceSiteHarvestWorkChanged changed) state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
@@ -646,7 +646,7 @@ class ResourceSiteColdHarvestReceiptTest {
                 switch (event.payload()) {
                     case ResourceSiteHarvestColdTraversalAdvanced traversal -> state = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(state, site, traversal);
                     case ResourceSiteHarvestColdGoalAdvanced advanced -> state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, site, advanced);
-                    case ResourceSiteHarvestReturned returned -> state = ResourceSiteHarvestProcess.reduceReturned(state, site, returned);
+                    case ResourceSiteHarvestReturned returned -> state = ResourceSiteHarvestProcess.reduceReturned(state, site, returned, returned.coldDueAt());
                     case ResourceSiteHarvestCropPrepared crop -> state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
                     case ResourceSiteHarvestProgressed progressed -> state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);
                     case ResourceSiteHarvestWorkChanged changed -> state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);

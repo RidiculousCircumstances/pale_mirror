@@ -57,7 +57,7 @@ public final class ExtractionPhysicalStateSupport {
         return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replaceWork(job, job.prepare(event.step()))));
     }
     public static String operation(ExtractionWork job) { return "extraction:" + job.id().value() + ":" + job.revision(); }
-    public static FrontierWorldState observed(FrontierWorldState state, SubjectId subject, ExtractionHotObserved event, long canonicalRevision) {
+    public static FrontierWorldState observed(FrontierWorldState state, SubjectId subject, ExtractionHotObserved event, long canonicalRevision, long atTick) {
         var job = require(state, subject, event.jobId(), event.step());
         if (!job.pending().equals(Optional.of(event.step()))) throw new IllegalArgumentException("mining receipt has no exact retained physical intent");
         var changes = FrontierWorldStateUpdate.begin(); var sites = state.extractionSites();
@@ -106,7 +106,7 @@ public final class ExtractionPhysicalStateSupport {
                 var depleted = sites.deposits().get(job.siteId()).extracted(target.key().cell(), target.revision(), block.extraction().operationId());
                 if (event.externalSuccessor().isPresent()) depleted = depleted.observe(target.key().cell(), target.revision() + 1,
                         event.externalSuccessor().orElseThrow());
-                var next = ExtractionWorkEffects.afterBlock(state, job, depleted, expected.quantity());
+                var next = ExtractionWorkEffects.afterBlock(state, job, depleted, expected.quantity(), atTick);
                 sites = sites.settle(job, next, depleted);
                 changes.inventory(state.inventory().withFungibleResources(ledger))
                         .replicaCustody(ExtractionSourceCustody.closeMutation(state, sites, target, canonicalRevision));

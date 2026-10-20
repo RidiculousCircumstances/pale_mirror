@@ -45,7 +45,7 @@ class SettlementStaffingPolicyTest {
         var assignment = HumanAssignmentProjection.compile(state).assignment(job.workerId());
         assertEquals(HumanAssignmentKind.FIELD_HARVEST, assignment.kind());
         assertEquals(Optional.of(job.id()), assignment.ownerId());
-        var proposal = SettlementStaffingComposition.POLICY.propose(state, home);
+        var proposal = SettlementStaffingComposition.POLICY.propose(state, home, 200L);
         assertTrue(proposal.permits(ResidentWorkKind.AGRICULTURE, job.workerId()));
         var retained = state;
         assertThrows(IllegalArgumentException.class, () -> SettlementWorkforce.requireAvailable(retained, home,
@@ -53,24 +53,24 @@ class SettlementStaffingPolicyTest {
         var codec = new FrontierWorldStateCodec(state.bootstrap());
         var recovered = codec.decode(codec.encode(state));
         assertEquals(assignment, HumanAssignmentProjection.compile(recovered).assignment(job.workerId()));
-        assertEquals(proposal, SettlementStaffingComposition.POLICY.propose(recovered, home));
+        assertEquals(proposal, SettlementStaffingComposition.POLICY.propose(recovered, home, 200L));
     }
 
     @Test void demandBuildsDisjointEssentialRostersAndRetainsOptionalOffers() {
         var state = initial(); var home = state.bootstrap().settlements().getFirst().id();
-        var policy = fixedPolicy(3, 2).propose(state, home);
+        var policy = fixedPolicy(3, 2).propose(state, home, 200L);
         assertEquals(3, policy.workers(ResidentWorkKind.AGRICULTURE).size());
         assertEquals(2, policy.workers(ResidentWorkKind.BAKING).size());
         assertTrue(Collections.disjoint(policy.workers(ResidentWorkKind.AGRICULTURE), policy.workers(ResidentWorkKind.BAKING)));
         assertTrue(policy.workers(ResidentWorkKind.LOGISTICS).containsAll(policy.workers(ResidentWorkKind.AGRICULTURE)));
         assertTrue(policy.workers(ResidentWorkKind.LOGISTICS).containsAll(policy.workers(ResidentWorkKind.BAKING)));
         var changed = state.withStrategicPlans(state.strategicPlans().withWorkPermissions(home, policy));
-        assertEquals(policy, fixedPolicy(3, 2).propose(changed, home), "reassessment does not reshuffle a sufficient roster");
+        assertEquals(policy, fixedPolicy(3, 2).propose(changed, home, 200L), "reassessment does not reshuffle a sufficient roster");
     }
     @Test void replacingMissingPermissionsUsesCapabilitiesNotPermanentRoleAssignments() {
         var state = initial(); var home = state.bootstrap().settlements().getFirst().id();
         state = state.withStrategicPlans(state.strategicPlans().withWorkPermissions(home, ResidentWorkPermissions.none()));
-        var policy = fixedPolicy(3, 2).propose(state, home);
+        var policy = fixedPolicy(3, 2).propose(state, home, 200L);
         assertEquals(3, policy.workers(ResidentWorkKind.AGRICULTURE).size());
         assertEquals(2, policy.workers(ResidentWorkKind.BAKING).size());
         for (var actor : policy.workers(ResidentWorkKind.AGRICULTURE))
@@ -80,9 +80,9 @@ class SettlementStaffingPolicyTest {
     }
     @Test void demandReductionReleasesPermissionsWithoutCreatingAnAssignment() {
         var state = initial(); var home = state.bootstrap().settlements().getFirst().id();
-        var old = fixedPolicy(3, 2).propose(state, home);
+        var old = fixedPolicy(3, 2).propose(state, home, 200L);
         var projected = state.withStrategicPlans(state.strategicPlans().withWorkPermissions(home, old));
-        var next = fixedPolicy(1, 1).propose(projected, home);
+        var next = fixedPolicy(1, 1).propose(projected, home, 200L);
         assertEquals(1, next.workers(ResidentWorkKind.AGRICULTURE).size());
         assertEquals(1, next.workers(ResidentWorkKind.BAKING).size());
         assertEquals(1, next.localReserve(ResidentWorkKind.AGRICULTURE));
@@ -114,7 +114,7 @@ class SettlementStaffingPolicyTest {
         var forged = new SettlementStaffingPort() {
             public ResidentWorkKind kind() { return ResidentWorkKind.AGRICULTURE; }
             public HumanCapability capability() { return HumanCapability.AGRICULTURE; }
-            public Demand assess(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules) {
+            public Demand assess(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules, long atTick) {
                 return new Demand(ResidentWorkKind.AGRICULTURE, HumanCapability.LOGISTICS, 3, 1, 1, Set.of());
             }
         };
@@ -123,7 +123,7 @@ class SettlementStaffingPolicyTest {
                 port(ResidentWorkKind.EXTRACTION, HumanCapability.EXTRACTION, 0, 0),
                 port(ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS, 64, 0)));
         var state = initial();
-        assertThrows(IllegalArgumentException.class, () -> policy.propose(state, state.bootstrap().settlements().getFirst().id()));
+        assertThrows(IllegalArgumentException.class, () -> policy.propose(state, state.bootstrap().settlements().getFirst().id(), 200L));
     }
     @Test void deadLocalWorkersAreReplacedByLivingCapableResidents() {
         var state = initial(); var home = state.bootstrap().settlements().getFirst().id();
@@ -131,7 +131,7 @@ class SettlementStaffingPolicyTest {
         var locations = new LinkedHashMap<>(state.actorLocations());
         for (var id : farmers) locations.put(id, locations.get(id).deadAt(locations.get(id).body()));
         state = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(locations));
-        var next = fixedPolicy(3, 2).propose(state, home);
+        var next = fixedPolicy(3, 2).propose(state, home, 200L);
         assertEquals(3, next.workers(ResidentWorkKind.AGRICULTURE).size());
         assertTrue(Collections.disjoint(farmers, next.workers(ResidentWorkKind.AGRICULTURE)));
         assertEquals(1, next.localReserve(ResidentWorkKind.AGRICULTURE));
@@ -147,7 +147,7 @@ class SettlementStaffingPolicyTest {
         return new SettlementStaffingPort() {
             public ResidentWorkKind kind() { return kind; }
             public HumanCapability capability() { return capability; }
-            public Demand assess(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules) {
+            public Demand assess(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules, long atTick) {
                 return new Demand(kind, capability, target, reserve, rules.priority(), Set.of());
             }
         };

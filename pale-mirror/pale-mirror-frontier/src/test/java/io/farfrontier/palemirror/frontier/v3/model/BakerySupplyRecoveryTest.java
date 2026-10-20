@@ -85,7 +85,7 @@ class BakerySupplyRecoveryTest {
         state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
         var job = started.job(); var station = job.bakeryWork().orElseThrow().stationId();
         var participant = state.companies().goodsTrade().participants().participants().get(task.ownerId());
-        var publicPlan = GoodsParticipantView.read(state, participant).supplyPlan().orElseThrow();
+        var publicPlan = GoodsParticipantAssessment.view(state, participant, 200L).supplyPlan().orElseThrow();
         assertTrue(publicPlan.require("minecraft:coal").urgent(100));
         assertTrue(publicPlan.require("minecraft:coal").protectedInput() > 0,
                 "the actual settlement/market composition must retain the admitted batch's fuel obligation");
@@ -120,7 +120,7 @@ class BakerySupplyRecoveryTest {
         lost = new ProductionStationRetired(station, lost.productionStations().require(station).revision()).apply(lost, station);
         assertEquals(0, ProductionStationEnergy.suppliedHeat(lost, station));
         assertFalse(SupplyCapacityComposition.dependencies(lost, task.ownerId(), facts).isEmpty());
-        var lostDemand = GoodsParticipantView.read(lost, participant).supplyPlan().orElseThrow().require("minecraft:bread");
+        var lostDemand = GoodsParticipantAssessment.view(lost, participant, 200L).supplyPlan().orElseThrow().require("minecraft:bread");
         assertTrue(lostDemand.purchase() > 0 && lostDemand.production() == 0,
                 "lost station must preserve actual food purchasing, not promise unavailable processing: " + lostDemand);
         assertEquals(state.productionJobs(), lost.productionJobs(), "forecasting cannot cancel or retarget the retained job");

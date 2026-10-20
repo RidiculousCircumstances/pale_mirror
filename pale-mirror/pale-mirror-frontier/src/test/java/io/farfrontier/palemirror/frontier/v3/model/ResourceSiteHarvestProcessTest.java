@@ -408,7 +408,7 @@ class ResourceSiteHarvestProcessTest {
                 HumanAssignmentProjection.compile(state).assignment(job.workerId())));
         var due = ResourceSiteHarvestProcess.coldProgress(job, 27_000L);
         var returned = new ResourceSiteHarvestReturned(job.id(), job.workerId(), due.id(), due.dueAt().ticks());
-        var after = ResourceSiteHarvestProcess.reduceReturned(state, job.siteId(), returned);
+        var after = ResourceSiteHarvestProcess.reduceReturned(state, job.siteId(), returned, returned.coldDueAt());
         var settled = after.resourceSites().site(job.siteId()).harvestJob(job.id()).orElseThrow();
         assertEquals(64, settled.deliveredYieldQuantity());
         assertEquals(64, settled.progress().completedCropSlots());
@@ -419,8 +419,9 @@ class ResourceSiteHarvestProcessTest {
         assertFalse(after.reservedContainerSlots(depot).contains(job.outputSlot().slot()));
         assertEquals(after, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(after)));
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.reduceReturned(after, job.siteId(),
-                new ResourceSiteHarvestReturned(job.id(), new SubjectId("resident:1-999"), due.id(), due.dueAt().ticks())));
-        var retired = ResourceSiteHarvestProcess.reduceReturned(after, job.siteId(), returned);
+                new ResourceSiteHarvestReturned(job.id(), new SubjectId("resident:1-999"), due.id(), due.dueAt().ticks()),
+                due.dueAt().ticks()));
+        var retired = ResourceSiteHarvestProcess.reduceReturned(after, job.siteId(), returned, due.dueAt().ticks());
         assertTrue(retired.resourceSites().site(job.siteId()).harvestJob(job.id()).isEmpty());
         assertEquals(field, retired.resourceSites().cycle(job.siteId()));
     }
@@ -521,7 +522,7 @@ class ResourceSiteHarvestProcessTest {
                 case ResourceSiteHarvestImmatureCellSkipped skipped -> state = ResourceSiteHarvestProcess.reduceCellSkipped(state, site, skipped);
                 case ResourceSiteHarvestCropPrepared prepared -> state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, prepared);
                 case ResourceSiteHarvestProgressed progressed -> state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);
-                case ResourceSiteHarvestReturned returned -> state = ResourceSiteHarvestProcess.reduceReturned(state, site, returned);
+                case ResourceSiteHarvestReturned returned -> state = ResourceSiteHarvestProcess.reduceReturned(state, site, returned, returned.coldDueAt());
                 case ResourceSiteHarvestColdGoalHeld held -> state = ResourceSiteHarvestProcess.reduceColdGoalHeld(state, site, held);
                 case ResourceSiteHarvestBlockedCellSkipped skipped -> state = ResourceSiteHarvestProcess.reduceBlockedCellSkipped(state, site, skipped);
                 case ResourceSiteHarvestTargetRetargeted retargeted -> state = ResourceSiteHarvestRetargeting.reduceTargetRetargeted(state, site, retargeted);

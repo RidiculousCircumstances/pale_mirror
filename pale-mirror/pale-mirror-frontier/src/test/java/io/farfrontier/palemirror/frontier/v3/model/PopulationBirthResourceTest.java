@@ -12,6 +12,18 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Actual demographic producer/consumer, including historical consumed portions after recovery. */
 class PopulationBirthResourceTest {
+    @Test void delayedReviewUsesExecutionTimeForItsDecisionAndSuccessorClocks() {
+        var f = fixture();
+        var action = PopulationBirthProcess.review(f.home(), 1, 100);
+        var events = FrontierWorldRuntimeDefinition.planScheduled(f.state(), action, new SimInstant(2000));
+        var started = start(events);
+        assertEquals(2000 + f.state().bootstrap().ruleset().cadence().populationBirthCompletionDelay(),
+                started.job().resident().birthTick());
+        assertTrue(events.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Created.class::isInstance)
+                .map(ScheduleEffect.Created.class::cast).allMatch(event -> event.action().dueAt().ticks() > 2000),
+                "late admission must not schedule new work in the past");
+        PopulationBirthProcess.reduceStarted(f.state(), f.home(), started, 2000);
+    }
     @Test void alternateFungibleWarehouseCommitsOneRationAndCompletesAfterSnapshotAndWalReplay() throws Exception {
         var f = fixture(); var events = review(f.state(), f.home());
         var started = start(events);
@@ -25,13 +37,13 @@ class PopulationBirthResourceTest {
             throw new AssertionError("demographic consumption never ranks or calculates a pedestrian route");
         })) {
             var recovered = codec.decode(codec.encode(f.state()));
-            var admitted = PopulationBirthProcess.reduceStarted(recovered, f.home(), decoded);
+            var admitted = PopulationBirthProcess.reduceStarted(recovered, f.home(), decoded, 100L);
             assertFalse(admitted.inventory().fungibleResources().lots().containsKey(f.first()));
             assertEquals(127, SettlementFoodPolicy.breadStock(admitted, f.home()));
             assertEquals(f.state().humanPopulation().residents(), admitted.humanPopulation().residents());
             assertEquals(f.state().physicalIntents(), admitted.physicalIntents());
             assertEquals(admitted, codec.decode(codec.encode(admitted)), "the spent source is history, not a dangling live lot claim");
-            assertThrows(IllegalArgumentException.class, () -> PopulationBirthProcess.reduceStarted(admitted, f.home(), decoded));
+            assertThrows(IllegalArgumentException.class, () -> PopulationBirthProcess.reduceStarted(admitted, f.home(), decoded, 100L));
             var restored = codec.decode(codec.encode(admitted));
             var completion = events.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Created.class::isInstance)
                     .map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action)
@@ -58,7 +70,7 @@ class PopulationBirthResourceTest {
                 f.state().inventory().fungibleResources().reserve(held, f.account())));
         var next = start(review(claimed, f.home()));
         assertEquals(f.reserve(), next.job().foodItemId());
-        assertThrows(IllegalArgumentException.class, () -> PopulationBirthProcess.reduceStarted(claimed, f.home(), event),
+        assertThrows(IllegalArgumentException.class, () -> PopulationBirthProcess.reduceStarted(claimed, f.home(), event, 100L),
                 "unclaimed total stock does not authorize consuming another owner's retained portion");
         var old = (ColdResourceConsumption.Fungible) event.job().food();
         var forged = new ColdResourceConsumption.Fungible(f.home(), f.container(), "minecraft:bread",
@@ -66,7 +78,7 @@ class PopulationBirthResourceTest {
         var job = event.job();
         var wrong = new ResidentBirthStarted(new ResidentBirthJob(job.id(), job.settlementId(), job.householdId(), forged,
                 job.foodCommitmentId(), job.resident(), job.position()));
-        assertThrows(IllegalArgumentException.class, () -> PopulationBirthProcess.reduceStarted(f.state(), f.home(), wrong));
+        assertThrows(IllegalArgumentException.class, () -> PopulationBirthProcess.reduceStarted(f.state(), f.home(), wrong, 100L));
         assertEquals(128, SettlementFoodPolicy.breadStock(claimed, f.home()));
     }
 
@@ -80,11 +92,11 @@ class PopulationBirthResourceTest {
                         1, 7, 2, PhysicalCustodyLeaseStatus.ACQUIRED, null));
         var hot = f.state().withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody));
         assertTrue(review(hot, f.home()).stream().noneMatch(proposed -> proposed.payload() instanceof ResidentBirthStarted));
-        assertThrows(IllegalArgumentException.class, () -> PopulationBirthProcess.reduceStarted(hot, f.home(), event));
+        assertThrows(IllegalArgumentException.class, () -> PopulationBirthProcess.reduceStarted(hot, f.home(), event, 100L));
         var policy = f.state().inventory().containers().get(f.container()).storage().orElseThrow();
         var replacement = new ResourceStoragePolicy(policy.endpoint(), new ResourceStorageFilter(false, Set.of(), Map.of()), policy.priority(), policy.role());
         var filtered = new ResourceStoragePolicyChanged(f.container(), policy, replacement).apply(f.state(), f.home());
-        assertThrows(IllegalArgumentException.class, () -> PopulationBirthProcess.reduceStarted(filtered, f.home(), event));
+        assertThrows(IllegalArgumentException.class, () -> PopulationBirthProcess.reduceStarted(filtered, f.home(), event, 100L));
         assertEquals(f.state().inventory().fungibleResources(), filtered.inventory().fungibleResources());
         assertEquals(f.state().inventory().fungibleResources(), hot.inventory().fungibleResources());
     }

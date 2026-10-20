@@ -7,9 +7,9 @@ import java.util.*;
  * Forecasts never grant route, cargo or worker authority. */
 public final class GoodsDispatchAdvice {
     public static TripDispatchPolicy.Cause assess(FrontierWorldState state, GoodsParticipantView view,
-                                                  Map<String, Integer> quantities, long journeyTicks) {
+                                                  Map<String, Integer> quantities, long journeyTicks, long atTick) {
         var rules = state.bootstrap().ruleset().goodsTrade();
-        var needs = SettlementReservePlanning.basis(state, view.participant().settlementId()).needs();
+        var needs = SettlementReservePlanning.basis(state, view.participant().settlementId(), atTick).needs();
         return TripDispatchPolicy.assess(quantities.entrySet().stream().map(e -> {
             var demand = view.supplyPlan().map(p -> p.require(e.getKey()))
                     .orElseGet(() -> new SupplyPlanner.Demand(0, 0, 0, Long.MAX_VALUE, Set.of(), Optional.empty()));

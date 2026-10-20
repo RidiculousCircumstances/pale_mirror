@@ -61,7 +61,7 @@ public record FrontierSettlementWorkDiagnostic(
                 java.util.Set.of(ResourceStorageRole.WAREHOUSE)).stream()).findFirst();
         String storageId = receiving.map(value -> value.containerId().value()).orElse("");
         String admission = harvestAdmission(state, settlementId, readySites, facility, farmStatus, livingFarmers,
-                availableFarmer, receiving.isPresent(), pendingSchedules);
+                availableFarmer, receiving.isPresent(), pendingSchedules, checkpoint.instant().ticks());
         return Optional.of(new FrontierSettlementWorkDiagnostic(settlementId.value(), strategic, facility, readySites, pendingSchedules, admission,
                 livingFarmers, availableFarmer, farmStatus, storageId, receiving.isPresent()));
     }
@@ -75,9 +75,9 @@ public record FrontierSettlementWorkDiagnostic(
 
     private static String harvestAdmission(FrontierWorldState state, SubjectId settlementId, List<String> readySites, Lane facility,
                                            String farmStatus, int livingFarmers, String availableFarmer,
-                                           boolean storageAvailable, List<String> pendingSchedules) {
+                                           boolean storageAvailable, List<String> pendingSchedules, long atTick) {
         if (readySites.isEmpty()) return "NO_READY_SITE";
-        if (!ProductionStockDemand.read(state, settlementId, "minecraft:wheat").requested()) return "STOCK_TARGET_MET";
+        if (!ProductionStockDemand.read(state, settlementId, "minecraft:wheat", atTick).requested()) return "STOCK_TARGET_MET";
         String recoveringFarmer = state.humanPopulation().residents().values().stream()
                 .filter(value -> value.settlementId().equals(settlementId) && SettlementWorkPolicy.permissions(state, value.settlementId()).permits(ResidentWorkKind.AGRICULTURE, value.id()) && value.capability(HumanCapability.AGRICULTURE) > 0)
                 .filter(value -> FrontierWorldStateSupport.workCapable(state, value))

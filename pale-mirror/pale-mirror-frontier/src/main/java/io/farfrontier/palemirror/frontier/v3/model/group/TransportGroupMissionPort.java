@@ -170,11 +170,11 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
                 || ordinal == mission.deliveryOrdinal() && mission.stage() == TransportMission.Stage.OUTBOUND
                 || ordinal == mission.returnOrdinal() && mission.stage() == TransportMission.Stage.RETURNING);
     }
-    @Override public MovementPermission movementPermission(FrontierWorldState state, UnitGroup group) {
+    @Override public MovementPermission movementPermission(FrontierWorldState state, UnitGroup group, long atTick) {
         var mission = mission(state, group);
         if (requestsJourneyStop(state, group)) return MovementPermission.hold(MovementPermission.Reason.MISSION_STOP_REQUESTED);
         if (mission.replenishment().isPresent()) return MovementPermission.hold(MovementPermission.Reason.REFILL_TRANSFER);
-        if (io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.requiresLocalStock(state, mission))
+        if (io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.requiresLocalStock(state, mission, atTick))
             return MovementPermission.hold(MovementPermission.Reason.FOOD_STOCK_REQUIRED);
         return MovementPermission.allow();
     }

@@ -25,22 +25,19 @@ final class GoodsProductionPricing {
         }
         return Map.copyOf(result);
     }
-    static Map<String, FixedScalar> alternatives(FrontierWorldState state, GoodsParticipantView view,
+    static Map<String, FixedScalar> alternatives(GoodsParticipantAssessment.Assessment assessment,
                                                 Map<String, FixedScalar> prices) {
-        return assess(state, view, prices).alternatives();
+        return assess(assessment, prices).alternatives();
     }
-    static Assessment assess(FrontierWorldState state, GoodsParticipantView view, Map<String, FixedScalar> prices) {
-        if (view.participant().policy() != GoodsPolicyKind.PUBLIC_SETTLEMENT || view.supplyPlan().isEmpty())
+    static Assessment assess(GoodsParticipantAssessment.Assessment assessment, Map<String, FixedScalar> prices) {
+        var view = assessment.view();
+        if (assessment.facts().isEmpty())
             return new Assessment(Map.of(), Map.of(), List.of());
-        var facts = new TreeMap<String, SupplyPlanner.Stock>(); var rules = state.bootstrap().ruleset().goodsTrade();
-        view.stocks().forEach((item, stock) -> facts.put(item, new SupplyPlanner.Stock(stock.unclaimedInStorage(), stock.expectedIncoming(),
-                0, 0, stock.protectedMinimum(), 0, 1, rules.supplyPlanning().require(item))));
+        var collected = assessment.facts().orElseThrow();
+        var facts = collected.stocks();
         var result = new HashMap<String, FixedScalar>();
-        var home = view.participant().party().id();
-        var window = SupplyPlanningWindow.forSettlement(state, home, view.supplyPlan().orElseThrow().reserves().values());
-        var capacities = SupplyCapacityComposition.read(state, home, facts, window);
-        var economic = state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().isPresent()
-                ? SettlementSourcingMarket.read(state, view.participant(), capacities).processUnitCosts() : Map.<String, Long>of();
+        var capacities = collected.capacities();
+        var economic = collected.market().processUnitCosts();
         var opportunities = new TreeMap<String, FixedScalar>();
         for (var process : capacities) {
             if (economic.containsKey(process.id())) opportunities.merge(process.product(), new FixedScalar(economic.get(process.id())),

@@ -50,7 +50,7 @@ class ExtractionDevelopmentReplayTest {
             assertEquals(observed, accepted.events().getFirst().payload());
             assertTrue(accepted.events().stream().noneMatch(event -> event.payload() instanceof ExtractionFrontierOpened
                     || event.payload() instanceof ExtractionAreaExtended));
-            var after = ExtractionExternalChanges.apply(before, site, observed, 1001);
+            var after = ExtractionExternalChanges.apply(before, site, observed, 1001, 6000L);
             assertEquals(before.inventory(), after.inventory()); assertEquals(before.actorLocations(), after.actorLocations());
             assertEquals(cell.definition().after(), after.extractionSites().deposits().get(site).cells().get(last).knownBlock());
             calls.set(0);

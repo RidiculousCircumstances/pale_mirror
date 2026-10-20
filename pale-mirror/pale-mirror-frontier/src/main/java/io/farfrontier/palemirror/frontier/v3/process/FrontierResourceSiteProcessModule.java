@@ -425,7 +425,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
         }
         if (command.payload() instanceof ResourceSiteHarvestBatchPrepared prepared) {
             try {
-                ResourceSiteHarvestProcess.reduceBatchPrepared(state, prepared.siteId(), prepared);
+                ResourceSiteHarvestProcess.reduceBatchPrepared(state, prepared.siteId(), prepared, command.submittedAt().ticks());
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(prepared.siteId(), prepared)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
@@ -501,7 +501,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
             case ResourceSiteHarvestColdTraversalAdvanced advanced -> ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(state, event.subject(), advanced);
             case ResourceSiteHarvestColdGoalAdvanced advanced -> ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, event.subject(), advanced);
             case ResourceSiteHarvestColdGoalHeld held -> ResourceSiteHarvestProcess.reduceColdGoalHeld(state, event.subject(), held);
-            case ResourceSiteHarvestReturned returned -> ResourceSiteHarvestProcess.reduceReturned(state, event.subject(), returned);
+            case ResourceSiteHarvestReturned returned -> ResourceSiteHarvestProcess.reduceReturned(state, event.subject(), returned, event.instant().ticks());
             case ResourceSiteHarvestSegmentRenewed renewed -> ResourceSiteHarvestProcess.reduceSegmentRenewed(state, event.subject(), renewed);
             case ResourceSiteHarvestBlockedCellSkipped skipped -> ResourceSiteHarvestProcess.reduceBlockedCellSkipped(state, event.subject(), skipped);
             case ResourceSiteHarvestWorkChanged changed -> ResourceSiteHarvestWorkProcess.reduce(state, event.subject(), changed);
@@ -514,7 +514,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                     throw new IllegalArgumentException("field batch receipt has a foreign event owner");
                 yield ResourceSitePhysicalIntentStateSupport.deliverHarvestBatch(state, delivered);
             }
-            case ResourceSiteHarvestBatchPrepared prepared -> ResourceSiteHarvestProcess.reduceBatchPrepared(state, event.subject(), prepared);
+            case ResourceSiteHarvestBatchPrepared prepared -> ResourceSiteHarvestProcess.reduceBatchPrepared(state, event.subject(), prepared, event.instant().ticks());
             case ResourceSiteHarvestHotTraversalAdvanced advanced -> ResourceSiteHarvestProcess.reduceHotTraversalAdvanced(state, event.subject(), advanced);
             case ResourceSiteHarvestHotGoalArrived arrived -> ResourceSiteHarvestProcess.reduceHotGoalArrived(state, event.subject(), arrived);
             case ResourceSiteHarvestProgressed progressed -> ResourceSiteHarvestProcess.reduceProgressed(state, event.subject(), progressed);

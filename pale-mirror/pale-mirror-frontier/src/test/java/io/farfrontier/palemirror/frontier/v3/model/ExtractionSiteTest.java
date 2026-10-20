@@ -68,7 +68,7 @@ class ExtractionSiteTest {
         var retainedFirst = firstJob;
         assertTrue(deliveredHome, () -> "mining output did not reach its home depot; tick=" + engine.executionView().instant()
                 + " site=" + site.id() + " first=" + state.extractionSites().work().get(retainedFirst)
-                + " demand=" + ProductionStockDemand.read(state, site.settlementId(), "minecraft:cobblestone")
+                + " demand=" + ProductionStockDemand.read(state, site.settlementId(), "minecraft:cobblestone", 0L)
                 + " pending local stone shipments=" + state.shipments().shipments().values().stream()
                     .filter(shipment -> shipment.receiver().settlementId().equals(site.settlementId())
                             && shipment.itemKind().equals("minecraft:cobblestone") && !shipment.terminal())

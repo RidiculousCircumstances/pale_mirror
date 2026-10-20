@@ -27,7 +27,7 @@ public final class GoodsTradeStateSupport {
         }
         contract.seller().validate(state.inventory().economics()); contract.buyer().validate(state.inventory().economics());
         requireContainer(state, contract.sourceContainerId()); requireContainer(state, contract.receiverContainerId());
-        int protectedMinimum = GoodsTradeSourceAdmission.protectedMinimum(state, contract.seller(), contract.itemKind());
+        int protectedMinimum = GoodsTradeSourceAdmission.protectedMinimum(state, contract.seller(), contract.itemKind(), now);
         var seller = state.companies().goodsTrade().participants().participants().get(contract.seller().id());
         if (!GoodsParticipantStorage.eligible(state, seller, contract.sourceContainerId(), contract.itemKind()))
             throw new IllegalArgumentException("goods source is not an eligible participant warehouse");
@@ -216,7 +216,7 @@ public final class GoodsTradeStateSupport {
 
     /** Only the seller can abandon an allocation still at the declared source; no stock changes. */
     public static FrontierWorldState cancelBeforeLoading(FrontierWorldState state, SubjectId subject,
-                                                         GoodsTradeDisposition disposition) {
+                                                         GoodsTradeDisposition disposition, long now) {
         GoodsTradeContract contract = state.companies().goodsTrade().contracts().get(disposition.contractId());
         if (contract == null || !subject.equals(contract.seller().id())
                 || disposition.reason() == GoodsTradeDisposition.Reason.OBSERVED_ALLOCATION_CHANGED
@@ -224,7 +224,7 @@ public final class GoodsTradeStateSupport {
             throw new IllegalArgumentException("goods cancellation lacks its declared source owner");
         }
         if (disposition.reason() != GoodsTradeDisposition.Reason.CANCELLED_BEFORE_LOADING
-                && !GoodsTradeSourceAdmission.withdrawalReason(state, contract).equals(java.util.Optional.of(disposition.reason())))
+                && !GoodsTradeSourceAdmission.withdrawalReason(state, contract, now).equals(java.util.Optional.of(disposition.reason())))
             throw new IllegalArgumentException("goods withdrawal no longer has its declared current policy reason");
         GoodsTradeState trade = state.companies().goodsTrade().dispose(disposition);
         if (state.shipments().holds(disposition.claimId()))

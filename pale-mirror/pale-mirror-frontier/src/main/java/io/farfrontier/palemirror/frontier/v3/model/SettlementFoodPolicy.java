@@ -13,14 +13,19 @@ public final class SettlementFoodPolicy {
     private SettlementFoodPolicy() { }
 
     /** Two ordinary meals per living resident, plus the current target portion, never missed-meal debt. */
-    public static int reserveRequirement(FrontierWorldState state, SubjectId settlementId) {
+    public static int reserveRequirement(FrontierWorldState state, SubjectId settlementId, long atTick) {
         if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().economics().isPresent()) {
             var participant = state.companies().goodsTrade().participants().participants().get(settlementId);
-            return Math.toIntExact(GoodsParticipantView.read(state, participant).supplyPlan().orElseThrow()
+            return Math.toIntExact(GoodsParticipantAssessment.domestic(state, participant, atTick).view().supplyPlan().orElseThrow()
                     .reserves().get(BREAD).reorderPoint());
         }
+        return baselineReserveRequirement(state, settlementId);
+    }
+
+    /** Owner-fact baseline for non-economic profiles and economic fact collection. */
+    static int baselineReserveRequirement(FrontierWorldState state, SubjectId settlementId) {
         if (SettlementReservePlanning.enabled(state)) return Math.toIntExact(
-                SettlementReservePlanning.read(state, settlementId).get(BREAD).reorderPoint());
+                SettlementReservePlanning.retainedTargets(state, settlementId).get(BREAD).reorderPoint());
         return state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId))
                 .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
@@ -31,12 +36,12 @@ public final class SettlementFoodPolicy {
     }
 
     /** A discretionary birth cannot spend the next resident's meal or mask current hunger. */
-    public static boolean allowsPopulationGrowth(FrontierWorldState state, SubjectId settlementId) {
+    public static boolean allowsPopulationGrowth(FrontierWorldState state, SubjectId settlementId, long atTick) {
         return state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(settlementId))
                 .filter(resident -> state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE)
                 .noneMatch(resident -> state.humanPopulation().nutrition(resident.id()).wantsFood(state.bootstrap().ruleset().residentLife()))
-                && reserveCoverageBread(state, settlementId) > reserveRequirement(state, settlementId);
+                && reserveCoverageBread(state, settlementId) > reserveRequirement(state, settlementId, atTick);
     }
 
     private static java.util.Set<SubjectId> stores(FrontierWorldState state, SubjectId home) {
@@ -128,8 +133,8 @@ public final class SettlementFoodPolicy {
         return Math.addExact(exact, fungible);
     }
 
-    public static Optional<ExactItemStack> exportableBread(FrontierWorldState state, SubjectId settlementId) {
-        int reserve = reserveRequirement(state, settlementId);
+    public static Optional<ExactItemStack> exportableBread(FrontierWorldState state, SubjectId settlementId, long atTick) {
+        int reserve = reserveRequirement(state, settlementId, atTick);
         int available = coldUsableBread(state, settlementId);
         var stores = stores(state, settlementId);
         return state.inventory().items().values().stream().sorted(Comparator.comparing(ExactItemStack::id))
@@ -142,9 +147,9 @@ public final class SettlementFoodPolicy {
 
     /** COLD export query; a live physical binding is not COLD planning authority. */
     public static Optional<FungibleResourceCustodySupport.LotAtContainer> exportableFungibleBread(
-            FrontierWorldState state, SubjectId settlementId) {
+            FrontierWorldState state, SubjectId settlementId, long atTick) {
         var stores = stores(state, settlementId);
-        int reserve = reserveRequirement(state, settlementId);
+        int reserve = reserveRequirement(state, settlementId, atTick);
         FungibleResourceLedger resources = state.inventory().fungibleResources();
         if (coldUsableBread(state, settlementId) - 64 < reserve) return Optional.empty();
         return resources.accounts().values().stream().sorted(Comparator.comparing(CustodyAccount::id))

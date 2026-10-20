@@ -193,7 +193,7 @@ class SettlementExtractionAdmissionTest {
         state = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites()
                 .replaceWork(job, choosing).replace(depleted)));
         var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
-        assertFalse(ExtractionStockDemand.requested(state, depleted, Optional.of(job.id())));
+        assertFalse(ExtractionStockDemand.requested(state, depleted, Optional.of(job.id()), 100L));
         var event = ExtractionWorkProcess.progress(state, ExtractionContinuation.at(job.id(), 102), 102).stream()
                 .map(ProposedEvent::payload).filter(ExtractionWorkProgressed.class::isInstance)
                 .map(ExtractionWorkProgressed.class::cast).findFirst().orElseThrow();
@@ -232,7 +232,7 @@ class SettlementExtractionAdmissionTest {
                 ExtractionWorkProgressed.Operation.TAKE_TOOL), 100);
         job = state.extractionSites().work().get(job.id());
         state = state.withActorBody(f.worker().id(), job.movementOrder(ExtractionWorkAuthority.site(state, job)).legalStations().getFirst().standingBody());
-        var beforeMiningChoice = ExtractionWorkRelocation.select(state, job).orElseThrow();
+        var beforeMiningChoice = ExtractionWorkRelocation.select(state, job, 100L).orElseThrow();
         state = ExtractionColdWork.apply(state, job.id(), new ExtractionWorkProgressed(job.id(), job.revision(),
                 ExtractionWorkProgressed.Operation.LABOUR), 100);
         job = state.extractionSites().work().get(job.id());
@@ -240,8 +240,8 @@ class SettlementExtractionAdmissionTest {
                 ExtractionWorkProgressed.Operation.EXTRACT_BLOCK), job.labour().orElseThrow().activeUntilTick());
         var loaded = state; var held = state.extractionSites().work().get(job.id());
         assertTrue(ExtractionWorkAuthority.carried(loaded, held) > 0);
-        assertTrue(ExtractionWorkRelocation.select(loaded, held).isEmpty());
-        assertTrue(assertThrows(IllegalArgumentException.class, () -> ExtractionWorkRelocation.require(loaded, held, beforeMiningChoice))
+        assertTrue(ExtractionWorkRelocation.select(loaded, held, 100L).isEmpty());
+        assertTrue(assertThrows(IllegalArgumentException.class, () -> ExtractionWorkRelocation.require(loaded, held, beforeMiningChoice, 100L))
                 .getMessage().contains("held cargo"));
         var storing = ExtractionColdWork.apply(loaded, held.id(), new ExtractionWorkProgressed(held.id(), held.revision(),
                 ExtractionWorkProgressed.Operation.STORE_PART), 200);

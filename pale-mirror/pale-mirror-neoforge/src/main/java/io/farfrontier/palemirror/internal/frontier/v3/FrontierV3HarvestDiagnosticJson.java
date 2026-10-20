@@ -189,7 +189,7 @@ final class FrontierV3HarvestDiagnosticJson {
                     + ",\"intentStatus\":\"" + (intent == null ? "MISSING" : intent.status().name()) + "\",\"terminalBody\":" + position(lineage.terminalBody())
                     + ",\"causalTrace\":" + harvestCausality(lineage.causality()) + "}";
         }).collect(java.util.stream.Collectors.joining(",", "[", "]"));
-        BlockPosition boardPosition = FrontierReadabilityPlan.compile(state).boards().get(subject).position();
+        BlockPosition boardPosition = FrontierReadabilityPlan.compile(state, checkpoint.instant().ticks()).boards().get(subject).position();
         return base("site", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(site.settlementId().value())
                 + "\",\"workerPresentation\":\"" + quote(workerName)
                 + "\",\"facility\":\"" + quote(site.facilityId().value()) + "\",\"phase\":\"" + lifecycle.phase()

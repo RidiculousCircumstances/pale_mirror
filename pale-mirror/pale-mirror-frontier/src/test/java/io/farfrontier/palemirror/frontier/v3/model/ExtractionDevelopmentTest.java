@@ -58,20 +58,20 @@ class ExtractionDevelopmentTest {
         var initial = initial(); var original = deposit(initial); var site = original.site().id();
         assertEquals(512, original.cells().size()); assertEquals(8, original.development().openedCells().size());
         assertTrue(original.cells().values().stream().allMatch(cell -> cell.knownBlock().kind().equals("minecraft:stone")));
-        assertTrue(ExtractionDevelopment.proposal(initial, site).isEmpty(), "a live front is not exhausted by reservation");
-        var before = clearFirstFront(initial); var opening = ExtractionDevelopment.proposal(before, site).orElseThrow();
+        assertTrue(ExtractionDevelopment.proposal(initial, site, 0L).isEmpty(), "a live front is not exhausted by reservation");
+        var before = clearFirstFront(initial); var opening = ExtractionDevelopment.proposal(before, site, 0L).orElseThrow();
         assertEquals(8, opening.cells().size());
         FrontierWorldState after;
         var codec = new FrontierWorldStateCodec();
         try (var ignored = PedestrianRoutePlanning.bind((geometry, from, to) -> {
             fail("front opening replay cannot rediscover reachability or rank cells"); return null;
         })) {
-            after = ExtractionDevelopment.apply(codec.decode(codec.encode(before)), site, opening);
-            assertEquals(after, ExtractionDevelopment.apply(before, site, opening));
+            after = ExtractionDevelopment.apply(codec.decode(codec.encode(before)), site, opening, 0L);
+            assertEquals(after, ExtractionDevelopment.apply(before, site, opening, 0L));
             var missing = new LinkedHashMap<>(opening.access().routes()); missing.remove(missing.keySet().iterator().next());
             assertThrows(IllegalArgumentException.class, () -> ExtractionDevelopment.apply(before, site,
                     new ExtractionFrontierOpened(site, opening.expectedRevision(), opening.cells(),
-                            new PedestrianAccessReceipt(opening.access().origin(), missing))));
+                            new PedestrianAccessReceipt(opening.access().origin(), missing)), 0L));
         }
         assertEquals(before.inventory(), after.inventory()); assertEquals(before.actorLocations(), after.actorLocations());
         assertEquals(deposit(before).cells(), deposit(after).cells()); assertEquals(original.site(), deposit(after).site());
@@ -79,8 +79,8 @@ class ExtractionDevelopmentTest {
         assertEquals(2, deposit(after).development().revision());
         assertEquals(after, codec.decode(codec.encode(after)));
         var payloads = FrontierWorldRuntimeDefinition.payloadCodecs(); assertEquals(opening, payloads.decode(opening.type(), payloads.encode(opening)));
-        assertThrows(IllegalArgumentException.class, () -> ExtractionDevelopment.apply(after, site, opening));
-        assertThrows(IllegalArgumentException.class, () -> ExtractionDevelopment.apply(before, new SubjectId("extraction:foreign"), opening));
+        assertThrows(IllegalArgumentException.class, () -> ExtractionDevelopment.apply(after, site, opening, 0L));
+        assertThrows(IllegalArgumentException.class, () -> ExtractionDevelopment.apply(before, new SubjectId("extraction:foreign"), opening, 0L));
         var undeveloped = original.site().layout().cells().stream().filter(cell -> !original.development().openedCells().contains(cell.id())).findFirst().orElseThrow();
         assertThrows(IllegalArgumentException.class, () -> original.extracted(undeveloped.id(), 1, "effect:unadmitted"));
     }
@@ -90,9 +90,9 @@ class ExtractionDevelopmentTest {
         for (long cell : original.development().openedCells()) changed = changed.observe(cell, 1,
                 cell == blocked ? new BlockExtraction.Block("minecraft:bedrock", Map.of()) : original.site().layout().require(cell).definition().after());
         var before = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(changed)));
-        var opening = ExtractionDevelopment.proposal(before, original.site().id()).orElseThrow();
+        var opening = ExtractionDevelopment.proposal(before, original.site().id(), 0L).orElseThrow();
         assertEquals(7, opening.cells().size()); assertFalse(opening.cells().contains(blocked + 1));
-        var after = ExtractionDevelopment.apply(before, original.site().id(), opening);
+        var after = ExtractionDevelopment.apply(before, original.site().id(), opening, 0L);
         assertEquals(before.inventory(), after.inventory()); assertEquals(changed.cells(), deposit(after).cells());
         assertTrue(deposit(after).cells().values().stream().noneMatch(cell -> cell.disposition() == ExtractionDeposit.Disposition.EXTRACTED));
     }
@@ -101,14 +101,14 @@ class ExtractionDevelopmentTest {
         var policy = SettlementWorkPolicy.permissions(state, home);
         for (var actor : policy.workers(ResidentWorkKind.EXTRACTION)) policy = policy.withoutResident(actor);
         var withdrawn = state.withStrategicPlans(state.strategicPlans().withWorkPermissions(home, policy));
-        assertTrue(ExtractionDevelopment.proposal(withdrawn, original.site().id()).isEmpty());
+        assertTrue(ExtractionDevelopment.proposal(withdrawn, original.site().id(), 0L).isEmpty());
         var broken = original;
         for (var cell : original.accessibleSources(Set.of())) {
             var support = cell.workstation().support();
             if (!broken.geometry().containsKey(support)) broken = broken.observeGeometry(support, 1, new BlockExtraction.Block("minecraft:air", Map.of()));
         }
         var blocked = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(broken)));
-        assertTrue(ExtractionDevelopment.proposal(blocked, original.site().id()).isEmpty());
+        assertTrue(ExtractionDevelopment.proposal(blocked, original.site().id(), 0L).isEmpty());
         assertEquals(original.development(), deposit(blocked).development());
         assertEquals(state.inventory(), blocked.inventory());
     }
@@ -130,7 +130,7 @@ class ExtractionDevelopmentTest {
         for (long cell : original.cells().keySet()) exhausted = exhausted.extracted(cell, 1, "effect:finite-" + cell);
         var end = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(exhausted)));
         assertFalse(ExtractionWorkPolicy.remaining(exhausted));
-        assertTrue(ExtractionDevelopment.proposal(end, original.site().id()).isEmpty());
+        assertTrue(ExtractionDevelopment.proposal(end, original.site().id(), 0L).isEmpty());
         assertEquals(512, exhausted.cells().size());
         assertTrue(exhausted.cells().values().stream().allMatch(cell -> cell.knownBlock().kind().equals("minecraft:air")));
         assertEquals(state.inventory(), end.inventory(), "a history fixture is not a production receipt");

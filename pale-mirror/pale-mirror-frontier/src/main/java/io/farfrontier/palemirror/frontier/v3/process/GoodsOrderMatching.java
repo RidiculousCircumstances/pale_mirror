@@ -72,12 +72,12 @@ final class GoodsOrderMatching {
                         || !GoodsParticipantStorage.eligible(state, buyer, buy.containerId(), buy.itemKind())) {
                     disposition = "STORAGE_UNAVAILABLE"; continue;
                 }
-                long funding = GoodsParticipantFunding.purchase(GoodsParticipantView.read(state, buyer),
+                long funding = GoodsParticipantFunding.purchase(GoodsParticipantAssessment.view(state, buyer, now),
                         state.bootstrap().ruleset().goodsTrade(), buy.itemKind()).raw();
                 funding = Math.max(0, funding - unreservedDeliveryExpense.raw());
                 if (funding < sell.unitPriceLimit().raw()) { disposition = "INSUFFICIENT_PROCUREMENT_FUNDS"; continue; }
-                var sellerIntent = intent(state, seller, sell.itemKind(), GoodsTradeOrder.Side.SELL, cachedIntents);
-                var buyerIntent = intent(state, buyer, buy.itemKind(), GoodsTradeOrder.Side.BUY, cachedIntents);
+                var sellerIntent = intent(state, seller, sell.itemKind(), GoodsTradeOrder.Side.SELL, now, cachedIntents);
+                var buyerIntent = intent(state, buyer, buy.itemKind(), GoodsTradeOrder.Side.BUY, now, cachedIntents);
                 if (sellerIntent.isEmpty() || buyerIntent.isEmpty()) { disposition = "CURRENT_RESERVE_STOCK_OR_FUNDS"; continue; }
                 if (sell.unitPriceLimit().compareTo(sellerIntent.orElseThrow().limit()) < 0
                         || sell.unitPriceLimit().compareTo(buyerIntent.orElseThrow().limit()) > 0) {
@@ -114,13 +114,13 @@ final class GoodsOrderMatching {
         return new Search(Optional.empty(), disposition, checked);
     }
     static Optional<GoodsParticipantPolicy.Intent> intent(FrontierWorldState state, GoodsParticipant participant,
-                                                         String itemKind, GoodsTradeOrder.Side side) {
-        return intent(state, participant, itemKind, side, new HashMap<>());
+                                                         String itemKind, GoodsTradeOrder.Side side, long now) {
+        return intent(state, participant, itemKind, side, now, new HashMap<>());
     }
     private static Optional<GoodsParticipantPolicy.Intent> intent(FrontierWorldState state, GoodsParticipant participant,
-            String itemKind, GoodsTradeOrder.Side side, Map<SubjectId, List<GoodsParticipantPolicy.Intent>> cache) {
+            String itemKind, GoodsTradeOrder.Side side, long now, Map<SubjectId, List<GoodsParticipantPolicy.Intent>> cache) {
         return cache.computeIfAbsent(participant.party().id(), ignored -> GoodsParticipantPolicies.require(participant)
-                .decide(GoodsParticipantView.read(state, participant), state.bootstrap().ruleset().goodsTrade()))
+                .decide(GoodsParticipantAssessment.view(state, participant, now), state.bootstrap().ruleset().goodsTrade()))
                 .stream().filter(value -> value.itemKind().equals(itemKind) && value.side() == side).findFirst();
     }
     private static boolean known(GoodsParticipant owner, GoodsParticipant other) {

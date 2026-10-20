@@ -9,31 +9,31 @@ import java.util.*;
 /** Mining policy around a general geometry planner. All effects stay with the original extraction owner. */
 public final class ExtractionAreaPlanning {
     private ExtractionAreaPlanning() { }
-    public static Optional<ExtractionAreaExtended> proposal(FrontierWorldState state, SubjectId siteId) {
-        return proposal(state, siteId, true);
+    public static Optional<ExtractionAreaExtended> proposal(FrontierWorldState state, SubjectId siteId, long atTick) {
+        return proposal(state, siteId, true, atTick);
     }
     /** Staffing asks whether known work exists; it cannot require the staff it has not assigned yet. */
-    public static boolean hasKnownExtension(FrontierWorldState state, SubjectId siteId) {
-        return extensionAvailability(state, siteId) == Availability.AVAILABLE;
+    public static boolean hasKnownExtension(FrontierWorldState state, SubjectId siteId, long atTick) {
+        return extensionAvailability(state, siteId, atTick) == Availability.AVAILABLE;
     }
     public enum Availability { AVAILABLE, WAITING, NONE }
     /** A calculation/knowledge wait is not geological exhaustion or an admission grant. */
-    public static Availability extensionAvailability(FrontierWorldState state, SubjectId siteId) {
-        try { return proposal(state, siteId, false).isPresent() ? Availability.AVAILABLE : Availability.NONE; }
+    public static Availability extensionAvailability(FrontierWorldState state, SubjectId siteId, long atTick) {
+        try { return proposal(state, siteId, false, atTick).isPresent() ? Availability.AVAILABLE : Availability.NONE; }
         catch (KnownPedestrianNavigation.RouteUnavailable pending) {
             return pending.status() == PedestrianRouteResult.Status.NO_PATH ? Availability.NONE : Availability.WAITING;
         }
     }
-    private static Optional<ExtractionAreaExtended> proposal(FrontierWorldState state, SubjectId siteId, boolean requireStaff) {
+    private static Optional<ExtractionAreaExtended> proposal(FrontierWorldState state, SubjectId siteId, boolean requireStaff, long atTick) {
         var deposit = Objects.requireNonNull(state.extractionSites().deposits().get(siteId), "declared excavation site");
         var rules = state.bootstrap().ruleset().extraction(); var layout = deposit.site().layout();
         if (rules.geology().isEmpty() || rules.developmentBatchCells() < 2 || layout.cells().size() > ExtractionLayout.MAX_CELLS - 2
                 || requireStaff && SettlementWorkPolicy.permissions(state, deposit.site().settlementId()).workers(ResidentWorkKind.EXTRACTION).isEmpty()
-                || ExtractionDevelopment.proposal(state, siteId).isPresent()) return Optional.empty();
+                || ExtractionDevelopment.proposal(state, siteId, atTick).isPresent()) return Optional.empty();
         var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state);
         var access = knowledge.accessSelection(layout.storagePort());
-        var needed = ExtractionStockDemand.requiredCells(state, deposit, Optional.empty());
-        var priorities = ExtractionPriorities.read(state, deposit, Optional.empty());
+        var needed = ExtractionStockDemand.requiredCells(state, deposit, Optional.empty(), atTick);
+        var priorities = ExtractionPriorities.read(state, deposit, Optional.empty(), atTick);
         var bestExisting = deposit.available(Set.of()).stream().filter(cell -> needed.contains(cell.id()))
                 .filter(cell -> access.reachable(cell.workstation())).map(cell -> priorities.require(cell.id()))
                 .min(io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPriority::compareTo);

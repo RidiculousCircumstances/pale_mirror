@@ -299,7 +299,7 @@ public final class StrategicObjectiveProcess {
                 HivePresenceProcess.planFree(state, owner, currentTick));
         Optional<SettlementManagement.Decision> management = state.bootstrap().hive().id().equals(owner)
                 ? Optional.empty() : Optional.of(SettlementManagementComposition.MANAGEMENT.decide(decisionState,
-                        FrontierWorldStateSupport.settlement(state.bootstrap(), owner)));
+                        FrontierWorldStateSupport.settlement(state.bootstrap(), owner), currentTick));
         if (management.isPresent()) {
             var expansion = SettlementManagementComposition.MANAGEMENT.expandActiveTasks(decisionState,
                     FrontierWorldStateSupport.settlement(state.bootstrap(), owner), action.id(), currentTick);

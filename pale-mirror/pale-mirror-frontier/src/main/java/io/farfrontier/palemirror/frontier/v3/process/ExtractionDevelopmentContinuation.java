@@ -17,14 +17,14 @@ final class ExtractionDevelopmentContinuation {
         }
     }
     static FrontierWorldState append(FrontierWorldState state, SubjectId site, List<ProposedEvent> events, long tick) {
-        if (!ExtractionWorkPlanning.demanded(state, state.extractionSites().deposits().get(site).site().settlementId())) return state;
-        var opening = ExtractionDevelopment.proposal(state, site);
+        if (!ExtractionWorkPlanning.demanded(state, state.extractionSites().deposits().get(site).site().settlementId(), tick)) return state;
+        var opening = ExtractionDevelopment.proposal(state, site, tick);
         FrontierPayload event;
         FrontierWorldState after;
         if (opening.isPresent()) {
-            event = opening.orElseThrow(); after = ExtractionDevelopment.apply(state, site, opening.orElseThrow());
+            event = opening.orElseThrow(); after = ExtractionDevelopment.apply(state, site, opening.orElseThrow(), tick);
         } else {
-            var extension = ExtractionAreaPlanning.proposal(state, site);
+            var extension = ExtractionAreaPlanning.proposal(state, site, tick);
             if (extension.isEmpty()) return state;
             event = extension.orElseThrow(); after = ExtractionAreaPlanning.preview(state, site, extension.orElseThrow());
         }

@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 /** Domain port: proposals and explicit temporary holds; no execution or physical effects. */
 public interface SettlementOperationPlanner {
     String id();
-    Assessment assess(FrontierWorldState state, Settlement settlement);
+    Assessment assess(FrontierWorldState state, Settlement settlement, long atTick);
 
     /** Family-owned expansion of an existing objective; no new lane or waiting resident is acquired. */
     default List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> expandActiveTasks(

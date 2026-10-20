@@ -10,22 +10,22 @@ public final class ExtractionWorkRelocation {
     private static final Set<ResourceStorageRole> STORAGE = Set.of(ResourceStorageRole.WAREHOUSE, ResourceStorageRole.LOCAL_BUFFER);
     private ExtractionWorkRelocation() { }
 
-    public static Optional<ExtractionWorkDecision.Relocate> select(FrontierWorldState state, ExtractionWork job) {
+    public static Optional<ExtractionWorkDecision.Relocate> select(FrontierWorldState state, ExtractionWork job, long atTick) {
         if (job.pending().isPresent() || job.phase() != ExtractionWork.Phase.SELECT_SOURCE && job.phase() != ExtractionWork.Phase.EXTRACT
                 || ExtractionWorkAuthority.carried(state, job) != 0) return Optional.empty();
         var home = ExtractionWorkAuthority.site(state, job).settlementId();
         if (!SettlementWorkPolicy.permissions(state, home).permits(ResidentWorkKind.EXTRACTION, job.execution().actorId()))
             return Optional.empty();
         KnownPedestrianNavigation.RouteUnavailable waiting = null;
-        for (var site : ExtractionSiteSelection.ranked(state, home, job.execution().actorId(), Set.of(job.siteId()), Optional.of(job.id()))) {
+        for (var site : ExtractionSiteSelection.ranked(state, home, job.execution().actorId(), Set.of(job.siteId()), Optional.of(job.id()), atTick)) {
             var deposit = state.extractionSites().deposits().get(site);
-            var priorities = ExtractionPriorities.read(state, deposit, Optional.of(job.id()));
+            var priorities = ExtractionPriorities.read(state, deposit, Optional.of(job.id()), atTick);
             var available = new ArrayList<>(deposit.available(state.extractionSites().reservedCells(site)).stream()
                     .filter(cell -> ExtractionWorkPolicy.supportsTool(state, cell, job))
                     .filter(cell -> priorities.cells().containsKey(cell.id()) && priorities.require(cell.id()).missing() > 0).toList());
             try {
                 while (!available.isEmpty()) {
-                    var selected = ExtractionWorkTargets.plannedAt(state, job, deposit, available, AreaWorkSelection.SpatialPolicy.SPREAD_STARTS);
+                    var selected = ExtractionWorkTargets.plannedAt(state, job, deposit, available, AreaWorkSelection.SpatialPolicy.SPREAD_STARTS, atTick);
                     if (selected.isEmpty()) break;
                     var source = selected.orElseThrow();
                     var cell = deposit.site().layout().require(source.target().key().cell()); available.remove(cell);
@@ -49,18 +49,18 @@ public final class ExtractionWorkRelocation {
         return Optional.empty();
     }
 
-    public static ExtractionWork require(FrontierWorldState state, ExtractionWork job, ExtractionWorkDecision.Relocate selected) {
+    public static ExtractionWork require(FrontierWorldState state, ExtractionWork job, ExtractionWorkDecision.Relocate selected, long atTick) {
         var deposit = Objects.requireNonNull(state.extractionSites().deposits().get(selected.source().target().key().owner()), "selected worksite");
         var cell = deposit.site().layout().require(selected.source().target().key().cell());
         var home = ExtractionWorkAuthority.site(state, job).settlementId();
         if (!home.equals(deposit.site().settlementId()) || !selected.execution().equals(job.execution())
                 || ExtractionWorkAuthority.carried(state, job) != 0
                 || !SettlementWorkPolicy.permissions(state, home).permits(ResidentWorkKind.EXTRACTION, job.execution().actorId())
-                || ExtractionPriorities.read(state, deposit, Optional.of(job.id())).require(cell.id()).missing() == 0)
+                || ExtractionPriorities.read(state, deposit, Optional.of(job.id()), atTick).require(cell.id()).missing() == 0)
             throw new IllegalArgumentException("mining relocation has held cargo, foreign authority or covered demand");
         var output = cell.definition().coldOutput().getFirst();
         var next = job.relocate(selected.source().target(), output.itemKind(), selected.destination());
-        ExtractionWorkTargets.requireSelection(state, next, selected.source());
+        ExtractionWorkTargets.requireSelection(state, next, selected.source(), atTick);
         if (!ResourceStorageSelection.receivesAt(state, selected.destination(), home, output.itemKind(), output.quantity(), STORAGE, Optional.empty()))
             throw new IllegalArgumentException("mining relocation lacks current receiving capacity");
         ResourceStorageNavigation.requireAcceptedDestination(state, cell.workstation(), selected.destination(), selected.storageRoute());

@@ -11,32 +11,32 @@ public final class SettlementStaffingComposition {
             new SettlementStaffingPort() {
                 public ResidentWorkKind kind() { return ResidentWorkKind.AGRICULTURE; }
                 public HumanCapability capability() { return HumanCapability.AGRICULTURE; }
-                public Demand assess(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules) {
-                    return ResourceSiteHarvestPlanning.staffingDemand(state, home, rules);
+                public Demand assess(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules, long atTick) {
+                    return ResourceSiteHarvestPlanning.staffingDemand(state, home, rules, atTick);
                 }
             }, new SettlementStaffingPort() {
                 public ResidentWorkKind kind() { return ResidentWorkKind.BAKING; }
                 public HumanCapability capability() { return HumanCapability.INDUSTRY; }
-                public Demand assess(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules) {
-                    return BakeryJobAdmission.staffingDemand(state, home, rules);
+                public Demand assess(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules, long atTick) {
+                    return BakeryJobAdmission.staffingDemand(state, home, rules, atTick);
                 }
             }, new SettlementStaffingPort() {
                 public ResidentWorkKind kind() { return ResidentWorkKind.LOGISTICS; }
                 public HumanCapability capability() { return HumanCapability.LOGISTICS; }
-                public Demand assess(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules) {
-                    return GoodsShipmentPlanning.staffingDemand(state, home, rules);
+                public Demand assess(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules, long atTick) {
+                    return GoodsShipmentPlanning.staffingDemand(state, home, rules, atTick);
                 }
             }, new SettlementStaffingPort() {
                 public ResidentWorkKind kind() { return ResidentWorkKind.EXTRACTION; }
                 public HumanCapability capability() { return HumanCapability.EXTRACTION; }
-                public Demand assess(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules) {
-                    return ExtractionWorkPlanning.staffingDemand(state, home, rules);
+                public Demand assess(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules, long atTick) {
+                    return ExtractionWorkPlanning.staffingDemand(state, home, rules, atTick);
                 }
             }));
     private SettlementStaffingComposition() { }
     public static Optional<SettlementWorkPolicyChanged> change(FrontierWorldState state, SubjectId home, long tick) {
         var old = SettlementWorkPolicy.permissions(state, home);
-        var next = POLICY.propose(state, home);
+        var next = POLICY.propose(state, home, tick);
         return old.equals(next) ? Optional.empty() : Optional.of(new SettlementWorkPolicyChanged(home,
                 state.strategicPlans().requireDecisionAuthority(home).reconsiderationEpoch(), tick, old, next));
     }
@@ -45,7 +45,7 @@ public final class SettlementStaffingComposition {
         if (!subject.equals(event.settlementId()) || authority.kind() != DecisionAuthorityKind.SETTLEMENT
                 || authority.reconsiderationEpoch() != event.authorityEpoch()
                 || !authority.workPermissions().equals(event.expected())
-                || !POLICY.propose(state, subject).equals(event.next()))
+                || !POLICY.propose(state, subject, event.assessedAtTick()).equals(event.next()))
             throw new IllegalArgumentException("stale, foreign or forged settlement staffing decision");
         return state.withStrategicPlans(state.strategicPlans().withWorkPermissions(subject, event.next()));
     }

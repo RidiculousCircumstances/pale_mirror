@@ -102,7 +102,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
                 var actor = state.actorLocations().get(job.workerId());
                 if (actor == null) continue;
                 if (job.batchSuccessorSlot().isEmpty()) {
-                    var nextSlot = ResourceSiteHarvestCargo.nextBatchSlot(state, job);
+                    var nextSlot = ResourceSiteHarvestCargo.nextBatchSlot(state, job, runtime.executionView().orElseThrow().instant().ticks());
                     if (nextSlot.isPresent()) {
                         var prepared = new ResourceSiteHarvestBatchPrepared(job.siteId(), job.id(), scene.id(),
                                 job.deliveredYieldQuantity(), nextSlot.orElseThrow());

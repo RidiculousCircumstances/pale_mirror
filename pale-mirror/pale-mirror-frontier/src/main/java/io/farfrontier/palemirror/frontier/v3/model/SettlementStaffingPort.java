@@ -8,7 +8,7 @@ import java.util.Objects;
 public interface SettlementStaffingPort {
     ResidentWorkKind kind();
     HumanCapability capability();
-    Demand assess(FrontierWorldState state, SubjectId settlement, SettlementLabourRules.Entry rules);
+    Demand assess(FrontierWorldState state, SubjectId settlement, SettlementLabourRules.Entry rules, long atTick);
 
     record Demand(ResidentWorkKind kind, HumanCapability capability, int targetWorkers,
                   int minimumLocalStaff, int priority, Set<SubjectId> retainedWorkers) {

@@ -8,7 +8,7 @@ import java.util.*;
 final class GoodsCommitmentReview {
     private static final int MAX_RELEASES_PER_REVIEW = 64;
     record Result(FrontierWorldState state, List<ProposedEvent> events) { }
-    static Result plan(FrontierWorldState state, GoodsParticipant participant) {
+    static Result plan(FrontierWorldState state, GoodsParticipant participant, long now) {
         var events = new ArrayList<ProposedEvent>();
         var contracts = state.companies().goodsTrade().contracts().values().stream()
                 .filter(value -> !value.terminal() && value.seller().equals(participant.party()))
@@ -17,14 +17,14 @@ final class GoodsCommitmentReview {
             for (var claim : original.outstandingClaims().keySet().stream().sorted().toList()) {
                 if (events.size() == MAX_RELEASES_PER_REVIEW) return new Result(state, List.copyOf(events));
                 var current = state.companies().goodsTrade().contracts().get(original.id());
-                var reason = GoodsTradeSourceAdmission.withdrawalReason(state, current);
+                var reason = GoodsTradeSourceAdmission.withdrawalReason(state, current, now);
                 if (reason.isEmpty()) break;
                 if (!GoodsTradeStateSupport.canCancelBeforeLoading(state, current, claim)) continue;
                 var receipt = new SubjectId("receipt:goods-withdraw/" + WorkOpportunityIdentity.digest(
                         current.id().value() + "|" + current.revision() + "|" + claim.value()));
                 var disposition = new GoodsTradeDisposition(receipt, current.id(), current.revision(), claim,
                         current.outstandingClaims().get(claim), reason.orElseThrow());
-                state = GoodsTradeStateSupport.cancelBeforeLoading(state, participant.party().id(), disposition);
+                state = GoodsTradeStateSupport.cancelBeforeLoading(state, participant.party().id(), disposition, now);
                 events.add(new ProposedEvent(participant.party().id(), new GoodsTradeCancelled(disposition)));
             }
         }

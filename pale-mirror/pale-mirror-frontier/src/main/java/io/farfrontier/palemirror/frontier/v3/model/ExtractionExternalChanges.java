@@ -7,7 +7,7 @@ import java.util.*;
 /** Source policy: retain the actual block, retire this production opportunity, choose remaining work. */
 public final class ExtractionExternalChanges {
     private ExtractionExternalChanges() { }
-    public static FrontierWorldState apply(FrontierWorldState state, SubjectId subject, ExtractionSourceChanged event, long revision) {
+    public static FrontierWorldState apply(FrontierWorldState state, SubjectId subject, ExtractionSourceChanged event, long revision, long atTick) {
         var target = event.target(); var sites = state.extractionSites();
         var deposit = sites.deposits().get(target.key().owner());
         if (!subject.equals(target.key().owner()) || deposit == null
@@ -41,11 +41,11 @@ public final class ExtractionExternalChanges {
             }
             state = ExtractionWorkTargets.withdrawTargetRoute(state, job);
             var reserved = new HashSet<>(sites.reservedCells(job.siteId())); reserved.remove(target.key().cell());
-            var needed = ExtractionStockDemand.requiredCells(state, changed, Optional.of(job.id()));
+            var needed = ExtractionStockDemand.requiredCells(state, changed, Optional.of(job.id()), atTick);
             var nextCell = ExtractionWorkTargets.spatialSelection(state, changed, job.execution().actorId(),
                     changed.available(reserved).stream().filter(value -> needed.contains(value.id()))
                         .filter(value -> ExtractionWorkPolicy.matchingOutput(value, job)).toList(),
-                    AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION, Optional.of(job.id()));
+                    AreaWorkSelection.SpatialPolicy.LOCAL_CONTINUATION, Optional.of(job.id()), atTick);
             if (job.phase() == ExtractionWork.Phase.TAKE_TOOL && nextCell.isEmpty()) {
                 jobs.remove(job.id()); executions = ActorExecutionComposition.LIFECYCLE
                         .retire(executions, job.execution().actorId(), job.execution().activityKind(), job.id());

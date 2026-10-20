@@ -11,5 +11,8 @@ public interface ReserveSupplyPort {
         public Facts { needs = Map.copyOf(needs); flows = List.copyOf(flows); timing = Map.copyOf(timing); }
     }
     Key key();
+    /** Last retained owner facts; suitable for observation, not elapsed-time forecasting. */
     Facts read(FrontierWorldState state, SubjectId home);
+    /** Time-independent owners reuse their facts; temporal owners project explicitly. */
+    default Facts readAt(FrontierWorldState state, SubjectId home, long atTick) { return read(state, home); }
 }

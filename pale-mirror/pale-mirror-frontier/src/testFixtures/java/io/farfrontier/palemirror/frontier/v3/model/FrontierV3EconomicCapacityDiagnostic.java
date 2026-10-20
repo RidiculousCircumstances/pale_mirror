@@ -29,12 +29,12 @@ public final class FrontierV3EconomicCapacityDiagnostic {
         var participants = state.companies().goodsTrade().participants().participants();
         for (var participant : participants.values().stream().filter(p -> p.policy() == GoodsPolicyKind.PUBLIC_SETTLEMENT)
                 .sorted(Comparator.comparing(p -> p.party().id())).toList()) {
-            var home = participant.party().id(); var view = GoodsParticipantView.read(state, participant);
+            var home = participant.party().id(); var view = GoodsParticipantAssessment.view(state, participant, tick);
             var cohort = state.humanPopulation().residents().values().stream().filter(r -> r.settlementId().equals(home)
                     && state.actorLocations().get(r.id()).condition().status() == ActorLifeStatus.ALIVE).toList();
             var nutrition = cohort.stream().map(r -> state.humanPopulation().nutrition(r.id()).accrueThrough(tick,
                     state.bootstrap().ruleset().residentLife(), r.characteristics().effectiveMetabolismPermille(tick))).toList();
-            var basis = SettlementReservePlanning.basis(state, home);
+            var basis = SettlementReservePlanning.basis(state, home, tick);
             var stocks = new TreeMap<String, SupplyPlanner.Stock>();
             view.stocks().forEach((item, stock) -> stocks.put(item, new SupplyPlanner.Stock(stock.unclaimedInStorage(),
                     stock.expectedIncoming(), 0, 0, stock.protectedMinimum(), 0, 1,
@@ -59,8 +59,12 @@ public final class FrontierV3EconomicCapacityDiagnostic {
             var plan = view.supplyPlan().flatMap(SupplyPlanner.Plan::economy).orElseThrow();
             var incoming = new TreeMap<String, Integer>();
             view.stocks().forEach((item, stock) -> incoming.put(item, stock.expectedIncoming()));
+            var financial = FinancialAccountReport.read(state.inventory().economics(), home);
             nodes.add("{\"id\":" + string(home.value()) + ",\"cash\":" + view.availableMoney().raw()
-                    + ",\"balance\":" + state.inventory().economics().require(home).balance().raw()
+                    + ",\"balance\":" + financial.balance().raw()
+                    + ",\"openingBalance\":" + financial.turnover().openingBalance().raw()
+                    + ",\"received\":" + financial.turnover().received().raw()
+                    + ",\"paid\":" + financial.turnover().paid().raw()
                     + ",\"residents\":" + cohort.size()
                     + ",\"hungry\":" + nutrition.stream().filter(n -> n.status() == ResidentNutritionStatus.HUNGRY).count()
                     + ",\"starving\":" + nutrition.stream().filter(n -> n.status() == ResidentNutritionStatus.STARVING).count()

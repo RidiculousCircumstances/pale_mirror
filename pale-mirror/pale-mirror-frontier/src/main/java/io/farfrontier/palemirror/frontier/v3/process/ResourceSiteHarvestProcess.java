@@ -42,6 +42,7 @@ public final class ResourceSiteHarvestProcess {
     public static ScheduledAction start(StrategicTask task, long dueAt) { return ResourceSiteHarvestPlanning.start(task, dueAt); }
 
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) { return ResourceSiteHarvestPlanning.plan(state, action); }
+    public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, long atTick) { return ResourceSiteHarvestPlanning.plan(state, action, atTick); }
 
     public static ScheduledAction coldProgress(ResourceSiteHarvestJob job, long dueAt) { return ResourceSiteHarvestPlanning.coldProgress(job, dueAt); }
 
@@ -318,7 +319,7 @@ public final class ResourceSiteHarvestProcess {
     }
 
     private static FrontierWorldState finishAfterColdBatchReturn(FrontierWorldState state, ResourceSiteHarvestJob job,
-                                                                  ScheduledAction action) {
+                                                                  ScheduledAction action, long atTick) {
         if (!job.returningForBatch() || job.progress().complete()
                 || FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job)
                 || ReferenceContainerCustody.hasLiveCustody(state, job.outputSlot().containerId()))
@@ -331,7 +332,7 @@ public final class ResourceSiteHarvestProcess {
         ActorLocation actor = state.actorLocations().get(job.workerId());
         if (actor == null || !ResourceSiteHarvestGoal.actorAtDepot(state, job))
             throw new IllegalArgumentException("COLD field batch lacks its retained depot station");
-        java.util.Optional<InventoryCustody.ContainerSlot> nextSlot = ResourceSiteHarvestCargo.nextBatchSlot(state, job);
+        java.util.Optional<InventoryCustody.ContainerSlot> nextSlot = ResourceSiteHarvestCargo.nextBatchSlot(state, job, atTick);
         FungibleResourceLedger resources = state.inventory().fungibleResources()
                 .transferActorOrderCold(ResourceSiteHarvestCargo.deliveryOrder(state, job));
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
@@ -421,7 +422,7 @@ public final class ResourceSiteHarvestProcess {
 
     /** Pins next-batch capacity before either the farmer hand or chest may be written. */
     public static FrontierWorldState reduceBatchPrepared(FrontierWorldState state, SubjectId subject,
-                                                         ResourceSiteHarvestBatchPrepared prepared) {
+                                                         ResourceSiteHarvestBatchPrepared prepared, long atTick) {
         if (!subject.equals(prepared.siteId())) throw new IllegalArgumentException("field batch reservation has a foreign site owner");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(subject);
         ResourceSiteHarvestJob job = lifecycle.harvestJob(prepared.jobId()).orElseThrow(
@@ -435,7 +436,7 @@ public final class ResourceSiteHarvestProcess {
                 || intent == null || intent.status() != PhysicalIntentStatus.RUNNING)
             throw new IllegalArgumentException("field batch reservation lacks its exact full HOT hand");
         FrontierResourceSiteHarvestSceneSupport.requireHotLease(state, job, prepared.leaseId());
-        var expectedSlot = ResourceSiteHarvestCargo.nextBatchSlot(state, job).orElseThrow(
+        var expectedSlot = ResourceSiteHarvestCargo.nextBatchSlot(state, job, atTick).orElseThrow(
                 () -> new IllegalArgumentException("field batch has no demanded successor with vacant depot capacity"));
         if (!prepared.nextOutputSlot().equals(expectedSlot))
             throw new IllegalArgumentException("field batch reservation does not name the deterministic next vacant slot");
@@ -453,7 +454,7 @@ public final class ResourceSiteHarvestProcess {
     }
 
     public static FrontierWorldState reduceReturned(FrontierWorldState state, SubjectId subject,
-                                                    ResourceSiteHarvestReturned returned) {
+                                                    ResourceSiteHarvestReturned returned, long atTick) {
         ResourceSiteHarvestJob job = activeJobAtSite(state, subject, returned.jobId());
         if (job == null || !job.id().equals(returned.jobId()) || !job.workerId().equals(returned.workerId()))
             throw new IllegalArgumentException("resource-site COLD terminal has no exact returned job");
@@ -464,7 +465,7 @@ public final class ResourceSiteHarvestProcess {
             throw new IllegalArgumentException("resource-site COLD delivery lacks its exact service turn");
         ScheduledAction action = new ScheduledAction(returned.coldScheduleId(), new SimInstant(returned.coldDueAt()),
                 0, subject, COLD_PROGRESS_KIND, 1);
-        return job.returningForBatch() ? finishAfterColdBatchReturn(state, job, action)
+        return job.returningForBatch() ? finishAfterColdBatchReturn(state, job, action, atTick)
                 : finishAfterColdReturn(state, job, action);
     }
 

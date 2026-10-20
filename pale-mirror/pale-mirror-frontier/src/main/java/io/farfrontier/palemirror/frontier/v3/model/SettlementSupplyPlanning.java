@@ -6,37 +6,41 @@ import java.util.*;
 
 /** Adapts canonical owner facts to pure advice; its result grants no resource or worker authority. */
 public final class SettlementSupplyPlanning {
-    private static final SupplyPlanner PLANNER = new SupplyPlanner();
     private SettlementSupplyPlanning() { }
-    public static SupplyPlanner.Plan read(FrontierWorldState state, SubjectId home, int residents,
-                                         Map<String, GoodsParticipantView.Stock> observed) {
-        return read(state, home, residents, observed, (stocks, window) -> Optional.empty(), false);
+    static SettlementSupplyFacts collect(FrontierWorldState state, GoodsParticipantView observed, long atTick) {
+        return collect(state, observed.participant().party().id(), observed.residents(), observed.stocks(),
+                atTick, (stocks, window) -> Optional.empty());
     }
     /** Uses the same economic solver; hypothetical capacity is never inserted into the world state. */
     static SupplyPlanner.Plan assessCultivation(FrontierWorldState state, SubjectId home, int residents,
-            Map<String, GoodsParticipantView.Stock> observed, List<FieldSupplyCapacity.Cell> cells) {
-        return assessCultivation(state, home, residents, observed, cells, false);
+            Map<String, GoodsParticipantView.Stock> observed, List<FieldSupplyCapacity.Cell> cells, long atTick) {
+        return assessCultivation(state, home, residents, observed, cells, false, atTick);
     }
     static SupplyPlanner.Plan assessCultivation(FrontierWorldState state, SubjectId home, int residents,
-            Map<String, GoodsParticipantView.Stock> observed, List<FieldSupplyCapacity.Cell> cells, boolean requireSustainedExport) {
-        return read(state, home, residents, observed, (stocks, window) -> Optional.of(
+            Map<String, GoodsParticipantView.Stock> observed, List<FieldSupplyCapacity.Cell> cells, boolean requireSustainedExport, long atTick) {
+        var facts = collect(state, home, residents, observed, atTick, (stocks, window) -> Optional.of(
                 new SupplyCapacityComposition.Option(SupplyCapacityPort.Key.FIELD,
-                        FieldSupplyCapacity.assess(state, home, stocks, window, cells))), requireSustainedExport);
+                        FieldSupplyCapacity.assess(state, home, stocks, window, cells))));
+        var planner = new io.farfrontier.palemirror.frontier.v3.model.economy.EconomicPlanner();
+        return planner.withExports(planner.domestic(SettlementEconomicPlanning.facts(state, facts),
+                state.bootstrap().ruleset().goodsTrade().supplyPlanning().economics().orElseThrow()),
+                SettlementEconomicPlanning.exports(state, facts, requireSustainedExport));
     }
-    private static SupplyPlanner.Plan read(FrontierWorldState state, SubjectId home, int residents,
-            Map<String, GoodsParticipantView.Stock> observed,
+    private static SettlementSupplyFacts collect(FrontierWorldState state, SubjectId home, int residents,
+            Map<String, GoodsParticipantView.Stock> observed, long atTick,
             java.util.function.BiFunction<Map<String, SupplyPlanner.Stock>, SupplyPlanningWindow,
-                    Optional<SupplyCapacityComposition.Option>> option, boolean requireSustainedExport) {
+                    Optional<SupplyCapacityComposition.Option>> option) {
         var rules = state.bootstrap().ruleset(); var trade = rules.goodsTrade(); var life = rules.residentLife();
         if (!trade.supplyPlanning().enabled()) throw new IllegalArgumentException("supply planning was not selected by ruleset");
         var facts = new TreeMap<String, SupplyPlanner.Stock>();
         var participant = state.companies().goodsTrade().participants().participants().get(home);
         var deliveries = SettlementDeliveryForecast.read(state, participant);
-        var reserves = SettlementReservePlanning.enabled(state) ? SettlementReservePlanning.read(state, home)
+        var basis = SettlementReservePlanning.basis(state, home, atTick);
+        var reserves = SettlementReservePlanning.enabled(state) ? SettlementReservePlanning.targets(state, basis)
                 : Map.<String, io.farfrontier.palemirror.frontier.v3.model.supply.SupplyReservePlanner.Target>of();
         long metabolism = state.humanPopulation().residents().values().stream()
                 .filter(r -> r.settlementId().equals(home) && state.actorLocations().get(r.id()).condition().status() == ActorLifeStatus.ALIVE)
-                .mapToLong(r -> r.characteristics().effectiveMetabolismPermille(state.humanPopulation().nutrition(r.id()).lastEvaluatedTick())).sum();
+                .mapToLong(r -> r.characteristics().effectiveMetabolismPermille(atTick)).sum();
         for (var commodity : trade.policies().get(GoodsPolicyKind.PUBLIC_SETTLEMENT)) {
             var stock = Objects.requireNonNull(observed.get(commodity.itemKind()), "missing canonical supply stock");
             long promised = StockSupplyComposition.pending(state, StockSupplyPort.Key.BAKERY).stream()
@@ -56,10 +60,7 @@ public final class SettlementSupplyPlanning {
         var window = SupplyPlanningWindow.forSettlement(state, home, reserves.values());
         var capacities = SupplyCapacityComposition.read(state, home, facts, window, option.apply(facts, window));
         var commitments = SupplyCapacityComposition.dependencies(state, home, facts);
-        var market = SettlementSourcingMarket.read(state, participant, capacities);
-        if (trade.supplyPlanning().economics().isPresent())
-            return SettlementEconomicPlanning.read(state, home, facts, reserves, capacities, commitments, market, requireSustainedExport);
-        var planned = PLANNER.plan(facts, capacities, commitments, market);
-        return new SupplyPlanner.Plan(planned.demands(), reserves, planned.preferredPurchaseSpending());
+        var market = SettlementSourcingMarket.read(state, participant, capacities, atTick);
+        return new SettlementSupplyFacts(home, atTick, basis, facts, reserves, capacities, commitments, market);
     }
 }

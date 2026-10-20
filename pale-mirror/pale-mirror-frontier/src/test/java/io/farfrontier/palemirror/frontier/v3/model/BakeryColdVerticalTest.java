@@ -34,7 +34,7 @@ class BakeryColdVerticalTest {
                     io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING, List.of(), 0, 0, "pending bakery storage access");
         })) {
             assertTrue(BakeryBatchSelection.available(state, task.ownerId()).isPresent());
-            assertTrue(BakeryBatchSelection.admissibleStock(state, ProductionRights.publicService(task.ownerId())).isPresent());
+            assertTrue(BakeryBatchSelection.admissibleStock(state, ProductionRights.publicService(task.ownerId()), 0L).isPresent());
             assertEquals(0, calls.get(), "stock policy cannot invoke route planning");
             var pending = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.observe(
                     () -> ProductionProcess.planStart(state, action));
@@ -530,7 +530,7 @@ class BakeryColdVerticalTest {
         var codec = new FrontierWorldStateCodec();
         var restored = codec.decode(codec.encode(state));
         assertEquals(2, restored.productionJobs().size());
-        String board = FrontierReadabilityPlan.compile(restored).boards().get(originalJob.facilityId()).text();
+        String board = FrontierReadabilityPlan.compile(restored, 0L).boards().get(originalJob.facilityId()).text();
         assertTrue(board.contains("DELIVERY · 1"), board);
         assertTrue(board.contains("PICKUP · 1"), board);
         assertFalse(restored.productionJobs().get(originalJob.id()).reservesFacility());

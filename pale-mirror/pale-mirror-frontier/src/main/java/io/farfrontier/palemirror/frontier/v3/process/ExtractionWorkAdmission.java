@@ -16,16 +16,16 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
     @Override public HumanCapability capability() { return HumanCapability.EXTRACTION; }
     record Opportunity(ExtractionToolSelection.Selection tool, ExtractionLayout.Cell cell, ShipmentEndpoint destination,
             Optional<PedestrianRouteReceipt> sourceRoute, Optional<PedestrianRouteReceipt> storageRoute) { }
-    static Optional<Opportunity> opportunity(FrontierWorldState state, ResidentProfile resident, SubjectId siteId) {
+    static Optional<Opportunity> opportunity(FrontierWorldState state, ResidentProfile resident, SubjectId siteId, long tick) {
         var deposit = Objects.requireNonNull(state.extractionSites().deposits().get(siteId), "declared mining site");
         if (!resident.settlementId().equals(deposit.site().settlementId())
-                || !ExtractionWorkPlanning.demanded(state, resident.settlementId())
+                || !ExtractionWorkPlanning.demanded(state, resident.settlementId(), tick)
                 || state.extractionSites().work().size() >= ExtractionSiteState.MAX_WORK) return Optional.empty();
-        var required = ExtractionStockDemand.requiredCells(state, deposit, Optional.empty());
+        var required = ExtractionStockDemand.requiredCells(state, deposit, Optional.empty(), tick);
         var cells = new ArrayList<>(deposit.available(state.extractionSites().reservedCells(siteId)).stream()
                 .filter(cell -> required.contains(cell.id()))
                 .filter(cell -> cell.definition().coldOutput().size() == 1).toList());
-        var priorities = ExtractionPriorities.read(state, deposit, Optional.empty());
+        var priorities = ExtractionPriorities.read(state, deposit, Optional.empty(), tick);
         cells.removeIf(cell -> priorities.require(cell.id()).missing() == 0);
         if (cells.isEmpty()) return Optional.empty();
         var selectedTool = ExtractionToolSelection.select(state, resident, cells.stream()
@@ -63,7 +63,7 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
         return Optional.empty();
     }
     @Override public Optional<ResidentWorkOffer<ExtractionWorkStarted>> discover(FrontierWorldState state, ResidentProfile resident, long tick) {
-        var candidate = opportunity(state, resident, siteId);
+        var candidate = opportunity(state, resident, siteId, tick);
         if (candidate.isEmpty()) return Optional.empty();
         return Optional.of(offer(state, resident, siteId, candidate.orElseThrow()));
     }
@@ -90,7 +90,7 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
         var resident = state.humanPopulation().resident(job.execution().actorId());
         if (resident == null || event.expectedOrdinal() != state.extractionSites().nextWorkOrdinal()
                 || !ResidentWorkComposition.SELECTION.admissible(state, resident, ResidentWorkKind.EXTRACTION, HumanCapability.EXTRACTION, tick)
-                || !ExtractionWorkPlanning.demanded(state, resident.settlementId())
+                || !ExtractionWorkPlanning.demanded(state, resident.settlementId(), tick)
                 || state.extractionSites().work().size() >= ExtractionSiteState.MAX_WORK
                 || job.phase() != ExtractionWork.Phase.TAKE_TOOL || job.revision() != 1 || job.batch() != 0
                 || job.pending().isPresent() || job.labour().isPresent()
@@ -105,9 +105,9 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
                 || !state.inventory().containers().get(job.toolReturnSlot().containerId()).storage().orElseThrow().endpoint().equals(job.toolSource()))
             throw new IllegalArgumentException("mining start has a changed tool/source or foreign site");
         var target = job.target().orElseThrow();
-        if (!ExtractionStockDemand.requiredCells(state, deposit, Optional.empty()).contains(target.key().cell()))
+        if (!ExtractionStockDemand.requiredCells(state, deposit, Optional.empty(), tick).contains(target.key().cell()))
             throw new IllegalArgumentException("mining admission selected an unrequested source/prerequisite");
-        if (ExtractionPriorities.read(state, deposit, Optional.empty()).require(target.key().cell()).missing() == 0)
+        if (ExtractionPriorities.read(state, deposit, Optional.empty(), tick).require(target.key().cell()).missing() == 0)
             throw new IllegalArgumentException("mining admission duplicates already assigned settlement demand");
         var cell = deposit.available(state.extractionSites().reservedCells(job.siteId())).stream()
                 .filter(value -> ExtractionWorkEffects.target(deposit, value).equals(target)).findFirst().orElseThrow(

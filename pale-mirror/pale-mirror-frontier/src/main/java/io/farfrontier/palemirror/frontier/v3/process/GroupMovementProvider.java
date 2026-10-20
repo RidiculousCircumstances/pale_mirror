@@ -58,7 +58,7 @@ public final class GroupMovementProvider implements ActorMovementProvider {
     @Override public List<SurfaceAnchor> coldSegment(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route,
                                                    long tick, ActorPositionView positions) {
         var group = group(state, movement);
-        if (!UnitGroupMissionPorts.require(group).movementPermission(state, group).allowed()) return List.of(route.getFirst());
+        if (!UnitGroupMissionPorts.require(group).movementPermission(state, group, tick).allowed()) return List.of(route.getFirst());
         return io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.segment(state, group,
                 movement.order().actorId(), coldSegment(state, movement, route), positions);
     }
@@ -68,7 +68,7 @@ public final class GroupMovementProvider implements ActorMovementProvider {
     @Override public void requireColdRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route,
                                           long tick, ActorPositionView positions) {
         var group = group(state, movement); UnitGroupMissionPorts.require(group).knowledge(state, group).forActor(state, movement.order().actorId()).requireRoute(route);
-        if (!UnitGroupMissionPorts.require(group).movementPermission(state, group).allowed()
+        if (!UnitGroupMissionPorts.require(group).movementPermission(state, group, tick).allowed()
                 || route.size() > TimedKnownRoute.MAX_SURFACES
                 || !io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.permits(state, group,
                     movement.order().actorId(), route.getLast(), positions))
@@ -84,14 +84,14 @@ public final class GroupMovementProvider implements ActorMovementProvider {
     @Override public MovementPermission movementPermission(FrontierWorldState state, ActorMovement movement, SurfaceAnchor actual, long tick,
                                        ActorPositionView positions) {
         var group = group(state, movement);
-        var mission = UnitGroupMissionPorts.require(group).movementPermission(state, group);
+        var mission = UnitGroupMissionPorts.require(group).movementPermission(state, group, tick);
         return mission.allowed() ? io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.assess(
                 state, group, movement.order().actorId(), actual, positions) : mission;
     }
     @Override public MovementPermission movementPermission(FrontierWorldState state, ActorMovement movement, SurfaceAnchor actual, long tick,
                                        ActorPositionView positions, MovementPermission previous) {
         var group = group(state, movement);
-        var mission = UnitGroupMissionPorts.require(group).movementPermission(state, group);
+        var mission = UnitGroupMissionPorts.require(group).movementPermission(state, group, tick);
         return mission.allowed() ? io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.assessCurrent(
                 state, group, movement.order().actorId(), positions, previous) : mission;
     }

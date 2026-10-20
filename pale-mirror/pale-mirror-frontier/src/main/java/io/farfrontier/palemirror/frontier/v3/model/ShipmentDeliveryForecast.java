@@ -22,7 +22,13 @@ public final class ShipmentDeliveryForecast {
         if (mission.stage() != TransportMission.Stage.OUTBOUND) return DeliveryEstimate.unknown(NOT_DISPATCHED);
         var group = state.unitGroups().groups().get(mission.groupId());
         var port = UnitGroupMissionPorts.require(group);
-        if (!port.movementPermission(state, group).allowed()) return DeliveryEstimate.unknown(GROUP_HELD);
+        // Forecast facts must not invoke live movement admission: buying food
+        // can itself require this economic forecast. An unresolved supply need
+        // has no reliable ETA, whether the mission will refill here or continue.
+        if (port.requestsJourneyStop(state, group) || mission.replenishment().isPresent()
+                || io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority
+                    .requiresPersonalStock(state, mission))
+            return DeliveryEstimate.unknown(GROUP_HELD);
         if (group.phase() != UnitGroup.Phase.TRAVELLING || group.goalOrdinal() != mission.deliveryOrdinal())
             return DeliveryEstimate.unknown(MOVEMENT_PENDING);
         if (mission.supplies().isEmpty()) return DeliveryEstimate.unknown(ROUTE_UNKNOWN);

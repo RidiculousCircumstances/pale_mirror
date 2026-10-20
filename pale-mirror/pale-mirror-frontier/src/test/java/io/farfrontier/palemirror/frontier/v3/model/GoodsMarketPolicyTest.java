@@ -30,7 +30,7 @@ class GoodsMarketPolicyTest {
                 125L, FrontierRulesets.dynamicFarmingGraybox()));
         var rules = state.bootstrap().ruleset().goodsTrade();
         var participant = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
-        var original = GoodsParticipantView.read(state, participant);
+        var original = GoodsParticipantAssessment.view(state, participant, 2400L);
         var zeros = new TreeMap<String, Long>(); var prices = new TreeMap<String, Long>();
         var demands = new TreeMap<String, io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Demand>();
         var stocks = new TreeMap<String, GoodsParticipantView.Stock>();
@@ -77,7 +77,7 @@ class GoodsMarketPolicyTest {
         ledger = ledger.transfer(buyer.party().id(), seller.party().id(),
                 ledger.availableToReserve(buyer.party().id()).minus(FixedScalar.whole(3)));
         state = state.withInventory(state.inventory().withEconomics(ledger));
-        assertEquals(FixedScalar.ZERO, GoodsParticipantFunding.purchase(GoodsParticipantView.read(state, buyer),
+        assertEquals(FixedScalar.ZERO, GoodsParticipantFunding.purchase(GoodsParticipantAssessment.view(state, buyer, 2400L),
                 state.bootstrap().ruleset().goodsTrade(), "minecraft:coal"));
         assertTrue(GoodsMarketDemand.read(state, seller, "minecraft:coal", 8, 2400).buyers().isEmpty(),
                 "the last three coins needed for food are not an independently spendable coal purse");
@@ -91,7 +91,7 @@ class GoodsMarketPolicyTest {
         // settlement must buy something under every economic policy.
         var state = BakeryPartialBatchTest.fixture(63, FrontierRulesets.marketQuarryGraybox());
         var participant = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
-        var view = GoodsParticipantView.read(state, participant);
+        var view = GoodsParticipantAssessment.view(state, participant, 2400L);
         var small = new GoodsParticipantView(participant, view.residents(), new FixedScalar(1), view.stocks(), view.purchaseLimits(), view.supplyPlan());
         var intents = GoodsParticipantPolicies.require(participant).decide(small, state.bootstrap().ruleset().goodsTrade());
         var buy = intents.stream().filter(i -> i.side() == GoodsTradeOrder.Side.BUY).findFirst().orElseThrow();

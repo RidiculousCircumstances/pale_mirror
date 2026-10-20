@@ -18,9 +18,9 @@ public final class FrontierReadabilityPlan {
 
     private FrontierReadabilityPlan(Map<SubjectId, FrontierObjectBoard> boards) { this.boards = Map.copyOf(boards); }
 
-    public static FrontierReadabilityPlan compile(FrontierWorldState state) {
+    public static FrontierReadabilityPlan compile(FrontierWorldState state, long atTick) {
         Objects.requireNonNull(state, "state");
-        FrontierReadabilityPlan baseline = compileStableBaseline(state);
+        FrontierReadabilityPlan baseline = compileStableBaseline(state, atTick);
         FrontierReadabilityPlan dynamicHive = compileDynamicHiveOverlay(state, MAX_BOARDS - baseline.boards().size());
         Map<SubjectId, FrontierObjectBoard> values = new LinkedHashMap<>(baseline.boards());
         dynamicHive.boards().values().forEach(board -> add(values, board, MAX_BOARDS));
@@ -32,8 +32,8 @@ public final class FrontierReadabilityPlan {
      * Added organs are intentionally absent: their bounded overlay has its own exact compiler
      * so a growth completion cannot derive all world object geometry on one server turn.
      */
-    public static FrontierReadabilityPlan compileStableBaseline(FrontierWorldState state) {
-        return compileStableBaseline(state, StableObjectGeometry.compile(state));
+    public static FrontierReadabilityPlan compileStableBaseline(FrontierWorldState state, long atTick) {
+        return compileStableBaseline(state, StableObjectGeometry.compile(state), atTick);
     }
 
     /** Geometry is independent of stock, job, nutrition and actor-motion revisions. */
@@ -55,16 +55,16 @@ public final class FrontierReadabilityPlan {
         }
     }
 
-    public static FrontierReadabilityPlan compileStableBaseline(FrontierWorldState state, StableObjectGeometry geometry) {
+    public static FrontierReadabilityPlan compileStableBaseline(FrontierWorldState state, StableObjectGeometry geometry, long atTick) {
         Objects.requireNonNull(state, "state");
         if (!geometry.matches(state)) throw new IllegalArgumentException("stale board geometry");
         Map<SubjectId, FrontierObjectBoard> values = new LinkedHashMap<>();
         Map<SubjectId, InfectionOverlayStage> contamination = contamination(state, geometry.cells());
         state.bootstrap().settlements().forEach(settlement -> settlement.structures().forEach(structure -> {
-            add(values, structureBoard(state, settlement, structure, contamination.get(structure.id())));
+            add(values, structureBoard(state, settlement, structure, contamination.get(structure.id()), atTick));
         }));
         state.bootstrap().hive().organs().forEach(organ -> addOrgan(values, state, organ, contamination.get(organ.id())));
-        state.resourceSiteDescriptors().values().forEach(site -> addResourceSite(values, state, site));
+        state.resourceSiteDescriptors().values().forEach(site -> addResourceSite(values, state, site, atTick));
         addRouteNetwork(values, state);
         return new FrontierReadabilityPlan(values);
     }
@@ -72,25 +72,25 @@ public final class FrontierReadabilityPlan {
     /** Read-only formatting index. Each selected board reads current facts, not cached job text. */
     public static final class StableBoardIndex {
         private final StableObjectGeometry geometry;
-        private final Map<SubjectId, java.util.function.Function<FrontierWorldState, FrontierObjectBoard>> renderers;
+        private final Map<SubjectId, java.util.function.BiFunction<FrontierWorldState, Long, FrontierObjectBoard>> renderers;
 
         public StableBoardIndex(FrontierWorldState state, StableObjectGeometry geometry) {
             if (!geometry.matches(state)) throw new IllegalArgumentException("stale board index geometry");
             this.geometry = geometry;
-            var renderers = new LinkedHashMap<SubjectId, java.util.function.Function<FrontierWorldState, FrontierObjectBoard>>();
+            var renderers = new LinkedHashMap<SubjectId, java.util.function.BiFunction<FrontierWorldState, Long, FrontierObjectBoard>>();
             state.bootstrap().settlements().forEach(settlement -> settlement.structures().forEach(structure ->
-                    renderers.put(structure.id(), current -> structureBoard(current, settlement, structure, stage(current, structure.id())))));
-            state.bootstrap().hive().organs().forEach(organ -> renderers.put(organ.id(), current -> {
+                    renderers.put(structure.id(), (current, atTick) -> structureBoard(current, settlement, structure, stage(current, structure.id()), atTick))));
+            state.bootstrap().hive().organs().forEach(organ -> renderers.put(organ.id(), (current, atTick) -> {
                 var value = new LinkedHashMap<SubjectId, FrontierObjectBoard>();
                 addOrgan(value, current, organ, stage(current, organ.id()));
                 return value.get(organ.id());
             }));
-            state.resourceSiteDescriptors().keySet().forEach(owner -> renderers.put(owner, current -> {
+            state.resourceSiteDescriptors().keySet().forEach(owner -> renderers.put(owner, (current, atTick) -> {
                 var value = new LinkedHashMap<SubjectId, FrontierObjectBoard>();
-                addResourceSite(value, current, current.resourceSite(owner));
+                addResourceSite(value, current, current.resourceSite(owner), atTick);
                 return value.get(owner);
             }));
-            renderers.put(FrontierRouteNetwork.OWNER, current -> {
+            renderers.put(FrontierRouteNetwork.OWNER, (current, atTick) -> {
                 var value = new LinkedHashMap<SubjectId, FrontierObjectBoard>(); addRouteNetwork(value, current);
                 return value.get(FrontierRouteNetwork.OWNER);
             });
@@ -103,24 +103,24 @@ public final class FrontierReadabilityPlan {
             return cells == null ? null : contamination(state, Map.of(owner, cells)).get(owner);
         }
 
-        public FrontierObjectBoard render(FrontierWorldState state, SubjectId owner) {
+        public FrontierObjectBoard render(FrontierWorldState state, SubjectId owner, long atTick) {
             if (!geometry.matches(state)) throw new IllegalArgumentException("stale board index geometry");
             var renderer = renderers.get(owner);
             if (renderer == null) throw new IllegalArgumentException("unknown stable board owner");
-            return renderer.apply(state);
+            return renderer.apply(state, atTick);
         }
 
         public boolean contains(SubjectId owner) { return renderers.containsKey(owner); }
     }
 
     private static FrontierObjectBoard structureBoard(FrontierWorldState state, Settlement settlement,
-            SettlementStructure structure, InfectionOverlayStage stage) {
+            SettlementStructure structure, InfectionOverlayStage stage, long atTick) {
         StructureCondition condition = state.structureConditions().get(structure.id());
         boolean quarantine = structure.kind() == StructureKind.INFIRMARY && state.humanPopulation().quarantined(settlement.id());
-        boolean foodRisk = structure.kind() == StructureKind.DEPOT && foodRisk(state, settlement.id());
+        boolean foodRisk = structure.kind() == StructureKind.DEPOT && foodRisk(state, settlement.id(), atTick);
         return new FrontierObjectBoard(structure.id(), structureBoardPosition(structure, condition),
                 tone(condition, stage, quarantine, foodRisk), scope(structure.kind()), settlement.displayName() + "\n"
-                + structureName(structure.kind()) + "\n" + withContamination(facilityText(state, settlement, structure, condition), stage));
+                + structureName(structure.kind()) + "\n" + withContamination(facilityText(state, settlement, structure, condition, atTick), stage));
     }
 
     /**
@@ -282,11 +282,11 @@ public final class FrontierReadabilityPlan {
 
     private record MobilizationReadout(FrontierObjectBoard.Tone tone, String text) { }
 
-    private static void addResourceSite(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state, ResourceSite site) {
+    private static void addResourceSite(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state, ResourceSite site, long atTick) {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), site.settlementId());
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
         add(values, new FrontierObjectBoard(site.id(), fieldBoardPosition(state, site), fieldTone(lifecycle), FrontierObjectBoard.Scope.LOCAL,
-                settlement.displayName() + "\nWHEAT FIELD\n" + fieldStateText(state, site, lifecycle)));
+                settlement.displayName() + "\nWHEAT FIELD\n" + fieldStateText(state, site, lifecycle, atTick)));
     }
 
     private static void addRouteNetwork(Map<SubjectId, FrontierObjectBoard> values, FrontierWorldState state) {
@@ -396,11 +396,11 @@ public final class FrontierReadabilityPlan {
         };
     }
 
-    private static String fieldStateText(FrontierWorldState state, ResourceSite site, ResourceSiteLifecycle lifecycle) {
+    private static String fieldStateText(FrontierWorldState state, ResourceSite site, ResourceSiteLifecycle lifecycle, long atTick) {
         return switch (lifecycle.phase()) {
             case UNPREPARED -> "PREPARING SOIL · KEEP CLEAR";
             case GROWING -> CultivationPresentation.plants(state.resourceSites().cycle(site.id()));
-            case READY -> readyFieldText(state, site);
+            case READY -> readyFieldText(state, site, atTick);
             case HARVESTING -> lifecycle.harvestJobs().values().stream().sorted(java.util.Comparator.comparing(ResourceSiteHarvestJob::id))
                     .map(ResourceSiteHarvestJob::navigationBlock).flatMap(java.util.Optional::stream).findFirst()
                     .map(block -> "HARVEST PAUSED · ROUTE BLOCKED\n" + switch (block.reason()) {
@@ -439,8 +439,8 @@ public final class FrontierReadabilityPlan {
      * facility objective or a restart-unknown ambient lease is a real owned blocker and must
      * not be misrepresented as the absence of a farmer who is already known to be eligible.
      */
-    private static String readyFieldText(FrontierWorldState state, ResourceSite site) {
-        if (!ProductionStockDemand.read(state, site.settlementId(), "minecraft:wheat").requested())
+    private static String readyFieldText(FrontierWorldState state, ResourceSite site, long atTick) {
+        if (!ProductionStockDemand.read(state, site.settlementId(), "minecraft:wheat", atTick).requested())
             return "READY TO HARVEST · STOCK TARGET MET";
         long livingFarmers = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(site.settlementId()))
@@ -499,11 +499,11 @@ public final class FrontierReadabilityPlan {
         return stage == null ? stateText : stateText + "\nINFECTED\n" + stage.name();
     }
 
-    private static String facilityText(FrontierWorldState state, Settlement settlement, SettlementStructure structure, StructureCondition condition) {
+    private static String facilityText(FrontierWorldState state, Settlement settlement, SettlementStructure structure, StructureCondition condition, long atTick) {
         if (structure.kind() == StructureKind.INFIRMARY && state.humanPopulation().quarantined(settlement.id())) {
             return "QUARANTINE · " + state.humanPopulation().activeCases(settlement.id()) + " ACTIVE CASES";
         }
-        if (structure.kind() == StructureKind.DEPOT) return conditionText(condition) + "\n" + foodText(state, settlement.id());
+        if (structure.kind() == StructureKind.DEPOT) return conditionText(condition) + "\n" + foodText(state, settlement.id(), atTick);
         if (structure.kind() == StructureKind.WORKSHOP) return workshopText(state, settlement, condition);
         if (structure.kind() != StructureKind.HOUSING) return conditionText(condition);
         int residents = SettlementFacilityCapability.livingResidents(state, settlement.id());
@@ -511,9 +511,9 @@ public final class FrontierReadabilityPlan {
         return conditionText(condition) + "\n" + residents + " / " + beds + " RESIDENTS";
     }
 
-    private static String foodText(FrontierWorldState state, SubjectId settlementId) {
+    private static String foodText(FrontierWorldState state, SubjectId settlementId, long atTick) {
         int available = SettlementFoodPolicy.breadStock(state, settlementId);
-        int reserve = SettlementFoodPolicy.reserveRequirement(state, settlementId);
+        int reserve = SettlementFoodPolicy.reserveRequirement(state, settlementId, atTick);
         if (ResourceStorageSelection.containers(state, settlementId, SettlementFoodPolicy.BREAD,
                 java.util.Set.of(ResourceStorageRole.WAREHOUSE)).isEmpty())
             return "FOOD STORAGE UNAVAILABLE";
@@ -527,8 +527,8 @@ public final class FrontierReadabilityPlan {
                 : "FOOD SECURE · " + available + " / " + reserve;
     }
 
-    private static boolean foodRisk(FrontierWorldState state, SubjectId settlementId) {
-        return SettlementFoodPolicy.breadStock(state, settlementId) < SettlementFoodPolicy.reserveRequirement(state, settlementId)
+    private static boolean foodRisk(FrontierWorldState state, SubjectId settlementId, long atTick) {
+        return SettlementFoodPolicy.breadStock(state, settlementId) < SettlementFoodPolicy.reserveRequirement(state, settlementId, atTick)
                 || state.humanPopulation().residents().values().stream()
                     .filter(resident -> resident.settlementId().equals(settlementId))
                     .anyMatch(resident -> state.humanPopulation().nutrition(resident.id()).wantsFood(state.bootstrap().ruleset().residentLife()));

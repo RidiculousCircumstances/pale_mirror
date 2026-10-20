@@ -9,21 +9,21 @@ public final class ProductionStockDemand {
     private static final ImmutableInputView<Map<Resource, Long>> STOCK = new ImmutableInputView<>();
     private ProductionStockDemand() { }
 
-    public static StockTargetDemand read(FrontierWorldState state, SubjectId settlement, String itemKind) {
-        return read(state, settlement, itemKind, Optional.empty());
+    public static StockTargetDemand read(FrontierWorldState state, SubjectId settlement, String itemKind, long atTick) {
+        return read(state, settlement, itemKind, Optional.empty(), atTick);
     }
     public static StockTargetDemand read(FrontierWorldState state, SubjectId settlement, String itemKind,
-                                        Optional<SubjectId> completingSubject) {
-        var supply = readSupply(state, settlement, itemKind, completingSubject);
+                                        Optional<SubjectId> completingSubject, long atTick) {
+        var supply = readSupply(state, settlement, itemKind, completingSubject, atTick);
         // Unified planning already expands obligations and selects own work vs
         // imports. Adding a protected input target here would override that choice.
         if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().economics().isPresent()) return supply;
-        long inputs = StockSupplyComposition.inputDemand(state, settlement, itemKind);
+        long inputs = StockSupplyComposition.inputDemand(state, settlement, itemKind, atTick);
         return new StockTargetDemand(SettlementReservePlanning.enabled(state) ? Math.max(supply.target(), inputs) : Math.addExact(supply.target(), inputs),
                 supply.held(), supply.incoming(), supply.outgoing());
     }
     static StockTargetDemand readSupply(FrontierWorldState state, SubjectId settlement, String itemKind,
-                                       Optional<SubjectId> completingSubject) {
+                                       Optional<SubjectId> completingSubject, long atTick) {
         var participant = Objects.requireNonNull(state.companies().goodsTrade().participants().participants().get(settlement),
                 "production demand requires its declared public participant");
         if (participant.policy() != GoodsPolicyKind.PUBLIC_SETTLEMENT
@@ -33,7 +33,7 @@ public final class ProductionStockDemand {
                 .filter(value -> value.itemKind().equals(itemKind)).findFirst().orElseThrow(
                         () -> new IllegalArgumentException("production output has no declared stock target: " + itemKind));
         int residents = LivingResidentStockView.counts(state).getOrDefault(settlement, 0);
-        int minimum = PublicStockProtection.minimum(state, settlement, itemKind);
+        int minimum = PublicStockProtection.minimum(state, settlement, itemKind, atTick);
         long incoming = 0, outgoing = 0;
         for (var commitment : StockSupplyComposition.pending(state)) {
             if (!commitment.economicOwner().equals(settlement) || !commitment.itemKind().equals(itemKind)
@@ -42,10 +42,10 @@ public final class ProductionStockDemand {
             outgoing = Math.addExact(outgoing, commitment.outgoing());
         }
         long stock = held(state.inventory()).getOrDefault(new Resource(settlement, itemKind), 0L);
-        long target = SettlementReservePlanning.enabled(state) ? SettlementReservePlanning.read(state, settlement).get(itemKind).quantity()
+        long target = SettlementReservePlanning.enabled(state) ? SettlementReservePlanning.read(state, settlement, atTick).get(itemKind).quantity()
                 : StockTargetDemand.target(commodity, residents, minimum);
         if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().enabled()) {
-            var plan = GoodsParticipantView.read(state, participant).supplyPlan().orElseThrow();
+            var plan = GoodsParticipantAssessment.view(state, participant, atTick).supplyPlan().orElseThrow();
             var demand = plan.require(itemKind);
             if (plan.economy().isPresent()) {
                 // The planner has already netted usable stock and accepted output.
