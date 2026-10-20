@@ -369,7 +369,8 @@ public final class FrontierWorldProcessCatalog {
                     return ResourceSiteHarvestProcess.coldProgressWakeKeys(state, action);
                 }
             })),
-            Map.entry("frontier.objective.resource_harvest", (state, action) -> StrategicObjectiveProcess.planResourceHarvestOpportunity(state, action)),
+            Map.entry("frontier.objective.resource_harvest", atExecutionTime((state, action, instant) ->
+                    StrategicObjectiveProcess.planResourceHarvestOpportunity(state, action, instant.ticks()))),
             Map.entry("frontier.structural_repair.scan", (state, action) -> StructuralRepairProcess.plan(state, action)),
             Map.entry("frontier.route_construction.scan", withPlanningRecovery((state, action) -> RouteConstructionProcess.plan(state, action))),
             Map.entry("frontier.route_construction.start", (state, action) -> RouteConstructionProcess.planStart(state, action)),
@@ -395,7 +396,8 @@ public final class FrontierWorldProcessCatalog {
             }))),
             Map.entry("frontier.objective.stock_reconsider", coalescedReview(withPlanningRecovery(atExecutionTime((state, action, instant) ->
                     StrategicObjectiveProcess.planStockReconsideration(state, action, instant.ticks()))))),
-            Map.entry("frontier.objective.reconsider", withPlanningRecovery((state, action) -> StrategicObjectiveProcess.planReconsideration(state, action))),
+            Map.entry("frontier.objective.reconsider", withPlanningRecovery(atExecutionTime((state, action, instant) ->
+                    StrategicObjectiveProcess.planReconsideration(state, action, instant.ticks())))),
             Map.entry("frontier.objective.assault", (state, action) -> StrategicObjectiveProcess.planAssaultOpportunity(state, action)),
             Map.entry("frontier.settlement_assault.start", (state, action) -> HiveSettlementAssaultProcess.planStart(state, action)),
             Map.entry("frontier.settlement_assault.progress", (state, action) -> HiveSettlementAssaultProcess.planProgress(state, action)),

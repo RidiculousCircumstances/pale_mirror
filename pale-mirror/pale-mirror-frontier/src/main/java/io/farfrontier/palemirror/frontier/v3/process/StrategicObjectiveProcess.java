@@ -115,8 +115,11 @@ public final class StrategicObjectiveProcess {
     }
 
     public static List<ProposedEvent> planReconsideration(FrontierWorldState state, ScheduledAction action) {
+        return planReconsideration(state, action, action.dueAt().ticks());
+    }
+    public static List<ProposedEvent> planReconsideration(FrontierWorldState state, ScheduledAction action, long currentTick) {
         if (!action.kind().equals("frontier.objective.reconsider")) throw new IllegalArgumentException("route reconsideration has an invalid action kind");
-        return plan(state, action, false, action.id().value());
+        return plan(state, action, false, action.id().value(), currentTick);
     }
 
     /**
@@ -195,6 +198,10 @@ public final class StrategicObjectiveProcess {
     }
 
     public static List<ProposedEvent> planResourceHarvestOpportunity(FrontierWorldState state, ScheduledAction action) {
+        return planResourceHarvestOpportunity(state, action, action.dueAt().ticks());
+    }
+    public static List<ProposedEvent> planResourceHarvestOpportunity(FrontierWorldState state, ScheduledAction action, long currentTick) {
+        if (currentTick < action.dueAt().ticks()) throw new IllegalArgumentException("field opportunity precedes its deadline");
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(action.subject());
         if (!action.kind().equals("frontier.objective.resource_harvest"))
             throw new IllegalArgumentException("field opportunity has a foreign scheduled kind");
@@ -204,7 +211,7 @@ public final class StrategicObjectiveProcess {
                             && task.status() == StrategicTaskStatus.ACTIVE
                             && task.resourceSiteTarget().equals(Optional.of(lifecycle.siteId())))
                     .reduce((left, right) -> { throw new IllegalArgumentException("field has competing active tasks"); });
-            return retained.map(task -> ResourceSiteHarvestPlanning.expandActiveTask(state, task, action.dueAt().ticks()))
+            return retained.map(task -> ResourceSiteHarvestPlanning.expandActiveTask(state, task, currentTick))
                     .orElse(List.of());
         }
         if (!ResourceFieldGrowthProcess.eligible(lifecycle)
@@ -224,7 +231,7 @@ public final class StrategicObjectiveProcess {
                 state.resourceSites().cycle(site.id()).layout().cells().getFirst().workstation(),
                 java.util.Set.of(ResourceStorageRole.WAREHOUSE)).isEmpty()) {
             return List.of(new ProposedEvent(lifecycle.siteId(), new ScheduleEffect.Rescheduled(action.id(),
-                    new ScheduledAction(action.id(), new SimInstant(Math.addExact(action.dueAt().ticks(),
+                    new ScheduledAction(action.id(), new SimInstant(Math.addExact(currentTick,
                             state.bootstrap().ruleset().cadence().strategicReviewInterval())), action.priority(),
                             action.subject(), action.kind(), action.weight()))));
         }
@@ -238,7 +245,7 @@ public final class StrategicObjectiveProcess {
         // while farmers were implicitly placed close to their work, but now steals the beginning
         // of their retained home-to-field traversal.
         return List.of(new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
-                new ProposedEvent(task.id(), new ScheduleEffect.Created(ResourceSiteHarvestProcess.start(task, Math.addExact(action.dueAt().ticks(), 85L)))));
+                new ProposedEvent(task.id(), new ScheduleEffect.Created(ResourceSiteHarvestProcess.start(task, Math.addExact(currentTick, 85L)))));
     }
 
     private static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, boolean recurring) {

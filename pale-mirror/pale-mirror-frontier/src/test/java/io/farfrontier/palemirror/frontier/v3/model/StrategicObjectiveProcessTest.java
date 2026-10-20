@@ -22,6 +22,32 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StrategicObjectiveProcessTest {
+    @Test void delayedSettlementWakesUseCurrentFactsAndDoNotScheduleHarvestInThePast() {
+        var state = ResourceSiteHarvestProcessTest.ready(FrontierWorldState.initial(FrontierBootstrapper.create(
+                new WorldId("frontier:delayed-policy"), 125L, FrontierRulesets.dynamicFarmingGraybox())));
+        var home = state.bootstrap().settlements().getFirst().id();
+        long now = 27_200;
+        var resident = state.humanPopulation().residents().values().stream()
+                .filter(r -> r.settlementId().equals(home)).findFirst().orElseThrow();
+        state = state.withHumanPopulation(state.humanPopulation().accrueHunger(
+                resident.id(), now, state.bootstrap().ruleset().residentLife()));
+        var delayed = new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction(
+                new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:delayed-policy-1"),
+                new io.farfrontier.palemirror.frontier.v3.api.SimInstant(27_000),
+                0, home, "frontier.objective.reconsider", 1);
+        var instant = new io.farfrontier.palemirror.frontier.v3.api.SimInstant(now);
+        assertEquals(StrategicObjectiveProcess.planReconsideration(state, delayed, now),
+                FrontierWorldRuntimeDefinition.planScheduled(state, delayed, instant));
+        var site = new SubjectId("site:1-wheat-field");
+        var opportunity = StrategicObjectiveProcess.resourceHarvestOpportunity(
+                state, state.resourceSites().site(site), 27_000);
+        var events = FrontierWorldRuntimeDefinition.planScheduled(state, opportunity, instant);
+        var start = events.stream().map(ProposedEvent::payload)
+                .filter(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class::isInstance)
+                .map(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class::cast)
+                .findFirst().orElseThrow().action();
+        assertEquals(now + 85, start.dueAt().ticks());
+    }
     @Test
     void playerDepotStockWakeHasAParseableDecisionOrdinal() {
         FrontierWorldState state = initial("frontier:player-stock-wake", 407L);
