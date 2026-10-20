@@ -26,6 +26,7 @@ public final class ResourceSiteHarvestCargo {
         var slot = job.outputSlot();
         return job.reservesOutputCapacity() && state.inventory().itemAt(slot.containerId(), slot.slot()).isEmpty()
                 && ReferenceContainerCustody.expectedFungibleSlot(state, slot.containerId(), slot.slot()).isEmpty()
+                && state.reservedContainerSlots(slot.containerId()).contains(slot.slot())
                 && state.inventory().canReserveSlots(slot.containerId(), state.reservedContainerSlots(slot.containerId()));
     }
 

@@ -91,7 +91,7 @@ public final class FrontierResourceSiteHarvestSceneSupport {
         if (lifecycle.phase() != ResourceSitePhase.HARVESTING
                 || lifecycle.harvestJob(job.id()).filter(job::equals).isEmpty()) return Optional.empty();
         if (!job.progress().hasPendingPhysicalWork()
-                && ReferenceContainerCustody.blocksCanonicalUse(state, job.outputSlot().containerId())) return Optional.empty();
+                && !HarvestStorageReplacement.retainedAvailable(state, job)) return Optional.empty();
         ResourceSite site = state.resourceSite(job.siteId());
         ActorLocation worker = state.actorLocations().get(job.workerId());
         if (site == null || state.structureConditions().get(site.facilityId()) != StructureCondition.INTACT

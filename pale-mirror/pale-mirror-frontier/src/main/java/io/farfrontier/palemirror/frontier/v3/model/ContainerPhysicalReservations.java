@@ -6,6 +6,7 @@ import java.util.function.Function;
 /** Registered physical effect owners contribute exact held slots; storage does not inspect jobs. */
 final class ContainerPhysicalReservations {
     private static final ImmutableInputView<List<ContainerSlotClaim>> CLAIMS = new ImmutableInputView<>();
+    private static final ImmutableInputView<List<ContainerSlotClaim>> BACKED = new ImmutableInputView<>();
     private static final ImmutableInputView<List<ContainerInboundCapacity.Demand>> DEMANDS = new ImmutableInputView<>();
     private record DemandKey(SubjectId owner, SubjectId container, String kind) { }
     private record Owners(ResourceSiteState sites, Map<SubjectId, ProductionJob> production, ShipmentState shipments,
@@ -25,7 +26,25 @@ final class ContainerPhysicalReservations {
         });
     }
     static List<ContainerSlotClaim> claims(FrontierWorldState state) {
-        return claims(state.inventory(), new Owners(state.resourceSites(), state.productionJobs(), state.shipments(), state.extractionSites(), state.physicalIntents()));
+        var declared = claims(state.inventory(), new Owners(state.resourceSites(), state.productionJobs(), state.shipments(), state.extractionSites(), state.physicalIntents()));
+        return BACKED.get(List.of(state.inventory(), declared), () -> backed(state.inventory(), declared));
+    }
+    /** Prospective destinations reserve only still available capacity. External
+     * edits may displace them; in-flight physical operations are separately fenced
+     * by ContainerPhysicalAuthorityComposition, never by these planning hints. */
+    private static List<ContainerSlotClaim> backed(ExactInventory inventory, List<ContainerSlotClaim> declared) {
+        var occupied = new HashMap<SubjectId, Set<Integer>>();
+        var result = new ArrayList<ContainerSlotClaim>();
+        for (var claim : declared.stream().sorted(Comparator
+                .comparing((ContainerSlotClaim c) -> c.slot().containerId())
+                .thenComparingInt(c -> c.slot().slot())).toList()) {
+            var slots = new HashSet<>(occupied.getOrDefault(claim.slot().containerId(), Set.of()));
+            slots.add(claim.slot().slot());
+            if (!inventory.canReserveSlots(claim.slot().containerId(), slots)) continue;
+            occupied.put(claim.slot().containerId(), slots);
+            result.add(claim);
+        }
+        return List.copyOf(result);
     }
     static void validate(ExactInventory inventory, ResourceSiteState sites, Map<SubjectId, ProductionJob> jobs,
                          ShipmentState shipments, io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState extraction,

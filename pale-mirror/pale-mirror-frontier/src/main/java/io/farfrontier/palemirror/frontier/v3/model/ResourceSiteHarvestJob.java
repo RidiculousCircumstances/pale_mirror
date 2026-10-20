@@ -206,7 +206,7 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
     /** Unbegun placement changes only destination/authority version; carried stock and historical receipts remain exact. */
     public ResourceSiteHarvestJob retargetStorage(InventoryCustody.ContainerSlot slot, PhysicalIntentId replacementIntent) {
         if (progress.hasPendingPhysicalWork() || batchSuccessorSlot.isPresent()
-                || slot.containerId().equals(outputSlot.containerId()) || replacementIntent.equals(intentId))
+                || slot.equals(outputSlot) || replacementIntent.equals(intentId))
             throw new IllegalArgumentException("field storage replacement has an unresolved or unchanged boundary");
         return new ResourceSiteHarvestJob(id, taskId, siteId, workerId, actorAccountId,
                 ReferenceContainerCustody.scopeId(slot.containerId()), outputItemId, slot, replacementIntent,

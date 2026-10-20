@@ -82,6 +82,9 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
                 }
                 continue;
             }
+            // Player edits may displace a future output slot. Do not prepare an
+            // effect against it; the field scene yields for destination selection.
+            if (!ResourceSiteHarvestCargo.deliveryCapacityAvailable(state, job)) continue;
             if (hand.disposition() != FrontierV3ActorHandObservation.Disposition.WHEAT
                     || hand.stack().orElseThrow().quantity() != quantity || quantity > 64) continue;
             var account = state.inventory().fungibleResources().accounts().get(job.actorAccountId());

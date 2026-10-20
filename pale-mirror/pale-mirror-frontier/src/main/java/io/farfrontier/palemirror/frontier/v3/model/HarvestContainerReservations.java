@@ -24,17 +24,6 @@ final class HarvestContainerReservations {
         }
     }
 
-    static Set<Integer> slots(ResourceSiteState sites, SubjectId containerId) {
-        Set<Integer> reserved = new HashSet<>();
-        for (ResourceSiteHarvestJob job : sites.sites().values().stream()
-                .flatMap(site -> site.harvestJobs().values().stream()).toList()) {
-            if (job.reservesOutputCapacity() && job.outputSlot().containerId().equals(containerId)) reserved.add(job.outputSlot().slot());
-            job.batchSuccessorSlot().filter(slot -> slot.containerId().equals(containerId))
-                    .ifPresent(slot -> reserved.add(slot.slot()));
-        }
-        return Set.copyOf(reserved);
-    }
-
     static java.util.List<ContainerSlotClaim> claims(ResourceSiteState sites) {
         var result = new java.util.ArrayList<ContainerSlotClaim>();
         for (var site : sites.sites().values()) for (var job : site.harvestJobs().values()) {
@@ -53,9 +42,13 @@ final class HarvestContainerReservations {
                     && !reserved.add(job.batchSuccessorSlot().orElseThrow()))
                 throw new IllegalArgumentException("active harvest output slot lacks exclusive container capacity");
         }
-        for (SubjectId containerId : reserved.stream().map(InventoryCustody.ContainerSlot::containerId).distinct().toList()) {
-            if (!inventory.canReserveSlots(containerId, slots(sites, containerId)))
-                throw new IllegalArgumentException("active harvest output slot lacks exclusive container capacity");
+        // A future destination is not exclusive authority over a player's chest.
+        // Current backing is derived by ContainerPhysicalReservations; execution
+        // reselects/waits if external edits consume it. Owner identity stays exact.
+        for (var slot : reserved) {
+            var container = inventory.containers().get(slot.containerId());
+            if (container == null || slot.slot() >= container.slotCount())
+                throw new IllegalArgumentException("active harvest output names an undeclared container slot");
         }
     }
 }

@@ -1,7 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
-import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
 
 import io.farfrontier.palemirror.frontier.v3.model.HarvestServiceAccess;
+import io.farfrontier.palemirror.frontier.v3.model.HarvestStorageReplacement;
 
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierResourceSitePlan;
@@ -282,7 +282,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         if (projectColdCarriedHand(level, runtime, state, lease, job)) return;
         if (job.navigationBlock().isEmpty()
                 && ResourceSiteHarvestGoal.actorAtDepot(state, job)
-                && (HarvestServiceAccess.available(state, job)
+                && (HarvestServiceAccess.available(state, job) && HarvestStorageReplacement.retainedAvailable(state, job)
                     || FrontierV3ResourceSiteLedger.get(level).fieldDelivery(job.siteId()) != null
                         && FrontierV3ResourceSiteLedger.get(level).fieldDelivery(job.siteId()).jobId().equals(job.id()))) {
             // The delivery effect owns the returned hand, chest and atomic terminal event.
@@ -318,7 +318,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         var supportedExit = FrontierV3SupportedBodyCapture.observe(level, worker);
         if (supportedExit.isPresent() && !job.progress().hasPendingPhysicalWork()
                 && !state.resourceSites().harvestMutationPending(job)
-                && ReferenceContainerCustody.blocksCanonicalUse(state, job.outputSlot().containerId())) {
+                && !HarvestStorageReplacement.retainedAvailable(state, job)) {
             FrontierV3GoalNavigation.stop(worker, actuation);
             if (FrontierV3ResourceFieldLabourExecutor.pause(level, runtime, state, lease, job)) return;
             beginImmediateColdRelease(level, runtime, state, lease);

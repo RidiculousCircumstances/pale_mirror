@@ -40,7 +40,6 @@ public final class HarvestStorageReplacement {
         var replacement = replacementId(job);
         for (var endpoint : ResourceStorageSelection.receivingCandidates(state, site.settlementId(), "minecraft:wheat", quantity, origin,
                 Set.of(ResourceStorageRole.WAREHOUSE), Optional.empty())) {
-                    if (endpoint.containerId().equals(job.outputSlot().containerId())) continue;
                     var slot = state.firstFreeContainerSlot(endpoint.containerId());
                     if (slot.isEmpty()) continue;
                     var candidate = job.retargetStorage(new InventoryCustody.ContainerSlot(endpoint.containerId(), slot.getAsInt()), replacement);
@@ -65,7 +64,7 @@ public final class HarvestStorageReplacement {
         if (!subject.equals(event.siteId()) || !job.workerId().equals(event.workerId()) || job.storageRevision() != event.expectedRevision()
                 || retainedAvailable(state, job) || !safe(state, job) || lifecycle.phase() != ResourceSitePhase.HARVESTING
                 || !event.replacementIntent().equals(replacementId(job))
-                || event.destination().containerId().equals(job.outputSlot().containerId())
+                || event.destination().equals(job.outputSlot())
                 || !state.containerSlotAvailable(event.destination())
                 || ResourceStorageSelection.receivingCandidates(state, state.resourceSite(job.siteId()).settlementId(), "minecraft:wheat",
                         job.undeliveredYieldQuantity() == 0 ? 64 : job.undeliveredYieldQuantity(),
