@@ -8,7 +8,7 @@ public record ExtractionPocketProfile(int producerPeriod, int firstDepth, int de
     public ExtractionPocketProfile {
         Objects.requireNonNull(material);
         if (producerPeriod < 1 || producerPeriod > 12 || firstDepth < 0 || firstRow < 0
-                || depthCells < 1 || rowCells < 1 || firstDepth + depthCells > 32 || firstRow + rowCells > 32)
+                || depthCells < 1 || rowCells < 1 || (long) firstDepth + depthCells > 64 || (long) firstRow + rowCells > 64)
             throw new IllegalArgumentException("invalid finite deposit inclusion");
     }
     public boolean contains(int producer, int depth, int row) {
