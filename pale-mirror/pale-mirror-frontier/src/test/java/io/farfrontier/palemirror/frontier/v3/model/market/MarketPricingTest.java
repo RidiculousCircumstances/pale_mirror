@@ -6,6 +6,34 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MarketPricingTest {
+    @Test void recurringProductionValuesRetentionAndCanTradeAtBreakEvenWithoutASeedFloor() {
+        var cost = new FixedScalar(1_340_000);
+        var rival = new SellerPriceDiscovery.Offer(new SubjectId("seller:rival"), 8, new FixedScalar(400));
+        var demand = new SellerPriceDiscovery.Demand(new SubjectId("buyer:one"), 2, FixedScalar.whole(10),
+                FixedScalar.whole(2), FixedScalar.ZERO, List.of(rival));
+        assertEquals(cost, SellerPriceDiscovery.ask(new FixedScalar(398), 8, market(demand), cost),
+                "a tiny rival liquidation is not authority to discard recurring production value");
+        var atCost = new SellerPriceDiscovery.Demand(demand.buyer(), 2, FixedScalar.whole(10), cost, FixedScalar.ZERO, List.of());
+        assertEquals(cost, SellerPriceDiscovery.ask(FixedScalar.whole(20), 8, market(atCost), cost),
+                "equal net gain prefers a feasible exchange to an unfillable old ask");
+        var cheapHistory = new FixedScalar(2420);
+        var context = new MarketPricePolicy.Context(FixedScalar.ZERO, Optional.empty(), 1000, market(atCost), Optional.empty(),
+                Optional.of(new ResourceEconomicValue(cost, FixedScalar.whole(3))));
+        var quote = new MarketPricePolicy().review(FixedScalar.whole(20), FixedScalar.whole(20), cheapHistory,
+                8, Optional.empty(), Optional.empty(), 0, MarketPricingRules.adaptive(), context);
+        assertEquals(FixedScalar.whole(3), quote.bid());
+        assertEquals(cheapHistory, quote.reference(), "economic value must not fabricate completed sale history");
+    }
+    @Test void ingredientAndFuelValueComesFromOutputMinusOtherInputsAndLabour() {
+        var recipe = new io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Process("recipe", "food", 1,
+                Map.of("grain", 3), 80, Map.of("fuel", 1600L), 0, 0, 40, 64, 20);
+        var prices = Map.of("food", 4_000_000L, "grain", 1_000_000L, "fuel", 1_000_000L);
+        assertEquals(16_000_000, ProductionInputValue.assess("fuel", List.of(recipe), prices, 10000));
+        assertEquals(1_250_000, ProductionInputValue.assess("grain", List.of(recipe), prices, 10000));
+        assertEquals(0, ProductionInputValue.assess("unused", List.of(recipe), prices, 10000));
+        var loss = Map.of("food", 2_000_000L, "grain", 1_000_000L, "fuel", 1_000_000L);
+        assertEquals(0, ProductionInputValue.assess("fuel", List.of(recipe), loss, 10000));
+    }
     @Test void purchaseConsentUsesFullTargetWithDeliveryAndAlternativeWithoutPercentageSteps() {
         var policy = new MarketPricePolicy(); var rules = MarketPricingRules.adaptive();
         var reference = new FixedScalar(16000);

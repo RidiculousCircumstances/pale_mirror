@@ -7,10 +7,13 @@ import java.util.*;
 public record SourcingMarket(long availableMoney, int switchingSavingsPermille,
                              Map<String, Long> processUnitCosts, List<Offer> offers) {
     public record Offer(String id, String item, long quantity, long cashPerItem, long deliveredCostPerItem,
-                        long deliveryTicks, long tripCost) {
+                        long deliveryTicks, long tripCost, long tripCashCost) {
+        public Offer(String id, String item, long quantity, long cashPerItem, long deliveredCostPerItem, long deliveryTicks, long tripCost) {
+            this(id, item, quantity, cashPerItem, deliveredCostPerItem, deliveryTicks, tripCost, 0);
+        }
         public Offer {
             if (id == null || id.isBlank() || item == null || item.isBlank() || quantity < 1 || cashPerItem < 1
-                    || deliveredCostPerItem < cashPerItem || deliveryTicks < 0 || tripCost < 0)
+                    || deliveredCostPerItem < cashPerItem || deliveryTicks < 0 || tripCost < 0 || tripCashCost < 0 || tripCashCost > tripCost)
                 throw new IllegalArgumentException("invalid priced supply offer");
         }
     }
@@ -43,10 +46,12 @@ public record SourcingMarket(long availableMoney, int switchingSavingsPermille,
             for (var offer : market.offers().stream().filter(value -> value.item().equals(item))
                     .sorted(Comparator.<Offer>comparingLong(value -> effectiveCost(value, quantity)).thenComparing(Offer::id)).toList()) {
                 if (offer.deliveryTicks() > deadline) continue;
+                long freight = used.containsKey(offer.id()) ? 0 : offer.tripCashCost();
+                if (remaining < freight) continue;
                 long take = Math.min(quantity - bought, Math.min(offer.quantity() - used.getOrDefault(offer.id(), 0L),
-                        remaining / offer.cashPerItem()));
+                        (remaining - freight) / offer.cashPerItem()));
                 if (take == 0 || !cheaper(Math.addExact(offer.deliveredCostPerItem(), Math.ceilDiv(offer.tripCost(), take)), ownCost)) continue;
-                long cost = Math.multiplyExact(take, offer.cashPerItem());
+                long cost = Math.addExact(Math.multiplyExact(take, offer.cashPerItem()), freight);
                 used.merge(offer.id(), take, Math::addExact); spending.merge(item, cost, Math::addExact);
                 purchased.merge(item, take, Math::addExact);
                 remaining -= cost; bought += take;
@@ -59,7 +64,8 @@ public record SourcingMarket(long availableMoney, int switchingSavingsPermille,
                     .compareTo(BigInteger.valueOf(local).multiply(BigInteger.valueOf(1000L - market.switchingSavingsPermille()))) < 0;
         }
         private long effectiveCost(Offer offer, long quantity) {
-            long take = Math.min(quantity, Math.min(offer.quantity() - used.getOrDefault(offer.id(), 0L), remaining / offer.cashPerItem()));
+            long freight = used.containsKey(offer.id()) ? 0 : offer.tripCashCost();
+            long take = Math.min(quantity, Math.min(offer.quantity() - used.getOrDefault(offer.id(), 0L), Math.max(0, remaining - freight) / offer.cashPerItem()));
             return take < 1 ? Long.MAX_VALUE : Math.addExact(offer.deliveredCostPerItem(), Math.ceilDiv(offer.tripCost(), take));
         }
         public Map<String, Long> spending() { return Map.copyOf(spending); }

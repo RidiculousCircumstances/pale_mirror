@@ -10,7 +10,8 @@ final class EconomicFunding {
     Allocation allocate(EconomicSnapshot facts, SupplyPlanner.Plan supply, EconomicRequirements.Projection horizon, long horizonTicks) {
         var prices = new TreeMap<>(facts.replacementPrices());
         var quoted = new TreeMap<String, Long>();
-        for (var offer : facts.market().offers()) quoted.merge(offer.item(), offer.cashPerItem(), Math::min);
+        for (var offer : facts.market().offers()) quoted.merge(offer.item(),
+                Math.addExact(offer.cashPerItem(), Math.ceilDiv(offer.tripCashCost(), offer.quantity())), Math::min);
         prices.putAll(quoted); // An old cheaper reference cannot fund a currently dearer offer.
         var restart = new TreeMap<String, Long>(); var requested = new TreeMap<String, Long>();
         var quotedRestarts = new HashSet<String>();
@@ -72,7 +73,7 @@ final class EconomicFunding {
                 .sorted(Comparator.comparingLong(io.farfrontier.palemirror.frontier.v3.model.supply.SourcingMarket.Offer::cashPerItem)
                         .thenComparing(io.farfrontier.palemirror.frontier.v3.model.supply.SourcingMarket.Offer::id)).toList()) {
             long take = Math.min(remaining, offer.quantity());
-            cost = Math.addExact(cost, Math.multiplyExact(take, offer.cashPerItem())); remaining -= take;
+            cost = Math.addExact(cost, Math.addExact(Math.multiplyExact(take, offer.cashPerItem()), offer.tripCashCost())); remaining -= take;
             if (remaining == 0) return OptionalLong.of(Math.ceilDiv(cost, quantity));
         }
         return OptionalLong.empty();

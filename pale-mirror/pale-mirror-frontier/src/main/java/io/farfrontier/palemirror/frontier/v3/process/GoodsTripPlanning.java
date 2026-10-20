@@ -144,6 +144,16 @@ final class GoodsTripPlanning {
                         candidate.mode(), deferred, candidate.prefixes(), exactTiming));
                 continue;
             }
+            var exactOffer = new ProcurementSelection.Offer(candidate.offer().id(), candidate.offer().goods(), cost.resourceExpense(),
+                    exactTiming.deliveryTicks(), cost.workerTicks(), ProcurementSelection.Departure.READY);
+            var alternatives = new ArrayList<>(candidates.stream().map(Candidate::offer).toList()); alternatives.add(exactOffer);
+            var preferred = new ProcurementSelection().select(requirements, alternatives,
+                    initial.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().map(SourcingRules::labourValuePerTick).orElse(0L));
+            if (preferred.filter(exactOffer.id()::equals).isEmpty()) {
+                candidates.add(new Candidate(candidate.draft(), candidate.reservations(), candidate.seller(), candidate.parcels(),
+                        candidate.mode(), exactOffer, candidate.prefixes(), exactTiming));
+                continue;
+            }
             var priced = GoodsDeliveryPricing.reserve(initial, candidate.reservations(), candidate.parcels(), cost, now);
             if (priced.isEmpty()) {
                 decision = "DELIVERED_PRICE_OR_FUNDS; expense=" + cost.resourceExpense().raw() + "; reserved=0";
@@ -209,19 +219,7 @@ final class GoodsTripPlanning {
         for (var parcel : parcels) {
             var contract = parcel.contract(); quantities.merge(contract.itemKind(), parcel.claim().quantity(), Math::addExact);
         }
-        return dispatchCause(rules, view, quantities, journeyTicks, SettlementReservePlanning.basis(state, buyer.settlementId()).needs());
-    }
-    private static TripDispatchPolicy.Cause dispatchCause(GoodsTradeRules rules, GoodsParticipantView view,
-            Map<String, Integer> quantities, long journeyTicks, Map<String, SupplyReservePlanner.Need> needs) {
-        return TripDispatchPolicy.assess(quantities.entrySet().stream().map(e -> {
-            var demand = view.supplyPlan().map(p -> p.require(e.getKey()))
-                    .orElseGet(() -> new SupplyPlanner.Demand(0, 0, 0, Long.MAX_VALUE, Set.of(), Optional.empty()));
-            var stock = view.stocks().get(e.getKey());
-            return new TripDispatchPolicy.Goods(e.getValue(), rules.supplyPlanning().require(e.getKey()), demand,
-                    TripDispatchPolicy.uncovered(demand, needs.get(e.getKey()), stock.unclaimedInStorage(),
-                            stock.expectedIncoming(), journeyTicks, rules.reviewInterval()));
-        }).toList(),
-                journeyTicks, rules.reviewInterval());
+        return GoodsDispatchAdvice.assess(state, view, quantities, journeyTicks);
     }
     private GoodsTripPlanning() { }
 }

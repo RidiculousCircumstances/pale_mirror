@@ -33,8 +33,16 @@ public final class SellerPriceDiscovery {
     }
     /** Compare price breakpoints; never repeatedly discount for elapsed time. */
     public static FixedScalar ask(FixedScalar previous, long surplus, Market market) {
-        if (surplus == 0 || market.buyers().isEmpty()) return previous;
-        var candidates = new TreeSet<Long>(); candidates.add(previous.raw());
+        return ask(previous, surplus, market, FixedScalar.ZERO);
+    }
+    /** Retaining stock is worth its owner-declared opportunity value. This is
+     * not a seed-price floor, a wage payment or authority to produce more. */
+    public static FixedScalar ask(FixedScalar previous, long surplus, Market market, FixedScalar retainedValue) {
+        if (retainedValue.raw() < 0 || surplus < 0) throw new IllegalArgumentException("negative sale valuation");
+        long minimum = Math.max(1, retainedValue.raw());
+        long anchor = Math.max(previous.raw(), minimum);
+        if (surplus == 0 || market.buyers().isEmpty()) return new FixedScalar(anchor);
+        var candidates = new TreeSet<Long>(); candidates.add(anchor); candidates.add(minimum);
         for (var buyer : market.buyers()) {
             long ceiling = Math.min(buyer.landedLimit().raw(), buyer.budget().raw()) - buyer.deliveryPerItem().raw();
             if (ceiling > 0) candidates.add(ceiling);
@@ -46,15 +54,20 @@ public final class SellerPriceDiscovery {
                 if (competitive > 0 && competitive <= ceiling) candidates.add(competitive);
             }
         }
-        long best = previous.raw(); var revenue = revenue(best, surplus, market);
+        long best = anchor; var revenue = gain(best, surplus, market, retainedValue.raw());
         for (long candidate : candidates) {
-            var value = revenue(candidate, surplus, market);
+            if (candidate < minimum) continue;
+            var value = gain(candidate, surplus, market, retainedValue.raw());
             // Keep the existing quote on equal proceeds: no churn without a benefit.
-            if (value.compareTo(revenue) > 0) { best = candidate; revenue = value; }
+            if (value.compareTo(revenue) > 0 || value.equals(revenue) && retainedValue.raw() > 0
+                    && sold(candidate, surplus, market) > sold(best, surplus, market)) { best = candidate; revenue = value; }
         }
         return new FixedScalar(best);
     }
-    private static BigInteger revenue(long ask, long surplus, Market market) {
+    private static BigInteger gain(long ask, long surplus, Market market, long retained) {
+        return BigInteger.valueOf(ask - retained).multiply(BigInteger.valueOf(sold(ask, surplus, market)));
+    }
+    private static long sold(long ask, long surplus, Market market) {
         long sold = 0;
         var competingUsed = new HashMap<SubjectId, Long>();
         for (var buyer : market.buyers()) {
@@ -72,7 +85,7 @@ public final class SellerPriceDiscovery {
             }
             if (affordableLimit) sold += Math.min(surplus - sold, Math.min(remaining, budget / landed));
         }
-        return BigInteger.valueOf(ask).multiply(BigInteger.valueOf(sold));
+        return sold;
     }
     private SellerPriceDiscovery() { }
 }

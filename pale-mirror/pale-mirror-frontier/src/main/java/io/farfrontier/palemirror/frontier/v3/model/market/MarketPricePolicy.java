@@ -17,10 +17,14 @@ public final class MarketPricePolicy {
     }
     public record Context(FixedScalar materialFloor, Optional<FixedScalar> alternativeCeiling,
                           int shortagePermille, SellerPriceDiscovery.Market market,
-                          Optional<AcquisitionQuote> acquisition) {
+                          Optional<AcquisitionQuote> acquisition, Optional<ResourceEconomicValue> economics) {
+        public Context(FixedScalar materialFloor, Optional<FixedScalar> alternativeCeiling, int shortagePermille,
+                       SellerPriceDiscovery.Market market, Optional<AcquisitionQuote> acquisition) {
+            this(materialFloor, alternativeCeiling, shortagePermille, market, acquisition, Optional.empty());
+        }
         public Context {
             Objects.requireNonNull(materialFloor); Objects.requireNonNull(alternativeCeiling);
-            Objects.requireNonNull(market); Objects.requireNonNull(acquisition);
+            Objects.requireNonNull(market); Objects.requireNonNull(acquisition); Objects.requireNonNull(economics);
             if (materialFloor.raw() < 0 || alternativeCeiling.filter(v -> v.raw() <= 0).isPresent()
                     || shortagePermille < 0 || shortagePermille > 1000)
                 throw new IllegalArgumentException("invalid economic price constraints");
@@ -44,12 +48,14 @@ public final class MarketPricePolicy {
             if (!rules.enabled() || now - before.reviewedAt() < rules.reviewTicks()) return before;
         }
         var anchor = previous.map(Quote::ask).orElse(seedAsk);
-        var ask = bounded(SellerPriceDiscovery.ask(anchor, surplus, context.market()), seedAsk, rules);
+        var ask = bounded(SellerPriceDiscovery.ask(anchor, surplus, context.market(),
+                context.economics().map(ResourceEconomicValue::retained).orElse(FixedScalar.ZERO)), seedAsk, rules);
         if (rules.seedBounded()) ask = new FixedScalar(Math.max(ask.raw(), context.materialFloor().raw()));
         var referenceBid = rules.seedBounded() ? new FixedScalar(BigInteger.valueOf(reference.raw()).multiply(BigInteger.valueOf(seedBid.raw()))
                 .divide(BigInteger.valueOf(seedAsk.raw())).longValueExact()) : reference;
         var goodsBid = bounded(scale(referenceBid, 1000L + context.shortagePermille()), seedBid, rules);
-        var bid = constrainBid(context.acquisition().map(quote -> goodsBid.plus(quote.delivery())).orElse(goodsBid), context);
+        var bid = constrainBid(context.economics().map(ResourceEconomicValue::acquisition)
+                .orElseGet(() -> context.acquisition().map(quote -> goodsBid.plus(quote.delivery())).orElse(goodsBid)), context);
         // Publish the calculated target directly. Neither receipts nor elapsed
         // time are independent percentage increments or discounts.
         return new Quote(ask, bid, reference, now, surplus, lastSale);

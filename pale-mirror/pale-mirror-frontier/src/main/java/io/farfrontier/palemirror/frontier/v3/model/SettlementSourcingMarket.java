@@ -40,7 +40,7 @@ final class SettlementSourcingMarket {
             long transport = Math.addExact(cost.resourceExpense().raw(),
                     Math.multiplyExact(timing.orElseThrow().labourTicks(), policy.labourValuePerTick()));
             offers.put(pool, new SourcingMarket.Offer(pool, order.itemKind(), quantity, order.unitPriceLimit().raw(),
-                    order.unitPriceLimit().raw(), timing.orElseThrow().deliveryTicks(), transport));
+                    order.unitPriceLimit().raw(), timing.orElseThrow().deliveryTicks(), transport, cost.resourceExpense().raw()));
         }
         var available = List.copyOf(offers.values());
         return new SourcingMarket(state.inventory().economics().availableToReserve(buyer.party().id()).raw(),

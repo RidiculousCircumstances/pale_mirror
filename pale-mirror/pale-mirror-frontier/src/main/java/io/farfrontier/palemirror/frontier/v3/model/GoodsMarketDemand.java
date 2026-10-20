@@ -24,9 +24,12 @@ final class GoodsMarketDemand {
         var result = new ArrayList<SellerPriceDiscovery.Demand>();
         for (var entry : buyers.entrySet()) {
             var order = entry.getValue(); var buyer = trade.participants().participants().get(entry.getKey());
-            var budget = state.inventory().economics().availableToReserve(buyer.party().id());
+            var view = GoodsParticipantView.read(state, buyer);
+            var budget = GoodsParticipantFunding.purchase(view, rules, item);
             if (budget.raw() <= 0) continue;
             int quantity = Math.min(order.availableQuantity(), rules.maximumBatch());
+            if (view.supplyPlan().isPresent()) quantity = (int) Math.min(quantity, view.supplyPlan().orElseThrow().require(item).purchase());
+            if (quantity == 0) continue;
             var delivery = delivery(state, seller, buyer, item, (int) Math.min(surplus, quantity));
             if (delivery.isEmpty()) continue;
             var competitors = new TreeMap<SubjectId, SellerPriceDiscovery.Offer>();
@@ -69,7 +72,8 @@ final class GoodsMarketDemand {
         for (var container : GoodsParticipantStorage.containers(state, seller, item)) {
             int stock = GoodsParticipantStorage.unclaimed(state, seller, container, item);
             if (stock == 0) continue;
-            var freight = deliveryFrom(state, container, buyer, item, Math.min(quantity, stock));
+            int carried = Math.min(quantity, stock);
+            var freight = deliveryFrom(state, container, buyer, item, carried);
             if (freight.isEmpty()) continue;
             var unit = freight.orElseThrow();
             if (best == null || unit.compareTo(best) < 0) best = unit;
@@ -79,7 +83,9 @@ final class GoodsMarketDemand {
     private static Optional<FixedScalar> deliveryFrom(FrontierWorldState state, SubjectId container,
                                                       GoodsParticipant buyer, String item, int quantity) {
         if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().isEmpty()) return Optional.of(FixedScalar.ZERO);
-        return ProcurementTravelForecast.read(state, container, item, buyer).map(timing ->
+        return ProcurementTravelForecast.read(state, container, item, buyer)
+                .filter(timing -> GoodsDispatchAdvice.assess(state, GoodsParticipantView.read(state, buyer), Map.of(item, quantity), timing.deliveryTicks())
+                        != io.farfrontier.palemirror.frontier.v3.model.supply.TripDispatchPolicy.Cause.ACCUMULATING).map(timing ->
                 new FixedScalar(Math.ceilDiv(GoodsTransportValuation.estimate(state, buyer, timing.journeyTicks(), 1)
                         .resourceExpense().raw(), quantity)));
     }

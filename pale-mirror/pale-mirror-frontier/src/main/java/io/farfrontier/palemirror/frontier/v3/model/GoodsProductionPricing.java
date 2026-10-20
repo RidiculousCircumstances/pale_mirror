@@ -7,6 +7,10 @@ import java.util.*;
 
 /** Converts declared production capabilities into price constraints, without inspecting concrete jobs. */
 final class GoodsProductionPricing {
+    record Assessment(Map<String, FixedScalar> opportunities, Map<String, FixedScalar> alternatives,
+                      List<SupplyPlanner.Process> processes) {
+        Assessment { opportunities = Map.copyOf(opportunities); alternatives = Map.copyOf(alternatives); processes = List.copyOf(processes); }
+    }
     static Map<String, FixedScalar> floors(ProductionCatalog catalog, Map<String, FixedScalar> prices) {
         var result = new HashMap<String, FixedScalar>();
         var fuels = catalog.fuels().stream().filter(f -> prices.containsKey(f.itemKind()))
@@ -23,7 +27,11 @@ final class GoodsProductionPricing {
     }
     static Map<String, FixedScalar> alternatives(FrontierWorldState state, GoodsParticipantView view,
                                                 Map<String, FixedScalar> prices) {
-        if (view.participant().policy() != GoodsPolicyKind.PUBLIC_SETTLEMENT || view.supplyPlan().isEmpty()) return Map.of();
+        return assess(state, view, prices).alternatives();
+    }
+    static Assessment assess(FrontierWorldState state, GoodsParticipantView view, Map<String, FixedScalar> prices) {
+        if (view.participant().policy() != GoodsPolicyKind.PUBLIC_SETTLEMENT || view.supplyPlan().isEmpty())
+            return new Assessment(Map.of(), Map.of(), List.of());
         var facts = new TreeMap<String, SupplyPlanner.Stock>(); var rules = state.bootstrap().ruleset().goodsTrade();
         view.stocks().forEach((item, stock) -> facts.put(item, new SupplyPlanner.Stock(stock.unclaimedInStorage(), stock.expectedIncoming(),
                 0, 0, stock.protectedMinimum(), 0, 1, rules.supplyPlanning().require(item))));
@@ -33,7 +41,10 @@ final class GoodsProductionPricing {
         var capacities = SupplyCapacityComposition.read(state, home, facts, window);
         var economic = state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().isPresent()
                 ? SettlementSourcingMarket.read(state, view.participant(), capacities).processUnitCosts() : Map.<String, Long>of();
+        var opportunities = new TreeMap<String, FixedScalar>();
         for (var process : capacities) {
+            if (economic.containsKey(process.id())) opportunities.merge(process.product(), new FixedScalar(economic.get(process.id())),
+                    (a, b) -> a.compareTo(b) <= 0 ? a : b);
             var demand = view.supplyPlan().orElseThrow().require(process.product());
             long batches = Math.max(1, Math.ceilDiv(demand.purchase(), process.outputPerBatch()));
             if (batches > process.maximumBatches()
@@ -51,7 +62,7 @@ final class GoodsProductionPricing {
             if (economic.containsKey(process.id())) cost = Optional.of(new FixedScalar(economic.get(process.id())));
             cost.filter(value -> value.raw() > 0).ifPresent(value -> result.merge(process.product(), value, (a, b) -> a.compareTo(b) <= 0 ? a : b));
         }
-        return Map.copyOf(result);
+        return new Assessment(opportunities, result, capacities);
     }
     private GoodsProductionPricing() { }
 }

@@ -66,6 +66,8 @@ class EconomicSourcingTest {
         assertEquals(25, SourcingValuation.processes(List.of(bakery), prices, offers, 1).get("bakery"));
         var field = new SupplyPlanner.Process("field", "grain", 1, Map.of(), 0, Map.of(), 0, 1, 1, 64, 2);
         assertEquals(16, SourcingValuation.processes(List.of(bakery, field), prices, offers, 1).get("bakery"));
+        assertEquals(16, SourcingValuation.processes(List.of(bakery, field), prices, List.of(), 1).get("bakery"),
+                "a cheap historical receipt cannot displace the only currently available production alternative");
         assertEquals(13, SourcingValuation.processes(List.of(bakery), prices, List.of(), 1).get("bakery"),
                 "missing market evidence retains an explicitly estimated reference, not a supply promise");
     }
@@ -79,5 +81,14 @@ class EconomicSourcingTest {
         var forged = new SupplyPlanner.Process("b", "b", 1, Map.of(), 0, Map.of(), 0, 1, 1, 100, 10, Map.of("worker", 100L));
         assertThrows(IllegalArgumentException.class, () -> new SupplyPlanner().plan(
                 Map.of("a", stock(0, 4), "b", stock(0, 4)), List.of(first, forged)));
+    }
+    @Test void procurementBudgetPaysFixedFreightBeforeChoosingAnAffordableQuantity() {
+        var offer = new SourcingMarket.Offer("trip", "grain", 64, 2, 2, 0, 6, 6);
+        var allocation = new SourcingMarket(10, 0, Map.of(), List.of(offer)).allocate();
+        assertEquals(2, allocation.preferPurchase("grain", 64, 100, Optional.empty()));
+        assertEquals(10, allocation.spending().get("grain"));
+        assertEquals(0, allocation.preferPurchase("grain", 64, 100, Optional.empty()));
+        var insufficient = new SourcingMarket(7, 0, Map.of(), List.of(offer)).allocate();
+        assertEquals(0, insufficient.preferPurchase("grain", 1, 100, Optional.empty()));
     }
 }

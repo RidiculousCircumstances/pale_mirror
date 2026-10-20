@@ -6,7 +6,8 @@ import io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner;
 import java.math.BigInteger;
 import java.util.*;
 
-/** Values additional public production: materials are spent, spare labour is allocated, not paid a fictional wage. */
+/** Values additional production using the same sourcing opportunity cost.
+ * Labour value is not a wage debit. Existing stock release is a separate decision. */
 final class ExportProductionValuation {
     record Return(long margin, long outputPerOperation, long labourPerOperation) implements Comparable<Return> {
         @Override public int compareTo(Return other) {
@@ -26,12 +27,14 @@ final class ExportProductionValuation {
                     .map(e -> new ProductionValuation.Fuel(prices.get(e.getKey()), e.getValue())).toList();
             ProductionValuation.unitCost(process.inputs(), process.outputPerBatch(), process.heatPerBatch(), prices, fuels)
                     .ifPresent(cost -> costs.put(process.id(), cost.raw()));
+            if (facts.market().processUnitCosts().containsKey(process.id()))
+                costs.put(process.id(), facts.market().processUnitCosts().get(process.id()));
         }
         materials = Map.copyOf(costs);
     }
     Return returnOn(SupplyPlanner.Process process, long unitPrice) {
         Long cost = materials.get(process.id());
-        return new Return(cost == null ? 0 : Math.max(0, unitPrice - cost),
+        return new Return(cost == null ? Long.MIN_VALUE : unitPrice - cost,
                 Math.multiplyExact((long) process.outputPerBatch(), process.recipesPerOperation()),
                 Math.max(1, process.labourTicksPerOperation()));
     }

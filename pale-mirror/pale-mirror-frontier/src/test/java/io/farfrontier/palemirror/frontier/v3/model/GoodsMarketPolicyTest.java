@@ -9,6 +9,22 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GoodsMarketPolicyTest {
+    @Test void actualRecurringMinerQuoteRecoversFromCheapHistoryWithoutMintingMoneyOrContracts() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:production-price"),
+                125L, FrontierRulesets.dynamicFarmingGraybox()));
+        var participant = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
+        var prices = new TreeMap<String, io.farfrontier.palemirror.frontier.v3.model.market.MarketPricePolicy.Quote>();
+        for (var commodity : state.bootstrap().ruleset().goodsTrade().policies().get(participant.policy()))
+            prices.put(commodity.itemKind(), new io.farfrontier.palemirror.frontier.v3.model.market.MarketPricePolicy.Quote(
+                    new FixedScalar(398), new FixedScalar(2420), new FixedScalar(2420), 0, 0, Optional.empty()));
+        var event = new GoodsParticipantPricesReviewed(participant.reviewRevision(), 0, prices);
+        state = GoodsParticipantPricing.applyCommitted(state, participant.party().id(), event, 0);
+        participant = state.companies().goodsTrade().participants().participants().get(participant.party().id());
+        var quote = GoodsParticipantPricing.review(state, participant, 2400).get("minecraft:coal");
+        assertTrue(quote.ask().raw() >= 1_000_000, "declared extraction labour must reach the price policy");
+        assertTrue(state.companies().goodsTrade().contracts().isEmpty());
+        assertTrue(state.companies().goodsTrade().priceHistory().commodities().isEmpty());
+    }
     @Test void immediateConsumptionFundingDoesNotLeakIntoInheritedIngredientDeadlines() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:funding-alternative"),
                 125L, FrontierRulesets.dynamicFarmingGraybox()));
@@ -32,12 +48,11 @@ class GoodsMarketPolicyTest {
         assertEquals(0, GoodsParticipantFunding.purchase(view, rules, "minecraft:wheat").raw());
     }
     @Test void priceDiscoveryUsesCurrentUncommittedFundedQuotesWithoutStartingTransport() {
-        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:price-feedback"),
-                20260918065L, FrontierRulesets.marketQuarryGraybox()));
+        var state = BakeryPartialBatchTest.fixture(0, FrontierRulesets.marketQuarryGraybox());
         var trade = state.companies().goodsTrade();
-        var seller = trade.participants().participants().get(new SubjectId("settlement:1"));
-        var buyer = trade.participants().participants().get(new SubjectId("settlement:3"));
-        var source = FungibleResourceCustodySupport.accountAtContainer(state, new SubjectId("container:1-depot")).orElseThrow();
+        var seller = trade.participants().participants().get(new SubjectId("settlement:3"));
+        var buyer = trade.participants().participants().get(new SubjectId("settlement:1"));
+        var source = FungibleResourceCustodySupport.accountAtContainer(state, new SubjectId("container:3-depot")).orElseThrow();
         var lot = new SubjectId("lot:price-feedback");
         var staging = new SubjectId("custody:price-feedback");
         var resources = state.inventory().fungibleResources().issue(
@@ -46,7 +61,7 @@ class GoodsMarketPolicyTest {
         resources = resources.transfer(staging, source.id(), Map.of(lot, 8), Map.of());
         state = state.withInventory(state.inventory().withFungibleResources(resources));
         var quote = new GoodsTradeOrder(new SubjectId("order:funded-price-feedback"), buyer.party(), seller.party(),
-                GoodsTradeOrder.Side.BUY, new SubjectId("container:3-depot"), "minecraft:coal", 2, 0, FixedScalar.whole(6), 24000);
+                GoodsTradeOrder.Side.BUY, new SubjectId("container:1-depot"), "minecraft:coal", 2, 0, FixedScalar.whole(6), 24000);
         state = GoodsTradeStateSupport.place(state, buyer.party().id(), quote, 0);
         var market = GoodsMarketDemand.read(state, seller, "minecraft:coal", 8, 2400);
         assertEquals(FixedScalar.whole(6), market.buyers().getFirst().landedLimit());
@@ -62,8 +77,10 @@ class GoodsMarketPolicyTest {
         ledger = ledger.transfer(buyer.party().id(), seller.party().id(),
                 ledger.availableToReserve(buyer.party().id()).minus(FixedScalar.whole(3)));
         state = state.withInventory(state.inventory().withEconomics(ledger));
-        assertEquals(FixedScalar.whole(3), GoodsMarketDemand.read(state, seller, "minecraft:coal", 8, 2400).buyers().getFirst().budget(),
-                "a retained quote cannot invent funds spent since publication");
+        assertEquals(FixedScalar.ZERO, GoodsParticipantFunding.purchase(GoodsParticipantView.read(state, buyer),
+                state.bootstrap().ruleset().goodsTrade(), "minecraft:coal"));
+        assertTrue(GoodsMarketDemand.read(state, seller, "minecraft:coal", 8, 2400).buyers().isEmpty(),
+                "the last three coins needed for food are not an independently spendable coal purse");
         ledger = ledger.transfer(buyer.party().id(), seller.party().id(), FixedScalar.whole(3));
         state = state.withInventory(state.inventory().withEconomics(ledger));
         assertTrue(GoodsMarketDemand.read(state, seller, "minecraft:coal", 8, 2400).buyers().isEmpty());

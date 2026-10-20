@@ -40,7 +40,7 @@ final class EconomicExportPlanning {
             long wanted = Math.min(remaining, Math.min(interest.quantity(), buyerCash.get(interest.buyer()) / interest.unitPrice()));
             String item = interest.item();
             var allowed = facts.processes().stream().filter(p -> p.product().equals(item)
-                            && valuation.returnOn(p, interest.unitPrice()).margin() > 0)
+                            && valuation.returnOn(p, interest.unitPrice()).margin() >= 0)
                     .map(SupplyPlanner.Process::id).collect(java.util.stream.Collectors.toSet());
             var selected = allocation.allocate(item, wanted, horizonTicks, allowed);
             allocation = selected.next();

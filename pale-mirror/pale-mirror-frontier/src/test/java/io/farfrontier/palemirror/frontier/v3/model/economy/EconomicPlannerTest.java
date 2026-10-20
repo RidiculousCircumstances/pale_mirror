@@ -133,17 +133,18 @@ class EconomicPlannerTest {
         assertEquals(30, exports.stream().mapToLong(EconomicPlan.Export::additionalProduction).sum());
         assertEquals(30, exports.stream().mapToLong(EconomicPlan.Export::conditionalRevenue).sum());
     }
-    @Test void idlePublicCapacityCanEarnBelowTheSourcingShadowWageWithoutInventingCash() {
+    @Test void liquidationDoesNotAuthorizeNewExportProductionBelowItsOpportunityCost() {
         var mine = new SupplyPlanner.Process("mine", "fuel", 1, Map.of(), 0, Map.of(), 0,
                 10, 1, 7, 134, Map.of("miner", 48000L));
-        var original = facts(100, 0, 0, 0, List.of(oven(), mine),
+        var original = facts(100, 0, 7, 0, List.of(oven(), mine),
                 List.of(new EconomicSnapshot.ExportInterest("neighbour", "fuel", 7, 25, 175)));
         var input = new EconomicSnapshot(original.dayTicks(), original.stocks(), original.needs(), original.flows(),
                 original.reserves(), original.processes(), original.commitments(),
                 new SourcingMarket(0, 100, Map.of("oven", 4L, "mine", 134L), List.of()),
                 original.replacementPrices(), original.exportInterest(), 0);
         var plan = new EconomicPlanner().plan(input, RULES).economy().orElseThrow();
-        assertEquals(7, plan.additionalProduction().get("fuel"));
+        assertEquals(0, plan.additionalProduction().get("fuel"));
+        assertEquals(7, plan.exports().getFirst().existingStock());
         assertEquals(175, plan.exports().getFirst().conditionalRevenue());
         assertEquals(0, plan.purchaseBudgets().values().stream().mapToLong(Long::longValue).sum());
         assertEquals(0, input.market().availableMoney());
@@ -154,7 +155,7 @@ class EconomicPlannerTest {
         var mine = new SupplyPlanner.Process("mine", "fuel", 1, Map.of(), 0, Map.of(), 0,
                 10, 1, 100, 10, Map.of("worker", 50L));
         var input = facts(100, 0, 0, 0, List.of(oven(), field, mine), List.of(
-                new EconomicSnapshot.ExportInterest("neighbour", "grain", 100, 1, 1000),
+                new EconomicSnapshot.ExportInterest("neighbour", "grain", 100, 2, 1000),
                 new EconomicSnapshot.ExportInterest("neighbour", "fuel", 100, 5, 1000)));
         var plan = new EconomicPlanner().plan(input, RULES).economy().orElseThrow();
         assertEquals(50, plan.additionalProduction().get("grain"));

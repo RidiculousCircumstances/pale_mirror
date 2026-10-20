@@ -54,7 +54,7 @@ public final class GoodsParticipantPricing {
                 ? history.reference(commodity.itemKind(), rules.pricing().recencyTicks()).orElse(commodity.minimumSellPrice())
                 : ask(participant, commodity)));
         var floors = GoodsProductionPricing.floors(state.bootstrap().ruleset().production(), prices);
-        var alternatives = GoodsProductionPricing.alternatives(state, view, prices);
+        var production = GoodsProductionPricing.assess(state, view, prices);
         for (var commodity : catalog) {
             var stock = view.stocks().get(commodity.itemKind());
             var reference = history.reference(commodity.itemKind(), rules.pricing().recencyTicks()).orElse(commodity.minimumSellPrice());
@@ -66,10 +66,13 @@ public final class GoodsParticipantPricing {
                     .orElse((long) Math.max(0, target - stock.unclaimedInStorage() - stock.expectedIncoming()));
             int pressure = (int) Math.min(1000, Math.multiplyExact(shortage, 1000) / Math.max(1, target));
             long surplus = view.saleable(commodity);
+            var acquisition = GoodsAcquisitionPricing.estimate(state, participant, commodity.itemKind(), shortage, now);
             var context = new MarketPricePolicy.Context(floors.getOrDefault(commodity.itemKind(), io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO),
-                    Optional.ofNullable(alternatives.get(commodity.itemKind())), pressure,
+                    Optional.ofNullable(production.alternatives().get(commodity.itemKind())), pressure,
                     GoodsMarketDemand.read(state, participant, commodity.itemKind(), surplus, now),
-                    GoodsAcquisitionPricing.estimate(state, participant, commodity.itemKind(), shortage, now));
+                    acquisition, view.supplyPlan().isPresent() && rules.supplyPlanning().sourcing().isPresent()
+                            ? Optional.of(GoodsEconomicPricing.assess(state, view, commodity.itemKind(), prices, production, acquisition, now))
+                            : Optional.empty());
             next.put(commodity.itemKind(), policy.review(commodity.minimumSellPrice(), commodity.maximumBuyPrice(), reference,
                     surplus, sale, Optional.ofNullable(participant.prices().get(commodity.itemKind())), now, rules.pricing(), context));
         }
