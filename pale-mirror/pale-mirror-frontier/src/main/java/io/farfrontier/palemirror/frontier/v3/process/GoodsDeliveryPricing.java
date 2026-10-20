@@ -30,7 +30,7 @@ final class GoodsDeliveryPricing {
             // invoice. It is not free acquisition, nor a second monetary debit.
             if (bid.isEmpty() || acquisitionPrice.compareTo(bid.orElseThrow().limit()) > 0
                     || acquisitionPrice.compareTo(state.companies().goodsTrade().orders().get(contract.buyOrderId()).unitPriceLimit()) > 0
-                    || GoodsParticipantFunding.purchase(GoodsParticipantAssessment.view(state, buyer, now), state.bootstrap().ruleset().goodsTrade(),
+                    || GoodsParticipantFunding.purchase(GoodsParticipantAssessment.trading(state, buyer, now), state.bootstrap().ruleset().goodsTrade(),
                             contract.itemKind()).compareTo(contract.outstandingPrice()) < 0) return Optional.empty();
             var originalEvent = (GoodsTradeReserved) reservations.get(i).payload();
             var event = new GoodsTradeReserved(contract, originalEvent.allocations());

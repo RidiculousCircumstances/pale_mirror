@@ -127,6 +127,15 @@ class SettlementSourcingMarketTest {
                 "observing current stock must not invoke economic decisions");
         var domestic = GoodsParticipantAssessment.domestic(state, participant, 100L);
         var complete = GoodsParticipantAssessment.read(state, participant, 100L);
+        var trading = GoodsParticipantAssessment.trading(state, participant, 100L);
+        var rules = state.bootstrap().ruleset().goodsTrade();
+        assertSame(domestic.view(), trading);
+        assertEquals(GoodsParticipantPolicies.require(participant).decide(complete.view(), rules),
+                GoodsParticipantPolicies.require(participant).decide(trading, rules),
+                "prospective export production must not change consent to trade current stock");
+        for (var item : trading.stocks().keySet())
+            assertEquals(GoodsParticipantFunding.purchase(complete.view(), rules, item),
+                    GoodsParticipantFunding.purchase(trading, rules, item));
         assertSame(domestic.domestic().orElseThrow(), complete.domestic().orElseThrow());
         assertSame(domestic.facts().orElseThrow(), complete.facts().orElseThrow());
         assertSame(complete, GoodsParticipantAssessment.read(state, participant, 100L));

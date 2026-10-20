@@ -72,7 +72,7 @@ final class GoodsOrderMatching {
                         || !GoodsParticipantStorage.eligible(state, buyer, buy.containerId(), buy.itemKind())) {
                     disposition = "STORAGE_UNAVAILABLE"; continue;
                 }
-                long funding = GoodsParticipantFunding.purchase(GoodsParticipantAssessment.view(state, buyer, now),
+                long funding = GoodsParticipantFunding.purchase(GoodsParticipantAssessment.trading(state, buyer, now),
                         state.bootstrap().ruleset().goodsTrade(), buy.itemKind()).raw();
                 funding = Math.max(0, funding - unreservedDeliveryExpense.raw());
                 if (funding < sell.unitPriceLimit().raw()) { disposition = "INSUFFICIENT_PROCUREMENT_FUNDS"; continue; }
@@ -120,7 +120,7 @@ final class GoodsOrderMatching {
     private static Optional<GoodsParticipantPolicy.Intent> intent(FrontierWorldState state, GoodsParticipant participant,
             String itemKind, GoodsTradeOrder.Side side, long now, Map<SubjectId, List<GoodsParticipantPolicy.Intent>> cache) {
         return cache.computeIfAbsent(participant.party().id(), ignored -> GoodsParticipantPolicies.require(participant)
-                .decide(GoodsParticipantAssessment.view(state, participant, now), state.bootstrap().ruleset().goodsTrade()))
+                .decide(GoodsParticipantAssessment.trading(state, participant, now), state.bootstrap().ruleset().goodsTrade()))
                 .stream().filter(value -> value.itemKind().equals(itemKind) && value.side() == side).findFirst();
     }
     private static boolean known(GoodsParticipant owner, GoodsParticipant other) {

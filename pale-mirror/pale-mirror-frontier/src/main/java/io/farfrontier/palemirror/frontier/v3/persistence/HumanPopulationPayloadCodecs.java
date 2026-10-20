@@ -336,6 +336,25 @@ final class HumanPopulationPayloadCodecs {
         };
     }
 
+    static PayloadCodec mealGrounded() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resident_meal_grounded"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                var value = (ResidentMealGrounded) payload;
+                return FrontierWorldPayloadCodecs.encodeProduction(out -> {
+                    ActorExecutionStateCodec.writeId(out, value.execution()); out.writeLong(value.atTick());
+                    FrontierWorldPayloadCodecs.writePosition(out, value.from().supportingSurface().support());
+                    FrontierWorldPayloadCodecs.writePosition(out, value.landing().support());
+                });
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, in -> new ResidentMealGrounded(
+                        ActorExecutionStateCodec.readId(in), in.readLong(),
+                        BodyPosition.aboveSupportCell(FrontierWorldPayloadCodecs.readPosition(in)),
+                        new SurfaceAnchor(FrontierWorldPayloadCodecs.readPosition(in))));
+            }
+        };
+    }
     static PayloadCodec mealColdStep() {
         return new PayloadCodec() {
             @Override public String type() { return "frontier.resident_meal_cold_step"; }

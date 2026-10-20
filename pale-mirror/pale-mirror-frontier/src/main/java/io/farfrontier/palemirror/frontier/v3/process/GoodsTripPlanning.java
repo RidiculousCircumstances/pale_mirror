@@ -30,7 +30,7 @@ final class GoodsTripPlanning {
         String decision = "NO_MUTUAL_KNOWN_QUOTE";
         var candidates = new ArrayList<Candidate>();
         var buyer = reviewer;
-        var demand = GoodsParticipantAssessment.view(initial, buyer, now);
+        var demand = GoodsParticipantAssessment.trading(initial, buyer, now);
         var requirements = GoodsParticipantPolicies.require(buyer).decide(demand, initial.bootstrap().ruleset().goodsTrade())
                 .stream().filter(intent -> intent.side() == GoodsTradeOrder.Side.BUY)
                 .map(intent -> new ProcurementSelection.Requirement(intent.itemKind(), intent.quantity(),
@@ -214,7 +214,7 @@ final class GoodsTripPlanning {
         return new ProcurementSelection.Offer(id, lines, cost.resourceExpense(), timing.deliveryTicks(), cost.workerTicks(), departure);
     }
     static TripDispatchPolicy.Cause dispatchCause(FrontierWorldState state, GoodsParticipant buyer, List<GoodsTripAssembly.Parcel> parcels, long journeyTicks, long now) {
-        var rules = state.bootstrap().ruleset().goodsTrade(); var view = GoodsParticipantAssessment.view(state, buyer, now);
+        var rules = state.bootstrap().ruleset().goodsTrade(); var view = GoodsParticipantAssessment.trading(state, buyer, now);
         var quantities = new TreeMap<String, Integer>();
         for (var parcel : parcels) {
             var contract = parcel.contract(); quantities.merge(contract.itemKind(), parcel.claim().quantity(), Math::addExact);

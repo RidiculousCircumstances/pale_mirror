@@ -99,6 +99,10 @@ public final class ResidentMealProcess {
         if (body == null || body.condition().status() != ActorLifeStatus.ALIVE)
             return List.of(new ProposedEvent(meal.residentId(), new ScheduleEffect.Consumed(action.id())));
         long now = Math.max(action.dueAt().ticks(), currentTick);
+        var grounding = ResidentMealGrounding.plan(state, meal, now);
+        if (grounding.isPresent()) return List.of(new ProposedEvent(meal.residentId(), grounding.orElseThrow()),
+                new ProposedEvent(meal.residentId(), new ScheduleEffect.Rescheduled(action.id(),
+                        progress(meal, Math.addExact(now, 1L)))));
         if (ActorExecutionCoordinator.coldAvailable(state, meal.residentId())
                 && meal.pendingPhysicalStep().isEmpty() && requiresClearance(state, meal, body.body()))
             return List.of(new ProposedEvent(meal.residentId(), new ResidentMealClearanceRequired(meal.executionId(), body.body())),

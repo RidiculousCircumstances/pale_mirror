@@ -11,6 +11,12 @@ import java.util.Objects;
 public final class ResidentMealKnownNavigation {
     private ResidentMealKnownNavigation() { }
 
+    /** Current origin and declared service permissions, shared by movement and gravity. */
+    public static KnownPedestrianRouteKnowledge departureKnowledge(FrontierWorldState state, ResidentMeal meal, SurfaceAnchor start) {
+        return PedestrianLocalDeparture.departure(state, start,
+                ShipmentEndpointComposition.passages(state, ResourceStorageAccess.at(state, meal.depotId()).endpoint()))
+                .forActor(state, meal.residentId());
+    }
     /** Access policy names destinations independently of the availability of a COLD route hint. */
     public static List<SurfaceAnchor> approachStations(FrontierWorldState state, ResidentMeal meal, SurfaceAnchor start,
             java.util.function.Predicate<SurfaceAnchor> availableWaitingStation) {
@@ -129,9 +135,7 @@ public final class ResidentMealKnownNavigation {
     /** Accept a current semantic leg without repeating search during WAL replay. */
     public static void requireMovementRoute(FrontierWorldState state, ResidentMeal meal, List<SurfaceAnchor> route) {
         var port = ResourceStorageAccess.at(state, meal.depotId());
-        PedestrianLocalDeparture.departure(state, route.getFirst(),
-                ShipmentEndpointComposition.passages(state, port.endpoint()))
-                .forActor(state, meal.residentId()).requireRoute(route);
+        departureKnowledge(state, meal, route.getFirst()).requireRoute(route);
         var end = route.getLast();
         if (meal.phase() == ResidentMeal.Phase.MOVE) {
             if (end.equals(port.interactionStation(state))) {

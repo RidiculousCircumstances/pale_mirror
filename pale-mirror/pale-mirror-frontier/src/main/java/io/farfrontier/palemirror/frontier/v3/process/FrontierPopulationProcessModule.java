@@ -324,6 +324,10 @@ final class FrontierPopulationProcessModule implements FrontierWorldProcessModul
             case ResidentWorkModifiersChanged changed -> ResidentWorkModifiersProcess.reduce(state, event.subject(), changed);
             case ResidentMetabolismChanged changed -> ResidentMetabolismProcess.reduce(state, event.subject(), changed);
             case ResidentMealStarted started -> ResidentActivityProcess.reduceMealStarted(state, event.subject(), started);
+            case ResidentMealGrounded grounded -> {
+                if (event.instant().ticks() != grounded.atTick()) throw new IllegalArgumentException("meal grounding has a foreign instant");
+                yield ResidentMealGrounding.reduce(state, event.subject(), grounded);
+            }
             case ResidentMealColdStep step -> ResidentMealProcess.reduceColdStep(state, event.subject(), step);
             case ResidentMealHotArrived arrived -> ResidentMealProcess.reduceHotArrived(state, event.subject(), arrived);
             case ResidentMealHotEffectPrepared prepared -> ResidentMealProcess.reduceHotPrepared(state, event.subject(), prepared);

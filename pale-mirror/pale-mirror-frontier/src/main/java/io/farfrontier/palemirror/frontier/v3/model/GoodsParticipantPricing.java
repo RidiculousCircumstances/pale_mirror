@@ -45,7 +45,7 @@ public final class GoodsParticipantPricing {
                 .collect(java.util.stream.Collectors.toUnmodifiableSet()))
                 && participant.prices().values().stream().allMatch(quote -> now >= quote.reviewedAt()
                     && now - quote.reviewedAt() < rules.pricing().reviewTicks())) return participant.prices();
-        var assessment = GoodsParticipantAssessment.read(state, participant, now);
+        var assessment = GoodsParticipantAssessment.domestic(state, participant, now);
         var view = assessment.view();
         var history = state.companies().goodsTrade().priceHistory();
         var next = new TreeMap<String, MarketPricePolicy.Quote>();

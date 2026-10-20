@@ -74,7 +74,7 @@ public final class GoodsParticipantProcess {
             }
         }
         var rules = state.bootstrap().ruleset().goodsTrade();
-        var intents = GoodsParticipantPolicies.require(participant).decide(GoodsParticipantAssessment.view(state, participant, now), rules);
+        var intents = GoodsParticipantPolicies.require(participant).decide(GoodsParticipantAssessment.trading(state, participant, now), rules);
         var retainedExpiry = new HashMap<QuoteKey, Long>();
         for (var order : state.companies().goodsTrade().orders().values().stream()
                 .filter(value -> value.party().equals(participant.party()) && value.availableQuantity() > 0)
@@ -141,7 +141,7 @@ public final class GoodsParticipantProcess {
                     ((GoodsTradeCancelled) event.payload()).disposition().quantity()).sum()
                 + "; reasons=" + commitments.events().stream().map(event ->
                     ((GoodsTradeCancelled) event.payload()).disposition().reason().name()).distinct().toList()
-                + "; " + GoodsParticipantPolicies.require(participant).explain(GoodsParticipantAssessment.view(state, participant, now), rules);
+                + "; " + GoodsParticipantPolicies.require(participant).explain(GoodsParticipantAssessment.trading(state, participant, now), rules);
         if (decision.length() > 512) decision = decision.substring(0, 512);
         events.add(new ProposedEvent(participant.party().id(), new GoodsParticipantReviewed(participant.reviewRevision(), decision, now)));
         if (periodic) events.add(new ProposedEvent(participant.party().id(), new ScheduleEffect.Created(review(participant.party().id(), Math.addExact(now, rules.reviewInterval())))));

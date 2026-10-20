@@ -23,6 +23,12 @@ public final class GoodsParticipantAssessment {
     public static GoodsParticipantView view(FrontierWorldState state, GoodsParticipant participant, long atTick) {
         return read(state, participant, atTick).view();
     }
+    /** Present stock, domestic requirements and funded consent. Trading existing
+     * goods must not recursively plan production for prospective buyers.
+     * Export production remains an explicit read/view assessment. */
+    public static GoodsParticipantView trading(FrontierWorldState state, GoodsParticipant participant, long atTick) {
+        return domestic(state, participant, atTick).view();
+    }
     public static Assessment read(FrontierWorldState state, GoodsParticipant participant, long atTick) {
         return cached(state, participant, atTick, true);
     }
