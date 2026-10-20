@@ -32,6 +32,11 @@ public final class SupplyPlanner {
                 throw new IllegalArgumentException("invalid supply stock facts");
         }
         public long covered() { return Math.addExact(available, Math.addExact(incoming, promisedProduction)); }
+        /** Unknown-time promises may reduce reserve replenishment, not a dated shortage. */
+        public long coveredBy(long afterTicks) {
+            return Math.addExact(available, arrivals.stream().filter(a -> a.afterTicks() <= afterTicks)
+                    .mapToLong(Arrival::quantity).reduce(0L, Math::addExact));
+        }
         public long deadline() {
             return consumptionUnits == 0 ? Long.MAX_VALUE
                     : Math.multiplyExact(available, consumptionPeriodTicks) / consumptionUnits;
@@ -151,7 +156,13 @@ public final class SupplyPlanner {
     public record Plan(Map<String, Demand> demands, Map<String, SupplyReservePlanner.Target> reserves,
                        Map<String, Long> preferredPurchaseSpending,
                        Map<String, Long> preferredPurchaseQuantities, Map<String, Long> inputRequirements,
-                       Optional<io.farfrontier.palemirror.frontier.v3.model.economy.EconomicPlan> economy) {
+                       Optional<io.farfrontier.palemirror.frontier.v3.model.economy.EconomicPlan> economy,
+                       Map<String, Long> backedRecipes) {
+        public Plan(Map<String, Demand> demands, Map<String, SupplyReservePlanner.Target> reserves,
+                    Map<String, Long> preferredPurchaseSpending, Map<String, Long> preferredPurchaseQuantities,
+                    Map<String, Long> inputRequirements, Optional<io.farfrontier.palemirror.frontier.v3.model.economy.EconomicPlan> economy) {
+            this(demands, reserves, preferredPurchaseSpending, preferredPurchaseQuantities, inputRequirements, economy, Map.of());
+        }
         public Plan(Map<String, Demand> demands, Map<String, SupplyReservePlanner.Target> reserves,
                     Map<String, Long> preferredPurchaseSpending,
                     Optional<io.farfrontier.palemirror.frontier.v3.model.economy.EconomicPlan> economy) {
@@ -162,6 +173,9 @@ public final class SupplyPlanner {
         public Plan(Map<String, Demand> demands, Map<String, SupplyReservePlanner.Target> reserves) { this(demands, reserves, Map.of()); }
         public Plan(Map<String, Demand> demands) { this(demands, Map.of()); }
         public Plan { demands = Map.copyOf(demands); reserves = Map.copyOf(reserves);
+            backedRecipes = Map.copyOf(backedRecipes);
+            if (backedRecipes.values().stream().anyMatch(value -> value < 0))
+                throw new IllegalArgumentException("negative backed capacity");
             economy = Objects.requireNonNull(economy);
             preferredPurchaseQuantities = Map.copyOf(preferredPurchaseQuantities); inputRequirements = Map.copyOf(inputRequirements);
             if (!demands.keySet().containsAll(preferredPurchaseQuantities.keySet())
@@ -233,8 +247,10 @@ public final class SupplyPlanner {
             var stock = entry.getValue();
             // An admitted replenishment finishes toward the upper target; its first
             // partial promise must not switch the same purchase off at the lower mark.
-            if (stock.covered() > stock.reorderPoint() && stock.incoming() == 0) continue;
+            long urgent = consumptionShortfall(stock, 0);
+            if (stock.covered() > stock.reorderPoint() && stock.incoming() == 0 && urgent == 0) continue;
             long missing = Math.max(0, Math.max(stock.target(), stock.protectedMinimum()) - stock.covered());
+            missing = Math.max(missing, urgent);
             var retained = demands.get(entry.getKey());
             missing = Math.max(0, missing - retained.purchase() - retained.production());
             if (missing == 0) continue;
@@ -255,7 +271,8 @@ public final class SupplyPlanner {
             if (missing > pending) expand(stocks, processes, demands, allocatedBatches, resources,
                     entry.getKey(), missing - pending, deadline, reasons, new HashSet<>(), sourcing);
         }
-        return new Plan(demands, Map.of(), sourcing.spending(), sourcing.purchased(), resources.inputRequirements(), Optional.empty());
+        return new Plan(demands, Map.of(), sourcing.spending(), sourcing.purchased(), resources.inputRequirements(),
+                Optional.empty(), resources.backedRecipes());
     }
     private void expand(Map<String, Stock> stocks, List<Process> capacities, Map<String, Demand> demands, Map<String, Long> allocatedBatches, SupplyResources resources,
                         String item, long amount, long deadline, Set<Reason> reasons, Set<String> ancestors, SourcingMarket.Allocation sourcing) {
@@ -325,18 +342,22 @@ public final class SupplyPlanner {
         ancestors.remove(item);
     }
     private static long consumptionShortfall(Stock stock, long produced) {
-        return stock.consumptionUnits() == 0 ? 0 : Math.max(0, Math.ceilDiv(Math.multiplyExact(stock.consumptionUnits(),
-                stock.policy().leadTicks()), stock.consumptionPeriodTicks()) + 1 - stock.covered() - produced);
+        if (stock.consumptionUnits() == 0) return 0;
+        var need = new SupplyReservePlanner.Need(
+                SupplyReservePlanner.Rate.of(stock.consumptionUnits(), stock.consumptionPeriodTicks()), 1);
+        return Math.max(0, DatedStockCoverage.assess(stock.available(), need, 0, stock.arrivals(),
+                Math.max(1, stock.policy().leadTicks())).maximumShortfall() - produced);
     }
     private void dependency(Map<String, Stock> stocks, List<Process> capacities, Map<String, Demand> demands, Map<String, Long> allocatedBatches, SupplyResources resources,
                             String item, long required, long protectedQuantity, long deadline, long urgentRequired, Set<Reason> reasons,
                             Reason dependency, Set<String> ancestors, SourcingMarket.Allocation sourcing) {
         var stock = requireStock(stocks, item); var previous = demands.get(item);
         long total = resources.requireInput(item, required);
-        long urgentMissing = Math.max(0, resources.requireUrgentInput(item, urgentRequired) - stock.covered());
+        long urgentMissing = Math.max(0, resources.requireUrgentInput(item, urgentRequired) - stock.coveredBy(deadline));
         long protection = Math.addExact(previous.protectedInput(), protectedQuantity);
         var combined = EnumSet.noneOf(Reason.class); combined.addAll(previous.reasons()); combined.add(dependency);
         long missing = Math.max(0, total - stock.covered());
+        missing = Math.max(missing, urgentMissing);
         if (missing > 0 && deadline <= stock.policy().leadTicks()) combined.add(Reason.CRITICAL_PRODUCTION_DEADLINE);
         demands.put(item, new Demand(previous.purchase(), previous.production(), previous.recoveryProduction(), protection,
                 Math.min(previous.deadlineTicks(), deadline), combined, previous.process(), previous.urgentPurchase()));

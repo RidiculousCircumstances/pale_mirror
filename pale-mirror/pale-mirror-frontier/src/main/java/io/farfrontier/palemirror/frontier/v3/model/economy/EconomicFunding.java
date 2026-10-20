@@ -13,22 +13,28 @@ final class EconomicFunding {
         for (var offer : facts.market().offers()) quoted.merge(offer.item(),
                 Math.addExact(offer.cashPerItem(), Math.ceilDiv(offer.tripCashCost(), offer.quantity())), Math::min);
         prices.putAll(quoted); // An old cheaper reference cannot fund a currently dearer offer.
+        var forecastPrices = Map.copyOf(prices);
         var restart = new TreeMap<String, Long>(); var requested = new TreeMap<String, Long>();
+        var restartQuantities = new TreeMap<String, Long>();
+        var currentCosts = new TreeMap<String, Long>();
+        var desiredCosts = new TreeMap<String, Long>();
         var quotedRestarts = new HashSet<String>();
         var processes = new HashMap<String, SupplyPlanner.Process>(); facts.processes().forEach(p -> processes.put(p.id(), p));
         for (var entry : supply.demands().entrySet()) {
             String item = entry.getKey(); var demand = entry.getValue(); var stock = facts.stocks().get(item);
             long minimum = Math.min(demand.purchase(), Math.max(0, demand.protectedInput() - stock.covered()));
-            var actual = quotedUnitPrice(facts, item, Math.max(1, minimum), demand.deadlineTicks());
+            restartQuantities.put(item, minimum);
+            var actual = SourcingPurchaseCost.quote(facts.market(), item, minimum, demand.deadlineTicks());
             // Missing a consumption deadline does not make a purchasable restart
             // unfunded. Preserve its money; timing/dispatch still report lateness.
-            if (actual.isEmpty() && minimum > 0)
-                actual = quotedUnitPrice(facts, item, minimum, Long.MAX_VALUE);
-            if (actual.isPresent()) {
-                prices.put(item, actual.getAsLong());
-                if (minimum > 0) quotedRestarts.add(item);
+            if (actual.quantity() < minimum)
+                actual = SourcingPurchaseCost.quote(facts.market(), item, minimum, Long.MAX_VALUE);
+            if (minimum > 0 && actual.quantity() == minimum) {
+                prices.put(item, Math.ceilDiv(actual.cash(), minimum));
+                quotedRestarts.add(item);
             }
-            restart.put(item, Math.multiplyExact(minimum, prices.get(item)));
+            restart.put(item, actual.quantity() == minimum ? actual.cash()
+                    : SourcingPurchaseCost.forecast(facts.market(), item, minimum, prices.get(item)));
             var process = demand.process().map(processes::get);
             // A missing manufactured output and its inputs are alternatives, not two
             // independent shopping lists. Explicitly selected finished purchases remain.
@@ -36,21 +42,39 @@ final class EconomicFunding {
             long current = manufacture ? Math.max(0, demand.purchase() - demand.recoveryProduction()) : demand.purchase();
             long future = manufacture ? 0 : Math.max(0, horizon.missing().get(item) - EconomicForecast.directOutputBy(facts, supply, item, horizonTicks));
             long spending = Math.max(supply.preferredPurchaseSpending().getOrDefault(item, 0L),
-                    Math.multiplyExact(Math.max(current, future), prices.get(item)));
+                    SourcingPurchaseCost.forecast(facts.market(), item, Math.max(current, future), forecastPrices.get(item)));
+            currentCosts.put(item, SourcingPurchaseCost.forecast(facts.market(), item, demand.purchase(), forecastPrices.get(item)));
+            desiredCosts.put(item, spending);
             requested.put(item, Math.max(restart.get(item), spending));
         }
         long available = facts.market().availableMoney(); var budgets = new TreeMap<String, Long>();
         long restartTotal = restart.values().stream().reduce(0L, Math::addExact);
+        if (restartTotal > available) {
+            // A timely but unaffordable bundle must not veto a cheaper late
+            // recovery. This changes financing, never the consumption deadline.
+            for (var entry : restartQuantities.entrySet()) {
+                if (entry.getValue() == 0) continue;
+                var late = SourcingPurchaseCost.quote(facts.market(), entry.getKey(), entry.getValue(), Long.MAX_VALUE);
+                if (late.quantity() == entry.getValue() && late.cash() < restart.get(entry.getKey())) {
+                    restart.put(entry.getKey(), late.cash());
+                    requested.put(entry.getKey(), Math.max(late.cash(), desiredCosts.get(entry.getKey())));
+                    prices.put(entry.getKey(), Math.ceilDiv(late.cash(), late.quantity()));
+                    quotedRestarts.add(entry.getKey());
+                }
+            }
+            restartTotal = restart.values().stream().reduce(0L, Math::addExact);
+        }
         if (restartTotal <= available) {
             budgets.putAll(restart); available -= restartTotal;
         } else {
             // An unaffordable input bundle cannot consume the last money while
             // preventing direct survival purchases. No imaginary complete restart.
             for (var entry : facts.stocks().entrySet()) if (entry.getValue().policy().essential())
-                requested.merge(entry.getKey(), Math.multiplyExact(supply.require(entry.getKey()).purchase(), prices.get(entry.getKey())), Math::max);
+                requested.merge(entry.getKey(), currentCosts.get(entry.getKey()), Math::max);
         }
         var order = new ArrayList<>(requested.keySet());
-        order.sort(Comparator.<String>comparingInt(item -> priority(facts, supply, item, restartTotal > facts.market().availableMoney()))
+        boolean restartImpossible = restartTotal > facts.market().availableMoney();
+        order.sort(Comparator.<String>comparingInt(item -> priority(facts, supply, item, restartImpossible))
                 .thenComparingLong(item -> supply.require(item).deadlineTicks()).thenComparing(java.util.function.Function.identity()));
         for (var item : order) {
             long missing = Math.max(0, requested.get(item) - budgets.getOrDefault(item, 0L));
@@ -59,7 +83,7 @@ final class EconomicFunding {
         }
         long liquidity = 0;
         for (var entry : budgets.entrySet()) {
-            long current = Math.multiplyExact(supply.require(entry.getKey()).purchase(), prices.get(entry.getKey()));
+            long current = currentCosts.get(entry.getKey());
             liquidity = Math.addExact(liquidity, Math.max(0, entry.getValue() - current));
         }
         long cost = requested.values().stream().reduce(0L, Math::addExact);
@@ -69,19 +93,6 @@ final class EconomicFunding {
         return new Allocation(Map.copyOf(budgets), liquidity, Math.max(0, cost - facts.market().availableMoney()),
                 Map.copyOf(prices), fullyQuoted && restartTotal <= facts.market().availableMoney() ? restartItems : Set.of(),
                 !restartItems.isEmpty() && restartTotal > facts.market().availableMoney());
-    }
-    /** A cheap single item cannot price a larger restart whose remaining supply is dearer or absent. */
-    private static OptionalLong quotedUnitPrice(EconomicSnapshot facts, String item, long quantity, long deadline) {
-        long remaining = quantity, cost = 0;
-        for (var offer : facts.market().offers().stream().filter(o -> o.item().equals(item) && o.deliveryTicks() <= deadline)
-                .sorted(Comparator.<SourcingMarket.Offer>comparingLong(o -> Math.addExact(o.cashPerItem(),
-                        Math.ceilDiv(o.tripCashCost(), Math.min(quantity, o.quantity()))))
-                        .thenComparing(SourcingMarket.Offer::id)).toList()) {
-            long take = Math.min(remaining, offer.quantity());
-            cost = Math.addExact(cost, Math.addExact(Math.multiplyExact(take, offer.cashPerItem()), offer.tripCashCost())); remaining -= take;
-            if (remaining == 0) return OptionalLong.of(Math.ceilDiv(cost, quantity));
-        }
-        return OptionalLong.empty();
     }
     private static int priority(EconomicSnapshot facts, SupplyPlanner.Plan plan, String item, boolean restartImpossible) {
         var stock = facts.stocks().get(item); var demand = plan.require(item);

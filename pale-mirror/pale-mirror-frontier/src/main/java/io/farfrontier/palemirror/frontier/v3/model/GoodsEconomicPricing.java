@@ -22,6 +22,13 @@ final class GoodsEconomicPricing {
                     Math.max(1, view.stocks().get(item).unclaimedInStorage()), now);
             if (replacement.isPresent()) retained = new FixedScalar(Math.min(retained.raw(), replacement.orElseThrow().total().raw()));
         }
+        // The reserve owner has already excluded necessary stock from sale.
+        // Under a forecast cash deficit, selling that optional surplus is not
+        // new production: sunk manufacturing cost cannot veto positive proceeds.
+        // Production admission keeps its independent profitability assessment.
+        var economic = view.supplyPlan().orElseThrow().economy().orElseThrow();
+        if (economic.unfundedRequirements() > 0 && economic.saleableStock().getOrDefault(item, 0L) > 0)
+            retained = FixedScalar.ZERO;
         var outputValues = new TreeMap<>(prices);
         production.opportunities().forEach((key, value) -> outputValues.merge(key, value.raw(), Math::max));
         long inputValue = ProductionInputValue.assess(item, production.processes(), outputValues,

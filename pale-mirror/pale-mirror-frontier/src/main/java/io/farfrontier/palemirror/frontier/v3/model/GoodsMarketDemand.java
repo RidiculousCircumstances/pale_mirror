@@ -14,8 +14,9 @@ final class GoodsMarketDemand {
             var order = demand.order(); var view = demand.buyer(); var buyer = view.participant();
             int quantity = demand.quantity();
             var delivery = GoodsDeliveryAdvice.read(state, seller, view, item, (int) Math.min(surplus, quantity),
-                    GoodsDeliveryAdvice.Supply.STORED, now);
+                    1, demand.budget().raw(), GoodsDeliveryAdvice.Supply.STORED, now);
             if (delivery.isEmpty()) continue;
+            quantity = Math.min(quantity, delivery.orElseThrow().quantity());
             var competitors = new TreeMap<SubjectId, SellerPriceDiscovery.Offer>();
             for (var other : trade.orders().values()) {
                 if (other.side() != GoodsTradeOrder.Side.SELL || !other.counterparty().equals(buyer.party())
@@ -26,16 +27,19 @@ final class GoodsMarketDemand {
                         || !GoodsParticipantStorage.eligible(state, provider, other.containerId(), item)) continue;
                 int stock = Math.min(other.availableQuantity(), GoodsParticipantStorage.unclaimed(state, provider, other.containerId(), item));
                 if (stock == 0) continue;
-                var freight = GoodsDeliveryAdvice.from(state, other.containerId(), view, item, Math.min(quantity, stock), now);
+                var freight = GoodsDeliveryAdvice.from(state, other.containerId(), view, item, Math.min(quantity, stock),
+                        other.unitPriceLimit().raw(), demand.budget().raw(), now);
                 if (freight.isEmpty()) continue;
-                var offer = new SellerPriceDiscovery.Offer(provider.party().id(), stock, other.unitPriceLimit().plus(freight.orElseThrow()));
+                var offer = new SellerPriceDiscovery.Offer(provider.party().id(), freight.orElseThrow().quantity(),
+                        other.unitPriceLimit().plus(new FixedScalar(freight.orElseThrow().deliveryPerItem())));
                 competitors.merge(provider.party().id(), offer, (a, b) -> {
                     int price = a.landedPrice().compareTo(b.landedPrice());
                     return price < 0 || price == 0 && a.quantity() >= b.quantity() ? a : b;
                 });
             }
             result.add(new SellerPriceDiscovery.Demand(buyer.party().id(), quantity, demand.budget(), order.unitPriceLimit(),
-                    delivery.orElseThrow(), List.copyOf(competitors.values())));
+                    FixedScalar.ZERO, List.copyOf(competitors.values()), new FixedScalar(delivery.orElseThrow().tripExpense()),
+                    delivery.orElseThrow().minimumDispatchQuantity()));
         }
         return new SellerPriceDiscovery.Market(result);
     }

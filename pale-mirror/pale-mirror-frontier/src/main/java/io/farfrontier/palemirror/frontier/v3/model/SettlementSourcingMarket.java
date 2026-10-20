@@ -25,9 +25,10 @@ final class SettlementSourcingMarket {
                     || buyer.known().stream().noneMatch(known -> known.party().equals(order.party()))) continue;
             var seller = trade.participants().participants().get(order.party().id());
             if (seller == null || !GoodsParticipantStorage.eligible(state, seller, order.containerId(), order.itemKind())) continue;
-            String pool = order.party().id().value() + "|" + order.itemKind();
-            if (offers.containsKey(pool)) continue; // Alternative warehouses quote one seller stock, not independent budgets.
-            int quantity = Math.min(order.availableQuantity(), GoodsParticipantStorage.unclaimed(state, seller, order.containerId(), order.itemKind()));
+            String pool = order.party().id().value() + "|" + order.containerId().value() + "|" + order.itemKind();
+            if (offers.containsKey(pool)) continue; // One physical stock pool, not duplicate quotes of it.
+            int quantity = Math.min(tradeRules.maximumBatch(), Math.min(order.availableQuantity(),
+                    GoodsParticipantStorage.unclaimed(state, seller, order.containerId(), order.itemKind())));
             if (quantity == 0) continue;
             var timing = ProcurementTravelForecast.read(state, order, buyer);
             if (timing.isEmpty()) continue;

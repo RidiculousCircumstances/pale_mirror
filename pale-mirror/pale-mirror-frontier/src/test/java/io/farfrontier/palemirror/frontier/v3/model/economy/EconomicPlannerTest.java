@@ -6,6 +6,33 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class EconomicPlannerTest {
+    @Test void cashForecastReconsidersImportsWhenOwnInputsOfferASustainableAlternative() {
+        var base = facts(20, 60, 0, 15, List.of(oven()), List.of());
+        var market = new SourcingMarket(15, 100, Map.of("oven", 4L),
+                List.of(new SourcingMarket.Offer("food", "food", 20, 1, 1, 0, 0),
+                        new SourcingMarket.Offer("fuel", "fuel", 2, 5, 5, 0, 0)));
+        var input = new EconomicSnapshot(base.dayTicks(), base.stocks(), base.needs(), base.flows(), base.reserves(),
+                base.processes(), base.commitments(), market, base.replacementPrices(), List.of(), 0);
+        var plan = new EconomicPlanner().plan(input, RULES);
+        assertEquals(0L, plan.preferredPurchaseQuantities().getOrDefault("food", 0L),
+                "cheap food cannot exhaust the purse and strand existing ingredients");
+        assertTrue(plan.economy().orElseThrow().fundedRestarts().contains("fuel"));
+        assertTrue(plan.economy().orElseThrow().purchaseBudgets().values().stream().mapToLong(Long::longValue).sum() <= 15);
+    }
+    @Test void unfuelledWishDoesNotReserveWorkersAgainstFeasibleExportProduction() {
+        var bakery = new SupplyPlanner.Process("oven", "food", 1, Map.of("grain", 3), 1, Map.of("fuel", 20L),
+                0, 10, 1, 100, 1, Map.of("shared-worker", 40L));
+        var field = new SupplyPlanner.Process("field", "grain", 1, Map.of(), 0, Map.of(), 0,
+                10, 1, 20, 1, Map.of("shared-worker", 40L));
+        var input = facts(0, 200, 0, 0, List.of(bakery, field),
+                List.of(new EconomicSnapshot.ExportInterest("buyer", "grain", 220, 2, 1000, 1000, 0)));
+        var plan = new EconomicPlanner().plan(input, RULES);
+        assertEquals(0L, plan.backedRecipes().getOrDefault("oven", 0L));
+        assertTrue(plan.economy().orElseThrow().exports().stream().anyMatch(e ->
+                e.item().equals("grain") && e.additionalProduction() > 0),
+                "missing fuel is not a reservation of otherwise usable workers");
+        assertEquals(0, plan.economy().orElseThrow().purchaseBudgets().values().stream().mapToLong(Long::longValue).sum());
+    }
     @Test void solventSettlementMayOfferUpperReservesWhileProtectingReplenishmentInterval() {
         var plan = new EconomicPlanner().plan(facts(30, 90, 2, 10000, List.of(oven()), List.of()), RULES);
         var economy = plan.economy().orElseThrow();
@@ -68,6 +95,14 @@ class EconomicPlannerTest {
                 "late recovery still needs protected financing");
         assertEquals(0, recovery.require("food").production(), "a quote is not delivered fuel or secured bread");
         assertTrue(recovery.require("fuel").deadlineTicks() < 10000, "funding cannot postpone the real deadline");
+        var expensiveTimely = new SourcingMarket(6, 100, Map.of("oven", 4L),
+                List.of(new SourcingMarket.Offer("timely-unaffordable", "fuel", 20, 100, 100, 0, 0),
+                        new SourcingMarket.Offer("late-affordable", "fuel", 20, 5, 5, 10000, 0)));
+        var alternatives = new EconomicSnapshot(input.dayTicks(), input.stocks(), input.needs(), input.flows(), input.reserves(),
+                input.processes(), input.commitments(), expensiveTimely, input.replacementPrices(), List.of(), 0);
+        var fallback = new EconomicPlanner().plan(alternatives, RULES).economy().orElseThrow();
+        assertTrue(fallback.fundedRestarts().contains("fuel"));
+        assertEquals(5, fallback.purchasePrices().get("fuel"));
         var absent = new SourcingMarket(6, 100, Map.of("oven", 4L), List.of());
         var unavailable = new EconomicSnapshot(input.dayTicks(), input.stocks(), input.needs(), input.flows(), input.reserves(),
                 input.processes(), input.commitments(), absent, input.replacementPrices(), List.of(), 0);

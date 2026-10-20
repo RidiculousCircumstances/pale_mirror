@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import java.util.*;
+import io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionTiming;
 
 /** Quote cost/timing advice, never arrival coverage or route authority. No asynchronous cache dependency. */
 final class ProcurementTravelForecast {
@@ -10,6 +11,10 @@ final class ProcurementTravelForecast {
     }
     static Optional<Estimate> read(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId source,
                                    String item, GoodsParticipant buyer) {
+        return read(state, source, item, buyer, TransportOrganization.Itinerary.SOURCE_DELIVERY);
+    }
+    static Optional<Estimate> read(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId source,
+                                   String item, GoodsParticipant buyer, TransportOrganization.Itinerary itinerary) {
         var destinations = GoodsParticipantStorage.containers(state, buyer, item);
         for (var mission : state.shipments().missions().values().stream().sorted(Comparator.comparing(TransportMission::id)).toList()) {
             if (!mission.sender().containerId().equals(source)
@@ -22,10 +27,13 @@ final class ProcurementTravelForecast {
             // by every economic/worker query. Admission and movement still validate
             // their own current geometry; no quote becomes promised delivery here.
             var rules = state.bootstrap().ruleset().expedition();
-            long duration = rules.plannedDuration(proof.outward().edges(), proof.returning().edges());
+            boolean sameDirection = mission.organization().itinerary() == itinerary;
+            var timing = ExpeditionTiming.assess(rules,
+                    sameDirection ? proof.outward().edges() : proof.returning().edges(),
+                    sameDirection ? proof.returning().edges() : proof.outward().edges(), itinerary);
             long labour = Math.addExact(Math.multiplyExact(Math.addExact(proof.outward().edges(), proof.returning().edges()),
                     rules.ticksPerRouteEdge()), rules.destinationWorkTicks());
-            return Optional.of(new Estimate(Math.addExact(duration, state.humanPopulation().schedule(buyer.settlementId()).dayTicks()), labour, duration));
+            return Optional.of(new Estimate(timing.deliveryTicks(), labour, timing.durationTicks()));
         }
         // A first quote still needs a cost estimate. Endpoint distance is explicitly
         // provisional: this may rank a BUY intention, never create incoming stock,
@@ -41,9 +49,9 @@ final class ProcurementTravelForecast {
         var rules = state.bootstrap().ruleset().expedition();
         long edges = Math.max(1, Math.ceilDiv(Math.multiplyExact(distance,
                 state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().orElseThrow().provisionalDistancePermille()), 1000));
-        long duration = rules.plannedDuration(edges, edges);
+        var timing = ExpeditionTiming.assess(rules, edges, edges, itinerary);
         long labour = Math.addExact(Math.multiplyExact(Math.multiplyExact(edges, 2), rules.ticksPerRouteEdge()), rules.destinationWorkTicks());
-        return Optional.of(new Estimate(Math.addExact(duration, state.humanPopulation().schedule(buyer.settlementId()).dayTicks()), labour, duration));
+        return Optional.of(new Estimate(timing.deliveryTicks(), labour, timing.durationTicks()));
     }
     private ProcurementTravelForecast() { }
 }

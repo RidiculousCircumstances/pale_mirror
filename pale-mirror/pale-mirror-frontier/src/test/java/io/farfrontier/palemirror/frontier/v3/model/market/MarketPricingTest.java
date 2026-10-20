@@ -6,6 +6,22 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MarketPricingTest {
+    @Test void fixedFreightUsesCandidateAffordableLotRatherThanUnfundedDesiredQuantity() {
+        assertEquals(4, FundedCargoLot.quantity(64, 2, 6, 14));
+        assertEquals(0, FundedCargoLot.quantity(64, 2, 6, 6));
+        var buyer = new SellerPriceDiscovery.Demand(new SubjectId("buyer:funded"), 64,
+                new FixedScalar(14), new FixedScalar(4), FixedScalar.ZERO, List.of(), new FixedScalar(6));
+        var ask = SellerPriceDiscovery.ask(new FixedScalar(2), 64, market(buyer));
+        int count = FundedCargoLot.quantity(64, ask.raw(), 6, 14);
+        assertTrue(count > 0);
+        assertTrue(ask.raw() + Math.ceilDiv(6L, count) <= 4);
+        assertTrue((long) count * ask.raw() + 6 <= 14);
+        var rival = new SellerPriceDiscovery.Offer(new SubjectId("seller:rival"), 10, FixedScalar.whole(3));
+        var competed = new SellerPriceDiscovery.Demand(new SubjectId("buyer:competed"), 10,
+                FixedScalar.whole(100), FixedScalar.whole(10), FixedScalar.ZERO, List.of(rival), FixedScalar.whole(6));
+        assertEquals(new FixedScalar(2_399_999), SellerPriceDiscovery.ask(FixedScalar.whole(9), 10, market(competed)),
+                "competition includes fixed freight at the selected lot, not an arbitrary liquidation floor");
+    }
     @Test void recurringProductionValuesRetentionAndCanTradeAtBreakEvenWithoutASeedFloor() {
         var cost = new FixedScalar(1_340_000);
         var rival = new SellerPriceDiscovery.Offer(new SubjectId("seller:rival"), 8, new FixedScalar(400));

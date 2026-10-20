@@ -54,8 +54,18 @@ class SupplyPlannerTest {
         var planner = new SupplyPlanner();
         assertEquals(100, planner.plan(Map.of("bread", stock(0, 0, 100, 1, FOOD)), List.of()).require("bread").purchase());
         assertEquals(36, planner.plan(Map.of("bread", stock(0, 64, 100, 1, FOOD)), List.of()).require("bread").purchase());
-        assertEquals(0, planner.plan(Map.of("bread", stock(0, 100, 100, 1, FOOD)), List.of()).require("bread").purchase());
+        assertEquals(2, planner.plan(Map.of("bread", stock(0, 100, 100, 1, FOOD)), List.of()).require("bread").urgentPurchase(),
+                "undated cargo covers the reserve but cannot suppress the immediate food gap");
         assertEquals(0, planner.plan(Map.of("bread", stock(75, 0, 100, 1, FOOD)), List.of()).require("bread").purchase());
+    }
+    @Test void lateFullReserveDoesNotHideThePrefixFoodGapButTimelyArrivalDoes() {
+        var delayed = new SupplyPlanner.Stock(2, 100, 0, 100, 0, 1, 10, FOOD,
+                List.of(new SupplyPlanner.Arrival(100, 200)));
+        var late = new SupplyPlanner().plan(Map.of("food", delayed), List.of()).require("food");
+        assertEquals(9, late.urgentPurchase());
+        var timely = new SupplyPlanner.Stock(2, 100, 0, 100, 0, 1, 10, FOOD,
+                List.of(new SupplyPlanner.Arrival(100, 10)));
+        assertEquals(0, new SupplyPlanner().plan(Map.of("food", timely), List.of()).require("food").purchase());
     }
     @Test void expandsProductionInputsAndFuelButAnEmptyFuelStoreAloneIsNotAnEmergency() {
         var stocks = Map.of("bread", stock(20, 0, 100, 1, FOOD), "wheat", stock(0, 0, 0, 0, MATERIAL), "coal", stock(0, 0, 0, 0, MATERIAL));
@@ -105,12 +115,13 @@ class SupplyPlannerTest {
         assertEquals(2, plan.require("coal").protectedInput());
         assertTrue(plan.require("coal").urgent(100));
         var funded = new HashMap<>(stocks); funded.put("coal", stock(0, 8, 8, 0, MATERIAL));
-        assertEquals(0, new SupplyPlanner().plan(funded, List.of(), List.of(commitment)).require("coal").purchase());
+        assertEquals(2, new SupplyPlanner().plan(funded, List.of(), List.of(commitment)).require("coal").purchase(),
+                "the undated fuel delivery cannot erase the urgent retained-job dependency");
         assertEquals(21, new SupplyPlanner().plan(funded, List.of(), List.of(commitment)).require("bread").purchase(),
                 "an order without an arrival bound does not prove timely production");
         funded.put("coal", stock(8, 0, 8, 0, MATERIAL));
-        assertEquals(0, new SupplyPlanner().plan(funded, List.of(), List.of(commitment)).require("bread").purchase(),
-                "actual delivery backs the retained job and withdraws the fallback need");
+        assertEquals(2, new SupplyPlanner().plan(funded, List.of(), List.of(commitment)).require("bread").purchase(),
+                "backed but undated output withdraws reserve replenishment, not the short-term food gap");
         assertThrows(IllegalArgumentException.class, () -> new SupplyPlanner().plan(stocks, List.of(), List.of(
                 commitment, new SupplyPlanner.Dependency("coal", "bread", 1, SupplyPlanner.Reason.PRODUCTION_INPUT))));
     }
@@ -212,11 +223,15 @@ class SupplyPlannerTest {
         var demand = new SupplyPlanner.Demand(7, 0, 6, 0, 15294,
                 Set.of(SupplyPlanner.Reason.STOCK_REPLENISHMENT, SupplyPlanner.Reason.UNSECURED_PRODUCTION), Optional.empty(), 0);
         var need = new SupplyReservePlanner.Need(SupplyReservePlanner.Rate.of(21, 15294), 0);
-        boolean uncovered = TripDispatchPolicy.uncovered(demand, need, 21, 105, 23000, 400);
+        boolean uncovered = TripDispatchPolicy.uncovered(demand, need, 21,
+                List.of(new SupplyPlanner.Arrival(105, 0)), 23000, 400);
         assertFalse(uncovered);
         assertEquals(TripDispatchPolicy.Cause.ACCUMULATING, TripDispatchPolicy.assess(
                 List.of(new TripDispatchPolicy.Goods(3, FOOD, demand, uncovered)), 23000, 400));
-        assertTrue(TripDispatchPolicy.uncovered(demand, need, 21, 0, 23000, 400),
+        assertTrue(TripDispatchPolicy.uncovered(demand, need, 21, List.of(), 23000, 400),
                 "a long actual journey can be urgent even outside the initial lead window");
+        assertTrue(TripDispatchPolicy.uncovered(demand, need, 21,
+                List.of(new SupplyPlanner.Arrival(105, 50000)), 23000, 400),
+                "a late incoming shipment cannot cover consumption before its arrival");
     }
 }

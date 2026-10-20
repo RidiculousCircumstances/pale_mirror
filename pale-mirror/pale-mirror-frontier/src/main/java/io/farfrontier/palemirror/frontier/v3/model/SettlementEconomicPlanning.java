@@ -48,12 +48,13 @@ final class SettlementEconomicPlanning {
             }
             if (quantity == 0) continue;
             var freight = GoodsDeliveryAdvice.read(state, participant, demand.buyer(), item, quantity,
-                    GoodsDeliveryAdvice.Supply.CONDITIONAL_PRODUCTION, now);
+                    salePrice, demand.budget().raw(), GoodsDeliveryAdvice.Supply.CONDITIONAL_PRODUCTION, now);
             if (freight.isEmpty()) continue;
-            long unitExpense = Math.addExact(salePrice, freight.orElseThrow().raw());
+            quantity = freight.orElseThrow().quantity();
+            long unitExpense = Math.addExact(salePrice, freight.orElseThrow().deliveryPerItem());
             if (order.unitPriceLimit().raw() < unitExpense || demand.budget().raw() < unitExpense) continue;
             interests.add(new EconomicSnapshot.ExportInterest(order.party().id().value(), item, quantity,
-                    salePrice, demand.buyer().availableMoney().raw(), demand.budget().raw(), freight.orElseThrow().raw()));
+                    salePrice, demand.buyer().availableMoney().raw(), demand.budget().raw(), freight.orElseThrow().deliveryPerItem()));
           }
         }
         return List.copyOf(interests);

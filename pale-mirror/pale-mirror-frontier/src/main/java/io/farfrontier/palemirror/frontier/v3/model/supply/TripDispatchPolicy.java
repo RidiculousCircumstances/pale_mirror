@@ -7,6 +7,9 @@ import java.util.*;
  * conservative journey forecast. Deferral is not a promise of future stock. */
 public final class TripDispatchPolicy {
     public enum Cause { PREFERRED_LOAD, SUPPLY_DEADLINE, ACCUMULATING }
+    public static int minimumStandaloneLoad(SupplyPolicy policy) {
+        return Math.max(policy.preferredTripLoad(), policy.preferredLot());
+    }
     public record Goods(int quantity, SupplyPolicy policy, SupplyPlanner.Demand demand, boolean uncoveredNeed) {
         public Goods { Objects.requireNonNull(policy); Objects.requireNonNull(demand);
             if (quantity < 1) throw new IllegalArgumentException("invalid trip demand"); }
@@ -34,15 +37,17 @@ public final class TripDispatchPolicy {
      * Input deadlines are already netted by the production planner; direct consumption is
      * checked at this route's horizon rather than the commodity's initial lead estimate. */
     public static boolean uncovered(SupplyPlanner.Demand demand, SupplyReservePlanner.Need need,
-            long available, long incoming, long arrivalTicks, long reviewTicks) {
+            long available, List<SupplyPlanner.Arrival> incoming, long arrivalTicks, long reviewTicks) {
         if (demand.purchase() == 0) return false;
         if (need.consumption().numerator().signum() == 0)
             return demand.urgentPurchase() > 0 || demand.deadlineTicks() != Long.MAX_VALUE
                     && (demand.reasons().contains(SupplyPlanner.Reason.PRODUCTION_INPUT)
                         || demand.reasons().contains(SupplyPlanner.Reason.PRODUCTION_FUEL));
-        long required = Math.addExact(need.immediate(), need.consumption().over(Math.addExact(arrivalTicks, reviewTicks)));
-        long covered = Math.addExact(Math.addExact(available, incoming), demand.production());
-        return required > covered;
+        var arrivals = new ArrayList<>(incoming);
+        if (demand.production() > 0 && demand.deadlineTicks() != Long.MAX_VALUE)
+            arrivals.add(new SupplyPlanner.Arrival(demand.production(), demand.deadlineTicks()));
+        return !DatedStockCoverage.assess(available, need, 0, arrivals,
+                Math.addExact(arrivalTicks, reviewTicks)).covered();
     }
     private TripDispatchPolicy() { }
 }

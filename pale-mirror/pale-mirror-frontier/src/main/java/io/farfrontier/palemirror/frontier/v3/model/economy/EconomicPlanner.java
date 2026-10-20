@@ -23,6 +23,18 @@ public final class EconomicPlanner {
     /** Independent of neighbours' plans: the funded domestic envelope is reusable
      * by quotation and export evaluation without recursive settlement planning. */
     public Domestic domestic(EconomicSnapshot facts, EconomicPlanningRules policy) {
+        var selected = evaluate(facts, policy, facts.market());
+        var economy = selected.plan.economy().orElseThrow();
+        if (economy.unfundedRequirements() == 0 || selected.plan.preferredPurchaseQuantities().isEmpty()) return selected;
+        // Unit profitability alone is not a cash-flow plan. Compare the selected
+        // import portfolio with own production, using the SAME real funding facts.
+        // Zero here disables optional sourcing only; it does not erase treasury
+        // money from financing, add a subsidy or credit conditional exports.
+        var local = evaluate(facts, policy, new SourcingMarket(0, facts.market().switchingSavingsPermille(),
+                facts.market().processUnitCosts(), facts.market().offers()));
+        return EconomicPlanChoice.prefer(local.plan, selected.plan, facts) ? local : selected;
+    }
+    private Domestic evaluate(EconomicSnapshot facts, EconomicPlanningRules policy, SourcingMarket selection) {
         long horizon = Math.max(Math.multiplyExact(facts.dayTicks(), policy.horizonDays()),
                 facts.reserves().values().stream().mapToLong(SupplyReservePlanner.Target::horizonTicks).max().orElseThrow());
         var requirements = new EconomicRequirements();
@@ -37,7 +49,7 @@ public final class EconomicPlanner {
             stocks.put(item, new SupplyPlanner.Stock(stock.available(), stock.incoming(), stock.promisedProduction(), target,
                     minimum, stock.consumptionUnits(), stock.consumptionPeriodTicks(), stock.policy(), stock.arrivals(), OptionalLong.of(target)));
         }
-        var supply = new SupplyPlanner().plan(stocks, facts.processes(), facts.commitments(), facts.market());
+        var supply = new SupplyPlanner().plan(stocks, facts.processes(), facts.commitments(), selection);
         supply.inputRequirements().forEach((item, amount) -> domestic.merge(item, amount, Math::addExact));
         var missing = new TreeMap<String, Long>();
         domestic.forEach((item, target) -> {
@@ -93,7 +105,7 @@ public final class EconomicPlanner {
                 funding.unfunded(), facts.contractReceivables(), checkpoints, List.of(), constraints,
                 funding.prices(), funding.fundedRestarts(), saleable);
         return new Domestic(facts, policy, new SupplyPlanner.Plan(supply.demands(), reserves, supply.preferredPurchaseSpending(),
-                supply.preferredPurchaseQuantities(), supply.inputRequirements(), Optional.of(economy)));
+                supply.preferredPurchaseQuantities(), supply.inputRequirements(), Optional.of(economy), supply.backedRecipes()));
     }
 
     /** Adds conditional sales to an already evaluated domestic plan. Does not
@@ -115,6 +127,6 @@ public final class EconomicPlanner {
                 base.retainedLiquidity(), base.unfundedRequirements(), base.contractReceivables(), base.checkpoints(),
                 exports.exports(), constraints, base.purchasePrices(), base.fundedRestarts(), base.saleableStock());
         return new SupplyPlanner.Plan(domestic.demands(), domestic.reserves(), domestic.preferredPurchaseSpending(),
-                domestic.preferredPurchaseQuantities(), domestic.inputRequirements(), Optional.of(economy));
+                domestic.preferredPurchaseQuantities(), domestic.inputRequirements(), Optional.of(economy), domestic.backedRecipes());
     }
 }

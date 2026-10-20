@@ -20,9 +20,7 @@ final class EconomicExportPlanning {
             if (previous != null && !previous.equals(ticks)) throw new IllegalArgumentException("inconsistent economic labour capacity");
         });
         for (var process : facts.processes()) {
-            var demand = supply.require(process.product());
-            long domesticBatches = demand.process().filter(process.id()::equals).isPresent()
-                    ? Math.ceilDiv(Math.addExact(demand.production(), demand.recoveryProduction()), process.outputPerBatch()) : 0;
+            long domesticBatches = supply.backedRecipes().getOrDefault(process.id(), 0L);
             // A later crop wave is not spare export capacity inside this plan.
             // Use the same owner-dated release boundary as domestic forecasts.
             capacity.put(process.id(), Math.max(0, process.recipesAvailableBy(horizonTicks) - domesticBatches));

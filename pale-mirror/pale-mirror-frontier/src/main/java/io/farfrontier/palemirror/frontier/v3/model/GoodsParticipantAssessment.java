@@ -61,7 +61,7 @@ public final class GoodsParticipantAssessment {
         var plan = domestic.map(EconomicPlanner.Domestic::plan).orElseGet(() -> {
             var supply = new SupplyPlanner().plan(facts.stocks(), facts.capacities(), facts.commitments(), facts.market());
             return new SupplyPlanner.Plan(supply.demands(), facts.reserves(), supply.preferredPurchaseSpending(),
-                    supply.preferredPurchaseQuantities(), supply.inputRequirements(), supply.economy());
+                    supply.preferredPurchaseQuantities(), supply.inputRequirements(), supply.economy(), supply.backedRecipes());
         });
         return new Assessment(atTick, GoodsParticipantView.planned(state, observed, Optional.of(plan)), Optional.of(facts), domestic);
     }

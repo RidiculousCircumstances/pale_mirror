@@ -10,13 +10,14 @@ public final class GoodsDispatchAdvice {
                                                   Map<String, Integer> quantities, long journeyTicks, long atTick) {
         var rules = state.bootstrap().ruleset().goodsTrade();
         var needs = SettlementReservePlanning.basis(state, view.participant().settlementId(), atTick).needs();
+        var incoming = SettlementDeliveryForecast.read(state, view.participant());
         return TripDispatchPolicy.assess(quantities.entrySet().stream().map(e -> {
             var demand = view.supplyPlan().map(p -> p.require(e.getKey()))
                     .orElseGet(() -> new SupplyPlanner.Demand(0, 0, 0, Long.MAX_VALUE, Set.of(), Optional.empty()));
             var stock = view.stocks().get(e.getKey());
             return new TripDispatchPolicy.Goods(e.getValue(), rules.supplyPlanning().require(e.getKey()), demand,
                     TripDispatchPolicy.uncovered(demand, needs.get(e.getKey()), stock.unclaimedInStorage(),
-                            stock.expectedIncoming(), journeyTicks, rules.reviewInterval()));
+                            incoming.getOrDefault(e.getKey(), List.of()), journeyTicks, rules.reviewInterval()));
         }).toList(), journeyTicks, rules.reviewInterval());
     }
     private GoodsDispatchAdvice() { }

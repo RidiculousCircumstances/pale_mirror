@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.FixedScalar;
 import io.farfrontier.palemirror.frontier.v3.model.market.AcquisitionQuote;
+import io.farfrontier.palemirror.frontier.v3.model.market.FundedCargoLot;
 import java.util.*;
 
 /** Current stock and shared travel valuation -> provisional landed-price advice. */
@@ -34,8 +35,8 @@ final class GoodsAcquisitionPricing {
             if (timing.isEmpty()) continue;
             var cost = GoodsTransportValuation.estimate(state, buyer, timing.orElseThrow().journeyTicks(), 1);
             if (funding.isPresent()) {
-                long goodsCash = Math.max(0, funding.orElseThrow().raw() - cost.resourceExpense().raw());
-                quantity = (int) Math.min(quantity, goodsCash / order.unitPriceLimit().raw());
+                quantity = FundedCargoLot.quantity(quantity, order.unitPriceLimit().raw(),
+                        cost.resourceExpense().raw(), funding.orElseThrow().raw());
                 if (quantity == 0) continue;
             }
             var candidate = new AcquisitionQuote(order.unitPriceLimit(),

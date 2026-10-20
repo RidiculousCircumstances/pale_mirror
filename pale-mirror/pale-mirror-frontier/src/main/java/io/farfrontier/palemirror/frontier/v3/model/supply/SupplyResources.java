@@ -10,6 +10,8 @@ final class SupplyResources {
     private final Map<String, Long> inputRequirements = new HashMap<>();
     private final Map<String, Long> urgentInputRequirements = new HashMap<>();
     private final Map<String, Long> labour = new TreeMap<>();
+    private final Map<String, Long> backedRecipes = new TreeMap<>();
+    Map<String, Long> backedRecipes() { return Map.copyOf(backedRecipes); }
 
     long requireInput(String item, long quantity) {
         return inputRequirements.merge(item, quantity, Math::addExact);
@@ -96,6 +98,7 @@ final class SupplyResources {
         long ready = readyAt(process, batches, allocated).orElseThrow(() -> new IllegalArgumentException("unbacked production coverage"));
         processReady.put(process.id(), ready);
         required(process, batches, allocated).forEach(this::consume);
+        backedRecipes.merge(process.id(), batches, Math::addExact);
     }
     private void consume(String item, long quantity) {
         for (var entry : available.get(item).entrySet()) {
