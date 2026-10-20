@@ -8,6 +8,15 @@ import java.util.*;
 final class GoodsAcquisitionPricing {
     static Optional<AcquisitionQuote> estimate(FrontierWorldState state, GoodsParticipant buyer,
                                               String item, long shortage, long now) {
+        return estimate(state, buyer, item, shortage, now, Optional.empty());
+    }
+    static Optional<AcquisitionQuote> purchase(FrontierWorldState state, GoodsParticipant buyer,
+                                              String item, long shortage, long now, FixedScalar funding) {
+        if (funding.raw() < 0) throw new IllegalArgumentException("negative acquisition funding");
+        return estimate(state, buyer, item, shortage, now, Optional.of(funding));
+    }
+    private static Optional<AcquisitionQuote> estimate(FrontierWorldState state, GoodsParticipant buyer,
+                                              String item, long shortage, long now, Optional<FixedScalar> funding) {
         var rules = state.bootstrap().ruleset().goodsTrade();
         if (shortage <= 0 || rules.supplyPlanning().sourcing().isEmpty()) return Optional.empty();
         var trade = state.companies().goodsTrade();
@@ -24,6 +33,11 @@ final class GoodsAcquisitionPricing {
             var timing = ProcurementTravelForecast.read(state, order, buyer);
             if (timing.isEmpty()) continue;
             var cost = GoodsTransportValuation.estimate(state, buyer, timing.orElseThrow().journeyTicks(), 1);
+            if (funding.isPresent()) {
+                long goodsCash = Math.max(0, funding.orElseThrow().raw() - cost.resourceExpense().raw());
+                quantity = (int) Math.min(quantity, goodsCash / order.unitPriceLimit().raw());
+                if (quantity == 0) continue;
+            }
             var candidate = new AcquisitionQuote(order.unitPriceLimit(),
                     new FixedScalar(Math.ceilDiv(cost.resourceExpense().raw(), quantity)));
             if (best == null || candidate.total().compareTo(best.total()) < 0) best = candidate;

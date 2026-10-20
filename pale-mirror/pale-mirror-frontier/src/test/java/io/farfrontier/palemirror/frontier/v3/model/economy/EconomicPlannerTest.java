@@ -49,20 +49,29 @@ class EconomicPlannerTest {
         assertEquals(0, economy.purchaseBudgets().values().stream().mapToLong(Long::longValue).sum(),
                 "possible liquidation proceeds cannot be spent before sale");
     }
-    @Test void actualSupplierQuoteFundsRestartButAnUnreachableOrLateOfferDoesNot() {
+    @Test void actualSupplierQuoteFundsEvenLateRecoveryWithoutInventingTimelySupply() {
         var original = facts(0, 200, 0, 6, List.of(oven()), List.of());
         var market = new SourcingMarket(6, 100, Map.of("oven", 4L),
-                List.of(new SourcingMarket.Offer("coal-supplier", "fuel", 20, 5, 5, 0, 0)));
+                List.of(new SourcingMarket.Offer("coal-supplier", "fuel", 20, 5, 5, 0, 0),
+                        new SourcingMarket.Offer("cheap-but-distant", "fuel", 20, 1, 1, 0, 10, 10)));
         var input = new EconomicSnapshot(original.dayTicks(), original.stocks(), original.needs(), original.flows(),
                 original.reserves(), original.processes(), original.commitments(), market, original.replacementPrices(), List.of(), 0);
         var plan = new EconomicPlanner().plan(input, RULES).economy().orElseThrow();
-        assertEquals(5, plan.purchasePrices().get("fuel"));
+        assertEquals(5, plan.purchasePrices().get("fuel"), "fund the affordable delivered restart, not the cheapest sticker price");
         assertTrue(plan.fundedRestarts().contains("fuel"));
         var late = new SourcingMarket(6, 100, Map.of("oven", 4L),
                 List.of(new SourcingMarket.Offer("coal-supplier", "fuel", 20, 5, 5, 10000, 0)));
         var delayed = new EconomicSnapshot(input.dayTicks(), input.stocks(), input.needs(), input.flows(), input.reserves(),
                 input.processes(), input.commitments(), late, input.replacementPrices(), List.of(), 0);
-        assertFalse(new EconomicPlanner().plan(delayed, RULES).economy().orElseThrow().fundedRestarts().contains("fuel"));
+        var recovery = new EconomicPlanner().plan(delayed, RULES);
+        assertTrue(recovery.economy().orElseThrow().fundedRestarts().contains("fuel"),
+                "late recovery still needs protected financing");
+        assertEquals(0, recovery.require("food").production(), "a quote is not delivered fuel or secured bread");
+        assertTrue(recovery.require("fuel").deadlineTicks() < 10000, "funding cannot postpone the real deadline");
+        var absent = new SourcingMarket(6, 100, Map.of("oven", 4L), List.of());
+        var unavailable = new EconomicSnapshot(input.dayTicks(), input.stocks(), input.needs(), input.flows(), input.reserves(),
+                input.processes(), input.commitments(), absent, input.replacementPrices(), List.of(), 0);
+        assertFalse(new EconomicPlanner().plan(unavailable, RULES).economy().orElseThrow().fundedRestarts().contains("fuel"));
     }
     @Test void forecastShortfallOffersOptionalFoodReserveBeforeTheNextRestartFails() {
         var input = facts(20, 3, 2, 3, List.of(oven()), List.of());

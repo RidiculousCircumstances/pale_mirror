@@ -20,6 +20,10 @@ final class EconomicFunding {
             String item = entry.getKey(); var demand = entry.getValue(); var stock = facts.stocks().get(item);
             long minimum = Math.min(demand.purchase(), Math.max(0, demand.protectedInput() - stock.covered()));
             var actual = quotedUnitPrice(facts, item, Math.max(1, minimum), demand.deadlineTicks());
+            // Missing a consumption deadline does not make a purchasable restart
+            // unfunded. Preserve its money; timing/dispatch still report lateness.
+            if (actual.isEmpty() && minimum > 0)
+                actual = quotedUnitPrice(facts, item, minimum, Long.MAX_VALUE);
             if (actual.isPresent()) {
                 prices.put(item, actual.getAsLong());
                 if (minimum > 0) quotedRestarts.add(item);
@@ -70,8 +74,9 @@ final class EconomicFunding {
     private static OptionalLong quotedUnitPrice(EconomicSnapshot facts, String item, long quantity, long deadline) {
         long remaining = quantity, cost = 0;
         for (var offer : facts.market().offers().stream().filter(o -> o.item().equals(item) && o.deliveryTicks() <= deadline)
-                .sorted(Comparator.comparingLong(io.farfrontier.palemirror.frontier.v3.model.supply.SourcingMarket.Offer::cashPerItem)
-                        .thenComparing(io.farfrontier.palemirror.frontier.v3.model.supply.SourcingMarket.Offer::id)).toList()) {
+                .sorted(Comparator.<SourcingMarket.Offer>comparingLong(o -> Math.addExact(o.cashPerItem(),
+                        Math.ceilDiv(o.tripCashCost(), Math.min(quantity, o.quantity()))))
+                        .thenComparing(SourcingMarket.Offer::id)).toList()) {
             long take = Math.min(remaining, offer.quantity());
             cost = Math.addExact(cost, Math.addExact(Math.multiplyExact(take, offer.cashPerItem()), offer.tripCashCost())); remaining -= take;
             if (remaining == 0) return OptionalLong.of(Math.ceilDiv(cost, quantity));

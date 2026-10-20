@@ -107,6 +107,16 @@ class SettlementSourcingMarketTest {
         assertTrue(GoodsAcquisitionPricing.estimate(state, buyer, "minecraft:bread", 32, offer.expiresAtTick()).isEmpty());
         assertTrue(GoodsAcquisitionPricing.estimate(state, buyer, "minecraft:bread", 1, 0).orElseThrow().delivery()
                 .compareTo(acquisition.delivery()) > 0, "a small requirement cannot amortize freight over nonexistent cargo");
+        long freight = provisions.resourceExpense().raw(), unit = offer.unitPriceLimit().raw();
+        var smallBudget = new FixedScalar(freight + 3 * unit);
+        var small = GoodsAcquisitionPricing.purchase(state, buyer, "minecraft:bread", 32, 0, smallBudget).orElseThrow();
+        assertEquals(Math.ceilDiv(freight, 3), small.delivery().raw(),
+                "price advice must amortize only over cargo the buyer can actually finance");
+        assertTrue(small.total().compareTo(acquisition.total()) > 0);
+        assertTrue(GoodsAcquisitionPricing.purchase(state, buyer, "minecraft:bread", 32, 0,
+                new FixedScalar(freight + unit - 1)).isEmpty(), "cash must cover both goods and the trip");
+        assertEquals(acquisition, GoodsAcquisitionPricing.purchase(state, buyer, "minecraft:bread", 32, 0,
+                new FixedScalar(freight + 32 * unit)).orElseThrow());
         assertEquals(provisions.resourceExpense().raw() + timing.labourTicks()
                 * state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().orElseThrow().labourValuePerTick(),
                 market.offers().getFirst().tripCost(), "make-or-buy must include the same provisions as actual procurement");
