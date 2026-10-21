@@ -94,7 +94,7 @@ class FrontierV3HarvestSceneReleaseBarrierTest {
                 List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(base.worldId(), job.workerId()))), Set.of(), Optional.empty());
         var witness = new FrontierV3ResourceSiteHandProjectionWitness(site, job.id(), job.actorAccountId(),
                 new SubjectId("lot:retained-wheat"), job.workerId(), lease.members().getFirst().entityId(),
-                lease.id(), lease.revision(), 1L, 1, 1);
+                lease.id(), lease.revision(), 1L, 1, 1, FrontierV3ResourceSiteHandProjectionWitness.Mode.MATERIALIZE_COLD);
         var ledger = FrontierV3ResourceSiteLedger.fixture();
         ledger.beginFieldHandProjection(witness);
         var restored = FrontierV3ResourceSiteLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), null), null);

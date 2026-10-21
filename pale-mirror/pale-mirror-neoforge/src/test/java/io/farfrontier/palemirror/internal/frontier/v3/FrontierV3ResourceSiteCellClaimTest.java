@@ -242,14 +242,18 @@ class FrontierV3ResourceSiteCellClaimTest {
                 new SubjectId("lot:field-part-test"), new SubjectId("resident:cell-claim-test"),
                 java.util.UUID.fromString("00000000-0000-0000-0000-000000000091"),
                 new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:field-delivery-cell-claim-test"),
-                2L, 1L, 7, 7);
+                2L, 1L, 7, 7, FrontierV3ResourceSiteHandProjectionWitness.Mode.MATERIALIZE_COLD);
         activeLedger.beginFieldHandProjection(hand);
         var restoredHand = FrontierV3ResourceSiteLedger.load(activeLedger.save(new CompoundTag(), null), null);
         assertEquals(hand, restoredHand.fieldHandProjection(SITE));
+        var missingMode = hand.write(); missingMode.remove("mode");
+        assertThrows(IllegalStateException.class, () -> FrontierV3ResourceSiteHandProjectionWitness.read(missingMode));
+        var unknownMode = hand.write(); unknownMode.putInt("mode", 99);
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceSiteHandProjectionWitness.read(unknownMode));
         assertThrows(IllegalStateException.class, () -> restoredHand.beginFieldHandProjection(
                 new FrontierV3ResourceSiteHandProjectionWitness(hand.siteId(), hand.jobId(), hand.actorAccountId(),
                         hand.lotId(), hand.workerId(), hand.entityId(), hand.leaseId(), hand.actorEpoch(),
-                        hand.fieldEpoch(), hand.accountedPrefix(), 8)));
+                        hand.fieldEpoch(), hand.accountedPrefix(), 8, hand.mode())));
         restoredHand.retireFieldHandProjection(hand);
         activeLedger.retireFieldHandProjection(hand);
         var delivery = new FrontierV3ResourceSiteDeliveryWitness(SITE,
@@ -333,7 +337,7 @@ class FrontierV3ResourceSiteCellClaimTest {
                 new SubjectId("lot:field-part-cold"), new SubjectId("resident:field-cold"),
                 java.util.UUID.fromString("00000000-0000-0000-0000-000000000092"),
                 new io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId("lease:field-cold"),
-                2L, 2L, 64, 64);
+                2L, 2L, 64, 64, FrontierV3ResourceSiteHandProjectionWitness.Mode.BIND_RETAINED);
         var delivery = new FrontierV3ResourceSiteDeliveryWitness(SITE, hand.jobId(),
                 new PhysicalIntentId("intent:site-harvest-cell-claim-cold"), hand.workerId(),
                 hand.entityId(), hand.leaseId(), hand.actorEpoch(), new SubjectId("container:1-depot"),

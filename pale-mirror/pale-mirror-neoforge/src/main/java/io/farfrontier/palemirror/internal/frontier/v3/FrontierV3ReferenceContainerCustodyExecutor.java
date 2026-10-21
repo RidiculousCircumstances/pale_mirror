@@ -491,8 +491,8 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
     /** A witnessed non-replayable transfer keeps the depot exclusive; it may still report real foreign contents. */
     static boolean reportForeignDuringFieldDelivery(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                     FrontierWorldState state, PhysicalReplicaRecord replica,
-                                                    ChestBlockEntity chest) {
-        Observed actual = observed(state, replica.objectId(), chest);
+                                                    FrontierV3PhysicalContainer container) {
+        Observed actual = observedContainer(state, replica.objectId(), container);
         if (actual.fingerprint().equals(replica.fingerprint()) && actual.provenance().equals(replica.provenance()))
             return false;
         conflict(runtime, replica, actual);

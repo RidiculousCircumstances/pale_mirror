@@ -693,9 +693,18 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 || !account.claimQuantities().isEmpty()) {
             conflict(level, runtime, lease, "cold-carried-hand-contradiction"); return true;
         }
+        Entity entity = level.getEntity(lease.members().getFirst().entityId());
+        if (entity == null) return true;
+        if (!(entity instanceof Mob worker) || !FrontierV3SceneExecutor.owned(entity, state, lease, lease.members().getFirst())) {
+            conflict(level, runtime, lease, "cold-carried-hand-body-foreign"); return true;
+        }
+        boolean retainedCargo = FrontierV3ActorCarryProjection.witnessed(state, job.workerId(), job.actorAccountId(), worker);
+        var mode = pending != null ? pending.mode() : retainedCargo
+                ? FrontierV3ResourceSiteHandProjectionWitness.Mode.BIND_RETAINED
+                : FrontierV3ResourceSiteHandProjectionWitness.Mode.MATERIALIZE_COLD;
         var expected = new FrontierV3ResourceSiteHandProjectionWitness(job.siteId(), job.id(), job.actorAccountId(),
                 part.id(), job.workerId(), lease.members().getFirst().entityId(), lease.id(), lease.revision(),
-                cycle.epoch(), job.progress().completedCropSlots(), part.quantity());
+                cycle.epoch(), job.progress().completedCropSlots(), part.quantity(), mode);
         if (pending != null && !pending.equals(expected)) {
             conflict(level, runtime, lease, "cold-carried-hand-witness-foreign"); return true;
         }
@@ -708,6 +717,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             if (binding.size() != 1
                     || hand.disposition() != FrontierV3ActorHandObservation.Disposition.WHEAT
                     || hand.stack().orElseThrow().quantity() != part.quantity()
+                    || binding.getFirst().authorityEpoch() != pending.actorEpoch()
                     || !binding.getFirst().address().equals(hand.stack().orElseThrow().address())) {
                 conflict(level, runtime, lease, "cold-carried-hand-bound-witness-diverged"); return true;
             }
@@ -715,9 +725,6 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             return true;
         }
         if (pending == null) {
-            Entity existingBody = level.getEntity(lease.members().getFirst().entityId());
-            boolean retainedCargo = existingBody instanceof Mob retained
-                    && FrontierV3ActorCarryProjection.witnessed(state, job.workerId(), job.actorAccountId(), retained);
             if (hand.disposition() != FrontierV3ActorHandObservation.Disposition.EMPTY && !retainedCargo) {
                 conflict(level, runtime, lease, "cold-carried-hand-unwitnessed-item"); return true;
             }
@@ -725,33 +732,24 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             // first-visibility field writer is a separate physical owner and may
             // still be initializing while this worker appears by the depot.
             ledger.beginFieldHandProjection(expected); ledger.persist(level);
-            if (retainedCargo) return true; // next turn binds the witnessed stack; never issues another one
-            Entity entity = level.getEntity(lease.members().getFirst().entityId());
-            if (!(entity instanceof Mob worker) || !FrontierV3SceneExecutor.owned(entity, state, lease, lease.members().getFirst())) {
-                conflict(level, runtime, lease, "cold-carried-hand-body-foreign"); return true;
-            }
-            if (!FrontierV3VillagerHandMutation.setOffhand(worker,
-                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WHEAT, part.quantity())))
-                conflict(level, runtime, lease, "cold-carried-hand-write-rejected");
+        }
+        var result = FrontierV3HarvestHandOperation.apply(level, state, expected, worker);
+        if (result.status() == FrontierV3MinecraftOperation.Status.WAITING_DURABILITY) return true;
+        if (!result.complete()) {
+            conflict(level, runtime, lease, "cold-carried-hand-native-" + result.status().name().toLowerCase(java.util.Locale.ROOT));
             return true;
         }
-        if (hand.disposition() == FrontierV3ActorHandObservation.Disposition.EMPTY) {
-            // The before-effect witness may survive a crash before the entity write, or the
-            // hand may have been cleared after the write. Kind/count cannot distinguish the
-            // two, so never issue a second stack from this pending witness.
-            conflict(level, runtime, lease, "cold-carried-hand-after-restart-ambiguous");
-            return true;
-        }
+        hand = FrontierV3ActorHandObservation.observe(level, state, lease, job);
         if (hand.disposition() != FrontierV3ActorHandObservation.Disposition.WHEAT
                 || hand.stack().orElseThrow().quantity() != part.quantity()) {
             conflict(level, runtime, lease, "cold-carried-hand-physical-foreign"); return true;
         }
         var observed = new ResourceSiteHarvestHandProjected(job.siteId(), job.id(), job.actorAccountId(),
                 lease.id(), lease.revision(), hand.stack().orElseThrow());
-        submit(runtime, "resource-site-harvest-cold-hand-projected", lease.id().value(), observed);
+        if (!FrontierV3OperationConfirmation.submit(level, runtime, result.ticket(), observed)) return true;
         // The canonical WAL now owns this observed hand. A crash before this SavedData
         // retirement is harmless: the exact pending witness is checked on re-entry.
-        ledger.retireFieldHandProjection(pending); ledger.persist(level);
+        ledger.retireFieldHandProjection(expected); ledger.persist(level);
         return true;
     }
 

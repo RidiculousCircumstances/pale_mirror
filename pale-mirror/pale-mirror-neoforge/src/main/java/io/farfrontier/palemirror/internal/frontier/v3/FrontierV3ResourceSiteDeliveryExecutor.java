@@ -5,13 +5,12 @@ import io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.*;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.Container;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -118,10 +117,10 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
             PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(depot);
             if (custody == null || custody.status() != PhysicalCustodyLeaseStatus.ACQUIRED
                     || replica == null || replica.state() != PhysicalReplicaState.OBSERVED_CURRENT) continue;
-            ChestBlockEntity chest = chest(level, state, depot);
-            if (chest == null || classify(state, chest, depot, job.outputSlot().slot(), quantity, null) != ChestState.BEFORE
+            var chest = container(level, state, depot);
+            if (chest == null || classify(state, chest.inventory(), depot, job.outputSlot().slot(), quantity, null) != ChestState.BEFORE
                     || !replica.fingerprint().equals(ReferenceContainerCustody.canonicalFingerprint(state, depot))
-                    || !FrontierV3ReferenceContainerCustodyExecutor.observed(state, depot, chest).provenance()
+                    || !FrontierV3ReferenceContainerCustodyExecutor.observedContainer(state, depot, chest).provenance()
                     .equals(replica.provenance())) continue;
             // A COLD-completed job may first become HOT only at this terminal station. Crop
             // work never crossed RUNNING in that case, but delivery still needs a durable
@@ -155,19 +154,14 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
             if (intent == null || intent.status() != PhysicalIntentStatus.RUNNING) continue;
             SubjectId depot = lineage.outputSlot().containerId();
             if (FrontierV3ResourceSiteLedger.get(level).hasPendingFieldDelivery(depot)) continue;
-            ContainerSurface surface = state.inventory().surfaces().get(depot);
-            if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) continue;
-            BlockPos position = new BlockPos(surface.position().x(), surface.position().y(), surface.position().z());
-            if (!level.hasChunkAt(position) || !level.shouldTickBlocksAt(position)) continue;
-            ChestBlockEntity chest = FrontierV3ExactItemPresentation.activeChest(level,
-                    new FrontierV3ExactItemPresentation.StoreTarget(position, depot));
+            var chest = container(level, state, depot);
             if (chest == null) continue;
             PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(depot);
             PhysicalCustodyLease custody = state.replicaCustody().custodyByScope()
                     .get(ReferenceContainerCustody.scopeId(depot));
             if (replica == null || replica.state() != PhysicalReplicaState.OBSERVED_CURRENT
                     || custody == null || custody.status() != PhysicalCustodyLeaseStatus.ACQUIRED) continue;
-            var observed = FrontierV3ReferenceContainerCustodyExecutor.observed(state, depot, chest);
+            var observed = FrontierV3ReferenceContainerCustodyExecutor.observedContainer(state, depot, chest);
             if (!observed.fingerprint().equals(replica.fingerprint())
                     || !observed.provenance().equals(replica.provenance())
                     || !observed.fingerprint().equals(ReferenceContainerCustody.canonicalFingerprint(state, depot))) continue;
@@ -226,7 +220,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
         PhysicalCustodyLease custody = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(witness.containerId()));
         if (custody == null || custody.status() != PhysicalCustodyLeaseStatus.ACQUIRED
                 || custody.authorityEpoch() != witness.depotEpoch()) return false;
-        ChestBlockEntity chest = chest(level, state, witness.containerId());
+        var chest = container(level, state, witness.containerId());
         if (chest == null) return false;
         PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(witness.containerId());
         if (replica == null) return false;
@@ -239,7 +233,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
             FrontierV3ResourceSiteHarvestSceneExecutor.conflict(level, runtime, scene, "field-delivery-depot-epoch-diverged");
             return true;
         }
-        if (!FrontierV3ReferenceContainerCustodyExecutor.observed(state, witness.containerId(), chest)
+        if (!FrontierV3ReferenceContainerCustodyExecutor.observedContainer(state, witness.containerId(), chest)
                 .provenance().equals(replica.provenance())) {
             FrontierV3ReferenceContainerCustodyExecutor.reportForeignDuringFieldDelivery(runtime, state, replica, chest);
             FrontierV3ResourceSiteHarvestSceneExecutor.conflict(level, runtime, scene, "field-delivery-depot-provenance-foreign");
@@ -260,10 +254,9 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
             return true;
         }
         var hand = FrontierV3ActorHandObservation.observe(level, state, scene, job);
-        ChestState chestState = classify(state, chest, witness.containerId(), witness.slot(), witness.quantity(), witness);
+        ChestState chestState = classify(state, chest.inventory(), witness.containerId(), witness.slot(), witness.quantity(), witness);
         boolean handBefore = hand.disposition() == FrontierV3ActorHandObservation.Disposition.WHEAT
                 && hand.stack().orElseThrow().quantity() == witness.quantity();
-        boolean handAfter = hand.disposition() == FrontierV3ActorHandObservation.Disposition.EMPTY;
         if (chestState == ChestState.FOREIGN) {
             FrontierV3ReferenceContainerCustodyExecutor.reportForeignDuringFieldDelivery(runtime, state, replica, chest);
             FrontierV3ResourceSiteHarvestSceneExecutor.conflict(level, runtime, scene, "field-delivery-chest-foreign");
@@ -281,8 +274,8 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
                 || !FrontierV3SceneExecutor.owned(farmer, state, scene, scene.members().getFirst())) return false;
         var order = ResourceSiteHarvestCargo.deliveryOrder(state, job);
         var transfer = new FrontierV3ActorItemTransfer.FungibleStep(order, chest, farmer, witness.entityId(),
-                MaterialSourceSelection.select(resources, order), witness.slot());
-        var participants = List.of(FrontierV3OperationBlockEntityParticipant.current(chest),
+                MaterialSourceSelection.select(resources, order), witness.slot(), 0);
+        var participants = List.of(chest.persistence().get(),
                 FrontierV3OperationEntityParticipant.current(farmer, ActorBodyAuthority.current(state, job.workerId()).physicalEpoch()));
         var declaration = new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.FIELD_DELIVERY,
                 job.id(), witness.witnessId(), FrontierV3OperationFingerprint.of(witness.write()),
@@ -291,7 +284,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
                 transfer::before, transfer::apply, transfer::after);
         if (!operation.complete()) return false;
         List<FungiblePhysicalObservation.Stack> stacks = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(
-                chest, state, witness.containerId());
+                chest.inventory(), state, witness.containerId());
         confirm(level, operation.ticket(), runtime, state, job, scene, witness.resourceEpoch(), witness.quantity(), witness.depotEpoch(), stacks,
                 witness.afterFingerprint(), witness.witnessId());
         FrontierWorldState current = runtime.decodedState().orElse(null);
@@ -344,16 +337,14 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
         else FrontierV3CommandSubmission.submit(runtime, "field-delivery", job.id().value(), consequence);
     }
 
-    private static ChestBlockEntity chest(ServerLevel level, FrontierWorldState state, SubjectId depot) {
+    private static FrontierV3PhysicalContainer container(ServerLevel level, FrontierWorldState state, SubjectId depot) {
         ContainerSurface surface = state.inventory().surfaces().get(depot);
         if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) return null;
-        BlockPos position = new BlockPos(surface.position().x(), surface.position().y(), surface.position().z());
-        if (!level.hasChunkAt(position) || !level.shouldTickBlocksAt(position)) return null;
-        return FrontierV3ExactItemPresentation.activeChest(level,
-                new FrontierV3ExactItemPresentation.StoreTarget(position, depot));
+        return FrontierV3PhysicalContainer.loaded(level, state, depot)
+                .filter(physical -> level.shouldTickBlocksAt(physical.position())).orElse(null);
     }
 
-    private static ChestState classify(FrontierWorldState state, ChestBlockEntity chest, SubjectId depot,
+    private static ChestState classify(FrontierWorldState state, Container chest, SubjectId depot,
                                        int target, int quantity, FrontierV3ResourceSiteDeliveryWitness witness) {
         if (target < 0 || target >= chest.getContainerSize()
                 || state.inventory().itemAt(depot, target).isPresent()

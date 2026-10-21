@@ -12,8 +12,10 @@ import java.util.UUID;
 record FrontierV3ResourceSiteHandProjectionWitness(SubjectId siteId, SubjectId jobId, SubjectId actorAccountId,
                                                    SubjectId lotId, SubjectId workerId, UUID entityId,
                                                    SceneLeaseId leaseId, long actorEpoch, long fieldEpoch,
-                                                   int accountedPrefix, int quantity) {
+                                                   int accountedPrefix, int quantity, Mode mode) {
+    enum Mode { MATERIALIZE_COLD, BIND_RETAINED }
     FrontierV3ResourceSiteHandProjectionWitness {
+        Objects.requireNonNull(mode, "hand projection mode");
         Objects.requireNonNull(siteId, "hand projection site");
         Objects.requireNonNull(jobId, "hand projection job");
         Objects.requireNonNull(actorAccountId, "hand projection actor account");
@@ -37,6 +39,7 @@ record FrontierV3ResourceSiteHandProjectionWitness(SubjectId siteId, SubjectId j
         tag.putString("lease", leaseId.value()); tag.putLong("actorEpoch", actorEpoch);
         tag.putLong("fieldEpoch", fieldEpoch); tag.putInt("prefix", accountedPrefix);
         tag.putInt("quantity", quantity);
+        tag.putInt("mode", switch (mode) { case MATERIALIZE_COLD -> 1; case BIND_RETAINED -> 2; });
         return tag;
     }
 
@@ -47,7 +50,7 @@ record FrontierV3ResourceSiteHandProjectionWitness(SubjectId siteId, SubjectId j
         for (String key : java.util.List.of("actorEpoch", "fieldEpoch")) {
             if (!tag.contains(key, Tag.TAG_LONG)) throw new IllegalStateException("incomplete field hand witness: " + key);
         }
-        for (String key : java.util.List.of("prefix", "quantity")) {
+        for (String key : java.util.List.of("prefix", "quantity", "mode")) {
             if (!tag.contains(key, Tag.TAG_INT)) throw new IllegalStateException("incomplete field hand witness: " + key);
         }
         if (!tag.hasUUID("entity")) throw new IllegalStateException("incomplete field hand body identity");
@@ -55,6 +58,9 @@ record FrontierV3ResourceSiteHandProjectionWitness(SubjectId siteId, SubjectId j
                 new SubjectId(tag.getString("job")), new SubjectId(tag.getString("actorAccount")),
                 new SubjectId(tag.getString("lot")), new SubjectId(tag.getString("worker")), tag.getUUID("entity"),
                 new SceneLeaseId(tag.getString("lease")), tag.getLong("actorEpoch"), tag.getLong("fieldEpoch"),
-                tag.getInt("prefix"), tag.getInt("quantity"));
+                tag.getInt("prefix"), tag.getInt("quantity"), switch (tag.getInt("mode")) {
+                    case 1 -> Mode.MATERIALIZE_COLD; case 2 -> Mode.BIND_RETAINED;
+                    default -> throw new IllegalArgumentException("unknown field hand projection mode");
+                });
     }
 }

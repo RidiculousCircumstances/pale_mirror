@@ -22,4 +22,5 @@ public record ResourceSiteHarvestHandProjected(SubjectId siteId, SubjectId jobId
         }
     }
     @Override public String type() { return "frontier.resource_site_harvest_hand_projected"; }
+    @Override public boolean requiresDurableBeforeEffect() { return true; }
 }
