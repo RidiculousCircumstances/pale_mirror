@@ -20,6 +20,9 @@ import java.util.List;
  */
 final class FrontierV3ActorEquipmentDeathExecutor {
     private FrontierV3ActorEquipmentDeathExecutor() { }
+    static boolean settled(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId id) {
+        return state.inventory().actorItems(id.actorId()).isEmpty();
+    }
 
     static boolean resolve(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Entity entity, SubjectId actor) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
@@ -36,6 +39,18 @@ final class FrontierV3ActorEquipmentDeathExecutor {
         }
         if (!(entity instanceof Mob mob)) throw new IllegalArgumentException("managed equipment requires a Mob hand");
         return FrontierV3ExactHeldItemDeath.resolve(level, runtime, mob, items.getFirst(),
-                FrontierV3DiagnosticTrace.defenderEquipmentCorrelation(items.getFirst().id()), "defender_equipment");
+                "actor-equipment:" + items.getFirst().id().value(), "actor_equipment");
+    }
+
+    static void recover(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            Mob body, io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId id, FrontierV3BodyResourceSnapshot snapshot) {
+        var state = runtime.decodedState().orElseThrow();
+        io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.requireRetiredDeath(state, id);
+        // Missing after restart is not the pre-loot loss observation. Pending drop
+        // reconciliation owns that outcome; only a still-held exact stack can start a drop.
+        var before = snapshot.slots(level).get(new io.farfrontier.palemirror.frontier.v3.model.ActorItemSlot.Hand(
+                io.farfrontier.palemirror.frontier.v3.model.ActorContainerItemOrder.Hand.MAIN));
+        if (before == null || !net.minecraft.world.item.ItemStack.matches(before, body.getMainHandItem())) return;
+        resolve(level, runtime, body, id.actorId());
     }
 }

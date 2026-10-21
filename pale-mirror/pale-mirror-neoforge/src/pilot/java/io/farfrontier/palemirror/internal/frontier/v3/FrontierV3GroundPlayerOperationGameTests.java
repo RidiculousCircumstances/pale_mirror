@@ -18,8 +18,15 @@ import java.util.*;
 public final class FrontierV3GroundPlayerOperationGameTests {
     @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
     public static void personalStockDeathUsesOneNativeTransferAndNeverInfersAnotherFromCounts(GameTestHelper helper) {
+        personalStockDeath(helper, false);
+    }
+    @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
+    public static void retainedPreLootImageRecoversPersonalDropWithoutItsEphemeralClosure(GameTestHelper helper) {
+        personalStockDeath(helper, true);
+    }
+    private static void personalStockDeath(GameTestHelper helper, boolean recovered) {
         var level = helper.getLevel(); var point = helper.absolutePos(new BlockPos(1, 1, 1));
-        var base = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:entity-resource-drop"), 95L);
+        var base = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:entity-resource-drop-" + recovered), 95L);
         var initial = base.initialState(); var actor = initial.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
         var execution = initial.actorExecutions().next(actor, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRESENCE, actor);
         initial = ActorExecutionComposition.LIFECYCLE
@@ -48,10 +55,17 @@ public final class FrontierV3GroundPlayerOperationGameTests {
             body.setHealth(0);
             var settlement = FrontierV3UnitInventoryDeathResources.prepare(level, runtime, body, id);
             var current = runtime.decodedState().orElseThrow(); var location = current.actorLocations().get(actor);
+            var image = FrontierV3BodyResourceSnapshot.decode(FrontierV3BodyResourceSnapshot.capture(level, current, body).encode());
+            image.slots(level).get(new ActorItemSlot.Pocket(3)).setCount(1);
+            helper.assertValueEqual(image.slots(level).get(new ActorItemSlot.Pocket(3)).getCount(), 7,
+                    "decoded native evidence is immutable, not a live inventory or restore authority");
+            helper.assertTrue(!FrontierV3UnitInventoryDeathResources.settled(current, id), "body cannot close while its personal account remains");
             FrontierV3CommandSubmission.submit(runtime, "fixture-death", actor.value(), new ActorBodyDied(id, location.body(),
                     location.condition().health(), Optional.empty(), current.actorExecutions().actors().get(actor).current(), "test:pre-loot"));
-            settlement.settle();
+            if (recovered) FrontierV3UnitInventoryDeathResources.recover(level, runtime, body, id, image);
+            else settlement.settle();
             var after = runtime.decodedState().orElseThrow(); var stock = after.inventory().fungibleResources();
+            helper.assertTrue(FrontierV3UnitInventoryDeathResources.settled(after, id), "actual transfer discharges only the inventory owner's obligation");
             var destination = stock.accounts().values().stream().filter(a -> a.lotQuantities().containsKey(lot.id())).findFirst().orElseThrow();
             helper.assertTrue(!stock.accounts().containsKey(account) && destination.custody() instanceof ResourceCustody.Ground
                     && destination.lotQuantities().equals(Map.of(lot.id(), 7)) && stock.lots().get(lot.id()).equals(lot),
@@ -62,7 +76,9 @@ public final class FrontierV3GroundPlayerOperationGameTests {
             var journal = FrontierV3ResourceHandoffLedger.get(level); var operations = FrontierV3OperationLedger.get(level);
             helper.assertTrue(journal.entityDrops().isEmpty() && FrontierV3NativeOperationMarkers.read(body.getPersistentData()).size() == 1,
                     "owner outbox closes through the shared operation, not a private item tag");
-            settlement.settle(); helper.assertTrue(runtime.decodedState().orElseThrow().equals(after), "repeated death settlement cannot duplicate stock");
+            if (recovered) FrontierV3UnitInventoryDeathResources.recover(level, runtime, body, id, image);
+            else settlement.settle();
+            helper.assertTrue(runtime.decodedState().orElseThrow().equals(after), "repeated death settlement cannot duplicate stock");
             var source = FrontierV3OperationEntityParticipant.nativeObject(body).identity();
             var birth = FrontierV3OperationEntityParticipant.nativeObject(drop).identity();
             var outcome = new UnitInventoryDispositionObserved(id, account, 1, UnitInventoryDispositionObserved.Outcome.WORLD_DROP,
@@ -85,7 +101,7 @@ public final class FrontierV3GroundPlayerOperationGameTests {
             helper.assertTrue(drop.isRemoved() && player.getInventory().countItem(Items.COBBLESTONE) == 7
                     && !runtime.decodedState().orElseThrow().inventory().fungibleResources().accounts().containsKey(destination.id()),
                     "actual pickup closes ground stock without matching or retaining a phantom player account");
-        } finally { runtime.shutdown(); }
+        } finally { body.discard(); runtime.shutdown(); }
         helper.succeed();
     }
     @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)

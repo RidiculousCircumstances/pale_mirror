@@ -6,20 +6,24 @@ import java.util.*;
 /** Bounded log suppression only. Removing a diagnostic never resolves an operation. */
 final class FrontierV3OperationDiagnostics {
     private static final Map<ServerLevel, LinkedHashMap<UUID, FrontierV3MinecraftOperation.Status>> REPORTED = new WeakHashMap<>();
-    enum Backpressure { JOURNAL_CAPACITY, NATIVE_RECEIPT_CAPACITY, NATIVE_RECOVERY_EVIDENCE }
+    enum Backpressure { JOURNAL_CAPACITY, NATIVE_RECEIPT_CAPACITY, NATIVE_RECOVERY_EVIDENCE, OWNER_AFTERMATH }
     private record WaitKey(FrontierV3OperationReceipt.Protocol protocol, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner, String operation) {
         static WaitKey of(FrontierV3OperationReceipt.Declaration value) { return new WaitKey(value.protocol(), value.owner(), value.operation()); }
     }
-    private record Wait(Backpressure reason, long since) { }
+    private record Wait(Backpressure reason, String detail, long since) { }
     private static final Map<ServerLevel, LinkedHashMap<WaitKey, Wait>> WAITING = new WeakHashMap<>();
     static FrontierV3MinecraftOperation.Result waiting(ServerLevel level, FrontierV3OperationReceipt.Declaration declaration, Backpressure reason) {
+        return waiting(level, declaration, reason, "");
+    }
+    static FrontierV3MinecraftOperation.Result waiting(ServerLevel level, FrontierV3OperationReceipt.Declaration declaration,
+            Backpressure reason, String detail) {
         var waits = WAITING.computeIfAbsent(level, ignored -> new LinkedHashMap<>());
         var key = WaitKey.of(declaration); var previous = waits.get(key);
-        if (previous == null || previous.reason() != reason) {
-            waits.put(key, new Wait(reason, System.nanoTime()));
+        if (previous == null || previous.reason() != reason || !previous.detail().equals(detail)) {
+            waits.put(key, new Wait(reason, detail, previous == null ? System.nanoTime() : previous.since()));
             io.farfrontier.palemirror.PaleMirrorMod.LOGGER.warn(
-                    "PMV3_OPERATION_WAIT protocol={} owner={} operation={} reason={} pendingOperations={}; no new physical effect attempted",
-                    declaration.protocol(), declaration.owner(), declaration.operation(), reason, FrontierV3OperationLedger.get(level).pendingCount());
+                    "PMV3_OPERATION_WAIT protocol={} owner={} operation={} reason={} detail={} pendingOperations={}; unresolved obligation retained",
+                    declaration.protocol(), declaration.owner(), declaration.operation(), reason, detail, FrontierV3OperationLedger.get(level).pendingCount());
             while (waits.size() > 1024) waits.remove(waits.keySet().iterator().next());
         }
         return FrontierV3MinecraftOperation.Result.waiting();

@@ -17,6 +17,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 abstract class FrontierV3EntityDepartureMixin {
     @Inject(method = "setRemoved", at = @At("HEAD"), cancellable = true, require = 1)
     private void frontierV3$beforeGroundRemoval(Entity.RemovalReason reason, CallbackInfo callback) {
+        if (!FrontierV3ServerLifecycle.permitsBodyRemoval((Entity) (Object) this, reason)) { callback.cancel(); return; }
         if (!FrontierV3GroundItemDestruction.before((Entity) (Object) this, reason)) { callback.cancel(); return; }
         io.farfrontier.palemirror.internal.frontier.v3.FrontierV3RetiredEntityReceipts.beforeRemoval((Entity) (Object) this, reason);
     }

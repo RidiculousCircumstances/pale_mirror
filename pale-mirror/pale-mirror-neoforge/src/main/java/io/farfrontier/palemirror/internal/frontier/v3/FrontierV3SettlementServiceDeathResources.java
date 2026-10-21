@@ -12,6 +12,14 @@ import org.slf4j.LoggerFactory;
 final class FrontierV3SettlementServiceDeathResources {
     private static final Logger LOGGER = LoggerFactory.getLogger(FrontierV3SettlementServiceDeathResources.class);
     private FrontierV3SettlementServiceDeathResources() { }
+    static boolean settled(FrontierWorldState state, ActorBodyId id) {
+        return state.serviceWorks().values().stream().filter(work -> work.workerId().equals(id.actorId())).allMatch(work ->
+                terminal(state.physicalIntents().get(work.inputIssueIntentId()).status())
+                        && terminal(state.physicalIntents().get(work.endpointIntentId()).status()));
+    }
+    private static boolean terminal(PhysicalIntentStatus status) {
+        return status == PhysicalIntentStatus.CONFIRMED || status == PhysicalIntentStatus.CONFLICTED;
+    }
 
     static FrontierV3ActorDeathResourceComposition.AfterFatality prepare(ServerLevel level,
             FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body, ActorBodyId id) {

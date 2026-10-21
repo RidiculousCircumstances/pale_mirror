@@ -14,11 +14,28 @@ import java.util.*;
 /** Captures the identified dying hand before Vanilla loot, under the retained shipment fence. */
 final class FrontierV3ShipmentDeathResources {
     private FrontierV3ShipmentDeathResources() { }
+    static boolean settled(FrontierWorldState state, ActorBodyId id) {
+        return state.shipments().shipments().values().stream().noneMatch(shipment -> shipment.pendingPhysicalStep()
+                .filter(step -> step.observation().actuation().body().equals(id)).isPresent());
+    }
     static FrontierV3ActorDeathResourceComposition.AfterFatality prepare(ServerLevel level,
             FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body, ActorBodyId id) {
         var state = runtime.decodedState().orElseThrow();
+        if (!ActorBodyAuthority.current(state, id.actorId()).equals(id)) return () -> { };
+        return captured(level, runtime, body, id, body.getMainHandItem().copy());
+    }
+    static void recover(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            Mob body, ActorBodyId id, FrontierV3BodyResourceSnapshot snapshot) {
+        ActorBodyAuthority.requireRetiredDeath(runtime.decodedState().orElseThrow(), id);
+        var witness = snapshot.slots(level).get(new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN));
+        if (witness == null) throw new IllegalStateException("shipment recovery lacks a pre-loot native hand");
+        captured(level, runtime, body, id, witness).settle();
+    }
+    private static FrontierV3ActorDeathResourceComposition.AfterFatality captured(ServerLevel level,
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body, ActorBodyId id, ItemStack witness) {
+        var state = runtime.decodedState().orElseThrow();
         var authority = state.actorExecutions().actors().get(id.actorId());
-        if (authority == null || !ActorBodyAuthority.current(state, id.actorId()).equals(id)) return () -> { };
+        if (authority == null) return () -> { };
         var execution = authority.current().filter(e -> e.activityKind() == ActorActivityKind.COURIER || e.activityKind() == ActorActivityKind.GROUP_MEMBER)
                 .or(() -> authority.suspended().filter(e -> e.activityKind() == ActorActivityKind.COURIER || e.activityKind() == ActorActivityKind.GROUP_MEMBER));
         if (execution.isEmpty()) return () -> { };
@@ -29,7 +46,6 @@ final class FrontierV3ShipmentDeathResources {
                     .stream().filter(s -> !s.terminal() && s.carrying()).findFirst().orElse(null);
         if (shipment == null || shipment.mobileContainerId().isPresent() || !shipment.carrying() || shipment.pendingPhysicalStep().isPresent()
                 || shipment.reception().isPresent()) return () -> { }; // Possibly applied endpoint effects retain their exact owner.
-        ItemStack witness = body.getMainHandItem().copy();
         if (!witness.isEmpty() && !matches(witness, shipment)) return () -> { }; // Unclassified substitution is not fictional loss.
         var identity = new ActorActuationId(id, execution.orElseThrow());
         return () -> {
@@ -43,7 +59,7 @@ final class FrontierV3ShipmentDeathResources {
                 return;
             }
             UUID carrier = dropId(current, shipment, id);
-            if (level.getEntity(carrier) != null) return; // Never replay insertion from absence/presence guesses.
+            if (level.getEntity(carrier) != null || FrontierV3ResourceHandoffLedger.get(level).blocks(carrier)) return;
             ItemEntity drop = new ItemEntity(level, body.getX(), body.getY() + 0.25D, body.getZ(), witness.copy());
             drop.setUUID(carrier);
             var receipt = new ShipmentCargoDispositionObserved(shipment.id(), shipment.revision(), identity,

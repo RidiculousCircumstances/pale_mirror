@@ -41,7 +41,18 @@ final class FrontierV3UnitInventoryDeathResources {
         initial = runtime.decodedState().orElseThrow();
         var beforeLoot = new java.util.HashMap<ActorItemSlot, ItemStack>();
         for (var slot : FrontierV3ActorResourceSlots.supportedSlots(body)) beforeLoot.put(slot, FrontierV3ActorResourceSlots.get(body, slot).copy());
-        return () -> {
+        return () -> settle(level, runtime, body, id, beforeLoot);
+    }
+    static void recover(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            Mob body, ActorBodyId id, FrontierV3BodyResourceSnapshot snapshot) {
+        ActorBodyAuthority.requireRetiredDeath(runtime.decodedState().orElseThrow(), id);
+        settle(level, runtime, body, id, snapshot.slots(level));
+    }
+    static boolean settled(FrontierWorldState state, ActorBodyId id) {
+        return UnitInventory.accounts(state.inventory().fungibleResources(), id.actorId()).isEmpty();
+    }
+    private static void settle(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            Mob body, ActorBodyId id, java.util.Map<ActorItemSlot, ItemStack> beforeLoot) {
             // Earlier resource owners may just have confirmed an applied prepared take.
             // Use the actual pre-loot slot snapshot, not only accounts known before settlement.
             var sources = UnitInventoryPresentation.inventory(runtime.decodedState().orElseThrow(), id.actorId()).values().stream()
@@ -68,14 +79,13 @@ final class FrontierV3UnitInventoryDeathResources {
                 var expected = new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(binding.itemKind())), binding.quantity());
                 if (!ItemStack.matches(actual, expected) || !ItemStack.matches(actual, original)) continue;
                 var carrier = dropId(state, id, account.id(), binding.authorityEpoch());
-                if (level.getEntity(carrier) != null) continue; // Never replay insertion after an absent source.
+                if (level.getEntity(carrier) != null || FrontierV3ResourceHandoffLedger.get(level).blocks(carrier)) continue;
                 var drop = new ItemEntity(level, body.getX(), body.getY() + 0.25D, body.getZ(), actual.copy());
                 drop.setUUID(carrier);
                 var receipt = new UnitInventoryDispositionObserved(id, account.id(), binding.authorityEpoch(),
                         UnitInventoryDispositionObserved.Outcome.WORLD_DROP, Optional.of(FrontierV3EntityResourceDropOperation.ground(drop)));
                 FrontierV3EntityResourceDropOperation.perform(level, runtime, body, source.slot(), drop, receipt);
             }
-        };
     }
     private static UUID dropId(FrontierWorldState state, ActorBodyId body,
                                io.farfrontier.palemirror.frontier.v3.api.SubjectId account, long epoch) {

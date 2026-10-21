@@ -27,6 +27,11 @@ final class FrontierV3ExpeditionTransferDeathResources {
         }
         return List.copyOf(result);
     }
+    static boolean settled(FrontierWorldState state, ActorBodyId id) {
+        return pending(state).stream().noneMatch(retained -> retained.step().observation().actuation().body().equals(id)
+                || java.util.Optional.ofNullable(state.inventory().surfaces().get(retained.order().containerEndpoint().containerId()))
+                    .filter(surface -> surface.location().equals(new ContainerLocation.Mobile(id.actorId()))).isPresent());
+    }
 
     static FrontierV3ActorDeathResourceComposition.AfterFatality prepare(ServerLevel level,
             FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body, ActorBodyId id) {

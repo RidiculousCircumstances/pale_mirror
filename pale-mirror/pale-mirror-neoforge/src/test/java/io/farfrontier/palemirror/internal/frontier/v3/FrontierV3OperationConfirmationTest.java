@@ -14,6 +14,51 @@ import static org.junit.jupiter.api.Assertions.*;
 class FrontierV3OperationConfirmationTest {
     @BeforeAll static void version() { net.minecraft.SharedConstants.tryDetectVersion(); }
     @TempDir Path directory;
+    @Test void explicitAftermathSurvivesAcceptanceAndRestartUntilItsOwnerClosesIt() {
+        var ledger = FrontierV3OperationLedger.inMemory();
+        var participant = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.ENTITIES, UUID.randomUUID().toString(), 7);
+        var consequence = new PhysicalDeltaObserved(new PhysicalDelta(new BlockPosition(1, 64, 1), PhysicalDeltaKind.UNKNOWN_SCAR,
+                Optional.empty(), Optional.empty(), "test:aftermath"));
+        var operation = ledger.prepare(new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.BODY_FATALITY,
+                new SubjectId("resident:aftermath"), "fatality", FrontierV3OperationConfirmation.fingerprint(consequence), Set.of(participant)));
+        var evidence = new byte[] { 1, 2, 3 };
+        var command = new FrontierV3OperationLedger.OwnerCommand(new CommandId("physical-operation:" + operation.ticket()), consequence,
+                FrontierV3OperationLedger.OwnerCommand.Closure.EXPLICIT_OWNER, evidence);
+        evidence[0] = 9; command.context()[1] = 9;
+        assertArrayEquals(new byte[] { 1, 2, 3 }, command.context(), "retained owner evidence cannot be mutated by its producer");
+        ledger.retainOwnerIntent(operation.ticket(), command);
+        var pins = new HashSet<CommandId>(); var accepted = new HashMap<CommandId, CommandReceipt>();
+        var calls = new AtomicInteger();
+        var canonical = new FrontierV3OperationConfirmation.Canonical() {
+            public void pin(CommandId id) { pins.add(id); }
+            public void release(CommandId id) { pins.remove(id); }
+            public Optional<CommandReceipt> receipt(CommandId id) { assertTrue(pins.contains(id)); return Optional.ofNullable(accepted.get(id)); }
+            public CommandResult submit(CommandId id, SubjectId owner, FrontierPayload payload) {
+                calls.incrementAndGet();
+                var result = new CommandResult.Accepted(id, new TransactionId("test:aftermath"), new Revision(1));
+                accepted.put(id, new CommandReceipt(id, SimInstant.ZERO, result.transactionId(), result.revision()));
+                return result;
+            }
+        };
+        assertFalse(FrontierV3OperationConfirmation.completeOwner(ledger, () -> ledger.setDirty(false), canonical, operation.ticket()));
+        assertTrue(pins.isEmpty(), "owner completion cannot invent canonical acceptance");
+        ledger.saved(operation.nativeReceipt(participant));
+        assertTrue(FrontierV3OperationConfirmation.submit(ledger, () -> ledger.setDirty(false), canonical, operation.ticket(), consequence));
+        assertFalse(ledger.require(operation.ticket()).ownerClosed());
+        assertEquals(Set.of(command.id()), pins, "canonical receipt remains pinned while the owner has outstanding consequences");
+        assertThrows(IllegalStateException.class, () -> ledger.retire(operation.ticket()));
+        var recovered = FrontierV3OperationLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), null), null);
+        assertEquals(command, recovered.ownerCommand(operation.ticket()).orElseThrow());
+        pins.clear();
+        FrontierV3OperationConfirmation.recover(recovered, () -> recovered.setDirty(false), canonical);
+        assertEquals(Set.of(command.id()), pins); assertFalse(recovered.require(operation.ticket()).ownerClosed());
+        assertEquals(1, calls.get(), "recovery must not reapply the already accepted parent consequence");
+        assertTrue(FrontierV3OperationConfirmation.completeOwner(recovered, () -> recovered.setDirty(false), canonical, operation.ticket()));
+        assertTrue(recovered.find(operation.ticket()).isEmpty()); assertTrue(pins.isEmpty());
+        assertTrue(recovered.prunable(operation.nativeReceipt(participant)));
+        var invalid = ledger.save(new net.minecraft.nbt.CompoundTag(), null); invalid.putInt("format", 3);
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3OperationLedger.load(invalid, null));
+    }
     @Test void preEffectConsequenceSurvivesRestartButCannotConfirmWithoutNativeProof() {
         var ledger = FrontierV3OperationLedger.inMemory();
         var participant = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.ENTITIES, UUID.randomUUID().toString(), 1);

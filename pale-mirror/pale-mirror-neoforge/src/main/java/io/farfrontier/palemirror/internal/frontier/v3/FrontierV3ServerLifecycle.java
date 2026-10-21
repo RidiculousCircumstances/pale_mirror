@@ -824,6 +824,11 @@ public final class FrontierV3ServerLifecycle {
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
         return FrontierV3ActorBodyController.commitDeath(level, runtime, entity, source, nativeDeath, died);
     }
+    public static boolean permitsBodyRemoval(Entity entity, Entity.RemovalReason reason) {
+        if (!reason.shouldDestroy() || !(entity.level() instanceof ServerLevel level) || !FrontierV3PhysicalWorld.isPhysical(level)) return true;
+        var runtime = RUNTIMES.get(level.getServer());
+        return runtime == null || runtime.decodedState().map(state -> !FrontierV3BodyFatalityOperation.holdsBody(level, state, entity)).orElse(true);
+    }
     /** Observe final geometry without asking Minecraft to reload an unloading chunk. */
     public static void observeNaturalChunkUnload(ServerLevel level, net.minecraft.world.level.chunk.LevelChunk chunk) {
         var runtime = RUNTIMES.get(level.getServer());

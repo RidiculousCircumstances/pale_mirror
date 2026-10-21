@@ -101,9 +101,9 @@ class FrontierV3ActorCarrierCompositionTest {
         assertEquals(Set.of(FrontierV3ActorBodyController.class.getName()),
                 methodCallBoundaries(FrontierV3BodyInsertionJournal.class, "prepare"),
                 "first insertion is not an activity-owned physical operation");
-        assertEquals(Set.of(FrontierV3ActorBodyController.class.getName()),
+        assertEquals(Set.of(FrontierV3ActorBodyController.class.getName(), FrontierV3BodyOperationIntegration.class.getName()),
                 methodCallBoundaries(FrontierV3BodyInsertionJournal.class, "consume"),
-                "reconstruction is not an activity-owned physical operation");
+                "the body owner and its common-operation adapter exclusively consume insertion; activities cannot bypass them");
         assertEquals(Set.of(FrontierV3ActorBodyController.class.getName(), FrontierV3BodyInsertionJournal.class.getName()),
                 methodCallBoundaries(FrontierV3AmbientCarrierLedger.class, "beginBodyResidence"),
                 "only the common body owner may start a new loaded residency; an activity cannot reset unload proof");
@@ -131,8 +131,8 @@ class FrontierV3ActorCarrierCompositionTest {
                 methodCallBoundaries(FrontierV3AmbientCarrierLedger.class, "recordDeparture"),
                 "family departure records are read views/retained hydration, not a parallel physical capture source");
         assertEquals(Set.of(FrontierV3ServerLifecycle.class.getName()),
-                methodCallBoundaries(FrontierV3ActorBodyController.class, "observeDeath"),
-                "the actual death listener enters one common body observer, not a family observer");
+                methodCallBoundaries(FrontierV3ActorBodyController.class, "commitDeath"),
+                "the non-cancelled native fatality enters one common body boundary, not a family observer");
         assertEquals(Set.of(FrontierV3ActorBodyController.class.getName()),
                 methodCallBoundaries(FrontierV3ActorDeathResourceComposition.class, "prepare"),
                 "pre-loot resource owners enter only after common fatality provenance validation");

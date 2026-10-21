@@ -36,8 +36,21 @@ final class FrontierV3ResidentMealDeathResources {
                         id, meal.executionId(), meal.pendingPhysicalStep());
                 return;
             }
-            settlePortion(level, runtime, body, id, meal, beforeLoot);
+            settlePortion(level, runtime, body, id, meal.executionId(), beforeLoot);
         };
+    }
+
+    static boolean settled(FrontierWorldState state, ActorBodyId id) {
+        return !state.humanPopulation().mealResourceObligations().containsKey(id.actorId());
+    }
+    static void recover(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            Mob body, ActorBodyId id, FrontierV3BodyResourceSnapshot snapshot) {
+        var state = runtime.decodedState().orElseThrow(); ActorBodyAuthority.requireRetiredDeath(state, id);
+        var retained = state.humanPopulation().mealResourceObligations().get(id.actorId());
+        if (retained == null || !retained.body().equals(id) || retained.pendingPhysicalStep().isPresent()) return;
+        var before = snapshot.slots(level).get(retained.inventorySlot());
+        if (before == null) throw new IllegalStateException("retired meal has no declared pre-loot native slot");
+        settlePortion(level, runtime, body, id, retained.executionId(), before);
     }
 
     private static java.util.function.BooleanSupplier prepareEffect(ServerLevel level,
@@ -153,11 +166,11 @@ final class FrontierV3ResidentMealDeathResources {
     }
 
     private static void settlePortion(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-            Mob body, ActorBodyId id, ResidentMeal original, ItemStack beforeLoot) {
+            Mob body, ActorBodyId id, io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId execution, ItemStack beforeLoot) {
         var state = runtime.decodedState().orElse(null);
         if (state == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
         var retained = state.humanPopulation().mealResourceObligations().get(id.actorId());
-        if (retained == null || !retained.body().equals(id) || !retained.executionId().equals(original.executionId())
+        if (retained == null || !retained.body().equals(id) || !retained.executionId().equals(execution)
                 || retained.custodyState() == ResidentMealResourceObligation.CustodyState.SOURCE_TAKE_PENDING) return;
         var bindings = state.inventory().fungibleResources().bindings().values().stream()
                 .filter(binding -> binding.accountId().equals(retained.actorAccountId())).toList();
@@ -178,7 +191,7 @@ final class FrontierV3ResidentMealDeathResources {
         UUID carrier = dropId(state, retained);
         // The already durable retired obligation is the before-effect fence. Never repeat
         // insertion after an absent lookup; this source can only use its positively held stack.
-        if (level.getEntity(carrier) != null) return;
+        if (level.getEntity(carrier) != null || FrontierV3ResourceHandoffLedger.get(level).blocks(carrier)) return;
         ItemEntity drop = new ItemEntity(level, body.getX(), body.getY() + 0.25D, body.getZ(), beforeLoot.copy());
         drop.setUUID(carrier);
         var receipt = new ResidentMealPortionDispositionObserved(id, retained.executionId(),

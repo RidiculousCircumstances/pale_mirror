@@ -19,22 +19,35 @@ final class FrontierV3ActorDeathResourceComposition {
     @FunctionalInterface interface Reconciliation {
         boolean reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state);
     }
-    record Handler(Owner owner, Preparation preparation, Reconciliation reconciliation) {
-        Handler(Owner owner, Preparation preparation) { this(owner, preparation, (level, runtime, state) -> false); }
-        Handler { Objects.requireNonNull(owner); Objects.requireNonNull(preparation); Objects.requireNonNull(reconciliation); }
+    @FunctionalInterface interface Recovery {
+        void recover(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                     Mob body, ActorBodyId id, FrontierV3BodyResourceSnapshot snapshot);
+    }
+    @FunctionalInterface interface Completion { boolean settled(FrontierWorldState state, ActorBodyId id); }
+    record Handler(Owner owner, Preparation preparation, Reconciliation reconciliation, Recovery recovery, Completion completion) {
+        Handler { Objects.requireNonNull(owner); Objects.requireNonNull(preparation); Objects.requireNonNull(reconciliation);
+            Objects.requireNonNull(recovery); Objects.requireNonNull(completion); }
     }
 
     private static final List<Handler> HANDLERS = closed(List.of(
             new Handler(Owner.EXACT_EQUIPMENT, (level, runtime, body, id) -> {
                 FrontierV3ActorEquipmentDeathExecutor.resolve(level, runtime, body, id.actorId());
                 return () -> { };
-            }),
-            new Handler(Owner.RESIDENT_MEAL, FrontierV3ResidentMealDeathResources::prepare, FrontierV3ResidentMealDeathResources::reconcileOne),
-            new Handler(Owner.SETTLEMENT_SERVICE, FrontierV3SettlementServiceDeathResources::prepare),
-            new Handler(Owner.EXPEDITION_TRANSFER, FrontierV3ExpeditionTransferDeathResources::prepare, FrontierV3ExpeditionTransferDeathResources::reconcileOne),
-            new Handler(Owner.SHIPMENT, FrontierV3ShipmentDeathResources::prepare),
-            new Handler(Owner.UNIT_INVENTORY, FrontierV3UnitInventoryDeathResources::prepare),
-            new Handler(Owner.ATTACHED_STORAGE, FrontierV3AttachedStorageDeathResources::prepare)));
+            }, (level, runtime, state) -> false, FrontierV3ActorEquipmentDeathExecutor::recover,
+                    FrontierV3ActorEquipmentDeathExecutor::settled),
+            new Handler(Owner.RESIDENT_MEAL, FrontierV3ResidentMealDeathResources::prepare, FrontierV3ResidentMealDeathResources::reconcileOne,
+                    FrontierV3ResidentMealDeathResources::recover, FrontierV3ResidentMealDeathResources::settled),
+            new Handler(Owner.SETTLEMENT_SERVICE, FrontierV3SettlementServiceDeathResources::prepare,
+                    (level, runtime, state) -> false, (level, runtime, body, id, snapshot) -> { },
+                    FrontierV3SettlementServiceDeathResources::settled),
+            new Handler(Owner.EXPEDITION_TRANSFER, FrontierV3ExpeditionTransferDeathResources::prepare, FrontierV3ExpeditionTransferDeathResources::reconcileOne,
+                    (level, runtime, body, id, snapshot) -> { }, FrontierV3ExpeditionTransferDeathResources::settled),
+            new Handler(Owner.SHIPMENT, FrontierV3ShipmentDeathResources::prepare, (level, runtime, state) -> false,
+                    FrontierV3ShipmentDeathResources::recover, FrontierV3ShipmentDeathResources::settled),
+            new Handler(Owner.UNIT_INVENTORY, FrontierV3UnitInventoryDeathResources::prepare, (level, runtime, state) -> false,
+                    FrontierV3UnitInventoryDeathResources::recover, FrontierV3UnitInventoryDeathResources::settled),
+            new Handler(Owner.ATTACHED_STORAGE, FrontierV3AttachedStorageDeathResources::prepare, (level, runtime, state) -> false,
+                    FrontierV3AttachedStorageDeathResources::recover, FrontierV3AttachedStorageDeathResources::settled)));
 
     private FrontierV3ActorDeathResourceComposition() { }
     static List<Handler> closed(List<Handler> handlers) {
@@ -56,5 +69,12 @@ final class FrontierV3ActorDeathResourceComposition {
     static boolean reconcileOne(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
         if (FrontierV3EntityResourceDropOperation.reconcileOne(level, runtime)) return true;
         return HANDLERS.stream().anyMatch(handler -> handler.reconciliation().reconcile(level, runtime, state));
+    }
+    static void recover(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            Mob body, ActorBodyId id, FrontierV3BodyResourceSnapshot snapshot) {
+        for (var handler : HANDLERS) handler.recovery().recover(level, runtime, body, id, snapshot);
+    }
+    static List<Owner> pending(FrontierWorldState state, ActorBodyId id) {
+        return HANDLERS.stream().filter(handler -> !handler.completion().settled(state, id)).map(Handler::owner).toList();
     }
 }

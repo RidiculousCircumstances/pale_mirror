@@ -43,8 +43,23 @@ final class FrontierV3OperationConfirmation {
                 canonical.release(command.id()); return false;
             }
         }
-        close(ledger, force, canonical, ticket, command);
+        if (command.closure() == FrontierV3OperationLedger.OwnerCommand.Closure.AUTOMATIC)
+            close(ledger, force, canonical, ticket, command);
         return true;
+    }
+    /** Canonical acceptance does not discharge an owner's retained aftermath.
+     * The caller supplies that completion; the coordinator checks the exact command. */
+    static boolean completeOwner(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime, UUID ticket) {
+        var ledger = FrontierV3OperationLedger.get(level);
+        return completeOwner(ledger, () -> ledger.persist(level), canonical(level, runtime, java.util.Optional.empty()), ticket);
+    }
+    static boolean completeOwner(FrontierV3OperationLedger ledger, Runnable force, Canonical canonical, UUID ticket) {
+        var command = ledger.ownerCommand(ticket).orElseThrow();
+        if (command.closure() != FrontierV3OperationLedger.OwnerCommand.Closure.EXPLICIT_OWNER)
+            throw new IllegalArgumentException("operation does not declare explicit owner closure");
+        canonical.pin(command.id());
+        if (canonical.receipt(command.id()).isEmpty()) { canonical.release(command.id()); return false; }
+        close(ledger, force, canonical, ticket, command); return true;
     }
     /** The owner validates its recovery consequence. The coordinator first proves that
      * the pinned prior command was not accepted; it never replays the native effect. */
@@ -62,12 +77,15 @@ final class FrontierV3OperationConfirmation {
         if (retained.isPresent()) {
             var previous = retained.orElseThrow(); canonical.pin(previous.id());
             if (canonical.receipt(previous.id()).isPresent()) {
-                close(ledger, force, canonical, ticket, previous); return true;
+                if (previous.closure() == FrontierV3OperationLedger.OwnerCommand.Closure.AUTOMATIC)
+                    close(ledger, force, canonical, ticket, previous);
+                return true;
             }
             String digest = fingerprint(consequence);
             if (!previous.fingerprint().equals(digest)) {
                 var successor = new FrontierV3OperationLedger.OwnerCommand(
-                        new CommandId("physical-operation:" + ticket + "/recovery/" + digest), consequence);
+                        new CommandId("physical-operation:" + ticket + "/recovery/" + digest), consequence,
+                        previous.closure(), previous.context());
                 ledger.replaceUnacceptedOwnerCommand(ticket, previous, successor);
                 force.run(); // Crash recovery restores the successor pin from this durable binding.
                 canonical.pin(successor.id()); canonical.release(previous.id());
@@ -83,9 +101,10 @@ final class FrontierV3OperationConfirmation {
     static void recover(FrontierV3OperationLedger ledger, Runnable force, Canonical canonical) {
         for (var entry : ledger.ownerCommands().entrySet()) {
             var command = entry.getValue(); canonical.pin(command.id());
-            if (ledger.require(entry.getKey()).ownerClosed() || canonical.receipt(command.id()).isPresent())
+            if (ledger.require(entry.getKey()).ownerClosed() || canonical.receipt(command.id()).isPresent()
+                    && command.closure() == FrontierV3OperationLedger.OwnerCommand.Closure.AUTOMATIC)
                 close(ledger, force, canonical, entry.getKey(), command);
-            else canonical.release(command.id());
+            else if (canonical.receipt(command.id()).isEmpty()) canonical.release(command.id());
         }
     }
     private static void close(FrontierV3OperationLedger ledger, Runnable force, Canonical canonical,

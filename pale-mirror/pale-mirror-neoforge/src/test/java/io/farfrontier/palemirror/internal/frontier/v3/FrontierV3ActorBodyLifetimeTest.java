@@ -47,21 +47,13 @@ class FrontierV3ActorBodyLifetimeTest {
         assertThrows(IllegalStateException.class, () -> FrontierV3ActorBodyDeparture.load(malformed));
     }
     @Test void resourceDeathCompositionRejectsMissingOrCompetingOwners() {
-        FrontierV3ActorDeathResourceComposition.Preparation noop = (level, runtime, body, id) -> () -> { };
-        var equipment = new FrontierV3ActorDeathResourceComposition.Handler(
-                FrontierV3ActorDeathResourceComposition.Owner.EXACT_EQUIPMENT, noop);
-        var meal = new FrontierV3ActorDeathResourceComposition.Handler(
-                FrontierV3ActorDeathResourceComposition.Owner.RESIDENT_MEAL, noop);
-        var service = new FrontierV3ActorDeathResourceComposition.Handler(
-                FrontierV3ActorDeathResourceComposition.Owner.SETTLEMENT_SERVICE, noop);
-        var expedition = new FrontierV3ActorDeathResourceComposition.Handler(
-                FrontierV3ActorDeathResourceComposition.Owner.EXPEDITION_TRANSFER, noop);
-        var shipment = new FrontierV3ActorDeathResourceComposition.Handler(
-                FrontierV3ActorDeathResourceComposition.Owner.SHIPMENT, noop);
-        var personal = new FrontierV3ActorDeathResourceComposition.Handler(
-                FrontierV3ActorDeathResourceComposition.Owner.UNIT_INVENTORY, noop);
-        var attached = new FrontierV3ActorDeathResourceComposition.Handler(
-                FrontierV3ActorDeathResourceComposition.Owner.ATTACHED_STORAGE, noop);
+        var equipment = deathHandler(FrontierV3ActorDeathResourceComposition.Owner.EXACT_EQUIPMENT);
+        var meal = deathHandler(FrontierV3ActorDeathResourceComposition.Owner.RESIDENT_MEAL);
+        var service = deathHandler(FrontierV3ActorDeathResourceComposition.Owner.SETTLEMENT_SERVICE);
+        var expedition = deathHandler(FrontierV3ActorDeathResourceComposition.Owner.EXPEDITION_TRANSFER);
+        var shipment = deathHandler(FrontierV3ActorDeathResourceComposition.Owner.SHIPMENT);
+        var personal = deathHandler(FrontierV3ActorDeathResourceComposition.Owner.UNIT_INVENTORY);
+        var attached = deathHandler(FrontierV3ActorDeathResourceComposition.Owner.ATTACHED_STORAGE);
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorDeathResourceComposition.closed(java.util.List.of(equipment)));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorDeathResourceComposition.closed(java.util.List.of(equipment, meal, meal)));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorDeathResourceComposition.closed(java.util.List.of(equipment, meal)));
@@ -72,6 +64,10 @@ class FrontierV3ActorBodyLifetimeTest {
             assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorDeathResourceComposition.closed(
                     complete.stream().filter(handler -> handler != absent).toList()));
         }
+    }
+    private static FrontierV3ActorDeathResourceComposition.Handler deathHandler(FrontierV3ActorDeathResourceComposition.Owner owner) {
+        return new FrontierV3ActorDeathResourceComposition.Handler(owner, (level, runtime, body, id) -> () -> { },
+                (level, runtime, state) -> false, (level, runtime, body, id, snapshot) -> { }, (state, id) -> true);
     }
     private static FrontierWorldState running() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:body-lifetime"), 91L));

@@ -89,12 +89,14 @@ final class FrontierV3ActorBodyController {
         String cause = source == null ? "environment" : "entity:" + source.getUUID();
         var payload = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyDied(id, actor.body(),
                 actor.condition().health(), observed, FrontierV3ActorBodyDeparture.execution(state, declaration.actorId()), cause);
-        FrontierV3BodyFatalityOperation.commit(level, runtime, body, payload, nativeDeath, died);
+        var fatality = FrontierV3BodyFatalityOperation.commit(level, runtime, body, payload, nativeDeath, died);
         FrontierV3BodyOperationIntegration.recover(level, runtime.decodedState().orElseThrow(), ledger, declaration.actorId());
         ledger.retireDeadActor(runtime.decodedState().orElseThrow(), declaration.actorId());
         ledger.persist(level, state.bootstrap().worldId());
         FrontierV3GoalNavigation.retireIncarnation(body, id);
         resources.settle();
+        if (!FrontierV3BodyFatalityOperation.finish(level, runtime, fatality, id))
+            throw new IllegalStateException("native death retains unresolved resource aftermath: " + fatality + " body=" + id);
         return true;
     }
 
@@ -591,6 +593,7 @@ final class FrontierV3ActorBodyController {
             return false;
         var id = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(declaration.actorId(), declaration.epoch());
         boolean dead = recognizesRetiredDeadBody(level, state, body);
+        if (dead && FrontierV3BodyFatalityOperation.holdsBody(level, state, body)) return false;
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
         if (!dead && !ledger.fencesBody(declaration)) return false;
         if (!FrontierV3GoalNavigation.retireIncarnation(body, id)) return false;
