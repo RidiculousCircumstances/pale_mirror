@@ -107,6 +107,10 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
 
     static java.util.Optional<FrontierV3ResourceFieldWitness.Pending> ownedPending(
             FrontierV3ResourceSiteLedger ledger, SceneLease lease, ResourceSiteHarvestJob job, ResourceFieldCycle cycle) {
+        return ownedWorkPending(ledger, lease, job, cycle).filter(pending -> pending.handEffect().isPresent());
+    }
+    static java.util.Optional<FrontierV3ResourceFieldWitness.Pending> ownedWorkPending(
+            FrontierV3ResourceSiteLedger ledger, SceneLease lease, ResourceSiteHarvestJob job, ResourceFieldCycle cycle) {
         if (!job.progress().hasPendingCrop() || lease.members().size() != 1
                 || !(ledger.fieldClaim(job.siteId()) instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
                 || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE || !owner.witness().matchesCycle(cycle))
@@ -115,9 +119,10 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
         return owner.witness().cell(cell).pending().filter(pending -> pending.canonicalSource().isEmpty()
                 && pending.causationId().equals(FrontierV3ResourceFieldWorkExecutor.cause(job, cycle, cell))
                 && cycle.physicalWorkTransition(cell).filter(pending.transition()::equals).isPresent()
-                && pending.handEffect().filter(hand -> hand.siteId().equals(job.siteId()) && hand.jobId().equals(job.id())
+                && pending.handEffect().isPresent() == (cycle.expectedWorkOutcome(cell) == ResourceFieldCycle.WorkOutcome.HARVESTED)
+                && pending.handEffect().map(hand -> hand.siteId().equals(job.siteId()) && hand.jobId().equals(job.id())
                     && hand.actorId().equals(job.workerId()) && hand.entityId().equals(lease.members().getFirst().entityId())
-                    && hand.beforeCount() == job.undeliveredYieldQuantity()).isPresent());
+                    && hand.beforeCount() == job.undeliveredYieldQuantity()).orElse(true));
     }
 
     private static boolean currentField(ServerLevel level, SceneLease lease, ResourceSiteHarvestJob job, ResourceFieldCycle cycle) {

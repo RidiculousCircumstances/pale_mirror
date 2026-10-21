@@ -165,8 +165,10 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         receipt.join(); return true;
     }
     boolean unattempted(UUID ticket) { require(ticket); return unattempted.contains(ticket); }
-    /** Must be called in the same server turn as the owner captures its conditional
-     * outcome, before the parent can attempt. No old permit is reconstructed. */
+    /** Explicit causal dependency supplied by the owning producer, not inferred
+     * from overlapping native media. A body fatality may exclude a terrain-only
+     * or station-only action. Capture in the same server turn before either
+     * attempt; no old permit is reconstructed. */
     void deferCancellation(UUID parent, UUID child) {
         validateCancellation(parent, child);
         if (Objects.equals(cancellationParents.get(child), parent)) return;
@@ -182,9 +184,8 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
                 || owner == null || owner.closure() != OwnerCommand.Closure.EXPLICIT_OWNER
                 || owner.contextSize() == 0 || cancellationParents.containsKey(parent)
                 || cancellationChildren.containsKey(child)
-                || cancellationParents.containsKey(child) && !cancellationParents.get(child).equals(parent)
-                || Collections.disjoint(enclosing.declaration().participants(), excluded.declaration().participants()))
-            throw new IllegalArgumentException("conditional cancellation lacks its exact parent/shared participant/unused child declaration");
+                || cancellationParents.containsKey(child) && !cancellationParents.get(child).equals(parent))
+            throw new IllegalArgumentException("conditional cancellation lacks its exact retained parent/unused child declaration");
     }
     /** Only the enclosing live native callback may supply a positive refusal.
      * Recovery, a timeout or matching item counts cannot grant this transition. */

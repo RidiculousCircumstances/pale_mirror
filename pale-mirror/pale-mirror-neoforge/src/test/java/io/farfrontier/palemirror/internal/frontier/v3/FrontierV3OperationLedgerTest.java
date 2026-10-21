@@ -13,15 +13,20 @@ class FrontierV3OperationLedgerTest {
     @BeforeAll static void version() { net.minecraft.SharedConstants.tryDetectVersion(); }
     @TempDir Path directory;
     @Test void conditionalCancellationRetainsTheLivingCommandAndNeedsPositiveParentOutcomeAfterRestart() throws Exception {
-        var path = directory.resolve("conditional.dat"); var ledger = fresh(path);
+        conditionalCancellation(true);
+        conditionalCancellation(false);
+    }
+    private void conditionalCancellation(boolean sharedParticipant) throws Exception {
+        var path = directory.resolve("conditional-" + sharedParticipant + ".dat"); var ledger = fresh(path);
         var payload = new io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaObserved(
                 new io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta(
                         new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(1, 64, 1),
                         io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind.UNKNOWN_SCAR,
                         Optional.empty(), Optional.empty(), "test:conditional"));
         var fingerprint = FrontierV3OperationConfirmation.fingerprint(payload);
-        var child = ledger.prepare(new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.MEAL_TAKE,
-                new SubjectId("resident:conditional"), "take", fingerprint, Set.of(BODY, CHEST)));
+        var child = ledger.prepare(new FrontierV3OperationReceipt.Declaration(sharedParticipant
+                ? FrontierV3OperationReceipt.Protocol.MEAL_TAKE : FrontierV3OperationReceipt.Protocol.FIELD_WORK,
+                new SubjectId("owner:conditional-child"), "take", fingerprint, sharedParticipant ? Set.of(BODY, CHEST) : Set.of(CHEST)));
         var normal = new FrontierV3OperationLedger.OwnerCommand(new CommandId("test:normal-child"), payload);
         ledger.retainOwnerIntent(child.ticket(), normal);
         var parent = ledger.prepare(new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.BODY_FATALITY,
@@ -40,7 +45,7 @@ class FrontierV3OperationLedgerTest {
                 recovered.ownerCommand(parent.ticket()).orElseThrow().context())), "typed child outcome survives the actual journal boundary");
         assertFalse(recovered.beginAttempt(parent.ticket())); assertFalse(recovered.beginAttempt(child.ticket()));
         assertFalse(recovered.sealUnattemptedCancellation(child.ticket()));
-        assertThrows(IllegalStateException.class, () -> recovered.applied(child.nativeReceipt(BODY)));
+        assertThrows(IllegalStateException.class, () -> recovered.applied(child.nativeReceipt(CHEST)));
         recovered.applied(parent.nativeReceipt(BODY));
         assertThrows(IllegalStateException.class, () -> recovered.closeOwner(parent.ticket()));
         var historical = FrontierV3OperationLedger.load(recovered.save(new CompoundTag(), null), null);

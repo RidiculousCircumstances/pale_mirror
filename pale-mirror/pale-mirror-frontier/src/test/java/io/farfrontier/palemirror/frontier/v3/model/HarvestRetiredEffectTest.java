@@ -12,14 +12,13 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class HarvestRetiredEffectTest {
     @Test void retainedCellSettlesWithoutResurrectingWorkerOrConflictingField() {
-        var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
-        var job = hot.state().resourceSites().site(hot.site()).harvestJobs().values().stream()
-                .reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
-        var state = ResourceSiteHarvestProcessTest.inspectGoal(hot.state(), hot.site(), job, hot.lease().id());
-        state = ResourceSiteHarvestProcessTest.completeLabourHot(state, hot.site(), hot.lease().id());
-        job = state.resourceSites().site(hot.site()).harvestJob(job.id()).orElseThrow();
-        state = ResourceSiteHarvestProcess.reduceCropPrepared(state, hot.site(),
-                new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex(), job.target().generation()));
+        for (var outcome : java.util.List.of(ResourceFieldCycle.WorkOutcome.HARVESTED,
+                ResourceFieldCycle.WorkOutcome.TILLED, ResourceFieldCycle.WorkOutcome.PLANTED)) check(outcome);
+    }
+    private static void check(ResourceFieldCycle.WorkOutcome outcome) {
+        var hot = HarvestPendingWorkFixture.create(FrontierResourceSiteHarvestFixture.smallFieldBootstrap(
+                new WorldId("frontier:retired-field-work"), 125L), outcome);
+        var job = hot.job(); var state = hot.state();
         var identity = new ActorActuationId(ActorBodyAuthority.current(state, job.workerId()),
                 HarvestDeathResources.execution(state, job.workerId()).orElseThrow());
         var due = ResourceSiteHarvestProcess.coldProgress(job, job.progress().work().orElseThrow().evaluatedAtTick() + 1);
@@ -34,10 +33,11 @@ class HarvestRetiredEffectTest {
                 ResourceSiteHarvestProcess.planColdProgress(dead, due).getFirst().payload());
         assertTrue(ActorInventoryInteractionFences.pending(dead, job.workerId()));
         for (boolean applied : java.util.List.of(false, true)) {
+            int yield = applied && outcome == ResourceFieldCycle.WorkOutcome.HARVESTED ? 1 : 0;
             var hand = new ResourceSiteHarvestProgressed.HandObservation(new PhysicalStackAddress.ActorHand(job.workerId(),
-                    hot.lease().members().getFirst().entityId()), hot.lease().revision(), applied ? 1 : 0);
+                    hot.lease().members().getFirst().entityId()), hot.lease().revision(), yield);
             var effect = new ResourceSiteHarvestProgressed(hot.site(), field.epoch(), job.id(), job.progress().completedCropSlots() + 1,
-                    field.layout().revision(), job.target().cellId(), job.target().generation(), ResourceFieldCycle.WorkOutcome.HARVESTED,
+                    field.layout().revision(), job.target().cellId(), job.target().generation(), outcome,
                     due.id(), due.dueAt().ticks(), Optional.of(hand));
             var receipt = new HarvestRetiredEffectObserved(identity, effect, applied);
             var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
@@ -46,7 +46,7 @@ class HarvestRetiredEffectTest {
             var next = apply(dead, receipt, due.dueAt().ticks());
             var retained = next.resourceSites().site(hot.site()).harvestJob(job.id()).orElseThrow();
             assertFalse(retained.progress().hasPendingCrop());
-            assertEquals(applied ? 1 : 0, ResourceSiteHarvestCargo.quantity(next, retained));
+            assertEquals(yield, ResourceSiteHarvestCargo.quantity(next, retained));
             assertEquals(job.progress().selectedCropSlotIndex(), retained.progress().selectedCropSlotIndex());
             assertEquals(applied, retained.progress().acceptance().isPresent());
             assertEquals(dead.actorLocations(), next.actorLocations());
@@ -55,11 +55,11 @@ class HarvestRetiredEffectTest {
             var observed = next;
             assertThrows(IllegalArgumentException.class, () -> apply(observed, receipt, due.dueAt().ticks()));
             var codec = new FrontierWorldStateCodec(); assertEquals(next, codec.decode(codec.encode(next)));
-            var ground = applied ? Optional.of(new ResourceCustody.Ground(java.util.UUID.nameUUIDFromBytes(
+            var ground = yield > 0 ? Optional.of(new ResourceCustody.Ground(java.util.UUID.nameUUIDFromBytes(
                     "harvest-death".getBytes(java.nio.charset.StandardCharsets.UTF_8)), new BlockPosition(0, 64, 0)))
                     : Optional.<ResourceCustody.Ground>empty();
             var settled = new HarvestDeathSettled(job.siteId(), identity, retained.progress().completedCropSlots(),
-                    retained.harvestedYieldQuantity(), retained.deliveredYieldQuantity(), applied ? hand.authorityEpoch() : 0, ground);
+                    retained.harvestedYieldQuantity(), retained.deliveredYieldQuantity(), yield > 0 ? hand.authorityEpoch() : 0, ground);
             assertEquals(settled, codecs.decode(settled.type(), codecs.encode(settled)));
             if (applied) {
                 assertThrows(IllegalArgumentException.class, () -> apply(observed, settled, due.dueAt().ticks()));
@@ -74,7 +74,7 @@ class HarvestRetiredEffectTest {
             assertEquals(ready.resourceSites().cycle(job.siteId()), closed.resourceSites().cycle(job.siteId()));
             assertEquals(ready.strategicPlans(), closed.strategicPlans());
             assertEquals(ready.inventory().fungibleResources().lots(), closed.inventory().fungibleResources().lots());
-            if (applied) assertTrue(closed.inventory().fungibleResources().accounts().values().stream()
+            if (yield > 0) assertTrue(closed.inventory().fungibleResources().accounts().values().stream()
                     .anyMatch(account -> account.custody().equals(ground.orElseThrow()) && account.lotQuantities().values().stream().mapToInt(Integer::intValue).sum() == 1));
             assertEquals(closed, codec.decode(codec.encode(closed)));
             assertThrows(IllegalArgumentException.class, () -> apply(closed, settled, due.dueAt().ticks()));

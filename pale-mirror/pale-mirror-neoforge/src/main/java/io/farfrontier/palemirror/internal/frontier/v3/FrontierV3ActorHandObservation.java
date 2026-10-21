@@ -66,8 +66,11 @@ final class FrontierV3ActorHandObservation {
         }
         boolean matchesBefore(FrontierV3ResourceFieldWitness.HandEffect effect) {
             if (!matches(effect)) return false;
-            return effect.beforeCount() == 0 ? disposition == Disposition.EMPTY
-                    : disposition == Disposition.WHEAT && stack.orElseThrow().quantity() == effect.beforeCount();
+            return matchesQuantity(effect.beforeCount());
+        }
+        boolean matchesQuantity(int count) {
+            return worldRead && (count == 0 ? disposition == Disposition.EMPTY
+                    : disposition == Disposition.WHEAT && stack.orElseThrow().quantity() == count);
         }
     }
 
@@ -86,11 +89,31 @@ final class FrontierV3ActorHandObservation {
                 || !FrontierV3SceneExecutor.owned(entity, state, lease, member)) {
             return Review.of(Disposition.FOREIGN_OWNER);
         }
+        return read(state, lease, job, worker);
+    }
+
+    /** Read-only retained custody at the pre-loot boundary. Native health is
+     * already zero there; neither health nor HOT actuation permission decides
+     * whether the exact body still contains this owner's resources. */
+    static Review observeRetained(ServerLevel level, FrontierWorldState state, SceneLease lease, ResourceSiteHarvestJob job,
+            Mob body, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId identity) {
+        if (identity.execution().activityKind() != io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST
+                || !identity.execution().activityOwnerId().equals(job.id()) || !identity.body().actorId().equals(job.workerId())
+                || !identity.body().equals(io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, job.workerId()))
+                || body.level() != level || body.isRemoved() || level.getEntity(body.getUUID()) != body
+                || lease.status() == SceneLeaseStatus.CLOSED || !ownsRetainedHarvest(state, lease, job)
+                || !FrontierV3SceneExecutor.ownsDeclaration(body, state, lease, lease.members().getFirst()))
+            return Review.of(Disposition.FOREIGN_OWNER);
+        state.actorExecutions().requireRetained(identity.execution());
+        return read(state, lease, job, body);
+    }
+
+    private static Review read(FrontierWorldState state, SceneLease lease, ResourceSiteHarvestJob job, Mob worker) {
         // MAINHAND is already used by exact tools, weapons and service materials. Farmer
         // cargo owns OFFHAND exclusively; reading the main hand would mistake that exact
         // equipment for a conflicting fungible stack or overwrite it on a later effect.
         ItemStack held = worker.getOffhandItem();
-        return classify(job.workerId(), member.entityId(), held.isEmpty() ? "" : Objects.toString(BuiltInRegistries.ITEM.getKey(held.getItem()), ""),
+        return classify(job.workerId(), worker.getUUID(), held.isEmpty() ? "" : Objects.toString(BuiltInRegistries.ITEM.getKey(held.getItem()), ""),
                 held.isEmpty() ? 0 : held.getCount(), held.isEmpty() || ItemStack.isSameItemSameComponents(held,
                         new ItemStack(Items.WHEAT, held.getCount()))).fromWorld(job.siteId(), job.id(),
                         ResourceSiteHarvestCargo.handEpoch(state, job, lease));
@@ -116,9 +139,11 @@ final class FrontierV3ActorHandObservation {
 
     /** A caller's stale lease/job pair cannot borrow the hand of a current physical body. */
     static boolean ownsCurrentHarvest(FrontierWorldState state, SceneLease lease, ResourceSiteHarvestJob job) {
+        return lease.status() == SceneLeaseStatus.HOT && ownsRetainedHarvest(state, lease, job);
+    }
+    private static boolean ownsRetainedHarvest(FrontierWorldState state, SceneLease lease, ResourceSiteHarvestJob job) {
         ResourceSiteLifecycle site = state.resourceSites().sites().get(job.siteId());
-        return lease.status() == SceneLeaseStatus.HOT
-                && lease.worldId().equals(state.bootstrap().worldId())
+        return lease.worldId().equals(state.bootstrap().worldId())
                 && lease.equals(state.sceneLeases().get(lease.id()))
                 && FrontierSceneBehaviors.isResourceSiteHarvest(lease)
                 && FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId().equals(job.siteId())

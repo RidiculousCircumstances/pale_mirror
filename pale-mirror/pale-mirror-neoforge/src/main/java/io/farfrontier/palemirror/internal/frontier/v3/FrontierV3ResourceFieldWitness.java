@@ -554,13 +554,14 @@ final class FrontierV3ResourceFieldWitness {
             throw new IllegalArgumentException("unused field cancellation has a foreign witness");
         var prior = cell(receipt.cellId());
         if (prior.pending().isEmpty()) return this;
-        var pending = prior.pending().orElseThrow(); var hand = pending.handEffect().orElseThrow();
+        var pending = prior.pending().orElseThrow();
         if (!pending.causationId().equals(FieldCellOperation.id(receipt.jobId(), receipt.epoch(), receipt.cellId(), receipt.generation()))
                 || pending.canonicalSource().isPresent() || pending.completedSteps() != 0 || pending.handConfirmed()
                 || !prior.committed().equals(pending.transition().before())
-                || !hand.extraction().execution().equals(cancelled.identity().execution())
-                || hand.beforeCount() != receipt.observedHand().orElseThrow().quantity()
-                || hand.authorityEpoch() != receipt.observedHand().orElseThrow().authorityEpoch())
+                || pending.handEffect().isPresent() != (receipt.outcome() == ResourceFieldCycle.WorkOutcome.HARVESTED)
+                || pending.handEffect().map(hand -> !hand.extraction().execution().equals(cancelled.identity().execution())
+                    || hand.beforeCount() != receipt.observedHand().orElseThrow().quantity()
+                    || hand.authorityEpoch() != receipt.observedHand().orElseThrow().authorityEpoch()).orElse(false))
             throw new IllegalArgumentException("unused field cancellation cannot clear another or attempted operation");
         return replace(receipt.cellId(), new Cell(prior.committed(), Optional.empty(), prior.foreign(), prior.retiredWork()));
     }

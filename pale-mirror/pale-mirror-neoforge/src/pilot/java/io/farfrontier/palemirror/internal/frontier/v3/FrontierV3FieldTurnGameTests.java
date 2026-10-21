@@ -22,8 +22,8 @@ public final class FrontierV3FieldTurnGameTests {
         var config = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:field-turns"), 42L);
         var runtime = FrontierV3ServerRuntime.start(config, new EphemeralStore(), 20_000);
         var state = runtime.decodedState().orElseThrow();
-        var a = field(helper.absolutePos(new BlockPos(4, 30, 4)), "site:1-wheat-field");
-        var b = field(helper.absolutePos(new BlockPos(16, 30, 4)), "site:2-wheat-field");
+        var a = field(helper.absolutePos(new BlockPos(4, 30, 4)), "site:field-turn-a");
+        var b = field(helper.absolutePos(new BlockPos(16, 30, 4)), "site:field-turn-b");
         var ledger = FrontierV3ResourceSiteLedger.get(level);
         try {
             for (var site : List.of(a, b)) {

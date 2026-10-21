@@ -42,8 +42,12 @@ final class FrontierV3HarvestDeathResources {
         var state = runtime.decodedState().orElseThrow(); ActorBodyAuthority.requireRetiredDeath(state, id);
         FrontierV3HarvestDeliveryOperation.retireSettled(level, id, effects);
         FrontierV3HarvestHandAftermath.retireSettled(level, id, effects);
-        var job = HarvestDeathResources.work(state, id.actorId()).orElse(null);
-        if (job == null || !HarvestDeathResources.ready(state, job)) return;
+        var acceptedWork = HarvestDeathResources.work(state, id.actorId()).orElse(null);
+        if (acceptedWork == null) return;
+        FrontierV3ResourceFieldAcceptanceExecutor.acknowledge(level, runtime, acceptedWork);
+        state = runtime.decodedState().orElseThrow();
+        var job = HarvestDeathResources.work(state, id.actorId()).orElseThrow();
+        if (!HarvestDeathResources.ready(state, job)) return;
         var ledger = FrontierV3ResourceSiteLedger.get(level);
         for (var effect : effects) {
             if (!(effect.consequence() instanceof HarvestRetiredEffectObserved retired)
