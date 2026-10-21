@@ -113,6 +113,20 @@ class FrontierV3ResourceHandoffLedgerTest {
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceHandoffLedger.load(foreign, null));
         exitRecovered.retireLoss(pickup); assertFalse(exitRecovered.blocks(ids.getFirst()));
         assertTrue(exitRecovered.lossOperation(pickup).isEmpty());
+        var destroyed = new GroundResourceDestroyed(groundAccount.id(), (ResourceCustody.Ground) groundAccount.custody(),
+                1, owner, UUID.randomUUID(), "KILLED", groundAccount.lotQuantities(), Set.of());
+        exitRecovered.prepareLoss(destroyed);
+        var column = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.ENTITY_COLUMN, "0", 1);
+        var destruction = FrontierV3OperationReceipt.prepare(new FrontierV3OperationReceipt.Declaration(
+                FrontierV3OperationReceipt.Protocol.GROUND_DESTRUCTION, owner, destroyed.witnessId().toString(),
+                FrontierV3OperationConfirmation.fingerprint(destroyed), Set.of(column)), 2);
+        assertThrows(IllegalArgumentException.class, () -> exitRecovered.bindLossOperation(destroyed, applied),
+                "player pickup authority cannot acknowledge native destruction");
+        assertThrows(IllegalArgumentException.class, () -> exitRecovered.bindLossOperation(destroyed, destruction));
+        var removed = destruction.applied(destruction.nativeReceipt(column)); exitRecovered.bindLossOperation(destroyed, removed);
+        var durableLoss = FrontierV3ResourceHandoffLedger.load(exitRecovered.save(new CompoundTag(), null), null);
+        assertEquals(Optional.of(removed), durableLoss.lossOperation(destroyed));
+        durableLoss.retireLoss(destroyed); assertTrue(durableLoss.lossOperation(destroyed).isEmpty());
         var obsolete = exits.save(new CompoundTag(), null); obsolete.putInt("format", 3);
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceHandoffLedger.load(obsolete, null));
         journal.finish(); // Offline readFile returns a read-only image, not a live writable store.

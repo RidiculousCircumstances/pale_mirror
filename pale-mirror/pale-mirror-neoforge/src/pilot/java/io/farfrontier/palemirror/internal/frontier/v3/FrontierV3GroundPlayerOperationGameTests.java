@@ -16,6 +16,49 @@ import java.util.*;
 @PrefixGameTestTemplate(false)
 public final class FrontierV3GroundPlayerOperationGameTests {
     @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
+    public static void destructionNeedsAnActualRemovalReceiptNotAnAbsentEntity(GameTestHelper helper) {
+        var level = helper.getLevel(); var point = helper.absolutePos(new BlockPos(1, 1, 1));
+        var item = new ItemEntity(level, point.getX() + .5, point.getY(), point.getZ() + .5, new ItemStack(Items.BREAD, 2));
+        item.setNoGravity(true); helper.assertTrue(level.addFreshEntity(item), "source admitted");
+        var base = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:ground-destruction-operation"), 92L);
+        var owner = base.initialState().bootstrap().settlements().getFirst().id(); var account = new SubjectId("custody:ground-destruction");
+        var ground = new ResourceCustody.Ground(item.getUUID(), new BlockPosition(point.getX(), point.getY(), point.getZ()));
+        var lot = new ResourceLot(new SubjectId("lot:ground-destruction"), owner, "minecraft:bread", 2, "test:destruction", List.of());
+        var resources = FungibleResourceLedger.empty().issue(lot, new CustodyAccount(account, ground, Map.of(lot.id(), 2), Map.of()));
+        resources = resources.rebind(account, 1, FungiblePhysicalObservation.bind(resources, account, 1,
+                List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.WorldEntity(item.getUUID()), lot.itemKind(), 2))));
+        var initial = base.initialState().withInventory(base.initialState().inventory().withFungibleResources(resources));
+        var config = new FrontierEngineConfiguration<>(base.worldId(), initial, base.initialInstant(), base.commandPlanner(),
+                base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),
+                base.initialSchedules(), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
+        var runtime = FrontierV3ServerRuntime.start(config, new FrontierV3AmbientActorGameTests.EphemeralStore(), 10_000);
+        try {
+            var journal = FrontierV3ResourceHandoffLedger.get(level);
+            var unproved = new GroundResourceDestroyed(account, ground, 1, owner, UUID.randomUUID(), "DISCARDED", Map.of(lot.id(), 2), Set.of());
+            journal.prepareLoss(unproved); journal.persist(level);
+            helper.assertTrue(!FrontierV3GroundItemDestruction.reconcile(level, runtime, unproved), "a witness is not proof of execution");
+            journal.retireLoss(unproved); journal.persist(level);
+            helper.assertTrue(FrontierV3GroundItemDestruction.before(level, item,
+                    net.minecraft.world.entity.Entity.RemovalReason.UNLOADED_TO_CHUNK, runtime), "unloading never consumes resource stock");
+            helper.assertTrue(!FrontierV3GroundItemDestruction.before(level, item,
+                    net.minecraft.world.entity.Entity.RemovalReason.DISCARDED, runtime), "outer removal is replaced by exactly one native callback");
+            helper.assertTrue(item.isRemoved() && item.getRemovalReason() == net.minecraft.world.entity.Entity.RemovalReason.DISCARDED,
+                    "native removal actually occurred");
+            helper.assertTrue(!runtime.decodedState().orElseThrow().inventory().fungibleResources().accounts().containsKey(account)
+                    && journal.losses().isEmpty(), "confirmed destruction retires stock and its owner witness");
+            var bag = FrontierV3OperationEntityColumns.current(level, item.chunkPosition()).orElseThrow().persistent();
+            helper.assertTrue(FrontierV3NativeOperationMarkers.read(bag).stream()
+                    .anyMatch(r -> FrontierV3OperationLedger.get(level).require(r.ticket()).declaration().protocol()
+                            == FrontierV3OperationReceipt.Protocol.GROUND_DESTRUCTION),
+                    "exact native column receipt survives destruction of the source entity");
+            // Even an absent entity and absent canonical stock cannot prove an unrelated operation.
+            journal.prepareLoss(unproved); journal.persist(level);
+            helper.assertTrue(!FrontierV3GroundItemDestruction.reconcile(level, runtime, unproved), "absence cannot forge a retirement receipt");
+            journal.retireLoss(unproved); journal.persist(level);
+        } finally { runtime.shutdown(); }
+        helper.succeed();
+    }
+    @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
     public static void partialAndLastItemPickupUseTheRealMutationAndExactOwnerConfirmation(GameTestHelper helper) {
         var level = helper.getLevel(); var player = helper.makeMockServerPlayerInLevel();
         player.setGameMode(net.minecraft.world.level.GameType.SURVIVAL);

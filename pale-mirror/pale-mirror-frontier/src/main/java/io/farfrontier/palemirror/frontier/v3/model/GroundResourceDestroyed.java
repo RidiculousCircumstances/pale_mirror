@@ -15,6 +15,7 @@ public record GroundResourceDestroyed(SubjectId sourceAccountId, ResourceCustody
             throw new IllegalArgumentException("ground loss requires bounded exact native destruction evidence");
     }
     @Override public String type() { return "frontier.ground_resource_destroyed"; }
+    @Override public boolean requiresDurableBeforeEffect() { return true; }
     public FrontierWorldState apply(FrontierWorldState state, SubjectId owner) {
         var ledger = state.inventory().fungibleResources(); var account = ledger.accounts().get(sourceAccountId);
         var bindings = ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(sourceAccountId)).toList();

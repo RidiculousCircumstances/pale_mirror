@@ -65,20 +65,10 @@ public final class FrontierV3GroundPlayerPickup {
     /** Recovery consumes causal operation proof, never a matching source/player count. */
     static boolean reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             GroundResourcePlayerWithdrawal receipt) {
-        var journal = FrontierV3ResourceHandoffLedger.get(level); var ledger = FrontierV3OperationLedger.get(level);
-        var linked = journal.lossOperation(receipt).orElse(null);
-        var operation = linked == null ? ledger.find(FrontierV3OperationReceipt.Protocol.PLAYER_GROUND_PICKUP,
-                receipt.economicOwner(), receipt.witnessId().toString()).orElse(null) : ledger.find(linked.ticket()).orElse(null);
-        if (operation == null) {
-            // A positive retirement fence is valid only with the owner's retained exact
-            // operation identity. Missing operation/count equality alone proves nothing.
-            if (linked == null || !ledger.prunable(linked.nativeReceipt(linked.declaration().participants().iterator().next()))) return false;
-        } else {
-            if (!operation.declaration().fingerprint().equals(FrontierV3OperationConfirmation.fingerprint(receipt)))
-                throw new IllegalStateException("ground pickup changed its durable native intent");
-            if (!operation.applied().equals(operation.declaration().participants())) {
+        return FrontierV3GroundLossOperation.reconcile(level, runtime, receipt,
+                FrontierV3OperationReceipt.Protocol.PLAYER_GROUND_PICKUP, operation -> {
                 var player = level.getServer().getPlayerList().getPlayer(receipt.playerId());
-                if (player == null) return false;
+                if (player == null) return List.of();
                 FrontierV3MinecraftOperation.Participant source;
                 if (receipt.remaining().isEmpty()) {
                     var declared = operation.declaration().participants().stream()
@@ -89,22 +79,8 @@ public final class FrontierV3GroundPlayerPickup {
                     var entity = level.getEntity(receipt.source().entityId());
                     source = entity == null || entity.isRemoved() ? null : FrontierV3OperationEntityParticipant.nativeObject(entity);
                 }
-                if (source == null) return false;
-                var ports = List.of(source, FrontierV3OperationPlayers.current(player));
-                if (!ports.stream().map(FrontierV3MinecraftOperation.Participant::identity).collect(java.util.stream.Collectors.toSet())
-                        .equals(operation.declaration().participants())) {
-                    FrontierV3OperationDiagnostics.result(level, operation, FrontierV3MinecraftOperation.Status.AMBIGUOUS); return false;
-                }
-                // Exact native receipts attest the completed callback. Subsequent player
-                // inventory use cannot become permission to repeat or undo that callback.
-                var observed = FrontierV3MinecraftOperation.observe(level, operation.declaration(), ports, () -> true).orElseThrow();
-                if (!observed.complete()) return false;
-                operation = ledger.require(operation.ticket());
-            }
-            journal.bindLossOperation(receipt, operation); journal.persist(level);
-            if (!FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(), receipt)) return false;
-        }
-        journal.retireLoss(receipt); journal.persist(level); return true;
+                return source == null ? List.of() : List.of(source, FrontierV3OperationPlayers.current(player));
+        });
     }
     /** Ordinary Vanilla add(-1): main slots, matching offhand, never an empty offhand or armour slot. */
     static int capacity(Inventory inventory, ItemStack source) {

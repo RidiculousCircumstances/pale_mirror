@@ -151,8 +151,11 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
     }
     private static void validateOperation(GroundStockExit loss, FrontierV3OperationReceipt operation) {
         var declaration = operation.declaration();
-        if (!(loss instanceof io.farfrontier.palemirror.frontier.v3.model.GroundResourcePlayerWithdrawal)
-                || declaration.protocol() != FrontierV3OperationReceipt.Protocol.PLAYER_GROUND_PICKUP
+        boolean compatible = loss instanceof io.farfrontier.palemirror.frontier.v3.model.GroundResourcePlayerWithdrawal
+                && declaration.protocol() == FrontierV3OperationReceipt.Protocol.PLAYER_GROUND_PICKUP
+                || loss instanceof io.farfrontier.palemirror.frontier.v3.model.GroundResourceDestroyed
+                && declaration.protocol() == FrontierV3OperationReceipt.Protocol.GROUND_DESTRUCTION;
+        if (!compatible
                 || !declaration.owner().equals(loss.economicOwner())
                 || !declaration.fingerprint().equals(FrontierV3OperationConfirmation.fingerprint(loss))
                 || !declaration.operation().equals(loss.witnessId().toString())

@@ -33,7 +33,6 @@ abstract class FrontierV3EntityDepartureMixin {
     @Inject(method = "setRemoved", at = @At("TAIL"), require = 1)
     private void frontierV3$observeFinalChunkDeparture(Entity.RemovalReason reason, CallbackInfo callback) {
         Entity entity = (Entity) (Object) this;
-        FrontierV3GroundItemDestruction.after(entity);
         if (entity.level() instanceof ServerLevel level) {
             FrontierV3ServerLifecycle.observeFinalChunkDeparture(level, entity);
         }
