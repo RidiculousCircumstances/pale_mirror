@@ -124,10 +124,14 @@ exact positions; restart reconstructs pending work from current declarations and
 retained PREPARED/SETTLED/external witnesses, never an ephemeral completion flag.
 
 Loaded chunk incarnation and block-ticking demand changes trigger renewed owner
-assessment. The nearest pending player-visible chunk receives contiguous progress on alternate
+assessment. The nearest pending chunk to a current viewer receives contiguous progress on alternate
 turns, with round-robin service on the other turns so a blocked chunk cannot starve
 its neighbours. Existing runtime read/time limits and extraction write ceiling bound
 each batch. Durable intent precedes writes; external changes are not overwritten.
+Priority also applies to already-presented chunks: `READY` presentation is not a
+current HOT custody proof after ticking demand changes. R208 observed699 pending
+cells and4.1s of re-entry wait in a `READY` chunk when priority used historical
+first-presentation status. The current queue no longer uses that historical gate.
 Initial handoff waits cheaply on pending work, then performs the exact physical
 proof. A completed queue alone never grants custody or chunk readiness.
 
@@ -149,6 +153,13 @@ Live source-chunk checks still observed about7s first preparation and a separate
 assessment/continuation CPU; `PedestrianRoutePlanning.observe` is a caller scope,
 not evidence that all its inclusive samples are pathfinding. Keep these residual
 server costs separate from client send/compile and projection queue latency.
+
+Extraction forecasts and undeveloped-product views retain independent bounded
+per-deposit input revisions (`ImmutableKeyedInputView`), not one last-site cache
+or an all-deposit rebuild on one depleted cell. Layout owns its immutable position
+index; ground-protection views use bucketed sets for dense coordinates. Same-input
+tick560400 forecast rounds fell from~10ms to~0.5ms with equal results; the complete
+planning round still measured~80-120ms. Neither figure is a chunk latency promise.
 
 ## Frontier v3 physical-scene scale protocol
 

@@ -45,7 +45,9 @@ final class FrontierV3WorksiteProjection {
                     new BlockPos(chunk.x * 16, level.getMinBuildHeight(), chunk.z * 16)));
         }, key -> {
             var chunk = new net.minecraft.world.level.ChunkPos(key);
-            if (!FrontierV3GrayboxExecutor.presentationWaiting(runtime, chunk)) return Long.MAX_VALUE;
+            // An already-presented chunk can still need a renewed HOT custody proof.
+            // Current viewer proximity, not historical first-presentation status,
+            // prioritizes both first entry and loaded/ticking re-entry.
             return viewers.stream().mapToLong(viewer -> Math.abs((long) viewer.x - chunk.x) + Math.abs((long) viewer.z - chunk.z))
                     .min().orElse(Long.MAX_VALUE);
         }, readBudget);

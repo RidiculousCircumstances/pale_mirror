@@ -7,16 +7,17 @@ import java.util.*;
 
 /** The extraction owner describes known sequential work, never hypothetical unexplored geology. */
 final class ExtractionProductionForecast {
-    private static final ImmutableInputView<Map<BlockExtraction.Definition, FiniteWorkForecast.Estimate>> ESTIMATES = new ImmutableInputView<>();
+    private static final ImmutableKeyedInputView<io.farfrontier.palemirror.frontier.v3.api.SubjectId,
+            Map<BlockExtraction.Definition, FiniteWorkForecast.Estimate>> ESTIMATES = new ImmutableKeyedInputView<>(256);
     static FiniteWorkForecast.Estimate assess(FrontierWorldState state, ExtractionDeposit deposit,
             BlockExtraction.Definition product, List<ResidentProfile> workers) {
         // Reservations of trade stock/cash do not change geology, extraction
         // commitments or worker capabilities. Key only the actual owner inputs.
         var inputs = new ArrayList<Object>();
-        inputs.add(state.bootstrap().ruleset()); inputs.add(state.extractionSites()); inputs.add(deposit);
+        inputs.add(state.bootstrap().ruleset()); inputs.add(state.extractionSites().work()); inputs.add(deposit);
         inputs.addAll(workers);
         synchronized (ESTIMATES) {
-            var estimates = ESTIMATES.get(inputs, HashMap::new);
+            var estimates = ESTIMATES.get(state.bootstrap(), deposit.site().id(), inputs, HashMap::new);
             return estimates.computeIfAbsent(product, ignored -> project(state, deposit, product, workers));
         }
     }

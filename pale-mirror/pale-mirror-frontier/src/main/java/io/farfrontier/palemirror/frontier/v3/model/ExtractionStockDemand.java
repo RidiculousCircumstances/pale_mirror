@@ -6,7 +6,7 @@ import java.util.*;
 
 /** Desired products select source cells and their resource-bearing prerequisites, not a second mining engine. */
 public final class ExtractionStockDemand {
-    private static final ImmutableInputView<Map<SubjectId, Set<String>>> UNDEVELOPED = new ImmutableInputView<>();
+    private static final ImmutableKeyedInputView<SubjectId, Set<String>> UNDEVELOPED = new ImmutableKeyedInputView<>(256);
     public static Set<Long> requiredCells(FrontierWorldState state, ExtractionDeposit deposit, Optional<SubjectId> completing, long atTick) {
         var demanded = demandedProducts(state, deposit, completing, atTick);
         var result = new HashSet<Long>(); var pending = new ArrayDeque<Long>();
@@ -28,11 +28,11 @@ public final class ExtractionStockDemand {
         return !demanded.isEmpty() && (deposit.site().layout().cells().stream().anyMatch(cell ->
                 deposit.cells().get(cell.id()).disposition() == ExtractionDeposit.Disposition.PRESENT
                         && cell.definition().coldOutput().stream().anyMatch(output -> demanded.contains(output.itemKind())))
-                || undevelopedProducts(state).get(deposit.site().id()).stream().anyMatch(demanded::contains));
+                || undevelopedProducts(state, deposit).stream().anyMatch(demanded::contains));
     }
     static Set<String> demandedProducts(FrontierWorldState state, ExtractionDeposit deposit, Optional<SubjectId> completing, long atTick) {
         var products = new HashSet<>(deposit.site().layout().outputKinds());
-        products.addAll(undevelopedProducts(state).get(deposit.site().id()));
+        products.addAll(undevelopedProducts(state, deposit));
         return state.bootstrap().ruleset().goodsTrade().policies().get(GoodsPolicyKind.PUBLIC_SETTLEMENT).stream()
                 .map(GoodsTradeRules.Commodity::itemKind).filter(products::contains)
                 .filter(kind -> ProductionStockDemand.read(state, deposit.site().settlementId(), kind, completing, atTick).requested())
@@ -40,23 +40,21 @@ public final class ExtractionStockDemand {
     }
     /** Declared but not yet admitted natural sources keep demand alive after
      * the initial face is depleted. This projection never grants reach or work. */
-    private static Map<SubjectId, Set<String>> undevelopedProducts(FrontierWorldState state) {
-        return UNDEVELOPED.get(List.of(state.bootstrap(), state.extractionSites().deposits(),
+    private static Set<String> undevelopedProducts(FrontierWorldState state, ExtractionDeposit deposit) {
+        // Declared source positions are excluded below: their depletion cannot
+        // change this view. Layout, observed natural blocks and survey inputs can.
+        return UNDEVELOPED.get(state.bootstrap(), deposit.site().id(), List.of(deposit.site(), deposit.geometry(),
                 state.extractionSites().geologicalExclusions(), state.extractionSites().geology(), state.extractionSites().knowledge()), () -> {
-            var result = new LinkedHashMap<SubjectId, Set<String>>();
-            for (var deposit : state.extractionSites().deposits().values()) {
-                var sources = deposit.site().layout().cells().stream().map(ExtractionLayout.Cell::source)
-                        .collect(java.util.stream.Collectors.toSet());
+                var sources = deposit.site().layout().cellsByPosition().keySet();
                 var products = new HashSet<String>();
                 var geometry = new ExtractionWorkingSurfaces(state, deposit);
+                var definitions = state.bootstrap().ruleset().extraction().definitions();
                 for (var position : deposit.site().layout().terrainSupports().keySet()) {
                     if (sources.contains(position)) continue;
-                    geometry.at(position).flatMap(state.bootstrap().ruleset().extraction()::definitionFor)
+                    geometry.at(position).flatMap(block -> definitions.stream().filter(d -> d.before().equals(block)).findFirst())
                             .ifPresent(material -> material.coldOutput().forEach(output -> products.add(output.itemKind())));
                 }
-                result.put(deposit.site().id(), Set.copyOf(products));
-            }
-            return Map.copyOf(result);
+                return Set.copyOf(products);
         });
     }
     public static boolean requested(FrontierWorldState state, SubjectId home, long atTick) {

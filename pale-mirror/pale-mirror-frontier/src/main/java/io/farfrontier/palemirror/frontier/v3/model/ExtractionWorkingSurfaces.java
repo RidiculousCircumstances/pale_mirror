@@ -12,8 +12,7 @@ final class ExtractionWorkingSurfaces {
 
     ExtractionWorkingSurfaces(FrontierWorldState state, ExtractionDeposit deposit) {
         this.state = state; this.deposit = deposit;
-        sources = deposit.site().layout().cells().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(
-                ExtractionLayout.Cell::source, cell -> cell));
+        sources = deposit.site().layout().cellsByPosition();
     }
     Optional<BlockExtraction.Block> at(BlockPosition position) {
         var cell = sources.get(position);

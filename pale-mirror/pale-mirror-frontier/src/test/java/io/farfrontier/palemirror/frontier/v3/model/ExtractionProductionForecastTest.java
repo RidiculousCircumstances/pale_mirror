@@ -23,5 +23,16 @@ class ExtractionProductionForecastTest {
         assertTrue(forecast.labourTicks() >= forecast.firstOutputTicks());
         assertTrue(forecast.firstOutputTicks() > 0);
         assertSame(inventory, state.inventory());
+        for (var other : state.extractionSites().deposits().values())
+            ExtractionProductionForecast.assess(state, other, definition, workers);
+        assertSame(forecast, ExtractionProductionForecast.assess(state, deposit, definition, workers),
+                "querying another mine must not recompile this unchanged forecast");
+        var cell = deposit.site().layout().cells().stream().filter(c -> c.definition().equals(definition)).findFirst().orElseThrow();
+        var changed = deposit.observe(cell.id(), deposit.cells().get(cell.id()).revision(), cell.definition().after());
+        var successor = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(changed)));
+        var next = ExtractionProductionForecast.assess(successor, changed, definition, workers);
+        assertEquals(forecast.outputs() - 1, next.outputs(), "external depletion cannot retain old capacity");
+        assertEquals(forecast, ExtractionProductionForecast.assess(state, deposit, definition, workers),
+                "revisiting an earlier immutable branch must recover its own forecast");
     }
 }

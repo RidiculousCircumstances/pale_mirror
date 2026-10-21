@@ -18,6 +18,7 @@ public final class ExtractionLayout {
     private final Map<BlockPosition, Long> terrainIds;
     // Derived once from this immutable declaration; not durable state or a history cache.
     private final Map<Long, Cell> cellsById;
+    private final Map<BlockPosition, Cell> cellsByPosition;
     private final Set<String> outputKinds;
     public static final int MAX_CELLS = 8_192;
     public ExtractionLayout(List<Cell> cells, Map<BlockPosition, BlockExtraction.Block> fixedBlocks,
@@ -90,7 +91,7 @@ public final class ExtractionLayout {
         Set<Long> ids = cells.stream().map(Cell::id).collect(java.util.stream.Collectors.toUnmodifiableSet());
         var protectedBlocks = fixedBlocks;
         var naturalBlocks = terrainSupports;
-        var sourcesByPosition = cells.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(Cell::source, cell -> cell));
+        var sourcesByPosition = Collections.unmodifiableMap(cells.stream().collect(java.util.stream.Collectors.toMap(Cell::source, cell -> cell)));
         var sources = sourcesByPosition.keySet();
         var surfaces = Set.copyOf(accessSurfaces);
         if (cells.stream().anyMatch(cell -> !ids.containsAll(cell.prerequisites())
@@ -124,6 +125,7 @@ public final class ExtractionLayout {
         this.terrainSupports = terrainSupports;
         this.terrainIds = terrainIds;
         this.cellsById = cells.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(Cell::id, cell -> cell));
+        this.cellsByPosition = sourcesByPosition;
         this.outputKinds = cells.stream().flatMap(cell -> cell.definition().coldOutput().stream())
                 .map(BlockExtraction.Output::itemKind).collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
@@ -133,6 +135,7 @@ public final class ExtractionLayout {
         return cell;
     }
     public List<Cell> cells() { return cells; }
+    public Map<BlockPosition, Cell> cellsByPosition() { return cellsByPosition; }
     /** Read-only products of this exact immutable source declaration, compiled once. */
     public Set<String> outputKinds() { return outputKinds; }
     public Map<BlockPosition, BlockExtraction.Block> fixedBlocks() { return fixedBlocks; }

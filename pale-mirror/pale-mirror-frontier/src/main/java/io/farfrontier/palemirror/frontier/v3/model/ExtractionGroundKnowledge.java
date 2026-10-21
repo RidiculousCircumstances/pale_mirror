@@ -20,8 +20,7 @@ final class ExtractionGroundKnowledge implements KnownBlockGeometry<BlockExtract
         this.state = state; this.protectedColumns = protectedColumns; this.declared = declared;
         this.deposit = deposit;
         local = deposit == null ? null : new ExtractionWorkingSurfaces(state, deposit);
-        sources = deposit == null ? Map.of() : deposit.site().layout().cells().stream()
-                .collect(java.util.stream.Collectors.toUnmodifiableMap(ExtractionLayout.Cell::source, cell -> cell));
+        sources = deposit == null ? Map.of() : deposit.site().layout().cellsByPosition();
     }
     static ExtractionGroundKnowledge forState(FrontierWorldState state) {
         var protection = cachedProtection(state, Optional.empty());
@@ -61,7 +60,9 @@ final class ExtractionGroundKnowledge implements KnownBlockGeometry<BlockExtract
                 deposit.site().layout().cells().forEach(cell -> columns.add(new TerrainColumn(cell.source().x(), cell.source().z())));
             }
         }
-        return new Protection(Set.copyOf(columns), Set.copyOf(declared));
+        // Dense grid hashes are highly clustered; retain bucketed immutable views,
+        // not SetN's quadratic linear-probe construction across all worksite blocks.
+        return new Protection(Collections.unmodifiableSet(columns), Collections.unmodifiableSet(declared));
     }
 
     /** Excavation fronts change frequently; immutable towns/roads do not. */
