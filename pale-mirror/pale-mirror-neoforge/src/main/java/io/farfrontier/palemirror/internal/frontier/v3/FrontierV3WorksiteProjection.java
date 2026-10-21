@@ -55,7 +55,7 @@ final class FrontierV3WorksiteProjection {
                 (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D),
                 System::nanoTime);
         var iterator = probes.iterator();
-        while (writes.size() < budget && iterator.hasNext() && preparation.takeRead()) {
+        while (iterator.hasNext() && preparation.takeRead()) {
             var declared = iterator.next();
             var owner = FrontierV3WorksiteRegistry.owner(declared.key().family());
             if (declared.key().family() != owner.family()) throw new IllegalStateException("worksite owner returned foreign declaration");
@@ -114,6 +114,10 @@ final class FrontierV3WorksiteProjection {
                     ledger.worksite(new FrontierV3WorksiteBlockWitness(write.declaration(), actual, FrontierV3WorksiteBlockWitness.Phase.EXTERNAL));
                     continue;
                 }
+                // Current preimages need a durable witness, not a block-write permit.
+                // Unused prepared intents remain pending if actual mutations exhaust
+                // this turn's allowance; their owner/recovery proof is unchanged.
+                if (!preparation.takeWrite()) continue;
                 if (!FrontierV3WorksiteWrites.apply(write.declaration().key(), () ->
                         level.setBlock(position, FrontierV3MinecraftBlockExtraction.block(write.declaration().block()), 3))) continue;
             }
