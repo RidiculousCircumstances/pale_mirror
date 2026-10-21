@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementColdAdvanced;
 import org.junit.jupiter.api.Test;
 import java.util.List;
@@ -8,8 +9,18 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ServiceAccessCapabilitiesTest {
     @Test void coldIncomingWorkCannotDeadlockAnIncumbentsExitButParkingAndPhysicalBodiesRemainExclusive() {
-        var fixture = ResourceSiteHarvestProcessTest.fullBatchAtDepotWithoutFutureCapacity();
-        var job = fixture.job(); var state = fixture.state(); var pointId = job.outputSlot().containerId();
+        // This tests service transit, not a full field cycle and its independent work clock.
+        var state = ProductionProcessTest.productionTask(FrontierWorldState.initial(FrontierBootstrapper.create(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:service-transit"), 91L)), StrategicTaskStatus.PENDING);
+        var task = state.strategicPlans().tasks().values().iterator().next();
+        var started = io.farfrontier.palemirror.frontier.v3.process.ProductionProcess.planStart(state,
+                io.farfrontier.palemirror.frontier.v3.process.ProductionProcess.start(task, 200L)).stream()
+                .map(io.farfrontier.palemirror.frontier.v3.api.ProposedEvent::payload)
+                .filter(ProductionStarted.class::isInstance).map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        state = io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess.reduceTaskTransition(state,
+                task.ownerId(), new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        state = io.farfrontier.palemirror.frontier.v3.process.ProductionProcess.reduceStarted(state, task.ownerId(), started);
+        var job = started.job(); var pointId = BakeryStorage.source(job);
         var point = ServiceBoundaryComposition.geometry(state, ServiceBoundaryComposition.declaration(state, pointId).identity());
         var exit = point.egressSurfaces().stream().sorted(java.util.Comparator.comparingInt(SurfaceAnchor::x)
                 .thenComparingInt(SurfaceAnchor::z)).findFirst().orElseThrow();
@@ -24,8 +35,10 @@ class ServiceAccessCapabilitiesTest {
         var stationary = state.withActorBody(actor, exit.standingBody());
         assertTrue(ServiceDestinationClaims.forImmediateExit(stationary, job.workerId(), pointId).contains(exit),
                 "unassigned stationary occupants are not incoming service transit");
-        var lease = ResourceSiteHarvestProcessTest.newHarvestLease(state, job.siteId(), job, "incoming-physical-body")
-                .withHandoffPosition(FrontierResourceSiteHarvestSceneSupport.candidate(state, job).orElseThrow().cropSlot());
+        var lease = SceneLease.forCause(new SceneLeaseId("lease:incoming-physical-body"), state.bootstrap().worldId(),
+                new ProductionWorkSceneCause(job.id()), exit.support(), new io.farfrontier.palemirror.frontier.v3.api.SimInstant(300L),
+                1L, SceneLeaseStatus.PREPARED, List.of(new SceneMember(job.workerId(),
+                        SceneLease.deterministicEntityId(state.bootstrap().worldId(), job.workerId()))), java.util.Set.of(), java.util.Optional.empty());
         var physical = state.prepareSceneLease(lease);
         assertFalse(ActorExecutionCoordinator.coldAvailable(physical, job.workerId()));
         assertTrue(ServiceDestinationClaims.forImmediateExit(physical, actor, pointId).contains(exit),
@@ -162,17 +175,19 @@ class ServiceAccessCapabilitiesTest {
     }
 
     @Test void wrongFamilyPointPriorityAndDuplicateDemandFailBeforeArbitration() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:invalid-service-demand"), 91L));
         var valid = new ServiceAccessDemand(IDENTITY, ServiceAccessDemand.Priority.WORK,
                 ServiceAccessDemand.Presence.OCCUPIED, 0, true);
-        assertEquals(List.of(valid), registry(List.of(valid)).evaluate(null, POINT));
+        assertEquals(List.of(valid), registry(List.of(valid)).evaluate(state, POINT));
         var wrongFamily = new ServiceAccessDemand(new ServiceAccessDemand.Identity(ServiceAccessDemand.Kind.FIELD_HARVEST,
                 IDENTITY.ownerId(), IDENTITY.actorId(), POINT), valid.priority(), valid.presence(), 0, true);
         var wrongPoint = new ServiceAccessDemand(new ServiceAccessDemand.Identity(IDENTITY.kind(), IDENTITY.ownerId(),
                 IDENTITY.actorId(), new SubjectId("container:2-depot")), valid.priority(), valid.presence(), 0, true);
         var wrongPriority = new ServiceAccessDemand(IDENTITY, ServiceAccessDemand.Priority.SELF_CARE, valid.presence(), 0, true);
         for (var invalid : List.of(wrongFamily, wrongPoint, wrongPriority))
-            assertThrows(IllegalArgumentException.class, () -> registry(List.of(invalid)).evaluate(null, POINT));
-        assertThrows(IllegalArgumentException.class, () -> registry(List.of(valid, valid)).evaluate(null, POINT));
+            assertThrows(IllegalArgumentException.class, () -> registry(List.of(invalid)).evaluate(state, POINT));
+        assertThrows(IllegalArgumentException.class, () -> registry(List.of(valid, valid)).evaluate(state, POINT));
     }
 
     @Test void incompleteNominalIdentityCannotBeConstructed() {

@@ -53,13 +53,20 @@ final class ServiceAccessCapabilities {
     List<ServiceAccessDemand> evaluate(FrontierWorldState state, SubjectId pointId) {
         var result = new ArrayList<ServiceAccessDemand>();
         var identities = new HashSet<ServiceAccessDemand.Identity>();
+        var conflictedActors = state.sceneLeases().values().stream()
+                .filter(lease -> lease.status() == SceneLeaseStatus.CONFLICT)
+                .flatMap(lease -> lease.members().stream()).map(SceneMember::actorId)
+                .collect(java.util.stream.Collectors.toSet());
         for (var kind : ServiceAccessDemand.Kind.values()) {
             for (var demand : capabilities.get(kind).demands(state, pointId)) {
                 if (demand.identity().kind() != kind || demand.priority() != capabilities.get(kind).priority()
                         || !demand.identity().pointId().equals(pointId)
                         || !identities.add(demand.identity()))
                     throw new IllegalArgumentException("foreign or duplicate service access declaration");
-                result.add(demand);
+                // A fenced execution cannot reserve a future turn. Keep actual occupancy:
+                // isolating a process is not evidence that its body cleared the doorway.
+                if (demand.presence() == ServiceAccessDemand.Presence.OCCUPIED
+                        || !conflictedActors.contains(demand.identity().actorId())) result.add(demand);
             }
         }
         return List.copyOf(result);

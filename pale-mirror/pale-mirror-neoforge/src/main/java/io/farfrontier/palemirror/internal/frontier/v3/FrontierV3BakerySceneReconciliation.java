@@ -37,7 +37,7 @@ final class FrontierV3BakerySceneReconciliation {
         if (job == null) return;
         if (body.getMainHandItem().isEmpty()) {
             var phase = job.bakeryWork().orElseThrow().phase();
-            if (phase != BakeryWorkState.Phase.PROCESSING && phase != BakeryWorkState.Phase.STATION_UNLOAD) return;
+            if (!BakeryStationSceneReconciled.emptyHandPhase(phase)) return;
             var receipt = new BakeryStationSceneReconciled(jobId, lease.id(), lease.revision(),
                     fence.authorityEpoch(), body.getUUID(), observed.orElseThrow(), phase);
             try { BakerySceneReconciliation.reduce(state, job.settlementId(), receipt); }
@@ -69,7 +69,7 @@ final class FrontierV3BakerySceneReconciliation {
         var job = state.productionJobs().get(FrontierSceneBehaviors.productionWork(lease).jobId());
         if (job == null || job.bakeryWork().isEmpty() || job.inputHold() instanceof ProductionInputHold.Materialized) return false;
         var work = job.bakeryWork().orElseThrow();
-        if (work.phase() != BakeryWorkState.Phase.PROCESSING && work.phase() != BakeryWorkState.Phase.STATION_UNLOAD
+        if (!BakeryStationSceneReconciled.emptyHandPhase(work.phase())
                 || work.pendingPhysicalStep().isPresent()
                 || !FrontierV3ServerLifecycle.newSceneAdmissionReady(level, lease.handoffPosition())
                 || !FrontierV3SceneDemand.observe(level, lease.handoffPosition()).active()) return false;
@@ -87,7 +87,7 @@ final class FrontierV3BakerySceneReconciliation {
         var job = state.productionJobs().get(jobId);
         if (job == null || job.bakeryWork().isEmpty()) return;
         var phase = job.bakeryWork().orElseThrow().phase();
-        if (phase != BakeryWorkState.Phase.PROCESSING && phase != BakeryWorkState.Phase.STATION_UNLOAD) return;
+        if (!BakeryStationSceneReconciled.emptyHandPhase(phase)) return;
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
         var departure = FrontierV3SceneDepartureObserver.validDeparture(state, lease, member, ledger).orElse(null);
         // OFF may contain body-owned personal inventory; only bakery MAIN is empty

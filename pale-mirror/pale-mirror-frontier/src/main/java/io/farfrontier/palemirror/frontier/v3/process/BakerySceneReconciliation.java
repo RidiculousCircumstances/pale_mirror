@@ -30,19 +30,31 @@ public final class BakerySceneReconciliation {
                 .flatMap(container -> container.productionStation().stream())
                 .filter(candidate -> candidate.id().equals(work.stationId())).findFirst().orElseThrow(
                         () -> new IllegalArgumentException("station recovery lost its production station"));
-        var batch = ledger.accounts().get(work.stationAccountId());
+        boolean atSource = work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP;
+        var batch = ledger.accounts().get(atSource ? work.sourceAccountId() : work.stationAccountId());
         String kind = BakeryCargo.kind(job);
         if (work.phase() != receipt.phase() || work.pendingPhysicalStep().isPresent()
-                || ContainerPhysicalAuthorityComposition.pending(state, station.containerId())
+                || ContainerPhysicalAuthorityComposition.pending(state, atSource ? work.sourceContainerId() : station.containerId())
                 || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
                 || !ActorExecutionCoordinator.ambientAvailable(state, java.util.List.of(job.workerId()))
                 || state.actorMovements().containsKey(job.workerId())
                 || ledger.accounts().containsKey(work.actorAccountId())
                 || FrontierSceneLeaseStateSupport.hasBoundSceneHand(state, lease)
-                || batch == null || !batch.custody().equals(new ResourceCustody.Container(station.containerId()))
-                || batch.lotQuantities().entrySet().stream().filter(entry -> ledger.lots().get(entry.getKey()).itemKind().equals(kind))
+                || batch == null || !batch.custody().equals(new ResourceCustody.Container(atSource ? work.sourceContainerId() : station.containerId()))
+                || !atSource && batch.lotQuantities().entrySet().stream().filter(entry -> ledger.lots().get(entry.getKey()).itemKind().equals(kind))
                     .mapToInt(java.util.Map.Entry::getValue).sum() != BakeryCargo.quantity(job))
             throw new IllegalArgumentException("station recovery cannot abandon cargo or a pending physical effect");
+        if (atSource) {
+            var claimId = switch (job.inputHold()) {
+                case ProductionInputHold.FungibleCold cold -> cold.claimId();
+                case ProductionInputHold.FungibleBound bound -> bound.claimId();
+                default -> throw new IllegalArgumentException("source recovery requires its exact fungible reservation");
+            };
+            var claim = ledger.claims().get(claimId);
+            if (claim == null || !claim.claimantId().equals(job.id()) || !claim.itemKind().equals(kind)
+                    || claim.quantity() != job.inputCount() || batch.claimQuantities().getOrDefault(claimId, 0) != claim.quantity())
+                throw new IllegalArgumentException("source recovery lost its untouched input allocation");
+        }
         var fence = state.fencedRecovery().current().get(ActorBodyId.recoveryBindingId(job.workerId()));
         if (fence == null || fence.asset() != FencedRecoveryAsset.BODY || !fence.ownerId().equals(job.workerId())
                 || fence.ownerRevision() != 0L || fence.authorityEpoch() != receipt.recoveryEpoch()

@@ -18,6 +18,18 @@ public final class ServiceAccessCoordinator {
         changedActors(previous.ambientLeases(), next.ambientLeases(), actors);
         changedActors(previous.actorExecutions().actors(), next.actorExecutions().actors(), actors);
         var points = new java.util.HashSet<>(ServiceAccessCapabilities.wakePoints(previous, next));
+        if (previous.sceneLeases() != next.sceneLeases()) {
+            var changedFences = new java.util.HashSet<SubjectId>();
+            for (var state : List.of(previous, next)) for (var lease : state.sceneLeases().values()) {
+                if (lease.status() != SceneLeaseStatus.CONFLICT
+                        || Objects.equals(previous.sceneLeases().get(lease.id()), next.sceneLeases().get(lease.id()))) continue;
+                lease.members().forEach(member -> changedFences.add(member.actorId()));
+            }
+            if (!changedFences.isEmpty()) for (var state : List.of(previous, next))
+                for (var point : ServiceBoundaryComposition.operationalDeclarations(state).keySet())
+                    if (ServiceAccessCapabilities.current(state, point).stream()
+                            .anyMatch(demand -> changedFences.contains(demand.identity().actorId()))) points.add(point);
+        }
         for (SubjectId actor : actors) {
             points.addAll(wakePoints(previous, actor));
             points.addAll(wakePoints(next, actor));
