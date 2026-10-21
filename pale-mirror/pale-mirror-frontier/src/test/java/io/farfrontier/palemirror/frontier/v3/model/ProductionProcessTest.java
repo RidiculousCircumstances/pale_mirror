@@ -885,7 +885,7 @@ class ProductionProcessTest {
                     harvesting = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(harvesting, siteId, advanced);
                 else if (event.payload() instanceof ResourceSiteHarvestColdTraversalAdvanced advanced)
                     harvesting = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(harvesting, siteId, advanced);
-                else if (event.payload() instanceof ResourceSiteHarvestWorkChanged changed)
+                else if (event.payload() instanceof ResourceSiteHarvestLabourChange changed)
                     harvesting = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(harvesting, siteId, changed);
                 else if (event.payload() instanceof ResourceSiteHarvestSegmentRenewed renewed)
                     harvesting = ResourceSiteHarvestProcess.reduceSegmentRenewed(harvesting, siteId, renewed);

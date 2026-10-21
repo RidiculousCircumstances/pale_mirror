@@ -65,7 +65,12 @@ class PedestrianIncrementalRoutingTest {
             var first = finish(planner, open, start, target, extent);
             assertEquals(PedestrianRouteResult.Status.SEGMENT_READY, first.status());
             var blocked = geometry(512, 400, revision.changed(java.util.Set.of(new PedestrianGeometryRevision.Region(25, 0))));
-            assertTrue(planner.peek(blocked, start, target, extent).isEmpty());
+            var local = planner.peek(blocked, start, target, extent).orElseThrow();
+            assertEquals(PedestrianRouteResult.Status.SEGMENT_READY, local.status(),
+                    "a distant change does not invalidate still-proven local detail");
+            KnownPedestrianNavigation.requireRoute(blocked, local.route());
+            assertTrue(planner.peek(blocked, start, target).isEmpty(),
+                    "local detail cannot certify arrival beyond the changed region");
             assertEquals(PedestrianRouteResult.Status.NO_PATH, finish(planner, blocked, first.route().getLast(), target, extent).status());
         }
     }

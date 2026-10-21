@@ -138,7 +138,14 @@ public final class PopulationMigrationProcess {
                 + state.humanPopulation().inboundHousingReservations(target.id()));
         BlockPosition arrival = FrontierSettlementActorSlots.residentSlot(state.bootstrap().bounds(), state.bootstrap().terrain(), target,
                 Math.toIntExact(SettlementFacilityCapability.housingCapacity(state, target.id())), arrivalOrdinal);
-        return Optional.of(new Candidate(source, journey(state, person, source, household, target, arrival)));
+        try {
+            return Optional.of(new Candidate(source, journey(state, person, source, household, target, arrival)));
+        } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
+            // Admission owns no resident/bed until the shared planner has a usable route.
+            // Pending knowledge and proven obstruction both retain the ordinary review,
+            // rather than quarantining the world or manufacturing a journey.
+            return Optional.empty();
+        }
     }
 
     private static ResidentMigrationJourney journey(FrontierWorldState state, ResidentProfile resident, Settlement source, Household household,

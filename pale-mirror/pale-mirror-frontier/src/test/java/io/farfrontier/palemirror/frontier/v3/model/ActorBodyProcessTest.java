@@ -75,7 +75,9 @@ class ActorBodyProcessTest {
         assertFalse(after.humanPopulation().meals().containsKey(farmer));
         assertTrue(after.actorExecutions().actors().get(farmer).current().isEmpty());
         assertEquals(work, after.actorExecutions().actors().get(farmer).suspended().orElseThrow());
-        assertEquals(ResourceSiteConflictReason.WORKER_DIED, after.resourceSites().site(field.site()).conflictDisposition().orElseThrow().reason());
+        assertEquals(state.resourceSites().site(field.site()).phase(), after.resourceSites().site(field.site()).phase());
+        assertEquals(state.resourceSites().site(field.site()).conflictDisposition(), after.resourceSites().site(field.site()).conflictDisposition(),
+                "death keeps the field available to independent workers");
         assertFalse(after.inventory().fungibleResources().claims().containsKey(meal.claimId()));
         assertEquals(state.inventory().fungibleResources().lots(), after.inventory().fungibleResources().lots());
         assertEquals(state.inventory().fungibleResources().accounts().get(meal.sourceAccountId()).lotQuantities(),
@@ -145,9 +147,10 @@ class ActorBodyProcessTest {
             var site = after.resourceSites().site(job.siteId());
             assertEquals(ActorLifeStatus.DEAD, after.actorLocations().get(job.workerId()).condition().status(), scope);
             assertFalse(ActorBodyAuthority.retainsPhysicalCustody(after, job.workerId()));
-            assertEquals(ResourceSitePhase.CONFLICT, site.phase(), scope);
-            assertEquals(ResourceSiteConflictReason.WORKER_DIED, site.conflictDisposition().orElseThrow().reason(), scope);
-            assertEquals(StrategicTaskStatus.BLOCKED, after.strategicPlans().tasks().get(job.taskId()).status(), scope);
+            assertEquals(state.resourceSites().site(job.siteId()).phase(), site.phase(), scope);
+            assertEquals(state.resourceSites().site(job.siteId()).conflictDisposition(), site.conflictDisposition(), scope);
+            assertEquals(state.strategicPlans().tasks().get(job.taskId()).status(), after.strategicPlans().tasks().get(job.taskId()).status(),
+                    "one worker death cannot block the shared field task: " + scope);
             assertEquals(state.inventory(), after.inventory(), "death must not delete or duplicate the retained harvest cargo");
             assertEquals(job.progress(), site.harvestJob(job.id()).orElseThrow().progress());
             assertTrue(after.actorExecutions().owns(job.workerId(), ActorActivityKind.FIELD_HARVEST, job.id())

@@ -49,8 +49,9 @@ public record ResidentMigrationJourney(
         }
         for (int index = 1; index < route.size(); index++) {
             BlockPosition previous = route.get(index - 1), current = route.get(index);
-            if (previous.y() != current.y() || Math.abs(previous.x() - current.x()) + Math.abs(previous.z() - current.z()) != 1) {
-                throw new IllegalArgumentException("migration route must contain adjacent horizontal positions");
+            if (Math.abs((long) previous.y() - current.y()) > 1
+                    || Math.abs((long) previous.x() - current.x()) + Math.abs((long) previous.z() - current.z()) != 1) {
+                throw new IllegalArgumentException("migration route must contain adjacent supported pedestrian steps");
             }
         }
         if (spatial.approach().isPresent() && !spatial.approach().orElseThrow().target().support().equals(

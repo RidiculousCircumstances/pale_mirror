@@ -65,6 +65,22 @@ public final class FrontierV3PilotCrashHooks {
         PROBE.afterVisibleCropEffectBeforeObservation(typedRuntime, job);
     }
 
+    /** Pilot-only observation of a real completed menu callback before canonical confirmation. */
+    public static void afterVisibleContainerClick(net.minecraft.server.level.ServerPlayer player, Object runtime) {
+        if (!PROBE.armed()) return;
+        if (!(runtime instanceof FrontierV3ServerRuntime<?, ?>)) throw new IllegalArgumentException("missing pilot runtime");
+        @SuppressWarnings("unchecked")
+        var typed = (FrontierV3ServerRuntime<FrontierWorldState, ?>) runtime;
+        for (var transaction : FrontierV3DepotClickLedger.get(player.serverLevel()).transactions()) {
+            if (!transaction.members().getFirst().playerId().equals(player.getUUID()) || transaction.outcome().isEmpty()
+                    || transaction.operation().isEmpty()) continue;
+            var operation = transaction.operation().orElseThrow();
+            if (!FrontierV3MinecraftOperation.recoverOutcome(player.serverLevel(), operation.ticket())) continue;
+            PROBE.afterVisibleContainerClick(player.serverLevel(), typed, operation.declaration().owner());
+            return;
+        }
+    }
+
     /** Pilot-only observation of the existing player-departure adapter immediately before submit. */
     public static void afterVisibleFungiblePlayerDeparture(ServerLevel level, Object runtime, io.farfrontier.palemirror.frontier.v3.api.SubjectId account) {
         if (!(runtime instanceof FrontierV3ServerRuntime<?, ?>)) {

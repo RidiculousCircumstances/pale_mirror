@@ -1,0 +1,227 @@
+{
+  "schema": 1,
+  "id": "live_storage_operation_boundary",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "summary",
+          "id": "",
+          "expect": {
+            "status": "ok",
+            "diagnosticVerdict": "green",
+            "requiredConflicts": 0,
+            "inventoryConflicts": 0,
+            "sceneConflicts": 0
+          }
+        }
+      ]
+    },
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:7-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -2,
+        "y": -1,
+        "z": 0
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:7-depot",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:7-depot",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "close_container"
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:8-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -2,
+        "y": -1,
+        "z": 0
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:8-depot",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:8-depot",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "close_container"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:7-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -2,
+        "y": -1,
+        "z": 0
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:7-depot",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:7-depot",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "close_container"
+    },
+    {
+      "type": "visit",
+      "dimension": "minecraft:overworld",
+      "position": {
+        "x": 24,
+        "y": 64,
+        "z": -132
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 16,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "diagnosticVerdict": "green",
+        "requiredConflicts": 0,
+        "inventoryConflicts": 0,
+        "sceneConflicts": 0,
+        "replicaCustodyDiagnostics": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 3,
+      "name": "clearwater-current-storage",
+      "presentation": "player"
+    },
+    {
+      "after": 8,
+      "name": "ironmeadow-current-storage",
+      "presentation": "player"
+    },
+    {
+      "after": 12,
+      "name": "clearwater-storage-reentry",
+      "presentation": "player"
+    }
+  ]
+}

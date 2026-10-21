@@ -54,11 +54,14 @@ class FrontierV3ActorBodyLifetimeTest {
         var shipment = deathHandler(FrontierV3ActorDeathResourceComposition.Owner.SHIPMENT);
         var personal = deathHandler(FrontierV3ActorDeathResourceComposition.Owner.UNIT_INVENTORY);
         var attached = deathHandler(FrontierV3ActorDeathResourceComposition.Owner.ATTACHED_STORAGE);
+        var extraction = deathHandler(FrontierV3ActorDeathResourceComposition.Owner.EXTRACTION);
+        var bakery = deathHandler(FrontierV3ActorDeathResourceComposition.Owner.BAKERY);
+        var harvest = deathHandler(FrontierV3ActorDeathResourceComposition.Owner.HARVEST);
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorDeathResourceComposition.closed(java.util.List.of(equipment)));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorDeathResourceComposition.closed(java.util.List.of(equipment, meal, meal)));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorDeathResourceComposition.closed(java.util.List.of(equipment, meal)));
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorDeathResourceComposition.closed(java.util.List.of(equipment, meal, service)));
-        var complete = java.util.List.of(equipment, meal, service, expedition, shipment, personal, attached);
+        var complete = java.util.List.of(equipment, meal, service, expedition, shipment, personal, attached, extraction, bakery, harvest);
         assertEquals(complete, FrontierV3ActorDeathResourceComposition.closed(complete));
         for (var absent : complete) {
             assertThrows(IllegalArgumentException.class, () -> FrontierV3ActorDeathResourceComposition.closed(

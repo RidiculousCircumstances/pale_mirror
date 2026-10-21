@@ -9,6 +9,7 @@
     "FrontierV3HarvestCrashWindowMixin",
     "FrontierV3ServerEntityTrackerMixin",
     "FrontierV3FungiblePlayerCrashWindowMixin",
+    "FrontierV3ContainerClickCrashWindowMixin",
     "FrontierV3PilotChunkMapAccessor",
     "FrontierV3PilotDistanceManagerAccessor"
   ],

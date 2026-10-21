@@ -28,6 +28,11 @@ public final class KnownPedestrianGround {
         return frontierSurvey(bootstrap, bootstrapRoads(bootstrap));
     }
 
+    /** Authored work-site admission uses current roads without inventing a staging floor. */
+    public static BoundedPedestrianApproach.SurveyedSurface forBootstrap(FrontierBootstrap bootstrap, RouteTopology topology) {
+        return frontierSurvey(bootstrap, roads(bootstrap, topology));
+    }
+
     /** Cross-settlement movement uses all authored local floors, not one origin's datum. */
     public static BoundedPedestrianApproach.SurveyedSurface forFrontier(FrontierWorldState state) {
         return restricted(state, RetainedNavigationGeometry.overlay(layered(state.bootstrap(), roads(state.bootstrap(), state.routeTopology()),

@@ -38,11 +38,12 @@ final class FrontierV3CrashBoundaryProbe {
     private static final java.util.Map<String, java.util.Set<String>> DURABLE_PAYLOADS = java.util.Map.of(
             LEASE_RECORDED_BEFORE_PHYSICAL_MATERIALIZATION, java.util.Set.of("frontier.resource_site_harvest_scene_lease_prepared"),
             TYPED_OBSERVATION_DURABLE_BEFORE_NEXT_PROCESS_CHECKPOINT,
-            java.util.Set.of("frontier.resource_site_harvest_progressed", "frontier.ground_resource_player_withdrawal"),
+            java.util.Set.of("frontier.resource_site_harvest_progressed", "frontier.ground_resource_player_withdrawal", "frontier.container_player_edit_observed"),
             HOT_CHECKPOINT_DURABLE_BEFORE_DRAIN_RELEASE, java.util.Set.of("frontier.resource_site_harvest_hot_traversal_advanced"),
             RELEASE_DURABLE_BEFORE_COLD_RESUMPTION, java.util.Set.of("frontier.scene_lease_released_v2"));
     private static final String HARVEST_PHYSICAL_PAYLOAD = "frontier.resource_site_harvest_progressed";
     private static final String FUNGIBLE_PLAYER_PHYSICAL_PAYLOAD = "frontier.ground_resource_player_withdrawal";
+    private static final String CONTAINER_CLICK_PAYLOAD = "frontier.container_player_edit_observed";
     private static final String PILOT_RUN_ID = "pale_mirror.frontier_v3.pilot.run_id";
     private static final String BOUNDARY = "pale_mirror.frontier_v3.pilot.crash.boundary";
     private static final String OWNER = "pale_mirror.frontier_v3.pilot.crash.owner";
@@ -128,6 +129,14 @@ final class FrontierV3CrashBoundaryProbe {
             // MinecraftServer.saveEverything flushes world/chunk storage but does not serialize
             // connected ServerPlayer data. The player list is the real vanilla ownership save
             // boundary for the already-observed native pickup; capture it before the crash marker.
+            level.getServer().saveEverything(true, true, true);
+            level.getServer().getPlayerList().saveAll();
+        });
+    }
+
+    void afterVisibleContainerClick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId owner) {
+        visibleEffect.set(new PhysicalEffect(owner.value(), CONTAINER_CLICK_PAYLOAD));
+        afterVisiblePhysicalEffect(runtime, () -> {
             level.getServer().saveEverything(true, true, true);
             level.getServer().getPlayerList().saveAll();
         });
@@ -241,6 +250,9 @@ final class FrontierV3CrashBoundaryProbe {
     }
 
     private static MixinTarget mixinTarget(String boundary, String payload) {
+        if (PHYSICAL_EFFECT_VISIBLE_BEFORE_TYPED_OBSERVATION.equals(boundary) && CONTAINER_CLICK_PAYLOAD.equals(payload))
+            return new MixinTarget(FrontierV3ContainerClickExecutor.class,
+                    "io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3ContainerClickCrashWindowMixin");
         return switch (boundary) {
             case LEASE_RECORDED_BEFORE_PHYSICAL_MATERIALIZATION,
                     TYPED_OBSERVATION_DURABLE_BEFORE_NEXT_PROCESS_CHECKPOINT,
@@ -265,7 +277,7 @@ final class FrontierV3CrashBoundaryProbe {
             if (durablePayloads == null && !PHYSICAL_EFFECT_VISIBLE_BEFORE_TYPED_OBSERVATION.equals(boundary)) {
                 throw new IllegalArgumentException("test-only crash arm names a boundary without an installed pilot hook");
             }
-            if ((durablePayloads == null && !java.util.Set.of(HARVEST_PHYSICAL_PAYLOAD, FUNGIBLE_PLAYER_PHYSICAL_PAYLOAD).contains(payload))
+            if ((durablePayloads == null && !java.util.Set.of(HARVEST_PHYSICAL_PAYLOAD, FUNGIBLE_PLAYER_PHYSICAL_PAYLOAD, CONTAINER_CLICK_PAYLOAD).contains(payload))
                     || (durablePayloads != null && !durablePayloads.contains(payload))) {
                 throw new IllegalArgumentException("test-only crash arm payload does not match semantic boundary");
             }

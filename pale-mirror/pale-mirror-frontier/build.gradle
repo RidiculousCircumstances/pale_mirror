@@ -16,6 +16,8 @@ sourceSets.named('test') {
 }
 
 tasks.withType(Test).configureEach {
+    // The full source graph imported by ArchUnit exceeds Gradle's default 512 MiB.
+    maxHeapSize = '2g'
     useJUnitPlatform()
     if (name != 'wave1Benchmark' && name != 'frontierV3AnnualAudit' && name != 'frontierV3ScaleAudit') {
         useJUnitPlatform {

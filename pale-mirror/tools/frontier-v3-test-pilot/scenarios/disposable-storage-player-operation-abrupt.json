@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "id": "disposable_storage_player_operation_abrupt",
+  "isolation": { "mode": "disposable_lite", "seed": 41 },
+  "server": { "host": "127.0.0.1", "port": 25575, "profile": "storage-ground", "viewDistance": 6 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/clear PMTestPilot" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } }, "offset": { "x": -2, "y": -1, "z": 0 }, "settleMs": 0 },
+    { "type": "assert_fixture", "timeoutMs": 90000, "checks": [
+      { "view": "container", "id": "container:1-depot", "expect": { "status": "ok", "surface": "ACTIVE", "custody": { "status": "ACQUIRED" } } },
+      { "view": "resource", "id": "custody:container-1-depot", "expect": { "status": "ok", "quantity": 64 } }
+    ] }
+  ],
+  "actions": [
+    { "type": "open_container", "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } }, "timeoutMs": 30000 },
+    { "type": "quick_move_from_container", "item": "minecraft:cobblestone", "count": 64, "timeoutMs": 30000, "causalMilestone": "ordinary_player_withdrawal_before_canonical_confirmation" },
+    { "type": "wait_until_diagnostic", "view": "resource", "id": "custody:container-1-depot", "expect": { "status": "not_found" }, "timeoutMs": 60000, "causalMilestone": "saved_native_receipts_close_the_exact_withdrawal_after_crash" },
+    { "type": "open_container", "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } }, "timeoutMs": 30000 },
+    { "type": "quick_move_from_inventory", "item": "minecraft:cobblestone", "count": 64, "timeoutMs": 30000, "causalMilestone": "actual_saved_player_stock_returns_through_an_ordinary_click" },
+    { "type": "wait_until_diagnostic", "view": "resource", "id": "custody:container-1-depot", "expect": { "status": "ok", "quantity": 64 }, "timeoutMs": 60000, "causalMilestone": "finite_source_stock_restored_without_native_replay" },
+    { "type": "wait_until_container_item", "containerId": "container:1-depot", "item": "minecraft:cobblestone", "count": 64, "timeoutMs": 30000 }
+  ],
+  "restart": {
+    "mode": "abrupt", "afterAction": 2,
+    "resumeSetup": [
+      { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "diagnostic": { "view": "container", "id": "container:1-depot", "field": "position" } }, "offset": { "x": -2, "y": -1, "z": 0 }, "settleMs": 0 }
+    ]
+  },
+  "crash": {
+    "phase": "before_restart", "boundary": "physical_effect_visible_before_typed_observation",
+    "owner": "system:physical_executor", "payloadType": "frontier.container_player_edit_observed", "expectedRevision": "observed_at_boundary",
+    "playerSave": { "player": "bf39347d-cb86-3221-b6b7-7b89a1dcb4cf", "item": "minecraft:cobblestone", "expectedCount": 64 }
+  },
+  "assertions": [
+    { "after": 3, "view": "resource", "id": "custody:container-1-depot", "expect": { "status": "not_found" } },
+    { "after": 6, "view": "resource", "id": "custody:container-1-depot", "expect": { "status": "ok", "quantity": 64 } }
+  ],
+  "frames": [ { "after": 7, "name": "recovered-stock-returned-once", "presentation": "player" } ]
+}

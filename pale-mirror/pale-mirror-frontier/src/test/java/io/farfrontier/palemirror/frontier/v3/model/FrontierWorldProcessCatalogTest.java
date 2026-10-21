@@ -117,9 +117,16 @@ class FrontierWorldProcessCatalogTest {
 
 
     @Test
-    void everyWorldPayloadCodecHasOneReducerOwnerBeforeRuntimeConfiguration() {
+    void everyWorldEventHasOneReducerAndTransferBatchRemainsCommandOnly() {
         DeterministicProcessRegistry registry = FrontierWorldRuntimeDefinition.processRegistry();
+        String transferBatch = "frontier.physical_inventory_transfers_observed";
+        assertEquals("physical-observation", registry.requireCommandOwner(transferBatch));
+        assertThrows(IllegalArgumentException.class, () -> registry.requireReducedEventOwner(transferBatch));
+        assertTrue(FrontierWorldProcessCatalog.allWorldPayloadTypes().contains(transferBatch));
         for (String type : FrontierWorldProcessCatalog.allWorldPayloadTypes()) {
+            // A batch command emits its ordinary owned transfer events atomically; it is
+            // deliberately not itself an event which could apply those transfers twice.
+            if (type.equals(transferBatch)) continue;
             assertFalse(registry.requireReducedEventOwner(type).isBlank());
         }
     }

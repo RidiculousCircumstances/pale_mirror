@@ -182,7 +182,8 @@ export function validateScenario(scenario) {
     throw new Error('crash needs an abrupt restart plus one exact phase/boundary/owner/revision/payload');
   }
   if (scenario.crash?.playerSave !== undefined && (!validPlayerSaveSnapshot(scenario.crash.playerSave)
-      || scenario.crash.payloadType !== 'frontier.fungible_resource_handoff_observed'
+      || !['frontier.fungible_resource_handoff_observed', 'frontier.ground_resource_player_withdrawal',
+        'frontier.container_player_edit_observed'].includes(scenario.crash.payloadType)
       || !['physical_effect_visible_before_typed_observation', 'typed_observation_durable_before_next_process_checkpoint'].includes(scenario.crash.boundary))) {
     throw new Error('player-save crash evidence needs one exact fungible physical or canonical boundary');
   }

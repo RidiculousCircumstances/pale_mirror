@@ -205,7 +205,9 @@ class PopulationMigrationProcessTest {
         assertEquals(journey.route(), heldJourney.route());
         assertEquals(observed, held.actorLocations().get(actor).body());
         assertEquals(held, codec.decode(codec.encode(held)));
-        assertTrue(ResidentMigrationJourneyKnowledge.approach(held, heldJourney).isEmpty());
+        assertEquals(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY,
+                assertThrows(io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable.class,
+                        () -> ResidentMigrationJourneyKnowledge.approach(held, heldJourney)).status());
         assertEquals(ResidentMigrationBlockReason.ROUTE_OBSTRUCTED,
                 payload(PopulationMigrationProcess.planProgress(held, due), ResidentMigrationBlocked.class).reason());
         var repaired = held.withChanges(FrontierWorldStateUpdate.begin().physicalDeltas(java.util.Map.of()));
@@ -285,7 +287,9 @@ class PopulationMigrationProcessTest {
         assertEquals(beforeRestart, decode(recovered.checkpoint()));
         assertEquals(uninterrupted.checkpoint().schedules(), recovered.checkpoint().schedules());
 
-        recovered.advanceTo(new SimInstant(300L), new WorkBudget(8, 64));
+        var nextDue = recovered.checkpoint().schedules().stream()
+                .filter(action -> action.id().equals(progressId(journey))).findFirst().orElseThrow().dueAt();
+        recovered.advanceTo(nextDue, new WorkBudget(8, 64));
         FrontierWorldState afterProgress = decode(recovered.checkpoint());
         ResidentMigrationJourney advanced = afterProgress.humanPopulation().migration(journey.residentId());
         assertEquals(journey.nextRouteIndex(), advanced.routeIndex());
@@ -354,12 +358,10 @@ class PopulationMigrationProcessTest {
             for (BlockPosition position : started.journey().route()) {
                 assertTrue(clearOfStructuralGeometry(graybox, position),
                         () -> "migration corridor enters planned geometry at " + position);
-                assertTrue(displaced.actorLocations().entrySet().stream()
-                                .filter(entry -> !entry.getKey().equals(started.journey().residentId()))
-                                .filter(entry -> entry.getValue().condition().status() == ActorLifeStatus.ALIVE)
-                                .noneMatch(entry -> entry.getValue().supportingSurface().support().equals(position)),
-                        () -> "migration corridor enters another actor hand-off cell at " + position);
             }
+            io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.requireRoute(
+                    KnownPedestrianRouteKnowledge.forFrontier(displaced).forActor(displaced, started.journey().residentId()).geometry(),
+                    started.journey().route().stream().map(SurfaceAnchor::new).toList());
         }
     }
 
@@ -449,6 +451,23 @@ class PopulationMigrationProcessTest {
         Settlement source = state.bootstrap().settlements().getFirst();
         SubjectId housing = source.structures().stream().filter(structure -> structure.kind() == StructureKind.HOUSING).findFirst().orElseThrow().id();
         return state.withStructureCondition(housing, StructureCondition.DESTROYED);
+    }
+
+    @Test
+    void admissionWaitsForSharedRouteKnowledgeWithoutReservingAResidentOrBed() throws Exception {
+        var state = displaced();
+        for (var status : List.of(PedestrianRouteResult.Status.PLANNING,
+                PedestrianRouteResult.Status.UNKNOWN_GEOMETRY, PedestrianRouteResult.Status.NO_PATH)) {
+            try (var binding = PedestrianRoutePlanning.bind((geometry, from, to) ->
+                    new PedestrianRouteResult(status, List.of(), 1, 1, "unavailable admission route"))) {
+                var events = PopulationMigrationProcess.planReview(state, PopulationMigrationProcess.review(1, 100L));
+                assertEquals(1, events.size());
+                assertInstanceOf(ScheduleEffect.Created.class, events.getFirst().payload());
+                assertTrue(state.humanPopulation().migrations().isEmpty());
+            }
+        }
+        assertTrue(PopulationMigrationProcess.planReview(state, PopulationMigrationProcess.review(1, 100L))
+                .stream().anyMatch(event -> event.payload() instanceof ResidentMigrationStarted));
     }
 
     private static <T> T payload(List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent> events, Class<T> type) {

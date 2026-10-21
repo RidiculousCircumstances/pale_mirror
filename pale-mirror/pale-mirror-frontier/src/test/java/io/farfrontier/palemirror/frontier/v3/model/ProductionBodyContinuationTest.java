@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog
 import io.farfrontier.palemirror.frontier.v3.process.PedestrianPlanningContinuations;
 import io.farfrontier.palemirror.frontier.v3.process.PedestrianPlanningWakeIndex;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierExecutionView;
 import io.farfrontier.palemirror.frontier.v3.api.Revision;
@@ -93,10 +94,15 @@ class ProductionBodyContinuationTest {
         var departed = ModeledActorBodyFacts.unloaded(observed, job.workerId());
         var retained = departed.productionJobs().get(job.id());
         assertTrue(retained.spatial().waitingOrigin().isPresent());
-        assertTrue(ProductionColdJourney.next(departed, retained).isEmpty());
+        assertEquals(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY,
+                assertThrows(KnownPedestrianNavigation.RouteUnavailable.class,
+                        () -> ProductionColdJourney.next(departed, retained)).status());
         assertEquals(job.workProgress(), retained.workProgress());
         assertEquals(job.consumedItemId(), retained.consumedItemId());
-        assertTrue(ProductionJourneyKnowledge.approach(departed, retained).isEmpty(), "missing support cannot manufacture a HOT hint");
+        assertEquals(PedestrianRouteResult.Status.UNKNOWN_GEOMETRY,
+                assertThrows(KnownPedestrianNavigation.RouteUnavailable.class,
+                        () -> ProductionJourneyKnowledge.approach(departed, retained)).status(),
+                "unknown support retains a knowledge wait; it cannot manufacture a HOT hint or claim NO_PATH");
         var repaired = departed.withChanges(FrontierWorldStateUpdate.begin().physicalDeltas(java.util.Map.of()));
         var hint = ProductionJourneyKnowledge.approach(repaired, retained).orElseThrow();
         assertEquals(fixture.port().inputStation(), hint.current());

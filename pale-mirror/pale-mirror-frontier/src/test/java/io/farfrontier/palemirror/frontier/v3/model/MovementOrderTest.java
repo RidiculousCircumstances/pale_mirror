@@ -30,11 +30,11 @@ class MovementOrderTest {
         assertEquals(target, route.getLast());
         assertThrows(KnownPedestrianNavigation.RouteUnavailable.class,
                 () -> KnownPedestrianNavigation.route(hot.state().bootstrap(), start, order,
-                        Set.of(start.support()), (x, z) -> SurfaceAnchor.at(x, target.y(), z)),
+                        Set.of(start.support().offset(0, 1, 0)), (x, z) -> SurfaceAnchor.at(x, target.y(), z)),
                 "a blocked starting body cannot be accepted as a zero-length route");
         assertThrows(KnownPedestrianNavigation.RouteUnavailable.class,
                 () -> KnownPedestrianNavigation.route(hot.state().bootstrap(), start, order,
-                        Set.of(target.support()), (x, z) -> SurfaceAnchor.at(x, target.y(), z)),
+                        Set.of(target.support().offset(0, 1, 0)), (x, z) -> SurfaceAnchor.at(x, target.y(), z)),
                 "a blocked work station cannot be reported as reached");
     }
 

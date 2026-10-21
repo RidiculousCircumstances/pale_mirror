@@ -423,7 +423,7 @@ class ResourceSiteColdHarvestReceiptTest {
                 else if (event.payload() instanceof ResourceSiteHarvestColdGoalAdvanced advanced) state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, site, advanced);
                 else if (event.payload() instanceof ResourceSiteHarvestCropPrepared crop) state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
                 else if (event.payload() instanceof ResourceSiteHarvestProgressed secondProgress) state = ResourceSiteHarvestProcess.reduceProgressed(state, site, secondProgress);
-                else if (event.payload() instanceof ResourceSiteHarvestWorkChanged changed) state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
+                else if (event.payload() instanceof ResourceSiteHarvestLabourChange changed) state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
                 else if (event.payload() instanceof ScheduleEffect.Rescheduled rescheduled) action[0] = rescheduled.replacement();
                 else throw new AssertionError("unexpected COLD harvest event: " + event.payload());
             }
@@ -448,7 +448,7 @@ class ResourceSiteColdHarvestReceiptTest {
                 else if (event.payload() instanceof ResourceSiteHarvestColdGoalAdvanced advanced) state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, site, advanced);
                 else if (event.payload() instanceof ResourceSiteHarvestCropPrepared crop) state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
                 else if (event.payload() instanceof ResourceSiteHarvestProgressed continuingProgress) state = ResourceSiteHarvestProcess.reduceProgressed(state, site, continuingProgress);
-                else if (event.payload() instanceof ResourceSiteHarvestWorkChanged changed) state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
+                else if (event.payload() instanceof ResourceSiteHarvestLabourChange changed) state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
                 else if (event.payload() instanceof ScheduleEffect.Rescheduled rescheduled) action[0] = rescheduled.replacement();
                 else throw new AssertionError("unexpected continuing COLD harvest event: " + event.payload());
             }
@@ -492,7 +492,7 @@ class ResourceSiteColdHarvestReceiptTest {
                 else if (event.payload() instanceof ResourceSiteHarvestReturned returned) state = ResourceSiteHarvestProcess.reduceReturned(state, site, returned, returned.coldDueAt());
                 else if (event.payload() instanceof ResourceSiteHarvestCropPrepared crop) state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
                 else if (event.payload() instanceof ResourceSiteHarvestProgressed progressed) state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);
-                else if (event.payload() instanceof ResourceSiteHarvestWorkChanged changed) state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
+                else if (event.payload() instanceof ResourceSiteHarvestLabourChange changed) state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
                 else if (event.payload() instanceof StrategicTaskTransition transition) {
                     state = StrategicObjectiveProcess.reduceTaskTransition(state, new SubjectId("settlement:1"), transition);
                 }
@@ -649,7 +649,7 @@ class ResourceSiteColdHarvestReceiptTest {
                     case ResourceSiteHarvestReturned returned -> state = ResourceSiteHarvestProcess.reduceReturned(state, site, returned, returned.coldDueAt());
                     case ResourceSiteHarvestCropPrepared crop -> state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
                     case ResourceSiteHarvestProgressed progressed -> state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);
-                    case ResourceSiteHarvestWorkChanged changed -> state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
+                    case ResourceSiteHarvestLabourChange changed -> state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
                     case StrategicTaskTransition transition -> state = StrategicObjectiveProcess.reduceTaskTransition(state, state.resourceSite(site).settlementId(), transition);
                     case ScheduleEffect.Rescheduled rescheduled -> action = rescheduled.replacement();
                     case ScheduleEffect.Cancelled ignored -> { }
@@ -691,7 +691,7 @@ class ResourceSiteColdHarvestReceiptTest {
                     case ResourceSiteHarvestColdGoalAdvanced advanced -> state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, site, advanced);
                     case ResourceSiteHarvestCropPrepared crop -> state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
                     case ResourceSiteHarvestProgressed progressed -> state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);
-                    case ResourceSiteHarvestWorkChanged changed -> state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
+                    case ResourceSiteHarvestLabourChange changed -> state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
                     case ScheduleEffect.Rescheduled rescheduled -> action = rescheduled.replacement();
                     default -> throw new AssertionError("unexpected pre-terminal COLD harvest event: " + event.payload().type());
                 }

@@ -37,7 +37,7 @@ public final class FrontierV3RoutePatrolGameTests {
      * fixture creates only canonical COLD patrol state and ordinary scene demand; the registered
      * executor must materialize, move, observe and commit the one shared formation edge.
      */
-    @GameTest(batch = "pm-frontier-v3-scene-route-patrol", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 140)
+    @GameTest(batch = "pm-frontier-v3-scene-route-patrol", templateNamespace = "minecraft", template = "bastion/treasure/big_air_full", timeoutTicks = 20000)
     public static void demandedCloseFormationAdvancesOnlyAfterBothExactBodiesLeaveAndArrive(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); Fixture fixture = fixture(helper, "ordinary");
         RoutePatrolSceneObservation observation = new RoutePatrolSceneObservation();
@@ -45,10 +45,7 @@ public final class FrontierV3RoutePatrolGameTests {
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(fixture.state());
         ServerPlayer observer = demand(helper, fixture);
 
-        for (int turn = 1; turn <= 110; turn++) {
-            helper.runAtTickTime(turn, () -> drive(level, runtime, fixture.taskId(), observation));
-        }
-        helper.runAtTickTime(111, () -> {
+        await(helper, () -> drive(level, runtime, fixture.taskId(), observation), observation::observedFormationAdvance, () -> {
             FrontierWorldState current = runtime.decodedState().orElseThrow();
             RoutePatrol patrol = current.strategicPlans().routePatrols().get(fixture.taskId());
             helper.assertTrue(observation.hotExactRoster(),
@@ -62,7 +59,7 @@ public final class FrontierV3RoutePatrolGameTests {
             helper.assertTrue(patrol.blockReason().isEmpty(),
                     "the following exact scout must not be misclassified as an occupied foreign body: " + patrol.blockReason());
             runtime.shutdown(); releaseDemand(observer); helper.succeed();
-        });
+        }, 0L);
     }
 
     /** Ordinary observer loss releases the same exact HOT checkpoint; it is not a new patrol admission. */
@@ -210,6 +207,20 @@ public final class FrontierV3RoutePatrolGameTests {
         current.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isRoutePatrol)
                 .flatMap(lease -> lease.members().stream()).map(member -> level.getEntity(member.entityId())).filter(Mob.class::isInstance)
                 .map(Mob.class::cast).forEach(FrontierV3ControlledMobMotion::advance);
+    }
+
+    /** GameTest ticks do not pace asynchronous journal writes. Observe semantic readiness,
+     * with a real finite deadline, rather than requiring an fsync in 110 accelerated ticks. */
+    private static void await(GameTestHelper helper, Runnable drive, java.util.function.BooleanSupplier ready,
+                              Runnable complete, long started) {
+        helper.runAfterDelay(1, () -> {
+            long beginning = started == 0L ? System.nanoTime() : started;
+            drive.run();
+            if (ready.getAsBoolean()) { complete.run(); return; }
+            helper.assertTrue(System.nanoTime() - beginning < java.time.Duration.ofSeconds(15).toNanos(),
+                    "patrol made no required semantic transition through native admission/movement in 15 seconds");
+            await(helper, drive, ready, complete, beginning);
+        });
     }
 
     private static Fixture fixture(GameTestHelper helper, String scenario) {

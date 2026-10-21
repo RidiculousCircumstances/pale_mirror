@@ -246,11 +246,12 @@ public final class EngineeringWorksite {
     }
 
     private static List<BlockPosition> slots(FrontierBootstrap bootstrap, RouteTopology topology, EngineeringWorkOrder project) {
-        // Canonical actor positions are column anchors; the NeoForge materializer resolves
-        // their actual standing cell through FrontierV3StandingPosition. Keep the engineering
-        // corridor on the same anchor plane as the route floor rather than embedding adapter Y.
-        BlockPosition anchorPlane = workCell(bootstrap, topology, project);
-        return SLOT_OFFSETS.stream().map(offset -> anchorPlane.offset(offset.x(), 0, offset.z())).toList();
+        // A neighbouring road cell does not imply a floor at the same height.
+        // Select actual authored support before assembly, not a floor projected only afterwards.
+        BlockPosition work = workCell(bootstrap, topology, project);
+        var ground = KnownPedestrianGround.forBootstrap(bootstrap, topology);
+        return SLOT_OFFSETS.stream().map(offset -> Objects.requireNonNull(
+                ground.at(work.x() + offset.x(), work.z() + offset.z()), "engineering work-site support").support()).toList();
     }
 
     private static EngineeringRecoveryTeam requireTeam(EngineeringWorkOrder project) {
