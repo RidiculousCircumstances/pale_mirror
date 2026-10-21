@@ -33,12 +33,35 @@ final class FrontierV3MinecraftOperation {
             Objects.requireNonNull(declaration); participants = List.copyOf(participants);
             Objects.requireNonNull(before); Objects.requireNonNull(mutation); Objects.requireNonNull(after);
             Objects.requireNonNull(refusedWithoutEffect);
+            if (participants.stream().anyMatch(p -> p.identity().medium() == FrontierV3OperationReceipt.Medium.ENTITY_SNAPSHOT))
+                throw new IllegalArgumentException("a saved observation is not a mutation port");
             var identities = participants.stream().map(Participant::identity).collect(java.util.stream.Collectors.toSet());
             if (identities.size() != participants.size() || !identities.equals(declaration.participants()))
                 throw new IllegalArgumentException("physical ports do not cover the exact operation participants");
         }
     }
     private FrontierV3MinecraftOperation() { }
+    /** A producer may cancel its exact durable action only while the live attempt
+     * is still unused. Matching a native preimage after recovery is not evidence. */
+    static Optional<FrontierV3OperationReceipt> cancelUnattempted(ServerLevel level,
+            FrontierV3OperationReceipt.Declaration declaration) {
+        if (!level.getServer().isSameThread()) throw new IllegalStateException("native cancellation outside server thread");
+        var ledger = FrontierV3OperationLedger.get(level);
+        if (!ledger.canPrepare(declaration)) {
+            FrontierV3OperationDiagnostics.waiting(level, declaration, FrontierV3OperationDiagnostics.Backpressure.JOURNAL_CAPACITY);
+            return Optional.empty();
+        }
+        var retained = ledger.find(declaration).orElse(null);
+        if (retained != null && !retained.declaration().equals(declaration)) {
+            FrontierV3OperationDiagnostics.result(level, retained, Status.AMBIGUOUS); return Optional.empty();
+        }
+        var operation = ledger.prepare(declaration);
+        if (!ledger.sealUnattemptedCancellation(operation.ticket())) {
+            FrontierV3OperationDiagnostics.result(level, operation, Status.AMBIGUOUS); return Optional.empty();
+        }
+        ledger.persist(level);
+        return Optional.of(ledger.require(operation.ticket()));
+    }
     /** Historical APPLIED is not evidence that all independent native files
      * survived a crash. Resolve only the missing participants, without loading
      * chunks, recreating entities, replaying effects or inventing compensation. */

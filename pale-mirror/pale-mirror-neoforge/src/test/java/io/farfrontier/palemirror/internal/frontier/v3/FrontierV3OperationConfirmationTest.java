@@ -14,6 +14,38 @@ import static org.junit.jupiter.api.Assertions.*;
 class FrontierV3OperationConfirmationTest {
     @BeforeAll static void version() { net.minecraft.SharedConstants.tryDetectVersion(); }
     @TempDir Path directory;
+    @Test void preEffectConsequenceSurvivesRestartButCannotConfirmWithoutNativeProof() {
+        var ledger = FrontierV3OperationLedger.inMemory();
+        var participant = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.ENTITIES, UUID.randomUUID().toString(), 1);
+        var consequence = new PhysicalDeltaObserved(new PhysicalDelta(new BlockPosition(1, 64, 1), PhysicalDeltaKind.UNKNOWN_SCAR,
+                Optional.empty(), Optional.empty(), "test:pre-effect-intent"));
+        var operation = ledger.prepare(new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.BODY_FATALITY,
+                new SubjectId("resident:intent"), "fatality", FrontierV3OperationConfirmation.fingerprint(consequence), Set.of(participant)));
+        var command = new FrontierV3OperationLedger.OwnerCommand(new CommandId("physical-operation:" + operation.ticket()), consequence);
+        ledger.retainOwnerIntent(operation.ticket(), command);
+        var recovered = FrontierV3OperationLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), null), null);
+        assertEquals(command, recovered.ownerCommand(operation.ticket()).orElseThrow());
+        assertFalse(recovered.beginAttempt(operation.ticket()), "recovery cannot replay even an exact retained intent");
+        var calls = new AtomicInteger();
+        var canonical = new FrontierV3OperationConfirmation.Canonical() {
+            public void pin(CommandId id) { }
+            public void release(CommandId id) { }
+            public Optional<CommandReceipt> receipt(CommandId id) { return Optional.empty(); }
+            public CommandResult submit(CommandId id, SubjectId owner, FrontierPayload payload) {
+                assertEquals(consequence, payload); calls.incrementAndGet();
+                return new CommandResult.Accepted(id, new TransactionId("test:intent"), new Revision(1));
+            }
+        };
+        assertFalse(FrontierV3OperationConfirmation.submit(recovered, () -> recovered.setDirty(false), canonical, operation.ticket(), consequence));
+        assertEquals(0, calls.get());
+        recovered.saved(operation.nativeReceipt(participant));
+        assertTrue(FrontierV3OperationConfirmation.submit(recovered, () -> recovered.setDirty(false), canonical, operation.ticket(), consequence));
+        assertEquals(1, calls.get());
+        assertTrue(recovered.find(operation.ticket()).isEmpty());
+        var wrong = ledger.prepare(new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.BODY_FATALITY,
+                new SubjectId("resident:intent"), "other", "different", Set.of(participant)));
+        assertThrows(IllegalArgumentException.class, () -> ledger.retainOwnerIntent(wrong.ticket(), command));
+    }
     @Test void mixedNativeGenerationsCannotUseHistoricalAppliedAsCurrentEvidence() {
         var ledger = FrontierV3OperationLedger.inMemory();
         var source = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.TERRAIN, "source", 1);

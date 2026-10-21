@@ -7,7 +7,7 @@ import java.util.*;
  * A producer must validate its current durable domain intent before opening this envelope. */
 record FrontierV3OperationReceipt(Declaration declaration, UUID ticket, long sequence, Set<Participant> applied,
         Set<Participant> saved, boolean cancelled, boolean ownerClosed) {
-    enum Medium { TERRAIN, CHUNK_BLOCKS, ENTITIES, ENTITY_COLUMN, PLAYER }
+    enum Medium { TERRAIN, CHUNK_BLOCKS, ENTITIES, ENTITY_COLUMN, PLAYER, ENTITY_SNAPSHOT }
     /** Closed, explicit producer keys. They name authority; the coordinator never
      * infers a protocol from an owner ID or dispatches business logic on these keys. */
     enum Protocol {
@@ -20,7 +20,7 @@ record FrontierV3OperationReceipt(Declaration declaration, UUID ticket, long seq
         PLAYER_GROUND_PICKUP("player-ground-pickup-v1"), PLAYER_CONTAINER_CLICK("player-container-click-v1"),
         GROUND_DESTRUCTION("ground-destruction-v1"), GROUND_MERGE("ground-merge-v1"), CONTAINER_DROP("container-drop-v1"),
         ENTITY_RESOURCE_DROP("entity-resource-drop-v1"), NATIVE_INVENTORY_TRANSFER("native-inventory-transfer-v1"),
-        BODY_ADMISSION("body-admission-v1");
+        BODY_ADMISSION("body-admission-v1"), BODY_FATALITY("body-fatality-v1"), BODY_DEPARTURE("body-departure-v1");
         private final String wire;
         Protocol(String wire) { this.wire = wire; }
         String wire() { return wire; }
@@ -50,10 +50,14 @@ record FrontierV3OperationReceipt(Declaration declaration, UUID ticket, long seq
             participants = Set.copyOf(participants);
             if (participants.isEmpty() || participants.size() > 64)
                 throw new IllegalArgumentException("physical operation needs a bounded exact participant set");
+            if (participants.stream().anyMatch(p -> p.medium() == Medium.ENTITY_SNAPSHOT)
+                    && participants.stream().anyMatch(p -> p.medium() != Medium.ENTITY_SNAPSHOT))
+                throw new IllegalArgumentException("durable observations cannot grant a mixed mutation permission");
         }
     }
-    /** This token must be serialized WITH the participant's changed physical state.
-     * Creating it, observing it in memory or submitting a write does not establish durability. */
+    /** Mutation tokens must be serialized WITH the changed native state. ENTITY_SNAPSHOT
+     * instead references a producer-validated exact saved image: never an attempted effect
+     * or a token fabricated in an absent entity. Merely submitting a write proves neither. */
     record NativeReceipt(UUID ticket, long sequence, Participant participant, String fingerprint) {
         NativeReceipt {
             Objects.requireNonNull(ticket); Objects.requireNonNull(participant); text(fingerprint);

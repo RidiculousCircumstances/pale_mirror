@@ -92,6 +92,7 @@ final class FrontierV3AmbientActorExecutor {
         var departures = new FrontierV3PhysicalTransitionBudget((long)
                 (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D),
                 System::nanoTime);
+        FrontierV3BodyFatalityOperation.reconcile(level, runtime);
         FrontierV3AmbientPendingAdmissions.clean(runtime);
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;

@@ -126,6 +126,7 @@ final class FrontierV3ExtractionBlockWrites implements FrontierV3ManagedBlockWri
                 return;
             }
             var abort = Optional.<ExtractionSourceChanged.UnappliedEffect>empty();
+            FrontierV3OperationReceipt cancelled = null;
             if (state.extractionSites().work().values().stream().anyMatch(value -> value.siteId().equals(region.siteId())
                     && value.pending().isPresent() && value.target().filter(target -> region.contains(
                         state.extractionSites().deposits().get(region.siteId()).site().layout().require(target.key().cell()).source())
@@ -138,18 +139,31 @@ final class FrontierV3ExtractionBlockWrites implements FrontierV3ManagedBlockWri
                         || !witness.before().equals(step.extraction().definition().before())) continue;
                 var actor = level.getEntity(io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(
                         state.bootstrap().worldId(), job.execution().actorId()));
-                if (!(actor instanceof net.minecraft.world.entity.npc.Villager worker)) continue;
+                if (!(actor instanceof net.minecraft.world.entity.npc.Villager worker)
+                        || !FrontierV3ActorBodyController.recognizesRecordedBody(level, state, worker)
+                        || FrontierV3ActorCarrierComposition.declaredBy(worker).orElseThrow().epoch()
+                            != step.observation().actuation().body().physicalEpoch()) continue;
                 var hand = worker.getOffhandItem();
                 if (step.carriedBefore() == 0 ? !hand.isEmpty() : hand.getCount() != step.carriedBefore()
+                        || !hand.getComponentsPatch().isEmpty()
                         || !net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(hand.getItem()).toString().equals(job.outputKind())) continue;
+                var participants = List.of(FrontierV3OperationChunks.current(level, position),
+                        FrontierV3OperationEntityParticipant.current(worker, step.observation().actuation().body().physicalEpoch()));
+                var operation = FrontierV3MinecraftOperation.declaration(FrontierV3OperationReceipt.Protocol.EXTRACTION_BLOCK,
+                        job.id(), new ExtractionHotPrepared(job.id(), step), participants);
+                cancelled = FrontierV3MinecraftOperation.cancelUnattempted(level, operation).orElse(null);
+                if (cancelled == null) continue; // Unchanged hand counts cannot cancel a recovered or attempted extraction.
                 abort = Optional.of(new ExtractionSourceChanged.UnappliedEffect(job.id(), step,
                         step.carriedBefore() == 0 ? List.of() : List.of(ExtractionPhysicalStateSupport.hand(state, job, step.carriedBefore()))));
             }
             var event = new ExtractionSourceChanged(new ExtractionTarget(new CellMutationKey(current.key().family(),
                     current.key().owner(), current.key().cell()), current.revision()), actual,
                     lease.authorityEpoch(), lease.expectedReplicaRevision(), abort);
-            if (FrontierV3CommandSubmission.submit(runtime, "extraction-source-changed", event.target().key().owner().value(), event)
-                    instanceof CommandResult.Accepted) {
+            boolean accepted = cancelled == null
+                    ? FrontierV3CommandSubmission.submit(runtime, "extraction-source-changed", event.target().key().owner().value(), event)
+                        instanceof CommandResult.Accepted
+                    : FrontierV3OperationConfirmation.submitRecovery(level, runtime, cancelled.ticket(), event, Optional.empty());
+            if (accepted) {
                 var successor = FrontierV3WorksiteRegistry.owner(indexed.key().family()).current(runtime.decodedState().orElseThrow(), indexed);
                 ledger.worksite(new FrontierV3WorksiteBlockWitness(successor, actual, FrontierV3WorksiteBlockWitness.Phase.SETTLED));
                 ledger.persist(level);

@@ -817,11 +817,12 @@ public final class FrontierV3ServerLifecycle {
                                                    FrontierV3AmbientCarrierRecognition.ManagedCarrier carrier) {
         return FrontierV3AmbientCarrierRecognition.recognizes(runtime, carrier);
     }
-    public static boolean observeLivingDeath(ServerLevel level, Entity entity, Entity source) {
+    public static boolean commitLivingDeath(ServerLevel level, Entity entity, Entity source,
+            Runnable nativeDeath, java.util.function.BooleanSupplier died) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
-        return FrontierV3ActorBodyController.observeDeath(level, runtime, entity, source);
+        return FrontierV3ActorBodyController.commitDeath(level, runtime, entity, source, nativeDeath, died);
     }
     /** Observe final geometry without asking Minecraft to reload an unloading chunk. */
     public static void observeNaturalChunkUnload(ServerLevel level, net.minecraft.world.level.chunk.LevelChunk chunk) {

@@ -16,6 +16,50 @@ import java.util.function.Consumer;
 @PrefixGameTestTemplate(false)
 public final class FrontierV3BodyOperationGameTests {
     @GameTest(batch = "pm-frontier-v3-scene-body-lifetime", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
+    public static void bodyFatalityConfirmsActualNativeDeathWithoutAcknowledgingAnUnsavedCorpse(GameTestHelper helper) {
+        var level = helper.getLevel(); var actor = new SubjectId("resident:1-1");
+        var config = FrontierV3AmbientActorGameTests.configurationAt(helper, new WorldId("frontier:body-operation-fatality"), 91, actor);
+        var store = new FrontierV3AmbientActorGameTests.EphemeralStore();
+        var runtime = FrontierV3ServerRuntime.start(config, store, 10_000);
+        FrontierV3AmbientActorGameTests.initializeAdmission(level, config, store);
+        var feet = helper.absolutePos(new BlockPos(0, 1, 0)); FrontierV3AmbientActorGameTests.prepareFloor(level, feet);
+        var lease = AmbientActorProcess.nextLease(runtime.decodedState().orElseThrow(), actor, runtime.checkpointImage().orElseThrow().instant());
+        FrontierV3CommandSubmission.submit(runtime, "body-fatality-prepare", actor.value(), new AmbientLeasePrepared(lease));
+        FrontierV3AmbientActorGameTests.publishProjectionBeforeManagedJoin(helper, level, runtime);
+        try {
+            var state = runtime.decodedState().orElseThrow();
+            helper.assertValueEqual(FrontierV3BodyAdmissionGameTestFixture.ambient(level, runtime, state, actor,
+                    new BodyPosition(feet.getX(), feet.getY(), feet.getZ())), FrontierV3AmbientActorExecutor.Result.APPLIED,
+                    "real body is present before the fatality operation");
+            var body = (Mob) level.getEntity(FrontierV3AmbientActorExecutor.entityId(state, actor));
+            FrontierV3ActorBodyController.confirmPresent(level, runtime, body);
+            var id = ActorBodyAuthority.current(runtime.decodedState().orElseThrow(), actor);
+            body.setHealth(0);
+            // Component fixture in the template dimension: invoke the same body producer
+            // around real vanilla die, not a fabricated accepted domain event. The production
+            // mixin sits later, at the dead-field write, before loot; this fixture does not
+            // claim coverage of the physical-dimension callback or cancellation ordering.
+            helper.assertTrue(FrontierV3ActorBodyController.commitDeath(level, runtime, body, null,
+                    () -> body.die(level.damageSources().generic()), () -> body.getPose() == net.minecraft.world.entity.Pose.DYING),
+                    "actual fatality is confirmed by the common producer");
+            helper.assertValueEqual(runtime.decodedState().orElseThrow().actorLocations().get(actor).condition().status(),
+                    ActorLifeStatus.DEAD, "canonical lifetime terminates, not merely the presentation");
+            var ledger = FrontierV3OperationLedger.get(level);
+            var operation = ledger.find(FrontierV3OperationReceipt.Protocol.BODY_FATALITY, actor,
+                    config.worldId().value() + "/epoch:" + id.physicalEpoch() + "/residence:"
+                            + body.getPersistentData().getLong(FrontierV3ActorBodyController.RESIDENCE_KEY)).orElseThrow();
+            helper.assertTrue(operation.ownerClosed() && operation.saved().isEmpty() && !operation.retirable(),
+                    "canonical death cannot manufacture a native entity-file save");
+            var participant = operation.declaration().participants().iterator().next();
+            helper.assertTrue(FrontierV3NativeOperationMarkers.contains(body.getPersistentData(), operation.nativeReceipt(participant)),
+                    "same native corpse retains its exact fatality receipt");
+            helper.assertTrue(FrontierV3AmbientCarrierLedger.get(level, config.worldId()).firstAdmission(actor).isEmpty(),
+                    "dead lifetime cannot retain a replacement permission");
+            body.discard();
+        } finally { FrontierV3AmbientActorExecutor.forget(runtime); runtime.shutdown(); }
+        helper.succeed();
+    }
+    @GameTest(batch = "pm-frontier-v3-scene-body-lifetime", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
     public static void nativeJoinRefusalClosesOnlyItsOwnAdmissionAndNextAttemptConfirms(GameTestHelper helper) {
         var level = helper.getLevel(); var actor = new SubjectId("resident:1-1");
         var config = FrontierV3AmbientActorGameTests.configurationAt(helper, new WorldId("frontier:body-operation-refusal"), 91, actor);

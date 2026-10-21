@@ -17,6 +17,7 @@
     "FrontierV3GameTestSliceMixin",
     "FrontierV3ServerEntityTrackerMixin",
     "FrontierV3EntityDepartureMixin",
+    "FrontierV3LivingDeathMixin",
     "FrontierV3FarmlandObservationMixin",
     "FrontierV3FieldBlockWriteMixin",
     "FrontierV3BonemealAdmissionMixin",

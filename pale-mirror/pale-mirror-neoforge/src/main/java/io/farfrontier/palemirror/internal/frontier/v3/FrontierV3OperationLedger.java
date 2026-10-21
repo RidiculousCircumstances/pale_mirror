@@ -40,6 +40,8 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
     private final Map<UUID, OwnerCommand> ownerCommands;
     private long nextSequence;
     private final Map<Key, UUID> byOwner = new HashMap<>();
+    /** Derived, bounded recovery index; never a second durable operation owner. */
+    private final Map<FrontierV3OperationReceipt.Protocol, LinkedHashSet<UUID>> byProtocol = new EnumMap<>(FrontierV3OperationReceipt.Protocol.class);
     private final Set<UUID> unattempted = new HashSet<>();
     private final Set<UUID> attempting = new HashSet<>();
     private final Set<UUID> changedOperations = new HashSet<>();
@@ -63,9 +65,12 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
                 initial.values().stream().map(FrontierV3OperationReceipt::sequence).toList(), nextSequence);
         if (!initial.keySet().containsAll(commands.keySet()) || commands.values().stream().map(OwnerCommand::id).distinct().count() != commands.size())
             throw new IllegalArgumentException("owner command has no unique operation");
-        if (commands.keySet().stream().map(initial::get).anyMatch(value -> !value.cancelled()
-                && !value.applied().equals(value.declaration().participants())))
-            throw new IllegalArgumentException("owner command precedes an exact native outcome");
+        for (var entry : commands.entrySet()) {
+            var value = initial.get(entry.getKey());
+            if (!value.cancelled() && !value.applied().equals(value.declaration().participants())
+                    && !entry.getValue().fingerprint().equals(value.declaration().fingerprint()))
+                throw new IllegalArgumentException("prepared owner intent differs from its physical declaration");
+        }
         ownerCommands = table("ownerCommands", commands, UUID::toString, FrontierV3OperationLedger::commandTag);
         if (nextSequence < 1 || initial.values().stream().map(FrontierV3OperationReceipt::sequence).distinct().count() != initial.size())
             throw new IllegalArgumentException("invalid physical operation causal order");
@@ -74,6 +79,7 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
             observedSince.put(ticket, System.nanoTime());
             if (!ticket.equals(value.ticket()) || byOwner.putIfAbsent(Key.of(value.declaration()), ticket) != null)
                 throw new IllegalArgumentException("competing recovered physical operation");
+            byProtocol.computeIfAbsent(value.declaration().protocol(), ignored -> new LinkedHashSet<>()).add(ticket);
             if (value.sequence() >= nextSequence) throw new IllegalArgumentException("physical operation beyond issued sequence");
             pendingParticipants = Math.addExact(pendingParticipants, value.declaration().participants().size());
         });
@@ -97,9 +103,12 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         var value = FrontierV3OperationReceipt.prepare(declaration, nextSequence);
         nextSequence = Math.incrementExact(nextSequence);
         operations.put(value.ticket(), value); byOwner.put(Key.of(declaration), value.ticket());
+        byProtocol.computeIfAbsent(declaration.protocol(), ignored -> new LinkedHashSet<>()).add(value.ticket());
         pendingParticipants += declaration.participants().size();
         observedSince.put(value.ticket(), System.nanoTime());
-        unattempted.add(value.ticket()); changedOperations.add(value.ticket()); setDirty(); return value;
+        if (declaration.participants().stream().noneMatch(p -> p.medium() == FrontierV3OperationReceipt.Medium.ENTITY_SNAPSHOT))
+            unattempted.add(value.ticket());
+        changedOperations.add(value.ticket()); setDirty(); return value;
     }
     boolean canPrepare(FrontierV3OperationReceipt.Declaration declaration) {
         return byOwner.containsKey(Key.of(declaration)) || operations.size() < MAX_PENDING
@@ -144,6 +153,20 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         return value;
     }
     Optional<FrontierV3OperationReceipt> find(UUID ticket) { return Optional.ofNullable(operations.get(ticket)); }
+    /** Fair bounded probes. Unresolved evidence cannot starve a later operation. */
+    List<FrontierV3OperationReceipt> probe(FrontierV3OperationReceipt.Protocol protocol, int limit) {
+        if (limit < 1 || limit > 64) throw new IllegalArgumentException("invalid operation recovery budget");
+        var index = byProtocol.get(protocol);
+        if (index == null || index.isEmpty()) return List.of();
+        var tickets = index.stream().limit(limit).toList();
+        var result = new ArrayList<FrontierV3OperationReceipt>();
+        for (var ticket : tickets) {
+            index.remove(ticket); index.add(ticket);
+            var operation = require(ticket);
+            if (!operation.ownerClosed()) result.add(operation);
+        }
+        return List.copyOf(result);
+    }
     Map<UUID, OwnerCommand> ownerCommands() { return Map.copyOf(ownerCommands); }
     Optional<OwnerCommand> ownerCommand(UUID ticket) { require(ticket); return Optional.ofNullable(ownerCommands.get(ticket)); }
     /** Only the confirmation coordinator may supersede an unaccepted, pinned command.
@@ -158,9 +181,21 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
     void bindOwnerCommand(UUID ticket, OwnerCommand command) {
         var value = require(ticket);
         if (!value.cancelled() && !value.applied().equals(value.declaration().participants())) throw new IllegalStateException("owner command precedes applied participants or sealed cancellation");
+        retainCommand(ticket, command);
+    }
+    /** Persist the producer's exact consequence BEFORE a non-replayable effect.
+     * This is an outbox intent, not acknowledgement or permission to submit it.
+     * Confirmation still requires positive evidence for every native participant. */
+    void retainOwnerIntent(UUID ticket, OwnerCommand command) {
+        var value = require(ticket);
+        if (!value.declaration().fingerprint().equals(command.fingerprint()))
+            throw new IllegalArgumentException("owner intent differs from its physical declaration");
+        retainCommand(ticket, command);
+    }
+    private void retainCommand(UUID ticket, OwnerCommand command) {
         var prior = ownerCommands.get(ticket);
         if (prior != null && !prior.equals(command)) throw new IllegalArgumentException("owner confirmation changed payload/command identity");
-        if (prior == null) { ownerCommands.put(ticket, command); setDirty(); }
+        if (prior == null) { ownerCommands.put(ticket, command); changedOperations.add(ticket); setDirty(); }
     }
     void applied(FrontierV3OperationReceipt.NativeReceipt receipt) {
         replace(require(receipt.ticket()).applied(receipt));
@@ -207,6 +242,8 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         observedSince.remove(ticket);
         pendingParticipants -= value.declaration().participants().size();
         operations.remove(ticket); byOwner.remove(Key.of(value.declaration()), ticket); ownerCommands.remove(ticket); unattempted.remove(ticket); setDirty();
+        var index = byProtocol.get(value.declaration().protocol());
+        index.remove(ticket); if (index.isEmpty()) byProtocol.remove(value.declaration().protocol());
         retiredIndex.add(value.sequence());
     }
     boolean prunable(FrontierV3OperationReceipt.NativeReceipt receipt) {

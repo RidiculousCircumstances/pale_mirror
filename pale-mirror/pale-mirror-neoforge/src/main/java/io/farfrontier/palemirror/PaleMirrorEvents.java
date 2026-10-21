@@ -233,9 +233,9 @@ public final class PaleMirrorEvents {
     @SubscribeEvent
     public static void onLivingDeath(LivingDeathEvent event) {
         if (event.getEntity().level().getServer() != null) {
-            if (event.getEntity().level() instanceof net.minecraft.server.level.ServerLevel level
-                    && io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.observeLivingDeath(
-                    level, event.getEntity(), event.getSource().getEntity())) return;
+            // v3 owns fatality at LivingEntity's actual death write, not this
+            // cancellable notification (a later listener can still save the mob).
+            if (io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.freezesLegacySourceRuntime()) return;
             if (SourceGrayboxRuntime.availableForSelectedLaunch()) {
                 SourceGrayboxRuntime source = SourceGrayboxRuntime.forServer(event.getEntity().level().getServer());
                 if (source.activated()) {

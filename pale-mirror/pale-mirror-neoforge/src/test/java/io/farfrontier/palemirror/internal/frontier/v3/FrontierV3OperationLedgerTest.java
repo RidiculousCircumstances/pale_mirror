@@ -12,6 +12,18 @@ import static org.junit.jupiter.api.Assertions.*;
 class FrontierV3OperationLedgerTest {
     @BeforeAll static void version() { net.minecraft.SharedConstants.tryDetectVersion(); }
     @TempDir Path directory;
+    @Test void recoveryProbesAreBoundedFairAndDerivedAfterReload() {
+        var ledger = FrontierV3OperationLedger.inMemory();
+        var first = ledger.prepare(declaration("blocked"));
+        var second = ledger.prepare(declaration("available"));
+        assertEquals(List.of(first), ledger.probe(first.declaration().protocol(), 1));
+        assertEquals(List.of(second), ledger.probe(first.declaration().protocol(), 1));
+        assertTrue(ledger.cancelUnattempted(first.ticket()));
+        assertEquals(List.of(second), ledger.probe(first.declaration().protocol(), 1));
+        var recovered = FrontierV3OperationLedger.load(ledger.save(new CompoundTag(), null), null);
+        assertEquals(List.of(second), recovered.probe(first.declaration().protocol(), 1));
+        assertTrue(recovered.probe(FrontierV3OperationReceipt.Protocol.BODY_FATALITY, 1).isEmpty());
+    }
     private static final WorldId WORLD = new WorldId("frontier:operation-test");
     private static final ResourceLocation DIMENSION = ResourceLocation.parse("minecraft:overworld");
     private static final FrontierV3OperationReceipt.Participant BODY = new FrontierV3OperationReceipt.Participant(

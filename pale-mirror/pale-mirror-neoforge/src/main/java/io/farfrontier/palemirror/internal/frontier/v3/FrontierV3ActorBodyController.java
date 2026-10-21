@@ -61,11 +61,12 @@ final class FrontierV3ActorBodyController {
 
     private FrontierV3ActorBodyController() { }
 
-    /** Physical fatality is recognized by common provenance, never by presentation membership. */
-    static boolean observeDeath(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                net.minecraft.world.entity.Entity entity, net.minecraft.world.entity.Entity source) {
+    /** Called at the actual dead-field write, AFTER all cancellable death events. */
+    static boolean commitDeath(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                net.minecraft.world.entity.Entity entity, net.minecraft.world.entity.Entity source,
+                                Runnable nativeDeath, java.util.function.BooleanSupplier died) {
         var state = runtime.decodedState().orElse(null);
-        if (state == null || !(entity instanceof Mob body) || body.getHealth() > 0.0F
+        if (state == null || !(entity instanceof Mob body)
                 || body.level() != level || !recognizes(state, body)) return false;
         var declaration = FrontierV3ActorCarrierComposition.declaredBy(body).orElseThrow();
         if (level.getEntity(declaration.entityId()) != body) return false;
@@ -81,17 +82,17 @@ final class FrontierV3ActorBodyController {
                 ActorBodyAuthority.current(state, declaration.actorId()));
         state = runtime.decodedState().orElse(null);
         if (state == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE
-                || !recognizes(state, body)) return false;
+                || !recognizes(state, body)) throw new IllegalStateException("body fatality lost authority during resource preparation");
         var actor = state.actorLocations().get(declaration.actorId());
         var id = ActorBodyAuthority.current(state, declaration.actorId());
         var observed = FrontierV3BodyObservation.capture(body).supportedBody();
         String cause = source == null ? "environment" : "entity:" + source.getUUID();
         var payload = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyDied(id, actor.body(),
                 actor.condition().health(), observed, FrontierV3ActorBodyDeparture.execution(state, declaration.actorId()), cause);
-        var result = FrontierV3CommandSubmission.submit(runtime, "actor-body-death", declaration.actorId().value(), payload);
-        if (!(result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return false;
+        FrontierV3BodyFatalityOperation.commit(level, runtime, body, payload, nativeDeath, died);
         FrontierV3BodyOperationIntegration.recover(level, runtime.decodedState().orElseThrow(), ledger, declaration.actorId());
         ledger.retireDeadActor(runtime.decodedState().orElseThrow(), declaration.actorId());
+        ledger.persist(level, state.bootstrap().worldId());
         FrontierV3GoalNavigation.retireIncarnation(body, id);
         resources.settle();
         return true;
@@ -155,7 +156,11 @@ final class FrontierV3ActorBodyController {
         var payload = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyUnloaded(body,
                 location.body(), location.condition().health(), receipt.observed().body(), receipt.observed().health(),
                 FrontierV3ActorBodyDeparture.execution(state, actor));
-        FrontierV3CommandSubmission.submit(runtime, "actor-body-unloaded", actor.value(), payload);
+        FrontierV3BodyDepartureOperation.confirm(level, runtime, receipt, payload,
+                () -> ledger.savedBodyDeparture(receipt) && ledger.currentBodyResidence(actor, receipt.residenceGeneration())
+                        && receipt.current(runtime.decodedState().orElseThrow()) && !departureReadPending(level, receipt)
+                        && level.getEntity(receipt.identity().entityId()) == null
+                        && FrontierV3AmbientPendingAdmissions.get(runtime, receipt.identity().entityId()) == null);
     }
 
     /** Final terrain witness for all common bodies, including already-hidden entity sections. */
@@ -548,6 +553,15 @@ final class FrontierV3ActorBodyController {
     /** Bounded actor probes supply candidates; historical scene membership never authorizes removal. */
     static void cleanRetired(ServerLevel level, FrontierWorldState state,
                              io.farfrontier.palemirror.frontier.v3.api.SubjectId actorId) {
+        var location = state.actorLocations().get(actorId);
+        if (location != null && location.condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.DEAD) {
+            var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+            // A native column may arrive after startup recovery. Its positive
+            // admission evidence must be reconsidered before the body is discarded.
+            FrontierV3BodyOperationIntegration.recover(level, state, ledger, actorId);
+            ledger.retireDeadActor(state, actorId);
+            ledger.persist(level, state.bootstrap().worldId());
+        }
         var entity = level.getEntity(SceneLease.deterministicEntityId(state.bootstrap().worldId(), actorId));
         if (entity instanceof Mob body) discardRetired(level, state, body);
     }

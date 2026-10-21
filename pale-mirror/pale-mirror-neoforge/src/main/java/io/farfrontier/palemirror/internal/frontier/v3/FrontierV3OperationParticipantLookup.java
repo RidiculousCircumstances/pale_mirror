@@ -21,6 +21,7 @@ final class FrontierV3OperationParticipantLookup {
     }
     private static FrontierV3MinecraftOperation.Participant current(ServerLevel level, FrontierV3OperationReceipt.Participant identity) {
         return switch (identity.medium()) {
+            case ENTITY_SNAPSHOT -> null; // Immutable saved-image proof is owned by its producer, not a current UUID lookup.
             case PLAYER -> {
                 var player = level.getServer().getPlayerList().getPlayer(UUID.fromString(identity.identity()));
                 yield player == null ? null : FrontierV3OperationPlayers.current(player);
