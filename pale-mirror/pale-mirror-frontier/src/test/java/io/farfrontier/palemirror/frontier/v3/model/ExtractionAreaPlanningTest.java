@@ -46,6 +46,16 @@ class ExtractionAreaPlanningTest {
                             FrontierWorldRuntimeDefinition.payloadCodecs().encode(event).length - 1)));
         }
         var next = deposit(after);
+        var layout = next.site().layout();
+        var changedIds = new HashMap<>(layout.terrainIds());
+        var oldPoint = old.site().layout().terrainIds().keySet().iterator().next();
+        changedIds.put(oldPoint, changedIds.values().stream().mapToLong(Long::longValue).max().orElseThrow() + 1);
+        var changedDeclaration = new ExtractionLayout(layout.cells(), layout.fixedBlocks(), layout.accessSurfaces(),
+                layout.entrance(), layout.container(), layout.storagePort(), layout.infrastructureIds(),
+                layout.terrainSupports(), changedIds);
+        assertThrows(IllegalArgumentException.class, () -> changedDeclaration.requireExtensionOf(old.site().layout()),
+                "extension must preserve old terrain identities, not just contain the same positions");
+        assertThrows(UnsupportedOperationException.class, () -> layout.terrainIds().put(oldPoint, 999999L));
         assertEquals(512, old.cells().size());
         int added = event.columns().stream().mapToInt(column -> (int) column.clearance().stream()
                 .filter(sample -> !sample.block().kind().equals("minecraft:air")).count()).sum();

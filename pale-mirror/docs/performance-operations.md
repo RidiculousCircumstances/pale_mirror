@@ -138,6 +138,18 @@ declarations in 1 versus 160 turns. These are deterministic scheduler counts, no
 measured native/network milliseconds. The live ingress scenario checks actual
 client arrival, current worksite proof and revisit without mutating canonical state.
 
+Layout extension retains every old terrain declaration through indexed key/value
+comparison, not `MapN.entrySet().containsAll` (linear membership per old entry).
+The immutable terrain maps use hash buckets for clustered block coordinates and
+still reject null keys/values. On the retained tick560400 site (5507 terrain
+entries), the same one-cell extension check fell from roughly56ms warm to1ms.
+This is an isolated admission cost, not a claim that all server stalls disappeared.
+Live source-chunk checks still observed about7s first preparation and a separate
+9.2s accumulated lag warning. The bounded JFR also contains substantial economic
+assessment/continuation CPU; `PedestrianRoutePlanning.observe` is a caller scope,
+not evidence that all its inclusive samples are pathfinding. Keep these residual
+server costs separate from client send/compile and projection queue latency.
+
 ## Frontier v3 physical-scene scale protocol
 
 The v3 world keeps exact people, bioforms, cargo and objects. It must not

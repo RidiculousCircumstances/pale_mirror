@@ -66,8 +66,8 @@ public final class ExtractionLayout {
                             Map<BlockPosition, Long> terrainIds) {
         cells = List.copyOf(cells); fixedBlocks = Map.copyOf(fixedBlocks);
         infrastructureIds = Map.copyOf(infrastructureIds);
-        terrainSupports = Map.copyOf(terrainSupports);
-        terrainIds = Map.copyOf(terrainIds);
+        terrainSupports = terrainCopy(terrainSupports);
+        terrainIds = terrainCopy(terrainIds);
         accessSurfaces = List.copyOf(accessSurfaces);
         Objects.requireNonNull(entrance); Objects.requireNonNull(container); Objects.requireNonNull(storagePort);
         if (!infrastructureIds.keySet().equals(fixedBlocks.keySet())
@@ -158,10 +158,20 @@ public final class ExtractionLayout {
         if (!entrance.equals(prior.entrance()) || !container.equals(prior.container()) || !storagePort.equals(prior.storagePort())
                 || cells.size() <= prior.cells().size() || !cells.subList(0, prior.cells().size()).equals(prior.cells())
                 || !accessSurfaces.containsAll(prior.accessSurfaces())
-                || !fixedBlocks.entrySet().containsAll(prior.fixedBlocks().entrySet())
-                || !infrastructureIds.entrySet().containsAll(prior.infrastructureIds().entrySet())
-                || !terrainSupports.entrySet().containsAll(prior.terrainSupports.entrySet())
-                || !terrainIds.entrySet().containsAll(prior.terrainIds.entrySet()))
+                || !retains(fixedBlocks, prior.fixedBlocks())
+                || !retains(infrastructureIds, prior.infrastructureIds())
+                || !retains(terrainSupports, prior.terrainSupports)
+                || !retains(terrainIds, prior.terrainIds))
             throw new IllegalArgumentException("development changed an existing declaration");
+    }
+    /** MapN's entry-set membership iterates: containsAll makes large extensions quadratic. */
+    private static <K, V> boolean retains(Map<K, V> current, Map<K, V> prior) {
+        return prior.entrySet().stream().allMatch(entry -> entry.getValue().equals(current.get(entry.getKey())));
+    }
+    /** Preserve immutable, non-null declarations without MapN's clustered coordinate probes. */
+    private static <V> Map<BlockPosition, V> terrainCopy(Map<BlockPosition, V> source) {
+        var copy = new HashMap<BlockPosition, V>(source);
+        copy.forEach((position, value) -> { Objects.requireNonNull(position); Objects.requireNonNull(value); });
+        return Collections.unmodifiableMap(copy);
     }
 }
