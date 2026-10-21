@@ -116,6 +116,8 @@ public final class FrontierV3ContainerDrops {
     }
     static boolean reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             UUID id, FungibleResourceHandoffObserved receipt) {
+        if (FrontierV3ResourceHandoffLedger.get(level).handoffOperation(id).isPresent())
+            return FrontierV3NativeHandoffOperation.reconcile(level, runtime, id, receipt);
         var state = runtime.decodedState().orElseThrow(); var resources = state.inventory().fungibleResources();
         var arrived = resources.accounts().get(receipt.destinationAccount().id());
         if (arrived != null && arrived.equals(receipt.withoutForfeitedClaims().destinationAccount())) {

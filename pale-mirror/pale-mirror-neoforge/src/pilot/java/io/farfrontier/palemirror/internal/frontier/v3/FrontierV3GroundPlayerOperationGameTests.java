@@ -16,6 +16,59 @@ import java.util.*;
 @PrefixGameTestTemplate(false)
 public final class FrontierV3GroundPlayerOperationGameTests {
     @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
+    public static void nativeMergeConservesBothLotsAndClosesOneCausalHandoff(GameTestHelper helper) throws Exception {
+        var level = helper.getLevel(); var point = helper.absolutePos(new BlockPos(1, 1, 1));
+        var source = new ItemEntity(level, point.getX() + .5, point.getY(), point.getZ() + .5, new ItemStack(Items.BREAD, 5));
+        var destination = new ItemEntity(level, point.getX() + .5, point.getY(), point.getZ() + .5, new ItemStack(Items.BREAD, 10));
+        source.setNoGravity(true); destination.setNoGravity(true);
+        helper.assertTrue(level.addFreshEntity(source) && level.addFreshEntity(destination), "both native participants admitted");
+        var base = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:ground-merge-operation"), 93L);
+        var owner = base.initialState().bootstrap().settlements().getFirst().id();
+        var resources = FungibleResourceLedger.empty(); var accounts = new ArrayList<SubjectId>();
+        for (var entity : List.of(source, destination)) {
+            var account = new SubjectId("custody:merge-" + entity.getUUID()); accounts.add(account);
+            var lot = new ResourceLot(new SubjectId("lot:merge-" + entity.getUUID()), owner, "minecraft:bread", entity.getItem().getCount(), "test:merge", List.of());
+            resources = resources.issue(lot, new CustodyAccount(account,
+                    new ResourceCustody.Ground(entity.getUUID(), new BlockPosition(point.getX(), point.getY(), point.getZ())),
+                    Map.of(lot.id(), lot.quantity()), Map.of()));
+            resources = resources.rebind(account, 1, FungiblePhysicalObservation.bind(resources, account, 1,
+                    List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.WorldEntity(entity.getUUID()), lot.itemKind(), lot.quantity()))));
+        }
+        var initial = base.initialState().withInventory(base.initialState().inventory().withFungibleResources(resources));
+        var config = new FrontierEngineConfiguration<>(base.worldId(), initial, base.initialInstant(), base.commandPlanner(),
+                base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),
+                base.initialSchedules(), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
+        var runtime = FrontierV3ServerRuntime.start(config, new FrontierV3AmbientActorGameTests.EphemeralStore(), 10_000);
+        var nativeMerge = ItemEntity.class.getDeclaredMethod("merge", ItemEntity.class, ItemStack.class, ItemEntity.class, ItemStack.class);
+        nativeMerge.setAccessible(true);
+        try {
+            FrontierV3OperationEntityColumns.forRemoval(level, source.chunkPosition());
+            var from = resources.bindings().values().stream().filter(b -> b.accountId().equals(accounts.getFirst())).findFirst().orElseThrow();
+            var to = resources.bindings().values().stream().filter(b -> b.accountId().equals(accounts.getLast())).findFirst().orElseThrow();
+            var receipt = FungiblePhysicalHandoff.returnToExisting(resources, from.accountId(), 1, from, to.accountId(), 1, to);
+            var column = FrontierV3OperationEntityColumns.current(level, source.chunkPosition()).orElseThrow();
+            var operations = FrontierV3OperationLedger.get(level); var journal = FrontierV3ResourceHandoffLedger.get(level);
+            var cancelled = operations.prepare(new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.GROUND_MERGE,
+                    FrontierExecutionSubjects.PHYSICAL_EXECUTOR, UUID.randomUUID().toString(), FrontierV3OperationConfirmation.fingerprint(receipt),
+                    Set.of(column.identity(), FrontierV3OperationEntityParticipant.nativeObject(destination).identity())));
+            journal.prepareNative(destination.getUUID(), receipt, cancelled); journal.persist(level); operations.persist(level);
+            helper.assertTrue(operations.cancelUnattempted(cancelled.ticket()), "only an unattempted operation can be cancelled"); operations.persist(level);
+            helper.assertTrue(FrontierV3NativeHandoffOperation.reconcile(level, runtime, destination.getUUID(), receipt)
+                    && runtime.decodedState().orElseThrow().equals(initial), "cancel-before-owner-retire cut never invents a canonical transfer");
+            helper.assertTrue(!FrontierV3GroundItemMerge.before(level, runtime, destination, destination.getItem(), source, source.getItem(), () -> {
+                try { nativeMerge.invoke(null, destination, destination.getItem(), source, source.getItem()); }
+                catch (ReflectiveOperationException failure) { throw new IllegalStateException(failure); }
+            }), "managed merge wraps the real native method");
+            helper.assertTrue(source.isRemoved() && destination.getItem().getCount() == 15, "Vanilla merged and removed the actual source");
+            var next = runtime.decodedState().orElseThrow().inventory().fungibleResources();
+            helper.assertTrue(!next.accounts().containsKey(accounts.getFirst()) && next.accounts().get(accounts.getLast()).lotQuantities().size() == 2
+                    && next.accounts().get(accounts.getLast()).lotQuantities().values().stream().mapToInt(Integer::intValue).sum() == 15,
+                    "canonical merger conserves both original lots");
+            helper.assertTrue(FrontierV3ResourceHandoffLedger.get(level).pending().isEmpty(), "handoff owner closes through the shared operation");
+        } finally { runtime.shutdown(); }
+        helper.succeed();
+    }
+    @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
     public static void destructionNeedsAnActualRemovalReceiptNotAnAbsentEntity(GameTestHelper helper) {
         var level = helper.getLevel(); var point = helper.absolutePos(new BlockPos(1, 1, 1));
         var item = new ItemEntity(level, point.getX() + .5, point.getY(), point.getZ() + .5, new ItemStack(Items.BREAD, 2));

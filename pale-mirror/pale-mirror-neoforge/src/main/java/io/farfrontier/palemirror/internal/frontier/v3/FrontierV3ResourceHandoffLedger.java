@@ -43,10 +43,11 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
     private final Map<SubjectId, FrontierV3ContainerRemovalWitness> containerRemovals;
     private final Map<UUID, ExactItemCustodyChanged> exactDrops;
     private final Map<UUID, FrontierV3OperationReceipt> lossOperations;
-    private FrontierV3ResourceHandoffLedger() { this(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), 1); }
+    private final Map<UUID, FrontierV3OperationReceipt> handoffOperations;
+    private FrontierV3ResourceHandoffLedger() { this(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), 1); }
     private FrontierV3ResourceHandoffLedger(Map<UUID, Pending> initial, Map<SubjectId, Pickup> pickups, Map<UUID, GroundStockExit> losses,
             Map<SubjectId, FrontierV3ContainerRemovalWitness> removals, Map<UUID, ExactItemCustodyChanged> drops,
-            Map<UUID, FrontierV3OperationReceipt> operations, long nextSequence) {
+            Map<UUID, FrontierV3OperationReceipt> operations, Map<UUID, FrontierV3OperationReceipt> handoffs, long nextSequence) {
         super(FrontierV3PhysicalStoreKind.RESOURCE_HANDOFFS);
         if (initial.size() + pickups.size() + losses.size() + removals.size() + drops.size() > MAX_PENDING) throw new IllegalArgumentException("resource witness bound exceeded");
         if (nextSequence < 1 || initial.values().stream().anyMatch(entry -> entry.sequence() >= nextSequence)
@@ -59,6 +60,13 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
         containerRemovals = table("containerRemovals", removals, SubjectId::value, (id, removal) -> removal.save());
         exactDrops = table("exactDrops", drops, UUID::toString, (id, drop) -> encodeExact(id, drop));
         lossOperations = table("lossOperations", operations, UUID::toString, FrontierV3ResourceHandoffLedger::encodeOperation);
+        handoffOperations = table("handoffOperations", handoffs, UUID::toString, FrontierV3ResourceHandoffLedger::encodeOperation);
+        if (handoffs.values().stream().map(FrontierV3OperationReceipt::ticket).distinct().count() != handoffs.size())
+            throw new IllegalArgumentException("one native handoff has competing owner witnesses");
+        handoffs.forEach((id, operation) -> {
+            if (!initial.containsKey(id)) throw new IllegalArgumentException("native handoff has no exact owner witness");
+            validateHandoffOperation(initial.get(id).receipt(), operation);
+        });
         operations.forEach((id, operation) -> {
             var loss = losses.values().stream().filter(value -> value.witnessId().equals(id)).findFirst().orElseThrow(
                     () -> new IllegalArgumentException("native loss operation lacks its owner witness"));
@@ -196,6 +204,28 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
         pending.put(id, new Pending(nextSequence, receipt)); nextSequence = Math.addExact(nextSequence, 1);
         setDirty();
     }
+    Optional<FrontierV3OperationReceipt> handoffOperation(UUID id) { return Optional.ofNullable(handoffOperations.get(id)); }
+    void prepareNative(UUID id, FungibleResourceHandoffObserved receipt, FrontierV3OperationReceipt operation) {
+        validateHandoffOperation(receipt, operation);
+        if (handoffOperations.values().stream().anyMatch(existing -> existing.ticket().equals(operation.ticket())))
+            throw new IllegalArgumentException("native handoff already belongs to another witness");
+        prepare(id, receipt); handoffOperations.put(id, operation); setDirty();
+    }
+    void bindHandoffOperation(UUID id, FrontierV3OperationReceipt operation) {
+        var prior = handoffOperations.get(id);
+        if (prior == null || !prior.ticket().equals(operation.ticket()) || prior.sequence() != operation.sequence()
+                || !prior.declaration().equals(operation.declaration()) || !operation.applied().containsAll(prior.applied()))
+            throw new IllegalArgumentException("handoff changed its exact native operation");
+        validateHandoffOperation(pending.get(id).receipt(), operation);
+        if (!prior.equals(operation)) { handoffOperations.put(id, operation); setDirty(); }
+    }
+    private static void validateHandoffOperation(FungibleResourceHandoffObserved receipt, FrontierV3OperationReceipt operation) {
+        var declaration = operation.declaration();
+        if (declaration.protocol() != FrontierV3OperationReceipt.Protocol.GROUND_MERGE
+                || !declaration.owner().equals(io.farfrontier.palemirror.frontier.v3.model.FrontierExecutionSubjects.PHYSICAL_EXECUTOR)
+                || !declaration.fingerprint().equals(FrontierV3OperationConfirmation.fingerprint(receipt)))
+            throw new IllegalArgumentException("handoff has a foreign native declaration");
+    }
     private boolean competingExclusive(UUID id, FungibleResourceHandoffObserved receipt) {
         var accounts = new HashSet<>(List.of(receipt.sourceAccountId(), receipt.destinationAccount().id()));
         var entities = new HashSet<UUID>(); entities.add(id);
@@ -207,7 +237,7 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
     }
     void retire(UUID id, FungibleResourceHandoffObserved expected) {
         if (!pending.containsKey(id) || !expected.equals(pending.get(id).receipt())) throw new IllegalArgumentException("resource handoff retirement lost its exact witness");
-        pending.remove(id); setDirty();
+        pending.remove(id); handoffOperations.remove(id); setDirty();
     }
     private static CompoundTag encode(UUID id, Pending entry) {
         var tag = new CompoundTag(); tag.putUUID("id", id); tag.putLong("sequence", entry.sequence());
@@ -219,7 +249,7 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
     private static CompoundTag encodeExact(UUID id, ExactItemCustodyChanged receipt) {
         var tag = new CompoundTag(); tag.putUUID("id", id); tag.putByteArray("receipt", FrontierWorldRuntimeDefinition.payloadCodecs().encode(receipt)); return tag;
     }
-    @Override protected CompoundTag metadata() { var tag = new CompoundTag(); tag.putInt("format", 6); tag.putLong("nextSequence", nextSequence); return tag; }
+    @Override protected CompoundTag metadata() { var tag = new CompoundTag(); tag.putInt("format", 7); tag.putLong("nextSequence", nextSequence); return tag; }
     @Override public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.merge(metadata()); var entries = new ListTag();
         pending.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> entries.add(encode(entry.getKey(), entry.getValue())));
@@ -233,10 +263,13 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
         tag.put("exactDrops", drops);
         var operations = new ListTag(); lossOperations.entrySet().stream().sorted(Map.Entry.comparingByKey())
                 .forEach(entry -> operations.add(encodeOperation(entry.getKey(), entry.getValue())));
-        tag.put("lossOperations", operations); return tag;
+        tag.put("lossOperations", operations);
+        var handoffs = new ListTag(); handoffOperations.entrySet().stream().sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> handoffs.add(encodeOperation(entry.getKey(), entry.getValue())));
+        tag.put("handoffOperations", handoffs); return tag;
     }
     static FrontierV3ResourceHandoffLedger load(CompoundTag tag, HolderLookup.Provider registries) {
-        if (tag.getInt("format") != 6) throw new IllegalArgumentException("incompatible resource handoff journal");
+        if (tag.getInt("format") != 7) throw new IllegalArgumentException("incompatible resource handoff journal");
         var entries = tag.getList("pending", Tag.TAG_COMPOUND);
         if (entries.size() > MAX_PENDING) throw new IllegalArgumentException("resource witness bound exceeded");
         var values = new LinkedHashMap<UUID, Pending>();
@@ -284,6 +317,15 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
             if (!encodeOperation(id, operation).equals(row) || operations.putIfAbsent(id, operation) != null)
                 throw new IllegalArgumentException("duplicate or invalid native loss operation");
         }
-        return new FrontierV3ResourceHandoffLedger(values, pickups, losses, removals, drops, operations, tag.getLong("nextSequence"));
+        var handoffs = new HashMap<UUID, FrontierV3OperationReceipt>(); var handoffTags = tag.getList("handoffOperations", Tag.TAG_COMPOUND);
+        if (!tag.contains("handoffOperations", Tag.TAG_LIST) || !handoffTags.equals(tag.get("handoffOperations")) || handoffTags.size() > values.size())
+            throw new IllegalArgumentException("invalid native handoff operation links");
+        for (int i = 0; i < handoffTags.size(); i++) {
+            var row = handoffTags.getCompound(i); UUID id = row.getUUID("witness");
+            var operation = FrontierV3OperationReceiptCodec.read(row.getCompound("operation"));
+            if (!encodeOperation(id, operation).equals(row) || handoffs.putIfAbsent(id, operation) != null)
+                throw new IllegalArgumentException("duplicate or invalid native handoff operation");
+        }
+        return new FrontierV3ResourceHandoffLedger(values, pickups, losses, removals, drops, operations, handoffs, tag.getLong("nextSequence"));
     }
 }

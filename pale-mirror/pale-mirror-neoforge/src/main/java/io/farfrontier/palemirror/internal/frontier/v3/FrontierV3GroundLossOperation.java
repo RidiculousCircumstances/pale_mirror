@@ -3,15 +3,13 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import net.minecraft.server.level.ServerLevel;
 import java.util.*;
-import java.util.function.Function;
 
 /** Owner-side confirmation for causal ground exits. The producer declares its protocol
- * and native recovery ports; this bridge never discovers a player or a cause by counts. */
+ * and exact native participants; this bridge never discovers a player or a cause by counts. */
 final class FrontierV3GroundLossOperation {
     private FrontierV3GroundLossOperation() { }
     static boolean reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-            GroundStockExit receipt, FrontierV3OperationReceipt.Protocol protocol,
-            Function<FrontierV3OperationReceipt, List<FrontierV3MinecraftOperation.Participant>> recoverPorts) {
+            GroundStockExit receipt, FrontierV3OperationReceipt.Protocol protocol) {
         var journal = FrontierV3ResourceHandoffLedger.get(level); var ledger = FrontierV3OperationLedger.get(level);
         var linked = journal.lossOperation(receipt).orElse(null);
         var operation = linked == null ? ledger.find(protocol, receipt.economicOwner(), receipt.witnessId().toString()).orElse(null)
@@ -24,7 +22,7 @@ final class FrontierV3GroundLossOperation {
                     || !operation.declaration().fingerprint().equals(FrontierV3OperationConfirmation.fingerprint(receipt)))
                 throw new IllegalStateException("ground exit changed its declared native intent");
             if (!operation.applied().equals(operation.declaration().participants())) {
-                var ports = recoverPorts.apply(operation);
+                var ports = FrontierV3OperationParticipantLookup.current(level, operation.declaration().participants());
                 if (ports.isEmpty()) return false;
                 if (!ports.stream().map(FrontierV3MinecraftOperation.Participant::identity).collect(java.util.stream.Collectors.toSet())
                         .equals(operation.declaration().participants())) {

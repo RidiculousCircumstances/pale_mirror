@@ -66,21 +66,7 @@ public final class FrontierV3GroundPlayerPickup {
     static boolean reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             GroundResourcePlayerWithdrawal receipt) {
         return FrontierV3GroundLossOperation.reconcile(level, runtime, receipt,
-                FrontierV3OperationReceipt.Protocol.PLAYER_GROUND_PICKUP, operation -> {
-                var player = level.getServer().getPlayerList().getPlayer(receipt.playerId());
-                if (player == null) return List.of();
-                FrontierV3MinecraftOperation.Participant source;
-                if (receipt.remaining().isEmpty()) {
-                    var declared = operation.declaration().participants().stream()
-                            .filter(p -> p.medium() == FrontierV3OperationReceipt.Medium.ENTITY_COLUMN).findFirst().orElseThrow();
-                    source = FrontierV3OperationEntityColumns.current(level,
-                            new net.minecraft.world.level.ChunkPos(Long.parseLong(declared.identity()))).orElse(null);
-                } else {
-                    var entity = level.getEntity(receipt.source().entityId());
-                    source = entity == null || entity.isRemoved() ? null : FrontierV3OperationEntityParticipant.nativeObject(entity);
-                }
-                return source == null ? List.of() : List.of(source, FrontierV3OperationPlayers.current(player));
-        });
+                FrontierV3OperationReceipt.Protocol.PLAYER_GROUND_PICKUP);
     }
     /** Ordinary Vanilla add(-1): main slots, matching offhand, never an empty offhand or armour slot. */
     static int capacity(Inventory inventory, ItemStack source) {

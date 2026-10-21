@@ -8,11 +8,16 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.gen.Invoker;
 import org.spongepowered.asm.mixin.injection.*;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(ItemEntity.class)
 abstract class FrontierV3GroundItemMergeMixin {
+    @Invoker("merge")
+    public static void frontierV3$nativeMerge(ItemEntity destination, ItemStack destinationStack, ItemEntity source, ItemStack sourceStack) {
+        throw new AssertionError("mixin invoker not applied");
+    }
     @Redirect(method = "merge(Lnet/minecraft/world/entity/item/ItemEntity;Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/entity/item/ItemEntity;Lnet/minecraft/world/item/ItemStack;)V",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/item/ItemEntity;discard()V"))
     private static void frontierV3$consumedMergeSource(ItemEntity source) {
@@ -27,10 +32,7 @@ abstract class FrontierV3GroundItemMergeMixin {
     @Inject(method = "merge(Lnet/minecraft/world/entity/item/ItemEntity;Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/entity/item/ItemEntity;Lnet/minecraft/world/item/ItemStack;)V",
             at = @At("HEAD"), cancellable = true)
     private static void frontierV3$before(ItemEntity destination, ItemStack destinationStack, ItemEntity source, ItemStack sourceStack, CallbackInfo callback) {
-        if (!FrontierV3GroundItemMerge.before(destination, destinationStack, source, sourceStack)) callback.cancel();
-    }
-    @Inject(method = "merge(Lnet/minecraft/world/entity/item/ItemEntity;Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/entity/item/ItemEntity;Lnet/minecraft/world/item/ItemStack;)V", at = @At("RETURN"))
-    private static void frontierV3$after(ItemEntity destination, ItemStack destinationStack, ItemEntity source, ItemStack sourceStack, CallbackInfo callback) {
-        FrontierV3GroundItemMerge.after(destination);
+        if (!FrontierV3GroundItemMerge.before(destination, destinationStack, source, sourceStack,
+                () -> frontierV3$nativeMerge(destination, destinationStack, source, sourceStack))) callback.cancel();
     }
 }

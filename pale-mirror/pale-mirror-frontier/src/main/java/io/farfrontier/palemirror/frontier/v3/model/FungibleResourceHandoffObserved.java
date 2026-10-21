@@ -67,6 +67,7 @@ public record FungibleResourceHandoffObserved(SubjectId sourceAccountId, Custody
         }
     }
     @Override public String type() { return "frontier.fungible_resource_handoff_observed"; }
+    @Override public boolean requiresDurableBeforeEffect() { return true; }
 
     /** Binds a physical departure of a reserved portion to the one owning-work forfeiture path. */
     public FungibleResourceHandoffObserved forfeitMovedClaims() {

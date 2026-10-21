@@ -99,13 +99,7 @@ public final class FrontierV3GroundItemDestruction {
     static boolean reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, GroundStockExit loss) {
         if (loss instanceof GroundResourcePlayerWithdrawal pickup) return FrontierV3GroundPlayerPickup.reconcile(level, runtime, pickup);
         if (!(loss instanceof GroundResourceDestroyed)) throw new IllegalArgumentException("undeclared ground exit producer");
-        return FrontierV3GroundLossOperation.reconcile(level, runtime, loss, FrontierV3OperationReceipt.Protocol.GROUND_DESTRUCTION,
-                operation -> {
-                    var declared = operation.declaration().participants().stream()
-                            .filter(p -> p.medium() == FrontierV3OperationReceipt.Medium.ENTITY_COLUMN).findFirst().orElseThrow();
-                    return FrontierV3OperationEntityColumns.current(level, new net.minecraft.world.level.ChunkPos(Long.parseLong(declared.identity())))
-                            .map(List::of).orElseGet(List::of);
-                });
+        return FrontierV3GroundLossOperation.reconcile(level, runtime, loss, FrontierV3OperationReceipt.Protocol.GROUND_DESTRUCTION);
     }
     private FrontierV3GroundItemDestruction() { }
 }

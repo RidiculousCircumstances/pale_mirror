@@ -15,8 +15,8 @@ class FrontierV3ResourceHandoffLedgerTest {
     @BeforeAll static void version() { net.minecraft.SharedConstants.tryDetectVersion(); }
     @TempDir Path directory;
     private static FrontierV3ResourceHandoffLedger empty() {
-        var tag = new CompoundTag(); tag.putInt("format", 6); tag.putLong("nextSequence", 1);
-        tag.put("lossOperations", new ListTag());
+        var tag = new CompoundTag(); tag.putInt("format", 7); tag.putLong("nextSequence", 1);
+        tag.put("lossOperations", new ListTag()); tag.put("handoffOperations", new ListTag());
         tag.put("pending", new ListTag()); tag.put("actorPickups", new ListTag()); tag.put("groundLosses", new ListTag());
         return FrontierV3ResourceHandoffLedger.load(tag, null);
     }
@@ -79,6 +79,25 @@ class FrontierV3ResourceHandoffLedgerTest {
         assertEquals(ids, new ArrayList<>(recovered.pending().keySet()));
         assertEquals(journal.projected(state), recovered.projected(state));
         var first = recovered.pending().get(ids.getFirst());
+        var nativeJournal = empty();
+        var nativePort = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.ENTITY_COLUMN, "0", 2);
+        var nativeOperation = FrontierV3OperationReceipt.prepare(new FrontierV3OperationReceipt.Declaration(
+                FrontierV3OperationReceipt.Protocol.GROUND_MERGE, FrontierExecutionSubjects.PHYSICAL_EXECUTOR,
+                UUID.randomUUID().toString(), FrontierV3OperationConfirmation.fingerprint(first), Set.of(nativePort)), 4);
+        nativeJournal.prepareNative(ids.getFirst(), first, nativeOperation);
+        assertThrows(IllegalArgumentException.class, () -> nativeJournal.prepareNative(UUID.randomUUID(), first, nativeOperation));
+        var nativeRecovered = FrontierV3ResourceHandoffLedger.load(nativeJournal.save(new CompoundTag(), null), null);
+        assertEquals(Optional.of(nativeOperation), nativeRecovered.handoffOperation(ids.getFirst()));
+        assertThrows(IllegalArgumentException.class, () -> nativeRecovered.bindHandoffOperation(ids.getFirst(),
+                FrontierV3OperationReceipt.prepare(nativeOperation.declaration(), 5)), "foreign operation identity cannot replace the admitted attempt");
+        var nativeApplied = nativeOperation.applied(nativeOperation.nativeReceipt(nativePort));
+        nativeRecovered.bindHandoffOperation(ids.getFirst(), nativeApplied);
+        var nativeClosed = FrontierV3ResourceHandoffLedger.load(nativeRecovered.save(new CompoundTag(), null), null);
+        assertEquals(Optional.of(nativeApplied), nativeClosed.handoffOperation(ids.getFirst()));
+        var malformedLink = nativeClosed.save(new CompoundTag(), null);
+        malformedLink.getList("handoffOperations", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0).putUUID("witness", UUID.randomUUID());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceHandoffLedger.load(malformedLink, null));
+        nativeClosed.retire(ids.getFirst(), first); assertTrue(nativeClosed.handoffOperation(ids.getFirst()).isEmpty());
         var afterFirst = FungibleResourceHandoffStateSupport.apply(state, first);
         assertEquals(journal.projected(state), recovered.projected(afterFirst), "canonical-first recovery must not replay the first physical effect");
         assertThrows(IllegalArgumentException.class, () -> recovered.prepare(ids.getFirst(), first));
