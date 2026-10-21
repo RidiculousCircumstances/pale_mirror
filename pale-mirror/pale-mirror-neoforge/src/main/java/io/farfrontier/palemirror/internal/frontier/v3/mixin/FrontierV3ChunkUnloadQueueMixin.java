@@ -26,22 +26,25 @@ abstract class FrontierV3ChunkUnloadQueueMixin {
     @Shadow @Final private ServerLevel level;
     @Unique private final FrontierV3UnloadQueuePass frontierV3$unloadPass = new FrontierV3UnloadQueuePass();
     @Unique private boolean frontierV3$boundedShutdown;
+    @Unique private boolean frontierV3$unloadPassStarted;
 
     @Inject(method = "processUnloads", at = @At("HEAD"), require = 1)
     private void frontierV3$beginUnloadPass(BooleanSupplier budget, CallbackInfo callback) {
         frontierV3$boundedShutdown = level.getServer().isStopped()
                 && FrontierV3ServerLifecycle.ownsPhysicalWorld(level.getServer());
-    }
-
-    @Redirect(method = "processUnloads", at = @At(value = "INVOKE", target = "Ljava/util/Queue;size()I"), require = 1)
-    private int frontierV3$captureQueuedCallbacks(Queue<Runnable> queue) {
-        int queued = queue.size();
-        if (frontierV3$boundedShutdown) frontierV3$unloadPass.begin(queued);
-        return queued;
+        frontierV3$unloadPassStarted = false;
     }
 
     @Redirect(method = "processUnloads", at = @At(value = "INVOKE", target = "Ljava/util/Queue;poll()Ljava/lang/Object;"), require = 1)
     private Object frontierV3$pollUnloadCallback(Queue<Runnable> queue) {
-        return frontierV3$boundedShutdown ? frontierV3$unloadPass.poll(queue) : queue.poll();
+        if (!frontierV3$boundedShutdown) return queue.poll();
+        if (!frontierV3$unloadPassStarted) {
+            // Snapshot the real queue at the first drain, after new unloads have
+            // been scheduled. C2ME independently replaces vanilla's size query
+            // with MAX_VALUE; neither intercept nor consume that budget sentinel.
+            frontierV3$unloadPass.begin(queue.size());
+            frontierV3$unloadPassStarted = true;
+        }
+        return frontierV3$unloadPass.poll(queue);
     }
 }
