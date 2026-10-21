@@ -32,7 +32,7 @@ final class FrontierV3ContainerRemovalExecutor {
             if (state.inventory().items().values().stream().anyMatch(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(id))
                     || state.inventory().fungibleResources().accounts().values().stream().anyMatch(account ->
                         account.custody().equals(new ResourceCustody.Container(id)) && !account.lotQuantities().isEmpty())
-                    || journal.exactDrops().values().stream().anyMatch(drop -> ((InventoryCustody.ContainerSlot) drop.from()).containerId().equals(id))) continue;
+                    || journal.containerDrops().stream().anyMatch(drop -> drop.container().equals(id))) continue;
             var lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(id));
             if (lease == null || lease.authorityEpoch() != witness.custodyEpoch())
                 throw new IllegalStateException("container removal has stale custody authority");

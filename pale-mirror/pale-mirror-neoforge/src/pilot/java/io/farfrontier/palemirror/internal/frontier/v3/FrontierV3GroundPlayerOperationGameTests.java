@@ -16,6 +16,61 @@ import java.util.*;
 @PrefixGameTestTemplate(false)
 public final class FrontierV3GroundPlayerOperationGameTests {
     @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
+    public static void nativeContainerDropSplitsOnceAndConfirmsTheWholeResourceOutcome(GameTestHelper helper) {
+        var level = helper.getLevel(); var point = helper.absolutePos(new BlockPos(1, 1, 1));
+        level.setBlockAndUpdate(point, net.minecraft.world.level.block.Blocks.CHEST.defaultBlockState());
+        var chest = (net.minecraft.world.level.block.entity.ChestBlockEntity) level.getBlockEntity(point);
+        var base = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:container-drop-operation"), 94L);
+        var owner = base.initialState().bootstrap().settlements().getFirst().id(); var container = FrontierWorldState.depotId(owner);
+        chest.getPersistentData().putString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY, container.value());
+        chest.setItem(26, new ItemStack(Items.BREAD, 64));
+        var account = ReferenceContainerCustody.scopeId(container);
+        var lot = new ResourceLot(new SubjectId("lot:container-drop-operation"), owner, "minecraft:bread", 64, "test:drop", List.of());
+        var resources = FungibleResourceLedger.empty().issue(lot,
+                new CustodyAccount(account, new ResourceCustody.Container(container), Map.of(lot.id(), 64), Map.of()));
+        resources = resources.rebind(account, 1, FungiblePhysicalObservation.bind(resources, account, 1,
+                List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(container, 26)),
+                        lot.itemKind(), 64))));
+        var initial = base.initialState().withInventory(base.initialState().inventory().withFungibleResources(resources));
+        var config = new FrontierEngineConfiguration<>(base.worldId(), initial, base.initialInstant(), base.commandPlanner(),
+                base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(),
+                base.initialSchedules(), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
+        var runtime = FrontierV3ServerRuntime.start(config, new FrontierV3AmbientActorGameTests.EphemeralStore(), 10_000);
+        try {
+            FrontierV3ContainerDropOperation.perform(level, runtime, FrontierV3PhysicalContainer.declaredChest(container, chest), 26,
+                    chest.getItem(26), point.getX(), point.getY(), point.getZ());
+            var next = runtime.decodedState().orElseThrow().inventory().fungibleResources();
+            var drops = next.accounts().values().stream().filter(a -> a.custody() instanceof ResourceCustody.Ground).toList();
+            helper.assertTrue(chest.getItem(26).isEmpty() && !next.accounts().containsKey(account) && drops.size() >= 3,
+                    "actual vanilla callback splits the original stack and retires its source");
+            helper.assertTrue(drops.stream().flatMap(a -> a.lotQuantities().values().stream()).mapToInt(Integer::intValue).sum() == 64
+                    && next.lots().get(lot.id()).equals(lot), "fragmented drops preserve the original lot and all 64 resources");
+            helper.assertTrue(drops.stream().allMatch(a -> level.getEntity(((ResourceCustody.Ground) a.custody()).entityId()) instanceof ItemEntity e
+                    && e.getItem().getCount() == a.lotQuantities().get(lot.id())), "every canonical fragment is the actual native drop");
+            helper.assertTrue(FrontierV3ResourceHandoffLedger.get(level).containerDrops().isEmpty(), "one owner outcome closes the whole native split");
+            helper.assertTrue(FrontierV3NativeOperationMarkers.read(chest.getPersistentData()).size() == 1,
+                    "one operation covers the original stack, not one operation per fragment");
+            var fragment = (ItemEntity) level.getEntity(((ResourceCustody.Ground) drops.getFirst().custody()).entityId());
+            var operations = FrontierV3OperationLedger.get(level); var journal = FrontierV3ResourceHandoffLedger.get(level);
+            var unproved = operations.prepare(new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.CONTAINER_DROP,
+                    FrontierExecutionSubjects.PHYSICAL_EXECUTOR, UUID.randomUUID().toString(), "unproved-drop",
+                    Set.of(FrontierV3OperationBlockEntityParticipant.current(chest).identity(),
+                            FrontierV3OperationEntityParticipant.nativeObject(fragment).identity())));
+            var exact = new ExactItemCustodyChanged(new SubjectId("item:unproved-drop"), new InventoryCustody.ContainerSlot(container, 26),
+                    new InventoryCustody.WorldCarrier(fragment.getUUID()));
+            var retained = new FrontierV3ContainerDropTransaction(container, 26, unproved, List.of(), List.of(exact));
+            journal.prepareDrop(retained); journal.persist(level); operations.persist(level);
+            var canonical = runtime.decodedState().orElseThrow();
+            helper.assertTrue(!FrontierV3ContainerDropOperation.reconcile(level, runtime, retained)
+                    && runtime.decodedState().orElseThrow().equals(canonical), "existing destination and empty source never prove another drop");
+            helper.assertTrue(operations.cancelUnattempted(unproved.ticket()), "only unattempted callback is cancellable"); operations.persist(level);
+            helper.assertTrue(FrontierV3ContainerDropOperation.reconcile(level, runtime, retained)
+                    && runtime.decodedState().orElseThrow().equals(canonical) && journal.containerDrops().isEmpty(),
+                    "cancel-before-owner-retire recovery neither spawns nor submits a new outcome");
+        } finally { runtime.shutdown(); }
+        helper.succeed();
+    }
+    @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
     public static void nativeMergeConservesBothLotsAndClosesOneCausalHandoff(GameTestHelper helper) throws Exception {
         var level = helper.getLevel(); var point = helper.absolutePos(new BlockPos(1, 1, 1));
         var source = new ItemEntity(level, point.getX() + .5, point.getY(), point.getZ() + .5, new ItemStack(Items.BREAD, 5));

@@ -15,7 +15,8 @@ class FrontierV3ResourceHandoffLedgerTest {
     @BeforeAll static void version() { net.minecraft.SharedConstants.tryDetectVersion(); }
     @TempDir Path directory;
     private static FrontierV3ResourceHandoffLedger empty() {
-        var tag = new CompoundTag(); tag.putInt("format", 7); tag.putLong("nextSequence", 1);
+        var tag = new CompoundTag(); tag.putInt("format", 8); tag.putLong("nextSequence", 1);
+        tag.put("containerDrops", new ListTag());
         tag.put("lossOperations", new ListTag()); tag.put("handoffOperations", new ListTag());
         tag.put("pending", new ListTag()); tag.put("actorPickups", new ListTag()); tag.put("groundLosses", new ListTag());
         return FrontierV3ResourceHandoffLedger.load(tag, null);
@@ -26,18 +27,28 @@ class FrontierV3ResourceHandoffLedgerTest {
         var id = UUID.randomUUID();
         var drop = new ExactItemCustodyChanged(new SubjectId("item:mine-tool"), new InventoryCustody.ContainerSlot(container, 2),
                 new InventoryCustody.WorldCarrier(id));
-        journal.prepareRemoval(witness); journal.prepareExact(id, drop);
+        var port = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.TERRAIN, "0", 1);
+        var birth = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.ENTITIES, id.toString(), 2);
+        var operation = FrontierV3OperationReceipt.prepare(new FrontierV3OperationReceipt.Declaration(
+                FrontierV3OperationReceipt.Protocol.CONTAINER_DROP, FrontierExecutionSubjects.PHYSICAL_EXECUTOR,
+                UUID.randomUUID().toString(), "exact-source", Set.of(port, birth)), 1);
+        var draft = new FrontierV3ContainerDropTransaction(container, 2, operation, List.of(), List.of(drop));
+        journal.prepareRemoval(witness); journal.prepareDrop(draft);
         var recovered = FrontierV3ResourceHandoffLedger.load(journal.save(new CompoundTag(), null), null);
-        assertEquals(List.of(witness), recovered.removals()); assertEquals(Map.of(id, drop), recovered.exactDrops());
+        assertEquals(List.of(witness), recovered.removals()); assertEquals(List.of(draft), recovered.containerDrops());
         assertTrue(recovered.removes(container)); assertTrue(recovered.blocks(id));
         assertThrows(IllegalArgumentException.class, () -> recovered.prepareRemoval(witness));
-        assertThrows(IllegalArgumentException.class, () -> recovered.prepareExact(id, drop));
-        assertThrows(IllegalArgumentException.class, () -> recovered.prepareExact(UUID.randomUUID(), drop));
+        assertThrows(IllegalArgumentException.class, () -> recovered.prepareDrop(draft));
+        assertTrue(draft.operation().applied().isEmpty(), "a complete plan does not prove physical execution");
+        var applied = draft.bind(operation.applied(operation.nativeReceipt(port)).applied(operation.nativeReceipt(birth)));
+        recovered.updateDrop(draft, applied);
+        assertEquals(List.of(applied), FrontierV3ResourceHandoffLedger.load(recovered.save(new CompoundTag(), null), null).containerDrops());
+        assertThrows(IllegalArgumentException.class, () -> recovered.updateDrop(applied, draft));
         assertThrows(IllegalArgumentException.class, () -> recovered.retireRemoval(new FrontierV3ContainerRemovalWitness(
                 container, witness.owner(), witness.position(), 8, 3)));
         var obsolete = journal.save(new CompoundTag(), null); obsolete.putInt("format", 4);
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceHandoffLedger.load(obsolete, null));
-        recovered.retireExact(id, drop); recovered.retireRemoval(witness);
+        recovered.retireDrop(applied); recovered.retireRemoval(witness);
         assertFalse(recovered.removes(container)); assertFalse(recovered.blocks(id));
     }
     @Test void fragmentedDropsRetainExactlyOneStockBalanceAndReplayInRecordedOrder() throws Exception {

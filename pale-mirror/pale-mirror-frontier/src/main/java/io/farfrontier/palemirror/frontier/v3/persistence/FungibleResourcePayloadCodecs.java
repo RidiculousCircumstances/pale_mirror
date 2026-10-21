@@ -26,7 +26,7 @@ final class FungibleResourcePayloadCodecs {
         return new PayloadCodecs(List.of(new FungibleStackLayoutObservedCodec(), new FungibleResourceHandoffObservedCodec(),
                 new FungibleStockDepartureObservedCodec(), new FungibleStockContributionObservedCodec(),
                 new FungibleStackBindingsReleasedCodec(), new GroundResourceDestroyedCodec(), new GroundResourcePlayerWithdrawalCodec(),
-                new ContainerPlayerEditPayloadCodec()));
+                new ContainerPlayerEditPayloadCodec(), new PhysicalInventoryTransfersPayloadCodec(new FungibleResourceHandoffObservedCodec())));
     }
     private static final class GroundResourcePlayerWithdrawalCodec implements PayloadCodec {
         @Override public String type() { return "frontier.ground_resource_player_withdrawal"; }

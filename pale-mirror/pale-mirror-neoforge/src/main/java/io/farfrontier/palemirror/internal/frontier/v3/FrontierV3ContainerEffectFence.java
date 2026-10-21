@@ -12,6 +12,7 @@ final class FrontierV3ContainerEffectFence {
     static boolean pending(ServerLevel level, FrontierWorldState state, SubjectId container) {
         return ContainerPhysicalAuthorityComposition.pending(state, container)
                 || FrontierV3ResourceHandoffLedger.get(level).removes(container)
+                || FrontierV3ResourceHandoffLedger.get(level).dropsFrom(container)
                 || FrontierV3ResourceSiteLedger.get(level).hasPendingFieldDelivery(container)
                 || FrontierV3DepotClickLedger.get(level).pending(container) != null
                 || FungibleResourceCustodySupport.accountAtContainer(state, container)

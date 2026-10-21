@@ -13,8 +13,6 @@ import java.util.*;
 
 /** Vanilla drop adapter: the exact source slot and actual spawned entity, not proximity matching. */
 public final class FrontierV3ContainerDrops {
-    private record Source(ServerLevel level, SubjectId container, int slot) { }
-    private static final ThreadLocal<Source> ACTIVE = new ThreadLocal<>();
     private FrontierV3ContainerDrops() { }
     /** Persist the actual old provider before vanilla disperses any of its slots. */
     public static void prepareRemoval(Level level, Container container) {
@@ -43,76 +41,30 @@ public final class FrontierV3ContainerDrops {
         journal.prepareRemoval(witness); journal.persist(server);
     }
     public static void drop(Level level, double x, double y, double z, ItemStack stack, Container container) {
-        var previous = ACTIVE.get(); var source = source(level, container, stack);
-        if (source == null) ACTIVE.remove(); else ACTIVE.set(source);
-        try { Containers.dropItemStack(level, x, y, z, stack); }
-        finally { if (previous == null) ACTIVE.remove(); else ACTIVE.set(previous); }
-    }
-    private static Source source(Level level, Container container, ItemStack stack) {
-        if (!(level instanceof ServerLevel server)
-                || !FrontierV3PhysicalWorld.isPhysical(server)) return null;
+        if (stack.isEmpty() || !(level instanceof ServerLevel server) || !FrontierV3PhysicalWorld.isPhysical(server)) {
+            Containers.dropItemStack(level, x, y, z, stack); return;
+        }
         var runtime = FrontierV3ServerLifecycle.runtimeFor(server.getServer());
-        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return null;
+        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
+            Containers.dropItemStack(level, x, y, z, stack); return;
+        }
         var state = runtime.decodedState().orElseThrow();
         var physical = FrontierV3PhysicalContainer.observedFixed(server, state, container).orElse(null);
-        if (physical == null) return null;
-        var id = physical.containerId();
-        for (int slot = 0; slot < container.getContainerSize(); slot++) if (container.getItem(slot) == stack) return new Source(server, id, slot);
-        return null;
+        if (physical == null) { Containers.dropItemStack(level, x, y, z, stack); return; }
+        for (int slot = 0; slot < container.getContainerSize(); slot++) if (container.getItem(slot) == stack) {
+            FrontierV3ContainerDropOperation.perform(server, runtime, physical, slot, stack, x, y, z); return;
+        }
+        throw new IllegalStateException("managed native drop has no exact source slot");
     }
     public static boolean addFreshEntity(Level level, Entity entity) {
-        var source = ACTIVE.get();
-        if (source == null || source.level() != level || !(entity instanceof ItemEntity drop)) return level.addFreshEntity(entity);
-        var runtime = FrontierV3ServerLifecycle.runtimeFor(source.level().getServer());
-        var journal = FrontierV3ResourceHandoffLedger.get(source.level());
-        var state = journal.projected(runtime.decodedState().orElseThrow()); var resources = state.inventory().fungibleResources();
-        var address = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(source.container(), source.slot()));
-        var binding = resources.bindings().values().stream().filter(value -> value.address().equals(address)).findFirst().orElse(null);
-        if (binding == null) {
-            var slot = new InventoryCustody.ContainerSlot(source.container(), source.slot());
-            var exact = state.inventory().itemAt(source.container(), source.slot()).orElse(null);
-            if (exact == null) return level.addFreshEntity(entity); // Unknown native stock is not adopted.
-            if (!FrontierV3ExactItemPresentation.exactMatch(drop.getItem(), exact))
-                throw new IllegalStateException("causal exact drop contradicts its source slot");
-            var receipt = new ExactItemCustodyChanged(exact.id(), slot, new InventoryCustody.WorldCarrier(drop.getUUID()));
-            journal.prepareExact(drop.getUUID(), receipt); journal.persist(source.level());
-            FrontierV3ExactItemPresentation.bindWorldCarrier(drop.getItem(), drop.getUUID());
-            boolean added = level.addFreshEntity(entity);
-            if (added) reconcileExact(source.level(), runtime, drop.getUUID(), receipt);
-            return added;
-        }
-        var actual = drop.getItem();
-        if (!actual.getComponentsPatch().isEmpty() || !BuiltInRegistries.ITEM.getKey(actual.getItem()).toString().equals(binding.itemKind())
-                || actual.getCount() > binding.quantity()) throw new IllegalStateException("causal container drop contradicts its exact source binding");
-        var p = drop.blockPosition();
-        var receipt = FungiblePhysicalHandoff.departToNew(resources, binding.accountId(), binding.authorityEpoch(), binding,
-                binding.quantity() - actual.getCount(), new SubjectId("custody:ground-" + drop.getUUID()),
-                new ResourceCustody.Ground(drop.getUUID(), new BlockPosition(p.getX(), p.getY(), p.getZ())), 1,
-                new PhysicalStackAddress.WorldEntity(drop.getUUID())).forfeitAffectedClaims(resources);
-        journal.prepare(drop.getUUID(), receipt); journal.persist(source.level());
-        drop.getPersistentData().putBoolean(FrontierV3GroundItemPosition.MARKER, true);
-        boolean added = level.addFreshEntity(entity);
-        if (added) reconcile(source.level(), runtime, drop.getUUID(), receipt);
-        return added;
+        return FrontierV3ContainerDropOperation.addFreshEntity(level, entity);
     }
     static boolean reconcileOne(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        for (var entry : FrontierV3ResourceHandoffLedger.get(level).exactDrops().entrySet())
-            if (reconcileExact(level, runtime, entry.getKey(), entry.getValue())) return true;
+        for (var transaction : FrontierV3ResourceHandoffLedger.get(level).containerDrops())
+            if (FrontierV3ContainerDropOperation.reconcile(level, runtime, transaction)) return true;
         for (var entry : FrontierV3ResourceHandoffLedger.get(level).pending().entrySet())
             if (reconcile(level, runtime, entry.getKey(), entry.getValue())) return true;
         return false;
-    }
-    private static boolean reconcileExact(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-            UUID id, ExactItemCustodyChanged receipt) {
-        var item = runtime.decodedState().orElseThrow().inventory().items().get(receipt.itemId());
-        if (item == null) throw new IllegalStateException("exact drop lost its canonical item");
-        if (!item.custody().equals(receipt.to())) {
-            if (!(level.getEntity(id) instanceof ItemEntity drop) || drop.isRemoved()
-                    || !FrontierV3ExactItemPresentation.exactMatch(drop.getItem(), item)
-                    || !FrontierV3ExactItemPresentation.worldCarrierId(drop.getItem()).filter(id::equals).isPresent()) return false;
-            if (!(FrontierV3CommandSubmission.submit(runtime, "container-exact-drop", id.toString(), receipt) instanceof CommandResult.Accepted)) return false;
-        }
-        var journal = FrontierV3ResourceHandoffLedger.get(level); journal.retireExact(id, receipt); journal.persist(level); return true;
     }
     static boolean reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             UUID id, FungibleResourceHandoffObserved receipt) {

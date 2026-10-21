@@ -19,6 +19,8 @@ public final class FrontierV3GroundItemMerge {
     }
     static boolean before(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             ItemEntity destination, ItemStack destinationStack, ItemEntity source, ItemStack sourceStack, Runnable nativeMerge) {
+        var journal = FrontierV3ResourceHandoffLedger.get(level);
+        if (journal.blocks(destination.getUUID()) || journal.blocks(source.getUUID())) return false;
         var resources = runtime.decodedState().orElseThrow().inventory().fungibleResources();
         var from = binding(resources, source); var to = binding(resources, destination);
         if (from == null && to == null) return true;
@@ -30,9 +32,7 @@ public final class FrontierV3GroundItemMerge {
         var targetOwners = to.lotQuantities().keySet().stream().map(id -> resources.lots().get(id).economicOwnerId())
                 .collect(java.util.stream.Collectors.toSet());
         if (sourceOwners.size() != 1 || !sourceOwners.equals(targetOwners)) return false;
-        var journal = FrontierV3ResourceHandoffLedger.get(level);
-        if (journal.blocks(destination.getUUID()) || journal.blocks(source.getUUID())
-                || journal.blocksAccount(from.accountId()) || journal.blocksAccount(to.accountId())) return false;
+        if (journal.blocksAccount(from.accountId()) || journal.blocksAccount(to.accountId())) return false;
         var receipt = FungiblePhysicalHandoff.returnToExisting(resources, from.accountId(), from.authorityEpoch(), from,
                 to.accountId(), to.authorityEpoch(), to);
         var column = FrontierV3OperationEntityColumns.current(level, source.chunkPosition()).orElse(null);

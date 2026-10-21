@@ -34,7 +34,7 @@ final class FrontierV3ActorDeathResourceComposition {
             new Handler(Owner.EXPEDITION_TRANSFER, FrontierV3ExpeditionTransferDeathResources::prepare, FrontierV3ExpeditionTransferDeathResources::reconcileOne),
             new Handler(Owner.SHIPMENT, FrontierV3ShipmentDeathResources::prepare, FrontierV3ShipmentDeathResources::reconcileOneDrop),
             new Handler(Owner.UNIT_INVENTORY, FrontierV3UnitInventoryDeathResources::prepare, FrontierV3UnitInventoryDeathResources::reconcileOneDrop),
-            new Handler(Owner.ATTACHED_STORAGE, FrontierV3AttachedStorageDeathResources::prepare, FrontierV3AttachedStorageDeathResources::reconcileOneDrop)));
+            new Handler(Owner.ATTACHED_STORAGE, FrontierV3AttachedStorageDeathResources::prepare)));
 
     private FrontierV3ActorDeathResourceComposition() { }
     static List<Handler> closed(List<Handler> handlers) {

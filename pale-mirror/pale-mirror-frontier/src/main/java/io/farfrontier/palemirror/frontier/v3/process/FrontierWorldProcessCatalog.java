@@ -144,7 +144,7 @@ public final class FrontierWorldProcessCatalog {
     private static final Set<String> STRATEGY = types(
             "frontier.settlement_infection_observed", "frontier.settlement_work_policy_changed", "frontier.strategic_objective_selected",
             "frontier.strategic_task_planned", "frontier.strategic_task_transition");
-    private static final Set<String> ALL_WORLD = union(PHYSICAL, REPLICA_CUSTODY, AMBIENT, SCENES, POPULATION, ACTOR_MOVEMENT, ACTOR_EXECUTION, ACTOR_BODY, ECONOMY, RESOURCE_SITES,
+    private static final Set<String> ALL_WORLD = union(physicalCommands(), REPLICA_CUSTODY, AMBIENT, SCENES, POPULATION, ACTOR_MOVEMENT, ACTOR_EXECUTION, ACTOR_BODY, ECONOMY, RESOURCE_SITES,
             HIVE, INFRASTRUCTURE, SETTLEMENT_SERVICE_WORK, STRATEGY, GoodsTradeProcessModule.TYPES, ShipmentProcessModule.TYPES,
             UnitGroupProcessModule.TYPES, TransportMissionProcessModule.TYPES, UnitInventoryProcessModule.TYPES, ExpeditionSupplyProcessModule.TYPES, ExtractionWorkProcessModule.TYPES,
             DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.TYPES, CultivationProcessModule.TYPES);
@@ -417,7 +417,7 @@ public final class FrontierWorldProcessCatalog {
     public static List<DeterministicProcessDescriptor> descriptors() {
         return List.of(
                 descriptor("kernel-schedule", Set.of(), Set.of(), KERNEL, emissions("kernel-schedule"), KERNEL),
-                descriptor("physical-observation", physicalCommands(), Set.of(), PHYSICAL, emissions("physical-observation"), PHYSICAL),
+                descriptor("physical-observation", physicalCommands(), Set.of(), PHYSICAL, emissions("physical-observation"), physicalCommands()),
                 descriptor("replica-custody", replicaCustodyCommands(), Set.of(), REPLICA_CUSTODY, emissions("replica-custody"), REPLICA_CUSTODY),
                 descriptor("ambient-actors", ambientCommands(), Set.of(), AMBIENT, emissions("ambient-actors"), AMBIENT),
                 descriptor("scene-lifecycle", sceneCommands(), sceneSchedules(), SCENES, emissions("scene-lifecycle"), SCENES),
@@ -695,7 +695,7 @@ public final class FrontierWorldProcessCatalog {
         return new DeterministicProcessDescriptor(id, commands, schedules, events, emissions, codecs);
     }
 
-    private static Set<String> physicalCommands() { return PHYSICAL; }
+    private static Set<String> physicalCommands() { return union(PHYSICAL, types("frontier.physical_inventory_transfers_observed")); }
     private static Set<String> replicaCustodyCommands() { return REPLICA_CUSTODY; }
     private static Set<String> ambientCommands() { return types(
             "frontier.ambient_body_confirmed", "frontier.ambient_lease_prepared",

@@ -8,7 +8,6 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWireTags;
-import io.farfrontier.palemirror.frontier.v3.model.ExactItemCustodyChanged;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.*;
@@ -41,15 +40,16 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
     private final Map<SubjectId, Pickup> actorPickups;
     private final Map<UUID, GroundStockExit> groundLosses;
     private final Map<SubjectId, FrontierV3ContainerRemovalWitness> containerRemovals;
-    private final Map<UUID, ExactItemCustodyChanged> exactDrops;
     private final Map<UUID, FrontierV3OperationReceipt> lossOperations;
     private final Map<UUID, FrontierV3OperationReceipt> handoffOperations;
+    private final Map<UUID, FrontierV3ContainerDropTransaction> containerDrops;
     private FrontierV3ResourceHandoffLedger() { this(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), 1); }
     private FrontierV3ResourceHandoffLedger(Map<UUID, Pending> initial, Map<SubjectId, Pickup> pickups, Map<UUID, GroundStockExit> losses,
-            Map<SubjectId, FrontierV3ContainerRemovalWitness> removals, Map<UUID, ExactItemCustodyChanged> drops,
-            Map<UUID, FrontierV3OperationReceipt> operations, Map<UUID, FrontierV3OperationReceipt> handoffs, long nextSequence) {
+            Map<SubjectId, FrontierV3ContainerRemovalWitness> removals,
+            Map<UUID, FrontierV3OperationReceipt> operations, Map<UUID, FrontierV3OperationReceipt> handoffs,
+            Map<UUID, FrontierV3ContainerDropTransaction> nativeDrops, long nextSequence) {
         super(FrontierV3PhysicalStoreKind.RESOURCE_HANDOFFS);
-        if (initial.size() + pickups.size() + losses.size() + removals.size() + drops.size() > MAX_PENDING) throw new IllegalArgumentException("resource witness bound exceeded");
+        if (initial.size() + pickups.size() + losses.size() + removals.size() + nativeDrops.size() > MAX_PENDING) throw new IllegalArgumentException("resource witness bound exceeded");
         if (nextSequence < 1 || initial.values().stream().anyMatch(entry -> entry.sequence() >= nextSequence)
                 || initial.values().stream().map(Pending::sequence).distinct().count() != initial.size())
             throw new IllegalArgumentException("invalid resource witness causal order");
@@ -58,9 +58,11 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
         actorPickups = table("actorPickups", pickups, SubjectId::value, (id, pickup) -> pickup.save());
         groundLosses = table("groundLosses", losses, UUID::toString, (id, loss) -> encodeLoss(loss));
         containerRemovals = table("containerRemovals", removals, SubjectId::value, (id, removal) -> removal.save());
-        exactDrops = table("exactDrops", drops, UUID::toString, (id, drop) -> encodeExact(id, drop));
         lossOperations = table("lossOperations", operations, UUID::toString, FrontierV3ResourceHandoffLedger::encodeOperation);
         handoffOperations = table("handoffOperations", handoffs, UUID::toString, FrontierV3ResourceHandoffLedger::encodeOperation);
+        containerDrops = table("containerDrops", nativeDrops, UUID::toString, (id, drop) -> drop.save());
+        if (nativeDrops.values().stream().map(drop -> new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot(drop.container(), drop.slot()))
+                .distinct().count() != nativeDrops.size()) throw new IllegalArgumentException("competing native container drops");
         if (handoffs.values().stream().map(FrontierV3OperationReceipt::ticket).distinct().count() != handoffs.size())
             throw new IllegalArgumentException("one native handoff has competing owner witnesses");
         handoffs.forEach((id, operation) -> {
@@ -72,10 +74,6 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
                     () -> new IllegalArgumentException("native loss operation lacks its owner witness"));
             validateOperation(loss, operation);
         });
-        if (drops.values().stream().map(ExactItemCustodyChanged::itemId).distinct().count() != drops.size()
-                || drops.keySet().stream().anyMatch(id -> initial.containsKey(id) || losses.containsKey(id)))
-            throw new IllegalArgumentException("competing exact container drop authority");
-        drops.forEach(FrontierV3ResourceHandoffLedger::validateExact);
         // Sequential fragmented handoffs may share an account. Different physical
         // effect families must never recover authority over that same source.
         var exclusiveAccounts = new HashSet<SubjectId>(); var exclusiveEntities = new HashSet<UUID>();
@@ -85,8 +83,6 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
         for (var loss : losses.values())
             if (!exclusiveAccounts.add(loss.sourceAccountId()) || !exclusiveEntities.add(loss.source().entityId()))
                 throw new IllegalArgumentException("competing recovered ground stock exit authority");
-        for (var id : drops.keySet()) if (!exclusiveEntities.add(id))
-            throw new IllegalArgumentException("exact drop competes with recovered ground authority");
         if (initial.entrySet().stream().anyMatch(entry -> competingExclusive(entry.getKey(), entry.getValue().receipt())))
             throw new IllegalArgumentException("recovered handoff competes with ground pickup or exit");
     }
@@ -112,7 +108,6 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
     Pickup pickup(SubjectId owner) { return actorPickups.get(owner); }
     List<FrontierV3ContainerRemovalWitness> removals() { return containerRemovals.values().stream().sorted(Comparator.comparing(FrontierV3ContainerRemovalWitness::container)).toList(); }
     boolean removes(SubjectId container) { return containerRemovals.containsKey(container); }
-    Map<UUID, ExactItemCustodyChanged> exactDrops() { return Map.copyOf(exactDrops); }
     void prepareRemoval(FrontierV3ContainerRemovalWitness removal) {
         if (size() >= MAX_PENDING || containerRemovals.containsKey(removal.container())) throw new IllegalArgumentException("competing container removal witness");
         containerRemovals.put(removal.container(), removal); setDirty();
@@ -121,22 +116,30 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
         if (!removal.equals(containerRemovals.get(removal.container()))) throw new IllegalArgumentException("container removal lost its witness");
         containerRemovals.remove(removal.container()); setDirty();
     }
-    void prepareExact(UUID id, ExactItemCustodyChanged receipt) {
-        validateExact(id, receipt);
-        if (size() >= MAX_PENDING || blocks(id) || exactDrops.values().stream().anyMatch(value -> value.itemId().equals(receipt.itemId())))
-            throw new IllegalArgumentException("competing exact drop witness");
-        exactDrops.put(id, receipt); setDirty();
+    List<FrontierV3ContainerDropTransaction> containerDrops() {
+        return containerDrops.values().stream().sorted(Comparator.comparingLong(d -> d.operation().sequence())).toList();
     }
-    void retireExact(UUID id, ExactItemCustodyChanged receipt) {
-        if (!receipt.equals(exactDrops.get(id))) throw new IllegalArgumentException("exact drop lost its witness");
-        exactDrops.remove(id); setDirty();
+    boolean dropsFrom(SubjectId container) { return containerDrops.values().stream().anyMatch(d -> d.container().equals(container)); }
+    boolean canPrepareDrop(SubjectId container, int slot) {
+        return size() < MAX_PENDING && containerDrops.values().stream().noneMatch(d -> d.container().equals(container) && d.slot() == slot);
     }
-    private int size() { return pending.size() + actorPickups.size() + groundLosses.size() + containerRemovals.size() + exactDrops.size(); }
-    private static void validateExact(UUID id, ExactItemCustodyChanged receipt) {
-        if (!(receipt.from() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot)
-                || !(receipt.to() instanceof io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.WorldCarrier carrier)
-                || !carrier.carrierId().equals(id)) throw new IllegalArgumentException("exact drop lacks container/carrier declarations");
+    void prepareDrop(FrontierV3ContainerDropTransaction drop) {
+        if (!canPrepareDrop(drop.container(), drop.slot()) || containerDrops.containsKey(drop.id()))
+            throw new IllegalArgumentException("container drop has competing authority or exhausted capacity");
+        containerDrops.put(drop.id(), drop); setDirty();
     }
+    void updateDrop(FrontierV3ContainerDropTransaction expected, FrontierV3ContainerDropTransaction next) {
+        if (!expected.equals(containerDrops.get(expected.id())) || !expected.container().equals(next.container()) || expected.slot() != next.slot()
+                || !expected.bind(next.operation()).operation().equals(next.operation())
+                || !next.outcome().equals(expected.outcome()))
+            throw new IllegalArgumentException("container drop changed its exact causal witness");
+        containerDrops.put(next.id(), next); setDirty();
+    }
+    void retireDrop(FrontierV3ContainerDropTransaction expected) {
+        if (!expected.equals(containerDrops.get(expected.id()))) throw new IllegalArgumentException("container drop lost its witness");
+        containerDrops.remove(expected.id()); setDirty();
+    }
+    private int size() { return pending.size() + actorPickups.size() + groundLosses.size() + containerRemovals.size() + containerDrops.size(); }
     List<GroundStockExit> losses() { return groundLosses.values().stream().sorted(Comparator.comparing(GroundStockExit::witnessId)).toList(); }
     void prepareLoss(GroundStockExit loss) {
         if (groundLosses.containsKey(loss.source().entityId()) || blocks(loss.source().entityId()) || blocksAccount(loss.sourceAccountId())
@@ -175,13 +178,16 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
     }
     java.util.List<Pickup> pickups() { return actorPickups.values().stream().sorted(Comparator.comparing(Pickup::owner)).toList(); }
     boolean blocks(UUID entity) {
-        return exactDrops.containsKey(entity) || groundLosses.containsKey(entity) || pending.containsKey(entity) || pending.values().stream().anyMatch(entry ->
+        return containerDrops.values().stream().anyMatch(drop -> drop.blocks(entity))
+                || groundLosses.containsKey(entity) || pending.containsKey(entity) || pending.values().stream().anyMatch(entry ->
                 java.util.stream.Stream.concat(entry.receipt().remainingSource().stream(), entry.receipt().destinationBindings().stream())
                         .anyMatch(binding -> binding.address() instanceof PhysicalStackAddress.WorldEntity address && address.entityId().equals(entity)))
                 || actorPickups.values().stream().anyMatch(pickup -> pickup.entity().equals(entity));
     }
     boolean blocksAccount(SubjectId account) {
-        return pending.values().stream().anyMatch(entry -> entry.receipt().sourceAccountId().equals(account)
+        return containerDrops.values().stream().flatMap(drop -> drop.resources().stream()).anyMatch(r -> r.sourceAccountId().equals(account)
+                || r.destinationAccount().id().equals(account))
+                || pending.values().stream().anyMatch(entry -> entry.receipt().sourceAccountId().equals(account)
                 || entry.receipt().destinationAccount().id().equals(account))
                 || groundLosses.values().stream().anyMatch(loss -> loss.sourceAccountId().equals(account))
                 || actorPickups.values().stream().anyMatch(pickup -> pickup.account().equals(account));
@@ -198,7 +204,7 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
         actorPickups.remove(pickup.owner()); setDirty();
     }
     void prepare(UUID id, FungibleResourceHandoffObserved receipt) {
-        if (size() >= MAX_PENDING || pending.containsKey(id) || exactDrops.containsKey(id)
+        if (size() >= MAX_PENDING || pending.containsKey(id)
                 || competingExclusive(id, receipt))
             throw new IllegalArgumentException("resource handoff already prepared or witness capacity exhausted");
         pending.put(id, new Pending(nextSequence, receipt)); nextSequence = Math.addExact(nextSequence, 1);
@@ -246,10 +252,7 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
     private static CompoundTag encodeLoss(GroundStockExit loss) {
         var tag = new CompoundTag(); tag.putString("type", loss.type()); tag.putByteArray("receipt", FrontierWorldRuntimeDefinition.payloadCodecs().encode(loss)); return tag;
     }
-    private static CompoundTag encodeExact(UUID id, ExactItemCustodyChanged receipt) {
-        var tag = new CompoundTag(); tag.putUUID("id", id); tag.putByteArray("receipt", FrontierWorldRuntimeDefinition.payloadCodecs().encode(receipt)); return tag;
-    }
-    @Override protected CompoundTag metadata() { var tag = new CompoundTag(); tag.putInt("format", 7); tag.putLong("nextSequence", nextSequence); return tag; }
+    @Override protected CompoundTag metadata() { var tag = new CompoundTag(); tag.putInt("format", 8); tag.putLong("nextSequence", nextSequence); return tag; }
     @Override public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.merge(metadata()); var entries = new ListTag();
         pending.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> entries.add(encode(entry.getKey(), entry.getValue())));
@@ -259,17 +262,16 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
                 .sorted(Comparator.comparing(GroundStockExit::witnessId)).forEach(loss -> losses.add(encodeLoss(loss)));
         tag.put("groundLosses", losses);
         var removals = new ListTag(); removals().forEach(removal -> removals.add(removal.save())); tag.put("containerRemovals", removals);
-        var drops = new ListTag(); exactDrops.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> drops.add(encodeExact(entry.getKey(), entry.getValue())));
-        tag.put("exactDrops", drops);
         var operations = new ListTag(); lossOperations.entrySet().stream().sorted(Map.Entry.comparingByKey())
                 .forEach(entry -> operations.add(encodeOperation(entry.getKey(), entry.getValue())));
         tag.put("lossOperations", operations);
         var handoffs = new ListTag(); handoffOperations.entrySet().stream().sorted(Map.Entry.comparingByKey())
                 .forEach(entry -> handoffs.add(encodeOperation(entry.getKey(), entry.getValue())));
-        tag.put("handoffOperations", handoffs); return tag;
+        tag.put("handoffOperations", handoffs);
+        var nativeDrops = new ListTag(); containerDrops().forEach(drop -> nativeDrops.add(drop.save())); tag.put("containerDrops", nativeDrops); return tag;
     }
     static FrontierV3ResourceHandoffLedger load(CompoundTag tag, HolderLookup.Provider registries) {
-        if (tag.getInt("format") != 7) throw new IllegalArgumentException("incompatible resource handoff journal");
+        if (tag.getInt("format") != 8) throw new IllegalArgumentException("incompatible resource handoff journal");
         var entries = tag.getList("pending", Tag.TAG_COMPOUND);
         if (entries.size() > MAX_PENDING) throw new IllegalArgumentException("resource witness bound exceeded");
         var values = new LinkedHashMap<UUID, Pending>();
@@ -300,14 +302,6 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
             var removal = FrontierV3ContainerRemovalWitness.read(removalTags.getCompound(i));
             if (removals.putIfAbsent(removal.container(), removal) != null) throw new IllegalArgumentException("duplicate container removal witness");
         }
-        var drops = new LinkedHashMap<UUID, ExactItemCustodyChanged>(); var dropTags = tag.getList("exactDrops", Tag.TAG_COMPOUND);
-        if (values.size() + pickups.size() + losses.size() + removals.size() + dropTags.size() > MAX_PENDING)
-            throw new IllegalArgumentException("resource witness bound exceeded");
-        for (int i = 0; i < dropTags.size(); i++) {
-            var entry = dropTags.getCompound(i);
-            var receipt = (ExactItemCustodyChanged) FrontierWorldRuntimeDefinition.payloadCodecs().decode("frontier.exact_item_custody_changed", entry.getByteArray("receipt"));
-            if (drops.putIfAbsent(entry.getUUID("id"), receipt) != null) throw new IllegalArgumentException("duplicate exact drop witness");
-        }
         var operations = new HashMap<UUID, FrontierV3OperationReceipt>(); var operationTags = tag.getList("lossOperations", Tag.TAG_COMPOUND);
         if (!tag.contains("lossOperations", Tag.TAG_LIST) || !operationTags.equals(tag.get("lossOperations")) || operationTags.size() > losses.size())
             throw new IllegalArgumentException("invalid native loss operation links");
@@ -326,6 +320,13 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
             if (!encodeOperation(id, operation).equals(row) || handoffs.putIfAbsent(id, operation) != null)
                 throw new IllegalArgumentException("duplicate or invalid native handoff operation");
         }
-        return new FrontierV3ResourceHandoffLedger(values, pickups, losses, removals, drops, operations, handoffs, tag.getLong("nextSequence"));
+        var nativeDrops = new LinkedHashMap<UUID, FrontierV3ContainerDropTransaction>(); var nativeTags = tag.getList("containerDrops", Tag.TAG_COMPOUND);
+        if (!tag.contains("containerDrops", Tag.TAG_LIST) || !nativeTags.equals(tag.get("containerDrops")) || nativeTags.size() > MAX_PENDING)
+            throw new IllegalArgumentException("invalid native container drop witnesses");
+        for (int i = 0; i < nativeTags.size(); i++) {
+            var drop = FrontierV3ContainerDropTransaction.read(nativeTags.getCompound(i));
+            if (nativeDrops.putIfAbsent(drop.id(), drop) != null) throw new IllegalArgumentException("duplicate native container drop");
+        }
+        return new FrontierV3ResourceHandoffLedger(values, pickups, losses, removals, operations, handoffs, nativeDrops, tag.getLong("nextSequence"));
     }
 }

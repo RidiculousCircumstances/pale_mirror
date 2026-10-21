@@ -14,6 +14,8 @@ import java.util.List;
 /** Exact owner for durable physical observations, intents and surface state. */
 final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule {
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
+        if (command.payload() instanceof PhysicalInventoryTransfersObserved batch)
+            return PhysicalInventoryTransfersProcess.plan(state, batch, command);
         if (command.payload() instanceof ContainerPlayerEditObserved edit)
             return ContainerPlayerEditProcess.plan(state, edit, command);
         if (command.payload() instanceof GroundStockExit destroyed) {

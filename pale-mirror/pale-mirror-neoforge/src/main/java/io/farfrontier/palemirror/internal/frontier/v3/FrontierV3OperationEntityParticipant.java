@@ -17,6 +17,17 @@ final class FrontierV3OperationEntityParticipant {
         if (entity.isRemoved() || !(entity.level() instanceof net.minecraft.server.level.ServerLevel level)
                 || level.getEntity(entity.getUUID()) != entity)
             throw new IllegalArgumentException("native operation requires the exact loaded entity");
+        return port(entity);
+    }
+    /** An explicit birth participant is declared before insertion into EntityStorage.
+     * It cannot stand in for an existing body or authorize replacement by UUID. */
+    static FrontierV3MinecraftOperation.Participant birth(Entity entity) {
+        if (entity.isRemoved() || !(entity.level() instanceof net.minecraft.server.level.ServerLevel level)
+                || level.getEntity(entity.getUUID()) != null)
+            throw new IllegalArgumentException("native birth requires a new, not-yet-admitted entity");
+        return port(entity);
+    }
+    private static FrontierV3MinecraftOperation.Participant port(Entity entity) {
         var data = entity.getPersistentData();
         // Body authority can change on the SAME native object. Its operation receipts
         // must survive that handoff, while a newly constructed body gets a distinct lifetime.
