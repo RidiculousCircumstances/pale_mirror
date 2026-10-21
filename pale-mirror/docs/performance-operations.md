@@ -135,6 +135,22 @@ first-presentation status. The current queue no longer uses that historical gate
 Initial handoff waits cheaply on pending work, then performs the exact physical
 proof. A completed queue alone never grants custody or chunk readiness.
 
+Read/witness preparation does not consume the physical-write allowance. Already
+matching blocks settle under the bounded read/time budget; only actual mutations
+spend the64-write ceiling. All prepared intents are persisted before mutations,
+and an unexecuted intent stays pending for the next turn/recovery.
+
+Fixed-container presentation uses the same custody executor with alternating
+demanded/fair discovery. The existing spatial index selects naturally loaded
+containers from Minecraft's real `ChunkTrackingView`, including not-yet-sent
+chunks; no global-world scan or diagnostic-induced demand is required. Each
+discovery window remains bounded at8, with at most one reconciled surface. Fair
+turns retain unloaded/mobile custody drainage. Selection preserves cyclic order,
+not ID-resorting after the window wraps. Epochs, fingerprints, provenance and
+durable-before-write checks are unchanged. R208's dense mine trace separated
+worksite readiness from a remaining3.3s container catch-up wait: a completed
+terrain queue is not evidence that the complete chunk is ready to send.
+
 `first_visibility` includes `worksitePendingCells`. The focused scheduling fixture
 uses the same 20 x 512 declarations and 64-write ceiling: first complete chunk in
 15 queue turns versus 160 old round-robin turns; one dirty cell among settled

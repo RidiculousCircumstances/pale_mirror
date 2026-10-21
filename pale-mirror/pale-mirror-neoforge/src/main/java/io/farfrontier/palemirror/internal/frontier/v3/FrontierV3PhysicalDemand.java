@@ -19,9 +19,21 @@ final class FrontierV3PhysicalDemand {
 
     /** Current network tracking includes chunks waiting for presentation, unlike sent-chunk queries. */
     static boolean presentationRequested(ServerLevel level, BlockPos position) {
-        return level.hasChunkAt(position) && level.players().stream()
-                .filter(player -> !player.isSpectator() && !"test-mock-player".equals(player.getGameProfile().getName()))
+        return level.hasChunkAt(position) && ordinaryPlayers(level)
                 .anyMatch(player -> player.getChunkTrackingView().contains(position.getX() >> 4, position.getZ() >> 4));
+    }
+
+    /** Bounded by actual player view distance, not the number of settlements in the world. */
+    static void forEachRequestedChunk(ServerLevel level, java.util.function.Consumer<net.minecraft.world.level.ChunkPos> consumer) {
+        var seen = new java.util.HashSet<net.minecraft.world.level.ChunkPos>();
+        ordinaryPlayers(level).forEach(player -> player.getChunkTrackingView().forEach(chunk -> {
+            if (seen.add(chunk)) consumer.accept(chunk);
+        }));
+    }
+
+    private static java.util.stream.Stream<net.minecraft.server.level.ServerPlayer> ordinaryPlayers(ServerLevel level) {
+        return level.players().stream().filter(player -> !player.isSpectator()
+                && !"test-mock-player".equals(player.getGameProfile().getName()));
     }
 
     static boolean exists(ServerLevel level, BlockPos position) {
@@ -34,11 +46,7 @@ final class FrontierV3PhysicalDemand {
      */
     static Readiness readiness(ServerLevel level, BlockPos position) {
         boolean loaded = level.hasChunkAt(position);
-        List<net.minecraft.server.level.ServerPlayer> ordinaryPlayers = level.players().stream().filter(player -> !player.isSpectator())
-                // A GameTest mock is a server-side fixture actor, not an ordinary connected
-                // player and must not grant materialization/effect demand to unrelated tests.
-                .filter(player -> !"test-mock-player".equals(player.getGameProfile().getName()))
-                .toList();
+        List<net.minecraft.server.level.ServerPlayer> ordinaryPlayers = ordinaryPlayers(level).toList();
         int eligibleObservers = (int) ordinaryPlayers.stream()
                 .filter(player -> player.blockPosition().closerThan(position, EFFECT_RADIUS_BLOCKS)).count();
         int presentationObservers = (int) ordinaryPlayers.stream()

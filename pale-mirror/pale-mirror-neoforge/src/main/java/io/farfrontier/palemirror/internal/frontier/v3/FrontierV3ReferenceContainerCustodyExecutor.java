@@ -81,6 +81,19 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
+        // First/repeated presentation must not wait one global discovery revolution
+        // for every custody phase. The same owner reconciles exact loaded evidence;
+        // alternate turns retain ordinary drain/discovery service, including mobiles.
+        var surfaceWindow = SURFACE_WINDOWS.computeIfAbsent(level, ignored -> new FrontierV3IndexedWorkWindow<>());
+        var demanded = surfaceWindow.nextPreferred(state.inventory().surfaces(),
+                FrontierV3HandoffIndex.requestedContainers(level, state.inventory().surfaces()), MAX_DISCOVERY_PER_TURN)
+                .stream().filter(surface -> FrontierV3ReferenceContainerPresentation.needsReconciliation(level, state, surface)
+                        && !FrontierV3ContainerEffectFence.pending(level, state, surface.containerId())).toList();
+        var preferred = eligibleReferenceSurfaces(state, demanded);
+        if (!preferred.isEmpty()) {
+            reconcile(level, runtime, state, preferred.getFirst());
+            return;
+        }
         // An unloaded serialized chest is evidence, never a live custodian.  Drain one exact
         // scope per tick so unrelated containers keep progressing.
         for (PhysicalCustodyLease lease : LEASE_WINDOWS.computeIfAbsent(level, ignored -> new FrontierV3IndexedWorkWindow<>())
@@ -153,8 +166,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
             }
             rememberCurrentProcessObservation(level, lease);
         }
-        List<ContainerSurface> loaded = SURFACE_WINDOWS.computeIfAbsent(level, ignored -> new FrontierV3IndexedWorkWindow<>())
-                .next(state.inventory().surfaces(), MAX_DISCOVERY_PER_TURN).stream()
+        List<ContainerSurface> loaded = surfaceWindow.next(state.inventory().surfaces(), MAX_DISCOVERY_PER_TURN).stream()
                 .filter(surface -> (naturallyTicking(level, state, surface)
                             || FrontierV3ReferenceContainerPresentation.needsReconciliation(level, state, surface))
                         && !FrontierV3ContainerEffectFence.pending(level, state, surface.containerId())).toList();
@@ -666,7 +678,8 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
     static List<ContainerSurface> eligibleReferenceSurfaces(FrontierWorldState state, List<ContainerSurface> loaded) {
         return loaded.stream().filter(surface -> ReferenceContainerCustody.isReferenceContainer(state, surface.containerId()))
                 .filter(surface -> surface.status() != ContainerSurfaceStatus.RETIRED)
-                .sorted(Comparator.comparing(ContainerSurface::containerId))
+                // Preserve the discovery window's cyclic order. Sorting here would
+                // repeatedly put low IDs before the tail when that window wraps.
                 // Ordinary released conflicts remain isolated. A retained pending-write
                 // conflict may receive matching later evidence under its same exact epoch;
                 // round-robin selection prevents that inspection from monopolizing service.

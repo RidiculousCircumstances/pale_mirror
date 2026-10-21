@@ -37,7 +37,25 @@ final class FrontierV3HandoffIndex {
 
     static List<SubjectId> containers(ServerLevel level, Map<SubjectId, ContainerSurface> surfaces, ChunkPos chunk) {
         var index = INDEXES.computeIfAbsent(level, ignored -> new FrontierV3HandoffIndex());
-        if (index.surfaces != surfaces) {
+        index.updateContainers(surfaces);
+        return index.containerOwners.getOrDefault(chunk, List.of());
+    }
+
+    /** Real tracking demand, including chunks not sent yet; no diagnostic creates demand. */
+    static List<SubjectId> requestedContainers(ServerLevel level, Map<SubjectId, ContainerSurface> surfaces) {
+        var index = INDEXES.computeIfAbsent(level, ignored -> new FrontierV3HandoffIndex());
+        index.updateContainers(surfaces);
+        var requested = new ArrayList<SubjectId>();
+        FrontierV3PhysicalDemand.forEachRequestedChunk(level, chunk -> {
+            var owners = index.containerOwners.get(chunk);
+            if (owners != null && level.getChunkSource().getChunkNow(chunk.x, chunk.z) != null)
+                requested.addAll(owners);
+        });
+        return requested;
+    }
+
+    private void updateContainers(Map<SubjectId, ContainerSurface> surfaces) {
+        if (this.surfaces != surfaces) {
             var owners = new HashMap<ChunkPos, List<SubjectId>>();
             // Chunk terrain presentation owns fixed sockets only. A mobile container
             // belongs to exact body admission; indexing it at a saved pose would both
@@ -47,10 +65,9 @@ final class FrontierV3HandoffIndex {
                         new ChunkPos(surface.position().x() >> 4, surface.position().z() >> 4),
                         ignored -> new ArrayList<>()).add(id);
             });
-            index.containerOwners = freeze(owners);
-            index.surfaces = surfaces;
+            containerOwners = freeze(owners);
+            this.surfaces = surfaces;
         }
-        return index.containerOwners.getOrDefault(chunk, List.of());
     }
 
     private static Map<ChunkPos, List<SubjectId>> freeze(Map<ChunkPos, List<SubjectId>> owners) {

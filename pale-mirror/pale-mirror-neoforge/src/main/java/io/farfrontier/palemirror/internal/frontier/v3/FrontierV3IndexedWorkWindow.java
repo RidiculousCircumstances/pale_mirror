@@ -7,6 +7,19 @@ final class FrontierV3IndexedWorkWindow<Key extends Comparable<? super Key>, Val
     private Map<Key, Value> source;
     private List<Key> keys = List.of();
     private int cursor;
+    private FrontierV3IndexedWorkWindow<Key, Value> preferred;
+    private boolean preferredTurn;
+
+    /** Alternating demanded service cannot suppress the caller's ordinary fair sweep. */
+    List<Value> nextPreferred(Map<Key, Value> current, Collection<Key> demanded, int limit) {
+        if (limit < 1) throw new IllegalArgumentException("positive discovery bound required");
+        preferredTurn = !preferredTurn;
+        if (!preferredTurn || demanded.isEmpty()) return List.of();
+        var selected = new HashMap<Key, Value>();
+        for (var key : demanded) if (current.containsKey(key)) selected.put(key, current.get(key));
+        if (preferred == null) preferred = new FrontierV3IndexedWorkWindow<>();
+        return preferred.next(selected, limit);
+    }
 
     List<Value> next(Map<Key, Value> current, int limit) {
         if (limit < 1) throw new IllegalArgumentException("positive discovery bound required");
