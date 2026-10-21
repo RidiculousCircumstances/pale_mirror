@@ -20,7 +20,7 @@ import java.util.Optional;
 /** Completes a returned HOT farmer's single bounded hand-to-depot effect before generic chest drift audit. */
 final class FrontierV3ResourceSiteDeliveryExecutor {
     private FrontierV3ResourceSiteDeliveryExecutor() { }
-    private enum ChestState { BEFORE, AFTER, FOREIGN }
+    enum ChestState { BEFORE, AFTER, FOREIGN }
 
     /** A work-gate marker alone cannot authorize a chest effect: the exact owned body must occupy its declared port. */
     private static boolean workerAtDepot(ServerLevel level, FrontierWorldState state,
@@ -275,18 +275,17 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
         var order = ResourceSiteHarvestCargo.deliveryOrder(state, job);
         var transfer = new FrontierV3ActorItemTransfer.FungibleStep(order, chest, farmer, witness.entityId(),
                 MaterialSourceSelection.select(resources, order), witness.slot(), 0);
-        var participants = List.of(chest.persistence().get(),
-                FrontierV3OperationEntityParticipant.current(farmer, ActorBodyAuthority.current(state, job.workerId()).physicalEpoch()));
-        var declaration = new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.FIELD_DELIVERY,
-                job.id(), witness.witnessId(), FrontierV3OperationFingerprint.of(witness.write()),
-                participants.stream().map(FrontierV3MinecraftOperation.Participant::identity).collect(java.util.stream.Collectors.toSet()));
-        var operation = FrontierV3MinecraftOperation.apply(level, declaration, participants,
+        var binding = FrontierV3HarvestDeliveryOperation.binding(state, witness, farmer, chest);
+        var operation = FrontierV3MinecraftOperation.apply(level, binding.declaration(), binding.participants(),
                 transfer::before, transfer::apply, transfer::after);
         if (!operation.complete()) return false;
         List<FungiblePhysicalObservation.Stack> stacks = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(
                 chest.inventory(), state, witness.containerId());
-        confirm(level, operation.ticket(), runtime, state, job, scene, witness.resourceEpoch(), witness.quantity(), witness.depotEpoch(), stacks,
-                witness.afterFingerprint(), witness.witnessId());
+        var receipt = FrontierV3HarvestDeliveryOperation.receipt(state, job, witness, stacks);
+        io.farfrontier.palemirror.frontier.v3.api.FrontierPayload consequence = witness.intermediate()
+                ? new ResourceSiteHarvestBatchDelivered(receipt, witness.deliveredYieldBefore())
+                : new PhysicalIntentTransition(job.intentId(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(), consequence);
         FrontierWorldState current = runtime.decodedState().orElse(null);
         if (current != null && (witness.intermediate() && acceptedBatchObservation(current, witness)
                 || !witness.intermediate() && current.physicalIntents().get(witness.intentId()) != null
@@ -316,14 +315,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
                                 ResourceSiteHarvestJob job, SceneLease scene, long resourceEpoch, int quantity, long depotEpoch,
                                 List<FungiblePhysicalObservation.Stack> stacks, String fingerprint, String witnessId) {
         if (quantity != 0) throw new IllegalArgumentException("physical field delivery requires its operation ticket");
-        confirm(null, null, runtime, state, job, scene, resourceEpoch, quantity, depotEpoch, stacks, fingerprint, witnessId);
-    }
-    private static void confirm(ServerLevel level, java.util.UUID operation, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
-                                ResourceSiteHarvestJob job, SceneLease scene, long resourceEpoch, int quantity, long depotEpoch,
-                                List<FungiblePhysicalObservation.Stack> stacks, String fingerprint, String witnessId) {
-        PhysicalCustodyLease custody = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(job.outputSlot().containerId()));
-        long revision = quantity == 0 ? runtime.canonicalState().orElseThrow().revision().value()
-                : Math.incrementExact(custody.expectedCanonicalRevision());
+        long revision = runtime.canonicalState().orElseThrow().revision().value();
         var receipt = new ResourceSiteHarvestDeliveryObservation(job.returningForBatch()
                 ? batchObservationId(job.id(), job.deliveredYieldQuantity()) : new PhysicalObservationId(
                 "observation:field-delivery-" + job.id().value().substring("job:".length())),
@@ -333,18 +325,17 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
         io.farfrontier.palemirror.frontier.v3.api.FrontierPayload consequence = job.returningForBatch()
                 ? new ResourceSiteHarvestBatchDelivered(receipt, job.deliveredYieldQuantity())
                 : new PhysicalIntentTransition(job.intentId(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
-        if (operation != null) FrontierV3OperationConfirmation.submit(level, runtime, operation, consequence);
-        else FrontierV3CommandSubmission.submit(runtime, "field-delivery", job.id().value(), consequence);
+        FrontierV3CommandSubmission.submit(runtime, "field-delivery", job.id().value(), consequence);
     }
 
-    private static FrontierV3PhysicalContainer container(ServerLevel level, FrontierWorldState state, SubjectId depot) {
+    static FrontierV3PhysicalContainer container(ServerLevel level, FrontierWorldState state, SubjectId depot) {
         ContainerSurface surface = state.inventory().surfaces().get(depot);
         if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) return null;
         return FrontierV3PhysicalContainer.loaded(level, state, depot)
                 .filter(physical -> level.shouldTickBlocksAt(physical.position())).orElse(null);
     }
 
-    private static ChestState classify(FrontierWorldState state, Container chest, SubjectId depot,
+    static ChestState classify(FrontierWorldState state, Container chest, SubjectId depot,
                                        int target, int quantity, FrontierV3ResourceSiteDeliveryWitness witness) {
         if (target < 0 || target >= chest.getContainerSize()
                 || state.inventory().itemAt(depot, target).isPresent()

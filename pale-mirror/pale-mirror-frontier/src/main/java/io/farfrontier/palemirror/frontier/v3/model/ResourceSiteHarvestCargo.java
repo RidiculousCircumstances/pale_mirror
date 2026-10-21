@@ -85,6 +85,20 @@ public final class ResourceSiteHarvestCargo {
                 || !ResourceSiteHarvestGoal.actorAtDepot(state, job)
                 || !HarvestStorageReplacement.retainedAvailable(state, job))
             throw new IllegalArgumentException("harvest delivery lacks its ready part or actual depot arrival");
+        return deliveryOrder(state, job, part);
+    }
+
+    /** Observation of the already prepared endpoint, without requiring a dead worker to arrive again. */
+    static ActorContainerItemOrder retiredDeliveryOrder(FrontierWorldState state, ResourceSiteHarvestJob job,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId identity) {
+        ActorBodyAuthority.requireRetiredDeath(state, identity.body());
+        state.actorExecutions().requireRetained(identity.execution());
+        if (!identity.execution().activityOwnerId().equals(job.id()) || !identity.body().actorId().equals(job.workerId()))
+            throw new IllegalArgumentException("retired delivery has a foreign execution");
+        return deliveryOrder(state, job, part(state, job).orElseThrow());
+    }
+
+    private static ActorContainerItemOrder deliveryOrder(FrontierWorldState state, ResourceSiteHarvestJob job, ResourceLot part) {
         var container = new ResourceCustody.Container(job.outputSlot().containerId());
         return new ActorContainerItemOrder(job.id(), job.workerId(), ActorContainerItemOrder.Direction.PLACE,
                 new ActorContainerItemOrder.Portion.Fungible(job.actorAccountId(), new ResourceCustody.Actor(job.workerId()),

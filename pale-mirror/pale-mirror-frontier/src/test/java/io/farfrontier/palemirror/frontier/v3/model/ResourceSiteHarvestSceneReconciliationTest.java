@@ -176,6 +176,7 @@ class ResourceSiteHarvestSceneReconciliationTest {
                 lease.members().getFirst().entityId(), 37L, 64, 1L, stacks,
                 ReferenceContainerCustody.canonicalFingerprint(expected, depot), 8L, "witness:capacity-delivery");
         var batch = new ResourceSiteHarvestBatchDelivered(receipt, 0);
+        assertRetiredDelivery(state, job, receipt);
         var after = ResourceSitePhysicalIntentStateSupport.deliverHarvestBatch(state, batch);
         assertEquals(field, after.resourceSites().cycle(job.siteId()));
         assertEquals(state.actorLocations(), after.actorLocations(), "resource settlement never moves the resident");
@@ -192,6 +193,47 @@ class ResourceSiteHarvestSceneReconciliationTest {
                 receipt.emittedCanonicalRevision(), receipt.witnessId());
         assertThrows(IllegalArgumentException.class, () -> ResourceSitePhysicalIntentStateSupport.deliverHarvestBatch(before,
                 new ResourceSiteHarvestBatchDelivered(stale, 0)));
+    }
+
+    private static void assertRetiredDelivery(FrontierWorldState before, ResourceSiteHarvestJob job,
+            ResourceSiteHarvestDeliveryObservation receipt) {
+        var identity = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(
+                ActorBodyAuthority.current(before, job.workerId()), HarvestDeathResources.execution(before, job.workerId()).orElseThrow());
+        var dead = ActorBodyAuthority.died(before, ModeledActorBodyFacts.death(before, job.workerId(),
+                before.actorLocations().get(job.workerId()).body(), "fixture:delivery-death"), FrontierActorDeathConsequences.INSTANCE, 27_001);
+        var cancelled = new HarvestRetiredDeliveryObserved(identity, job.siteId(), job.deliveredYieldQuantity(),
+                receipt.harvestedQuantity(), java.util.Optional.empty());
+        assertEquals(dead, applyRetiredDelivery(dead, cancelled), "positive cancellation retains stock for its owner's drop");
+        var applied = new HarvestRetiredDeliveryObserved(identity, job.siteId(), job.deliveredYieldQuantity(),
+                receipt.harvestedQuantity(), java.util.Optional.of(receipt));
+        assertThrows(IllegalArgumentException.class, () -> applyRetiredDelivery(before, applied));
+        var settled = applyRetiredDelivery(dead, applied);
+        assertFalse(settled.inventory().fungibleResources().accounts().containsKey(job.actorAccountId()));
+        assertTrue(settled.resourceSites().site(job.siteId()).harvestJob(job.id()).isEmpty());
+        assertTrue(HarvestDeathResources.execution(settled, job.workerId()).isEmpty());
+        assertEquals(dead.resourceSites().cycle(job.siteId()), settled.resourceSites().cycle(job.siteId()));
+        assertEquals(dead.actorLocations(), settled.actorLocations(), "settlement never repositions or resurrects the farmer");
+        assertEquals(dead.inventory().fungibleResources().lots(), settled.inventory().fungibleResources().lots());
+        assertEquals(receipt.depotFingerprint(), ReferenceContainerCustody.canonicalFingerprint(settled, job.outputSlot().containerId()));
+        assertFalse(settled.physicalIntents().containsKey(job.intentId()));
+        assertEquals(settled, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(settled)));
+        assertThrows(IllegalArgumentException.class, () -> applyRetiredDelivery(settled, applied));
+        assertThrows(IllegalArgumentException.class, () -> applyRetiredDelivery(dead, new HarvestRetiredDeliveryObserved(
+                identity, job.siteId(), job.deliveredYieldQuantity() + 1, receipt.harvestedQuantity(), java.util.Optional.of(receipt))));
+    }
+
+    private static FrontierWorldState applyRetiredDelivery(FrontierWorldState state, HarvestRetiredDeliveryObserved receipt) {
+        var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(receipt, codecs.decode(receipt.type(), codecs.encode(receipt)));
+        var id = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:retired-delivery-test");
+        var command = new io.farfrontier.palemirror.frontier.v3.api.FrontierCommand(
+                io.farfrontier.palemirror.frontier.v3.api.FrontierCommand.SCHEMA_VERSION, id, state.bootstrap().worldId(),
+                new io.farfrontier.palemirror.frontier.v3.api.Revision(100), new io.farfrontier.palemirror.frontier.v3.api.SimInstant(27_001),
+                FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, io.farfrontier.palemirror.frontier.v3.api.CauseChain.root(id), receipt);
+        var plan = FrontierWorldRuntimeDefinition.planCommand(state, command);
+        if (!(plan instanceof io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan.Accepted accepted))
+            throw new IllegalArgumentException("retired delivery rejected: " + plan);
+        return GoodsTradeTest.applyEvents(state, accepted.events(), 27_001, "resource-sites");
     }
 
     @Test void retainedUnboundCargoIsBoundAndResumedAtomicallyWithoutReissuingYield() {

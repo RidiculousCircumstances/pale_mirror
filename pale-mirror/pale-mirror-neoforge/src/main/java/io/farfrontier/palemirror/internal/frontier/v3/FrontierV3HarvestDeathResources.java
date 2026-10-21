@@ -23,11 +23,12 @@ final class FrontierV3HarvestDeathResources {
                         && FrontierSceneBehaviors.resourceSiteHarvest(value).siteId().equals(job.siteId())
                         && FrontierSceneBehaviors.resourceSiteHarvest(value).jobId().equals(job.id()))
                 .reduce((left, right) -> { throw new IllegalArgumentException("dead field worker has competing scenes"); }).orElse(null);
-        var effect = lease == null ? java.util.Optional.<FrontierV3OperationAftermath>empty()
-                : FrontierV3FieldWorkOperation.deathEffect(level, runtime, state, lease, job, body, identity);
+        var effects = new ArrayList<FrontierV3OperationAftermath>();
+        if (lease != null) FrontierV3FieldWorkOperation.deathEffect(level, runtime, state, lease, job, body, identity).ifPresent(effects::add);
+        FrontierV3HarvestDeliveryOperation.deathEffect(level, state, job, body, identity).ifPresent(effects::add);
         var hand = body.getOffhandItem().copy();
-        return FrontierV3ActorDeathResourceComposition.retained(effect.stream().toList(),
-                () -> settle(level, runtime, body, id, hand, effect.stream().toList()));
+        return FrontierV3ActorDeathResourceComposition.retained(effects,
+                () -> settle(level, runtime, body, id, hand, effects));
     }
     static void recover(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             Mob body, ActorBodyId id, FrontierV3BodyResourceSnapshot snapshot) {
@@ -38,6 +39,7 @@ final class FrontierV3HarvestDeathResources {
     private static void settle(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             Mob body, ActorBodyId id, ItemStack before, List<FrontierV3OperationAftermath> effects) {
         var state = runtime.decodedState().orElseThrow(); ActorBodyAuthority.requireRetiredDeath(state, id);
+        FrontierV3HarvestDeliveryOperation.retireSettled(level, id, effects);
         var job = HarvestDeathResources.work(state, id.actorId()).orElse(null);
         if (job == null || !HarvestDeathResources.ready(state, job)) return;
         var ledger = FrontierV3ResourceSiteLedger.get(level);
