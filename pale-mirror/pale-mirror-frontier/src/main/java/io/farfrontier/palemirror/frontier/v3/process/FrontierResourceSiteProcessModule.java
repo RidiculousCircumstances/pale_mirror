@@ -24,7 +24,8 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
             "frontier.resource_field_foreign_change_acknowledged",
             "frontier.resource_field_player_break_prepared",
             "frontier.resource_site_harvest_crop_prepared",
-            "frontier.harvest_death_settled", "frontier.harvest_retired_effect_observed", "frontier.harvest_retired_delivery_observed", "frontier.resource_site_harvest_progressed", "frontier.resource_site_harvest_work_acknowledged",
+            "frontier.harvest_death_settled", "frontier.harvest_retired_effect_observed", "frontier.harvest_retired_delivery_observed",
+            "frontier.harvest_retired_hand_observed", "frontier.resource_site_harvest_progressed", "frontier.resource_site_harvest_work_acknowledged",
             "frontier.resource_site_harvest_scene_reconciled",
             "frontier.resource_site_harvest_effect_reconciled",
             "frontier.resource_site_harvest_hand_projected",
@@ -300,6 +301,16 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 return new CommandPlan.Accepted(java.util.List.of(new ProposedEvent(settled.siteId(), settled),
                         new ProposedEvent(job.id(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled(
                                 ResourceSiteHarvestProcess.coldProgress(job, 0).id()))));
+            } catch (IllegalArgumentException | IllegalStateException invalid) {
+                return FrontierWorldCommandPlanner.rejected(invalid.getMessage());
+            }
+        }
+        if (command.payload() instanceof HarvestRetiredHandObserved retired) {
+            if (!command.actor().equals(io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR))
+                return FrontierWorldCommandPlanner.rejected("retired field hand requires physical executor");
+            try {
+                HarvestHandBinding.retired(state, retired.siteId(), retired);
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(retired.siteId(), retired)));
             } catch (IllegalArgumentException | IllegalStateException invalid) {
                 return FrontierWorldCommandPlanner.rejected(invalid.getMessage());
             }
@@ -580,6 +591,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
             case ResourceSiteHarvestProgressed progressed -> ResourceSiteHarvestProcess.reduceProgressed(state, event.subject(), progressed);
             case HarvestRetiredEffectObserved retired -> ResourceSiteHarvestProcess.reduceRetiredEffect(state, event.subject(), retired);
             case HarvestRetiredDeliveryObserved retired -> HarvestDeathResources.settleDelivery(state, event.subject(), retired);
+            case HarvestRetiredHandObserved retired -> HarvestHandBinding.retired(state, event.subject(), retired);
             case HarvestDeathSettled settled -> HarvestDeathResources.settle(state, event.subject(), settled);
             case ResourceSiteHarvestWorkAcknowledged acknowledged -> ResourceSiteHarvestAcceptanceProcess.acknowledge(state, event.subject(), acknowledged);
             case ResourceSiteHarvestSceneReconciled reconciled -> ResourceSiteHarvestSceneReconciliation.reduce(state, event.subject(), reconciled);

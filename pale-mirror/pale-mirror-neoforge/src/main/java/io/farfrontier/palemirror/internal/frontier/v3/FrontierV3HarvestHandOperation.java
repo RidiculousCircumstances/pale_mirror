@@ -11,10 +11,21 @@ import java.util.Set;
 /** Field-owned hand presentation. Retained carry proof permits binding, never re-issuance.
  * The common native operation owns the one mutation attempt and durable outcome. */
 final class FrontierV3HarvestHandOperation {
+    record Binding(FrontierV3OperationReceipt.Declaration declaration, List<FrontierV3MinecraftOperation.Participant> ports) { }
     private FrontierV3HarvestHandOperation() { }
 
     static FrontierV3MinecraftOperation.Result apply(ServerLevel level, FrontierWorldState state,
             FrontierV3ResourceSiteHandProjectionWitness witness, Mob body) {
+        var binding = binding(state, witness, body);
+        return FrontierV3MinecraftOperation.apply(level, binding.declaration(), binding.ports(),
+                () -> before(state, witness, body),
+                () -> switch (witness.mode()) {
+                    case BIND_RETAINED -> retained(state, witness, body);
+                    case MATERIALIZE_COLD -> FrontierV3VillagerHandMutation.setOffhand(body, stack(witness));
+                }, () -> after(state, witness, body));
+    }
+
+    static Binding binding(FrontierWorldState state, FrontierV3ResourceSiteHandProjectionWitness witness, Mob body) {
         if (!body.getUUID().equals(witness.entityId()))
             throw new IllegalArgumentException("field hand operation has a foreign body");
         var participant = FrontierV3OperationEntityParticipant.current(body,
@@ -23,15 +34,12 @@ final class FrontierV3HarvestHandOperation {
                 FrontierV3OperationReceipt.Protocol.FIELD_HAND_PROJECTION, witness.jobId(),
                 FrontierV3OperationFingerprint.of(witness.write()), FrontierV3OperationFingerprint.of(witness.write()),
                 Set.of(participant.identity()));
-        return FrontierV3MinecraftOperation.apply(level, declaration, List.of(participant),
-                () -> before(state, witness, body),
-                () -> switch (witness.mode()) {
-                    case BIND_RETAINED -> retained(state, witness, body);
-                    case MATERIALIZE_COLD -> FrontierV3VillagerHandMutation.setOffhand(body, stack(witness));
-                },
-                () -> ItemStack.matches(body.getOffhandItem(), stack(witness))
-                        && (witness.mode() != FrontierV3ResourceSiteHandProjectionWitness.Mode.BIND_RETAINED
-                            || retained(state, witness, body)));
+        return new Binding(declaration, List.of(participant));
+    }
+
+    static boolean after(FrontierWorldState state, FrontierV3ResourceSiteHandProjectionWitness witness, Mob body) {
+        return ItemStack.matches(body.getOffhandItem(), stack(witness))
+                && (witness.mode() != FrontierV3ResourceSiteHandProjectionWitness.Mode.BIND_RETAINED || retained(state, witness, body));
     }
 
     private static boolean before(FrontierWorldState state, FrontierV3ResourceSiteHandProjectionWitness witness, Mob body) {

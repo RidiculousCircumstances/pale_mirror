@@ -104,23 +104,7 @@ public final class ResourceSiteHarvestProcess {
                 || !address.entityId().equals(lease.members().getFirst().entityId())) {
             throw new IllegalArgumentException("field hand projection has a foreign physical farmer or epoch");
         }
-        ResourceLot part = ResourceSiteHarvestCargo.part(state, job).orElseThrow(
-                () -> new IllegalArgumentException("field hand projection has no positive COLD-carried part"));
-        if (part.quantity() != projected.hand().quantity()) {
-            throw new IllegalArgumentException("field hand projection changes the accounted crop quantity");
-        }
-        FungibleResourceLedger resources = state.inventory().fungibleResources();
-        CustodyAccount account = resources.accounts().get(job.actorAccountId());
-        if (account == null || !account.custody().equals(new ResourceCustody.Actor(job.workerId()))
-                || !account.lotQuantities().equals(java.util.Map.of(part.id(), part.quantity()))
-                || !account.claimQuantities().isEmpty()
-                || resources.bindings().values().stream().anyMatch(binding -> binding.accountId().equals(account.id()))) {
-            throw new IllegalArgumentException("field hand projection lacks its unbound exact actor part");
-        }
-        var bindings = FungiblePhysicalObservation.bind(resources, account.id(), projected.actorEpoch(),
-                java.util.List.of(projected.hand()));
-        return state.withInventory(state.inventory().withFungibleResources(resources.rebind(account.id(),
-                projected.actorEpoch(), bindings)));
+        return HarvestHandBinding.bind(state, job, projected);
     }
 
     /** Releases exact physical hand authority and its scene in one event, never in two crash windows. */

@@ -222,7 +222,7 @@ class ResourceSiteHarvestSceneReconciliationTest {
                 identity, job.siteId(), job.deliveredYieldQuantity() + 1, receipt.harvestedQuantity(), java.util.Optional.of(receipt))));
     }
 
-    private static FrontierWorldState applyRetiredDelivery(FrontierWorldState state, HarvestRetiredDeliveryObserved receipt) {
+    private static FrontierWorldState applyRetiredDelivery(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierPayload receipt) {
         var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
         assertEquals(receipt, codecs.decode(receipt.type(), codecs.encode(receipt)));
         var id = new io.farfrontier.palemirror.frontier.v3.api.CommandId("command:retired-delivery-test");
@@ -264,6 +264,46 @@ class ResourceSiteHarvestSceneReconciliationTest {
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestSceneReconciliation.reduce(state, hot.site(),
                 new ResourceSiteHarvestSceneReconciled(hot.site(), job.id(), lease.id(), lease.revision(), epoch,
                         receipt.observedBody(), new FungiblePhysicalObservation.Stack(hand.address(), "minecraft:wheat", 2))));
+    }
+
+    @Test void retiredProjectionBindsOnlyExistingYieldAndAllowsItsTerminalDropWithoutResumingWork() {
+        var hot = ResourceSiteHarvestProcessTest.hotHarvestAfterColdSteps(0);
+        var accepted = oneObservedCrop(hot);
+        var job = accepted.resourceSites().site(hot.site()).harvestJob(hot.job().id()).orElseThrow();
+        var resources = accepted.inventory().fungibleResources().releaseBindings(job.actorAccountId(), hot.lease().revision());
+        var before = accepted.withInventory(accepted.inventory().withFungibleResources(resources));
+        var identity = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(
+                ActorBodyAuthority.current(before, job.workerId()), HarvestDeathResources.execution(before, job.workerId()).orElseThrow());
+        var projection = new ResourceSiteHarvestHandProjected(job.siteId(), job.id(), job.actorAccountId(), hot.lease().id(),
+                hot.lease().revision(), new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(
+                    job.workerId(), hot.lease().members().getFirst().entityId()), "minecraft:wheat", 1));
+        var receipt = new HarvestRetiredHandObserved(identity, job.siteId(), job.actorAccountId(),
+                projection.actorEpoch(), projection.hand(), job.progress().completedCropSlots());
+        var dead = ActorBodyAuthority.died(before, ModeledActorBodyFacts.death(before, job.workerId(),
+                before.actorLocations().get(job.workerId()).body(), "fixture:hand-death"), FrontierActorDeathConsequences.INSTANCE, 27_001);
+        assertThrows(IllegalArgumentException.class, () -> applyRetiredDelivery(before, receipt));
+        var bound = applyRetiredDelivery(dead, receipt);
+        assertEquals(resources.accounts(), bound.inventory().fungibleResources().accounts());
+        assertEquals(resources.lots(), bound.inventory().fungibleResources().lots());
+        assertEquals(dead.resourceSites(), bound.resourceSites());
+        assertEquals(dead.actorLocations(), bound.actorLocations());
+        assertEquals(bound, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(bound)));
+        assertThrows(IllegalArgumentException.class, () -> applyRetiredDelivery(bound, receipt));
+        assertThrows(IllegalArgumentException.class, () -> applyRetiredDelivery(dead,
+                new HarvestRetiredHandObserved(identity, job.siteId(), job.actorAccountId(),
+                    projection.actorEpoch(), projection.hand(), receipt.completedCells() + 1)));
+        var leases = new java.util.LinkedHashMap<>(dead.sceneLeases());
+        leases.put(hot.lease().id(), leases.get(hot.lease().id()).withStatus(SceneLeaseStatus.CLOSED));
+        var withoutScene = dead.withChanges(FrontierWorldStateUpdate.begin().sceneLeases(leases));
+        assertEquals(bound.inventory(), applyRetiredDelivery(withoutScene, receipt).inventory(),
+                "retained carried stock does not reacquire the former work scene");
+        var ground = new ResourceCustody.Ground(java.util.UUID.randomUUID(), new BlockPosition(1, 64, 1));
+        var settled = HarvestDeathResources.settle(bound, job.siteId(), new HarvestDeathSettled(job.siteId(), identity,
+                job.progress().completedCropSlots(), job.harvestedYieldQuantity(), job.deliveredYieldQuantity(),
+                projection.actorEpoch(), java.util.Optional.of(ground)));
+        assertTrue(HarvestDeathResources.work(settled, job.workerId()).isEmpty());
+        assertEquals(resources.lots(), settled.inventory().fungibleResources().lots());
+        assertTrue(settled.inventory().fungibleResources().accounts().values().stream().anyMatch(value -> value.custody().equals(ground)));
     }
 
     @Test void inspectedUntouchedPreparedCropResumesWithoutCreditingOrReplayingYield() {

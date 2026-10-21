@@ -53,15 +53,25 @@ public final class FrontierV3HarvestHandOperationGameTests {
                 body.setItemInHand(net.minecraft.world.InteractionHand.OFF_HAND, new ItemStack(Items.WHEAT, 7));
                 FrontierV3ActorCarryProjection.rememberConfirmed(state, actor, body);
             }
+            var identity = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(bodyId,
+                    state.actorExecutions().next(actor, ActorActivityKind.FIELD_HARVEST, witness.jobId()));
+            helper.assertTrue(FrontierV3HarvestHandAftermath.capture(level, state, witness, body, identity).isEmpty(),
+                    "native item counts alone cannot prove a projection for death aftermath");
             var result = FrontierV3HarvestHandOperation.apply(level, state, witness, body);
             helper.assertTrue(result.complete(), "declared projection reaches its exact physical hand");
             helper.assertValueEqual(body.getOffhandItem().getCount(), 7, "only the accounted quantity is presented");
             var repeated = FrontierV3HarvestHandOperation.apply(level, state, witness, body);
             helper.assertValueEqual(repeated.status(), FrontierV3MinecraftOperation.Status.OBSERVED, "same intent observes, never reissues");
             helper.assertValueEqual(result.ticket(), repeated.ticket(), "one common operation owns both calls");
+            var aftermath = FrontierV3HarvestHandAftermath.capture(level, state, witness, body, identity).orElseThrow();
+            helper.assertValueEqual(aftermath.child().ticket(), result.ticket(), "aftermath retains the original projection, not another issue");
+            helper.assertValueEqual(FrontierV3OperationAftermath.load(aftermath.save()), aftermath,
+                    "the exact body/execution and observed hand survive the pre-loot snapshot codec");
             body.setItemInHand(net.minecraft.world.InteractionHand.OFF_HAND, ItemStack.EMPTY);
             var changed = FrontierV3HarvestHandOperation.apply(level, state, witness, body);
             helper.assertTrue(!changed.complete() && body.getOffhandItem().isEmpty(), "external removal cannot mint a replacement stack");
+            helper.assertTrue(FrontierV3HarvestHandAftermath.capture(level, state, witness, body, identity).isEmpty(),
+                    "historical applied receipt cannot bind a missing pre-loot hand");
             if (mode == FrontierV3ResourceSiteHandProjectionWitness.Mode.BIND_RETAINED) {
                 var other = new FrontierV3ResourceSiteHandProjectionWitness(witness.siteId(), witness.jobId(), account,
                         lot.id(), actor, body.getUUID(), witness.leaseId(), 2, 1, 7, 7, mode);
