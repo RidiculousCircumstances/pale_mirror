@@ -25,14 +25,12 @@ public record ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits, Ma
             throw new IllegalArgumentException("invalid extraction site register");
         if (nextWorkOrdinal < 1 || work.size() > MAX_WORK || work.entrySet().stream().anyMatch(entry -> !entry.getKey().equals(entry.getValue().id())))
             throw new IllegalArgumentException("invalid bounded extraction work register");
-        var sourceCells = new HashSet<io.farfrontier.palemirror.frontier.v3.model.BlockPosition>();
         for (var deposit : deposits.values()) for (var id : deposit.site().mineralDeposits()) {
             var mineral = geology.deposits().get(id);
             if (mineral == null || !knowledge.knows(deposit.site().settlementId(), mineral))
                 throw new IllegalArgumentException("worksite requires explicit current knowledge of its declared deposits");
         }
-        for (var deposit : deposits.values()) for (var cell : deposit.site().layout().cells())
-            if (!sourceCells.add(cell.source())) throw new IllegalArgumentException("competing extraction source ownership");
+        ExtractionGeometryIndex.forDeposits(deposits); // Exact immutable declarations own the source-uniqueness proof.
         var actors = new HashSet<SubjectId>(); var tools = new HashSet<SubjectId>();
         var targets = new HashSet<io.farfrontier.palemirror.frontier.v3.model.CellMutationKey>();
         for (var job : work.values()) {

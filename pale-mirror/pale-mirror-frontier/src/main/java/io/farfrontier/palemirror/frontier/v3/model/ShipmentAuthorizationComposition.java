@@ -41,6 +41,11 @@ final class ShipmentAuthorizationComposition {
     static boolean recallable(FrontierWorldState state, Shipment shipment) {
         return PORTS.get(shipment.authorization().kind()).recallable(state, shipment);
     }
+    static boolean withdrawalRequired(FrontierWorldState state, Shipment shipment, long now) {
+        var port = PORTS.get(shipment.authorization().kind());
+        port.validate(state, shipment, false);
+        return port.withdrawalRequired(state, shipment, now);
+    }
     static FrontierWorldStateUpdate cancelledAtSource(FrontierWorldState state, Shipment shipment,
             ShipmentReception receipt, FrontierWorldStateUpdate transferred) {
         var owned = java.util.EnumSet.of(FrontierWorldStateUpdate.Component.INVENTORY, FrontierWorldStateUpdate.Component.COMPANIES);

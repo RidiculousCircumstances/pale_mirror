@@ -3,6 +3,8 @@ package io.farfrontier.palemirror.frontier.v3.model;
 /** The authorizing family owns permission/terms; logistics only consumes its exact declaration. */
 interface ShipmentAuthorizationPort {
     default boolean recallable(FrontierWorldState state, Shipment shipment) { return false; }
+    /** The issuer, not transport, decides whether an unfulfilled promise must be withdrawn. */
+    default boolean withdrawalRequired(FrontierWorldState state, Shipment shipment, long now) { return false; }
     default FrontierWorldStateUpdate cancelledAtSource(FrontierWorldState state, Shipment shipment,
             ShipmentReception receipt, ExactInventory inventory, CompanyRegistry companies) {
         throw new IllegalArgumentException("shipment issuer has not authorized a source return");

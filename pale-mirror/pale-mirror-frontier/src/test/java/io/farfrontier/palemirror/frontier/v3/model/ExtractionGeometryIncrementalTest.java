@@ -25,6 +25,10 @@ class ExtractionGeometryIncrementalTest {
         var facts = new ExtractionGeometryFacts(); var prior = facts.read(state, original);
         var provider = new ExtractionKnownGeometry(); var before = provider.project(state);
         var changed = original.extracted(cell.id(), 1, "effect:regional-test"); var after = replace(state, changed);
+        var ownership = ExtractionGeometryIndex.forDeposits(state.extractionSites().deposits());
+        assertSame(ownership, ExtractionGeometryIndex.forDeposits(after.extractionSites().deposits()),
+                "depletion preserves the validated declaration ownership index");
+        assertTrue(ownership.owns(cell.source()), "depleted sources remain owned until explicit retirement");
         var current = facts.read(after, changed);
         assertEquals(Set.of(Region.at(cell.source())), current.changesFrom(prior));
         for (var region : prior.regions()) if (!region.equals(Region.at(cell.source()))) assertSame(prior.in(region), current.in(region));
@@ -71,6 +75,10 @@ class ExtractionGeometryIncrementalTest {
                 layout.terrainSupports(), layout.terrainIds()));
         var facts = new ExtractionGeometryFacts(); var before = facts.read(state, original);
         var afterState = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().extend(original, extended)));
+        var ownership = ExtractionGeometryIndex.forDeposits(state.extractionSites().deposits());
+        assertFalse(ownership.owns(source));
+        assertTrue(ExtractionGeometryIndex.forDeposits(afterState.extractionSites().deposits()).owns(source));
+        assertFalse(ownership.owns(source), "an extension cannot mutate the predecessor declaration");
         var after = facts.read(afterState, extended);
         assertEquals(Set.of(Region.at(source)), after.changesFrom(before));
         assertEquals(cells.getLast().definition().before().kind(), after.get(source).orElseThrow().kind());

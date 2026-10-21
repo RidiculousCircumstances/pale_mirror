@@ -35,9 +35,8 @@ public record ExtractionGeologyInvalidated(List<Observation> observations) imple
             if (fact.revision() != observation.stratumRevision())
                 throw new IllegalArgumentException("stale geological observation");
         }
-        if (state.extractionSites().deposits().values().stream().anyMatch(deposit ->
-                deposit.site().layout().fixedBlocks().keySet().stream().anyMatch(positions::contains)
-                || deposit.site().layout().cells().stream().anyMatch(cell -> positions.contains(cell.source()))))
+        var ownership = io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionGeometryIndex.forDeposits(state.extractionSites().deposits());
+        if (positions.stream().anyMatch(ownership::owns))
             throw new IllegalArgumentException("geology already has a worksite owner");
         return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().invalidateGeology(positions)));
     }

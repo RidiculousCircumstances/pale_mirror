@@ -4,7 +4,12 @@ package io.farfrontier.palemirror.frontier.v3.model;
 final class GoodsShipmentAuthorization implements ShipmentAuthorizationPort {
     @Override public boolean recallable(FrontierWorldState state, Shipment shipment) {
         var contract = state.companies().goodsTrade().contracts().get(shipment.authorization().claimantId());
-        return contract != null && contract.fulfillment().mode() == GoodsTradeFulfillment.Mode.SELLER_DELIVERY;
+        return contract != null && (contract.fulfillment().mode() == GoodsTradeFulfillment.Mode.SELLER_DELIVERY
+                || shipment.status() == Shipment.Status.AWAITING_LOAD);
+    }
+    @Override public boolean withdrawalRequired(FrontierWorldState state, Shipment shipment, long now) {
+        return shipment.status() == Shipment.Status.AWAITING_LOAD && GoodsTradeSourceAdmission.withdrawalReason(state,
+                state.companies().goodsTrade().contracts().get(shipment.authorization().claimantId()), now).isPresent();
     }
     @Override public FrontierWorldStateUpdate cancelledAtSource(FrontierWorldState state, Shipment shipment,
             ShipmentReception receipt, ExactInventory inventory, CompanyRegistry companies) {

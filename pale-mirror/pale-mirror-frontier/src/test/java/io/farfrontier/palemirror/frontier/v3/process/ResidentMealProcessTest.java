@@ -539,9 +539,10 @@ class ResidentMealProcessTest {
                 new ResidentMealHotArrived(resident, 1L, service.standingBody(),
                         ModeledActorBodyFacts.hotObservation(state, meal.executionId(), 1L)));
         assertEquals(ResidentMeal.Phase.TAKE, state.humanPopulation().meals().get(resident).phase());
-        state = ResidentMealProcess.reduceHotPrepared(state, resident,
-                new ResidentMealHotEffectPrepared(resident,
-                        new ResidentMealPhysicalStep(ResidentMeal.Phase.TAKE, 0, 64, 1L, 1L, 1L, meal.executionId())));
+        var preparation = new ResidentMealHotEffectPrepared(resident,
+                new ResidentMealPhysicalStep(ResidentMeal.Phase.TAKE, 0, 64, 1L, 1L, 1L, meal.executionId()));
+        assertTrue(preparation.requiresDurableBeforeEffect(), "the executor may act immediately after acceptance");
+        state = ResidentMealProcess.reduceHotPrepared(state, resident, preparation);
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         assertFatalityRetainsMealResources(state, resident, 421L, 48_001L,
                 ResidentMealResourceObligation.CustodyState.SOURCE_TAKE_PENDING);

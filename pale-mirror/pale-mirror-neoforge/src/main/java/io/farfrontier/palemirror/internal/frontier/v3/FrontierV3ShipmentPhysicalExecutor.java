@@ -28,11 +28,14 @@ final class FrontierV3ShipmentPhysicalExecutor {
 
     private static boolean progress(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             FrontierWorldState state, Shipment shipment) {
-        if (shipment.transportMissionId().map(state.shipments().missions()::get).flatMap(TransportMission::supplies)
-                .filter(load -> !load.complete()).isPresent()) return false;
         var actor = shipment.execution().actorId();
         var entity = level.getEntity(ActorBodyId.entityId(state.bootstrap().worldId(), actor));
+        // Saved custody closes independently of permission to start the next trip.
+        // A carrier eating during provisioning still has to release its physical cargo
+        // on unload; otherwise its suspended group prevents the meal entering COLD.
         if (entity == null) return savedDeparture(level, runtime, state, shipment);
+        if (shipment.transportMissionId().map(state.shipments().missions()::get).flatMap(TransportMission::supplies)
+                .filter(load -> !load.complete()).isPresent()) return false;
         if (!(entity instanceof Mob worker) || !worker.isAlive()
                 || !FrontierV3ActorBodyController.recognizesRecordedBody(level, state, worker)) return false;
         var lease = state.ambientLeases().get(actor);

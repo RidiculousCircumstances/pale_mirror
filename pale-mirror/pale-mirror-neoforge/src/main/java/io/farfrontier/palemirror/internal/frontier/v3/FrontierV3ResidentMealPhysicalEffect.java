@@ -107,8 +107,16 @@ final class FrontierV3ResidentMealPhysicalEffect {
             ResidentMealPhysicalStep step = new ResidentMealPhysicalStep(ResidentMeal.Phase.TAKE,
                     sourceCounts, 0, slices.getFirst().epoch(),
                     lease.revision(), lease.revision(), meal.executionId());
-            return accepted(level, runtime, meal.residentId(), "resident-meal-take-prepare",
-                    new ResidentMealHotEffectPrepared(meal.residentId(), step));
+            if (!accepted(level, runtime, meal.residentId(), "resident-meal-take-prepare",
+                    new ResidentMealHotEffectPrepared(meal.residentId(), step))) return false;
+            // The WAL fence is durable before submit returns. Finish this atomic
+            // interaction in the same server callback: a later tick may already have
+            // unloaded either participant. Re-enter only with the retained step.
+            var prepared = runtime.decodedState().orElseThrow();
+            var next = prepared.humanPopulation().meals().get(meal.residentId());
+            if (next == null || !next.pendingPhysicalStep().equals(java.util.Optional.of(step)))
+                throw new IllegalStateException("accepted meal preparation lost its exact pending effect");
+            return take(level, runtime, prepared, next, worker, lease);
         }
         if (pending.phase() != ResidentMeal.Phase.TAKE || pending.ambientRevision() != lease.revision()
                 || !pending.sourceCounts().equals(sourceCounts)
@@ -145,10 +153,16 @@ final class FrontierV3ResidentMealPhysicalEffect {
         ResidentMealPhysicalStep pending = meal.pendingPhysicalStep().orElse(null);
         if (pending == null) {
             if (!before) return false;
-            return accepted(level, runtime, meal.residentId(), "resident-meal-consume-prepare",
-                    new ResidentMealHotEffectPrepared(meal.residentId(), new ResidentMealPhysicalStep(
+            var step = new ResidentMealPhysicalStep(
                             ResidentMeal.Phase.CONSUME, -1, meal.portion().quantity(), bindings.getFirst().authorityEpoch(),
-                            0L, lease.revision(), meal.executionId())));
+                            0L, lease.revision(), meal.executionId());
+            if (!accepted(level, runtime, meal.residentId(), "resident-meal-consume-prepare",
+                    new ResidentMealHotEffectPrepared(meal.residentId(), step))) return false;
+            var prepared = runtime.decodedState().orElseThrow();
+            var next = prepared.humanPopulation().meals().get(meal.residentId());
+            if (next == null || !next.pendingPhysicalStep().equals(java.util.Optional.of(step)))
+                throw new IllegalStateException("accepted meal preparation lost its exact pending effect");
+            return consume(level, runtime, prepared, next, worker, lease);
         }
         if (pending.phase() != ResidentMeal.Phase.CONSUME || pending.ambientRevision() != lease.revision()
                 || pending.consumptionQuantity() != meal.portion().quantity()

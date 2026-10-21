@@ -13,4 +13,5 @@ public record ResidentMealHotEffectPrepared(SubjectId residentId,
         Objects.requireNonNull(step, "meal physical step");
     }
     @Override public String type() { return "frontier.resident_meal_hot_effect_prepared"; }
+    @Override public boolean requiresDurableBeforeEffect() { return true; }
 }

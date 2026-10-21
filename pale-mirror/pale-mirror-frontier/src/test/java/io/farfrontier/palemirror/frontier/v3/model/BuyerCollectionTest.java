@@ -11,6 +11,69 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Actual policy/queue itinerary, including commercial pickup and current-schema in-flight recovery. */
 class BuyerCollectionTest {
+    @Test void depletedSourceReserveReleasesUnloadedRemoteGoodsAndMoneyWithoutAWorldTransfer() {
+        var configuration = FrontierV3FixtureCatalog.buyerCollectionConfiguration(
+                new WorldId("frontier:buyer-preparation-recall"), 20260918065L);
+        var engine = FrontierEngines.createCanonicalStateAccess(configuration);
+        for (int turn = 0; turn < 256; turn++) {
+            var state = engine.canonicalState().state();
+            if (state.shipments().missions().values().stream().anyMatch(mission -> mission.preparingSupplies()
+                    && io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.mayReconsider(state, mission))) break;
+            var next = engine.checkpoint().schedules().stream().filter(a -> !FrontierWorldRuntimeDefinition.scheduledHeld(state, a))
+                    .sorted().findFirst().orElseThrow();
+            assertEquals(EngineStatus.Kind.ACTIVE, engine.advanceTo(new SimInstant(Math.max(
+                    engine.checkpoint().instant().ticks(), next.dueAt().ticks())), new WorkBudget(1, 1024)).status().kind());
+        }
+        var state = engine.canonicalState().state();
+        var mission = state.shipments().missions().values().iterator().next();
+        assertEquals(TransportMission.Stage.PREPARING, mission.stage());
+        assertTrue(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.mayReconsider(state, mission),
+                "fixture must reach a reversible preparation boundary before removing food");
+        var resources = state.inventory().fungibleResources();
+        var depletedKinds = new HashSet<String>();
+        depletedKinds.add(FoodCatalog.BREAD);
+        for (var id : mission.shipmentIds()) depletedKinds.add(state.shipments().shipments().get(id).itemKind());
+        for (var account : new ArrayList<>(resources.accounts().values())) {
+            var food = new LinkedHashMap<SubjectId, Integer>();
+            for (var entry : account.lotQuantities().entrySet()) {
+                if (!depletedKinds.contains(resources.lots().get(entry.getKey()).itemKind())) continue;
+                int reserved = 0;
+                for (var claim : account.claimQuantities().keySet())
+                    reserved += resources.claims().get(claim).lotQuantities().getOrDefault(entry.getKey(), 0);
+                if (entry.getValue() > reserved) food.put(entry.getKey(), entry.getValue() - reserved);
+            }
+            if (!food.isEmpty()) resources = resources.destroy(account.id(), food, Map.of());
+        }
+        state = state.withInventory(state.inventory().withFungibleResources(resources));
+        // The collection fixture disables all seller work to select buyer transport.
+        // Re-enable a real bakery after admission: its inputs now have a local need.
+        var sellerId = mission.sender().settlementId();
+        var baker = state.humanPopulation().residents().values().stream()
+                .filter(resident -> resident.settlementId().equals(sellerId)).findFirst().orElseThrow();
+        state = state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans()
+                .withWorkPermissions(sellerId, new ResidentWorkPermissions(Map.of(ResidentWorkKind.BAKING, Set.of(baker.id()))))));
+        long now = engine.checkpoint().instant().ticks();
+        assertTrue(TransportPreparationRecovery.needed(state, mission, now));
+        var before = state;
+        var after = TransportPreparationRecovery.recall(state, mission, now);
+        assertEquals(before.actorLocations(), after.actorLocations());
+        assertEquals(before.inventory().economics().accounts(), after.inventory().economics().accounts(), "no payment or refund is invented");
+        for (var id : mission.shipmentIds()) {
+            var parcel = before.shipments().shipments().get(id);
+            assertEquals(Shipment.Status.ALLOCATION_WITHDRAWN, after.shipments().shipments().get(id).status());
+            assertEquals(before.inventory().fungibleResources().accounts().get(parcel.sourceAccountId()).lotQuantities(),
+                    after.inventory().fungibleResources().accounts().get(parcel.sourceAccountId()).lotQuantities());
+            assertFalse(after.inventory().fungibleResources().claims().containsKey(parcel.authorization().claimId()));
+            var contract = after.companies().goodsTrade().contracts().get(parcel.authorization().claimantId());
+            assertTrue(contract.terminal());
+            assertFalse(after.inventory().economics().reservations().containsKey(contract.financialReservationId()));
+        }
+        assertEquals(TransportMission.Stage.RECOVERING, after.shipments().missions().get(mission.id()).stage());
+        var codec = new FrontierWorldStateCodec();
+        assertEquals(after, codec.decode(codec.encode(after)));
+        assertThrows(IllegalArgumentException.class, () -> TransportPreparationRecovery.recall(after, mission, now),
+                "the same withdrawal cannot release resources twice");
+    }
     @Test void buyerCollectsWhenSellerHasNoCrewPaysOnlyAtPickupAndReturnsOwnedCargoAfterRecovery() {
         var configuration = FrontierV3FixtureCatalog.buyerCollectionConfiguration(
                 new WorldId("frontier:buyer-collection"), 20260918065L);
