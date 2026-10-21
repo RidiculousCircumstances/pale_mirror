@@ -13,16 +13,14 @@ class FrontierV3PlayerCustodyRecoveryTest {
             new SubjectId("binding:player-recovery"), 7L, "minecraft:wheat", 32, "bf39347d-cb86-3221-b6b7-7b89a1dcb4cf");
 
     @Test
-    void onlyAnUnresolvedCanonicalFirstSaveGapMayMaterializeItsExactEmptySlot() {
-        assertEquals(FrontierV3PlayerCustodyRecovery.Decision.MATERIALIZE,
-                FrontierV3PlayerCustodyRecovery.decision(EXPECTED, new FrontierV3PlayerResourceDiagnostic.Actual("", 0), false));
+    void missingOrPresentLegacyMarkerNeverAuthorizesRecreatingAnEmptyPlayerSlot() {
         assertEquals(FrontierV3PlayerCustodyRecovery.Decision.LOCAL_AMBIGUITY,
-                FrontierV3PlayerCustodyRecovery.decision(EXPECTED, new FrontierV3PlayerResourceDiagnostic.Actual("", 0), true));
+                FrontierV3PlayerCustodyRecovery.decision(EXPECTED, new FrontierV3PlayerResourceDiagnostic.Actual("", 0)));
         assertEquals(FrontierV3PlayerCustodyRecovery.Decision.CURRENT,
-                FrontierV3PlayerCustodyRecovery.decision(EXPECTED, new FrontierV3PlayerResourceDiagnostic.Actual("minecraft:wheat", 32), true));
+                FrontierV3PlayerCustodyRecovery.decision(EXPECTED, new FrontierV3PlayerResourceDiagnostic.Actual("minecraft:wheat", 32)));
         assertEquals(FrontierV3PlayerCustodyRecovery.Decision.CONFLICT,
-                FrontierV3PlayerCustodyRecovery.decision(EXPECTED, new FrontierV3PlayerResourceDiagnostic.Actual("minecraft:bread", 32), false));
+                FrontierV3PlayerCustodyRecovery.decision(EXPECTED, new FrontierV3PlayerResourceDiagnostic.Actual("minecraft:bread", 32)));
         assertEquals(FrontierV3PlayerCustodyRecovery.Decision.CONFLICT,
-                FrontierV3PlayerCustodyRecovery.decision(EXPECTED, new FrontierV3PlayerResourceDiagnostic.Actual("minecraft:wheat", 64), false));
+                FrontierV3PlayerCustodyRecovery.decision(EXPECTED, new FrontierV3PlayerResourceDiagnostic.Actual("minecraft:wheat", 64)));
     }
 }

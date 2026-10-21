@@ -147,7 +147,7 @@ class ResidentFoodPortionTest {
                 new ResidentMealPhysicalStep(ResidentMeal.Phase.CONSUME, -1, 9, 1, 0, 1, started.meal().executionId()))));
         var consumed = new ResidentMealHotEffectObserved(resident, ResidentMeal.Phase.CONSUME, 1,
                 eating, List.of(), List.of(), started.meal().executionId());
-        var events = ResidentMealProcess.planHotObserved(state, consumed, 96_002);
+        var events = ResidentMealProcess.planHotObserved(state, consumed, 96_002, 1L);
         assertTrue(events.stream().anyMatch(event -> event.payload().equals(consumed)));
         for (var event : events) {
             if (event.payload() instanceof ResidentStarvationIntegrated health)

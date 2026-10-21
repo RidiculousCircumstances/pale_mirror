@@ -204,6 +204,8 @@ public final class FrontierV3ServerLifecycle {
                     () -> birthLedger.persist(physicalWorld, birthWorld), new FrontierStoreTransactionCommitter(store));
             runtime = FrontierV3ServerRuntime.startRecovered(configuration.withExecutionMetrics(metrics), store, recovery, 200,
                     diagnosticIdentity, birthCommitter);
+            if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE)
+                FrontierV3OperationConfirmation.recover(physicalWorld, runtime);
             runtime.decodedState().ifPresent(recovered -> FrontierV3ActorBirthRecovery.retireUnpublished(recovered,
                     birthLedger, () -> birthLedger.persist(physicalWorld, birthWorld)));
         } catch (RuntimeException error) {
@@ -844,39 +846,17 @@ public final class FrontierV3ServerLifecycle {
     public static void observeEntityChunkWrite(ServerLevel level, net.minecraft.world.level.ChunkPos chunk,
                                                net.minecraft.nbt.CompoundTag data,
                                                java.util.concurrent.CompletableFuture<Void> written) {
-        var runtime = RUNTIMES.get(level.getServer());
-        if (FrontierV3PhysicalWorld.isPhysical(level) && runtime != null
-                && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
-            FrontierV3ActorAdoptionPersistence.observeWrite(level, runtime, chunk, data, written);
-            FrontierV3SceneDeparturePersistence.observeWrite(level, runtime, chunk, data, written);
-        }
+        FrontierV3EntityPersistenceObservers.write(level, RUNTIMES.get(level.getServer()), chunk, data, written);
     }
 
     public static void completeEntitySavePass(ServerLevel level, boolean complete,
                                               java.util.function.Supplier<java.util.concurrent.CompletableFuture<Void>> synchronize) {
-        var runtime = RUNTIMES.get(level.getServer());
-        if (FrontierV3PhysicalWorld.isPhysical(level) && runtime != null
-                && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
-            FrontierV3ActorAdoptionPersistence.completeSavePass(level, runtime, complete, synchronize);
-            FrontierV3SceneDeparturePersistence.completeSavePass(level, runtime, complete, synchronize);
-        }
+        FrontierV3EntityPersistenceObservers.complete(level, RUNTIMES.get(level.getServer()), complete, synchronize);
     }
 
     /** Retain raw unload observations at the completed chunk-store boundary. */
     public static void persistRawEntityDepartures(ServerLevel level, Supplier<java.util.concurrent.CompletableFuture<Void>> synchronize) {
-        var runtime = RUNTIMES.get(level.getServer());
-        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null
-                || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
-        var state = runtime.decodedState().orElse(null);
-        if (state == null) return;
-        var world = state.bootstrap().worldId();
-        try { FrontierV3AmbientCarrierLedger.get(level, world).persist(level, world); }
-        catch (RuntimeException failure) {
-            PaleMirrorMod.LOGGER.error("Scene raw departure publication failed; custody remains unresolved", failure);
-        }
-        // These are positive exact-incarnation writes, not global absence proofs.
-        FrontierV3ActorAdoptionPersistence.completeSavePass(level, runtime, true, synchronize);
-        FrontierV3SceneDeparturePersistence.confirmRecordedDepartures(level, runtime, synchronize);
+        FrontierV3EntityPersistenceObservers.departed(level, RUNTIMES.get(level.getServer()), synchronize);
     }
 
     public static java.util.concurrent.CompletableFuture<java.util.Optional<net.minecraft.nbt.CompoundTag>> observeEntityChunkRead(
@@ -888,6 +868,11 @@ public final class FrontierV3ServerLifecycle {
     }
     private static boolean stopping(MinecraftServer server) {
         return STOPPING.containsKey(server);
+    }
+    static boolean acceptsNativeOperationSaves(ServerLevel level) {
+        var runtime = RUNTIMES.get(level.getServer());
+        return FrontierV3PhysicalWorld.isPhysical(level) && !stopping(level.getServer())
+                && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE;
     }
     /** Validate a supplied canonical owner against the actual server of a physical level. */
     static boolean ownsRuntime(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {

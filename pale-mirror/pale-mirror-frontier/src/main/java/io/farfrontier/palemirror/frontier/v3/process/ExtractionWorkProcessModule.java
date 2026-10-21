@@ -15,7 +15,7 @@ final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
     static final DeterministicProcessDescriptor DESCRIPTOR = new DeterministicProcessDescriptor("extraction",
             COMMANDS, Set.of(ExtractionContinuation.PROGRESS, ExtractionContinuation.REVIEW), TYPES,
             java.util.stream.Stream.concat(TYPES.stream(), Set.of("frontier.actor_movement_interrupted", "frontier.actor_movement_started", "kernel.schedule_created",
-                    "frontier.ambient_lease_transition", "kernel.schedule_rescheduled", "kernel.schedule_cancelled").stream()).collect(java.util.stream.Collectors.toUnmodifiableSet()), TYPES);
+                    "frontier.ambient_lease_transition", "frontier.reference_mutation_closed", "kernel.schedule_rescheduled", "kernel.schedule_cancelled").stream()).collect(java.util.stream.Collectors.toUnmodifiableSet()), TYPES);
     @Override public List<ScheduledAction> initialSchedules(FrontierBootstrap bootstrap) {
         return GrayboxQuarryPlan.initial(bootstrap).deposits().values().stream()
                 .map(deposit -> deposit.site().settlementId()).distinct().sorted()
@@ -78,6 +78,9 @@ final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
                     id = observed.jobId();
                     var preview = ExtractionPhysicalStateSupport.observed(state, id, observed, command.expectedRevision().next().value(), command.submittedAt().ticks());
                     var original = state.extractionSites().work().get(id);
+                    if (!(observed.step() instanceof io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionPhysicalStep.BlockWork))
+                        events.addAll(ConfirmedContainerMutationPlan.close(preview,
+                                List.of(ExtractionServiceAccess.identity(state, original).pointId()), command.expectedRevision().next().value()));
                     preview = ExtractionDevelopmentContinuation.appendAfterObservation(preview, original.siteId(), events, command.submittedAt().ticks());
                     if (preview.extractionSites().work().containsKey(id)) {
                         if (events.stream().noneMatch(proposed -> proposed.subject().equals(observed.jobId()) && proposed.payload() instanceof ScheduleEffect))

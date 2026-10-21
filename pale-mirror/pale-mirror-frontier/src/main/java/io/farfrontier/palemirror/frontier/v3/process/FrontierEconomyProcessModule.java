@@ -184,6 +184,11 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                 var successor = ProductionProcess.reduceBakeryHotEffectObserved(state, job.settlementId(), observed);
                 var events = new java.util.ArrayList<ProposedEvent>();
                 events.add(new ProposedEvent(job.settlementId(), observed));
+                var work = job.bakeryWork().orElseThrow();
+                SubjectId container = work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
+                        || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY ? BakeryStorage.current(job)
+                        : ProductionStationEnergy.record(state, work.stationId()).id();
+                events.addAll(ConfirmedContainerMutationPlan.close(successor, List.of(container), command.expectedRevision().next().value()));
                 events.addAll(BakeryCompletionPlanning.stationReleaseWake(state, successor, job.id(),
                         command.id().value(), command.submittedAt().ticks()));
                 if (job.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DEPOT_DELIVERY

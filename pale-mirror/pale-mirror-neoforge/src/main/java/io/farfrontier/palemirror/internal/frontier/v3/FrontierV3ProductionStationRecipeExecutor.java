@@ -29,14 +29,16 @@ final class FrontierV3ProductionStationRecipeExecutor {
             var input = new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(source.itemKind())), source.quantity());
             var output = new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(recipe.product().itemKind())), operation.outputQuantity());
             var effect = new FrontierV3StationRecipeEffect(physical.inventory(), station, recipe, input, operation.inputQuantity(), output);
-            if (!effect.before() && !effect.after()) throw new IllegalStateException("station recipe lost prepared pre/postimage: " + boundary);
-            if (effect.before()) effect.apply();
+            var participants = List.of(physical.persistence().get());
+            var declaration = FrontierV3MinecraftOperation.declaration(FrontierV3OperationReceipt.Protocol.STATION_RECIPE, machine.stationId(),
+                    new ProductionStationRecipeChanged(ProductionStationRecipeChanged.Stage.HOT_PREPARED, boundary, List.of()), participants);
+            var applied = FrontierV3MinecraftOperation.apply(level, declaration, participants, effect::before,
+                    () -> { effect.apply(); return true; }, effect::after);
+            if (!applied.complete()) continue;
             var observed = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(physical.inventory(), state, record.id());
-            var result = FrontierV3CommandSubmission.submitResult(runtime, "station-recipe-completed", machine.stationId().value(),
+            boolean accepted = FrontierV3OperationConfirmation.submit(level, runtime, applied.ticket(),
                     new ProductionStationRecipeChanged(ProductionStationRecipeChanged.Stage.HOT_COMPLETED, boundary, observed));
-            if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("station recipe receipt rejected after effect: " + boundary + " result=" + result);
-            if (!FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime, record.id(), physical))
-                throw new IllegalStateException("station recipe completion lacks its next replica boundary: " + boundary);
+            if (!accepted) throw new IllegalStateException("station recipe receipt rejected after effect: " + boundary);
             return;
         }
     }

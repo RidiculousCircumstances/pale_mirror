@@ -59,6 +59,7 @@ final class FrontierV3FixedContainerProviders {
                     || spec.fuelSlot() != ProductionBenchBlockEntity.FUEL)
                 throw new IllegalArgumentException("station port layout differs from registered equipment adapter");
         }
-        return Optional.of(new FrontierV3PhysicalContainer(record.id(), inventory, entity.getPersistentData(), entity.getBlockPos()));
+        return Optional.of(new FrontierV3PhysicalContainer(record.id(), inventory, entity.getPersistentData(), entity.getBlockPos(),
+                () -> FrontierV3OperationBlockEntityParticipant.current(entity)));
     }
 }

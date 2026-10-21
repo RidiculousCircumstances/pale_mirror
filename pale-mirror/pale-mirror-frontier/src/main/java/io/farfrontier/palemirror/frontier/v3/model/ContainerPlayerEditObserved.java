@@ -33,10 +33,11 @@ public record ContainerPlayerEditObserved(UUID playerId, UUID interactionId, Lis
     public ContainerPlayerEditObserved {
         Objects.requireNonNull(playerId); Objects.requireNonNull(interactionId); Objects.requireNonNull(returning);
         members = List.copyOf(members);
-        if (members.size() < 2 || members.size() > 54
+        if (members.isEmpty() || members.size() > 54
                 || members.stream().map(Member::containerId).distinct().count() != members.size()
                 || members.stream().map(Member::accountId).distinct().count() != members.size())
             throw new IllegalArgumentException("composed edit requires distinct explicitly declared members");
     }
     @Override public String type() { return "frontier.container_player_edit_observed"; }
+    @Override public boolean requiresDurableBeforeEffect() { return true; }
 }

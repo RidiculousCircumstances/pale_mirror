@@ -57,7 +57,7 @@ final class FrontierV3StoredEntityCensus {
         var reads = new ArrayList<CompletableFuture<Column>>(end - offset);
         for (int index = offset; index < end; index++) {
             ChunkPos chunk = columns.get(index);
-            reads.add(access.frontierV3$readStoredEntityChunkAfterSync(chunk)
+            reads.add(access.frontierV3$readOrderedEntityChunk(chunk)
                     .thenApplyAsync(raw -> select(raw, chunk, targets), net.minecraft.Util.backgroundExecutor()));
         }
         return CompletableFuture.allOf(reads.toArray(CompletableFuture[]::new)).thenCompose(ignored -> {

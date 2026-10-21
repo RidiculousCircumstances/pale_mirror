@@ -25,4 +25,5 @@ public record ResidentMealHotEffectObserved(SubjectId residentId, ResidentMeal.P
             throw new IllegalArgumentException("invalid HOT meal effect witness");
     }
     @Override public String type() { return "frontier.resident_meal_hot_effect_observed"; }
+    @Override public boolean requiresDurableBeforeEffect() { return true; }
 }

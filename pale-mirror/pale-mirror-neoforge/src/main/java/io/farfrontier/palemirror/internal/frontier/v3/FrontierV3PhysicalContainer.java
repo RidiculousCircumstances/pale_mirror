@@ -13,10 +13,12 @@ import java.util.Objects;
 import java.util.Optional;
 
 /** Thin physical port. Declared identity selects the provider; a nearby body never does. */
-record FrontierV3PhysicalContainer(SubjectId containerId, Container inventory, CompoundTag declaration, BlockPos position) {
+record FrontierV3PhysicalContainer(SubjectId containerId, Container inventory, CompoundTag declaration, BlockPos position,
+        java.util.function.Supplier<FrontierV3MinecraftOperation.Participant> persistence) {
     FrontierV3PhysicalContainer {
         Objects.requireNonNull(containerId); Objects.requireNonNull(inventory);
         Objects.requireNonNull(declaration); Objects.requireNonNull(position);
+        Objects.requireNonNull(persistence);
     }
 
     static Optional<FrontierV3PhysicalContainer> loaded(ServerLevel level, FrontierWorldState state, SubjectId id) {
@@ -51,7 +53,7 @@ record FrontierV3PhysicalContainer(SubjectId containerId, Container inventory, C
         if (!donkey.hasChest() || donkey.getInventory().getContainerSize() != slotCount + 1)
             throw new IllegalArgumentException("declared pack capacity differs from physical animal");
         return new FrontierV3PhysicalContainer(id, new CargoSlots(donkey.getInventory(), slotCount),
-                donkey.getPersistentData(), donkey.blockPosition());
+                donkey.getPersistentData(), donkey.blockPosition(), () -> FrontierV3OperationEntityParticipant.nativeObject(donkey));
     }
 
     static FrontierV3PhysicalContainer declaredChest(SubjectId id, ChestBlockEntity chest) {
@@ -61,7 +63,8 @@ record FrontierV3PhysicalContainer(SubjectId containerId, Container inventory, C
     }
 
     static FrontierV3PhysicalContainer observedChest(SubjectId id, ChestBlockEntity chest) {
-        return new FrontierV3PhysicalContainer(id, chest, chest.getPersistentData(), chest.getBlockPos());
+        return new FrontierV3PhysicalContainer(id, chest, chest.getPersistentData(), chest.getBlockPos(),
+                () -> FrontierV3OperationBlockEntityParticipant.current(chest));
     }
 
     /** Vanilla reports its actual destroyed inventory; validate the producer's declared provider. */

@@ -148,6 +148,8 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
     }
     /** Small family metadata only; list/table content must not be rebuilt here. */
     protected abstract CompoundTag metadata();
+    /** Read-only bounded owner metrics; never hydrate lazy world tables for diagnostics. */
+    protected String ownerDiagnostic() { return "{}"; }
     final String journalDiagnostic() {
         if (store == null) return "{\"attached\":false}";
         var p = store.pressure();
@@ -155,7 +157,7 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
                 + ",\"checkpointSequence\":" + p.checkpointSequence() + ",\"queuedWrites\":" + p.queuedWrites()
                 + ",\"queuedBytes\":" + p.queuedBytes() + ",\"retainedBytes\":" + p.retainedBytes()
                 + ",\"forcedGroups\":" + p.forcedGroups() + ",\"appendedBytes\":" + p.appendedBytes()
-                + "," + store.layoutDiagnostic() + "}";
+                + "," + store.layoutDiagnostic() + ",\"owner\":" + ownerDiagnostic() + "}";
     }
     final void finish() {
         if (level == null) save(path.toFile(), null); else persist(level);

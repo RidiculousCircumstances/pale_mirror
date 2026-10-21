@@ -217,10 +217,9 @@ class GoodsTradeTest {
         assertFalse(ShipmentStateSupport.coldTransferAvailable(state, state.shipments().shipments().get(shipment.id())));
         assertTrue(new ShipmentServiceAccess().demands(state, RECEIVER).isEmpty(),
                 "a full receiver retains cargo and contract, not an exclusive unloading turn");
-        var retry = io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.plan(state,
-                io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.progress(shipment.id(), 11), 11);
-        var next = (io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled) retry.getFirst().payload();
-        assertEquals(11 + state.bootstrap().ruleset().cadence().transportReviewInterval(), next.replacement().dueAt().ticks());
+        assertTrue(io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.held(state,
+                io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.progress(shipment.id(), 11)),
+                "capacity waits retain a dependency wake, not an unconditional polling timer");
         assertEquals(43, state.shipments().shipments().get(shipment.id()).quantity());
         resources = state.inventory().fungibleResources().destroy(RECEIVER_ACCOUNT, Map.of(filler, 43), Map.of());
         state = state.withInventory(state.inventory().withFungibleResources(resources));
@@ -423,9 +422,8 @@ class GoodsTradeTest {
                 "courtesy cannot displace a carrier during an unresolved physical pickup");
         assertTrue(ContainerPhysicalAuthorityComposition.pending(state, SOURCE));
         if (mobile) {
-            assertTrue(state.reservedContainerSlots(mobileId).contains(0));
-            assertFalse(ContainerStorageAdmission.receive(state, mobileId, shipment.itemKind(), 60, java.util.Optional.empty()),
-                    "fresh admission must still reject the slot held by the prepared handoff");
+            assertTrue(ContainerPhysicalAuthorityComposition.pending(state, mobileId),
+                    "the prepared transfer fences actual mutation, independently of a free-slot planning hint");
         }
         var prepared = state;
         assertThrows(IllegalArgumentException.class, () -> ModeledActorBodyFacts.unloaded(prepared, actor));
@@ -912,6 +910,7 @@ class GoodsTradeTest {
                 Shipment.Status.AWAITING_LOAD, 1);
     }
     private static FrontierWorldState shipmentFact(FrontierWorldState state, SubjectId subject, FrontierPayload payload) {
+        if (payload instanceof ShipmentHotTransferred transferred) return ShipmentConfirmationFixture.apply(state, transferred);
         return factForFamily(state, subject, payload, 0, "shipments");
     }
     private static SubjectId depotStructure(FrontierWorldState state, SubjectId settlementId) {

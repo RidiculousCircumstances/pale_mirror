@@ -23,6 +23,17 @@ final class FrontierV3CommandSubmission {
         return submitRaw(runtime, phase, id, payload, Optional.empty());
     }
 
+    /** The physical integration protocol retains this explicit id before submission. */
+    static CommandResult submitOperation(FrontierV3ServerRuntime<?, ?> runtime, CommandId commandId, String owner, FrontierPayload payload) {
+        return submitOperation(runtime, commandId, owner, payload, Optional.empty());
+    }
+    static CommandResult submitOperation(FrontierV3ServerRuntime<?, ?> runtime, CommandId commandId, String owner, FrontierPayload payload,
+            Optional<ScheduledAction> binding) {
+        if (!payload.requiresDurableBeforeEffect())
+            throw new IllegalArgumentException("physical operation closure must force the canonical receipt before retiring external evidence");
+        return submitRaw(runtime, "physical-operation", owner, payload, binding, commandId);
+    }
+
     static CommandResult submitBound(FrontierV3ServerRuntime<?, ?> runtime, String phase, String id, FrontierPayload payload,
                                      ScheduledAction binding) {
         return requireAccepted(submitResultBound(runtime, phase, id, payload, binding));
@@ -40,8 +51,12 @@ final class FrontierV3CommandSubmission {
 
     private static CommandResult submitRaw(FrontierV3ServerRuntime<?, ?> runtime, String phase, String id, FrontierPayload payload,
                                         Optional<ScheduledAction> binding) {
+        return submitRaw(runtime, phase, id, payload, binding, null);
+    }
+    private static CommandResult submitRaw(FrontierV3ServerRuntime<?, ?> runtime, String phase, String id, FrontierPayload payload,
+                                        Optional<ScheduledAction> binding, CommandId retainedId) {
         io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        CommandId commandId = FrontierV3CommandIds.physical(phase, checkpoint.revision().value());
+        CommandId commandId = retainedId == null ? FrontierV3CommandIds.physical(phase, checkpoint.revision().value()) : retainedId;
         CommandResult result = runtime.submit(new FrontierCommand(binding.isPresent() ? FrontierCommand.SCHEMA_VERSION : FrontierCommand.LEGACY_SCHEMA_VERSION,
                 commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), payload,

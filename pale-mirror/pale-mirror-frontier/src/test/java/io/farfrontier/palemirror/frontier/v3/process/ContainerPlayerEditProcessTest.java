@@ -41,9 +41,38 @@ class ContainerPlayerEditProcessTest {
         return new ContainerPlayerEditObserved(PLAYER, CLICK, List.of(member(state, LEFT, List.of(), List.of(stack(LEFT, 1))),
                 member(state, RIGHT, List.of(), List.of(stack(RIGHT, 16)))), Optional.empty());
     }
+    @Test void singleAndCompositeClicksCloseTheirPhysicalFencesInTheSameRegisteredCommand() {
+        for (var count : List.of(1, 2)) {
+            var state = fixture();
+            var edit = new ContainerPlayerEditObserved(PLAYER, CLICK, gift(state).members().subList(0, count), Optional.empty());
+            var id = new CommandId("test:container-click");
+            var command = new FrontierCommand(1, id, new WorldId("frontier:composed-test"), new Revision(99), new SimInstant(12),
+                    FrontierExecutionSubjects.PHYSICAL_EXECUTOR, CauseChain.root(id), edit);
+            var registry = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.processRegistry();
+            var plan = assertInstanceOf(CommandPlan.Accepted.class, FrontierWorldCommandPlanner.plan(state, command, registry,
+                    FrontierExecutionSubjects.PHYSICAL_EXECUTOR));
+            assertTrue(edit.requiresDurableBeforeEffect());
+            assertEquals(count.longValue(), plan.events().stream().filter(e -> e.payload().type().equals("frontier.reference_mutation_closed")).count());
+            int index = 0;
+            // This check applies the declared aggregate events; queue wake effects belong
+            // to the kernel and are not replayed through the domain reducer.
+            for (var event : plan.events()) {
+                if (registry.requireReducedEventOwner(event.payload().type()).equals("kernel-schedule")) continue;
+                state = FrontierWorldEventReducer.reduce(state, new FrontierEvent(1,
+                    new EventId("test:click-event-" + index++), new TransactionId("test:click-transaction"),
+                    command.worldId(), new Revision(100), new SimInstant(12), event.subject(), CauseChain.root(id), event.payload()), registry);
+            }
+            for (var member : edit.members()) {
+                var lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(member.containerId()));
+                assertEquals(PhysicalCustodyLeaseStatus.RELEASED, lease.status());
+                assertEquals(ReferenceContainerCustody.canonicalFingerprint(state, member.containerId()),
+                        state.replicaCustody().replicas().get(member.containerId()).fingerprint());
+            }
+        }
+    }
     @Test void oneClickCreditsBothMembersWithDistinctLotsAndRoundTripsItsWholeSuccessor() {
         var state = fixture(); var edit = gift(state);
-        var plan = assertInstanceOf(CommandPlan.Accepted.class, ContainerPlayerEditProcess.plan(state, edit, 12));
+        var plan = assertInstanceOf(CommandPlan.Accepted.class, ContainerPlayerEditProcess.plan(state, edit, 12, 100));
         assertEquals(edit, plan.events().getFirst().payload());
         assertEquals(1, plan.events().stream().filter(e -> e.payload() instanceof ContainerPlayerEditObserved).count());
         var next = ContainerPlayerEditProcess.reduce(state, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, edit);
@@ -69,7 +98,7 @@ class ContainerPlayerEditProcessTest {
                 new ContainerPlayerEditObserved.Member(right.containerId(), right.accountId(), right.ownerId(), 1, List.of(stack(RIGHT, 1)), right.after()));
         for (var forged : invalid) {
             var bad = new ContainerPlayerEditObserved(PLAYER, CLICK, List.of(edit.members().getFirst(), forged), Optional.empty());
-            assertInstanceOf(CommandPlan.Rejected.class, ContainerPlayerEditProcess.plan(state, bad, 12));
+            assertInstanceOf(CommandPlan.Rejected.class, ContainerPlayerEditProcess.plan(state, bad, 12, 100));
             assertThrows(IllegalArgumentException.class, () -> ContainerPlayerEditProcess.reduce(state, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, bad));
         }
         assertFalse(state.inventory().fungibleResources().accounts().containsKey(ReferenceContainerCustody.scopeId(LEFT)));

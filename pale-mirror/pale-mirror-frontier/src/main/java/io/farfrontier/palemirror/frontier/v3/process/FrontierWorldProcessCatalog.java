@@ -795,6 +795,7 @@ public final class FrontierWorldProcessCatalog {
         return switch (processId) {
             case "kernel-schedule" -> KERNEL;
             case "physical-observation" -> union(DefenderEquipmentReturnVisitProcessModule.TYPES, types(
+                    "frontier.reference_mutation_closed",
                     "frontier.container_player_edit_observed", "frontier.resource_storage_adopted", "frontier.resource_storage_declared", "frontier.resource_storage_policy_changed",
                     "frontier.ground_resource_destroyed", "frontier.ground_resource_player_withdrawal",
                     "kernel.reconsideration_requested",
@@ -854,7 +855,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.settlement_assault_transition", "frontier.settlement_assault_strike", "frontier.settlement_assault_resolved",
                     "frontier.hive_mobilization_started", "frontier.hive_mobilization_departed");
             case "population" -> union(DefenderEquipmentReturnVisitProcessModule.TYPES, types(
-                    "kernel.reconsideration_requested",
+                    "kernel.reconsideration_requested", "frontier.reference_mutation_closed",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.actor_movement_interrupted", "frontier.actor_movement_started", "frontier.actor_execution_resumed",
                     "frontier.actor_presence_started",
@@ -877,7 +878,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.actor_movement_cold_route_started",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled");
             case "economy" -> types(
-                    "kernel.reconsideration_requested",
+                    "kernel.reconsideration_requested", "frontier.reference_mutation_closed",
                     "kernel.schedule_created", "kernel.schedule_cancelled", "kernel.schedule_consumed", "kernel.schedule_rescheduled",
                     "frontier.company_registered", "frontier.employment_contract_opened", "frontier.employment_contract_terminated", "frontier.market_demand_opened",
                     "frontier.market_quote_published", "frontier.market_work_order_accepted", "frontier.market_relationship_incident_recorded", "frontier.market_work_order_cancelled", "frontier.market_demand_expired",

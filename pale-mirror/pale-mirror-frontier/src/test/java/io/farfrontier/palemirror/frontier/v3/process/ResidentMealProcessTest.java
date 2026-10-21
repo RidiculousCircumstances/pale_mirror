@@ -1,7 +1,6 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
 import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
-
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.SimInstant;
 import io.farfrontier.palemirror.frontier.v3.api.WorldId;
@@ -549,8 +548,9 @@ class ResidentMealProcessTest {
         var remaining = new FungiblePhysicalObservation.Stack(source.address(), "minecraft:bread", 63);
         var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorPocket(resident,
                 SceneLease.deterministicEntityId(state.bootstrap().worldId(), resident), 0), "minecraft:bread", 1);
-        state = ResidentActivityProcess.reduceMealEffectObserved(state, resident, new ResidentMealHotEffectObserved(
-                resident, ResidentMeal.Phase.TAKE, 1L, service.standingBody(), List.of(remaining), List.of(hand), meal.executionId()), 48_001L);
+        var take = new ResidentMealHotEffectObserved(resident, ResidentMeal.Phase.TAKE, 1L,
+                service.standingBody(), List.of(remaining), List.of(hand), meal.executionId());
+        state = ResidentMealTakeAssertions.applyConfirmed(state, take, 48_001L, 8L, account, depot);
         assertEquals(64, state.inventory().fungibleResources().totalQuantity(settlement.id(), "minecraft:bread"));
         assertEquals(ResidentMeal.Phase.CLEAR_ACCESS, state.humanPopulation().meals().get(resident).phase());
         assertFatalityRetainsMealResources(state, resident, 421L, 48_001L,
@@ -598,7 +598,7 @@ class ResidentMealProcessTest {
         assertEquals(state.actorLocations(), resourceAcknowledged.actorLocations(),
                 "an exact resource receipt must not become a competing physical position writer");
         assertFalse(resourceAcknowledged.humanPopulation().meals().containsKey(resident));
-        var plannedEvents = ResidentMealProcess.planHotObserved(state, consumed, 48_002L);
+        var plannedEvents = ResidentMealProcess.planHotObserved(state, consumed, 48_002L, 1L);
         var healthFact = assertInstanceOf(ResidentStarvationIntegrated.class, plannedEvents.getFirst().payload());
         assertEquals(100, healthFact.next().severityUnits());
         assertEquals(2, healthFact.next().exposureRemainder());
@@ -696,7 +696,7 @@ class ResidentMealProcessTest {
         if (meal.pendingPhysicalStep().isPresent()) {
             var stale = new ResidentMealHotEffectObserved(resident, meal.phase(),
                     meal.pendingPhysicalStep().orElseThrow().ambientRevision(), location.body(), List.of(), List.of(), meal.executionId());
-            assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.planHotObserved(after, stale, atTick));
+            assertThrows(IllegalArgumentException.class, () -> ResidentMealProcess.planHotObserved(after, stale, atTick, 1L));
         }
         var population = after.humanPopulation();
         population = population.withSchedule(meal.settlementId(), population.schedule(meal.settlementId()));

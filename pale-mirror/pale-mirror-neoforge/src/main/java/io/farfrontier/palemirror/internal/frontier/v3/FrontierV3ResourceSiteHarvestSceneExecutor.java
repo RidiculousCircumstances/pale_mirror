@@ -475,6 +475,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             }
             ResourceFieldCycle.WorkOutcome outcome;
             Optional<ResourceSiteHarvestProgressed.HandObservation> observedHand;
+            Optional<java.util.UUID> operation;
             if (physicalClaim instanceof FrontierV3ResourceSiteLedger.CellSiteClaim) {
                 var work = FrontierV3ResourceFieldWorkExecutor.advance(level, runtime, state, lease, job, worker);
                 if (work.disposition() == FrontierV3ResourceFieldWorkExecutor.Disposition.PENDING) return;
@@ -483,6 +484,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
                 }
                 outcome = work.outcome();
                 observedHand = work.hand();
+                operation = work.operation();
             } else {
                 // The previous stage/prefix writer has no paired crop/offhand witness.
                 // It cannot submit a trusted HOT work receipt under the new custody owner.
@@ -491,11 +493,11 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             var field = state.resourceSites().cycle(job.siteId());
             var cellId = field.layout().cells().get(job.progress().nextCropSlotIndex()).id();
             var admittedContinuation = dueBinding.orElseThrow();
-            submitBound(runtime, "resource-site-harvest-progress", lease.id().value(),
-                    new ResourceSiteHarvestProgressed(job.siteId(), field.epoch(), job.id(), job.progress().completedCropSlots() + 1,
+            var consequence = new ResourceSiteHarvestProgressed(job.siteId(), field.epoch(), job.id(), job.progress().completedCropSlots() + 1,
                             field.layout().revision(), cellId, job.target().generation(), outcome,
-                            admittedContinuation.id(), admittedContinuation.dueAt().ticks(), observedHand),
-                    admittedContinuation);
+                            admittedContinuation.id(), admittedContinuation.dueAt().ticks(), observedHand);
+            if (operation.isPresent()) FrontierV3OperationConfirmation.submit(level, runtime, operation.orElseThrow(), consequence, Optional.of(admittedContinuation));
+            else submitBound(runtime, "resource-site-harvest-progress", lease.id().value(), consequence, admittedContinuation);
             // Accepted final crop work still leaves the retained field-exit corridor.
             // The next scene turn follows it before DRAINING can release this body.
             return;

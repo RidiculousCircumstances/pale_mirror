@@ -52,8 +52,7 @@ final class FrontierV3FungibleResourceObservationExecutor {
         if (FrontierV3ActorDeathResourceComposition.reconcileOne(level, runtime, state)) return;
         if (FrontierV3UnitInventoryPhysicalCustody.bindOne(level, runtime, state)) return;
         if (FrontierV3ContainerClickExecutor.reconcileOne(level, runtime, state)) return;
-        // This is deliberately before ordinary return/departure observation: only an exact
-        // canonical-first fence without its later persisted player witness is reversible.
+        // Startup diagnostics never recreate items from an absent player-save marker.
         if (FrontierV3PlayerCustodyRecovery.reconcileOne(level, runtime, state)) return;
         if (observeOneWorldContainerDeparture(level, runtime, state)) return;
         if (observeOneWorldPickup(level, runtime, state)) return;

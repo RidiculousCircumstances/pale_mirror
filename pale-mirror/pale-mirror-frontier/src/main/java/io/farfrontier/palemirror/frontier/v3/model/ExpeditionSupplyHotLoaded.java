@@ -10,4 +10,5 @@ public record ExpeditionSupplyHotLoaded(SubjectId missionId, SubjectId claimId, 
         if (remainingSource.size() > 27 || destination.isEmpty() || destination.size() > 27) throw new IllegalArgumentException("invalid supply physical receipt size");
     }
     @Override public String type() { return "frontier.expedition_supply_hot_loaded"; }
+    @Override public boolean requiresDurableBeforeEffect() { return true; }
 }

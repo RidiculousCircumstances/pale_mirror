@@ -41,6 +41,8 @@ abstract class FrontierV3EntityStorageMixin implements FrontierV3EntitySaveBound
 
     @Inject(method = "storeEntities", at = @At("HEAD"), require = 1)
     private void frontierV3$observeCachedEmptyStore(ChunkEntities<Entity> entities, CallbackInfo callback) {
+        if (io.farfrontier.palemirror.internal.frontier.v3.FrontierV3OperationEntityColumns.retains(level, entities.getPos()))
+            emptyChunks.remove(entities.getPos().toLong()); // an empty entity list still has an unsaved operation receipt
         if (entities.isEmpty() && emptyChunks.contains(entities.getPos().toLong())) {
             // Vanilla elides this write. Observe its cached empty state as a read,
             // never as a new successful write that could waive an earlier IO failure.
@@ -59,14 +61,14 @@ abstract class FrontierV3EntityStorageMixin implements FrontierV3EntitySaveBound
     @Override public CompletableFuture<Optional<CompoundTag>> frontierV3$readStoredEntityChunk(ChunkPos chunk) {
         // The storage worker orders this after its pending writes. The caller
         // receives a detached immutable-by-convention snapshot, not a chunk load.
-        return frontierV3$synchronizeStoredEntities().thenCompose(ignored -> frontierV3$readStoredEntityChunkAfterSync(chunk));
+        return frontierV3$synchronizeStoredEntities().thenCompose(ignored -> frontierV3$readOrderedEntityChunk(chunk));
     }
 
     @Override public CompletableFuture<Void> frontierV3$synchronizeStoredEntities() {
         return simpleRegionStorage.synchronize(true);
     }
 
-    @Override public CompletableFuture<Optional<CompoundTag>> frontierV3$readStoredEntityChunkAfterSync(ChunkPos chunk) {
+    @Override public CompletableFuture<Optional<CompoundTag>> frontierV3$readOrderedEntityChunk(ChunkPos chunk) {
         return simpleRegionStorage.read(chunk)
                 .thenApply(value -> value.map(CompoundTag::copy));
     }
@@ -74,11 +76,13 @@ abstract class FrontierV3EntityStorageMixin implements FrontierV3EntitySaveBound
     @Redirect(method = "storeEntities", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/world/level/chunk/storage/SimpleRegionStorage;write(Lnet/minecraft/world/level/ChunkPos;Lnet/minecraft/nbt/CompoundTag;)Ljava/util/concurrent/CompletableFuture;"), require = 2)
     private CompletableFuture<Void> frontierV3$observeWrite(SimpleRegionStorage storage, ChunkPos chunk, CompoundTag data) {
-        var written = FrontierV3ServerLifecycle.writeEntityChunkWithFootprint(level, chunk, data, () -> storage.write(chunk, data));
+        var image = io.farfrontier.palemirror.internal.frontier.v3.FrontierV3OperationEntityColumns.decorate(level, chunk, data);
+        if (image != null) emptyChunks.remove(chunk.toLong());
+        var written = FrontierV3ServerLifecycle.writeEntityChunkWithFootprint(level, chunk, image, () -> storage.write(chunk, image));
         written.whenComplete((ignored, failure) -> {
             if (failure != null) level.getServer().execute(() -> emptyChunks.remove(chunk.toLong()));
         });
-        FrontierV3ServerLifecycle.observeEntityChunkWrite(level, chunk, data, written);
+        FrontierV3ServerLifecycle.observeEntityChunkWrite(level, chunk, image, written);
         return written;
     }
 

@@ -25,4 +25,5 @@ public record BakeryHotEffectObserved(SubjectId jobId, SceneLeaseId leaseId,
             throw new IllegalArgumentException("bakery observed physical layout exceeds bounded authority");
     }
     @Override public String type() { return "frontier.bakery_hot_effect_observed"; }
+    @Override public boolean requiresDurableBeforeEffect() { return true; }
 }

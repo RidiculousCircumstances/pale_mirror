@@ -189,7 +189,7 @@ final class FrontierResourceSiteHarvestFixture {
             switch (proposed.payload()) {
                 case ResourceSiteHarvestColdGoalAdvanced advanced ->
                         state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, siteId, advanced);
-                case ResourceSiteHarvestWorkChanged changed ->
+                case ResourceSiteHarvestLabourChange changed ->
                         state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, siteId, changed);
                 case ResourceSiteHarvestCropPrepared prepared ->
                         state = ResourceSiteHarvestProcess.reduceCropPrepared(state, siteId, prepared);
@@ -210,7 +210,7 @@ final class FrontierResourceSiteHarvestFixture {
                                 + created.action().kind());
                 }
                 default -> throw new IllegalStateException("harvest fixture produced unexpected cold event: "
-                        + proposed.payload().type());
+                        + proposed.payload() + " at=" + action.dueAt().ticks());
             }
         }
         if (next == null) throw new IllegalStateException("harvest fixture lost its one COLD continuation");

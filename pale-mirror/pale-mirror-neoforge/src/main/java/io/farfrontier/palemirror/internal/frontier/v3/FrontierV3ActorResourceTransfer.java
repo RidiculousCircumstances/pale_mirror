@@ -16,9 +16,10 @@ final class FrontierV3ActorResourceTransfer {
         boolean before();
         boolean after();
         boolean apply();
+        List<FrontierV3MinecraftOperation.Participant> participants();
         List<FungiblePhysicalObservation.Stack> sourceLayout();
         List<FungiblePhysicalObservation.Stack> destinationLayout();
-        boolean checkpoint(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime);
+        void ownerConfirmed();
     }
     private record Request(ActorResourceItemOrder order, Mob actor, List<MaterialSourceSelection.Slice> source,
                            int destinationSlot, int destinationBefore) { }
@@ -53,6 +54,11 @@ final class FrontierV3ActorResourceTransfer {
         var step = new FrontierV3ActorItemTransfer.FungibleStep(order, physical, attached, request.actor(), request.actor().getUUID(),
                 request.source(), request.destinationSlot(), request.destinationBefore());
         return Optional.of(new Session() {
+            @Override public List<FrontierV3MinecraftOperation.Participant> participants() {
+                return List.of(physical.persistence().get(), attached == null
+                        ? FrontierV3OperationEntityParticipant.current(request.actor(), ActorBodyAuthority.current(state, order.actorId()).physicalEpoch())
+                        : attached.persistence().get());
+            }
             @Override public boolean before() { return step.before(); }
             @Override public boolean after() { return step.after(); }
             @Override public boolean apply() { return step.apply(); }
@@ -69,9 +75,8 @@ final class FrontierV3ActorResourceTransfer {
             @Override public List<FungiblePhysicalObservation.Stack> destinationLayout() {
                 return order.direction() == ActorContainerItemOrder.Direction.TAKE ? carried() : endpoint();
             }
-            @Override public boolean checkpoint(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-                return FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime, id, physical)
-                        && (attached == null || FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime, attached.containerId(), attached));
+            @Override public void ownerConfirmed() {
+                // The owning transfer command closes every declared container atomically.
             }
         });
     }
@@ -89,6 +94,10 @@ final class FrontierV3ActorResourceTransfer {
         if (nativeEntity != null && !(nativeEntity instanceof ItemEntity))
             throw new IllegalArgumentException("ground source UUID denotes a non-item native entity");
         var entity = (ItemEntity) nativeEntity;
+        var column = FrontierV3OperationEntityColumns.current(level, new net.minecraft.world.level.ChunkPos(position.x() >> 4, position.z() >> 4)).orElse(null);
+        if (column == null) return Optional.empty();
+        if (entity != null && !entity.chunkPosition().equals(new net.minecraft.world.level.ChunkPos(position.x() >> 4, position.z() >> 4)))
+            return Optional.empty(); // source observation must first rebind an item that moved to another native save unit
         if (request.destinationSlot() != -1 || request.destinationBefore() != 0 || request.source().size() != 1
                 || !request.source().getFirst().address().equals(new PhysicalStackAddress.WorldEntity(order.entityId()))
                 || request.source().getFirst().epoch() != order.sourceEpoch())
@@ -104,6 +113,10 @@ final class FrontierV3ActorResourceTransfer {
                 state.actorExecutions().actors().get(order.actorId()).current().orElseThrow().activityKind(), order.goalRevision(), witness);
         FrontierV3GroundPickupRecovery.requireOwner(pickup.kind());
         return Optional.of(new Session() {
+            @Override public List<FrontierV3MinecraftOperation.Participant> participants() {
+                return List.of(column, FrontierV3OperationEntityParticipant.current(request.actor(),
+                        ActorBodyAuthority.current(state, order.actorId()).physicalEpoch()));
+            }
             private boolean plain(ItemStack stack, int count) {
                 return count == 0 ? stack.isEmpty() : stack.getCount() == count
                         && ItemStack.isSameItemSameComponents(stack, new ItemStack(item, count));
@@ -120,9 +133,7 @@ final class FrontierV3ActorResourceTransfer {
                     && !journal.blocksAccount(order.portion().sourceAccountId())) && sourceBefore() && destination().isEmpty(); }
             @Override public boolean after() { return retainedWitness() && plain(source(), slice.before() - slice.moved()) && plain(destination(), slice.moved()); }
             @Override public boolean apply() {
-                if (after()) return true;
-                // The exact intent's destination-first witness also admits completion of its saved partial native effect.
-                if (!before() && !(retainedWitness() && sourceBefore() && plain(destination(), slice.moved()))) return false;
+                if (!before()) return false;
                 journal.preparePickup(pickup); journal.persist(level);
                 FrontierV3ActorResourceSlots.set(request.actor(), order.actorSlot(), new ItemStack(item, slice.moved()));
                 int remaining = slice.before() - slice.moved();
@@ -137,8 +148,8 @@ final class FrontierV3ActorResourceTransfer {
                         new PhysicalStackAddress.WorldEntity(order.entityId()), order.portion().itemKind(), source().getCount()));
             }
             @Override public List<FungiblePhysicalObservation.Stack> destinationLayout() { return actorLayout(request); }
-            @Override public boolean checkpoint(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-                journal.retirePickup(pickup); journal.persist(level); return true;
+            @Override public void ownerConfirmed() {
+                journal.retirePickup(pickup); journal.persist(level);
             }
         });
     }

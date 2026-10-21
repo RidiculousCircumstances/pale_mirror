@@ -329,6 +329,16 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         return schedules.containsExact(action);
     }
 
+    @Override public void pinCommandReceipt(CommandId id) {
+        requireOwnerThread(); receipts.pin(id, limits.maxReceipts());
+    }
+    @Override public void releaseCommandReceipt(CommandId id) {
+        requireOwnerThread(); receipts.release(id);
+    }
+    @Override public Optional<CommandReceipt> commandReceipt(CommandId id) {
+        requireOwnerThread(); return receipts.get(id);
+    }
+
     @Override
     public Optional<SimInstant> nextScheduledInstantAfter(SimInstant after) {
         requireOwnerThread();

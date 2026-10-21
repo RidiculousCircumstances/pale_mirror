@@ -15,7 +15,7 @@ import java.util.List;
 final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule {
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof ContainerPlayerEditObserved edit)
-            return ContainerPlayerEditProcess.plan(state, edit, command.submittedAt().ticks());
+            return ContainerPlayerEditProcess.plan(state, edit, command.submittedAt().ticks(), command.expectedRevision().value() + 1);
         if (command.payload() instanceof GroundStockExit destroyed) {
             try { destroyed.apply(state, destroyed.economicOwner()); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }

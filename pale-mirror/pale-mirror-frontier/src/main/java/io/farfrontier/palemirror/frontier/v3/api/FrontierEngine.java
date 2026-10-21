@@ -23,6 +23,13 @@ public interface FrontierEngine<P extends FrontierProjection> {
     /** Read-only current retention capacity; expired receipts count exactly as at command admission. */
     CommandAdmissionCapacity commandAdmissionCapacity();
 
+    /** A host with a durable external obligation pins its exact command before submission.
+     * After recovery the host must restore these pins before advancing/submitting work.
+     * The host releases a pin only after recording the positive receipt durably elsewhere. */
+    void pinCommandReceipt(CommandId id);
+    void releaseCommandReceipt(CommandId id);
+    Optional<CommandReceipt> commandReceipt(CommandId id);
+
     /** Read-only next due instant for bounded background drivers; it never exposes mutable schedule state. */
     Optional<SimInstant> nextScheduledInstantAfter(SimInstant instant);
 

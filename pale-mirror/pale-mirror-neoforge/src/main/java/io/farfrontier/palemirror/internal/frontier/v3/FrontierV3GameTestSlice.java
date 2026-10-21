@@ -79,6 +79,7 @@ public final class FrontierV3GameTestSlice {
                     || batchName.equals("pm-frontier-v3-field-turns")
                     || batchName.equals("pm-frontier-v3-scene-body-lifetime");
             case "field-turns" -> batchName.equals("pm-frontier-v3-field-turns");
+            case "player-storage" -> batchName.equals("pm-frontier-v3-player-withdrawal");
             case "block-extraction" -> batchName.equals("pm-frontier-v3-block-extraction");
             case "container-socket" -> batchName.equals("pm-frontier-v3-container-socket");
             case "native-regressions" -> batchName.equals("pm-frontier-v3-block-extraction")

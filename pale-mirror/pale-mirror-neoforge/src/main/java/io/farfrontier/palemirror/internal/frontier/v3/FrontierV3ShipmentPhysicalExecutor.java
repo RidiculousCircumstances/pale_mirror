@@ -90,13 +90,15 @@ final class FrontierV3ShipmentPhysicalExecutor {
             }
             if (!step.observation().actuation().equals(actuation.id()) || step.observation().scopeRevision() != lease.revision())
                 return conflict(runtime, shipment, container, "retained physical effect has a stale body/scope fence");
-            if (!transfer.after() && (!transfer.apply() || !transfer.after()))
-                return conflict(runtime, shipment, container, "physical effect matches neither unapplied nor applied evidence");
+            var participants = transfer.participants();
+            var operation = FrontierV3MinecraftOperation.apply(level, FrontierV3MinecraftOperation.declaration(
+                    FrontierV3OperationReceipt.Protocol.SHIPMENT_TRANSFER, shipment.id(), new ShipmentHotPrepared(shipment.id(), step), participants),
+                    participants, transfer::before, transfer::apply, transfer::after);
+            if (!operation.complete()) return false;
             var receipt = new ShipmentHotTransferred(shipment.id(), step, transfer.sourceLayout(), transfer.destinationLayout());
-            boolean committed = accepted(level, runtime, shipment, "shipment-transfer-observed", receipt);
+            boolean committed = FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(), receipt);
             if (committed) {
-                if (!transfer.checkpoint(runtime))
-                    throw new IllegalStateException("shipment resource effect lacks its next container replica boundary");
+                transfer.ownerConfirmed();
                 if (attached == null) FrontierV3ActorCarryProjection.rememberConfirmed(runtime.decodedState().orElseThrow(), actor, worker);
             }
             return committed;

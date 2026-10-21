@@ -655,6 +655,23 @@ final class FrontierV3ResourceFieldWitness {
         tag.put("precedingLayouts", history); return tag;
     }
     Map<Long, Map<ResourceFieldLayout.CellId, Cell>> journalBuckets() { return byIdBucket; }
+    static CompoundTag workIntent(Pending pending) {
+        if (pending.canonicalSource().isPresent()) throw new IllegalArgumentException("field work cannot borrow a projection intent");
+        return preparedIntent(pending);
+    }
+    static CompoundTag projectionIntent(Pending pending) {
+        if (pending.canonicalSource().isEmpty() || pending.handEffect().isPresent())
+            throw new IllegalArgumentException("projection requires its exact canonical authority without work cargo");
+        return preparedIntent(pending);
+    }
+    private static CompoundTag preparedIntent(Pending pending) {
+        var transition = pending.transition();
+        var tag = new CompoundTag(); tag.putString("site", transition.siteId().value());
+        tag.putLong("epoch", transition.epoch()); tag.putLong("layoutRevision", transition.layoutRevision());
+        var prepared = new Pending(transition, 0, pending.causationId(), pending.handEffect(), false, pending.canonicalSource());
+        tag.put("cell", writeCells(Map.of(transition.cellId(), new Cell(transition.before(), Optional.of(prepared), Optional.empty()))));
+        return tag;
+    }
     ListTag writeBucket(long identity) { return writeCells(byIdBucket.get(identity)); }
     private static ListTag writeCells(Map<ResourceFieldLayout.CellId, Cell> cells) {
         var entries = new ListTag();

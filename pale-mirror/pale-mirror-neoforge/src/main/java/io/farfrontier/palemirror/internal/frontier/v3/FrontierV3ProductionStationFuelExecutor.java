@@ -9,7 +9,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import java.util.*;
 
-/** Loaded machine fuel effects. Before/after inspection makes retained prepares non-replayable. */
+/** Loaded machine fuel effects. The shared operation boundary owns native save evidence. */
 final class FrontierV3ProductionStationFuelExecutor {
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         var state = runtime.decodedState().orElse(null);
@@ -27,22 +27,23 @@ final class FrontierV3ProductionStationFuelExecutor {
                 return; // The accepted prepare is durably forced before the next physical invocation.
             }
             var burn = machine.pendingFuel().orElseThrow(); var slot = record.productionStation().orElseThrow().fuelSlot();
-            var actual = physical.inventory().getItem(slot); var item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(burn.itemKind()));
+            var item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(burn.itemKind()));
             int before = burn.source().getFirst().before();
             if (item == Items.AIR) throw new IllegalStateException("station fuel item is unavailable: " + burn);
-            boolean isBefore = plain(actual, new ItemStack(item, before));
-            boolean isAfter = before == 1 ? actual.isEmpty() : plain(actual, new ItemStack(item, before - 1));
-            if (!isBefore && !isAfter) throw new IllegalStateException("station fuel has neither prepared preimage nor postimage: "
-                    + burn + " actual=" + actual);
-            if (isBefore) {
-                physical.inventory().setItem(slot, actual.copyWithCount(before - 1)); physical.inventory().setChanged();
-            }
+            var participants = List.of(physical.persistence().get());
+            var declaration = FrontierV3MinecraftOperation.declaration(FrontierV3OperationReceipt.Protocol.STATION_FUEL, machine.stationId(),
+                    new ProductionStationFuelChanged(ProductionStationFuelChanged.Stage.HOT_PREPARED, burn, List.of()), participants);
+            var effect = FrontierV3MinecraftOperation.apply(level, declaration, participants,
+                    () -> plain(physical.inventory().getItem(slot), new ItemStack(item, before)),
+                    () -> { physical.inventory().setItem(slot, before == 1 ? ItemStack.EMPTY : new ItemStack(item, before - 1));
+                        physical.inventory().setChanged(); return true; },
+                    () -> before == 1 ? physical.inventory().getItem(slot).isEmpty()
+                            : plain(physical.inventory().getItem(slot), new ItemStack(item, before - 1)));
+            if (!effect.complete()) continue;
             var remaining = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(physical.inventory(), state, record.id());
-            var result = FrontierV3CommandSubmission.submitResult(runtime, "station-fuel-consumed", machine.stationId().value(),
+            boolean accepted = FrontierV3OperationConfirmation.submit(level, runtime, effect.ticket(),
                     new ProductionStationFuelChanged(ProductionStationFuelChanged.Stage.HOT_CONSUMED, burn, remaining));
-            if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("station fuel receipt rejected after physical effect: " + burn + " result=" + result);
-            if (!FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime, record.id(), physical))
-                throw new IllegalStateException("station fuel consumption lacks next replica boundary: " + burn);
+            if (!accepted) throw new IllegalStateException("station fuel receipt rejected after physical effect: " + burn);
             return;
         }
     }

@@ -181,6 +181,18 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         return canonicalState().map(FrontierCanonicalState::state);
     }
 
+    void pinCommandReceipt(io.farfrontier.palemirror.frontier.v3.api.CommandId id) {
+        if (engine == null) throw new IllegalStateException("no canonical receipt owner");
+        engine.pinCommandReceipt(id);
+    }
+    void releaseCommandReceipt(io.farfrontier.palemirror.frontier.v3.api.CommandId id) {
+        if (engine == null) throw new IllegalStateException("no canonical receipt owner");
+        engine.releaseCommandReceipt(id);
+    }
+    Optional<io.farfrontier.palemirror.frontier.v3.api.CommandReceipt> commandReceipt(io.farfrontier.palemirror.frontier.v3.api.CommandId id) {
+        return engine == null ? Optional.empty() : engine.commandReceipt(id);
+    }
+
     /**
      * Read-only retained ownership for native lifetime/field fences, including quarantine.
      * Quarantine suspends execution; it does not surrender already-owned physical cells

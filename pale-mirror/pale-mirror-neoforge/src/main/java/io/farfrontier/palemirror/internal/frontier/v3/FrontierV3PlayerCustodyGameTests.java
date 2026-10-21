@@ -174,20 +174,19 @@ public final class FrontierV3PlayerCustodyGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void recoveredCanonicalPlayerCustodyRestoresOnlyItsExactEmptyStartupSlot(GameTestHelper helper) {
+    public static void missingPlayerSaveMarkerCannotRecreateItemsInAnEmptyStartupSlot(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); var player = helper.makeMockServerPlayerInLevel();
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 recoveredPlayerRuntime(new WorldId("frontier:player-custody-recovery-game-test"), player.getUUID());
         FrontierV3PlayerCustodyRecovery.beginRecovery(runtime);
         FrontierV3FungibleResourceObservationExecutor.tick(level, runtime);
 
-        ItemStack restored = player.getInventory().getItem(9);
-        helper.assertTrue(restored.is(Items.CARROT) && restored.getCount() == 32,
-                "a canonical-first abrupt recovery must restore the exact authenticated player slot, kind and count");
+        helper.assertTrue(player.getInventory().getItem(9).isEmpty(),
+                "an absent old save marker is not proof of loss and cannot mint replacement items");
         FrontierWorldState recovered = state(runtime);
         helper.assertTrue(recovered.inventory().fungibleResources().accounts().values().stream()
                         .anyMatch(account -> account.custody().equals(new ResourceCustody.Player(player.getUUID()))),
-                "physical reconstitution must retain the same canonical player custody instead of replaying a second handoff");
+                "local ambiguity retains the canonical obligation without replaying a handoff");
         helper.assertTrue(recovered.inventory().fungibleResources().accounts().values().stream()
                         .filter(account -> account.custody().equals(new ResourceCustody.Player(player.getUUID())))
                         .flatMapToInt(account -> account.lotQuantities().values().stream().mapToInt(Integer::intValue)).sum() == 32,
@@ -220,33 +219,6 @@ public final class FrontierV3PlayerCustodyGameTests {
         FrontierV3PlayerCustodyRecovery.forget(runtime); runtime.shutdown(); helper.succeed();
     }
 
-    @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void recoveredPlayerSaveThenOrdinaryMoveCannotReplayItsOriginalFence(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel(); var player = helper.makeMockServerPlayerInLevel();
-        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> recovered =
-                recoveredPlayerRuntime(new WorldId("frontier:player-custody-recovery-completion-game-test"), player.getUUID());
-        FrontierV3PlayerCustodyRecovery.beginRecovery(recovered);
-        FrontierV3FungibleResourceObservationExecutor.tick(level, recovered);
-        var expected = FrontierV3PlayerResourceDiagnostic.expected(state(recovered), "custody:player-" + player.getUUID());
-        helper.assertTrue(expected != null && player.getInventory().getItem(9).is(Items.CARROT),
-                "the fixture must first materialize exactly the canonical-first missing-save recovery");
-
-        var durablePlayerSave = player.saveWithoutId(new net.minecraft.nbt.CompoundTag());
-        helper.assertTrue(durablePlayerSave.toString().contains(expected.playerSaveFence()),
-                "the recovered player save must carry the exact completion witness with the restored stack");
-        player.getInventory().removeItemNoUpdate(9); player.containerMenu.broadcastChanges();
-        FrontierV3PlayerCustodyRecovery.forget(recovered); recovered.shutdown();
-
-        FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> restarted =
-                recoveredPlayerRuntime(new WorldId("frontier:player-custody-recovery-completion-game-test-restarted"), player.getUUID());
-        FrontierV3PlayerCustodyRecovery.beginRecovery(restarted);
-        FrontierV3FungibleResourceObservationExecutor.tick(level, restarted);
-        helper.assertTrue(player.getInventory().getItem(9).isEmpty(),
-                "a saved later move must retain local ambiguity and never re-materialize the old canonical fence");
-        helper.assertTrue(state(restarted).inventory().fungibleResources().totalQuantity(new SubjectId("settlement:1"), "minecraft:carrot") == 32,
-                "the ambiguity must retain one exact canonical player portion without replaying property");
-        FrontierV3PlayerCustodyRecovery.forget(restarted); restarted.shutdown(); helper.succeed();
-    }
 
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return new FrontierWorldStateCodec().decode(runtime.checkpointImage().orElseThrow().canonicalState());

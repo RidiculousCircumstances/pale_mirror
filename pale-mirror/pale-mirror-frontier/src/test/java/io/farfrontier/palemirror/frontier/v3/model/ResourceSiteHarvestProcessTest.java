@@ -435,7 +435,8 @@ class ResourceSiteHarvestProcessTest {
             Step step = stepCold(state, start.site(), due); state = step.state(); due = step.next();
         }
         assertTrue(state.inventory().fungibleResources().accounts().containsKey(start.job().actorAccountId()),
-                "fixture must stop on an actual harvested cargo receipt, not an estimated number of travel steps");
+                "fixture must reach cargo; actual choice=" + ResidentActivityCoordinator.assessEligibility(state, start.job().workerId(), due.dueAt().ticks())
+                        + " at=" + due.dueAt().ticks() + " movement=" + state.actorMovements().get(start.job().workerId()));
         return new ColdHarvest(state, start.site(), (ResourceSiteHarvestJob) state.resourceSites().site(start.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow());
     }
     static HotHarvest hotHarvestAfterColdSteps(long seed, int coldSteps) {
@@ -518,7 +519,7 @@ class ResourceSiteHarvestProcessTest {
         for (ProposedEvent event : ResourceSiteHarvestProcess.planColdProgress(state, due)) {
             switch (event.payload()) {
                 case ResourceSiteHarvestColdGoalAdvanced advanced -> state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, site, advanced);
-                case ResourceSiteHarvestWorkChanged changed -> state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
+                case ResourceSiteHarvestLabourChange changed -> state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
                 case ResourceSiteHarvestImmatureCellSkipped skipped -> state = ResourceSiteHarvestProcess.reduceCellSkipped(state, site, skipped);
                 case ResourceSiteHarvestCropPrepared prepared -> state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, prepared);
                 case ResourceSiteHarvestProgressed progressed -> state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);

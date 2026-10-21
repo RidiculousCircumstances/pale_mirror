@@ -25,7 +25,7 @@ import java.util.Map;
 
 /** One current cell-owned field journal; no stage/prefix compatibility authority. */
 final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
-    private static final int FORMAT = 19;
+    private static final int FORMAT = 20;
     static final int MAX_SITES = ResourceSiteState.MAX_SITES;
     private final Map<SubjectId, FieldClaim> fieldClaims;
     /** A positive cell-owned delivery is fenced before either Vanilla inventory is edited. */
@@ -38,15 +38,18 @@ final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
     private final Map<CellMutationKey, FrontierV3ResourceFieldWorldChangeWitness> fieldWorldChanges;
     /** An external edit owns one cell's physical cause until its local WAL/claim agree. */
     private final Map<CellMutationKey, FrontierV3ResourceFieldForeignChangeWitness> fieldForeignChanges;
+    private final FrontierV3LocalOperationReceipts operationReceipts;
+    private boolean recoverOperationReceipts;
 
     private FrontierV3ResourceSiteLedger() { this(new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>(),
-            new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>()); }
+            new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>(), Map.of()); }
     private FrontierV3ResourceSiteLedger(Map<SubjectId, FieldClaim> fieldClaims,
             Map<SubjectId, FrontierV3ResourceSiteDeliveryWitness> deliveries,
             Map<SubjectId, FrontierV3ResourceSiteHandProjectionWitness> hands,
             Map<CellMutationKey, FrontierV3ResourceFieldPlayerBreakWitness> breaks,
             Map<CellMutationKey, FrontierV3ResourceFieldWorldChangeWitness> world,
-            Map<CellMutationKey, FrontierV3ResourceFieldForeignChangeWitness> foreign) {
+            Map<CellMutationKey, FrontierV3ResourceFieldForeignChangeWitness> foreign,
+            Map<java.util.UUID, FrontierV3OperationReceipt> receipts) {
         super(FrontierV3PhysicalStoreKind.FIELDS);
         if (fieldClaims.size() > MAX_SITES || deliveries.size() > MAX_SITES || hands.size() > MAX_SITES
                 || breaks.size() + world.size() + foreign.size() > ResourceFieldLayout.MAX_CELLS
@@ -66,11 +69,22 @@ final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
         fieldPlayerBreaks = table("fieldPlayerBreaks", breaks, FrontierV3ResourceSiteLedger::mutationAddress, (id, value) -> value.write());
         fieldWorldChanges = table("fieldWorldChanges", world, FrontierV3ResourceSiteLedger::mutationAddress, (id, value) -> value.write());
         fieldForeignChanges = table("fieldForeignChanges", foreign, FrontierV3ResourceSiteLedger::mutationAddress, (id, value) -> value.write());
+        operationReceipts = new FrontierV3LocalOperationReceipts(table("operationReceipts", receipts,
+                java.util.UUID::toString, (id, value) -> FrontierV3OperationReceiptCodec.write(value)));
+        recoverOperationReceipts = !receipts.isEmpty();
     }
     static FrontierV3ResourceSiteLedger get(ServerLevel level) {
-        return FrontierV3JournaledSavedData.get(level, FrontierV3PhysicalStoreKind.FIELDS,
+        var ledger = FrontierV3JournaledSavedData.get(level, FrontierV3PhysicalStoreKind.FIELDS,
                 FrontierV3ResourceSiteLedger::new, FrontierV3ResourceSiteLedger::load);
+        if (ledger.recoverOperationReceipts) {
+            ledger.completeOperations(level); ledger.recoverOperationReceipts = false;
+        }
+        return ledger;
     }
+    void operationCompleted(ServerLevel level, java.util.UUID ticket) {
+        operationReceipts.add(FrontierV3OperationLedger.get(level).require(ticket));
+    }
+    void completeOperations(ServerLevel level) { operationReceipts.complete(level, () -> persist(level)); }
     static java.nio.file.Path storageFile(ServerLevel level) {
         return FrontierV3JournaledSavedData.storageFile(level, FrontierV3PhysicalStoreKind.FIELDS);
     }
@@ -349,7 +363,7 @@ final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
     }
 
     static FrontierV3ResourceSiteLedger load(CompoundTag tag, HolderLookup.Provider registries) {
-        if (!java.util.Set.of("format", "fieldClaims", "fieldDeliveries", "fieldHandProjections", "fieldPlayerBreaks", "fieldWorldChanges", "fieldForeignChanges").containsAll(tag.getAllKeys()))
+        if (!java.util.Set.of("format", "fieldClaims", "fieldDeliveries", "fieldHandProjections", "fieldPlayerBreaks", "fieldWorldChanges", "fieldForeignChanges", "operationReceipts").containsAll(tag.getAllKeys()))
             throw new IllegalStateException("obsolete or undeclared field ledger section");
         int format = tag.getInt("format");
         if (format != FORMAT) throw new IllegalStateException("incompatible v3 resource site ledger: format " + format + "; fresh current-schema world required");
@@ -433,7 +447,8 @@ final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
                 throw new IllegalStateException("field foreign-change witness has no unique exact cell owner");
         }
         return new FrontierV3ResourceSiteLedger(fieldClaims,
-                fieldDeliveries, fieldHandProjections, fieldPlayerBreaks, fieldWorldChanges, fieldForeignChanges);
+                fieldDeliveries, fieldHandProjections, fieldPlayerBreaks, fieldWorldChanges, fieldForeignChanges,
+                FrontierV3LocalOperationReceipts.read(tag, "operationReceipts"));
     }
 
     private static ListTag rows(CompoundTag tag, String key) {
@@ -479,6 +494,7 @@ final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
                 .sorted(java.util.Comparator.comparing(FrontierV3ResourceFieldForeignChangeWitness::mutationKey))
                 .forEach(change -> foreignRows.add(change.write()));
         tag.put("fieldForeignChanges", foreignRows);
+        tag.put("operationReceipts", operationReceipts.write());
         return tag;
     }
 

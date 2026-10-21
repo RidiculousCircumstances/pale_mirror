@@ -65,6 +65,9 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
                 if (due.isEmpty()) continue;
                 var binding = due.orElseThrow();
                 var cell = cycle.layout().cells().get(job.progress().pendingCropSlotIndex()).id();
+                var operation = FrontierV3FieldWorkOperation.observe(level, state, lease, job, worker,
+                        cycle.layout().requireCell(cell), pending.orElseThrow()).orElse(null);
+                if (operation == null || !operation.complete()) continue;
                 var applied = new ResourceSiteHarvestProgressed(job.siteId(), cycle.epoch(), job.id(),
                         job.progress().completedCropSlots() + 1, cycle.layout().revision(), cell, job.target().generation(),
                         ResourceFieldCycle.WorkOutcome.HARVESTED, binding.id(), binding.dueAt().ticks(),
@@ -76,9 +79,7 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
                 catch (IllegalArgumentException unresolved) {
                     FrontierV3PhysicalWaitTrace.reconciliation(worker, lease, unresolved.getMessage()); continue;
                 }
-                FrontierV3DiagnosticTrace.recordScene(level.getServer(), "resource_site_harvest_effect_reconciled", lease,
-                        FrontierV3CommandSubmission.submitBound(runtime, "resource-site-harvest-effect-reconciled",
-                                lease.id().value(), recovered, binding));
+                FrontierV3OperationConfirmation.submitRecovery(level, runtime, operation.ticket(), recovered, java.util.Optional.of(binding));
                 return true;
             }
             try { ResourceSiteHarvestSceneReconciliation.reduce(state, job.siteId(), receipt); }

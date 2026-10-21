@@ -9,4 +9,5 @@ public record ExpeditionReplenishmentHotLoaded(SubjectId missionId, SubjectId cl
         if (remainingSource.size() > 27 || destination.size() != 1) throw new IllegalArgumentException("invalid personal replenishment physical layout");
     }
     @Override public String type() { return "frontier.expedition_replenishment_hot_loaded"; }
+    @Override public boolean requiresDurableBeforeEffect() { return true; }
 }

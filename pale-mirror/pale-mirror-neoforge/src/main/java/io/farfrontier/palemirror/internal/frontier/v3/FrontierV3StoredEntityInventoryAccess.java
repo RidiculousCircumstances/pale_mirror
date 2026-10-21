@@ -9,6 +9,8 @@ import java.util.concurrent.CompletableFuture;
 /** Read-only physical-provider capability; no entity or chunk admission. */
 public interface FrontierV3StoredEntityInventoryAccess {
     CompletableFuture<Void> frontierV3$synchronizeStoredEntities();
-    CompletableFuture<Optional<CompoundTag>> frontierV3$readStoredEntityChunkAfterSync(ChunkPos chunk);
+    /** Ordered snapshot, possibly including unforced writes. Never a durability receipt
+     * without the separately acquired synchronization boundary. */
+    CompletableFuture<Optional<CompoundTag>> frontierV3$readOrderedEntityChunk(ChunkPos chunk);
     CompletableFuture<Optional<CompoundTag>> frontierV3$readStoredEntityChunk(ChunkPos chunk);
 }

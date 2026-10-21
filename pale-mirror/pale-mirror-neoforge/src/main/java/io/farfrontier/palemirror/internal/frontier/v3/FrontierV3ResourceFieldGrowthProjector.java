@@ -49,7 +49,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
     static Result projectAccepted(ServerLevel level, ResourceSite site,
                              FrontierCanonicalState<ResourceFieldCycle> accepted,
                              ResourceFieldLayout.CellId cellId) {
-        return projectAccepted(level, site, accepted, cellId, true);
+        return projectAccepted(level, site, accepted, cellId, true, null);
     }
 
     /** One prepared publication, then individual effects, then one result publication. */
@@ -119,17 +119,34 @@ final class FrontierV3ResourceFieldGrowthProjector {
         }
         if (admitted.isEmpty()) return;
         try {
-            for (var id : admitted) projectAccepted(level, site, accepted, id, false);
+            var requests = new java.util.LinkedHashMap<ResourceFieldLayout.CellId, FrontierV3MinecraftOperation.Request>();
+            for (var id : admitted) {
+                var pending = witness.cell(id).pending().orElseThrow();
+                var reading = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, id, "projection:growth-batch-apply");
+                if (pending.completedSteps() < pending.transition().steps().size()
+                        && (reading.disposition() == FrontierV3ResourceFieldObservation.Disposition.CURRENT
+                            || reading.disposition() == FrontierV3ResourceFieldObservation.Disposition.NEXT_STEP_APPLIED))
+                    requests.put(id, FrontierV3FieldProjectionOperation.request(level, siteId, cycle.layout().requireCell(id), pending));
+            }
+            var results = new java.util.HashMap<ResourceFieldLayout.CellId, FrontierV3MinecraftOperation.Result>();
+            if (!requests.isEmpty()) {
+                var completed = FrontierV3MinecraftOperation.applyBatch(level, java.util.List.copyOf(requests.values()));
+                int index = 0;
+                for (var id : requests.keySet()) results.put(id, completed.get(index++));
+            }
+            for (var id : admitted) projectAccepted(level, site, accepted, id, false, results.get(id));
         } finally {
             // A failure may leave some cells applied and others pending. The original persisted
             // per-cell witnesses recover that split; no all-or-nothing application is invented.
             ledger.persist(level);
+            ledger.completeOperations(level);
         }
     }
 
     private static Result projectAccepted(ServerLevel level, ResourceSite site,
                              FrontierCanonicalState<ResourceFieldCycle> accepted,
-                             ResourceFieldLayout.CellId cellId, boolean persistAcknowledgement) {
+                             ResourceFieldLayout.CellId cellId, boolean persistAcknowledgement,
+                             FrontierV3MinecraftOperation.Result batchResult) {
         Objects.requireNonNull(level, "growth projection world");
         Objects.requireNonNull(site, "growth projection site");
         Objects.requireNonNull(accepted, "growth projection canonical state");
@@ -190,23 +207,16 @@ final class FrontierV3ResourceFieldGrowthProjector {
         var review = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, cellId,
                 "projection:growth-current");
         if (review.disposition() == FrontierV3ResourceFieldObservation.Disposition.UNLOADED) return Result.UNLOADED;
+        java.util.UUID operation = null;
         if (review.disposition() == FrontierV3ResourceFieldObservation.Disposition.NEXT_STEP_APPLIED
-                || review.disposition() == FrontierV3ResourceFieldObservation.Disposition.LATER_STEP_APPLIED) {
-            witness = witness.confirm(cellId, review);
-        } else if (review.disposition() == FrontierV3ResourceFieldObservation.Disposition.CURRENT) {
+                || review.disposition() == FrontierV3ResourceFieldObservation.Disposition.CURRENT) {
             var pending = witness.cell(cellId).pending().orElseThrow();
             if (pending.completedSteps() < pending.transition().steps().size()) {
-                ResourceFieldCellTransition.Step step = pending.transition().steps().get(pending.completedSteps());
-                BlockState next = switch (step.part()) {
-                    case SOIL -> FrontierV3FieldBlocks.soil(step.after().soil());
-                    case CROP -> step.after().crop() == ResourceFieldCycle.Crop.ABSENT
-                            ? Blocks.AIR.defaultBlockState()
-                            : Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, step.after().growthStage());
-                };
-                BlockPos position = step.part() == ResourceFieldCellTransition.Part.SOIL
-                        ? new BlockPos(geometry.soil().support().x(), geometry.soil().support().y(), geometry.soil().support().z())
-                        : new BlockPos(geometry.crop().x(), geometry.crop().y(), geometry.crop().z());
-                if (!level.setBlock(position, next, 3)) return Result.RETRY;
+                if (!persistAcknowledgement && batchResult == null) return Result.RETRY;
+                var applied = persistAcknowledgement ? FrontierV3FieldProjectionOperation.apply(level, site.id(), geometry, pending) : batchResult;
+                if (applied.status() == FrontierV3MinecraftOperation.Status.WAITING_DURABILITY) return Result.RETRY;
+                if (!applied.complete()) return Result.PHYSICAL_CONFLICT;
+                operation = applied.ticket();
                 var afterWrite = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, cellId,
                         "projection:growth-after-write");
                 if (afterWrite.disposition() != FrontierV3ResourceFieldObservation.Disposition.NEXT_STEP_APPLIED)
@@ -217,14 +227,16 @@ final class FrontierV3ResourceFieldGrowthProjector {
         var pending = witness.cell(cellId).pending().orElseThrow();
         if (pending.completedSteps() != pending.transition().steps().size()) {
             ledger.replaceFieldClaim(owner, owner.withWitness(witness));
-            if (persistAcknowledgement) ledger.persist(level);
+            if (operation != null) ledger.operationCompleted(level, operation);
+            if (persistAcknowledgement) { ledger.persist(level); ledger.completeOperations(level); }
             return Result.ADVANCED;
         }
         var finalReview = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, cellId,
                 "projection:growth-final");
         witness = witness.acknowledgeCanonicalProjection(accepted, cellId, pending.causationId(), finalReview);
         ledger.replaceFieldClaim(owner, owner.withWitness(witness));
-        if (persistAcknowledgement) ledger.persist(level);
+        if (operation != null) ledger.operationCompleted(level, operation);
+        if (persistAcknowledgement) { ledger.persist(level); ledger.completeOperations(level); }
         return Result.ADVANCED;
     }
 

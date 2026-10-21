@@ -44,14 +44,14 @@ class FrontierV3StoredEntityCensusTest {
             @Override public CompletableFuture<Void> frontierV3$synchronizeStoredEntities() {
                 return CompletableFuture.completedFuture(null);
             }
-            @Override public CompletableFuture<Optional<CompoundTag>> frontierV3$readStoredEntityChunkAfterSync(ChunkPos chunk) {
+            @Override public CompletableFuture<Optional<CompoundTag>> frontierV3$readOrderedEntityChunk(ChunkPos chunk) {
                 var data = new CompoundTag(); data.putIntArray("Position", new int[]{chunk.x, chunk.z});
                 var body = new CompoundTag(); body.putUUID("UUID", BODY);
                 var entities = new ListTag(); entities.add(body); data.put("Entities", entities);
                 return CompletableFuture.completedFuture(Optional.of(data));
             }
             @Override public CompletableFuture<Optional<CompoundTag>> frontierV3$readStoredEntityChunk(ChunkPos chunk) {
-                return frontierV3$readStoredEntityChunkAfterSync(chunk);
+                return frontierV3$readOrderedEntityChunk(chunk);
             }
         };
         var sightings = FrontierV3StoredEntityCensus.scanBatch(reader, java.util.List.of(first, second),

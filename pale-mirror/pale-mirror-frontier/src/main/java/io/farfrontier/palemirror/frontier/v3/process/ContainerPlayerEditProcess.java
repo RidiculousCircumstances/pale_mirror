@@ -9,12 +9,18 @@ import java.util.*;
 /** Composes existing physical accounting owners atomically, never another inventory authority. */
 final class ContainerPlayerEditProcess {
     private ContainerPlayerEditProcess() { }
-    static CommandPlan plan(FrontierWorldState state, ContainerPlayerEditObserved edit, long now) {
+    static CommandPlan plan(FrontierWorldState state, ContainerPlayerEditObserved edit, long now, long revision) {
         var consequences = new ArrayList<ProposedEvent>();
-        try { apply(state, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, edit, now, consequences); }
+        FrontierWorldState successor;
+        try { successor = apply(state, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, edit, now, consequences); }
         catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         var events = new ArrayList<ProposedEvent>();
         events.add(new ProposedEvent(FrontierExecutionSubjects.PHYSICAL_EXECUTOR, edit));
+        // The source accounting and its released physical fence have one WAL receipt.
+        // Later activity consequences do not own this container checkpoint.
+        try { events.addAll(ConfirmedContainerMutationPlan.close(successor,
+                edit.members().stream().map(ContainerPlayerEditObserved.Member::containerId).toList(), revision)); }
+        catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         events.addAll(consequences);
         return new CommandPlan.Accepted(List.copyOf(events));
     }

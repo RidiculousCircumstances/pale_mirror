@@ -73,9 +73,9 @@ final class FrontierV3ExtractionExecutor {
             }
         }
         try {
-            var receipt = apply(level, state, job, step, worker, actuation);
-            if (receipt == null) return false;
-            boolean committed = submit(level, runtime, job.id(), "effect-observed", receipt);
+            var effect = apply(level, state, job, step, worker, actuation);
+            if (effect == null) return false;
+            boolean committed = FrontierV3OperationConfirmation.submit(level, runtime, effect.ticket(), effect.receipt());
             if (!committed) return false;
             var current = runtime.decodedState().orElseThrow();
             if (step instanceof ExtractionPhysicalStep.BlockWork block) {
@@ -87,11 +87,6 @@ final class FrontierV3ExtractionExecutor {
                 ledger.worksite(new FrontierV3WorksiteBlockWitness(declared, block.extraction().definition().before(),
                         FrontierV3WorksiteBlockWitness.Phase.SETTLED));
                 ledger.persist(level);
-            } else {
-                var container = ExtractionServiceAccess.identity(state, job).pointId();
-                var physical = FrontierV3PhysicalContainer.loaded(level, current, container).orElseThrow();
-                if (!FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime, container, physical))
-                    throw new IllegalStateException("confirmed mining storage effect lacks its successor replica boundary");
             }
             FrontierV3ActorCarryProjection.rememberConfirmed(runtime.decodedState().orElseThrow(), actor, worker);
             return true;
@@ -148,7 +143,8 @@ final class FrontierV3ExtractionExecutor {
                     ((ActorContainerItemOrder.Portion.Exact) order.portion()).item())) return null;
         return new ExtractionPhysicalStep.Equipment(observation, slot, epoch);
     }
-    private static ExtractionHotObserved apply(ServerLevel level, FrontierWorldState state, ExtractionWork job,
+    private record Applied(UUID ticket, ExtractionHotObserved receipt) { }
+    private static Applied apply(ServerLevel level, FrontierWorldState state, ExtractionWork job,
             ExtractionPhysicalStep step, Villager worker, FrontierV3ActorActuation actuation) {
         if (!step.observation().actuation().equals(actuation.id()) || step.observation().scopeRevision() != job.revision())
             throw new IllegalArgumentException("mining retained effect has a stale body/owner fence");
@@ -166,7 +162,6 @@ final class FrontierV3ExtractionExecutor {
                         || witness.phase() == FrontierV3WorksiteBlockWitness.Phase.EXTERNAL_PENDING)
                     throw new IllegalArgumentException("mining source has external or missing physical provenance");
                 boolean sourceAfter = FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(source)).equals(block.extraction().definition().after());
-                boolean handAfter = plain(worker.getOffhandItem(), job.outputKind(), resultCount);
                 if (sourceAfter && witness.phase() != FrontierV3WorksiteBlockWitness.Phase.EFFECT_BLOCK_APPLIED)
                     throw new IllegalArgumentException("source postcondition alone is not proof of this worker's extraction");
                 if (witness.phase() == FrontierV3WorksiteBlockWitness.Phase.EFFECT_BLOCK_APPLIED
@@ -175,18 +170,21 @@ final class FrontierV3ExtractionExecutor {
                 var external = witness.externalSuccessor();
                 if (external.isPresent() && !external.orElseThrow().equals(FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(source))))
                     throw new IllegalArgumentException("split mining successor lacks the current captured external fact");
-                if (!sourceAfter || !handAfter) {
-                    // The exact intent may have saved its block half before its hand half.
-                    // Completing that retained split does not evaluate loot or mint twice.
-                    if (!handAfter && !plain(worker.getOffhandItem(), job.outputKind(), block.carriedBefore()))
-                        throw new IllegalArgumentException("mining output hand matches neither retained preimage nor postimage");
-                    if (!sourceAfter && external.isEmpty()) {
-                        var deposit = state.extractionSites().deposits().get(job.siteId());
-                        if (!ExtractionWorkSafety.available(state, deposit, deposit.site().layout().require(job.target().orElseThrow().key().cell()))
-                                || !level.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class,
-                                    new net.minecraft.world.phys.AABB(source).inflate(1.0D), entity -> entity.isAlive()
-                                        && FrontierV3BodyObservation.capture(entity).support().filter(support ->
-                                            support.support().equals(block.extraction().target())).isPresent()).isEmpty()) return null;
+                if (!sourceAfter && external.isEmpty()) {
+                    var deposit = state.extractionSites().deposits().get(job.siteId());
+                    if (!ExtractionWorkSafety.available(state, deposit, deposit.site().layout().require(job.target().orElseThrow().key().cell()))
+                            || !level.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class,
+                                new net.minecraft.world.phys.AABB(source).inflate(1.0D), entity -> entity.isAlive()
+                                    && FrontierV3BodyObservation.capture(entity).support().filter(support ->
+                                        support.support().equals(block.extraction().target())).isPresent()).isEmpty()) return null;
+                }
+                var participants = List.of(FrontierV3OperationChunks.current(level, source),
+                        FrontierV3OperationEntityParticipant.current(worker, actuation.id().body().physicalEpoch()));
+                var declaration = FrontierV3MinecraftOperation.declaration(FrontierV3OperationReceipt.Protocol.EXTRACTION_BLOCK, job.id(), new ExtractionHotPrepared(job.id(), step), participants);
+                var operation = FrontierV3MinecraftOperation.apply(level, declaration, participants,
+                    () -> FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(source)).equals(block.extraction().definition().before())
+                            && plain(worker.getOffhandItem(), job.outputKind(), block.carriedBefore()),
+                    () -> {
                         var result = new BlockExtractionPort.Result[1];
                         FrontierV3WorksiteWrites.apply(key, () -> {
                             result[0] = adapter.apply(block.extraction());
@@ -196,27 +194,30 @@ final class FrontierV3ExtractionExecutor {
                             throw new IllegalArgumentException("retained mining block effect refused: " + result[0]);
                         ledger.worksite(new FrontierV3WorksiteBlockWitness(witness.declaration(), witness.before(),
                                 FrontierV3WorksiteBlockWitness.Phase.EFFECT_BLOCK_APPLIED, Optional.of(block.extraction().operationId())));
-                        ledger.persist(level); // Causal block-half receipt before completing its held-resource half.
-                    }
-                    if (!handAfter) worker.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(job.outputKind())), resultCount));
-                }
-                if (!FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(source)).equals(external.orElse(block.extraction().definition().after()))
-                        || !plain(worker.getOffhandItem(), job.outputKind(), resultCount))
-                    throw new IllegalArgumentException("mining effect has no exact complete block/hand postcondition");
+                        ledger.persist(level);
+                        worker.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(job.outputKind())), resultCount));
+                        return true;
+                    }, () -> FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(source)).equals(external.orElse(block.extraction().definition().after()))
+                            && plain(worker.getOffhandItem(), job.outputKind(), resultCount));
+                if (!operation.complete()) return null;
                 worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
-                return new ExtractionHotObserved(job.id(), step, List.of(), List.of(ExtractionPhysicalStateSupport.hand(state, job, resultCount)), external);
+                return new Applied(operation.ticket(), new ExtractionHotObserved(job.id(), step, List.of(), List.of(ExtractionPhysicalStateSupport.hand(state, job, resultCount)), external));
             }
             case ExtractionPhysicalStep.Equipment equipment -> {
                 var physical = FrontierV3PhysicalContainer.loaded(level, state, equipment.slot().containerId()).orElse(null);
                 if (physical == null) return null;
                 var chest = physical.inventory();
                 var expected = state.inventory().items().get(job.toolId()); boolean take = job.phase() == ExtractionWork.Phase.TAKE_TOOL;
-                boolean after = take ? chest.getItem(equipment.slot().slot()).isEmpty() && FrontierV3ExactItemPresentation.exactMatch(worker.getMainHandItem(), expected)
-                        : worker.getMainHandItem().isEmpty() && FrontierV3ExactItemPresentation.exactMatch(chest.getItem(equipment.slot().slot()), expected);
-                if (!after && !(take ? FrontierV3ActorItemTransfer.take(chest, worker, expected, equipment.slot(), EquipmentSlot.MAINHAND)
-                        : FrontierV3ActorItemTransfer.place(chest, worker, expected, equipment.slot(), EquipmentSlot.MAINHAND)))
-                    throw new IllegalArgumentException("equipment source/destination no longer matches its retained intent");
-                return new ExtractionHotObserved(job.id(), step, List.of(), List.of());
+                var participants = List.of(physical.persistence().get(), FrontierV3OperationEntityParticipant.current(worker, actuation.id().body().physicalEpoch()));
+                var declaration = FrontierV3MinecraftOperation.declaration(FrontierV3OperationReceipt.Protocol.EXTRACTION_EQUIPMENT, job.id(), new ExtractionHotPrepared(job.id(), step), participants);
+                var operation = FrontierV3MinecraftOperation.apply(level, declaration, participants,
+                        () -> take ? worker.getMainHandItem().isEmpty() && FrontierV3ExactItemPresentation.exactMatch(chest.getItem(equipment.slot().slot()), expected)
+                                : chest.getItem(equipment.slot().slot()).isEmpty() && FrontierV3ExactItemPresentation.exactMatch(worker.getMainHandItem(), expected),
+                        () -> take ? FrontierV3ActorItemTransfer.take(chest, worker, expected, equipment.slot(), EquipmentSlot.MAINHAND)
+                                : FrontierV3ActorItemTransfer.place(chest, worker, expected, equipment.slot(), EquipmentSlot.MAINHAND),
+                        () -> take ? chest.getItem(equipment.slot().slot()).isEmpty() && FrontierV3ExactItemPresentation.exactMatch(worker.getMainHandItem(), expected)
+                                : worker.getMainHandItem().isEmpty() && FrontierV3ExactItemPresentation.exactMatch(chest.getItem(equipment.slot().slot()), expected));
+                return operation.complete() ? new Applied(operation.ticket(), new ExtractionHotObserved(job.id(), step, List.of(), List.of())) : null;
             }
             case ExtractionPhysicalStep.Cargo cargo -> {
                 var container = job.storageTarget().containerId();
@@ -225,10 +226,11 @@ final class FrontierV3ExtractionExecutor {
                 var order = ExtractionWorkEffects.cargo(state, job); var transfer = cargo.transfer();
                 var adapter = new FrontierV3ActorItemTransfer.FungibleStep(order, physical, worker, worker.getUUID(),
                         transfer.source(), transfer.destinationSlot(), transfer.destinationBefore());
-                if (!adapter.after() && (!adapter.before() || !adapter.apply() || !adapter.after()))
-                    throw new IllegalArgumentException("mining storage effect matches neither unapplied nor applied evidence");
-                return new ExtractionHotObserved(job.id(), step, List.of(),
-                        FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(physical.inventory(), state, container));
+                var participants = List.of(physical.persistence().get(), FrontierV3OperationEntityParticipant.current(worker, actuation.id().body().physicalEpoch()));
+                var declaration = FrontierV3MinecraftOperation.declaration(FrontierV3OperationReceipt.Protocol.EXTRACTION_CARGO, job.id(), new ExtractionHotPrepared(job.id(), step), participants);
+                var operation = FrontierV3MinecraftOperation.apply(level, declaration, participants, adapter::before, adapter::apply, adapter::after);
+                return operation.complete() ? new Applied(operation.ticket(), new ExtractionHotObserved(job.id(), step, List.of(),
+                        FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(physical.inventory(), state, container))) : null;
             }
         }
     }

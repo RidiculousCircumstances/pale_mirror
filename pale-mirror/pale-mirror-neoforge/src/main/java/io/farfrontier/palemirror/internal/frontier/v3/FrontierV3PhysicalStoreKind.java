@@ -5,7 +5,7 @@ import java.util.List;
 /** Closed wire identities of physical stores, supplied by their composition, not inferred. */
 enum FrontierV3PhysicalStoreKind {
     FIELDS(1, "pale_mirror_frontier_v3_resource_sites", List.of(new Table(1,"fieldClaims"), new Table(2,"fieldDeliveries"), new Table(3,"fieldHandProjections"), new Table(4,"fieldPlayerBreaks"),
-            new Table(5,"fieldWorldChanges"), new Table(6,"fieldForeignChanges"))),
+            new Table(5,"fieldWorldChanges"), new Table(6,"fieldForeignChanges"), new Table(7,"operationReceipts"))),
     BLOCKS(2, "pale_mirror_frontier_v3_graybox", List.of(new Table(1,"claims"), new Table(2,"worksiteCells"))),
     PLAYER_CLICKS(3, "pale_mirror_frontier_v3_depot_clicks", List.of(new Table(1,"pending"))),
     BOARDS(4, "pale_mirror_frontier_v3_object_boards", List.of(new Table(1,"claims"))),
@@ -15,7 +15,8 @@ enum FrontierV3PhysicalStoreKind {
     ACTORS(9, "pale_mirror_frontier_v3_ambient_carriers", List.of()),
     RESOURCE_HANDOFFS(11, "pale_mirror_frontier_v3_resource_handoffs", List.of(new Table(1,"pending"), new Table(2,"actorPickups"), new Table(3,"groundLosses"),
             new Table(4,"containerRemovals"), new Table(5,"exactDrops"))),
-    INFECTION(8, "pale_mirror_frontier_v3_infection_overlay", List.of(new Table(1,"claims")));
+    INFECTION(8, "pale_mirror_frontier_v3_infection_overlay", List.of(new Table(1,"claims"))),
+    OPERATIONS(12, "pale_mirror_frontier_v3_operations", List.of(new Table(1,"operations"), new Table(4,"retired"), new Table(3,"ownerCommands")));
 
     record Table(int wireTag, String name) {
         Table {

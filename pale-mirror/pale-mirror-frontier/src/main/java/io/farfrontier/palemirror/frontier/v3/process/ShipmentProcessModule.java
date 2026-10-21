@@ -22,7 +22,7 @@ final class ShipmentProcessModule implements FrontierWorldProcessModule {
     static final DeterministicProcessDescriptor DESCRIPTOR = new DeterministicProcessDescriptor("shipments",
             Set.of("frontier.shipment_dispatch_requested", "frontier.shipment_hot_prepared", "frontier.shipment_hot_transferred", "frontier.shipment_hand_custody_observed", "frontier.shipment_cargo_disposition_observed"),
             Set.of(ShipmentProcess.PROGRESS, InternalShipmentReceipts.RECEIVE, ResourceHaulingPolicy.REVIEW), TYPES, java.util.stream.Stream.concat(TYPES.stream(), Set.of(
-                    "frontier.actor_movement_started", "frontier.actor_movement_interrupted", "kernel.schedule_created", "kernel.schedule_rescheduled", "kernel.schedule_cancelled").stream())
+                    "frontier.actor_movement_started", "frontier.actor_movement_interrupted", "kernel.schedule_created", "kernel.schedule_rescheduled", "kernel.schedule_cancelled", "frontier.reference_mutation_closed").stream())
                     .collect(java.util.stream.Collectors.toUnmodifiableSet()), java.util.stream.Stream.concat(TYPES.stream(),
                             java.util.stream.Stream.of("frontier.shipment_dispatch_requested")).collect(java.util.stream.Collectors.toUnmodifiableSet()));
     @Override public java.util.List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> initialSchedules(FrontierBootstrap bootstrap) {
@@ -77,6 +77,10 @@ final class ShipmentProcessModule implements FrontierWorldProcessModule {
                     id = value.shipmentId();
                     var preview = ShipmentPhysicalStateSupport.observed(state, value.shipmentId(), value);
                     Shipment shipment = state.shipments().shipments().get(value.shipmentId());
+                    var containers = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.api.SubjectId>();
+                    ShipmentServiceAccess.point(shipment).ifPresent(containers::add);
+                    shipment.mobileContainerId().ifPresent(containers::add);
+                    events.addAll(ConfirmedContainerMutationPlan.close(preview, containers, command.expectedRevision().next().value()));
                     if (shipment.carrying())
                         events.addAll(ShipmentDeliveryNotifications.delivered(preview.shipments().shipments().get(shipment.id()), command.submittedAt().ticks()));
                     else events.addAll(ShipmentDeliveryNotifications.loaded(preview.shipments().shipments().get(shipment.id()), command.submittedAt().ticks()));

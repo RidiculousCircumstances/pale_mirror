@@ -10,4 +10,5 @@ public record ShipmentHotTransferred(SubjectId shipmentId, ShipmentPhysicalStep 
             throw new IllegalArgumentException("shipment transfer witness exceeds its bounded endpoints");
     }
     @Override public String type() { return "frontier.shipment_hot_transferred"; }
+    @Override public boolean requiresDurableBeforeEffect() { return true; }
 }

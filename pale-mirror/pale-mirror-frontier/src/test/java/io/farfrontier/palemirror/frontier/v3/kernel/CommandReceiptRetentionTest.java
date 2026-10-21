@@ -35,4 +35,24 @@ class CommandReceiptRetentionTest {
         return new CommandReceipt(new CommandId("command:" + suffix), new SimInstant(tick),
                 new TransactionId("transaction:" + suffix), new Revision(tick));
     }
+
+    @Test void externalObligationSurvivesTimeExpiryAndRecoveryUntilPositiveClosure() {
+        var retention = new CommandReceiptRetention(); var held = receipt("physical", 10); var ordinary = receipt("ordinary", 11);
+        retention.pin(held.commandId(), 2); retention.add(held); retention.add(ordinary);
+        assertEquals(1, retention.retainedAt(1000)); retention.pruneBefore(1000);
+        assertEquals(List.of(held), retention.snapshot());
+        var recovered = new CommandReceiptRetention(); retention.snapshot().forEach(recovered::add);
+        // The host restores its durable obligations before the first post-restart prune.
+        recovered.pin(held.commandId(), 2); recovered.pruneBefore(2000);
+        assertEquals(held, recovered.get(held.commandId()).orElseThrow());
+        recovered.release(held.commandId()); assertTrue(recovered.snapshot().isEmpty());
+        assertEquals(0, recovered.retainedAt(2001));
+    }
+
+    @Test void unsubmittedPinsAreBoundedAndReleasingThemDoesNotInventReceipts() {
+        var retention = new CommandReceiptRetention(); var id = new CommandId("operation:pending"); retention.pin(id, 1);
+        retention.pin(id, 1); assertThrows(IllegalStateException.class, () -> retention.pin(new CommandId("operation:other"), 1));
+        assertTrue(retention.get(id).isEmpty()); retention.release(id);
+        retention.pin(new CommandId("operation:other"), 1); assertEquals(0, retention.size());
+    }
 }

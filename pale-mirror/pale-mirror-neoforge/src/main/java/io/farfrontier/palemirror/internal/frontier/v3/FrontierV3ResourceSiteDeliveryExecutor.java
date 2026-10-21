@@ -282,24 +282,17 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
         var order = ResourceSiteHarvestCargo.deliveryOrder(state, job);
         var transfer = new FrontierV3ActorItemTransfer.FungibleStep(order, chest, farmer, witness.entityId(),
                 MaterialSourceSelection.select(resources, order), witness.slot());
-        if (chestState == ChestState.BEFORE && handBefore) {
-            if (!transfer.placeDestination())
-                FrontierV3ResourceSiteHarvestSceneExecutor.conflict(level, runtime, scene, "field-delivery-place-rejected");
-            return true;
-        }
-        if (chestState == ChestState.AFTER && handBefore) {
-            if (!transfer.releasePlacedSource())
-                FrontierV3ResourceSiteHarvestSceneExecutor.conflict(level, runtime, scene, "field-delivery-hand-clear-rejected");
-            return true;
-        }
-        if (chestState == ChestState.BEFORE && handAfter) {
-            FrontierV3ResourceSiteHarvestSceneExecutor.conflict(level, runtime, scene, "field-delivery-crash-split-ambiguous");
-            return true;
-        }
-        if (chestState != ChestState.AFTER || !handAfter) return false;
+        var participants = List.of(FrontierV3OperationBlockEntityParticipant.current(chest),
+                FrontierV3OperationEntityParticipant.current(farmer, ActorBodyAuthority.current(state, job.workerId()).physicalEpoch()));
+        var declaration = new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.FIELD_DELIVERY,
+                job.id(), witness.witnessId(), FrontierV3OperationFingerprint.of(witness.write()),
+                participants.stream().map(FrontierV3MinecraftOperation.Participant::identity).collect(java.util.stream.Collectors.toSet()));
+        var operation = FrontierV3MinecraftOperation.apply(level, declaration, participants,
+                transfer::before, transfer::apply, transfer::after);
+        if (!operation.complete()) return false;
         List<FungiblePhysicalObservation.Stack> stacks = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(
                 chest, state, witness.containerId());
-        confirm(runtime, state, job, scene, witness.resourceEpoch(), witness.quantity(), witness.depotEpoch(), stacks,
+        confirm(level, operation.ticket(), runtime, state, job, scene, witness.resourceEpoch(), witness.quantity(), witness.depotEpoch(), stacks,
                 witness.afterFingerprint(), witness.witnessId());
         FrontierWorldState current = runtime.decodedState().orElse(null);
         if (current != null && (witness.intermediate() && acceptedBatchObservation(current, witness)
@@ -329,19 +322,26 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
     private static void confirm(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                 ResourceSiteHarvestJob job, SceneLease scene, long resourceEpoch, int quantity, long depotEpoch,
                                 List<FungiblePhysicalObservation.Stack> stacks, String fingerprint, String witnessId) {
+        if (quantity != 0) throw new IllegalArgumentException("physical field delivery requires its operation ticket");
+        confirm(null, null, runtime, state, job, scene, resourceEpoch, quantity, depotEpoch, stacks, fingerprint, witnessId);
+    }
+    private static void confirm(ServerLevel level, java.util.UUID operation, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
+                                ResourceSiteHarvestJob job, SceneLease scene, long resourceEpoch, int quantity, long depotEpoch,
+                                List<FungiblePhysicalObservation.Stack> stacks, String fingerprint, String witnessId) {
         PhysicalCustodyLease custody = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(job.outputSlot().containerId()));
         long revision = quantity == 0 ? runtime.canonicalState().orElseThrow().revision().value()
-                : Math.max(runtime.canonicalState().orElseThrow().revision().value(), custody.expectedCanonicalRevision() + 1L);
+                : Math.incrementExact(custody.expectedCanonicalRevision());
         var receipt = new ResourceSiteHarvestDeliveryObservation(job.returningForBatch()
                 ? batchObservationId(job.id(), job.deliveredYieldQuantity()) : new PhysicalObservationId(
                 "observation:field-delivery-" + job.id().value().substring("job:".length())),
                 job.intentId(), job.siteId(), job.id(), job.workerId(), job.actorAccountId(), job.depotAccountId(),
                 scene.id(), scene.members().getFirst().entityId(), resourceEpoch, quantity, depotEpoch,
                 stacks, fingerprint, revision, witnessId);
-        CommandResult result = FrontierV3CommandSubmission.submit(runtime, "field-delivery", job.id().value(),
-                job.returningForBatch() ? new ResourceSiteHarvestBatchDelivered(receipt, job.deliveredYieldQuantity())
-                        : new PhysicalIntentTransition(job.intentId(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)));
-        if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("field delivery was not durably accepted");
+        io.farfrontier.palemirror.frontier.v3.api.FrontierPayload consequence = job.returningForBatch()
+                ? new ResourceSiteHarvestBatchDelivered(receipt, job.deliveredYieldQuantity())
+                : new PhysicalIntentTransition(job.intentId(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
+        if (operation != null) FrontierV3OperationConfirmation.submit(level, runtime, operation, consequence);
+        else FrontierV3CommandSubmission.submit(runtime, "field-delivery", job.id().value(), consequence);
     }
 
     private static ChestBlockEntity chest(ServerLevel level, FrontierWorldState state, SubjectId depot) {

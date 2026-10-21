@@ -151,130 +151,19 @@ final class FrontierV3ContainerClickExecutor {
         if (targets.isEmpty()) return;
         var target = targets.getFirst();
         var transaction = FrontierV3DepotClickLedger.get(level).transaction(target.record().id());
-        if (transaction != null && transaction.members().size() > 1) {
-            FrontierV3CompositeClickExecutor.reconcile(level, runtime, state, transaction); return;
-        }
-        ContainerRecord owned = target.record();
-        FrontierV3DepotClickWitness witness = FrontierV3DepotClickLedger.get(level).pending(owned.id());
-        if (witness == null || !witness.playerId().equals(player.getUUID())) return;
-        reconcile(level, runtime, state, target.physical(), witness);
+        if (transaction != null && transaction.members().getFirst().playerId().equals(player.getUUID()))
+            FrontierV3CompositeClickExecutor.reconcile(level, runtime, state, transaction);
     }
 
     /** Reconciles at most one pending witness before the ordinary uncaused layout poller runs. */
     static boolean reconcileOne(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 FrontierWorldState state) {
         for (var transaction : FrontierV3DepotClickLedger.get(level).transactions()) {
-            if (transaction.members().size() > 1) {
-                if (FrontierV3CompositeClickExecutor.reconcile(level, runtime, state, transaction)) return true;
-                continue;
-            }
-            var witness = transaction.members().getFirst();
-            ContainerSurface surface = state.inventory().surfaces().get(witness.containerId());
-            if (surface == null) continue;
-            var physical = FrontierV3PhysicalContainer.loaded(level, state, witness.containerId()).orElse(null);
-            if (physical == null) continue;
-            if (reconcile(level, runtime, state, physical, witness)) return true;
+            if (FrontierV3CompositeClickExecutor.reconcile(level, runtime, state, transaction)) return true;
         }
         return false;
     }
 
-    private static boolean reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                  FrontierWorldState state, FrontierV3PhysicalContainer physicalContainer,
-                                  FrontierV3DepotClickWitness witness) {
-        var chest = physicalContainer.inventory();
-        var ledger = FrontierV3DepotClickLedger.get(level);
-        var ingress = FrontierV3ExactContainerIngress.reconcile(level, runtime, state,
-                new FrontierV3ContainerClickTransaction(List.of(witness)));
-        if (ingress != FrontierV3ExactContainerIngress.Result.NONE)
-            return ingress == FrontierV3ExactContainerIngress.Result.ADVANCED;
-        List<FungiblePhysicalObservation.Stack> physical = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(
-                chest, state, witness.containerId());
-        if (!exactSlotsCurrent(state, witness.containerId(), chest)
-                || FrontierV3ContainerSurfaceExecutor.hasForeignFungibleComponents(chest, state, witness.containerId())) {
-            conflict(runtime, witness, "foreign or changed exact chest components"); return false;
-        }
-        var current = state.inventory().fungibleResources();
-        CustodyAccount account = current.accounts().get(witness.accountId());
-        if (account == null && !witness.before().isEmpty() && witness.after().filter(List::isEmpty).isPresent()
-                && physical.isEmpty()
-                && current.accounts().values().stream().noneMatch(value ->
-                    value.custody().equals(new ResourceCustody.Container(witness.containerId())))) {
-            ledger.retire(witness); ledger.persist(level); REPORTED.remove(witness.interactionId()); return true;
-        }
-        if (account == null && !witness.before().isEmpty()) {
-            conflict(runtime, witness, "source account disappeared before click commit"); return false;
-        }
-        // WAL may have committed just before a crash; the post-layout already equals canonical.
-        if (account != null && witness.after().isPresent() && physical.equals(witness.after().orElseThrow())
-                && canonicalMatches(current, account.id(), witness.authorityEpoch(), physical)) {
-            if (!FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(
-                    runtime, witness.containerId(), physicalContainer)) return false;
-            ledger.retire(witness); ledger.persist(level); REPORTED.remove(witness.interactionId()); return true;
-        }
-        if (physical.equals(witness.before()) && witness.after().isEmpty()) {
-            if (!confirmUnchangedClick(runtime, witness.containerId(), physicalContainer)) return false;
-            ledger.retire(witness); ledger.persist(level); REPORTED.remove(witness.interactionId()); return true;
-        }
-        if (physical.equals(witness.before()) && witness.after().isPresent()
-                && !witness.after().orElseThrow().equals(witness.before())) {
-            conflict(runtime, witness, "post-click chest reverted after witnessed player action"); return false;
-        }
-        if (witness.after().isPresent() && !physical.equals(witness.after().orElseThrow())) {
-            conflict(runtime, witness, "post-click chest diverged from durable witness"); return false;
-        }
-        // A click on a player slot, an empty slot, or a rejected vanilla transfer can leave
-        // the managed chest unchanged. This is a completed physical no-op, including the
-        // first click on an empty depot: it needs no account or synthetic layout event.
-        if (physical.equals(witness.before())) {
-            if (!confirmUnchangedClick(runtime, witness.containerId(), physicalContainer)) return false;
-            ledger.retire(witness); ledger.persist(level); REPORTED.remove(witness.interactionId());
-            return true;
-        }
-        FrontierV3DepotClickWitness observed = witness;
-        if (observed.after().isEmpty()) {
-            java.util.Optional<Integer> remaining = java.util.Optional.empty();
-            if (witness.returnSource().isPresent()) {
-                var player = level.getServer().getPlayerList().getPlayer(witness.playerId());
-                if (player == null) return false; // Never guess a missing player's postimage.
-                var source = witness.returnSource().orElseThrow();
-                var actual = player.getInventory().getItem(source.playerSlot());
-                if (!actual.isEmpty() && !net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(actual.getItem())
-                        .toString().equals(source.itemKind())) {
-                    conflict(runtime, witness, "player return source changed to a foreign kind"); return false;
-                }
-                remaining = java.util.Optional.of(actual.isEmpty() ? 0 : actual.getCount());
-            }
-            observed = observed.observed(physical, remaining);
-            ledger.observe(witness, observed); ledger.persist(level);
-        }
-        try {
-            FrontierPayload payload;
-            if (observed.returnSource().isPresent()) {
-                var source = observed.returnSource().orElseThrow();
-                var binding = current.bindings().get(source.bindingId());
-                if (binding == null || !binding.accountId().equals(source.accountId()) || binding.authorityEpoch() != source.epoch()
-                        || binding.quantity() != source.quantity() || !binding.itemKind().equals(source.itemKind())
-                        || !binding.address().equals(new PhysicalStackAddress.PlayerSlot(witness.playerId(), source.playerSlot())))
-                    throw new IllegalArgumentException("player return lost its exact admitted binding");
-                payload = FungiblePhysicalHandoff.returnObserved(current, binding, observed.returnedRemaining().orElseThrow(),
-                        witness.accountId(), witness.containerId(), witness.authorityEpoch(), physical);
-            } else payload = FungibleContainerPlayerEdit.classify(current, witness.accountId(), witness.containerId(),
-                    witness.ownerId(), witness.authorityEpoch(), witness.playerId(), witness.interactionId(), physical,
-                    SourceStockClaimLoss.admissibleClaims(state, witness.accountId()));
-            CommandResult result = FrontierV3CommandSubmission.submit(runtime, "depot-player-edit",
-                    witness.interactionId().toString(), payload);
-            if (result instanceof CommandResult.Accepted) {
-                if (!FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(
-                        runtime, witness.containerId(), physicalContainer)) return false;
-                ledger.retire(observed); ledger.persist(level); REPORTED.remove(observed.interactionId());
-                return true;
-            }
-            conflict(runtime, observed, "canonical player edit rejected");
-        } catch (IllegalArgumentException invalid) {
-            conflict(runtime, observed, invalid.getMessage());
-        }
-        return false;
-    }
 
     /** A real no-op keeps its acquired epoch. Exact ingress has changed the complete
      * canonical image even though its fungible predecessor/successor are equal. */

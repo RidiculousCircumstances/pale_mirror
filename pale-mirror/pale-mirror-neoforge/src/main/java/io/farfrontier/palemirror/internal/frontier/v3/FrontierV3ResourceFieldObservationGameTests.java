@@ -139,7 +139,8 @@ public final class FrontierV3ResourceFieldObservationGameTests {
             }
             var live = (FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(siteId);
             ledger.replaceFieldClaim(live, live.withWitness(witness)); ledger.persist(level);
-            level.setBlock(first.above(), Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 2), 3);
+            helper.assertTrue(FrontierV3FieldProjectionOperation.apply(level, siteId, layout.requireCell(ids.getFirst()),
+                    witness.cell(ids.getFirst()).pending().orElseThrow()).complete(), "first real operation applied before owner confirmation");
             // Restore the actual persisted pending claims: first physical effect applied, second not.
             var saved = (FrontierV3ResourceSiteLedger.FieldOwnership) persistedField(level, siteId);
             ledger.replaceFieldClaim((FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(siteId), saved);
@@ -292,7 +293,10 @@ public final class FrontierV3ResourceFieldObservationGameTests {
             ledger.replaceFieldClaim(owner, owner.withWitness(owner.witness().beginCanonicalProjection(
                     acceptedThird, thirdTransition, "projection:already-written-third", beforeThirdGrowth)));
             ledger.persist(level);
-            level.setBlock(soil.above(), Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 3), 3);
+            var thirdPending = ((FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(siteId))
+                    .witness().cell(cellId).pending().orElseThrow();
+            helper.assertTrue(FrontierV3FieldProjectionOperation.apply(level, siteId, layout.requireCell(cellId), thirdPending).complete(),
+                    "third physical operation retains its native receipt before field acknowledgement");
             helper.assertTrue(FrontierV3ResourceFieldGrowthProjector.projectAccepted(level, site, acceptedThird, cellId)
                             == FrontierV3ResourceFieldGrowthProjector.Result.ADVANCED
                             && ((FrontierV3ResourceSiteLedger.FieldOwnership) persistedField(level, siteId))

@@ -22,7 +22,10 @@ final class FrontierV3DepartureReturnReadFence {
         if (!FrontierV3PhysicalWorld.isPhysical(level)) return source;
         PENDING_READS.reserve(level, chunk);
         return beforeDeserialize(source, deserializer, raw -> {
-            try { fenceBeforeVanillaLoad(level, chunk, raw.orElse(null)); }
+            try {
+                FrontierV3OperationEntityColumns.loaded(level, chunk, raw.orElse(null));
+                fenceBeforeVanillaLoad(level, chunk, raw.orElse(null));
+            }
             catch (RuntimeException publicationFailure) {
                 PaleMirrorMod.LOGGER.error("Entity return-read fence could not be published chunk={}; vanilla load held", chunk, publicationFailure);
                 throw publicationFailure;

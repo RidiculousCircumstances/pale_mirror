@@ -330,11 +330,17 @@ public final class ResidentMealProcess {
 
     /** A witnessed consumption and both affected resident clocks form one command transaction. */
     public static List<ProposedEvent> planHotObserved(FrontierWorldState state,
-                                                       ResidentMealHotEffectObserved observed, long atTick) {
+                                                       ResidentMealHotEffectObserved observed, long atTick, long committedRevision) {
         ResidentMeal meal = state.humanPopulation().meals().get(observed.residentId());
-        reduceHotObserved(state, observed.residentId(), observed, atTick);
-        if (observed.phase() != ResidentMeal.Phase.CONSUME)
-            return List.of(new ProposedEvent(observed.residentId(), observed));
+        var applied = reduceHotObserved(state, observed.residentId(), observed, atTick);
+        if (observed.phase() == ResidentMeal.Phase.TAKE) {
+            // The resource owner and reference-custody owner contribute to ONE commit.
+            // A receipt may not advance the meal while leaving the source's old lease live.
+            var events = new java.util.ArrayList<ProposedEvent>();
+            events.add(new ProposedEvent(observed.residentId(), observed));
+            events.addAll(ConfirmedContainerMutationPlan.close(applied, List.of(meal.depotId()), committedRevision));
+            return List.copyOf(events);
+        }
         var events = new java.util.ArrayList<>(ResidentPhysiologyComposition.BEFORE_NUTRITION.beforeRetirement(state, observed.residentId(), atTick));
         events.addAll(List.of(new ProposedEvent(observed.residentId(), observed),
                 ResidentNeedProcess.requeueAfterConfirmedFood(state, observed.residentId(), atTick, meal.portion().nutritionUnits()),

@@ -68,17 +68,21 @@ final class FrontierV3ExpeditionSupplyExecutor {
             }
             if (!step.observation().actuation().equals(actuation.id()) || step.observation().scopeRevision() != lease.revision())
                 throw new IllegalArgumentException("prepared supply effect lost its body/scope authority");
-            if (!transfer.after() && (!transfer.before() || !transfer.apply() || !transfer.after()))
-                throw new IllegalArgumentException("supply effect matches neither unapplied nor applied physical preimage");
+            var participants = new ArrayList<FrontierV3MinecraftOperation.Participant>();
+            participants.add(physical.persistence().get());
+            participants.add(attached == null ? FrontierV3OperationEntityParticipant.current(worker, actuation.id().body().physicalEpoch())
+                    : attached.persistence().get());
+            var operation = FrontierV3MinecraftOperation.apply(level, FrontierV3MinecraftOperation.declaration(
+                    FrontierV3OperationReceipt.Protocol.EXPEDITION_SUPPLY, mission.id(), new ExpeditionSupplyHotPrepared(mission.id(), a.claimId(), step), participants),
+                    participants, transfer::before, transfer::apply, transfer::after);
+            if (!operation.complete()) return false;
             var layout = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, state, mission.organization().home().containerId());
             var destinationLayout = attached == null ? List.of(new FungiblePhysicalObservation.Stack(
                     FrontierV3ActorResourceSlots.address(a.actorId(), worker, a.slot()), load.foodKind(), a.quantity()))
                     : FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(attached.inventory(), state, attached.containerId());
-            boolean accepted = submit(level, runtime, mission, new ExpeditionSupplyHotLoaded(mission.id(), a.claimId(), step, layout, destinationLayout));
+            boolean accepted = FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(),
+                    new ExpeditionSupplyHotLoaded(mission.id(), a.claimId(), step, layout, destinationLayout));
             if (accepted) {
-                if (!FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime, mission.organization().home().containerId(), physical)
-                        || attached != null && !FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime, attached.containerId(), attached))
-                    throw new IllegalStateException("supply transfer lacks its next container replica boundary");
                 if (attached == null) FrontierV3ActorCarryProjection.rememberConfirmed(runtime.decodedState().orElseThrow(), a.actorId(), worker);
             }
             return accepted;

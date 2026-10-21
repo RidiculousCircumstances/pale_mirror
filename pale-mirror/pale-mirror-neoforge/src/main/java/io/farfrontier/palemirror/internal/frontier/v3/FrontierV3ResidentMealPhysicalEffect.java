@@ -121,20 +121,23 @@ final class FrontierV3ResidentMealPhysicalEffect {
         if (pending.phase() != ResidentMeal.Phase.TAKE || pending.ambientRevision() != lease.revision()
                 || !pending.sourceCounts().equals(sourceCounts)
                 || pending.sourceEpoch() != slices.getFirst().epoch()) return false;
-        if (!transfer.after()) {
-            if (!transfer.before() || !transfer.apply() || !transfer.after()) return false;
-        }
+        var actorParticipant = FrontierV3OperationEntityParticipant.current(worker,
+                ActorBodyAuthority.current(state, meal.residentId()).physicalEpoch());
+        var containerParticipant = FrontierV3OperationBlockEntityParticipant.current(chest);
+        String preparation = FrontierV3OperationConfirmation.fingerprint(new ResidentMealHotEffectPrepared(meal.residentId(), pending));
+        var declaration = new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.MEAL_TAKE, meal.residentId(), preparation,
+                preparation + ":" + meal.depotId().value() + ":" + meal.portion().itemKind() + ":" + meal.portion().quantity(),
+                java.util.Set.of(actorParticipant.identity(), containerParticipant.identity()));
+        var operation = FrontierV3MinecraftOperation.apply(level, declaration, List.of(actorParticipant, containerParticipant),
+                transfer::before, transfer::apply, transfer::after);
+        if (!operation.complete()) return false;
         List<FungiblePhysicalObservation.Stack> remaining =
                 FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, state, meal.depotId());
         var held = new FungiblePhysicalObservation.Stack(FrontierV3ActorResourceSlots.address(
                 meal.residentId(), worker, meal.inventorySlot()), meal.portion().itemKind(), meal.portion().quantity());
-        boolean applied = accepted(level, runtime, meal.residentId(), "resident-meal-take-observed",
+        return FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(),
                 new ResidentMealHotEffectObserved(meal.residentId(), ResidentMeal.Phase.TAKE,
                         lease.revision(), lease.goalBody(), remaining, List.of(held), meal.executionId()));
-        if (applied && !FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedMutation(
-                runtime, meal.depotId(), chest))
-            throw new IllegalStateException("resident bread take lacks its next depot replica boundary");
-        return applied;
     }
 
     private static boolean consume(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
@@ -167,16 +170,28 @@ final class FrontierV3ResidentMealPhysicalEffect {
         if (pending.phase() != ResidentMeal.Phase.CONSUME || pending.ambientRevision() != lease.revision()
                 || pending.consumptionQuantity() != meal.portion().quantity()
                 || pending.sourceEpoch() != bindings.getFirst().authorityEpoch()) return false;
-        if (before) {
-            var remainder = actual.copy(); remainder.shrink(meal.portion().quantity());
-            FrontierV3ActorResourceSlots.set(worker, meal.inventorySlot(), remainder);
-            level.playSound(null, worker.blockPosition(), SoundEvents.GENERIC_EAT, SoundSource.NEUTRAL, 0.8F, 1.0F);
-        } else if (remainingCount == 0 ? !actual.isEmpty() : actual.getCount() != remainingCount
-                || !ItemStack.isSameItemSameComponents(actual, FrontierV3ResidentMealItems.stack(held))) return false;
+        var participant = FrontierV3OperationEntityParticipant.current(worker,
+                ActorBodyAuthority.current(state, meal.residentId()).physicalEpoch());
+        String preparation = FrontierV3OperationConfirmation.fingerprint(new ResidentMealHotEffectPrepared(meal.residentId(), pending));
+        var declaration = new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.MEAL_CONSUME, meal.residentId(), preparation,
+                preparation + ":" + held.itemKind() + ":" + held.quantity(), java.util.Set.of(participant.identity()));
+        var operation = FrontierV3MinecraftOperation.apply(level, declaration, List.of(participant),
+                () -> FrontierV3ResidentMealItems.matches(FrontierV3ActorResourceSlots.get(worker, meal.inventorySlot()), held),
+                () -> {
+                    var remainder = FrontierV3ActorResourceSlots.get(worker, meal.inventorySlot()).copy(); remainder.shrink(meal.portion().quantity());
+                    FrontierV3ActorResourceSlots.set(worker, meal.inventorySlot(), remainder);
+                    level.playSound(null, worker.blockPosition(), SoundEvents.GENERIC_EAT, SoundSource.NEUTRAL, 0.8F, 1.0F);
+                    return true;
+                }, () -> {
+                    var remaining = FrontierV3ActorResourceSlots.get(worker, meal.inventorySlot());
+                    return remainingCount == 0 ? remaining.isEmpty() : remaining.getCount() == remainingCount
+                            && ItemStack.isSameItemSameComponents(remaining, FrontierV3ResidentMealItems.stack(held));
+                });
+        if (!operation.complete()) return false;
         var remaining = remainingCount == 0 ? List.<FungiblePhysicalObservation.Stack>of()
                 : List.of(new FungiblePhysicalObservation.Stack(FrontierV3ActorResourceSlots.address(
                         meal.residentId(), worker, meal.inventorySlot()), meal.portion().itemKind(), remainingCount));
-        boolean consumed = accepted(level, runtime, meal.residentId(), "resident-meal-consume-observed",
+        boolean consumed = FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(),
                 new ResidentMealHotEffectObserved(meal.residentId(), ResidentMeal.Phase.CONSUME,
                         lease.revision(), FrontierV3SupportedBodyCapture.observe(level, worker).orElseThrow(), remaining, List.of(), meal.executionId()));
         if (consumed) FrontierV3ActorCarryProjection.rememberConfirmed(runtime.decodedState().orElseThrow(), meal.residentId(), worker);

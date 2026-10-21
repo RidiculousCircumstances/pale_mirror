@@ -45,14 +45,17 @@ final class FrontierV3ExpeditionReplenishmentExecutor {
         }
         if (!step.observation().actuation().equals(actuation.id()) || step.observation().scopeRevision() != lease.revision())
             throw new IllegalStateException("prepared expedition replenishment lost exact actuation " + transfer.claimId());
-        if (!effect.after() && (!effect.before() || !effect.apply() || !effect.after()))
-            throw new IllegalStateException("expedition replenishment matches neither physical preimage nor receipt " + transfer.claimId());
+        var participants = List.of(source.persistence().get(),
+                FrontierV3OperationEntityParticipant.current(actor, actuation.id().body().physicalEpoch()));
+        var operation = FrontierV3MinecraftOperation.apply(level, FrontierV3MinecraftOperation.declaration(
+                FrontierV3OperationReceipt.Protocol.EXPEDITION_REPLENISHMENT, mission.id(), new ExpeditionReplenishmentHotPrepared(mission.id(), transfer.claimId(), step), participants),
+                participants, effect::before, effect::apply, effect::after);
+        if (!operation.complete()) return false;
         var remainder = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(source.inventory(), state, source.containerId());
         var destination = List.of(new FungiblePhysicalObservation.Stack(FrontierV3ActorResourceSlots.address(transfer.actorId(), actor, transfer.slot()), transfer.itemKind(), transfer.quantity()));
-        boolean accepted = submit(level, runtime, mission, new ExpeditionReplenishmentHotLoaded(mission.id(), transfer.claimId(), step, remainder, destination));
+        boolean accepted = FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(),
+                new ExpeditionReplenishmentHotLoaded(mission.id(), transfer.claimId(), step, remainder, destination));
         if (accepted) {
-            if (!FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime, source.containerId(), source))
-                throw new IllegalStateException("replenishment lacks next actual replica boundary " + transfer.claimId());
             FrontierV3ActorCarryProjection.rememberConfirmed(runtime.decodedState().orElseThrow(), transfer.actorId(), actor);
         }
         return accepted;

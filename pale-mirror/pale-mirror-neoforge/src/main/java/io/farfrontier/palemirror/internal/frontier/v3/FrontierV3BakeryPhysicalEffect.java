@@ -85,32 +85,32 @@ final class FrontierV3BakeryPhysicalEffect {
         // A rejected post-effect receipt is non-replayable. Keep the physical
         // evidence and pending step stable for explicit reconciliation.
         if (work.block().map(value -> value.reason() == BakeryWorkBlock.Reason.AMBIGUOUS_EFFECT).orElse(false)) return;
-        if (shape.after()) {
-            observe(level, runtime, lease, job, containerId, chest, shape.observation());
-            return;
-        }
-        if (!shape.before()) {
-            if (shape.canAbortUnappliedDelivery()) {
-                FrontierV3DiagnosticTrace.recordScene(level.getServer(), "bakery_delivery_aborted", lease,
-                        FrontierV3CommandSubmission.submit(runtime, "bakery-delivery-abort", lease.id().value(), shape.cancellation()));
-                return;
-            }
+        var participants = work.phase() == BakeryWorkState.Phase.PROCESSING ? List.of(physical.persistence().get())
+                : List.of(physical.persistence().get(), FrontierV3OperationEntityParticipant.current(worker,
+                        ActorBodyAuthority.current(state, job.workerId()).physicalEpoch()));
+        String preparation = FrontierV3OperationConfirmation.fingerprint(
+                new BakeryHotEffectPrepared(job.id(), lease.id(), work.phase(), destinationSlot));
+        String identity = preparation + ":" + shape.sourceEpoch() + ":" + shape.destinationEpoch() + ":" + shape.kind();
+        var declaration = new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.BAKERY, job.id(), identity, identity,
+                participants.stream().map(FrontierV3MinecraftOperation.Participant::identity).collect(java.util.stream.Collectors.toSet()));
+        var effect = FrontierV3MinecraftOperation.apply(level, declaration, participants, shape::before,
+                () -> { shape.apply(); return true; }, shape::after);
+        if (effect.status() == FrontierV3MinecraftOperation.Status.WAITING_DURABILITY) return;
+        if (effect.complete()) {
+            observe(level, runtime, lease, job, containerId, effect.ticket(), shape.observation());
+        } else if (effect.status() == FrontierV3MinecraftOperation.Status.NOT_APPLIED && shape.canAbortUnappliedDelivery()) {
+            FrontierV3DiagnosticTrace.recordScene(level.getServer(), "bakery_delivery_aborted", lease,
+                    FrontierV3CommandSubmission.submit(runtime, "bakery-delivery-abort", lease.id().value(), shape.cancellation()));
+        } else {
             block(level, runtime, lease, job, new BakeryWorkBlock(BakeryWorkBlock.Reason.AMBIGUOUS_EFFECT,
                     containerId, destinationSlot, "minecraft:air", 0));
-            return;
-        }
-        shape.apply();
-        if (shape.after()) {
-            observe(level, runtime, lease, job, containerId, chest, shape.observation());
         }
     }
 
     private static void observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 SceneLease lease, ProductionJob job, SubjectId containerId,
-                                Container chest, BakeryHotEffectObserved receipt) {
-        CommandResult result = FrontierV3CommandSubmission.submitResult(runtime, "bakery-effect-observed", lease.id().value(), receipt);
-        FrontierV3DiagnosticTrace.recordScene(level.getServer(), "bakery_effect_observed", lease, result);
-        if (result instanceof CommandResult.Rejected) {
+                                java.util.UUID ticket, BakeryHotEffectObserved receipt) {
+        if (!FrontierV3OperationConfirmation.submit(level, runtime, ticket, receipt)) {
             // The chest/hand may already contain the effect. Keep the prepared
             // step and its exact worker local; do not quarantine unrelated sites.
             block(level, runtime, lease, job, new BakeryWorkBlock(BakeryWorkBlock.Reason.AMBIGUOUS_EFFECT,
@@ -119,16 +119,6 @@ final class FrontierV3BakeryPhysicalEffect {
                     "minecraft:air", 0));
             return;
         }
-        closeObservedContainerMutation(level, runtime, containerId, chest, result);
-    }
-
-    private static void closeObservedContainerMutation(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                                       SubjectId containerId, Container chest, CommandResult result) {
-        if (!(result instanceof CommandResult.Accepted)) return;
-        var physical = FrontierV3PhysicalContainer.loaded(level, runtime.decodedState().orElseThrow(), containerId).orElse(null);
-        if (physical == null || physical.inventory() != chest
-                || !FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime, containerId, physical))
-            throw new IllegalStateException("observed bakery transfer lacks its next reference-container replica boundary");
     }
 
     static void block(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

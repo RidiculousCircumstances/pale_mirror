@@ -26,4 +26,5 @@ public record ResourceSiteHarvestBatchDelivered(ResourceSiteHarvestDeliveryObser
     }
 
     @Override public String type() { return "frontier.resource_site_harvest_batch_delivered"; }
+    @Override public boolean requiresDurableBeforeEffect() { return true; }
 }

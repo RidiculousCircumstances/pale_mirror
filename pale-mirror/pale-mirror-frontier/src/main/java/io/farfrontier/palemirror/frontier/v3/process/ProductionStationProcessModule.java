@@ -13,6 +13,7 @@ final class ProductionStationProcessModule implements FrontierWorldProcessModule
     static final DeterministicProcessDescriptor DESCRIPTOR = new DeterministicProcessDescriptor("production-stations",
             TYPES, Set.of(REVIEW), TYPES, Set.of(ProductionStationFuelChanged.TYPE, ProductionStationProgressed.TYPE,
                     ProductionStationOperatorChanged.TYPE, ProductionStationRecipeChanged.TYPE, ProductionStationInstalled.TYPE, ProductionStationRetired.TYPE,
+                    "frontier.reference_mutation_closed",
                     "kernel.schedule_rescheduled", "kernel.schedule_created", "kernel.schedule_cancelled"), TYPES);
     static ScheduledAction review(SubjectId id, long at) {
         return new ScheduledAction(new ScheduleId("schedule:station-" + UUID.nameUUIDFromBytes(
@@ -63,7 +64,10 @@ final class ProductionStationProcessModule implements FrontierWorldProcessModule
                 case ProductionStationFuelChanged changed -> {
                     if (changed.stage() == ProductionStationFuelChanged.Stage.COLD_CONSUMED)
                         return FrontierWorldCommandPlanner.rejected("physical executor cannot consume COLD fuel");
-                    subject = changed.burn().stationId(); ProductionStationEnergy.apply(state, subject, changed);
+                    subject = changed.burn().stationId();
+                    var next = ProductionStationEnergy.apply(state, subject, changed);
+                    if (changed.stage() == ProductionStationFuelChanged.Stage.HOT_CONSUMED)
+                        return confirmed(state, next, command, subject);
                 }
                 case ProductionStationOperatorChanged changed -> {
                     if (changed.atTick() != command.submittedAt().ticks())
@@ -73,8 +77,11 @@ final class ProductionStationProcessModule implements FrontierWorldProcessModule
                 case ProductionStationRecipeChanged changed -> {
                     if (changed.stage() == ProductionStationRecipeChanged.Stage.COLD_COMPLETED)
                         return FrontierWorldCommandPlanner.rejected("physical executor cannot perform a COLD recipe");
-                    subject = changed.boundary().stationId(); ProductionStationTransformation.apply(state, subject, changed,
+                    subject = changed.boundary().stationId();
+                    var next = ProductionStationTransformation.apply(state, subject, changed,
                             ProductionOperationCompletionComposition::completed);
+                    if (changed.stage() == ProductionStationRecipeChanged.Stage.HOT_COMPLETED)
+                        return confirmed(state, next, command, subject);
                 }
                 case ProductionStationInstalled installed -> {
                     subject = installed.container().productionStation().orElseThrow().id();
@@ -86,5 +93,12 @@ final class ProductionStationProcessModule implements FrontierWorldProcessModule
             }
             return new CommandPlan.Accepted(List.of(new ProposedEvent(subject, command.payload())));
         } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+    }
+    private static CommandPlan confirmed(FrontierWorldState before, FrontierWorldState next,
+            FrontierCommand command, SubjectId station) {
+        var events = new ArrayList<ProposedEvent>(); events.add(new ProposedEvent(station, command.payload()));
+        events.addAll(ConfirmedContainerMutationPlan.close(next,
+                List.of(ProductionStationEnergy.record(before, station).id()), command.expectedRevision().next().value()));
+        return new CommandPlan.Accepted(List.copyOf(events));
     }
 }

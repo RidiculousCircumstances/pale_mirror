@@ -7,26 +7,18 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
 
 import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * Reconstitutes one player slot only when the exact durable canonical-first handoff has no
- * durable post-handoff player-save witness. The token is recorded in canonical HOT custody and
- * immediately armed in the live player's persistent NBT after the accepted observation; an
- * ordinary later player save carries that witness even if the player then consumes, moves or
- * drops the stack. Such divergence is local ambiguity, never authority to mint a replacement.
- */
+/** Read-only reconciliation of retained player custody. Missing native evidence is
+ * ambiguity, never permission to mint resources into the player's inventory. Legacy
+ * markers remain diagnostic until their producers migrate to the common operation protocol. */
 final class FrontierV3PlayerCustodyRecovery {
     private static final String SAVE_FENCE_KEY = "pale_mirror.frontier_v3.player_custody_save_fence";
     private static final Map<FrontierV3ServerRuntime<?, ?>, Map<SubjectId, FrontierV3PlayerResourceDiagnostic.Expected>> PENDING = new IdentityHashMap<>();
@@ -60,29 +52,15 @@ final class FrontierV3PlayerCustodyRecovery {
                 PaleMirrorMod.LOGGER.warn("Frontier v3 fenced player-custody recovery ignored stale account={}", captured.accountId());
                 return false;
             }
-            Decision decision = decision(captured, FrontierV3PlayerResourceDiagnostic.actual(player, captured.slot()), hasDurablePlayerSave(player, captured));
+            Decision decision = decision(captured, FrontierV3PlayerResourceDiagnostic.actual(player, captured.slot()));
             pending.remove(captured.accountId());
             if (decision == Decision.LOCAL_AMBIGUITY) {
                 PaleMirrorMod.LOGGER.warn("Frontier v3 retained player-custody local ambiguity account={} binding={}", captured.accountId(), captured.bindingId());
                 return false;
             }
-            if (decision != Decision.MATERIALIZE) return false;
-            ItemStack stack = materialized(captured);
-            if (stack.isEmpty()) {
-                PaleMirrorMod.LOGGER.error("Frontier v3 fenced player-custody recovery rejected invalid binding={}", captured.bindingId());
-                return false;
-            }
-            player.getInventory().setItem(captured.slot(), stack);
-            // This is the completion half of a canonical-first partial save.  It shares the
-            // exact durable fence with an ordinary handoff: the next vanilla player save
-            // persists it together with this materialized slot.  Thus a later legitimate
-            // move/consume/drop is an ambiguity, whereas a crash before that save remains
-            // the one reversible missing-witness window.
-            armDurablePlayerSave(player, captured);
-            player.containerMenu.broadcastChanges();
-            PaleMirrorMod.LOGGER.info("Frontier v3 restored fenced player custody account={} player={} slot={} kind={} count={}",
-                    captured.accountId(), captured.playerId(), captured.slot(), captured.itemKind(), captured.bindingQuantity());
-            return true;
+            if (decision == Decision.CONFLICT)
+                PaleMirrorMod.LOGGER.warn("Frontier v3 retained changed player-custody slot account={} binding={}", captured.accountId(), captured.bindingId());
+            return false;
         }
         return false;
     }
@@ -98,13 +76,6 @@ final class FrontierV3PlayerCustodyRecovery {
         armDurablePlayerSave(player, observed.playerSaveFence(), observed.destinationAccount().id(), binding.id(), slot.slot());
     }
 
-    /** Records the completion witness for a recovered canonical-first player binding. */
-    private static void armDurablePlayerSave(ServerPlayer player, FrontierV3PlayerResourceDiagnostic.Expected expected) {
-        if (expected.playerSaveFence().isEmpty() || expected.slot() < 0
-                || expected.slot() >= player.getInventory().getContainerSize()) return;
-        armDurablePlayerSave(player, expected.playerSaveFence(), expected.accountId(), expected.bindingId(), expected.slot());
-    }
-
     private static void armDurablePlayerSave(ServerPlayer player, String token, SubjectId accountId, SubjectId bindingId, int slot) {
         CompoundTag fence = new CompoundTag();
         fence.putString("token", token); fence.putString("account", accountId.value());
@@ -112,34 +83,17 @@ final class FrontierV3PlayerCustodyRecovery {
         player.getPersistentData().put(SAVE_FENCE_KEY, fence);
     }
 
-    /** Package-visible decision boundary: only a missing exact post-handoff save is reversible. */
-    static Decision decision(FrontierV3PlayerResourceDiagnostic.Expected expected, FrontierV3PlayerResourceDiagnostic.Actual actual,
-                             boolean durablePlayerSaveSeen) {
+    /** Neither absence nor presence of an old marker authorizes a new physical effect. */
+    static Decision decision(FrontierV3PlayerResourceDiagnostic.Expected expected, FrontierV3PlayerResourceDiagnostic.Actual actual) {
         if (expected.canonicalQuantity() != expected.bindingQuantity() || expected.bindingQuantity() < 1 || expected.playerSaveFence().isEmpty()) {
             return Decision.CONFLICT;
         }
         if (expected.itemKind().equals(actual.itemKind()) && expected.bindingQuantity() == actual.count()) return Decision.CURRENT;
         if (actual.count() == 0 && actual.itemKind().isEmpty()) {
-            return durablePlayerSaveSeen ? Decision.LOCAL_AMBIGUITY : Decision.MATERIALIZE;
+            return Decision.LOCAL_AMBIGUITY;
         }
         return Decision.CONFLICT;
     }
 
-    private static boolean hasDurablePlayerSave(ServerPlayer player, FrontierV3PlayerResourceDiagnostic.Expected expected) {
-        CompoundTag fence = player.getPersistentData().getCompound(SAVE_FENCE_KEY);
-        return expected.playerSaveFence().equals(fence.getString("token"))
-                && expected.accountId().value().equals(fence.getString("account"))
-                && expected.bindingId().value().equals(fence.getString("binding")) && expected.slot() == fence.getInt("slot");
-    }
-
-    static ItemStack materialized(FrontierV3PlayerResourceDiagnostic.Expected expected) {
-        if (expected.bindingQuantity() < 1 || expected.bindingQuantity() != expected.canonicalQuantity()) return ItemStack.EMPTY;
-        ResourceLocation id = ResourceLocation.tryParse(expected.itemKind());
-        if (id == null) return ItemStack.EMPTY;
-        Item item = BuiltInRegistries.ITEM.getOptional(id).orElse(null);
-        if (item == null || expected.bindingQuantity() > item.getDefaultMaxStackSize()) return ItemStack.EMPTY;
-        return new ItemStack(item, expected.bindingQuantity());
-    }
-
-    enum Decision { CURRENT, MATERIALIZE, LOCAL_AMBIGUITY, CONFLICT }
+    enum Decision { CURRENT, LOCAL_AMBIGUITY, CONFLICT }
 }

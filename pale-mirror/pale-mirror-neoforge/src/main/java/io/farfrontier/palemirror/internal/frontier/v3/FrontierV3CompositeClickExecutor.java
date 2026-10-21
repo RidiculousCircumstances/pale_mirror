@@ -31,7 +31,7 @@ final class FrontierV3CompositeClickExecutor {
                 if (!transaction.members().get(i).after().orElseThrow().equals(layouts.get(i)))
                     return conflict(runtime, transaction, "composed member diverged from durable postimage");
             // A committed WAL may precede witness retirement; only the complete successor can retire it.
-            if (committed(state, transaction, layouts)) return retire(level, runtime, ledger, transaction, physical);
+            if (committed(state, transaction, physical)) return retire(level, runtime, ledger, transaction, physical);
         }
         boolean unchanged = true;
         for (int i = 0; i < layouts.size(); i++) unchanged &= layouts.get(i).equals(transaction.members().get(i).before());
@@ -71,14 +71,16 @@ final class FrontierV3CompositeClickExecutor {
         } catch (IllegalArgumentException invalid) { return conflict(runtime, observed, invalid.getMessage()); }
     }
     private static boolean committed(FrontierWorldState state, FrontierV3ContainerClickTransaction transaction,
-            List<List<FungiblePhysicalObservation.Stack>> layouts) {
-        var resources = state.inventory().fungibleResources();
-        for (int i = 0; i < layouts.size(); i++) {
-            var member = transaction.members().get(i); var account = resources.accounts().get(member.accountId());
-            if (account == null) {
-                if (!layouts.get(i).isEmpty() || resources.accounts().values().stream().anyMatch(a ->
-                        a.custody().equals(new ResourceCustody.Container(member.containerId())))) return false;
-            } else if (!FrontierV3ContainerClickExecutor.canonicalMatches(resources, member.accountId(), member.authorityEpoch(), layouts.get(i))) return false;
+            List<FrontierV3PhysicalContainer> physical) {
+        for (int i = 0; i < physical.size(); i++) {
+            var member = transaction.members().get(i);
+            var lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(member.containerId()));
+            var replica = state.replicaCustody().replicas().get(member.containerId());
+            var observed = FrontierV3ReferenceContainerCustodyExecutor.observedContainer(state, member.containerId(), physical.get(i));
+            if (lease == null || replica == null || lease.authorityEpoch() != member.authorityEpoch()
+                    || !FrontierV3ReferenceContainerCustodyExecutor.confirmedMutationAlreadyClosed(lease, replica,
+                        ReferenceContainerCustody.canonicalFingerprint(state, member.containerId()), observed.fingerprint(), observed.provenance()))
+                return false;
         }
         return true;
     }

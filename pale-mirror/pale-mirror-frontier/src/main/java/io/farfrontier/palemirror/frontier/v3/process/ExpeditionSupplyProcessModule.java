@@ -18,7 +18,7 @@ final class ExpeditionSupplyProcessModule implements FrontierWorldProcessModule 
                     "frontier.expedition_replenishment_hot_prepared", "frontier.expedition_replenishment_hot_loaded"), Set.of(), TYPES,
             Set.of("frontier.expedition_transfer_death_observed", "frontier.expedition_supply_hot_prepared", "frontier.expedition_supply_hot_loaded", "kernel.schedule_rescheduled",
                     "frontier.expedition_replenishment_hot_prepared", "frontier.expedition_replenishment_hot_loaded",
-                    "frontier.actor_movement_started", "kernel.schedule_created"), TYPES);
+                    "frontier.actor_movement_started", "kernel.schedule_created", "frontier.reference_mutation_closed"), TYPES);
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         SubjectId mission = switch (command.payload()) {
             case ExpeditionSupplyHotPrepared v -> v.missionId(); case ExpeditionSupplyHotLoaded v -> v.missionId();
@@ -26,18 +26,29 @@ final class ExpeditionSupplyProcessModule implements FrontierWorldProcessModule 
             case ExpeditionTransferDeathObserved v -> v.missionId();
             default -> throw new IllegalArgumentException("supplies reject a foreign command");
         };
-        try { reducePayload(state, mission, command.payload(), command.submittedAt().ticks()); }
+        FrontierWorldState successor;
+        try { successor = reducePayload(state, mission, command.payload(), command.submittedAt().ticks()); }
         catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         var events = new ArrayList<ProposedEvent>(); events.add(new ProposedEvent(mission, command.payload()));
+        var containers = new ArrayList<SubjectId>();
+        var previous = state.shipments().missions().get(mission);
+        if (command.payload() instanceof ExpeditionSupplyHotLoaded receipt) {
+            containers.add(previous.organization().home().containerId());
+            var allocation = previous.supplies().orElseThrow().allocations().stream()
+                    .filter(a -> a.claimId().equals(receipt.claimId())).findFirst().orElseThrow();
+            if (allocation.slot() instanceof ActorItemSlot.AttachedStorage storage) containers.add(storage.containerId());
+        } else if (command.payload() instanceof ExpeditionReplenishmentHotLoaded) {
+            containers.add(previous.replenishment().orElseThrow().containerId());
+        }
+        events.addAll(ConfirmedContainerMutationPlan.close(successor, containers, command.expectedRevision().next().value()));
         events.add(TransportMissionProcess.wake(mission, command.submittedAt().ticks()));
         if (command.payload() instanceof ExpeditionSupplyHotLoaded)
-            events.addAll(loadingContinuations(reducePayload(state, mission, command.payload(), command.submittedAt().ticks()), mission, command.submittedAt().ticks()));
+            events.addAll(loadingContinuations(successor, mission, command.submittedAt().ticks()));
         if (command.payload() instanceof ExpeditionTransferDeathObserved receipt
                 && state.actorLocations().get(receipt.step().observation().actuation().execution().actorId()).condition().status() == ActorLifeStatus.ALIVE)
             events.add(ResidentActivityProcess.wakeAfterActivity(receipt.step().observation().actuation().execution().actorId(), command.submittedAt().ticks()));
         if (command.payload() instanceof ExpeditionReplenishmentHotLoaded) {
-            var next = reducePayload(state, mission, command.payload(), command.submittedAt().ticks());
-            events.addAll(replenishmentClearance(state, next, mission, command.submittedAt().ticks()));
+            events.addAll(replenishmentClearance(state, successor, mission, command.submittedAt().ticks()));
             events.add(ResidentActivityProcess.wakeAfterActivity(state.shipments().missions().get(mission).replenishment().orElseThrow().actorId(), command.submittedAt().ticks()));
         }
         return new CommandPlan.Accepted(List.copyOf(events));
