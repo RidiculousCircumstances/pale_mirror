@@ -41,6 +41,10 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
     private long nextSequence;
     private final Map<Key, UUID> byOwner = new HashMap<>();
     private final Set<UUID> unattempted = new HashSet<>();
+    // A persisted APPLIED row records history, not the native image recovered by
+    // this process. Only actual live receipts or acknowledged disk saves grant
+    // confirmation; this bounded cache intentionally starts empty on recovery.
+    private final Map<UUID, Set<FrontierV3OperationReceipt.Participant>> currentNative = new HashMap<>();
     private final Map<UUID, Long> observedSince = new HashMap<>(); // diagnostics only, reset explicitly on process recovery
     private FrontierV3OperationLedger(Map<UUID, FrontierV3OperationReceipt> initial,
             Map<Long, Long> ranges, Map<UUID, OwnerCommand> commands, long nextSequence) {
@@ -132,8 +136,19 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         if (prior != null && !prior.equals(command)) throw new IllegalArgumentException("owner confirmation changed payload/command identity");
         if (prior == null) { ownerCommands.put(ticket, command); setDirty(); }
     }
-    void applied(FrontierV3OperationReceipt.NativeReceipt receipt) { replace(require(receipt.ticket()).applied(receipt)); }
+    void applied(FrontierV3OperationReceipt.NativeReceipt receipt) {
+        replace(require(receipt.ticket()).applied(receipt));
+        currentNative.computeIfAbsent(receipt.ticket(), ignored -> new HashSet<>()).add(receipt.participant());
+    }
     void saved(FrontierV3OperationReceipt.NativeReceipt receipt) { replace(require(receipt.ticket()).saved(receipt)); }
+    Set<FrontierV3OperationReceipt.Participant> unverifiedNative(UUID ticket) {
+        var value = require(ticket);
+        if (value.cancelled()) return Set.of();
+        var missing = new HashSet<>(value.declaration().participants());
+        missing.removeAll(value.saved()); missing.removeAll(currentNative.getOrDefault(ticket, Set.of()));
+        return Set.copyOf(missing);
+    }
+    boolean nativeOutcomeAvailable(UUID ticket) { return unverifiedNative(ticket).isEmpty(); }
     void closeOwner(UUID ticket) { replace(require(ticket).closeOwner()); }
     private void replace(FrontierV3OperationReceipt value) {
         if (!value.equals(require(value.ticket()))) { operations.put(value.ticket(), value); setDirty(); }
@@ -160,6 +175,7 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
     }
     private void remove(FrontierV3OperationReceipt value) {
         UUID ticket = value.ticket();
+        currentNative.remove(ticket);
         observedSince.remove(ticket);
         pendingParticipants -= value.declaration().participants().size();
         operations.remove(ticket); byOwner.remove(Key.of(value.declaration()), ticket); ownerCommands.remove(ticket); unattempted.remove(ticket); setDirty();

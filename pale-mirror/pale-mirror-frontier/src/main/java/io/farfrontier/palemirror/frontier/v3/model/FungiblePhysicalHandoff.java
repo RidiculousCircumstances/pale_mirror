@@ -23,19 +23,32 @@ public final class FungiblePhysicalHandoff {
     public static FungibleResourceHandoffObserved transferToSlot(FungibleResourceLedger ledger,
             PhysicalStackBinding source, int amount, SubjectId destinationId, ResourceCustody custody,
             long destinationEpoch, PhysicalStackAddress address) {
+        return transferToSlots(ledger, source, destinationId, custody, destinationEpoch, List.of(new SlotAmount(address, amount)));
+    }
+
+    public record SlotAmount(PhysicalStackAddress address, int quantity) {
+        public SlotAmount {
+            Objects.requireNonNull(address, "native transfer address");
+            if (quantity < 1 || quantity > 64) throw new IllegalArgumentException("invalid native slot transfer quantity");
+        }
+    }
+
+    /** One native callback may fill several slots. Retain one conservation outcome,
+     * not separate canonical transfers between the individual slot mutations. */
+    public static FungibleResourceHandoffObserved transferToSlots(FungibleResourceLedger ledger,
+            PhysicalStackBinding source, SubjectId destinationId, ResourceCustody custody,
+            long destinationEpoch, List<SlotAmount> slots) {
+        slots = List.copyOf(slots);
+        if (slots.isEmpty() || slots.size() > 256 || slots.stream().map(SlotAmount::address).distinct().count() != slots.size())
+            throw new IllegalArgumentException("native transfer requires a bounded distinct slot layout");
+        int amount = slots.stream().mapToInt(SlotAmount::quantity).sum();
         if (amount < 1 || amount > source.quantity() || destinationId.equals(source.accountId())
                 || destinationEpoch < 1 || !current(ledger, source.accountId(), source.authorityEpoch()).contains(source))
             throw new IllegalArgumentException("native transfer lacks a current distinct source and destination");
         var destination = ledger.accounts().get(destinationId);
-        if (destination == null)
-            return departToNew(ledger, source.accountId(), source.authorityEpoch(), source,
-                    source.quantity() - amount, destinationId, custody, destinationEpoch, address);
-        if (!destination.custody().equals(custody))
+        if (destination != null && !destination.custody().equals(custody))
             throw new IllegalArgumentException("native destination changed custody");
-        var destinationCurrent = current(ledger, destinationId, destinationEpoch);
-        var atAddress = destinationCurrent.stream().filter(binding -> binding.address().equals(address)).toList();
-        if (atAddress.size() > 1 || !atAddress.isEmpty() && !atAddress.getFirst().itemKind().equals(source.itemKind()))
-            throw new IllegalArgumentException("native destination has incompatible slot bindings");
+        var destinationCurrent = destination == null ? List.<PhysicalStackBinding>of() : current(ledger, destinationId, destinationEpoch);
         var retainedLots = first(source.lotQuantities(), source.quantity() - amount);
         var movedLots = subtract(source.lotQuantities(), retainedLots);
         var retainedClaims = first(source.claimQuantities(), Math.min(source.quantity() - amount,
@@ -48,19 +61,32 @@ public final class FungiblePhysicalHandoff {
                     source.address(), source.authorityEpoch(), source.itemKind(), retainedLots, retainedClaims, source.playerSaveFence()));
         }
         var arrived = new ArrayList<>(destinationCurrent);
-        if (atAddress.isEmpty()) {
-            int index = 0;
-            var ids = destinationCurrent.stream().map(PhysicalStackBinding::id).collect(java.util.stream.Collectors.toSet());
-            while (ids.contains(PhysicalStackBinding.generatedId(destinationId, destinationEpoch, index))) index++;
-            arrived.add(new PhysicalStackBinding(PhysicalStackBinding.generatedId(destinationId, destinationEpoch, index),
-                    destinationId, address, destinationEpoch, source.itemKind(), movedLots, movedClaims));
-        } else {
-            var prior = atAddress.getFirst(); arrived.remove(prior);
-            arrived.add(new PhysicalStackBinding(prior.id(), prior.accountId(), prior.address(), prior.authorityEpoch(),
-                    prior.itemKind(), add(prior.lotQuantities(), movedLots), add(prior.claimQuantities(), movedClaims), prior.playerSaveFence()));
+        var lotsLeft = movedLots;
+        var claimsLeft = movedClaims;
+        for (var slot : slots) {
+            var atAddress = destinationCurrent.stream().filter(binding -> binding.address().equals(slot.address())).toList();
+            if (atAddress.size() > 1 || !atAddress.isEmpty() && !atAddress.getFirst().itemKind().equals(source.itemKind()))
+                throw new IllegalArgumentException("native destination has incompatible slot bindings");
+            if (!atAddress.isEmpty() && atAddress.getFirst().quantity() + slot.quantity() > 64)
+                throw new IllegalArgumentException("native transfer exceeds one physical stack");
+            var slotLots = first(lotsLeft, slot.quantity());
+            var slotClaims = first(claimsLeft, Math.min(slot.quantity(), claimsLeft.values().stream().mapToInt(Integer::intValue).sum()));
+            lotsLeft = subtract(lotsLeft, slotLots); claimsLeft = subtract(claimsLeft, slotClaims);
+            if (atAddress.isEmpty()) {
+                int index = 0;
+                var ids = arrived.stream().map(PhysicalStackBinding::id).collect(java.util.stream.Collectors.toSet());
+                while (ids.contains(PhysicalStackBinding.generatedId(destinationId, destinationEpoch, index))) index++;
+                arrived.add(new PhysicalStackBinding(PhysicalStackBinding.generatedId(destinationId, destinationEpoch, index),
+                        destinationId, slot.address(), destinationEpoch, source.itemKind(), slotLots, slotClaims));
+            } else {
+                var prior = atAddress.getFirst(); arrived.remove(prior);
+                arrived.add(new PhysicalStackBinding(prior.id(), prior.accountId(), prior.address(), prior.authorityEpoch(),
+                        prior.itemKind(), add(prior.lotQuantities(), slotLots), add(prior.claimQuantities(), slotClaims), prior.playerSaveFence()));
+            }
         }
-        return new FungibleResourceHandoffObserved(source.accountId(), destination.withQuantities(
-                add(destination.lotQuantities(), movedLots), add(destination.claimQuantities(), movedClaims)),
+        var after = destination == null ? new CustodyAccount(destinationId, custody, movedLots, movedClaims)
+                : destination.withQuantities(add(destination.lotQuantities(), movedLots), add(destination.claimQuantities(), movedClaims));
+        return new FungibleResourceHandoffObserved(source.accountId(), after,
                 source.authorityEpoch(), destinationEpoch, movedLots, movedClaims, remaining, arrived);
     }
 

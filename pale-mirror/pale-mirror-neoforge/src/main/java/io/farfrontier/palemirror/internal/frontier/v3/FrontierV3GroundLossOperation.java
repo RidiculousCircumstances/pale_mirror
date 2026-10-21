@@ -21,17 +21,8 @@ final class FrontierV3GroundLossOperation {
             if (operation.declaration().protocol() != protocol
                     || !operation.declaration().fingerprint().equals(FrontierV3OperationConfirmation.fingerprint(receipt)))
                 throw new IllegalStateException("ground exit changed its declared native intent");
-            if (!operation.applied().equals(operation.declaration().participants())) {
-                var ports = FrontierV3OperationParticipantLookup.current(level, operation.declaration().participants());
-                if (ports.isEmpty()) return false;
-                if (!ports.stream().map(FrontierV3MinecraftOperation.Participant::identity).collect(java.util.stream.Collectors.toSet())
-                        .equals(operation.declaration().participants())) {
-                    FrontierV3OperationDiagnostics.result(level, operation, FrontierV3MinecraftOperation.Status.AMBIGUOUS); return false;
-                }
-                var observed = FrontierV3MinecraftOperation.observe(level, operation.declaration(), ports, () -> true).orElseThrow();
-                if (!observed.complete()) return false;
-                operation = ledger.require(operation.ticket());
-            }
+            if (!FrontierV3MinecraftOperation.recoverOutcome(level, operation.ticket())) return false;
+            operation = ledger.require(operation.ticket());
             journal.bindLossOperation(receipt, operation); journal.persist(level);
             if (!FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(), receipt)) return false;
         }

@@ -110,11 +110,8 @@ final class FrontierV3ContainerDropOperation {
             // Positive retirement with a PREPARED owner link is the explicit
             // unattempted-cancellation cut. Neither cut permits another spawn.
         } else {
-            if (!current.applied().equals(current.declaration().participants())) {
-                var ports = FrontierV3OperationParticipantLookup.current(level, current.declaration().participants());
-                if (ports.isEmpty() || !FrontierV3MinecraftOperation.observe(level, current.declaration(), ports, () -> true).orElseThrow().complete()) return false;
-                current = operations.require(current.ticket());
-            }
+            if (!FrontierV3MinecraftOperation.recoverOutcome(level, current.ticket())) return false;
+            current = operations.require(current.ticket());
             var linked = transaction.bind(current); journal.updateDrop(transaction, linked); journal.persist(level); transaction = linked;
             if (!FrontierV3OperationConfirmation.submit(level, runtime, current.ticket(), transaction.outcome())) return false;
         }

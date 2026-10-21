@@ -6,7 +6,7 @@ import java.util.*;
 /** Bounded log suppression only. Removing a diagnostic never resolves an operation. */
 final class FrontierV3OperationDiagnostics {
     private static final Map<ServerLevel, LinkedHashMap<UUID, FrontierV3MinecraftOperation.Status>> REPORTED = new WeakHashMap<>();
-    enum Backpressure { JOURNAL_CAPACITY, NATIVE_RECEIPT_CAPACITY }
+    enum Backpressure { JOURNAL_CAPACITY, NATIVE_RECEIPT_CAPACITY, NATIVE_RECOVERY_EVIDENCE }
     private record WaitKey(FrontierV3OperationReceipt.Protocol protocol, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner, String operation) {
         static WaitKey of(FrontierV3OperationReceipt.Declaration value) { return new WaitKey(value.protocol(), value.owner(), value.operation()); }
     }
@@ -18,7 +18,7 @@ final class FrontierV3OperationDiagnostics {
         if (previous == null || previous.reason() != reason) {
             waits.put(key, new Wait(reason, System.nanoTime()));
             io.farfrontier.palemirror.PaleMirrorMod.LOGGER.warn(
-                    "PMV3_OPERATION_WAIT protocol={} owner={} operation={} reason={} pendingOperations={}; no physical effect attempted",
+                    "PMV3_OPERATION_WAIT protocol={} owner={} operation={} reason={} pendingOperations={}; no new physical effect attempted",
                     declaration.protocol(), declaration.owner(), declaration.operation(), reason, FrontierV3OperationLedger.get(level).pendingCount());
             while (waits.size() > 1024) waits.remove(waits.keySet().iterator().next());
         }

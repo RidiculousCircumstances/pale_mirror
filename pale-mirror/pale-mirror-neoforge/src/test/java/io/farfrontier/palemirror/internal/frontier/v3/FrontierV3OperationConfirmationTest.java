@@ -14,6 +14,54 @@ import static org.junit.jupiter.api.Assertions.*;
 class FrontierV3OperationConfirmationTest {
     @BeforeAll static void version() { net.minecraft.SharedConstants.tryDetectVersion(); }
     @TempDir Path directory;
+    @Test void mixedNativeGenerationsCannotUseHistoricalAppliedAsCurrentEvidence() {
+        var ledger = FrontierV3OperationLedger.inMemory();
+        var source = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.TERRAIN, "source", 1);
+        var target = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.ENTITIES, UUID.randomUUID().toString(), 2);
+        var operation = ledger.prepare(new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.NATIVE_INVENTORY_TRANSFER,
+                FrontierExecutionSubjects.PHYSICAL_EXECUTOR, "mixed-save", "exact", Set.of(source, target)));
+        ledger.applied(operation.nativeReceipt(source)); ledger.applied(operation.nativeReceipt(target));
+        ledger.saved(operation.nativeReceipt(source));
+        assertTrue(ledger.nativeOutcomeAvailable(operation.ticket()), "the running callback has both actual native participants");
+        var recovered = FrontierV3OperationLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), null), null);
+        assertEquals(operation.declaration().participants(), recovered.require(operation.ticket()).applied());
+        assertEquals(Set.of(target), recovered.unverifiedNative(operation.ticket()), "only the independently unsaved side needs native evidence");
+        var consequence = new PhysicalDeltaObserved(new PhysicalDelta(new BlockPosition(1, 64, 1), PhysicalDeltaKind.UNKNOWN_SCAR,
+                Optional.empty(), Optional.empty(), "test:mixed-native-save"));
+        var calls = new AtomicInteger(); var forces = new AtomicInteger();
+        var canonical = new FrontierV3OperationConfirmation.Canonical() {
+            public void pin(CommandId id) { }
+            public void release(CommandId id) { }
+            public Optional<CommandReceipt> receipt(CommandId id) { return Optional.empty(); }
+            public CommandResult submit(CommandId id, SubjectId owner, FrontierPayload payload) {
+                calls.incrementAndGet(); return new CommandResult.Accepted(id, new TransactionId("test:mixed"), new Revision(1));
+            }
+        };
+        assertFalse(FrontierV3OperationConfirmation.submit(recovered, forces::incrementAndGet, canonical, operation.ticket(), consequence));
+        assertFalse(FrontierV3OperationConfirmation.submitRecovery(recovered, forces::incrementAndGet, canonical, operation.ticket(), consequence));
+        assertEquals(0, calls.get()); assertEquals(0, forces.get()); assertTrue(recovered.ownerCommand(operation.ticket()).isEmpty());
+        recovered.applied(operation.nativeReceipt(target));
+        assertTrue(recovered.nativeOutcomeAvailable(operation.ticket()), "a validated current native marker fills only its own gap");
+        var restarted = FrontierV3OperationLedger.load(recovered.save(new net.minecraft.nbt.CompoundTag(), null), null);
+        assertFalse(restarted.nativeOutcomeAvailable(operation.ticket()), "live observation is not itself disk durability");
+        restarted.saved(operation.nativeReceipt(target));
+        var durable = FrontierV3OperationLedger.load(restarted.save(new net.minecraft.nbt.CompoundTag(), null), null);
+        assertTrue(FrontierV3OperationConfirmation.submit(durable, forces::incrementAndGet, canonical, operation.ticket(), consequence));
+        assertEquals(1, calls.get()); assertTrue(durable.find(operation.ticket()).isEmpty());
+    }
+    @Test void canonicalClosureDoesNotAuthorizeRetiringAnUnverifiedNativeOwnerWitness() {
+        var ledger = FrontierV3OperationLedger.inMemory();
+        var participant = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.CHUNK_BLOCKS, "1", 1);
+        var operation = ledger.prepare(new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.FIELD_WORK,
+                new SubjectId("owner:closed-test"), "effect", "exact", Set.of(participant)));
+        ledger.applied(operation.nativeReceipt(participant)); ledger.closeOwner(operation.ticket());
+        var recovered = FrontierV3OperationLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), null), null);
+        assertTrue(recovered.require(operation.ticket()).ownerClosed());
+        assertFalse(recovered.nativeOutcomeAvailable(operation.ticket()), "canonical acceptance and native recovery are separate acknowledgements");
+        recovered.applied(operation.nativeReceipt(participant));
+        assertTrue(recovered.nativeOutcomeAvailable(operation.ticket()));
+        assertFalse(recovered.require(operation.ticket()).retirable(), "fresh live evidence still cannot retire the disk-save obligation");
+    }
     @Test void sealedCancellationAndItsTypedConsequenceRecoverWithoutInventingNativeApplication() {
         var ledger = FrontierV3OperationLedger.inMemory();
         var participant = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.ENTITIES, UUID.randomUUID().toString(), 1);

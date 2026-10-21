@@ -19,6 +19,15 @@ import java.util.*;
 record FrontierV3AutomationSlot(Container inventory, int slot, SubjectId account, ResourceCustody custody,
         PhysicalStackAddress address, long epoch, FrontierV3MinecraftOperation.Participant persistence) {
     private static final String CARRIER = "pm_v3_automation_carrier";
+    /** Read-only declaration check, deliberately independent of current admission.
+     * A fenced/missing lease must not turn a managed endpoint into an untracked one. */
+    static boolean managed(Container container, FrontierWorldState state) {
+        if (container instanceof CompoundContainer && container instanceof FrontierV3CompoundContainerAccessor access)
+            return managed(access.frontierV3$first(), state) || managed(access.frontierV3$second(), state);
+        if (!(container instanceof net.minecraft.world.level.block.entity.BlockEntity entity)) return false;
+        if (!entity.getPersistentData().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY).isBlank()) return true;
+        return accounted(entity, state);
+    }
     static boolean accounted(net.minecraft.world.level.block.entity.BlockEntity entity, FrontierWorldState state) {
         if (!entity.getPersistentData().hasUUID(CARRIER)) return false;
         UUID id = entity.getPersistentData().getUUID(CARRIER);

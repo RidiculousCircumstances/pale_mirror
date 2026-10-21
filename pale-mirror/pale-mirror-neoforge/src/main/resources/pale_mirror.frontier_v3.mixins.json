@@ -4,6 +4,7 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "FrontierV3AutomationTransfersMixin",
+    "FrontierV3GroundInventoryPickupMixin",
     "FrontierV3AutomationEjectionMixin",
     "FrontierV3SidedInventoryAccessor",
     "FrontierV3ContainerDropsMixin",

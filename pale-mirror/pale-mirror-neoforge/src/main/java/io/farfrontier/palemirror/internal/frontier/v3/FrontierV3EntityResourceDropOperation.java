@@ -61,11 +61,8 @@ final class FrontierV3EntityResourceDropOperation {
             // APPLIED owner cut. Neither authorizes another spawn or canonical command.
         } else {
             transaction.bind(current); // Validate identity even before examining native markers.
-            if (!current.applied().equals(current.declaration().participants())) {
-                var ports = FrontierV3OperationParticipantLookup.current(level, current.declaration().participants());
-                if (ports.isEmpty() || !FrontierV3MinecraftOperation.observe(level, current.declaration(), ports, () -> true).orElseThrow().complete()) return false;
-                current = operations.require(current.ticket());
-            }
+            if (!FrontierV3MinecraftOperation.recoverOutcome(level, current.ticket())) return false;
+            current = operations.require(current.ticket());
             var applied = transaction.bind(current); journal.updateEntityDrop(transaction, applied); journal.persist(level); transaction = applied;
             if (!FrontierV3OperationConfirmation.submit(level, runtime, current.ticket(), transaction.outcome())) return false;
         }

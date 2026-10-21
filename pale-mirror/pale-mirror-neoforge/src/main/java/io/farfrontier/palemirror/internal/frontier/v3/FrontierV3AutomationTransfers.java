@@ -2,9 +2,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
-import net.minecraft.world.CompoundContainer;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.Hopper;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.item.ItemStack;
@@ -13,7 +11,6 @@ import net.neoforged.neoforge.items.wrapper.InvWrapper;
 import org.apache.commons.lang3.tuple.Pair;
 import java.util.Optional;
 import java.util.function.Function;
-import io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3CompoundContainerAccessor;
 import io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3SidedInventoryAccessor;
 
 /** Thin NeoForge provider adapter. The native callback still owns insertion rules,
@@ -88,10 +85,6 @@ public final class FrontierV3AutomationTransfers {
         return selected instanceof Container container && managed(container, state);
     }
     private static boolean managed(Container container, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState state) {
-        if (container instanceof CompoundContainer && container instanceof FrontierV3CompoundContainerAccessor access)
-            return managed(access.frontierV3$first(), state) || managed(access.frontierV3$second(), state);
-        if (!(container instanceof BlockEntity entity)) return false;
-        if (!entity.getPersistentData().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY).isBlank()) return true;
-        return FrontierV3AutomationSlot.accounted(entity, state);
+        return FrontierV3AutomationSlot.managed(container, state);
     }
 }

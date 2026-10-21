@@ -42,14 +42,8 @@ final class FrontierV3PlayerClickOperation {
         if (confirmed(level, transaction)) return transaction;
         var operation = operation(level, transaction).orElse(null);
         if (operation == null) return null; // Missing evidence cannot be replaced by a matching layout.
-        if (!operation.applied().equals(operation.declaration().participants())) {
-            var ports = ports(level, state, transaction);
-            if (!ports.stream().map(FrontierV3MinecraftOperation.Participant::identity).collect(java.util.stream.Collectors.toSet())
-                    .equals(operation.declaration().participants())) return null;
-            var observed = FrontierV3MinecraftOperation.observe(level, operation.declaration(), ports, () -> true).orElseThrow();
-            if (!observed.complete()) return null;
-            operation = FrontierV3OperationLedger.get(level).require(operation.ticket());
-        }
+        if (!FrontierV3MinecraftOperation.recoverOutcome(level, operation.ticket())) return null;
+        operation = FrontierV3OperationLedger.get(level).require(operation.ticket());
         var owner = FrontierV3DepotClickLedger.get(level); var linked = owner.bind(transaction, operation); owner.persist(level); return linked;
     }
     static Optional<FrontierV3OperationReceipt> operation(ServerLevel level, FrontierV3ContainerClickTransaction transaction) {
@@ -60,7 +54,8 @@ final class FrontierV3PlayerClickOperation {
     }
     static boolean confirmed(ServerLevel level, FrontierV3ContainerClickTransaction transaction) {
         var current = operation(level, transaction);
-        if (current.isPresent()) return current.orElseThrow().ownerClosed();
+        if (current.isPresent()) return current.orElseThrow().ownerClosed()
+                && FrontierV3MinecraftOperation.recoverOutcome(level, current.orElseThrow().ticket());
         return transaction.operation().map(proof -> FrontierV3OperationLedger.get(level).prunable(
                 proof.nativeReceipt(proof.declaration().participants().iterator().next()))).orElse(false);
     }

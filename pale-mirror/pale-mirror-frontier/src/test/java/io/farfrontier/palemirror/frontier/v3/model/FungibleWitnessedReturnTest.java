@@ -15,6 +15,24 @@ class FungibleWitnessedReturnTest {
     private static final SubjectId TARGET = new SubjectId("custody:return");
     private static final UUID PLAYER = UUID.fromString("00000000-0000-0000-0000-000000000009");
 
+    @Test void nativeMultiSlotHandoffConservesOneOutcomeAndRejectsDuplicateOrExcessPortions() {
+        var ledger = playerStock(); var source = ledger.bindings().values().iterator().next();
+        var first = new FungiblePhysicalHandoff.SlotAmount(stack(0, 3).address(), 3);
+        var second = new FungiblePhysicalHandoff.SlotAmount(stack(1, 4).address(), 4);
+        var custody = new ResourceCustody.Container(CONTAINER);
+        var fact = FungiblePhysicalHandoff.transferToSlots(ledger, source, TARGET, custody, 7, List.of(first, second));
+        var result = apply(ledger, fact);
+        assertEquals(ledger.lots(), result.lots());
+        assertEquals(Map.of(LOT, 3), result.accounts().get(PLAYER_ACCOUNT).lotQuantities());
+        assertEquals(Map.of(LOT, 7), result.accounts().get(TARGET).lotQuantities());
+        assertEquals(2, fact.destinationBindings().size());
+        assertThrows(IllegalArgumentException.class, () -> apply(result, fact));
+        assertThrows(IllegalArgumentException.class, () -> FungiblePhysicalHandoff.transferToSlots(ledger, source,
+                TARGET, custody, 7, List.of(first, first)));
+        assertThrows(IllegalArgumentException.class, () -> FungiblePhysicalHandoff.transferToSlots(ledger, source,
+                TARGET, custody, 7, List.of(new FungiblePhysicalHandoff.SlotAmount(first.address(), 11))));
+    }
+
     @Test void causalReturnCreatesNoGiftAndRetainsPartialPlayerPortion() {
         var ledger = playerStock(); var source = ledger.bindings().values().iterator().next();
         var fact = FungiblePhysicalHandoff.returnObserved(ledger, source, 4, TARGET, CONTAINER, 7,

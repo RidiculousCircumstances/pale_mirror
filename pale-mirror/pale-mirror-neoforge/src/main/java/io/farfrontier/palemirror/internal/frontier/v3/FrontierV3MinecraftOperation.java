@@ -34,6 +34,28 @@ final class FrontierV3MinecraftOperation {
         }
     }
     private FrontierV3MinecraftOperation() { }
+    /** Historical APPLIED is not evidence that all independent native files
+     * survived a crash. Resolve only the missing participants, without loading
+     * chunks, recreating entities, replaying effects or inventing compensation. */
+    static boolean recoverOutcome(ServerLevel level, UUID ticket) {
+        if (!level.getServer().isSameThread()) throw new IllegalStateException("native recovery outside server thread");
+        var ledger = FrontierV3OperationLedger.get(level); var operation = ledger.require(ticket);
+        var missing = ledger.unverifiedNative(ticket);
+        if (missing.isEmpty()) return true;
+        var ports = FrontierV3OperationParticipantLookup.current(level, missing);
+        if (ports.isEmpty()) {
+            FrontierV3OperationDiagnostics.waiting(level, operation.declaration(), FrontierV3OperationDiagnostics.Backpressure.NATIVE_RECOVERY_EVIDENCE);
+            return false;
+        }
+        if (!ports.stream().map(Participant::identity).collect(java.util.stream.Collectors.toSet()).equals(missing)
+                || !ports.stream().allMatch(port -> FrontierV3NativeOperationMarkers.contains(port.persistent(), operation.nativeReceipt(port.identity())))) {
+            FrontierV3OperationDiagnostics.result(level, operation, Status.AMBIGUOUS); return false;
+        }
+        for (var port : ports) ledger.applied(operation.nativeReceipt(port.identity()));
+        ledger.persist(level);
+        FrontierV3OperationDiagnostics.result(level, ledger.require(ticket), Status.OBSERVED);
+        return true;
+    }
     /** Recovery may inspect exact receipts without granting another mutation attempt. */
     static Optional<Result> observe(ServerLevel level, FrontierV3OperationReceipt.Declaration declaration,
             List<Participant> participants, BooleanSupplier after) {

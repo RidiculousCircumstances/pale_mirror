@@ -21,10 +21,12 @@ final class FrontierV3OperationConfirmation {
     static boolean submit(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime, UUID ticket, FrontierPayload consequence,
             java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> binding) {
         var ledger = FrontierV3OperationLedger.get(level);
+        if (!FrontierV3MinecraftOperation.recoverOutcome(level, ticket)) return false;
         return submit(ledger, () -> ledger.persist(level), canonical(level, runtime, binding), ticket, consequence);
     }
     static boolean submit(FrontierV3OperationLedger ledger, Runnable force, Canonical canonical, UUID ticket, FrontierPayload consequence) {
         var operation = ledger.require(ticket);
+        if (!ledger.nativeOutcomeAvailable(ticket)) return false;
         if (operation.ownerClosed()) return true;
         var retained = ledger.ownerCommand(ticket);
         var command = retained.orElseGet(() -> new FrontierV3OperationLedger.OwnerCommand(
@@ -49,10 +51,12 @@ final class FrontierV3OperationConfirmation {
     static boolean submitRecovery(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime, UUID ticket,
             FrontierPayload consequence, java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> binding) {
         var ledger = FrontierV3OperationLedger.get(level);
+        if (!FrontierV3MinecraftOperation.recoverOutcome(level, ticket)) return false;
         return submitRecovery(ledger, () -> ledger.persist(level), canonical(level, runtime, binding), ticket, consequence);
     }
     static boolean submitRecovery(FrontierV3OperationLedger ledger, Runnable force, Canonical canonical,
             UUID ticket, FrontierPayload consequence) {
+        if (!ledger.nativeOutcomeAvailable(ticket)) return false;
         if (ledger.require(ticket).ownerClosed()) return true;
         var retained = ledger.ownerCommand(ticket);
         if (retained.isPresent()) {
