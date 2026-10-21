@@ -29,15 +29,16 @@ final class FrontierV3ResidentMealDeathResources {
         var preparedEffect = prepareEffect(level, runtime, body, id, state, meal);
         // The indexed dying body is the positive source witness. An absent corpse after
         // loot/unload is deliberately not accepted by this port.
-        return () -> {
-            if (!preparedEffect.getAsBoolean()) {
+        return FrontierV3ActorDeathResourceComposition.retained(preparedEffect.stream().toList(), () -> {
+            var retained = runtime.decodedState().orElseThrow().humanPopulation().mealResourceObligations().get(id.actorId());
+            if (retained != null && retained.pendingPhysicalStep().isPresent()) {
                 io.farfrontier.palemirror.PaleMirrorMod.LOGGER.warn(
                         "PMV3_MEAL_DEATH_UNRESOLVED body={} execution={} step={}; exact native outcome unavailable, no replay or stock disposition",
                         id, meal.executionId(), meal.pendingPhysicalStep());
                 return;
             }
             settlePortion(level, runtime, body, id, meal.executionId(), beforeLoot);
-        };
+        });
     }
 
     static boolean settled(FrontierWorldState state, ActorBodyId id) {
@@ -53,10 +54,10 @@ final class FrontierV3ResidentMealDeathResources {
         settlePortion(level, runtime, body, id, retained.executionId(), before);
     }
 
-    private static java.util.function.BooleanSupplier prepareEffect(ServerLevel level,
+    private static Optional<FrontierV3OperationAftermath> prepareEffect(ServerLevel level,
             FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body, ActorBodyId id,
             FrontierWorldState state, ResidentMeal meal) {
-        if (meal.pendingPhysicalStep().isEmpty()) return () -> true;
+        if (meal.pendingPhysicalStep().isEmpty()) return Optional.empty();
         var worker = (Villager) body; var step = meal.pendingPhysicalStep().orElseThrow();
         var actor = FrontierV3OperationEntityParticipant.current(body, id.physicalEpoch());
         if (step.phase() == ResidentMeal.Phase.CONSUME) {
@@ -66,7 +67,7 @@ final class FrontierV3ResidentMealDeathResources {
             boolean before = FrontierV3ResidentMealItems.matches(actual, held);
             int remainingCount = before ? held.quantity() : held.quantity() - meal.portion().quantity();
             if (!before && (remainingCount == 0 ? !actual.isEmpty() : actual.getCount() != remainingCount
-                    || !ItemStack.isSameItemSameComponents(actual, FrontierV3ResidentMealItems.stack(held)))) return () -> false;
+                    || !ItemStack.isSameItemSameComponents(actual, FrontierV3ResidentMealItems.stack(held)))) return Optional.empty();
             var remainder = remainingCount == 0 ? List.<FungiblePhysicalObservation.Stack>of()
                     : List.of(new FungiblePhysicalObservation.Stack(FrontierV3ActorResourceSlots.address(
                             meal.residentId(), worker, meal.inventorySlot()), held.itemKind(), remainingCount));
@@ -74,20 +75,20 @@ final class FrontierV3ResidentMealDeathResources {
                     before ? ResidentMealResourceEffectObserved.Outcome.CONSUMPTION_UNAPPLIED
                             : ResidentMealResourceEffectObserved.Outcome.CONSUMPTION_APPLIED, remainder, List.of());
             var snapshot = actual.copy();
-            return () -> settleEffect(level, runtime, declaration, List.of(actor), receipt,
+            return FrontierV3OperationAftermath.capture(level, declaration, List.of(actor), receipt, !before,
                     () -> ItemStack.matches(snapshot, FrontierV3ActorResourceSlots.get(body, meal.inventorySlot())));
         }
         var surface = state.inventory().surfaces().get(meal.depotId());
         if (surface == null || !ReferenceContainerCustody.hasLiveCustody(state, meal.depotId())
-                || ReferenceContainerCustody.blocksCanonicalUse(state, meal.depotId())) return () -> false;
+                || ReferenceContainerCustody.blocksCanonicalUse(state, meal.depotId())) return Optional.empty();
         var position = new BlockPos(surface.position().x(), surface.position().y(), surface.position().z());
-        if (!level.hasChunkAt(position)) return () -> false;
+        if (!level.hasChunkAt(position)) return Optional.empty();
         var chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, position, meal.depotId());
-        if (chest == null) return () -> false;
+        if (chest == null) return Optional.empty();
         var order = ResidentMealProcess.takeOrder(state, meal);
         var slices = MaterialSourceSelection.select(state.inventory().fungibleResources(), order);
         if (slices.isEmpty() || slices.stream().anyMatch(slice -> slice.epoch() != step.sourceEpoch())
-                || !ResidentMealPhysicalStep.sourceCounts(slices).equals(step.sourceCounts())) return () -> false;
+                || !ResidentMealPhysicalStep.sourceCounts(slices).equals(step.sourceCounts())) return Optional.empty();
         var transfer = new FrontierV3ActorItemTransfer.FungibleStep(order, chest, worker, worker.getUUID(), slices, -1);
         var source = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, state, meal.depotId());
         var container = FrontierV3OperationBlockEntityParticipant.current(chest);
@@ -103,36 +104,9 @@ final class FrontierV3ResidentMealDeathResources {
                     meal.residentId(), worker, meal.inventorySlot()), meal.portion().itemKind(), meal.portion().quantity());
             receipt = new ResidentMealResourceEffectObserved(id, meal.executionId(), step,
                     ResidentMealResourceEffectObserved.Outcome.TAKE_APPLIED, source, List.of(held));
-        } else return () -> false;
-        return () -> settleEffect(level, runtime, declaration, List.of(actor, container), receipt,
+        } else return Optional.empty();
+        return FrontierV3OperationAftermath.capture(level, declaration, List.of(actor, container), receipt, !before,
                 before ? transfer::before : transfer::after);
-    }
-
-    private static boolean settleEffect(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-            FrontierV3OperationReceipt.Declaration declaration, List<FrontierV3MinecraftOperation.Participant> ports,
-            ResidentMealResourceEffectObserved receipt, java.util.function.BooleanSupplier unchanged) {
-        if (!unchanged.getAsBoolean()) return false;
-        var operations = FrontierV3OperationLedger.get(level);
-        boolean cancelled = receipt.outcome() == ResidentMealResourceEffectObserved.Outcome.TAKE_UNAPPLIED
-                || receipt.outcome() == ResidentMealResourceEffectObserved.Outcome.CONSUMPTION_UNAPPLIED;
-        UUID ticket;
-        if (cancelled) {
-            // The same owner/key as ordinary execution admits a never-started intent,
-            // or returns its prior attempt. A recovered PREPARED never gains that permission.
-            if (!operations.canPrepare(declaration)) return false;
-            var operation = operations.prepare(declaration);
-            if (!operations.sealUnattemptedCancellation(operation.ticket())) {
-                FrontierV3OperationDiagnostics.result(level, operation, FrontierV3MinecraftOperation.Status.AMBIGUOUS); return false;
-            }
-            ticket = operation.ticket();
-            // Cancellation and its full typed consequence are forced together by
-            // submitRecovery; neither is prematurely retired on this path.
-        } else {
-            var observed = FrontierV3MinecraftOperation.observe(level, declaration, ports, unchanged).orElse(null);
-            if (observed == null || !observed.complete()) return false;
-            ticket = observed.ticket();
-        }
-        return FrontierV3OperationConfirmation.submitRecovery(level, runtime, ticket, receipt, Optional.empty());
     }
 
     static boolean reconcileOne(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {

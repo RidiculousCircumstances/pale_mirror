@@ -11,7 +11,17 @@ import java.util.Objects;
 /** Closed resource-owner hooks. Body death knows neither food phases nor equipment policy. */
 final class FrontierV3ActorDeathResourceComposition {
     enum Owner { EXACT_EQUIPMENT, RESIDENT_MEAL, SETTLEMENT_SERVICE, EXPEDITION_TRANSFER, SHIPMENT, UNIT_INVENTORY, ATTACHED_STORAGE }
-    @FunctionalInterface interface AfterFatality { void settle(); }
+    @FunctionalInterface interface AfterFatality {
+        void settle();
+        default List<FrontierV3OperationAftermath> effects() { return List.of(); }
+    }
+    static AfterFatality retained(List<FrontierV3OperationAftermath> effects, Runnable settlement) {
+        var captured = List.copyOf(effects);
+        return new AfterFatality() {
+            public void settle() { settlement.run(); }
+            public List<FrontierV3OperationAftermath> effects() { return captured; }
+        };
+    }
     @FunctionalInterface interface Preparation {
         AfterFatality prepare(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                               Mob body, ActorBodyId id);
@@ -64,7 +74,8 @@ final class FrontierV3ActorDeathResourceComposition {
         // Rejected common death must never execute a post-retirement resource receipt.
         var settlements = HANDLERS.stream().map(handler -> Objects.requireNonNull(
                 handler.preparation().prepare(level, runtime, body, id))).toList();
-        return () -> settlements.forEach(AfterFatality::settle);
+        return retained(settlements.stream().flatMap(value -> value.effects().stream()).toList(),
+                () -> settlements.forEach(AfterFatality::settle));
     }
     static boolean reconcileOne(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
         if (FrontierV3EntityResourceDropOperation.reconcileOne(level, runtime)) return true;

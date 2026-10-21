@@ -15,7 +15,7 @@ final class FrontierV3BodyFatalityOperation {
     private FrontierV3BodyFatalityOperation() { }
 
     static java.util.UUID commit(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-            Mob body, ActorBodyDied consequence, Runnable nativeDeath, BooleanSupplier died) {
+            Mob body, ActorBodyDied consequence, List<FrontierV3OperationAftermath> aftermath, Runnable nativeDeath, BooleanSupplier died) {
         var participant = FrontierV3OperationEntityParticipant.current(body, consequence.body().physicalEpoch());
         var world = runtime.decodedState().orElseThrow().bootstrap().worldId();
         var declaration = new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.BODY_FATALITY,
@@ -25,10 +25,12 @@ final class FrontierV3BodyFatalityOperation {
         var ledger = FrontierV3OperationLedger.get(level);
         if (!ledger.canPrepare(declaration)) throw new IllegalStateException("body fatality cannot lose its durable intent under backpressure");
         var operation = ledger.prepare(declaration);
+        var snapshot = FrontierV3BodyResourceSnapshot.capture(level, runtime.decodedState().orElseThrow(), body, aftermath);
         ledger.retainOwnerIntent(operation.ticket(), new FrontierV3OperationLedger.OwnerCommand(
                 new CommandId("physical-operation:" + operation.ticket()), consequence,
                 FrontierV3OperationLedger.OwnerCommand.Closure.EXPLICIT_OWNER,
-                FrontierV3BodyResourceSnapshot.capture(level, runtime.decodedState().orElseThrow(), body).encode()));
+                snapshot.encode()));
+        snapshot.retain(ledger, operation.ticket());
         ledger.persist(level);
         var result = FrontierV3MinecraftOperation.apply(level, declaration, List.of(participant),
                 () -> !died.getAsBoolean() && !body.isRemoved() && level.getEntity(body.getUUID()) == body,
@@ -37,6 +39,7 @@ final class FrontierV3BodyFatalityOperation {
                 + operation.ticket() + " " + result.status());
         if (!FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(), consequence))
             throw new IllegalStateException("native body fatality awaits canonical confirmation: " + operation.ticket());
+        snapshot.settle(level, runtime, operation.ticket());
         return operation.ticket();
     }
 
@@ -97,9 +100,11 @@ final class FrontierV3BodyFatalityOperation {
             var carriers = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
             FrontierV3BodyOperationIntegration.recover(level, state, carriers, consequence.body().actorId());
             carriers.retireDeadActor(state, consequence.body().actorId()); carriers.persist(level, state.bootstrap().worldId());
+            var snapshot = FrontierV3BodyResourceSnapshot.decode(retained.context());
+            snapshot.settle(level, runtime, operation.ticket());
             if (entity instanceof Mob body && FrontierV3ActorBodyController.recognizesRetiredDeadBody(level, state, body))
                 FrontierV3ActorDeathResourceComposition.recover(level, runtime, body, consequence.body(),
-                        FrontierV3BodyResourceSnapshot.decode(retained.context()));
+                        snapshot);
             finish(level, runtime, operation.ticket(), consequence.body());
         }
     }

@@ -36,7 +36,7 @@ final class FrontierV3ExpeditionTransferDeathResources {
     static FrontierV3ActorDeathResourceComposition.AfterFatality prepare(ServerLevel level,
             FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body, ActorBodyId id) {
         var state = runtime.decodedState().orElseThrow();
-        var settlements = new ArrayList<FrontierV3ActorDeathResourceComposition.AfterFatality>();
+        var effects = new ArrayList<FrontierV3OperationAftermath>();
         for (var retained : pending(state)) {
             var surface = state.inventory().surfaces().get(retained.order().containerEndpoint().containerId());
             if (!retained.step().observation().actuation().body().equals(id)
@@ -64,30 +64,12 @@ final class FrontierV3ExpeditionTransferDeathResources {
                     ? FrontierV3OperationEntityParticipant.current(recipient, retained.step().observation().actuation().body().physicalEpoch())
                     : attached.persistence().get());
             var declaration = FrontierV3MinecraftOperation.declaration(retained.protocol(), retained.mission(), retained.prepared(), ports);
-            settlements.add(() -> {
-                if (!(applied ? effect.after() : effect.before())) { unresolved(retained, id, "changed-during-fatality"); return; }
-                var operations = FrontierV3OperationLedger.get(level);
-                UUID ticket;
-                if (applied) {
-                    var observed = FrontierV3MinecraftOperation.observe(level, declaration, ports, effect::after).orElse(null);
-                    if (observed == null || !observed.complete()) { unresolved(retained, id, "missing-exact-native-application"); return; }
-                    ticket = observed.ticket();
-                } else {
-                    if (!operations.canPrepare(declaration)) {
-                        FrontierV3OperationDiagnostics.waiting(level, declaration, FrontierV3OperationDiagnostics.Backpressure.JOURNAL_CAPACITY); return;
-                    }
-                    var operation = operations.prepare(declaration);
-                    if (!operations.sealUnattemptedCancellation(operation.ticket())) {
-                        FrontierV3OperationDiagnostics.result(level, operation, FrontierV3MinecraftOperation.Status.AMBIGUOUS); return;
-                    }
-                    ticket = operation.ticket();
-                }
-                // The common WAL retains the whole typed consequence until confirmation;
-                // matching source counts are only validation, never evidence of execution.
-                FrontierV3OperationConfirmation.submitRecovery(level, runtime, ticket, receipt, Optional.empty());
-            });
+            var captured = FrontierV3OperationAftermath.capture(level, declaration, ports, receipt, applied,
+                    applied ? effect::after : effect::before);
+            if (captured.isEmpty()) unresolved(retained, id, "native-outcome-or-unused-permission-unavailable");
+            else effects.add(captured.orElseThrow());
         }
-        return () -> settlements.forEach(FrontierV3ActorDeathResourceComposition.AfterFatality::settle);
+        return FrontierV3ActorDeathResourceComposition.retained(effects, () -> { });
     }
 
     static boolean reconcileOne(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {

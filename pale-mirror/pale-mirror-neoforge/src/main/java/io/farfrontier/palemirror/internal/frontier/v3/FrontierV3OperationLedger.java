@@ -53,6 +53,11 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         @Override public int hashCode() { return Objects.hash(id, fingerprint, closure, Arrays.hashCode(context)); }
     }
     private final Map<UUID, OwnerCommand> ownerCommands;
+    /** Positive unused child permissions consumed by a declared enclosing operation.
+     * Unlike a recovered PREPARED row, this is durable proof that the child was
+     * excluded from native execution before its parent's native boundary. */
+    private final Map<UUID, UUID> cancellationParents;
+    private final Map<UUID, Integer> cancellationChildren = new HashMap<>();
     private long nextSequence;
     private final Map<Key, UUID> byOwner = new HashMap<>();
     /** Derived, bounded recovery index; never a second durable operation owner. */
@@ -71,7 +76,7 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
     private final Map<UUID, Set<FrontierV3OperationReceipt.Participant>> currentNative = new HashMap<>();
     private final Map<UUID, Long> observedSince = new HashMap<>(); // diagnostics only, reset explicitly on process recovery
     private FrontierV3OperationLedger(Map<UUID, FrontierV3OperationReceipt> initial,
-            Map<Long, Long> ranges, Map<UUID, OwnerCommand> commands, long nextSequence) {
+            Map<Long, Long> ranges, Map<UUID, OwnerCommand> commands, Map<UUID, UUID> cancellations, long nextSequence) {
         super(FrontierV3PhysicalStoreKind.OPERATIONS);
         if (initial.size() > MAX_PENDING) throw new IllegalArgumentException("physical operation backlog exceeds its bound");
         operations = table("operations", initial, UUID::toString, (key, value) -> FrontierV3OperationReceiptCodec.write(value));
@@ -90,6 +95,9 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
                 throw new IllegalArgumentException("physical owner context backlog exceeds its byte bound");
         }
         ownerCommands = table("ownerCommands", commands, UUID::toString, FrontierV3OperationLedger::commandTag);
+        cancellationParents = table("cancellationParents", cancellations, UUID::toString, FrontierV3OperationLedger::cancellationTag);
+        cancellations.values().forEach(parent -> cancellationChildren.merge(parent, 1, Math::addExact));
+        cancellations.forEach((child, parent) -> validateCancellation(parent, child));
         if (nextSequence < 1 || initial.values().stream().map(FrontierV3OperationReceipt::sequence).distinct().count() != initial.size())
             throw new IllegalArgumentException("invalid physical operation causal order");
         this.nextSequence = nextSequence;
@@ -103,7 +111,7 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         });
         if (pendingParticipants > MAX_NATIVE_RECEIPTS) throw new IllegalArgumentException("physical participant backlog exceeds admission bound");
     }
-    static FrontierV3OperationLedger inMemory() { return new FrontierV3OperationLedger(Map.of(), Map.of(), Map.of(), 1); }
+    static FrontierV3OperationLedger inMemory() { return new FrontierV3OperationLedger(Map.of(), Map.of(), Map.of(), Map.of(), 1); }
     static FrontierV3OperationLedger get(ServerLevel level) {
         return FrontierV3JournaledSavedData.get(level, FrontierV3PhysicalStoreKind.OPERATIONS,
                 FrontierV3OperationLedger::inMemory, FrontierV3OperationLedger::load);
@@ -157,10 +165,32 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         receipt.join(); return true;
     }
     boolean unattempted(UUID ticket) { require(ticket); return unattempted.contains(ticket); }
+    /** Must be called in the same server turn as the owner captures its conditional
+     * outcome, before the parent can attempt. No old permit is reconstructed. */
+    void deferCancellation(UUID parent, UUID child) {
+        validateCancellation(parent, child);
+        if (Objects.equals(cancellationParents.get(child), parent)) return;
+        if (!unattempted.contains(parent) || !unattempted.remove(child))
+            throw new IllegalStateException("conditional cancellation requires both original unused live permits");
+        cancellationParents.put(child, parent); cancellationChildren.merge(parent, 1, Math::addExact);
+        changedOperations.add(parent); changedOperations.add(child); setDirty();
+    }
+    private void validateCancellation(UUID parent, UUID child) {
+        var enclosing = require(parent); var excluded = require(child); var owner = ownerCommands.get(parent);
+        if (parent.equals(child) || enclosing.cancelled() || enclosing.ownerClosed()
+                || excluded.cancelled() || excluded.ownerClosed() || !excluded.applied().isEmpty()
+                || owner == null || owner.closure() != OwnerCommand.Closure.EXPLICIT_OWNER
+                || owner.contextSize() == 0 || cancellationParents.containsKey(parent)
+                || cancellationChildren.containsKey(child)
+                || cancellationParents.containsKey(child) && !cancellationParents.get(child).equals(parent)
+                || Collections.disjoint(enclosing.declaration().participants(), excluded.declaration().participants()))
+            throw new IllegalArgumentException("conditional cancellation lacks its exact parent/shared participant/unused child declaration");
+    }
     /** Only the enclosing live native callback may supply a positive refusal.
      * Recovery, a timeout or matching item counts cannot grant this transition. */
     boolean rejectCurrentAttempt(UUID ticket) {
         var value = require(ticket);
+        if (cancellationChildren.containsKey(ticket)) throw new IllegalStateException("enclosing native refusal requires its declared child recovery");
         if (!attempting.contains(ticket) || !value.applied().isEmpty()) return false;
         replace(value.cancel()); attempting.remove(ticket); return true;
     }
@@ -222,10 +252,14 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         }
     }
     void applied(FrontierV3OperationReceipt.NativeReceipt receipt) {
+        if (cancellationParents.containsKey(receipt.ticket())) throw new IllegalStateException("excluded child acquired an impossible native effect");
         replace(require(receipt.ticket()).applied(receipt));
         currentNative.computeIfAbsent(receipt.ticket(), ignored -> new HashSet<>()).add(receipt.participant());
     }
-    void saved(FrontierV3OperationReceipt.NativeReceipt receipt) { replace(require(receipt.ticket()).saved(receipt)); }
+    void saved(FrontierV3OperationReceipt.NativeReceipt receipt) {
+        if (cancellationParents.containsKey(receipt.ticket())) throw new IllegalStateException("excluded child acquired an impossible native save");
+        replace(require(receipt.ticket()).saved(receipt));
+    }
     Set<FrontierV3OperationReceipt.Participant> unverifiedNative(UUID ticket) {
         var value = require(ticket);
         if (value.cancelled()) return Set.of();
@@ -234,7 +268,10 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         return Set.copyOf(missing);
     }
     boolean nativeOutcomeAvailable(UUID ticket) { return unverifiedNative(ticket).isEmpty(); }
-    void closeOwner(UUID ticket) { replace(require(ticket).closeOwner()); }
+    void closeOwner(UUID ticket) {
+        if (cancellationChildren.containsKey(ticket)) throw new IllegalStateException("operation retains conditional child obligations");
+        replace(require(ticket).closeOwner());
+    }
     private void replace(FrontierV3OperationReceipt value) {
         if (!value.equals(require(value.ticket()))) { operations.put(value.ticket(), value); changedOperations.add(value.ticket()); setDirty(); }
     }
@@ -247,7 +284,7 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
     }
     boolean cancelUnattempted(UUID ticket) {
         var value = require(ticket);
-        if (!unattempted.contains(ticket) || !value.applied().isEmpty()) return false;
+        if (!unattempted.contains(ticket) || !value.applied().isEmpty() || cancellationChildren.containsKey(ticket)) return false;
         remove(value); return true;
     }
     /** Cancellation with a canonical consequence must survive until that owner
@@ -255,11 +292,22 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
     boolean sealUnattemptedCancellation(UUID ticket) {
         var value = require(ticket);
         if (value.cancelled()) return true;
+        var parent = cancellationParents.get(ticket);
+        if (parent != null) {
+            var enclosing = require(parent);
+            if (enclosing.cancelled() || !nativeOutcomeAvailable(parent)
+                    || !enclosing.applied().equals(enclosing.declaration().participants())) return false;
+            replace(value.cancel()); cancellationParents.remove(ticket);
+            cancellationChildren.compute(parent, (key, count) -> count == 1 ? null : count - 1);
+            changedOperations.add(parent); setDirty(); return true;
+        }
         if (!unattempted.contains(ticket) || !value.applied().isEmpty()) return false;
         replace(value.cancel()); unattempted.remove(ticket); return true;
     }
     private void remove(FrontierV3OperationReceipt value) {
         UUID ticket = value.ticket();
+        if (cancellationChildren.containsKey(ticket) || cancellationParents.containsKey(ticket))
+            throw new IllegalStateException("conditional operation cannot retire its causal boundary");
         changedOperations.remove(ticket); writeReceipts.remove(ticket);
         attempting.remove(ticket);
         currentNative.remove(ticket);
@@ -287,7 +335,7 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
                 + ",\"awaitingNativeSave\":" + nativeWaiting + ",\"awaitingOwner\":" + ownerWaiting
                 + ",\"oldestObservedAgeMs\":" + age + ",\"ageScope\":\"current-process\",\"retiredRanges\":" + retired.size() + "}";
     }
-    @Override protected CompoundTag metadata() { var tag = new CompoundTag(); tag.putInt("format", 4); tag.putLong("nextSequence", nextSequence); return tag; }
+    @Override protected CompoundTag metadata() { var tag = new CompoundTag(); tag.putInt("format", 5); tag.putLong("nextSequence", nextSequence); return tag; }
     @Override public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.merge(metadata()); var rows = new ListTag();
         operations.values().stream().sorted(Comparator.comparing(value -> value.ticket().toString()))
@@ -297,10 +345,13 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         tag.put("retired", ranges);
         var commands = new ListTag(); ownerCommands.entrySet().stream().sorted(Map.Entry.comparingByKey())
                 .map(entry -> commandTag(entry.getKey(), entry.getValue())).forEach(commands::add);
-        tag.put("ownerCommands", commands); return tag;
+        tag.put("ownerCommands", commands);
+        var cancellations = new ListTag(); cancellationParents.entrySet().stream().sorted(Map.Entry.comparingByKey())
+                .map(entry -> cancellationTag(entry.getKey(), entry.getValue())).forEach(cancellations::add);
+        tag.put("cancellationParents", cancellations); return tag;
     }
     static FrontierV3OperationLedger load(CompoundTag tag, HolderLookup.Provider registries) {
-        if (!tag.contains("format", Tag.TAG_INT) || tag.getInt("format") != 4 || !tag.contains("operations", Tag.TAG_LIST))
+        if (!tag.contains("format", Tag.TAG_INT) || tag.getInt("format") != 5 || !tag.contains("operations", Tag.TAG_LIST))
             throw new IllegalArgumentException("unsupported physical operation journal format");
         var rows = tag.getList("operations", Tag.TAG_COMPOUND);
         if (!rows.equals(tag.get("operations")) || rows.size() > MAX_PENDING) throw new IllegalArgumentException("invalid operation journal rows");
@@ -333,7 +384,18 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
                     }, row.getByteArray("context"));
             if (!commandTag(id, command).equals(row) || commands.putIfAbsent(id, command) != null) throw new IllegalArgumentException("invalid owner command binding");
         }
-        return new FrontierV3OperationLedger(values, ranges, commands, tag.getLong("nextSequence"));
+        var cancellations = new HashMap<UUID, UUID>(); var cancelledTags = tag.getList("cancellationParents", Tag.TAG_COMPOUND);
+        if (!tag.contains("cancellationParents", Tag.TAG_LIST) || !cancelledTags.equals(tag.get("cancellationParents"))
+                || cancelledTags.size() > values.size()) throw new IllegalArgumentException("invalid conditional operation list");
+        for (int i = 0; i < cancelledTags.size(); i++) {
+            var row = cancelledTags.getCompound(i); var child = row.getUUID("child"); var parent = row.getUUID("parent");
+            if (!cancellationTag(child, parent).equals(row) || cancellations.putIfAbsent(child, parent) != null)
+                throw new IllegalArgumentException("invalid or duplicate conditional operation");
+        }
+        return new FrontierV3OperationLedger(values, ranges, commands, cancellations, tag.getLong("nextSequence"));
+    }
+    private static CompoundTag cancellationTag(UUID child, UUID parent) {
+        var tag = new CompoundTag(); tag.putUUID("child", child); tag.putUUID("parent", parent); return tag;
     }
     private static CompoundTag rangeTag(long start, long end) {
         var tag = new CompoundTag(); tag.putLong("start", start); tag.putLong("end", end); return tag;

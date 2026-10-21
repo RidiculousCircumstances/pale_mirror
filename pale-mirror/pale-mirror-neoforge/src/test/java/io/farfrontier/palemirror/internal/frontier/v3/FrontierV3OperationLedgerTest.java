@@ -12,6 +12,52 @@ import static org.junit.jupiter.api.Assertions.*;
 class FrontierV3OperationLedgerTest {
     @BeforeAll static void version() { net.minecraft.SharedConstants.tryDetectVersion(); }
     @TempDir Path directory;
+    @Test void conditionalCancellationRetainsTheLivingCommandAndNeedsPositiveParentOutcomeAfterRestart() throws Exception {
+        var path = directory.resolve("conditional.dat"); var ledger = fresh(path);
+        var payload = new io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaObserved(
+                new io.farfrontier.palemirror.frontier.v3.model.PhysicalDelta(
+                        new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(1, 64, 1),
+                        io.farfrontier.palemirror.frontier.v3.model.PhysicalDeltaKind.UNKNOWN_SCAR,
+                        Optional.empty(), Optional.empty(), "test:conditional"));
+        var fingerprint = FrontierV3OperationConfirmation.fingerprint(payload);
+        var child = ledger.prepare(new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.MEAL_TAKE,
+                new SubjectId("resident:conditional"), "take", fingerprint, Set.of(BODY, CHEST)));
+        var normal = new FrontierV3OperationLedger.OwnerCommand(new CommandId("test:normal-child"), payload);
+        ledger.retainOwnerIntent(child.ticket(), normal);
+        var parent = ledger.prepare(new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.BODY_FATALITY,
+                new SubjectId("resident:conditional"), "death", fingerprint, Set.of(BODY)));
+        var aftermath = new FrontierV3OperationAftermath(child, FrontierV3OperationAftermath.Outcome.CANCEL_UNUSED, payload);
+        var context = FrontierV3JournalNbt.encode(aftermath.save());
+        ledger.retainOwnerIntent(parent.ticket(), new FrontierV3OperationLedger.OwnerCommand(new CommandId("test:conditional-parent"), payload,
+                FrontierV3OperationLedger.OwnerCommand.Closure.EXPLICIT_OWNER, context));
+        aftermath.retain(ledger, parent.ticket()); ledger.finish();
+        assertFalse(ledger.beginAttempt(child.ticket()), "parent admission positively excludes the still-unused child");
+        assertFalse(ledger.sealUnattemptedCancellation(child.ticket()), "parent preparation is not death");
+        assertFalse(ledger.cancelUnattempted(parent.ticket()), "parent cannot erase its conditional outcome");
+        assertEquals(normal, ledger.ownerCommand(child.ticket()).orElseThrow(), "living owner was not replaced by a death-only command");
+        var recovered = reopen(path);
+        assertEquals(aftermath, FrontierV3OperationAftermath.load(FrontierV3JournalNbt.decode(
+                recovered.ownerCommand(parent.ticket()).orElseThrow().context())), "typed child outcome survives the actual journal boundary");
+        assertFalse(recovered.beginAttempt(parent.ticket())); assertFalse(recovered.beginAttempt(child.ticket()));
+        assertFalse(recovered.sealUnattemptedCancellation(child.ticket()));
+        assertThrows(IllegalStateException.class, () -> recovered.applied(child.nativeReceipt(BODY)));
+        recovered.applied(parent.nativeReceipt(BODY));
+        assertThrows(IllegalStateException.class, () -> recovered.closeOwner(parent.ticket()));
+        var historical = FrontierV3OperationLedger.load(recovered.save(new CompoundTag(), null), null);
+        assertFalse(historical.sealUnattemptedCancellation(child.ticket()), "historical APPLIED is not the recovered parent's native image");
+        historical.saved(parent.nativeReceipt(BODY));
+        assertTrue(historical.sealUnattemptedCancellation(child.ticket()));
+        assertTrue(historical.require(child.ticket()).cancelled());
+        assertEquals(normal, historical.ownerCommand(child.ticket()).orElseThrow());
+        var afterCut = FrontierV3OperationLedger.load(historical.save(new CompoundTag(), null), null);
+        assertTrue(afterCut.sealUnattemptedCancellation(child.ticket()), "sealed cancellation survives before child outcome submission");
+        afterCut.closeOwner(child.ticket()); afterCut.retire(child.ticket());
+        afterCut.closeOwner(parent.ticket()); afterCut.retire(parent.ticket());
+        assertEquals(0, afterCut.pendingCount());
+        var orphan = recovered.save(new CompoundTag(), null);
+        orphan.getList("cancellationParents", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0).putUUID("parent", UUID.randomUUID());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3OperationLedger.load(orphan, null));
+    }
     @Test void recoveryProbesAreBoundedFairAndDerivedAfterReload() {
         var ledger = FrontierV3OperationLedger.inMemory();
         var first = ledger.prepare(declaration("blocked"));

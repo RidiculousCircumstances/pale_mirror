@@ -89,7 +89,7 @@ final class FrontierV3ActorBodyController {
         String cause = source == null ? "environment" : "entity:" + source.getUUID();
         var payload = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyDied(id, actor.body(),
                 actor.condition().health(), observed, FrontierV3ActorBodyDeparture.execution(state, declaration.actorId()), cause);
-        var fatality = FrontierV3BodyFatalityOperation.commit(level, runtime, body, payload, nativeDeath, died);
+        var fatality = FrontierV3BodyFatalityOperation.commit(level, runtime, body, payload, resources.effects(), nativeDeath, died);
         FrontierV3BodyOperationIntegration.recover(level, runtime.decodedState().orElseThrow(), ledger, declaration.actorId());
         ledger.retireDeadActor(runtime.decodedState().orElseThrow(), declaration.actorId());
         ledger.persist(level, state.bootstrap().worldId());
