@@ -18,4 +18,5 @@ public record UnitInventoryDispositionObserved(ActorBodyId body, SubjectId accou
             throw new IllegalArgumentException("inventory disposition requires an exact source fence and outcome");
     }
     @Override public String type() { return "frontier.unit_inventory_disposition_observed"; }
+    @Override public boolean requiresDurableBeforeEffect() { return true; }
 }

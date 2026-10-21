@@ -10,13 +10,11 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 /** Portable inventory's own death hook. Declared job/meal owners settle their claims first. */
 final class FrontierV3UnitInventoryDeathResources {
-    private static final String RECEIPT = "pmv3_retired_inventory_drop_v1";
     private FrontierV3UnitInventoryDeathResources() { }
     static FrontierV3ActorDeathResourceComposition.AfterFatality prepare(ServerLevel level,
             FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body, ActorBodyId id) {
@@ -75,45 +73,9 @@ final class FrontierV3UnitInventoryDeathResources {
                 drop.setUUID(carrier);
                 var receipt = new UnitInventoryDispositionObserved(id, account.id(), binding.authorityEpoch(),
                         UnitInventoryDispositionObserved.Outcome.WORLD_DROP, Optional.of(carrier));
-                drop.getPersistentData().putByteArray(RECEIPT,
-                        io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs().encode(receipt));
-                if (!level.addFreshEntity(drop)) continue;
-                FrontierV3ActorResourceSlots.set(body, source.slot(), ItemStack.EMPTY);
-                if (level.getEntity(carrier) == drop && !drop.isRemoved() && ItemStack.matches(drop.getItem(), expected))
-                    submit(runtime, receipt);
+                FrontierV3EntityResourceDropOperation.perform(level, runtime, body, source.slot(), drop, receipt);
             }
         };
-    }
-    static boolean reconcileOneDrop(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                    FrontierWorldState state) {
-        for (var account : state.inventory().fungibleResources().accounts().values()) {
-            if (!(account.custody() instanceof ResourceCustody.Actor actor) || !account.claimQuantities().isEmpty()) continue;
-            var body = state.actorLocations().get(actor.actorId());
-            if (body == null || body.condition().status() != ActorLifeStatus.DEAD) continue;
-            var retired = state.fencedRecovery().tombstones().get(ActorBodyId.recoveryBindingId(actor.actorId()));
-            if (retired == null) continue;
-            var id = new ActorBodyId(actor.actorId(), retired.retiredEpoch());
-            var bindings = state.inventory().fungibleResources().bindings().values().stream()
-                    .filter(binding -> binding.accountId().equals(account.id())).toList();
-            if (bindings.size() != 1) continue;
-            var binding = bindings.getFirst();
-            var carrier = dropId(state, id, account.id(), binding.authorityEpoch());
-            if (!(level.getEntity(carrier) instanceof ItemEntity drop) || drop.isRemoved()
-                    || !drop.getPersistentData().contains(RECEIPT, net.minecraft.nbt.Tag.TAG_BYTE_ARRAY)) continue;
-            UnitInventoryDispositionObserved receipt;
-            try {
-                receipt = (UnitInventoryDispositionObserved) io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition
-                        .payloadCodecs().decode("frontier.unit_inventory_disposition_observed", drop.getPersistentData().getByteArray(RECEIPT));
-            } catch (IllegalArgumentException invalid) { continue; }
-            var expected = new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(binding.itemKind())), binding.quantity());
-            if (!receipt.body().equals(id) || !receipt.accountId().equals(account.id())
-                    || receipt.sourceEpoch() != binding.authorityEpoch()
-                    || !receipt.worldCarrier().equals(Optional.of(carrier))
-                    || receipt.outcome() != UnitInventoryDispositionObserved.Outcome.WORLD_DROP
-                    || !ItemStack.matches(drop.getItem(), expected)) continue;
-            if (submit(runtime, receipt)) return true;
-        }
-        return false;
     }
     private static UUID dropId(FrontierWorldState state, ActorBodyId body,
                                io.farfrontier.palemirror.frontier.v3.api.SubjectId account, long epoch) {

@@ -17,7 +17,6 @@ import java.util.UUID;
 
 /** Food owner reads the identified pre-loot body; never walks, feeds or reconstructs it. */
 final class FrontierV3ResidentMealDeathResources {
-    private static final String DROP_RECEIPT_KEY = "pmv3_retired_meal_drop_v1";
     private FrontierV3ResidentMealDeathResources() { }
 
     static FrontierV3ActorDeathResourceComposition.AfterFatality prepare(ServerLevel level,
@@ -120,40 +119,7 @@ final class FrontierV3ResidentMealDeathResources {
         var receipt = new ResidentMealPortionDispositionObserved(id, retained.executionId(),
                 bindings.getFirst().authorityEpoch(), ResidentMealPortionDispositionObserved.Outcome.WORLD_DROP,
                 Optional.of(carrier));
-        drop.getPersistentData().putByteArray(DROP_RECEIPT_KEY,
-                io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs().encode(receipt));
-        if (!level.addFreshEntity(drop)) return; // Source remains intact; no fictional drop receipt.
-        FrontierV3ActorResourceSlots.set(body, retained.inventorySlot(), ItemStack.EMPTY);
-        if (level.getEntity(carrier) != drop || drop.isRemoved()
-                || !FrontierV3ResidentMealItems.matches(drop.getItem(), stock)) return;
-        submitDisposition(level, runtime, receipt);
-    }
-
-    /** Existing resource observation reconciles only unresolved portions, never the population.
-     * A saved exact drop can complete a death-before-receipt gap; absence cannot replay insertion. */
-    static boolean reconcileOneDrop(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                                    FrontierWorldState state) {
-        for (var retained : state.humanPopulation().mealResourceObligations().values()) {
-            if (retained.custodyState() == ResidentMealResourceObligation.CustodyState.SOURCE_TAKE_PENDING) continue;
-            UUID carrier = dropId(state, retained);
-            var account = state.inventory().fungibleResources().accounts().get(retained.actorAccountId());
-            if (account == null) continue;
-            var stock = new FoodPortion(retained.portion().itemKind(), retained.portion().nutritionPerItem(), account.lotQuantities());
-            if (!(level.getEntity(carrier) instanceof ItemEntity drop) || drop.isRemoved()
-                    || !FrontierV3ResidentMealItems.matches(drop.getItem(), stock)
-                    || !drop.getPersistentData().contains(DROP_RECEIPT_KEY, net.minecraft.nbt.Tag.TAG_BYTE_ARRAY)) continue;
-            ResidentMealPortionDispositionObserved receipt;
-            try {
-                receipt = (ResidentMealPortionDispositionObserved)
-                        io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs().decode(
-                                "frontier.resident_meal_portion_disposition_observed", drop.getPersistentData().getByteArray(DROP_RECEIPT_KEY));
-            } catch (IllegalArgumentException invalid) { continue; }
-            if (receipt.outcome() != ResidentMealPortionDispositionObserved.Outcome.WORLD_DROP
-                    || !receipt.worldCarrier().equals(Optional.of(carrier)) || !receipt.body().equals(retained.body())
-                    || !receipt.executionId().equals(retained.executionId())) continue;
-            if (submitDisposition(level, runtime, receipt)) return true;
-        }
-        return false;
+        FrontierV3EntityResourceDropOperation.perform(level, runtime, body, retained.inventorySlot(), drop, receipt);
     }
 
     private static UUID dropId(FrontierWorldState state, ResidentMealResourceObligation retained) {

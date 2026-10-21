@@ -13,7 +13,6 @@ import java.util.*;
 
 /** Captures the identified dying hand before Vanilla loot, under the retained shipment fence. */
 final class FrontierV3ShipmentDeathResources {
-    private static final String RECEIPT = "pmv3_shipment_death_drop_v1";
     private FrontierV3ShipmentDeathResources() { }
     static FrontierV3ActorDeathResourceComposition.AfterFatality prepare(ServerLevel level,
             FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body, ActorBodyId id) {
@@ -49,33 +48,9 @@ final class FrontierV3ShipmentDeathResources {
                     ShipmentCargoDispositionObserved.Outcome.WORLD_DROP, Optional.of(carrier));
             ItemEntity drop = new ItemEntity(level, body.getX(), body.getY() + 0.25D, body.getZ(), witness.copy());
             drop.setUUID(carrier);
-            drop.getPersistentData().putByteArray(RECEIPT,
-                    io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs().encode(receipt));
-            if (!level.addFreshEntity(drop)) return;
-            body.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND, ItemStack.EMPTY);
-            if (level.getEntity(carrier) == drop && !drop.isRemoved() && matches(drop.getItem(), shipment)) submit(level, runtime, receipt);
+            FrontierV3EntityResourceDropOperation.perform(level, runtime, body,
+                    new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN), drop, receipt);
         };
-    }
-    static boolean reconcileOneDrop(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
-        for (var shipment : state.shipments().shipments().values().stream().filter(s -> !s.terminal()).sorted(Comparator.comparing(Shipment::id)).toList()) {
-            if (state.actorLocations().get(shipment.execution().actorId()).condition().status() != ActorLifeStatus.DEAD) continue;
-            var retired = state.fencedRecovery().tombstones().get(ActorBodyId.recoveryBindingId(shipment.execution().actorId()));
-            if (retired == null) continue;
-            var id = new ActorBodyId(shipment.execution().actorId(), retired.retiredEpoch());
-            ActorBodyAuthority.requireRetiredDeath(state, id);
-            UUID carrier = dropId(state, shipment, id);
-            if (!(level.getEntity(carrier) instanceof ItemEntity drop) || drop.isRemoved() || !matches(drop.getItem(), shipment)
-                    || !drop.getPersistentData().contains(RECEIPT, net.minecraft.nbt.Tag.TAG_BYTE_ARRAY)) continue;
-            ShipmentCargoDispositionObserved receipt;
-            try {
-                receipt = (ShipmentCargoDispositionObserved) io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs()
-                        .decode("frontier.shipment_cargo_disposition_observed", drop.getPersistentData().getByteArray(RECEIPT));
-            } catch (IllegalArgumentException invalid) { continue; }
-            if (!receipt.shipmentId().equals(shipment.id()) || !receipt.identity().body().equals(id)
-                    || !receipt.worldCarrier().equals(Optional.of(carrier))) continue;
-            if (submit(level, runtime, receipt)) return true;
-        }
-        return false;
     }
     private static boolean matches(ItemStack stack, Shipment shipment) {
         return !stack.isEmpty() && stack.getCount() == shipment.quantity()

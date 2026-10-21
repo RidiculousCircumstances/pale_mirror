@@ -24,4 +24,5 @@ public record ResidentMealPortionDispositionObserved(ActorBodyId body, ActorExec
     }
 
     @Override public String type() { return "frontier.resident_meal_portion_disposition_observed"; }
+    @Override public boolean requiresDurableBeforeEffect() { return true; }
 }

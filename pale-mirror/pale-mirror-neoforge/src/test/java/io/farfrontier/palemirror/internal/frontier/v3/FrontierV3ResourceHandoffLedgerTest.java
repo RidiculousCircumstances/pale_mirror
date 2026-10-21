@@ -15,7 +15,8 @@ class FrontierV3ResourceHandoffLedgerTest {
     @BeforeAll static void version() { net.minecraft.SharedConstants.tryDetectVersion(); }
     @TempDir Path directory;
     private static FrontierV3ResourceHandoffLedger empty() {
-        var tag = new CompoundTag(); tag.putInt("format", 8); tag.putLong("nextSequence", 1);
+        var tag = new CompoundTag(); tag.putInt("format", 9); tag.putLong("nextSequence", 1);
+        tag.put("entityDrops", new ListTag());
         tag.put("containerDrops", new ListTag());
         tag.put("lossOperations", new ListTag()); tag.put("handoffOperations", new ListTag());
         tag.put("pending", new ListTag()); tag.put("actorPickups", new ListTag()); tag.put("groundLosses", new ListTag());
@@ -50,6 +51,35 @@ class FrontierV3ResourceHandoffLedgerTest {
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceHandoffLedger.load(obsolete, null));
         recovered.retireDrop(applied); recovered.retireRemoval(witness);
         assertFalse(recovered.removes(container)); assertFalse(recovered.blocks(id));
+    }
+    @Test void entityDropOutboxRecoversExactOutcomeAndMonotonicOperationWithoutInferringCompletion() {
+        var actor = new SubjectId("resident:drop-owner"); var entity = UUID.randomUUID();
+        var consequence = new UnitInventoryDispositionObserved(new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(actor, 4),
+                new SubjectId("custody:drop-owner"), 2, UnitInventoryDispositionObserved.Outcome.WORLD_DROP, Optional.of(entity));
+        var source = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.ENTITIES, UUID.randomUUID().toString(), 3);
+        var birth = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.ENTITIES, entity.toString(), 1);
+        var declaration = new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.ENTITY_RESOURCE_DROP,
+                FrontierExecutionSubjects.PHYSICAL_EXECUTOR, UUID.randomUUID().toString(), FrontierV3OperationConfirmation.fingerprint(consequence), Set.of(source, birth));
+        var operation = FrontierV3OperationReceipt.prepare(declaration, 4);
+        var draft = new FrontierV3EntityResourceDropTransaction(source, birth, operation, consequence);
+        var journal = empty(); journal.prepareEntityDrop(draft);
+        var recovered = FrontierV3ResourceHandoffLedger.load(journal.save(new CompoundTag(), null), null);
+        assertEquals(List.of(draft), recovered.entityDrops()); assertTrue(recovered.blocks(entity));
+        assertTrue(recovered.entityDrops().getFirst().operation().applied().isEmpty(), "a retained plan is not native completion");
+        assertThrows(IllegalArgumentException.class, () -> recovered.prepareEntityDrop(draft));
+        assertThrows(IllegalArgumentException.class, () -> new FrontierV3EntityResourceDropTransaction(source, birth,
+                FrontierV3OperationReceipt.prepare(new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.GROUND_MERGE,
+                        declaration.owner(), declaration.operation(), declaration.fingerprint(), declaration.participants()), 4), consequence));
+        var altered = new UnitInventoryDispositionObserved(consequence.body(), consequence.accountId(), 3, consequence.outcome(), consequence.worldCarrier());
+        assertThrows(IllegalArgumentException.class, () -> new FrontierV3EntityResourceDropTransaction(source, birth, operation, altered));
+        var malformed = draft.save(); malformed.putString("destination", source.identity());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3EntityResourceDropTransaction.read(malformed));
+        var applied = draft.bind(operation.applied(operation.nativeReceipt(source)).applied(operation.nativeReceipt(birth)));
+        recovered.updateEntityDrop(draft, applied);
+        var next = FrontierV3ResourceHandoffLedger.load(recovered.save(new CompoundTag(), null), null);
+        assertEquals(List.of(applied), next.entityDrops());
+        assertThrows(IllegalArgumentException.class, () -> next.updateEntityDrop(applied, draft));
+        next.retireEntityDrop(applied); assertFalse(next.blocks(entity));
     }
     @Test void fragmentedDropsRetainExactlyOneStockBalanceAndReplayInRecordedOrder() throws Exception {
         var initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:drop-fragments"), 20260918065L,

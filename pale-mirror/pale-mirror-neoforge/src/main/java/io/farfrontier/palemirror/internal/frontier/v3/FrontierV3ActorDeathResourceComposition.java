@@ -29,11 +29,11 @@ final class FrontierV3ActorDeathResourceComposition {
                 FrontierV3ActorEquipmentDeathExecutor.resolve(level, runtime, body, id.actorId());
                 return () -> { };
             }),
-            new Handler(Owner.RESIDENT_MEAL, FrontierV3ResidentMealDeathResources::prepare, FrontierV3ResidentMealDeathResources::reconcileOneDrop),
+            new Handler(Owner.RESIDENT_MEAL, FrontierV3ResidentMealDeathResources::prepare),
             new Handler(Owner.SETTLEMENT_SERVICE, FrontierV3SettlementServiceDeathResources::prepare),
             new Handler(Owner.EXPEDITION_TRANSFER, FrontierV3ExpeditionTransferDeathResources::prepare, FrontierV3ExpeditionTransferDeathResources::reconcileOne),
-            new Handler(Owner.SHIPMENT, FrontierV3ShipmentDeathResources::prepare, FrontierV3ShipmentDeathResources::reconcileOneDrop),
-            new Handler(Owner.UNIT_INVENTORY, FrontierV3UnitInventoryDeathResources::prepare, FrontierV3UnitInventoryDeathResources::reconcileOneDrop),
+            new Handler(Owner.SHIPMENT, FrontierV3ShipmentDeathResources::prepare),
+            new Handler(Owner.UNIT_INVENTORY, FrontierV3UnitInventoryDeathResources::prepare),
             new Handler(Owner.ATTACHED_STORAGE, FrontierV3AttachedStorageDeathResources::prepare)));
 
     private FrontierV3ActorDeathResourceComposition() { }
@@ -54,6 +54,7 @@ final class FrontierV3ActorDeathResourceComposition {
         return () -> settlements.forEach(AfterFatality::settle);
     }
     static boolean reconcileOne(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
+        if (FrontierV3EntityResourceDropOperation.reconcileOne(level, runtime)) return true;
         return HANDLERS.stream().anyMatch(handler -> handler.reconciliation().reconcile(level, runtime, state));
     }
 }
