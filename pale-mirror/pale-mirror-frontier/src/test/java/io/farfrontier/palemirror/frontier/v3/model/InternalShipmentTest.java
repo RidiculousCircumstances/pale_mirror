@@ -10,6 +10,39 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class InternalShipmentTest {
+    @Test void arrivedCourierWaitsForItsServiceBoundaryInsteadOfSleepingUntilPolicyReview() {
+        var fixture = machineSupplyFixture(); var state = fixture.state(); var parcel = fixture.shipment();
+        var actor = parcel.execution().actorId();
+        state = state.withActorBody(actor, parcel.sender().station().standingBody());
+        state = ShipmentStateSupport.transferCold(state, parcel.id(), parcel.id(), 1, Shipment.Status.AWAITING_LOAD);
+        parcel = state.shipments().shipments().get(parcel.id());
+        state = state.withActorBody(actor, parcel.receiver().station().standingBody());
+        var due = io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.progress(parcel.id(), 500L);
+        assertFalse(io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.held(state, due));
+        var other = state.humanPopulation().residents().values().stream()
+                .filter(r -> !r.id().equals(actor)).findFirst().orElseThrow().id();
+        var point = parcel.receiver().containerId();
+        var occupied = ServiceAccessCoordinator.boundary(state, point).occupiedSurfaces().iterator().next();
+        state = state.withActorBody(other, occupied.standingBody());
+        var execution = state.actorExecutions().next(other, ActorActivityKind.SERVICE_EXIT, other);
+        var movement = new ActorMovement(new MovementOrder(other, other, 0, 1,
+                List.of(new SurfaceAnchor(occupied.support().offset(8, 0, 0))), TraversalCapability.PEDESTRIAN,
+                MovementOrder.ArrivalPolicy.EXACT_STATION), 500L,
+                new ActorMovementContext.ServiceExit(ServiceBoundaryComposition.declaration(state, point).identity()), execution);
+        var waiting = state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(Map.of(other, movement))
+                .actorExecutions(state.actorExecutions().begin(execution, execution.generation() - 1)));
+        assertFalse(ShipmentStateSupport.coldTransferAvailable(waiting, parcel));
+        assertTrue(io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.held(waiting, due),
+                "an occupied endpoint is an event wait, not a transportReviewInterval retry");
+        assertTrue(io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.wakeDependencies(waiting, due).contains(point));
+        var cleared = waiting.withActorBody(other, occupied.standingBody().offset(8, 0, 0));
+        assertTrue(ServiceAccessCoordinator.wakePoints(waiting, cleared).contains(point));
+        assertFalse(io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.held(cleared, due));
+        assertTrue(io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.plan(cleared, due, 501L).stream()
+                .anyMatch(e -> e.payload() instanceof ShipmentColdTransferred));
+        var codec = new FrontierWorldStateCodec();
+        assertTrue(io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.held(codec.decode(codec.encode(waiting)), due));
+    }
     private RetargetFixture machineSupplyFixture() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:machine-supply"),
                 20260918065L, FrontierRulesets.fuelledQuarryGraybox()));

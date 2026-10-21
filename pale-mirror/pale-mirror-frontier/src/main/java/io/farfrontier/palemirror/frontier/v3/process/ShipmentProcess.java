@@ -58,15 +58,17 @@ public final class ShipmentProcess {
         if (needsStorage(state, shipment)) return false;
         // Goal issuance is allowed under the same HOT courier execution. Only the item effect
         // waits for COLD custody; otherwise a loaded courier could never start its second leg.
+        // At the endpoint, service/capacity/custody changes wake this exact continuation.
+        // A policy-review retry would keep an already-ready incumbent blocking the doorway.
         return shipment.movementOrder().arrivedAt(state.actorLocations().get(actor).supportingSurface())
-                && (!ActorExecutionCoordinator.coldAvailable(state, actor)
-                    || shipment.status() == Shipment.Status.AWAITING_LOAD && !ResourceSourceComposition.coldAvailable(state, shipment.sender()));
+                && !ShipmentStateSupport.coldTransferAvailable(state, shipment);
     }
     public static java.util.Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) {
         var shipment = state.shipments().shipments().get(action.subject());
         if (shipment == null) return java.util.Set.of(action.subject());
         var keys = new java.util.HashSet<SubjectId>(); keys.add(shipment.id()); keys.add(shipment.execution().actorId());
         shipment.sender().container().ifPresent(keys::add); keys.add(shipment.receiver().containerId());
+        shipment.mobileContainerId().ifPresent(keys::add);
         shipment.transportMissionId().ifPresent(id -> {
             var mission = state.shipments().missions().get(id);
             keys.add(id); keys.add(mission.groupId()); keys.addAll(mission.shipmentIds());
