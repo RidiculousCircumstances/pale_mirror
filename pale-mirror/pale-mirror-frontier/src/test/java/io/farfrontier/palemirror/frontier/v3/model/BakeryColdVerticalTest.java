@@ -684,6 +684,8 @@ class BakeryColdVerticalTest {
             BakeryColdStep step = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, due)).stream()
                     .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
                     .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
+            if (step.action() == BakeryColdStep.Action.RECIPE)
+                BakeryDeathEffectsFixture.exactRecipe(state, task.ownerId(), job.id(), due);
             state = ProductionProcess.reduceBakeryColdStep(state, task.ownerId(), step);
             state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
             if (step.action() == BakeryColdStep.Action.PICKUP) {

@@ -105,9 +105,10 @@ final class FrontierV3BakeryPhysicalEffect {
     static Optional<FrontierV3OperationAftermath> deathEffect(ServerLevel level, FrontierWorldState state,
             ProductionJob job, Villager worker, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId identity) {
         var work = job.bakeryWork().orElseThrow(); var pending = work.pendingPhysicalStep().orElse(null);
-        // Station-only effects are not cancelled by a body outcome. An unresolved
-        // legacy exact recipe remains retained; it is not an unused hand transfer.
-        if (pending == null || pending.phase() == BakeryWorkState.Phase.PROCESSING) return Optional.empty();
+        // The retained job also owns its exact-item station recipe. Conditional
+        // aftermath declares that causal dependency without a fake body participant.
+        // Fungible recipes remain exclusively with the independent station owner.
+        if (pending == null) return Optional.empty();
         var lease = state.sceneLeases().get(pending.leaseId());
         if (lease == null || lease.members().size() != 1 || !lease.members().getFirst().entityId().equals(worker.getUUID())
                 || !identity.body().actorId().equals(job.workerId()) || !identity.execution().activityOwnerId().equals(job.id()))
