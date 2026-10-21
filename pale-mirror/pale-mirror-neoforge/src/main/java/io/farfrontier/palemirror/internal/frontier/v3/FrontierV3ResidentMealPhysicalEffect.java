@@ -124,10 +124,7 @@ final class FrontierV3ResidentMealPhysicalEffect {
         var actorParticipant = FrontierV3OperationEntityParticipant.current(worker,
                 ActorBodyAuthority.current(state, meal.residentId()).physicalEpoch());
         var containerParticipant = FrontierV3OperationBlockEntityParticipant.current(chest);
-        String preparation = FrontierV3OperationConfirmation.fingerprint(new ResidentMealHotEffectPrepared(meal.residentId(), pending));
-        var declaration = new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.MEAL_TAKE, meal.residentId(), preparation,
-                preparation + ":" + meal.depotId().value() + ":" + meal.portion().itemKind() + ":" + meal.portion().quantity(),
-                java.util.Set.of(actorParticipant.identity(), containerParticipant.identity()));
+        var declaration = FrontierV3ResidentMealNativeOperation.take(meal, pending, actorParticipant, containerParticipant);
         var operation = FrontierV3MinecraftOperation.apply(level, declaration, List.of(actorParticipant, containerParticipant),
                 transfer::before, transfer::apply, transfer::after);
         if (!operation.complete()) return false;
@@ -172,9 +169,7 @@ final class FrontierV3ResidentMealPhysicalEffect {
                 || pending.sourceEpoch() != bindings.getFirst().authorityEpoch()) return false;
         var participant = FrontierV3OperationEntityParticipant.current(worker,
                 ActorBodyAuthority.current(state, meal.residentId()).physicalEpoch());
-        String preparation = FrontierV3OperationConfirmation.fingerprint(new ResidentMealHotEffectPrepared(meal.residentId(), pending));
-        var declaration = new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.MEAL_CONSUME, meal.residentId(), preparation,
-                preparation + ":" + held.itemKind() + ":" + held.quantity(), java.util.Set.of(participant.identity()));
+        var declaration = FrontierV3ResidentMealNativeOperation.consume(meal, pending, held, participant);
         var operation = FrontierV3MinecraftOperation.apply(level, declaration, List.of(participant),
                 () -> FrontierV3ResidentMealItems.matches(FrontierV3ActorResourceSlots.get(worker, meal.inventorySlot()), held),
                 () -> {

@@ -14,6 +14,37 @@ import static org.junit.jupiter.api.Assertions.*;
 class FrontierV3OperationConfirmationTest {
     @BeforeAll static void version() { net.minecraft.SharedConstants.tryDetectVersion(); }
     @TempDir Path directory;
+    @Test void sealedCancellationAndItsTypedConsequenceRecoverWithoutInventingNativeApplication() {
+        var ledger = FrontierV3OperationLedger.inMemory();
+        var participant = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.ENTITIES, UUID.randomUUID().toString(), 1);
+        var operation = ledger.prepare(new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.MEAL_TAKE,
+                new SubjectId("resident:cancelled"), "take", "exact", Set.of(participant)));
+        var recoveredBefore = FrontierV3OperationLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), null), null);
+        assertFalse(recoveredBefore.sealUnattemptedCancellation(operation.ticket()), "a recovered PREPARED record is not proof that no attempt occurred");
+        assertTrue(ledger.sealUnattemptedCancellation(operation.ticket()));
+        var sealed = ledger.require(operation.ticket()); assertTrue(sealed.cancelled()); assertTrue(sealed.applied().isEmpty());
+        assertThrows(IllegalStateException.class, () -> ledger.applied(operation.nativeReceipt(participant)));
+        var consequence = new PhysicalDeltaObserved(new PhysicalDelta(new BlockPosition(1, 64, 1), PhysicalDeltaKind.UNKNOWN_SCAR,
+                Optional.empty(), Optional.empty(), "test:cancel-consequence"));
+        var command = new FrontierV3OperationLedger.OwnerCommand(new CommandId("test:cancelled-native"), consequence);
+        ledger.bindOwnerCommand(operation.ticket(), command);
+        var recovered = FrontierV3OperationLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), null), null);
+        assertEquals(consequence, recovered.ownerCommand(operation.ticket()).orElseThrow().consequence());
+        assertTrue(recovered.sealUnattemptedCancellation(operation.ticket()), "a persisted cancellation is positive evidence across restart");
+        var calls = new AtomicInteger();
+        var canonical = new FrontierV3OperationConfirmation.Canonical() {
+            public void pin(CommandId id) { }
+            public void release(CommandId id) { }
+            public Optional<CommandReceipt> receipt(CommandId id) { return Optional.empty(); }
+            public CommandResult submit(CommandId id, SubjectId owner, FrontierPayload payload) {
+                assertEquals(consequence, payload); calls.incrementAndGet();
+                return new CommandResult.Accepted(id, new TransactionId("test:cancelled"), new Revision(1));
+            }
+        };
+        assertTrue(FrontierV3OperationConfirmation.submit(recovered, () -> { }, canonical, operation.ticket(), consequence));
+        assertEquals(1, calls.get()); assertTrue(recovered.find(operation.ticket()).isEmpty());
+        assertTrue(recovered.prunable(operation.nativeReceipt(participant)), "cancelled action retires only after its canonical consequence");
+    }
     @Test void ownerRecoveryCanReplaceOnlyAnUnacceptedPinnedConsequence() {
         var ledger = FrontierV3OperationLedger.inMemory();
         var participant = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.CHUNK_BLOCKS, "1", 9);
@@ -78,6 +109,8 @@ class FrontierV3OperationConfirmationTest {
         assertTrue(recoveredLedger.require(operation.ticket()).ownerClosed());
         assertEquals(revision, recovered.canonicalState().orElseThrow().revision(), "recovery only observes the exact receipt; it must not reapply the command");
         assertFalse(recoveredLedger.require(operation.ticket()).retirable(), "canonical acceptance is not native-save evidence");
+        assertEquals(consequence, recoveredLedger.ownerCommand(operation.ticket()).orElseThrow().consequence(),
+                "retain the actual typed outcome, not just its hash, until native participants save");
         recoveredLedger.saved(operation.nativeReceipt(participant)); recoveredLedger.retire(operation.ticket()); recoveredLedger.finish();
         recovered.shutdown();
     }

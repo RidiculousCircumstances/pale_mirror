@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.kernel.*;
 import io.farfrontier.palemirror.frontier.v3.model.expedition.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.*;
+import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.ReferenceMutationClosed;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import org.junit.jupiter.api.Test;
@@ -36,6 +37,7 @@ class ExpeditionTransferDeathTest {
         var allocation = mission.supplies().orElseThrow().next().orElseThrow();
         var state = ActorBodyAuthority.demand(ready, allocation.actorId());
         var body = ActorBodyAuthority.current(state, allocation.actorId()); state = ActorBodyAuthority.running(state, body);
+        state = ReferenceContainerCustodyFixtures.observedAndHeld(state, mission.sender().containerId());
         var resources = state.inventory().fungibleResources();
         var quantities = new TreeMap<String, Integer>();
         for (var entry : resources.accounts().get(allocation.sourceAccountId()).lotQuantities().entrySet())
@@ -44,7 +46,7 @@ class ExpeditionTransferDeathTest {
         for (var entry : quantities.entrySet()) for (int q = entry.getValue(); q > 0; q -= Math.min(q, 64))
             source.add(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(
                     mission.sender().containerId(), slot++)), entry.getKey(), Math.min(q, 64)));
-        resources = resources.rebind(allocation.sourceAccountId(), 7, FungiblePhysicalObservation.bind(resources, allocation.sourceAccountId(), 7, source));
+        resources = resources.rebind(allocation.sourceAccountId(), 1, FungiblePhysicalObservation.bind(resources, allocation.sourceAccountId(), 1, source));
         state = state.withInventory(state.inventory().withFungibleResources(resources));
         var execution = ExpeditionSupplyAuthority.execution(state, mission, allocation).orElseThrow();
         var order = mission.supplies().orElseThrow().order(mission.id(), mission.sender(), allocation);
@@ -81,6 +83,19 @@ class ExpeditionTransferDeathTest {
                     .filter(a -> a.claimId().equals(allocation.claimId())).findFirst().orElseThrow();
             assertEquals(applied, settled.loaded()); assertEquals(!applied, settled.withdrawn());
             assertThrows(IllegalArgumentException.class, () -> ExpeditionTransferDeathAuthority.observed(after, receipt, 1000));
+            var commandId = new CommandId("test:retired-expedition-" + applied);
+            var command = new FrontierCommand(1, commandId, state.bootstrap().worldId(), new Revision(1000), new SimInstant(1000),
+                    FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), receipt);
+            var plan = assertInstanceOf(CommandPlan.Accepted.class, config.commandPlanner().plan(died, command));
+            var closures = plan.events().stream().map(ProposedEvent::payload).filter(ReferenceMutationClosed.class::isInstance)
+                    .map(ReferenceMutationClosed.class::cast).toList();
+            assertEquals(applied ? 1 : 0, closures.size(), "applied transfer must close surviving storage in the same canonical transaction");
+            if (applied) {
+                var closed = ReferenceContainerCustody.closeConfirmedMutation(after, closures.getFirst());
+                assertFalse(ReferenceContainerCustody.hasLiveCustody(closed, mission.sender().containerId()));
+                assertTrue(closed.inventory().fungibleResources().bindings().values().stream()
+                        .noneMatch(b -> b.accountId().equals(allocation.sourceAccountId())));
+            }
         }
     }
     private static long total(FrontierWorldState state) {

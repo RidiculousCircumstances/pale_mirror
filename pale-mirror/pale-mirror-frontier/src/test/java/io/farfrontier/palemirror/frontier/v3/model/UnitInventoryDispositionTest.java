@@ -101,7 +101,8 @@ class UnitInventoryDispositionTest {
     @Test void exactDeathDropPreservesTitleAndQuantityAndRejectsReplayAndForeignEpoch() {
         var fixture = dyingInventory(); var alive = fixture.state(); var actor = fixture.body().actorId();
         var receipt = new UnitInventoryDispositionObserved(fixture.body(), fixture.account(), 1,
-                UnitInventoryDispositionObserved.Outcome.WORLD_DROP, Optional.of(UUID.fromString("00000000-0000-0000-0000-000000000123")));
+                UnitInventoryDispositionObserved.Outcome.WORLD_DROP, Optional.of(new ResourceCustody.Ground(
+                        UUID.fromString("00000000-0000-0000-0000-000000000123"), new BlockPosition(1, 64, 1))));
         assertThrows(IllegalArgumentException.class, () -> UnitInventoryDisposition.apply(alive, actor, receipt));
         var location = alive.actorLocations().get(actor);
         var died = ActorBodyAuthority.died(alive, new ActorBodyDied(fixture.body(), location.body(), location.condition().health(),
@@ -109,14 +110,14 @@ class UnitInventoryDispositionTest {
         died = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(died));
         var restored = died;
         assertThrows(IllegalArgumentException.class, () -> UnitInventoryDisposition.apply(restored, actor,
-                new UnitInventoryDispositionObserved(fixture.body(), fixture.account(), 2, receipt.outcome(), receipt.worldCarrier())));
+                new UnitInventoryDispositionObserved(fixture.body(), fixture.account(), 2, receipt.outcome(), receipt.ground())));
         var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
         assertEquals(receipt, codecs.decode(receipt.type(), codecs.encode(receipt)));
         var moved = UnitInventoryDisposition.apply(died, actor, receipt);
         assertEquals(died.inventory().fungibleResources().lots(), moved.inventory().fungibleResources().lots());
         assertFalse(moved.inventory().fungibleResources().accounts().containsKey(fixture.account()));
         assertTrue(moved.inventory().fungibleResources().accounts().values().stream().anyMatch(account ->
-                account.custody().equals(new ResourceCustody.WorldCarrier(receipt.worldCarrier().orElseThrow()))
+                account.custody().equals(receipt.ground().orElseThrow())
                         && account.lotQuantities().values().stream().mapToInt(Integer::intValue).sum() == 7));
         assertThrows(IllegalArgumentException.class, () -> UnitInventoryDisposition.apply(moved, actor, receipt));
         assertEquals(moved, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(moved)));

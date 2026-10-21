@@ -237,11 +237,7 @@ final class HumanPopulationPayloadCodecs {
                     ActorExecutionStateCodec.writeId(output, observed.executionId());
                     output.writeLong(observed.sourceEpoch());
                     output.writeByte(FrontierWireTags.tag(observed.outcome()));
-                    output.writeBoolean(observed.worldCarrier().isPresent());
-                    if (observed.worldCarrier().isPresent()) {
-                        output.writeLong(observed.worldCarrier().orElseThrow().getMostSignificantBits());
-                        output.writeLong(observed.worldCarrier().orElseThrow().getLeastSignificantBits());
-                    }
+                    GroundDispositionCodec.write(output, observed.ground());
                 });
             }
             @Override public FrontierPayload decode(byte[] bytes) {
@@ -250,8 +246,7 @@ final class HumanPopulationPayloadCodecs {
                                 FrontierWorldPayloadCodecs.readSubject(input).value(), input.readLong()),
                         ActorExecutionStateCodec.readId(input), input.readLong(),
                         FrontierWireTags.require(ResidentMealPortionDispositionObserved.Outcome.class, input.readUnsignedByte()),
-                        input.readBoolean() ? java.util.Optional.of(new java.util.UUID(input.readLong(), input.readLong()))
-                                : java.util.Optional.empty()));
+                        GroundDispositionCodec.read(input)));
             }
         };
     }

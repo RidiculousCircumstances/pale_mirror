@@ -15,6 +15,28 @@ import java.util.*;
 @PrefixGameTestTemplate(false)
 public final class FrontierV3OperationStorageGameTests {
     private FrontierV3OperationStorageGameTests() { }
+    @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void sealedCancellationNeverRunsTheNativeCallbackOrPretendsItWasApplied(GameTestHelper helper) {
+        var level = helper.getLevel(); var point = helper.absolutePos(new BlockPos(1, 1, 1));
+        level.setBlockAndUpdate(point, Blocks.CHEST.defaultBlockState());
+        var chest = (ChestBlockEntity) level.getBlockEntity(point); chest.setItem(0, new ItemStack(Items.BREAD, 7));
+        var port = FrontierV3OperationBlockEntityParticipant.current(chest);
+        var declaration = new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.MEAL_TAKE,
+                new SubjectId("test:cancelled-take"), UUID.randomUUID().toString(), "seven-bread", Set.of(port.identity()));
+        var operations = FrontierV3OperationLedger.get(level); var operation = operations.prepare(declaration);
+        helper.assertTrue(operations.sealUnattemptedCancellation(operation.ticket()), "cancel only the positively unattempted native effect");
+        operations.persist(level); var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var result = FrontierV3MinecraftOperation.apply(level, declaration, List.of(port), () -> chest.getItem(0).getCount() == 7,
+                () -> { calls.incrementAndGet(); chest.getItem(0).shrink(1); return true; }, () -> chest.getItem(0).getCount() == 6);
+        helper.assertTrue(result.status() == FrontierV3MinecraftOperation.Status.NOT_APPLIED && calls.get() == 0
+                && chest.getItem(0).getCount() == 7 && operations.require(operation.ticket()).applied().isEmpty(),
+                "same matching before-image cannot execute a sealed cancellation");
+        helper.assertTrue(FrontierV3MinecraftOperation.observe(level, declaration, List.of(port), () -> true).orElseThrow().status()
+                == FrontierV3MinecraftOperation.Status.NOT_APPLIED, "even a permissive after predicate cannot turn cancellation into an applied receipt");
+        helper.assertFalse(FrontierV3NativeOperationMarkers.contains(port.persistent(), operation.nativeReceipt(port.identity())),
+                "cancelled operation never stamps a fabricated native effect");
+        helper.succeed();
+    }
     @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
     public static void actualPlayerFileCoSavesReceiptButNeverAcknowledgesUnsavedCursor(GameTestHelper helper) throws Exception {
         var player = helper.makeMockServerPlayerInLevel(); var port = FrontierV3OperationPlayers.current(player);

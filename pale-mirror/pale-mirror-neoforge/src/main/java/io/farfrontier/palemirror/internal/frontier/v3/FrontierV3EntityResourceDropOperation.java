@@ -12,6 +12,10 @@ import java.util.*;
  * canonical consequence; the adapter never classifies their work or death state. */
 final class FrontierV3EntityResourceDropOperation {
     private FrontierV3EntityResourceDropOperation() { }
+    static ResourceCustody.Ground ground(ItemEntity drop) {
+        var position = drop.blockPosition();
+        return new ResourceCustody.Ground(drop.getUUID(), new BlockPosition(position.getX(), position.getY(), position.getZ()));
+    }
     static void perform(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             Mob body, ActorItemSlot slot, ItemEntity drop, FrontierPayload outcome) {
         var before = FrontierV3ActorResourceSlots.get(body, slot).copy();

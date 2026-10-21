@@ -44,10 +44,10 @@ final class FrontierV3ShipmentDeathResources {
             }
             UUID carrier = dropId(current, shipment, id);
             if (level.getEntity(carrier) != null) return; // Never replay insertion from absence/presence guesses.
-            var receipt = new ShipmentCargoDispositionObserved(shipment.id(), shipment.revision(), identity,
-                    ShipmentCargoDispositionObserved.Outcome.WORLD_DROP, Optional.of(carrier));
             ItemEntity drop = new ItemEntity(level, body.getX(), body.getY() + 0.25D, body.getZ(), witness.copy());
             drop.setUUID(carrier);
+            var receipt = new ShipmentCargoDispositionObserved(shipment.id(), shipment.revision(), identity,
+                    ShipmentCargoDispositionObserved.Outcome.WORLD_DROP, Optional.of(FrontierV3EntityResourceDropOperation.ground(drop)));
             FrontierV3EntityResourceDropOperation.perform(level, runtime, body,
                     new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN), drop, receipt);
         };

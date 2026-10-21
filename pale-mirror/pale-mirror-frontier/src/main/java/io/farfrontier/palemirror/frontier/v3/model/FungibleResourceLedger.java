@@ -597,8 +597,9 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
 
     /** Whole physically observed actor pocket/hand release, under its resource owner's fence.
      * This port accepts no container transfer or arbitrary replacement actor layout. */
-    public FungibleResourceLedger releaseObservedActorAccountToWorld(SubjectId accountId, SubjectId actorId,
-            java.util.UUID bodyId, long sourceEpoch, java.util.UUID carrierId) {
+    public FungibleResourceLedger releaseObservedActorAccountToGround(SubjectId accountId, SubjectId actorId,
+            java.util.UUID bodyId, long sourceEpoch, ResourceCustody.Ground ground) {
+        java.util.UUID carrierId = Objects.requireNonNull(ground).entityId();
         CustodyAccount source = requireAccount(accountId);
         List<PhysicalStackBinding> current = bindings.values().stream()
                 .filter(binding -> binding.accountId().equals(accountId)).toList();
@@ -613,7 +614,7 @@ public record FungibleResourceLedger(Map<SubjectId, ResourceLot> lots, Map<Subje
         };
         if (!sameBody) throw new IllegalArgumentException("actor world release names a foreign body address");
         SubjectId destinationId = new SubjectId("custody:world-" + carrierId);
-        CustodyAccount destination = new CustodyAccount(destinationId, new ResourceCustody.WorldCarrier(carrierId),
+        CustodyAccount destination = new CustodyAccount(destinationId, ground,
                 source.lotQuantities(), Map.of());
         PhysicalStackBinding drop = new PhysicalStackBinding(new SubjectId("binding:world-" + carrierId + "-e1"),
                 destinationId, new PhysicalStackAddress.WorldEntity(carrierId), 1L, current.getFirst().itemKind(),

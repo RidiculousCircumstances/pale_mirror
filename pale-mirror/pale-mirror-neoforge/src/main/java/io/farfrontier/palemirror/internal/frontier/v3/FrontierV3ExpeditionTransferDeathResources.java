@@ -3,24 +3,27 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
-import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import java.util.*;
 
 /** Observes, but never applies, pending resource interactions before Vanilla removes either endpoint. */
 final class FrontierV3ExpeditionTransferDeathResources {
-    private static final String RECEIPT = "pmv3_expedition_retired_transfer_v1";
     private FrontierV3ExpeditionTransferDeathResources() { }
-    private record Pending(SubjectId mission, SubjectId claim, ActorContainerItemOrder order, ActorItemTransferStep step) { }
+    private record Pending(SubjectId mission, SubjectId claim, ActorContainerItemOrder order, ActorItemTransferStep step,
+            FrontierV3OperationReceipt.Protocol protocol, FrontierPayload prepared) { }
 
     private static List<Pending> pending(FrontierWorldState state) {
         var result = new ArrayList<Pending>();
         for (var mission : state.shipments().missions().values().stream().sorted(Comparator.comparing(TransportMission::id)).toList()) {
             mission.supplies().ifPresent(load -> load.allocations().stream().filter(a -> a.pending().isPresent()).forEach(a ->
-                    result.add(new Pending(mission.id(), a.claimId(), load.order(mission.id(), mission.organization().home(), a), a.pending().orElseThrow()))));
+                    result.add(new Pending(mission.id(), a.claimId(), load.order(mission.id(), mission.organization().home(), a), a.pending().orElseThrow(),
+                            FrontierV3OperationReceipt.Protocol.EXPEDITION_SUPPLY,
+                            new ExpeditionSupplyHotPrepared(mission.id(), a.claimId(), a.pending().orElseThrow())))));
             mission.replenishment().filter(t -> t.pending().isPresent()).ifPresent(t -> result.add(new Pending(mission.id(),
-                    t.claimId(), t.order(mission.id(), mission.revision()), t.pending().orElseThrow())));
+                    t.claimId(), t.order(mission.id(), mission.revision()), t.pending().orElseThrow(),
+                    FrontierV3OperationReceipt.Protocol.EXPEDITION_REPLENISHMENT,
+                    new ExpeditionReplenishmentHotPrepared(mission.id(), t.claimId(), t.pending().orElseThrow()))));
         }
         return List.copyOf(result);
     }
@@ -28,11 +31,11 @@ final class FrontierV3ExpeditionTransferDeathResources {
     static FrontierV3ActorDeathResourceComposition.AfterFatality prepare(ServerLevel level,
             FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body, ActorBodyId id) {
         var state = runtime.decodedState().orElseThrow();
-        var receipts = new ArrayList<ExpeditionTransferDeathObserved>();
+        var settlements = new ArrayList<FrontierV3ActorDeathResourceComposition.AfterFatality>();
         for (var retained : pending(state)) {
             var surface = state.inventory().surfaces().get(retained.order().containerEndpoint().containerId());
             if (!retained.step().observation().actuation().body().equals(id)
-                    && !surface.location().equals(new ContainerLocation.Mobile(id.actorId()))) continue;
+                    && (surface == null || !surface.location().equals(new ContainerLocation.Mobile(id.actorId())))) continue;
             var source = FrontierV3PhysicalContainer.loaded(level, state, retained.order().containerEndpoint().containerId()).orElse(null);
             var entity = level.getEntity(ActorBodyId.entityId(state.bootstrap().worldId(), retained.order().actorId()));
             var attached = retained.order().actorSlot() instanceof ActorItemSlot.AttachedStorage storage
@@ -43,47 +46,63 @@ final class FrontierV3ExpeditionTransferDeathResources {
             var effect = new FrontierV3ActorItemTransfer.FungibleStep(retained.order(), source, attached, recipient,
                     recipient.getUUID(), retained.step().source(), retained.step().destinationSlot(), retained.step().destinationBefore());
             boolean applied = effect.after();
-            if (!applied && !effect.before()) throw new IllegalStateException("prepared expedition death has ambiguous source/recipient preimages: " + retained.claim());
+            if (!applied && !effect.before()) {
+                unresolved(retained, id, "changed-source-or-destination"); continue;
+            }
             var sourceLayout = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(source.inventory(), state, source.containerId());
             var destination = attached != null ? FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(attached.inventory(), state, attached.containerId())
                     : applied ? List.of(new FungiblePhysicalObservation.Stack(FrontierV3ActorResourceSlots.address(
                             retained.order().actorId(), recipient, retained.order().actorSlot()), retained.order().portion().itemKind(), retained.order().portion().quantity()))
                             : List.<FungiblePhysicalObservation.Stack>of();
             var receipt = new ExpeditionTransferDeathObserved(retained.mission(), retained.claim(), id, retained.step(), applied, sourceLayout, destination);
-            var bytes = FrontierWorldRuntimeDefinition.payloadCodecs().encode(receipt);
-            // Persist at both original endpoints. At least the other endpoint survives this death;
-            // recovery reuses this positive witness, never an empty body lookup or proximity.
-            source.declaration().putByteArray(RECEIPT, bytes); source.inventory().setChanged();
-            recipient.getPersistentData().putByteArray(RECEIPT, bytes);
-            receipts.add(receipt);
+            var ports = List.of(source.persistence().get(), attached == null
+                    ? FrontierV3OperationEntityParticipant.current(recipient, retained.step().observation().actuation().body().physicalEpoch())
+                    : attached.persistence().get());
+            var declaration = FrontierV3MinecraftOperation.declaration(retained.protocol(), retained.mission(), retained.prepared(), ports);
+            settlements.add(() -> {
+                if (!(applied ? effect.after() : effect.before())) { unresolved(retained, id, "changed-during-fatality"); return; }
+                var operations = FrontierV3OperationLedger.get(level);
+                UUID ticket;
+                if (applied) {
+                    var observed = FrontierV3MinecraftOperation.observe(level, declaration, ports, effect::after).orElse(null);
+                    if (observed == null || !observed.complete()) { unresolved(retained, id, "missing-exact-native-application"); return; }
+                    ticket = observed.ticket();
+                } else {
+                    if (!operations.canPrepare(declaration)) {
+                        FrontierV3OperationDiagnostics.waiting(level, declaration, FrontierV3OperationDiagnostics.Backpressure.JOURNAL_CAPACITY); return;
+                    }
+                    var operation = operations.prepare(declaration);
+                    if (!operations.sealUnattemptedCancellation(operation.ticket())) {
+                        FrontierV3OperationDiagnostics.result(level, operation, FrontierV3MinecraftOperation.Status.AMBIGUOUS); return;
+                    }
+                    ticket = operation.ticket();
+                }
+                // The common WAL retains the whole typed consequence until confirmation;
+                // matching source counts are only validation, never evidence of execution.
+                FrontierV3OperationConfirmation.submitRecovery(level, runtime, ticket, receipt, Optional.empty());
+            });
         }
-        return () -> receipts.forEach(receipt -> {
-            if (!submit(runtime, receipt)) throw new IllegalStateException("retired expedition transfer receipt rejected: " + receipt.claimId());
-        });
+        return () -> settlements.forEach(FrontierV3ActorDeathResourceComposition.AfterFatality::settle);
     }
 
     static boolean reconcileOne(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
         for (var retained : pending(state)) {
-            var holders = new ArrayList<net.minecraft.nbt.CompoundTag>();
-            FrontierV3PhysicalContainer.loaded(level, state, retained.order().containerEndpoint().containerId())
-                    .ifPresent(source -> holders.add(source.declaration()));
-            var entity = level.getEntity(ActorBodyId.entityId(state.bootstrap().worldId(), retained.order().actorId()));
-            if (entity instanceof Mob recipient) holders.add(recipient.getPersistentData());
-            for (var holder : holders) {
-                if (!holder.contains(RECEIPT, net.minecraft.nbt.Tag.TAG_BYTE_ARRAY)) continue;
-                ExpeditionTransferDeathObserved receipt;
-                try { receipt = (ExpeditionTransferDeathObserved) FrontierWorldRuntimeDefinition.payloadCodecs()
-                        .decode("frontier.expedition_transfer_death_observed", holder.getByteArray(RECEIPT)); }
-                catch (IllegalArgumentException invalid) { continue; }
-                if (!receipt.missionId().equals(retained.mission()) || !receipt.claimId().equals(retained.claim())
-                        || !receipt.step().equals(retained.step())
-                        || state.actorLocations().get(receipt.body().actorId()).condition().status() != ActorLifeStatus.DEAD) continue;
-                if (submit(runtime, receipt)) return true;
-            }
+            var operations = FrontierV3OperationLedger.get(level);
+            var operation = operations.find(retained.protocol(), retained.mission(),
+                    FrontierV3OperationConfirmation.fingerprint(retained.prepared())).orElse(null);
+            if (operation == null) continue;
+            var command = operations.ownerCommand(operation.ticket()).orElse(null);
+            if (command == null || !(command.consequence() instanceof ExpeditionTransferDeathObserved receipt)) continue;
+            if (!receipt.missionId().equals(retained.mission()) || !receipt.claimId().equals(retained.claim())
+                    || !receipt.step().equals(retained.step())) throw new IllegalStateException("retired expedition has a foreign native consequence");
+            ActorBodyAuthority.requireRetiredDeath(state, receipt.body());
+            if (FrontierV3OperationConfirmation.submitRecovery(level, runtime, operation.ticket(), receipt, Optional.empty())) return true;
         }
         return false;
     }
-    private static boolean submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ExpeditionTransferDeathObserved receipt) {
-        return FrontierV3CommandSubmission.submit(runtime, receipt.type(), receipt.missionId().value(), receipt) instanceof CommandResult.Accepted;
+    private static void unresolved(Pending pending, ActorBodyId body, String reason) {
+        io.farfrontier.palemirror.PaleMirrorMod.LOGGER.warn(
+                "PMV3_EXPEDITION_DEATH_UNRESOLVED mission={} claim={} body={} protocol={} reason={}; retained pending transfer, automatic replay refused",
+                pending.mission(), pending.claim(), body, pending.protocol(), reason);
     }
 }

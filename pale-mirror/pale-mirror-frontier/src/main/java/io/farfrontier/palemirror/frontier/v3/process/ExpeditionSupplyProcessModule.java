@@ -39,6 +39,19 @@ final class ExpeditionSupplyProcessModule implements FrontierWorldProcessModule 
             if (allocation.slot() instanceof ActorItemSlot.AttachedStorage storage) containers.add(storage.containerId());
         } else if (command.payload() instanceof ExpeditionReplenishmentHotLoaded) {
             containers.add(previous.replenishment().orElseThrow().containerId());
+        } else if (command.payload() instanceof ExpeditionTransferDeathObserved receipt && receipt.applied()) {
+            var refill = previous.replenishment().filter(t -> t.claimId().equals(receipt.claimId())).orElse(null);
+            if (refill != null) containers.add(refill.containerId());
+            else {
+                containers.add(previous.organization().home().containerId());
+                var allocation = previous.supplies().orElseThrow().allocations().stream()
+                        .filter(a -> a.claimId().equals(receipt.claimId())).findFirst().orElseThrow();
+                if (allocation.slot() instanceof ActorItemSlot.AttachedStorage storage) containers.add(storage.containerId());
+            }
+            // The dying carrier retains exact slot bindings for the following native
+            // loot operation. Only surviving containers close this transfer's fence.
+            containers.removeIf(container -> successor.inventory().surfaces().get(container).location()
+                    .equals(new ContainerLocation.Mobile(receipt.body().actorId())));
         }
         events.addAll(ConfirmedContainerMutationPlan.close(successor, containers, command.expectedRevision().next().value()));
         events.add(TransportMissionProcess.wake(mission, command.submittedAt().ticks()));

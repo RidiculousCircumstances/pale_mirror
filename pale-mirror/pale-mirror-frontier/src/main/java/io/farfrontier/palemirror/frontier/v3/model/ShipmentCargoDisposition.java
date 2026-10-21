@@ -29,7 +29,7 @@ public final class ShipmentCargoDisposition {
         long epoch = observed.identity().body().physicalEpoch();
         resources = switch (observed.outcome()) {
             case WORLD_DROP -> resources.releaseClaims(Set.of(shipment.authorization().claimId()))
-                    .releaseObservedActorAccountToWorld(shipment.carriedAccountId(), shipment.execution().actorId(), body, epoch, observed.worldCarrier().orElseThrow());
+                    .releaseObservedActorAccountToGround(shipment.carriedAccountId(), shipment.execution().actorId(), body, epoch, observed.ground().orElseThrow());
             case MISSING_BEFORE_LOOT -> resources.destroyObserved(shipment.carriedAccountId(), epoch,
                     shipment.lotQuantities(), Map.of(shipment.authorization().claimId(), shipment.quantity()), List.of());
         };

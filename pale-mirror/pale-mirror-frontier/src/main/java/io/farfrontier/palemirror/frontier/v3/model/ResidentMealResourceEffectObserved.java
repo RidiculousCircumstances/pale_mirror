@@ -12,7 +12,7 @@ public record ResidentMealResourceEffectObserved(ActorBodyId body, ActorExecutio
         ResidentMealPhysicalStep step, Outcome outcome,
         List<FungiblePhysicalObservation.Stack> remainingSource,
         List<FungiblePhysicalObservation.Stack> destination) implements FrontierPayload {
-    public enum Outcome { TAKE_UNAPPLIED, TAKE_APPLIED, CONSUMPTION_APPLIED }
+    public enum Outcome { TAKE_UNAPPLIED, TAKE_APPLIED, CONSUMPTION_APPLIED, CONSUMPTION_UNAPPLIED }
 
     public ResidentMealResourceEffectObserved {
         Objects.requireNonNull(body, "resource witness body");
@@ -23,11 +23,12 @@ public record ResidentMealResourceEffectObserved(ActorBodyId body, ActorExecutio
         destination = List.copyOf(Objects.requireNonNull(destination));
         if (!body.actorId().equals(executionId.actorId()) || !step.executionId().equals(executionId)
                 || remainingSource.size() > 27 || destination.size() > 1
-                || (outcome == Outcome.CONSUMPTION_APPLIED ? step.phase() != ResidentMeal.Phase.CONSUME
+                || (outcome == Outcome.CONSUMPTION_APPLIED || outcome == Outcome.CONSUMPTION_UNAPPLIED ? step.phase() != ResidentMeal.Phase.CONSUME
                         : step.phase() != ResidentMeal.Phase.TAKE)
                 || outcome != Outcome.TAKE_APPLIED && !destination.isEmpty()
-                || outcome == Outcome.CONSUMPTION_APPLIED && remainingSource.size() > 1)
+                || (outcome == Outcome.CONSUMPTION_APPLIED || outcome == Outcome.CONSUMPTION_UNAPPLIED) && remainingSource.size() > 1)
             throw new IllegalArgumentException("retired meal effect witness has a foreign identity, phase or layout");
     }
     @Override public String type() { return "frontier.resident_meal_resource_effect_observed"; }
+    @Override public boolean requiresDurableBeforeEffect() { return true; }
 }

@@ -14,4 +14,5 @@ public record ExpeditionTransferDeathObserved(SubjectId missionId, SubjectId cla
         if (source.size() > 27 || destination.size() > 27) throw new IllegalArgumentException("unbounded expedition death witness");
     }
     @Override public String type() { return "frontier.expedition_transfer_death_observed"; }
+    @Override public boolean requiresDurableBeforeEffect() { return true; }
 }

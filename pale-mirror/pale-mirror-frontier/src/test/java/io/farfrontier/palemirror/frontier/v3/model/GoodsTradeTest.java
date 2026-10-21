@@ -122,7 +122,8 @@ class GoodsTradeTest {
             state = state.withInventory(state.inventory().withFungibleResources(resources));
             var carrier = java.util.UUID.nameUUIDFromBytes(outcome.name().getBytes(java.nio.charset.StandardCharsets.UTF_8));
             var observed = new ShipmentCargoDispositionObserved(shipment.id(), shipment.revision(), identity, outcome,
-                    outcome == ShipmentCargoDispositionObserved.Outcome.WORLD_DROP ? java.util.Optional.of(carrier) : java.util.Optional.empty());
+                    outcome == ShipmentCargoDispositionObserved.Outcome.WORLD_DROP
+                            ? java.util.Optional.of(new ResourceCustody.Ground(carrier, new BlockPosition(1, 64, 1))) : java.util.Optional.empty());
             var alive = state;
             assertThrows(IllegalArgumentException.class, () -> shipmentFact(alive, observed.shipmentId(), observed));
             state = ActorBodyAuthority.died(state, ModeledActorBodyFacts.death(state, actor, state.actorLocations().get(actor).body(), "fixture:fatality"),

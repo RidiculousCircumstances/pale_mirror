@@ -72,7 +72,7 @@ final class FrontierV3UnitInventoryDeathResources {
                 var drop = new ItemEntity(level, body.getX(), body.getY() + 0.25D, body.getZ(), actual.copy());
                 drop.setUUID(carrier);
                 var receipt = new UnitInventoryDispositionObserved(id, account.id(), binding.authorityEpoch(),
-                        UnitInventoryDispositionObserved.Outcome.WORLD_DROP, Optional.of(carrier));
+                        UnitInventoryDispositionObserved.Outcome.WORLD_DROP, Optional.of(FrontierV3EntityResourceDropOperation.ground(drop)));
                 FrontierV3EntityResourceDropOperation.perform(level, runtime, body, source.slot(), drop, receipt);
             }
         };

@@ -9,18 +9,19 @@ final class FrontierV3OperationReceiptCodec {
     private FrontierV3OperationReceiptCodec() { }
     static CompoundTag write(FrontierV3OperationReceipt value) {
         var tag = new CompoundTag(); var declaration = value.declaration();
-        tag.putInt("format", 1); tag.putUUID("ticket", value.ticket());
+        tag.putInt("format", 2); tag.putUUID("ticket", value.ticket());
         tag.putLong("sequence", value.sequence());
         tag.putString("protocol", declaration.protocol().wire()); tag.putString("owner", declaration.owner().value());
         tag.putString("operation", declaration.operation()); tag.putString("fingerprint", declaration.fingerprint());
         tag.put("participants", participants(declaration.participants())); tag.put("applied", participants(value.applied()));
-        tag.put("saved", participants(value.saved())); tag.putBoolean("closed", value.ownerClosed()); return tag;
+        tag.put("saved", participants(value.saved())); tag.putBoolean("cancelled", value.cancelled());
+        tag.putBoolean("closed", value.ownerClosed()); return tag;
     }
     static FrontierV3OperationReceipt read(CompoundTag tag) {
         var declaration = new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.fromWire(tag.getString("protocol")), new SubjectId(tag.getString("owner")),
                 tag.getString("operation"), tag.getString("fingerprint"), participants(tag, "participants"));
         var result = new FrontierV3OperationReceipt(declaration, tag.getUUID("ticket"), tag.getLong("sequence"), participants(tag, "applied"),
-                participants(tag, "saved"), tag.getBoolean("closed"));
+                participants(tag, "saved"), tag.getBoolean("cancelled"), tag.getBoolean("closed"));
         if (!write(result).equals(tag)) throw new IllegalArgumentException("invalid physical operation encoding");
         return result;
     }

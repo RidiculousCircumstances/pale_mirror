@@ -55,7 +55,8 @@ class FrontierV3ResourceHandoffLedgerTest {
     @Test void entityDropOutboxRecoversExactOutcomeAndMonotonicOperationWithoutInferringCompletion() {
         var actor = new SubjectId("resident:drop-owner"); var entity = UUID.randomUUID();
         var consequence = new UnitInventoryDispositionObserved(new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(actor, 4),
-                new SubjectId("custody:drop-owner"), 2, UnitInventoryDispositionObserved.Outcome.WORLD_DROP, Optional.of(entity));
+                new SubjectId("custody:drop-owner"), 2, UnitInventoryDispositionObserved.Outcome.WORLD_DROP,
+                Optional.of(new ResourceCustody.Ground(entity, new BlockPosition(1, 64, 1))));
         var source = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.ENTITIES, UUID.randomUUID().toString(), 3);
         var birth = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.ENTITIES, entity.toString(), 1);
         var declaration = new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.ENTITY_RESOURCE_DROP,
@@ -70,7 +71,7 @@ class FrontierV3ResourceHandoffLedgerTest {
         assertThrows(IllegalArgumentException.class, () -> new FrontierV3EntityResourceDropTransaction(source, birth,
                 FrontierV3OperationReceipt.prepare(new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.GROUND_MERGE,
                         declaration.owner(), declaration.operation(), declaration.fingerprint(), declaration.participants()), 4), consequence));
-        var altered = new UnitInventoryDispositionObserved(consequence.body(), consequence.accountId(), 3, consequence.outcome(), consequence.worldCarrier());
+        var altered = new UnitInventoryDispositionObserved(consequence.body(), consequence.accountId(), 3, consequence.outcome(), consequence.ground());
         assertThrows(IllegalArgumentException.class, () -> new FrontierV3EntityResourceDropTransaction(source, birth, operation, altered));
         var malformed = draft.save(); malformed.putString("destination", source.identity());
         assertThrows(IllegalArgumentException.class, () -> FrontierV3EntityResourceDropTransaction.read(malformed));

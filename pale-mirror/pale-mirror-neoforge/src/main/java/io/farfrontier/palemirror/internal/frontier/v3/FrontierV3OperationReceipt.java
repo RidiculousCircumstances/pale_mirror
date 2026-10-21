@@ -6,7 +6,7 @@ import java.util.*;
 /** Storage-independent physical protocol. It neither selects work nor changes resource custody.
  * A producer must validate its current durable domain intent before opening this envelope. */
 record FrontierV3OperationReceipt(Declaration declaration, UUID ticket, long sequence, Set<Participant> applied,
-        Set<Participant> saved, boolean ownerClosed) {
+        Set<Participant> saved, boolean cancelled, boolean ownerClosed) {
     enum Medium { TERRAIN, CHUNK_BLOCKS, ENTITIES, ENTITY_COLUMN, PLAYER }
     /** Closed, explicit producer keys. They name authority; the coordinator never
      * infers a protocol from an owner ID or dispatches business logic on these keys. */
@@ -64,35 +64,43 @@ record FrontierV3OperationReceipt(Declaration declaration, UUID ticket, long seq
         if (sequence < 1) throw new IllegalArgumentException("invalid physical operation sequence");
         applied = Set.copyOf(applied); saved = Set.copyOf(saved);
         if (!declaration.participants().containsAll(applied) || !applied.containsAll(saved)
-                || ownerClosed && !applied.equals(declaration.participants()))
+                || cancelled && (!applied.isEmpty() || !saved.isEmpty())
+                || ownerClosed && !cancelled && !applied.equals(declaration.participants()))
             throw new IllegalArgumentException("invalid physical operation acknowledgement order");
     }
     static FrontierV3OperationReceipt prepare(Declaration declaration, long sequence) {
-        return new FrontierV3OperationReceipt(declaration, UUID.randomUUID(), sequence, Set.of(), Set.of(), false);
+        return new FrontierV3OperationReceipt(declaration, UUID.randomUUID(), sequence, Set.of(), Set.of(), false, false);
     }
     NativeReceipt nativeReceipt(Participant participant) {
         requireParticipant(participant);
         return new NativeReceipt(ticket, sequence, participant, declaration.fingerprint());
     }
     FrontierV3OperationReceipt applied(NativeReceipt receipt) {
+        if (cancelled) throw new IllegalStateException("cancelled operation cannot acquire native effects");
         requireReceipt(receipt); var next = new HashSet<>(applied); next.add(receipt.participant());
-        return new FrontierV3OperationReceipt(declaration, ticket, sequence, next, saved, ownerClosed);
+        return new FrontierV3OperationReceipt(declaration, ticket, sequence, next, saved, false, ownerClosed);
     }
     /** Invoked only by an actual successful write+sync boundary or a validated disk read.
      * A native receipt can outlive a crash before the physical journal's applied update. */
     FrontierV3OperationReceipt saved(NativeReceipt receipt) {
+        if (cancelled) throw new IllegalStateException("cancelled operation cannot acquire native save evidence");
         requireReceipt(receipt); var nextApplied = new HashSet<>(applied); nextApplied.add(receipt.participant());
         var nextSaved = new HashSet<>(saved); nextSaved.add(receipt.participant());
-        return new FrontierV3OperationReceipt(declaration, ticket, sequence, nextApplied, nextSaved, ownerClosed);
+        return new FrontierV3OperationReceipt(declaration, ticket, sequence, nextApplied, nextSaved, false, ownerClosed);
     }
     /** The domain producer supplies this only after its canonical consequence and successor
      * boundary are durable and no live incoming operation still needs this envelope. */
     FrontierV3OperationReceipt closeOwner() {
-        if (!applied.equals(declaration.participants()))
+        if (!cancelled && !applied.equals(declaration.participants()))
             throw new IllegalStateException("cannot close an incompletely observed physical operation");
-        return new FrontierV3OperationReceipt(declaration, ticket, sequence, applied, saved, true);
+        return new FrontierV3OperationReceipt(declaration, ticket, sequence, applied, saved, cancelled, true);
     }
-    boolean retirable() { return ownerClosed && saved.equals(declaration.participants()); }
+    /** Ledger must first prove that its in-process native attempt was never consumed. */
+    FrontierV3OperationReceipt cancel() {
+        if (!applied.isEmpty() || ownerClosed) throw new IllegalStateException("cannot cancel an applied or closed operation");
+        return new FrontierV3OperationReceipt(declaration, ticket, sequence, Set.of(), Set.of(), true, false);
+    }
+    boolean retirable() { return ownerClosed && (cancelled || saved.equals(declaration.participants())); }
     private void requireParticipant(Participant participant) {
         if (!declaration.participants().contains(participant)) throw new IllegalArgumentException("foreign native participant");
     }

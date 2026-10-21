@@ -29,7 +29,7 @@ final class FrontierV3ActorDeathResourceComposition {
                 FrontierV3ActorEquipmentDeathExecutor.resolve(level, runtime, body, id.actorId());
                 return () -> { };
             }),
-            new Handler(Owner.RESIDENT_MEAL, FrontierV3ResidentMealDeathResources::prepare),
+            new Handler(Owner.RESIDENT_MEAL, FrontierV3ResidentMealDeathResources::prepare, FrontierV3ResidentMealDeathResources::reconcileOne),
             new Handler(Owner.SETTLEMENT_SERVICE, FrontierV3SettlementServiceDeathResources::prepare),
             new Handler(Owner.EXPEDITION_TRANSFER, FrontierV3ExpeditionTransferDeathResources::prepare, FrontierV3ExpeditionTransferDeathResources::reconcileOne),
             new Handler(Owner.SHIPMENT, FrontierV3ShipmentDeathResources::prepare),

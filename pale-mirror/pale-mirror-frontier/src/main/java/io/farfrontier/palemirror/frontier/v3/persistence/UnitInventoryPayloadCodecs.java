@@ -5,8 +5,6 @@ import io.farfrontier.palemirror.frontier.v3.kernel.*;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId;
 import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
 final class UnitInventoryPayloadCodecs {
     private UnitInventoryPayloadCodecs() { }
@@ -18,11 +16,7 @@ final class UnitInventoryPayloadCodecs {
                 UnitGroupStateCodec.id(out, receipt.body().actorId()); out.writeLong(receipt.body().physicalEpoch());
                 UnitGroupStateCodec.id(out, receipt.accountId()); out.writeLong(receipt.sourceEpoch());
                 out.writeByte(switch (receipt.outcome()) { case WORLD_DROP -> 1; case MISSING_BEFORE_LOOT -> 2; });
-                out.writeBoolean(receipt.worldCarrier().isPresent());
-                if (receipt.worldCarrier().isPresent()) {
-                    out.writeLong(receipt.worldCarrier().orElseThrow().getMostSignificantBits());
-                    out.writeLong(receipt.worldCarrier().orElseThrow().getLeastSignificantBits());
-                }
+                GroundDispositionCodec.write(out, receipt.ground());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
@@ -32,7 +26,7 @@ final class UnitInventoryPayloadCodecs {
                         case 1 -> UnitInventoryDispositionObserved.Outcome.WORLD_DROP;
                         case 2 -> UnitInventoryDispositionObserved.Outcome.MISSING_BEFORE_LOOT;
                         default -> throw new IllegalArgumentException("unknown inventory disposition tag");
-                    }, in.readBoolean() ? Optional.of(new UUID(in.readLong(), in.readLong())) : Optional.empty()));
+                    }, GroundDispositionCodec.read(in)));
         }
     }, new PayloadCodec() {
         @Override public String type() { return "frontier.unit_inventory_bound_observed"; }

@@ -53,10 +53,10 @@ public final class FrontierV3GroundPlayerOperationGameTests {
             settlement.settle();
             var after = runtime.decodedState().orElseThrow(); var stock = after.inventory().fungibleResources();
             var destination = stock.accounts().values().stream().filter(a -> a.lotQuantities().containsKey(lot.id())).findFirst().orElseThrow();
-            helper.assertTrue(!stock.accounts().containsKey(account) && destination.custody() instanceof ResourceCustody.WorldCarrier
+            helper.assertTrue(!stock.accounts().containsKey(account) && destination.custody() instanceof ResourceCustody.Ground
                     && destination.lotQuantities().equals(Map.of(lot.id(), 7)) && stock.lots().get(lot.id()).equals(lot),
                     "one confirmed death transfer preserves quantity and title without retaining dead-actor stock");
-            var drop = (ItemEntity) level.getEntity(((ResourceCustody.WorldCarrier) destination.custody()).carrierId());
+            var drop = (ItemEntity) level.getEntity(((ResourceCustody.Ground) destination.custody()).entityId());
             helper.assertTrue(drop != null && drop.getItem().getCount() == 7 && body.getInventory().getItem(3).isEmpty(),
                     "physical pocket emptied exactly once into the accounted native entity");
             var journal = FrontierV3ResourceHandoffLedger.get(level); var operations = FrontierV3OperationLedger.get(level);
@@ -65,7 +65,8 @@ public final class FrontierV3GroundPlayerOperationGameTests {
             settlement.settle(); helper.assertTrue(runtime.decodedState().orElseThrow().equals(after), "repeated death settlement cannot duplicate stock");
             var source = FrontierV3OperationEntityParticipant.nativeObject(body).identity();
             var birth = FrontierV3OperationEntityParticipant.nativeObject(drop).identity();
-            var outcome = new UnitInventoryDispositionObserved(id, account, 1, UnitInventoryDispositionObserved.Outcome.WORLD_DROP, Optional.of(drop.getUUID()));
+            var outcome = new UnitInventoryDispositionObserved(id, account, 1, UnitInventoryDispositionObserved.Outcome.WORLD_DROP,
+                    Optional.of(FrontierV3EntityResourceDropOperation.ground(drop)));
             var unproved = operations.prepare(new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.ENTITY_RESOURCE_DROP,
                     FrontierExecutionSubjects.PHYSICAL_EXECUTOR, UUID.randomUUID().toString(), FrontierV3OperationConfirmation.fingerprint(outcome), Set.of(source, birth)));
             var transaction = new FrontierV3EntityResourceDropTransaction(source, birth, unproved, outcome);
@@ -76,6 +77,14 @@ public final class FrontierV3GroundPlayerOperationGameTests {
             helper.assertTrue(FrontierV3EntityResourceDropOperation.reconcile(level, runtime, transaction)
                     && runtime.decodedState().orElseThrow().equals(after) && journal.entityDrops().isEmpty(),
                     "cancel-before-owner-retire cut neither repeats the physical effect nor submits its unperformed consequence");
+            var player = helper.makeMockServerPlayerInLevel();
+            player.setGameMode(net.minecraft.world.level.GameType.SURVIVAL);
+            FrontierV3OperationEntityColumns.forRemoval(level, drop.chunkPosition());
+            helper.assertTrue(FrontierV3GroundPlayerPickup.add(level, drop, player.getInventory(), drop.getItem(), runtime),
+                    "a body drop uses the same native pickup as container drops");
+            helper.assertTrue(drop.isRemoved() && player.getInventory().countItem(Items.COBBLESTONE) == 7
+                    && !runtime.decodedState().orElseThrow().inventory().fungibleResources().accounts().containsKey(destination.id()),
+                    "actual pickup closes ground stock without matching or retaining a phantom player account");
         } finally { runtime.shutdown(); }
         helper.succeed();
     }

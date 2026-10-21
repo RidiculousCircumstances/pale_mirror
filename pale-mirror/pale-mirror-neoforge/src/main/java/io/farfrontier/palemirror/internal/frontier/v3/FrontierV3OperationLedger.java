@@ -19,8 +19,23 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
     private final Map<UUID, FrontierV3OperationReceipt> operations;
     private final Map<Long, Long> retired;
     private final FrontierV3RetiredOperationRanges retiredIndex;
-    record OwnerCommand(io.farfrontier.palemirror.frontier.v3.api.CommandId id, String fingerprint) {
-        OwnerCommand { Objects.requireNonNull(id); if (fingerprint == null || fingerprint.isBlank()) throw new IllegalArgumentException("missing owner command fingerprint"); }
+    static final class OwnerCommand {
+        private final io.farfrontier.palemirror.frontier.v3.api.CommandId id;
+        private final io.farfrontier.palemirror.frontier.v3.api.FrontierPayload consequence;
+        private final String fingerprint;
+        OwnerCommand(io.farfrontier.palemirror.frontier.v3.api.CommandId id,
+                io.farfrontier.palemirror.frontier.v3.api.FrontierPayload consequence) {
+            this.id = Objects.requireNonNull(id); this.consequence = Objects.requireNonNull(consequence);
+            if (!consequence.requiresDurableBeforeEffect()) throw new IllegalArgumentException("native consequence must commit durably");
+            fingerprint = FrontierV3OperationConfirmation.fingerprint(consequence);
+        }
+        io.farfrontier.palemirror.frontier.v3.api.CommandId id() { return id; }
+        io.farfrontier.palemirror.frontier.v3.api.FrontierPayload consequence() { return consequence; }
+        String fingerprint() { return fingerprint; }
+        @Override public boolean equals(Object other) {
+            return other instanceof OwnerCommand value && id.equals(value.id) && fingerprint.equals(value.fingerprint) && consequence.equals(value.consequence);
+        }
+        @Override public int hashCode() { return Objects.hash(id, fingerprint); }
     }
     private final Map<UUID, OwnerCommand> ownerCommands;
     private long nextSequence;
@@ -37,6 +52,9 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
                 initial.values().stream().map(FrontierV3OperationReceipt::sequence).toList(), nextSequence);
         if (!initial.keySet().containsAll(commands.keySet()) || commands.values().stream().map(OwnerCommand::id).distinct().count() != commands.size())
             throw new IllegalArgumentException("owner command has no unique operation");
+        if (commands.keySet().stream().map(initial::get).anyMatch(value -> !value.cancelled()
+                && !value.applied().equals(value.declaration().participants())))
+            throw new IllegalArgumentException("owner command precedes an exact native outcome");
         ownerCommands = table("ownerCommands", commands, UUID::toString, FrontierV3OperationLedger::commandTag);
         if (nextSequence < 1 || initial.values().stream().map(FrontierV3OperationReceipt::sequence).distinct().count() != initial.size())
             throw new IllegalArgumentException("invalid physical operation causal order");
@@ -102,14 +120,14 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
      * The physical effect and its ticket remain unchanged. */
     void replaceUnacceptedOwnerCommand(UUID ticket, OwnerCommand expected, OwnerCommand successor) {
         var value = require(ticket);
-        if (value.ownerClosed() || !value.applied().equals(value.declaration().participants())
+        if (value.ownerClosed() || !value.cancelled() && !value.applied().equals(value.declaration().participants())
                 || !Objects.equals(ownerCommands.get(ticket), expected) || expected.id().equals(successor.id()))
             throw new IllegalArgumentException("stale or incomplete operation recovery confirmation");
         ownerCommands.put(ticket, successor); setDirty();
     }
     void bindOwnerCommand(UUID ticket, OwnerCommand command) {
         var value = require(ticket);
-        if (!value.applied().equals(value.declaration().participants())) throw new IllegalStateException("owner command precedes applied participants");
+        if (!value.cancelled() && !value.applied().equals(value.declaration().participants())) throw new IllegalStateException("owner command precedes applied participants or sealed cancellation");
         var prior = ownerCommands.get(ticket);
         if (prior != null && !prior.equals(command)) throw new IllegalArgumentException("owner confirmation changed payload/command identity");
         if (prior == null) { ownerCommands.put(ticket, command); setDirty(); }
@@ -132,6 +150,14 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         if (!unattempted.contains(ticket) || !value.applied().isEmpty()) return false;
         remove(value); return true;
     }
+    /** Cancellation with a canonical consequence must survive until that owner
+     * acknowledges it. Recovered PREPARED is deliberately not an unattempted proof. */
+    boolean sealUnattemptedCancellation(UUID ticket) {
+        var value = require(ticket);
+        if (value.cancelled()) return true;
+        if (!unattempted.contains(ticket) || !value.applied().isEmpty()) return false;
+        replace(value.cancel()); unattempted.remove(ticket); return true;
+    }
     private void remove(FrontierV3OperationReceipt value) {
         UUID ticket = value.ticket();
         observedSince.remove(ticket);
@@ -146,13 +172,13 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
     @Override protected String ownerDiagnostic() {
         long now = System.nanoTime();
         long age = observedSince.values().stream().mapToLong(since -> Math.max(0, now - since)).max().orElse(0) / 1_000_000;
-        long nativeWaiting = operations.values().stream().filter(value -> !value.saved().equals(value.declaration().participants())).count();
+        long nativeWaiting = operations.values().stream().filter(value -> !value.cancelled() && !value.saved().equals(value.declaration().participants())).count();
         long ownerWaiting = operations.values().stream().filter(value -> !value.ownerClosed()).count();
         return "{\"pendingOperations\":" + operations.size() + ",\"pendingParticipants\":" + pendingParticipants
                 + ",\"awaitingNativeSave\":" + nativeWaiting + ",\"awaitingOwner\":" + ownerWaiting
                 + ",\"oldestObservedAgeMs\":" + age + ",\"ageScope\":\"current-process\",\"retiredRanges\":" + retired.size() + "}";
     }
-    @Override protected CompoundTag metadata() { var tag = new CompoundTag(); tag.putInt("format", 2); tag.putLong("nextSequence", nextSequence); return tag; }
+    @Override protected CompoundTag metadata() { var tag = new CompoundTag(); tag.putInt("format", 3); tag.putLong("nextSequence", nextSequence); return tag; }
     @Override public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.merge(metadata()); var rows = new ListTag();
         operations.values().stream().sorted(Comparator.comparing(value -> value.ticket().toString()))
@@ -165,7 +191,7 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         tag.put("ownerCommands", commands); return tag;
     }
     static FrontierV3OperationLedger load(CompoundTag tag, HolderLookup.Provider registries) {
-        if (!tag.contains("format", Tag.TAG_INT) || tag.getInt("format") != 2 || !tag.contains("operations", Tag.TAG_LIST))
+        if (!tag.contains("format", Tag.TAG_INT) || tag.getInt("format") != 3 || !tag.contains("operations", Tag.TAG_LIST))
             throw new IllegalArgumentException("unsupported physical operation journal format");
         var rows = tag.getList("operations", Tag.TAG_COMPOUND);
         if (!rows.equals(tag.get("operations")) || rows.size() > MAX_PENDING) throw new IllegalArgumentException("invalid operation journal rows");
@@ -184,10 +210,13 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
                 throw new IllegalArgumentException("invalid or duplicate physical retirement range");
         }
         var commands = new HashMap<UUID, OwnerCommand>(); var commandTags = tag.getList("ownerCommands", Tag.TAG_COMPOUND);
-        if (!tag.contains("ownerCommands", Tag.TAG_LIST) || !commandTags.equals(tag.get("ownerCommands"))) throw new IllegalArgumentException("invalid owner command list");
+        if (!tag.contains("ownerCommands", Tag.TAG_LIST) || !commandTags.equals(tag.get("ownerCommands")) || commandTags.size() > values.size())
+            throw new IllegalArgumentException("invalid owner command list");
         for (int i = 0; i < commandTags.size(); i++) {
             var row = commandTags.getCompound(i); UUID id = row.getUUID("ticket");
-            var command = new OwnerCommand(new io.farfrontier.palemirror.frontier.v3.api.CommandId(row.getString("command")), row.getString("fingerprint"));
+            var command = new OwnerCommand(new io.farfrontier.palemirror.frontier.v3.api.CommandId(row.getString("command")),
+                    io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs()
+                            .decode(row.getString("type"), row.getByteArray("consequence")));
             if (!commandTag(id, command).equals(row) || commands.putIfAbsent(id, command) != null) throw new IllegalArgumentException("invalid owner command binding");
         }
         return new FrontierV3OperationLedger(values, ranges, commands, tag.getLong("nextSequence"));
@@ -197,6 +226,7 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
     }
     private static CompoundTag commandTag(UUID ticket, OwnerCommand command) {
         var tag = new CompoundTag(); tag.putUUID("ticket", ticket); tag.putString("command", command.id().value());
-        tag.putString("fingerprint", command.fingerprint()); return tag;
+        tag.putString("fingerprint", command.fingerprint()); tag.putString("type", command.consequence().type());
+        tag.putByteArray("consequence", io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs().encode(command.consequence())); return tag;
     }
 }

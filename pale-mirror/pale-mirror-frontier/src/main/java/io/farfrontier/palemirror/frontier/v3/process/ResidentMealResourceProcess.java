@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.process;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.ProposedEvent;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import java.util.List;
 import java.util.Map;
@@ -10,6 +11,16 @@ import java.util.Set;
 /** Food-owner reconciliation, independent of a runnable meal, ambient scope or actuator. */
 public final class ResidentMealResourceProcess {
     private ResidentMealResourceProcess() { }
+
+    public static List<ProposedEvent> planObserved(FrontierWorldState state, ResidentMealResourceEffectObserved observed, long committedRevision) {
+        var retained = state.humanPopulation().mealResourceObligations().get(observed.body().actorId());
+        var applied = reduce(state, observed.body().actorId(), observed);
+        var events = new java.util.ArrayList<ProposedEvent>();
+        events.add(new ProposedEvent(observed.body().actorId(), observed));
+        if (observed.outcome() == ResidentMealResourceEffectObserved.Outcome.TAKE_APPLIED)
+            events.addAll(ConfirmedContainerMutationPlan.close(applied, List.of(retained.depotId()), committedRevision));
+        return List.copyOf(events);
+    }
 
     public static FrontierWorldState reduceDisposition(FrontierWorldState state, SubjectId subject,
                                                        ResidentMealPortionDispositionObserved observed) {
@@ -32,10 +43,10 @@ public final class ResidentMealResourceProcess {
             case MISSING_BEFORE_LOOT -> ledger.destroyObserved(retained.actorAccountId(), observed.sourceEpoch(),
                     ledger.accounts().get(retained.actorAccountId()).lotQuantities(),
                     Map.of(retained.claimId(), retained.portion().quantity()), List.of());
-            case WORLD_DROP -> ledger.releaseClaims(Set.of(retained.claimId())).releaseObservedActorAccountToWorld(
+            case WORLD_DROP -> ledger.releaseClaims(Set.of(retained.claimId())).releaseObservedActorAccountToGround(
                     retained.actorAccountId(), subject,
                     io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(state.bootstrap().worldId(), subject),
-                    observed.sourceEpoch(), observed.worldCarrier().orElseThrow());
+                    observed.sourceEpoch(), observed.ground().orElseThrow());
         };
         return state.withChanges(FrontierWorldStateUpdate.begin()
                 .humanPopulation(state.humanPopulation().settleMealResources(retained, Optional.empty()))
@@ -98,6 +109,20 @@ public final class ResidentMealResourceProcess {
                 ledger = ledger.destroyObserved(retained.actorAccountId(), observed.step().sourceEpoch(),
                         retained.portion().lotQuantities(), Map.of(retained.claimId(), retained.portion().quantity()), observed.remainingSource());
                 people = people.settleMealResources(retained, Optional.empty());
+            }
+            case CONSUMPTION_UNAPPLIED -> {
+                if (retained.custodyState() != ResidentMealResourceObligation.CustodyState.ACTOR_CONSUMPTION_PENDING)
+                    throw new IllegalArgumentException("cancelled consumption lacks its exact pending portion");
+                var bindings = ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(retained.actorAccountId())).toList();
+                if (bindings.size() != 1 || bindings.getFirst().authorityEpoch() != observed.step().sourceEpoch()
+                        || !bindings.getFirst().address().equals(inventoryAddress(state, retained))
+                        || !observed.remainingSource().equals(List.of(new FungiblePhysicalObservation.Stack(bindings.getFirst().address(),
+                                bindings.getFirst().itemKind(), bindings.getFirst().quantity()))))
+                    throw new IllegalArgumentException("cancelled consumption changed its original physical stock");
+                var portion = new ResidentMealResourceObligation(retained.executionId(), retained.body(), retained.settlementId(),
+                        retained.source(), retained.actorAccountId(), retained.portion(), ResidentMealResourceObligation.CustodyState.ACTOR_PORTION,
+                        Optional.empty(), retained.retiredAtTick());
+                people = people.settleMealResources(retained, Optional.of(portion));
             }
         }
         // No nutrition, route, pose, body permission, execution or resident-clock mutation.

@@ -36,7 +36,7 @@ final class ShipmentPayloadCodecs {
                     out.writeUTF(v.identity().body().actorId().value()); out.writeLong(v.identity().body().physicalEpoch());
                     ActorExecutionStateCodec.writeId(out, v.identity().execution());
                     out.writeByte(switch (v.outcome()) { case WORLD_DROP -> 1; case MISSING_BEFORE_LOOT -> 2; });
-                    if (v.worldCarrier().isPresent()) out.writeUTF(v.worldCarrier().orElseThrow().toString());
+                    GroundDispositionCodec.write(out, v.ground());
                 }, in -> {
                     var id = new SubjectId(in.readUTF()); long revision = in.readLong();
                     var body = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(new SubjectId(in.readUTF()), in.readLong());
@@ -46,8 +46,7 @@ final class ShipmentPayloadCodecs {
                         case 2 -> ShipmentCargoDispositionObserved.Outcome.MISSING_BEFORE_LOOT;
                         default -> throw new IllegalArgumentException("unknown shipment cargo disposition tag");
                     };
-                    return new ShipmentCargoDispositionObserved(id, revision, identity, outcome, outcome == ShipmentCargoDispositionObserved.Outcome.WORLD_DROP
-                            ? java.util.Optional.of(java.util.UUID.fromString(in.readUTF())) : java.util.Optional.empty());
+                    return new ShipmentCargoDispositionObserved(id, revision, identity, outcome, GroundDispositionCodec.read(in));
                 }),
                 codec("frontier.shipment_receipt_acknowledged", (out, p) -> {
                     var value = (ShipmentReceiptAcknowledged) p; out.writeUTF(value.shipmentId().value());

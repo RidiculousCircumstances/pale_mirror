@@ -45,6 +45,7 @@ final class FrontierV3MinecraftOperation {
             throw new IllegalArgumentException("native recovery has foreign participants or intent");
         if (!retained.declaration().equals(declaration))
             return Optional.of(FrontierV3OperationDiagnostics.result(level, retained, Status.AMBIGUOUS));
+        if (retained.cancelled()) return Optional.of(FrontierV3OperationDiagnostics.result(level, retained, Status.NOT_APPLIED));
         if (!participants.stream().allMatch(p -> FrontierV3NativeOperationMarkers.contains(p.persistent(), retained.nativeReceipt(p.identity()))))
             return Optional.of(FrontierV3OperationDiagnostics.result(level, retained, Status.AMBIGUOUS));
         if (!after.getAsBoolean()) return Optional.of(FrontierV3OperationDiagnostics.result(level, retained, Status.SOURCE_CHANGED));
@@ -90,6 +91,9 @@ final class FrontierV3MinecraftOperation {
             // not permission to apply the old action to the new body/container/chunk.
             if (retained != null && !retained.declaration().equals(request.declaration())) {
                 results.set(i, FrontierV3OperationDiagnostics.result(level, retained, Status.AMBIGUOUS)); continue;
+            }
+            if (retained != null && retained.cancelled()) {
+                results.set(i, FrontierV3OperationDiagnostics.result(level, retained, Status.NOT_APPLIED)); continue;
             }
             var needed = new IdentityHashMap<CompoundTag, Integer>();
             for (var participant : request.participants())

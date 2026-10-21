@@ -28,7 +28,7 @@ final class FrontierV3OperationConfirmation {
         if (operation.ownerClosed()) return true;
         var retained = ledger.ownerCommand(ticket);
         var command = retained.orElseGet(() -> new FrontierV3OperationLedger.OwnerCommand(
-                new CommandId("physical-operation:" + ticket), fingerprint(consequence)));
+                new CommandId("physical-operation:" + ticket), consequence));
         if (!command.fingerprint().equals(fingerprint(consequence)))
             throw new IllegalArgumentException("changed physical consequence requires explicit owner recovery");
         ledger.bindOwnerCommand(ticket, command); force.run();
@@ -63,7 +63,7 @@ final class FrontierV3OperationConfirmation {
             String digest = fingerprint(consequence);
             if (!previous.fingerprint().equals(digest)) {
                 var successor = new FrontierV3OperationLedger.OwnerCommand(
-                        new CommandId("physical-operation:" + ticket + "/recovery/" + digest), digest);
+                        new CommandId("physical-operation:" + ticket + "/recovery/" + digest), consequence);
                 ledger.replaceUnacceptedOwnerCommand(ticket, previous, successor);
                 force.run(); // Crash recovery restores the successor pin from this durable binding.
                 canonical.pin(successor.id()); canonical.release(previous.id());

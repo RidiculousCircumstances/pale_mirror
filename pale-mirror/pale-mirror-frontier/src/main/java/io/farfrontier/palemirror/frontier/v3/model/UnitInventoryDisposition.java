@@ -28,8 +28,8 @@ public final class UnitInventoryDisposition {
         };
         if (!ownBody) throw new IllegalArgumentException("inventory disposition has a foreign body address");
         var next = switch (receipt.outcome()) {
-            case WORLD_DROP -> resources.releaseObservedActorAccountToWorld(account.id(), subject, entityId,
-                    receipt.sourceEpoch(), receipt.worldCarrier().orElseThrow());
+            case WORLD_DROP -> resources.releaseObservedActorAccountToGround(account.id(), subject, entityId,
+                    receipt.sourceEpoch(), receipt.ground().orElseThrow());
             case MISSING_BEFORE_LOOT -> resources.destroyObserved(account.id(), receipt.sourceEpoch(),
                     account.lotQuantities(), Map.of(), List.of());
         };
