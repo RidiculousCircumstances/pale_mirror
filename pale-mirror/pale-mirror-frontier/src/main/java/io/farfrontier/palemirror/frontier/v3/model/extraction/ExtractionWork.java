@@ -68,6 +68,12 @@ public record ExtractionWork(SubjectId id, SubjectId siteId, ActorExecutionId ex
         return new ExtractionWork(id, siteId, execution, toolId, toolReturnSlot, toolSource, storageTarget, outputKind, carriedAccountId,
                 outputLotId, batch, phase, revision, target, labour, Optional.of(step));
     }
+    /** The family requires positive unused-operation evidence before this cancellation. */
+    public ExtractionWork withoutUnappliedEffect() {
+        if (pending.isEmpty()) throw new IllegalArgumentException("no retained extraction effect to cancel");
+        return new ExtractionWork(id, siteId, execution, toolId, toolReturnSlot, toolSource, storageTarget, outputKind,
+                carriedAccountId, outputLotId, batch, phase, Math.addExact(revision, 1), target, Optional.empty(), Optional.empty());
+    }
     public ExtractionWork resumed(ActorExecutionId successor) {
         if (terminal() || pending.isPresent() || !successor.actorId().equals(execution.actorId())
                 || !successor.activityOwnerId().equals(id) || successor.activityKind() != ActorActivityKind.EXTRACTION

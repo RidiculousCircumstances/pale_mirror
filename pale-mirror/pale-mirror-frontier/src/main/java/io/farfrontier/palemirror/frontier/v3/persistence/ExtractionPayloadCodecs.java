@@ -122,14 +122,17 @@ final class ExtractionPayloadCodecs {
         codec("frontier.extraction_hot_prepared", (out, payload) -> {
             var value = (ExtractionHotPrepared) payload; out.writeUTF(value.jobId().value()); ExtractionWorkCodec.writeStep(out, value.step());
         }, in -> new ExtractionHotPrepared(new SubjectId(in.readUTF()), ExtractionWorkCodec.readStep(in))),
-        codec("frontier.extraction_hot_observed", (out, payload) -> {
-            var value = (ExtractionHotObserved) payload; out.writeUTF(value.jobId().value()); ExtractionWorkCodec.writeStep(out, value.step());
-            PhysicalObservationStackCodec.writeStacks(out, value.remainingSource()); PhysicalObservationStackCodec.writeStacks(out, value.destination());
-            out.writeBoolean(value.externalSuccessor().isPresent());
-            if (value.externalSuccessor().isPresent()) ExtractionSiteStateCodec.writeBlock(out, value.externalSuccessor().orElseThrow());
-        }, in -> new ExtractionHotObserved(new SubjectId(in.readUTF()), ExtractionWorkCodec.readStep(in),
-                PhysicalObservationStackCodec.readStacks(in), PhysicalObservationStackCodec.readStacks(in),
-                in.readBoolean() ? java.util.Optional.of(ExtractionSiteStateCodec.readBlock(in)) : java.util.Optional.empty())),
+        codec("frontier.extraction_hot_observed", (out, payload) -> writeEffect(out, (ExtractionHotObserved) payload), ExtractionPayloadCodecs::readEffect),
+        codec("frontier.extraction_retired_effect_observed", (out, payload) -> {
+            var value = (ExtractionRetiredEffectObserved) payload; writeEffect(out, value.effect()); out.writeBoolean(value.applied());
+        }, in -> new ExtractionRetiredEffectObserved(readEffect(in), in.readBoolean())),
+        codec("frontier.extraction_death_settled", (out, payload) -> {
+            var value = (ExtractionDeathSettled) payload;
+            out.writeUTF(value.identity().body().actorId().value()); out.writeLong(value.identity().body().physicalEpoch());
+            ActorExecutionStateCodec.writeId(out, value.identity().execution()); out.writeLong(value.expectedRevision());
+        }, in -> new ExtractionDeathSettled(new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(new SubjectId(in.readUTF()), in.readLong()),
+                ActorExecutionStateCodec.readId(in)), in.readLong())),
         codec("frontier.extraction_hand_custody_observed", (out, payload) -> {
             var value = (ExtractionHandCustodyObserved) payload; out.writeUTF(value.jobId().value());
             out.writeUTF(value.identity().body().actorId().value()); out.writeLong(value.identity().body().physicalEpoch());
@@ -143,6 +146,17 @@ final class ExtractionPayloadCodecs {
             if (stacks.size() != 1) throw new IllegalArgumentException("mining hand boundary needs its single observed stack");
             return new ExtractionHandCustodyObserved(id, identity, boundary, stacks.getFirst());
         })));
+    }
+    private static void writeEffect(DataOutputStream out, ExtractionHotObserved value) throws IOException {
+        out.writeUTF(value.jobId().value()); ExtractionWorkCodec.writeStep(out, value.step());
+        PhysicalObservationStackCodec.writeStacks(out, value.remainingSource()); PhysicalObservationStackCodec.writeStacks(out, value.destination());
+        out.writeBoolean(value.externalSuccessor().isPresent());
+        if (value.externalSuccessor().isPresent()) ExtractionSiteStateCodec.writeBlock(out, value.externalSuccessor().orElseThrow());
+    }
+    private static ExtractionHotObserved readEffect(DataInputStream in) throws IOException {
+        return new ExtractionHotObserved(new SubjectId(in.readUTF()), ExtractionWorkCodec.readStep(in),
+                PhysicalObservationStackCodec.readStacks(in), PhysicalObservationStackCodec.readStacks(in),
+                in.readBoolean() ? java.util.Optional.of(ExtractionSiteStateCodec.readBlock(in)) : java.util.Optional.empty());
     }
     private static void writeSample(DataOutputStream out, io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockGeometry.Sample<
             io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block> sample) throws IOException {

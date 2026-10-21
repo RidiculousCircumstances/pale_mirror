@@ -8,10 +8,10 @@ import java.util.*;
 /** Registered owner, not a manual server tick branch. */
 final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
     static final Set<String> COMMANDS = Set.of("frontier.extraction_geology_invalidated.v2", "frontier.extraction_geometry_changed", "frontier.extraction_source_changed", "frontier.extraction_source_boundary", "frontier.extraction_hot_prepared",
-            "frontier.extraction_hot_observed", "frontier.extraction_hand_custody_observed");
+            "frontier.extraction_hot_observed", "frontier.extraction_hand_custody_observed", "frontier.extraction_retired_effect_observed", "frontier.extraction_death_settled");
     static final Set<String> TYPES = Set.of("frontier.extraction_geology_invalidated.v2", "frontier.extraction_area_extended.v3", "frontier.extraction_frontier_opened", "frontier.extraction_work_started", "frontier.extraction_work_progressed",
             "frontier.extraction_geometry_changed", "frontier.extraction_source_changed", "frontier.extraction_source_boundary", "frontier.extraction_hot_prepared",
-            "frontier.extraction_hot_observed", "frontier.extraction_hand_custody_observed");
+            "frontier.extraction_hot_observed", "frontier.extraction_hand_custody_observed", "frontier.extraction_retired_effect_observed", "frontier.extraction_death_settled");
     static final DeterministicProcessDescriptor DESCRIPTOR = new DeterministicProcessDescriptor("extraction",
             COMMANDS, Set.of(ExtractionContinuation.PROGRESS, ExtractionContinuation.REVIEW), TYPES,
             java.util.stream.Stream.concat(TYPES.stream(), Set.of("frontier.actor_movement_interrupted", "frontier.actor_movement_started", "kernel.schedule_created",
@@ -40,6 +40,9 @@ final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
                     ExtractionPhysicalStateSupport.observed(state, event.subject(), observed, event.revision().value(), event.instant().ticks()),
                     observed.step().observation().actuation().execution().actorId(), event.instant().ticks());
             case ExtractionHandCustodyObserved hand -> ExtractionPhysicalStateSupport.handCustody(state, event.subject(), hand);
+            case ExtractionRetiredEffectObserved retired -> ExtractionPhysicalStateSupport.retired(state, event.subject(), retired,
+                    event.revision().value(), event.instant().ticks());
+            case ExtractionDeathSettled settled -> ExtractionDeathResources.settle(state, event.subject(), settled);
             default -> throw new IllegalArgumentException("extraction owner rejects undeclared payload");
         };
     }
@@ -94,6 +97,21 @@ final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
                 case ExtractionHandCustodyObserved hand -> {
                     id = hand.jobId(); ExtractionPhysicalStateSupport.handCustody(state, id, hand);
                     events.add(ExtractionContinuation.wake(id, command.submittedAt().ticks()));
+                }
+                case ExtractionRetiredEffectObserved retired -> {
+                    id = retired.effect().jobId();
+                    var original = state.extractionSites().work().get(id);
+                    var preview = ExtractionPhysicalStateSupport.retired(state, id, retired,
+                            command.expectedRevision().next().value(), command.submittedAt().ticks());
+                    if (!(retired.effect().step() instanceof io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionPhysicalStep.BlockWork))
+                        events.addAll(ConfirmedContainerMutationPlan.close(preview,
+                                List.of(ExtractionServiceAccess.identity(state, original).pointId()), command.expectedRevision().next().value()));
+                    events.add(new ProposedEvent(id, new ScheduleEffect.Cancelled(ExtractionContinuation.at(id, 0).id())));
+                }
+                case ExtractionDeathSettled settled -> {
+                    id = settled.identity().execution().activityOwnerId();
+                    ExtractionDeathResources.settle(state, id, settled);
+                    events.add(new ProposedEvent(id, new ScheduleEffect.Cancelled(ExtractionContinuation.at(id, 0).id())));
                 }
                 default -> throw new IllegalArgumentException("extraction rejects an undeclared native command");
             }

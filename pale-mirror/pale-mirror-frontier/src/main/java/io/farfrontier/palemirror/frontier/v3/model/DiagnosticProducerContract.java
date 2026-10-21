@@ -71,6 +71,7 @@ public final class DiagnosticProducerContract {
         "frontier.extraction_geometry_changed", "frontier.extraction_source_changed", "frontier.extraction_work_started",
         "frontier.extraction_work_progressed", "frontier.extraction_source_boundary",
         "frontier.extraction_hot_prepared", "frontier.extraction_hot_observed", "frontier.extraction_hand_custody_observed",
+        "frontier.extraction_retired_effect_observed", "frontier.extraction_death_settled",
         "frontier.internal_shipment_dispatched", "frontier.internal_shipment_received",
         "frontier.shipment_dispatched", "frontier.shipment_cold_transferred", "frontier.shipment_retired", "frontier.shipment_cargo_disposition_observed",
         "frontier.unit_group_advanced", "frontier.transport_mission_started", "frontier.transport_mission_advanced", "frontier.transport_mission_retired",

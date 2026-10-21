@@ -11,6 +11,8 @@ public final class UnitInventoryDisposition {
     public static FrontierWorldState apply(FrontierWorldState state, SubjectId subject, UnitInventoryDispositionObserved receipt) {
         if (!subject.equals(receipt.body().actorId())) throw new IllegalArgumentException("foreign inventory disposition subject");
         ActorBodyAuthority.requireRetiredDeath(state, receipt.body());
+        if (ActorInventoryInteractionFences.pending(state, subject))
+            throw new IllegalArgumentException("inventory disposition cannot consume another owner's pending physical effect");
         var resources = state.inventory().fungibleResources();
         var account = resources.accounts().get(receipt.accountId());
         if (account == null || !account.custody().equals(new ResourceCustody.Actor(subject)) || !account.claimQuantities().isEmpty())

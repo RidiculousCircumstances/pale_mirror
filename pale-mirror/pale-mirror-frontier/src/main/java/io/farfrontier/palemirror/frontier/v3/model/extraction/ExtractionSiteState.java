@@ -152,6 +152,13 @@ public record ExtractionSiteState(Map<SubjectId, ExtractionDeposit> deposits, Ma
         var next = new LinkedHashMap<>(work); next.remove(id);
         return new ExtractionSiteState(deposits, next, nextWorkOrdinal, geologicalExclusions, geology, knowledge);
     }
+    /** Death owner has discharged resources; this does not claim a completed delivery. */
+    public ExtractionSiteState releaseDeadWork(ExtractionWork expected) {
+        if (!Objects.equals(work.get(expected.id()), expected) || expected.pending().isPresent())
+            throw new IllegalArgumentException("dead-work release lost its exact settled predecessor");
+        var next = new LinkedHashMap<>(work); next.remove(expected.id());
+        return new ExtractionSiteState(deposits, next, nextWorkOrdinal, geologicalExclusions, geology, knowledge);
+    }
     public ExtractionSiteState invalidateGeology(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) {
         return invalidateGeology(java.util.List.of(position));
     }

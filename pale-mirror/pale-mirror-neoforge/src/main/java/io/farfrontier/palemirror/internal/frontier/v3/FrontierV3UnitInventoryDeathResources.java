@@ -53,6 +53,7 @@ final class FrontierV3UnitInventoryDeathResources {
     }
     private static void settle(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             Mob body, ActorBodyId id, java.util.Map<ActorItemSlot, ItemStack> beforeLoot) {
+            if (ActorInventoryInteractionFences.pending(runtime.decodedState().orElseThrow(), id.actorId())) return;
             // Earlier resource owners may just have confirmed an applied prepared take.
             // Use the actual pre-loot slot snapshot, not only accounts known before settlement.
             var sources = UnitInventoryPresentation.inventory(runtime.decodedState().orElseThrow(), id.actorId()).values().stream()

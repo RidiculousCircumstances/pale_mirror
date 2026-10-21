@@ -40,8 +40,8 @@ class ExtractionExternalChangesTest {
         assertEquals(current.execution(), after.extractionSites().work().get(job.id()).execution());
         assertTrue(after.extractionSites().work().get(job.id()).labour().isEmpty(), "new block does not inherit old work credit");
     }
-    private record Admission(FrontierWorldState state, long tick) { }
-    private static Admission admitted() {
+    record Admission(FrontierWorldState state, long tick) { }
+    static Admission admitted() {
         var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:source-retarget"),
                 20260918065L, FrontierRulesets.installed("frontier-v3-quarry-graybox-r13"));
         var engine = FrontierEngines.createCanonicalStateAccess(configuration);

@@ -59,6 +59,24 @@ public final class ExtractionPhysicalStateSupport {
     public static String operation(ExtractionWork job) { return "extraction:" + job.id().value() + ":" + job.revision(); }
     public static FrontierWorldState observed(FrontierWorldState state, SubjectId subject, ExtractionHotObserved event, long canonicalRevision, long atTick) {
         var job = require(state, subject, event.jobId(), event.step());
+        return settle(state, job, event, canonicalRevision, atTick, false);
+    }
+    public static FrontierWorldState retired(FrontierWorldState state, SubjectId subject, ExtractionRetiredEffectObserved event,
+            long canonicalRevision, long atTick) {
+        var effect = event.effect(); var identity = effect.step().observation().actuation();
+        ActorBodyAuthority.requireRetiredDeath(state, identity.body());
+        state.actorExecutions().requireRetained(identity.execution());
+        var job = ExtractionWorkAuthority.require(state, identity.execution());
+        if (!subject.equals(job.id()) || !effect.jobId().equals(job.id())
+                || !job.pending().equals(Optional.of(effect.step()))
+                || job.revision() != effect.step().observation().scopeRevision())
+            throw new IllegalArgumentException("retired extraction effect lost its exact pending work");
+        if (event.applied()) return settle(state, job, effect, canonicalRevision, atTick, true);
+        var next = job.withoutUnappliedEffect();
+        return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replaceWork(job, next)));
+    }
+    private static FrontierWorldState settle(FrontierWorldState state, ExtractionWork job, ExtractionHotObserved event,
+            long canonicalRevision, long atTick, boolean retired) {
         if (!job.pending().equals(Optional.of(event.step()))) throw new IllegalArgumentException("mining receipt has no exact retained physical intent");
         var changes = FrontierWorldStateUpdate.begin(); var sites = state.extractionSites();
         switch (event.step()) {
@@ -73,7 +91,8 @@ public final class ExtractionPhysicalStateSupport {
                 if (!take) {
                     if (ExtractionWorkAuthority.carried(state, job) != 0) throw new IllegalArgumentException("mining completion retains undelivered output");
                     sites = sites.retire(next.id(), next.revision());
-                    changes.actorExecutions(state.actorExecutions().finish(job.execution()));
+                    changes.actorExecutions(retired ? ActorExecutionComposition.LIFECYCLE.retire(state.actorExecutions(),
+                            job.execution().actorId(), job.execution().activityKind(), job.id()) : state.actorExecutions().finish(job.execution()));
                 }
             }
             case ExtractionPhysicalStep.Cargo cargo -> {
@@ -106,7 +125,8 @@ public final class ExtractionPhysicalStateSupport {
                 var depleted = sites.deposits().get(job.siteId()).extracted(target.key().cell(), target.revision(), block.extraction().operationId());
                 if (event.externalSuccessor().isPresent()) depleted = depleted.observe(target.key().cell(), target.revision() + 1,
                         event.externalSuccessor().orElseThrow());
-                var next = ExtractionWorkEffects.afterBlock(state, job, depleted, expected.quantity(), atTick);
+                var next = retired ? job.transition(ExtractionWork.Phase.STORE, Optional.empty())
+                        : ExtractionWorkEffects.afterBlock(state, job, depleted, expected.quantity(), atTick);
                 sites = sites.settle(job, next, depleted);
                 changes.inventory(state.inventory().withFungibleResources(ledger))
                         .replicaCustody(ExtractionSourceCustody.closeMutation(state, sites, target, canonicalRevision));
