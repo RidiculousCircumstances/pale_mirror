@@ -19,7 +19,8 @@ record FrontierV3OperationReceipt(Declaration declaration, UUID ticket, long seq
         SHIPMENT_TRANSFER("shipment-transfer-v1"), FIELD_PROJECTION("field-projection-v1"),
         PLAYER_GROUND_PICKUP("player-ground-pickup-v1"), PLAYER_CONTAINER_CLICK("player-container-click-v1"),
         GROUND_DESTRUCTION("ground-destruction-v1"), GROUND_MERGE("ground-merge-v1"), CONTAINER_DROP("container-drop-v1"),
-        ENTITY_RESOURCE_DROP("entity-resource-drop-v1"), NATIVE_INVENTORY_TRANSFER("native-inventory-transfer-v1");
+        ENTITY_RESOURCE_DROP("entity-resource-drop-v1"), NATIVE_INVENTORY_TRANSFER("native-inventory-transfer-v1"),
+        BODY_ADMISSION("body-admission-v1");
         private final String wire;
         Protocol(String wire) { this.wire = wire; }
         String wire() { return wire; }

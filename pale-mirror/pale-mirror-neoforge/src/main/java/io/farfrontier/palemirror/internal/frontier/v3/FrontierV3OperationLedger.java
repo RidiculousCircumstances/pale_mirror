@@ -41,6 +41,13 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
     private long nextSequence;
     private final Map<Key, UUID> byOwner = new HashMap<>();
     private final Set<UUID> unattempted = new HashSet<>();
+    private final Set<UUID> attempting = new HashSet<>();
+    private final Set<UUID> changedOperations = new HashSet<>();
+    private final Map<UUID, java.util.concurrent.CompletableFuture<Long>> writeReceipts = new HashMap<>();
+    @Override protected void submitted(java.util.concurrent.CompletableFuture<Long> receipt) {
+        for (var ticket : changedOperations) writeReceipts.put(ticket, receipt);
+        changedOperations.clear();
+    }
     // A persisted APPLIED row records history, not the native image recovered by
     // this process. Only actual live receipts or acknowledged disk saves grant
     // confirmation; this bounded cache intentionally starts empty on recovery.
@@ -92,7 +99,7 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         operations.put(value.ticket(), value); byOwner.put(Key.of(declaration), value.ticket());
         pendingParticipants += declaration.participants().size();
         observedSince.put(value.ticket(), System.nanoTime());
-        unattempted.add(value.ticket()); setDirty(); return value;
+        unattempted.add(value.ticket()); changedOperations.add(value.ticket()); setDirty(); return value;
     }
     boolean canPrepare(FrontierV3OperationReceipt.Declaration declaration) {
         return byOwner.containsKey(Key.of(declaration)) || operations.size() < MAX_PENDING
@@ -109,9 +116,28 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
     /** Must follow persist(). Even matching preimages do not permit replay after restart. */
     boolean beginAttempt(UUID ticket) {
         require(ticket);
-        if (isDirty()) throw new IllegalStateException("physical operation has no durable prepare receipt");
-        return unattempted.remove(ticket);
+        if (!unattempted.contains(ticket)) return false;
+        if (!durableOperation(ticket)) throw new IllegalStateException("physical operation has no durable prepare receipt");
+        unattempted.remove(ticket);
+        attempting.add(ticket); return true;
     }
+    boolean durableOperation(UUID ticket) {
+        require(ticket);
+        if (changedOperations.contains(ticket)) return false;
+        var receipt = writeReceipts.get(ticket);
+        if (receipt == null) return true; // Recovered from a validated durable journal prefix.
+        if (!receipt.isDone()) return false;
+        receipt.join(); return true;
+    }
+    boolean unattempted(UUID ticket) { require(ticket); return unattempted.contains(ticket); }
+    /** Only the enclosing live native callback may supply a positive refusal.
+     * Recovery, a timeout or matching item counts cannot grant this transition. */
+    boolean rejectCurrentAttempt(UUID ticket) {
+        var value = require(ticket);
+        if (!attempting.contains(ticket) || !value.applied().isEmpty()) return false;
+        replace(value.cancel()); attempting.remove(ticket); return true;
+    }
+    void finishAttempt(UUID ticket) { attempting.remove(ticket); }
     FrontierV3OperationReceipt require(UUID ticket) {
         var value = operations.get(ticket);
         if (value == null) throw new IllegalArgumentException("unknown or retired physical operation ticket");
@@ -151,7 +177,7 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
     boolean nativeOutcomeAvailable(UUID ticket) { return unverifiedNative(ticket).isEmpty(); }
     void closeOwner(UUID ticket) { replace(require(ticket).closeOwner()); }
     private void replace(FrontierV3OperationReceipt value) {
-        if (!value.equals(require(value.ticket()))) { operations.put(value.ticket(), value); setDirty(); }
+        if (!value.equals(require(value.ticket()))) { operations.put(value.ticket(), value); changedOperations.add(value.ticket()); setDirty(); }
     }
     /** No TTL. The caller removes same-object markers only after this removal is durable.
      * Domain closure prohibits further callbacks; a retired random ticket is never recreated. */
@@ -175,6 +201,8 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
     }
     private void remove(FrontierV3OperationReceipt value) {
         UUID ticket = value.ticket();
+        changedOperations.remove(ticket); writeReceipts.remove(ticket);
+        attempting.remove(ticket);
         currentNative.remove(ticket);
         observedSince.remove(ticket);
         pendingParticipants -= value.declaration().participants().size();
@@ -182,7 +210,7 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         retiredIndex.add(value.sequence());
     }
     boolean prunable(FrontierV3OperationReceipt.NativeReceipt receipt) {
-        return !operations.containsKey(receipt.ticket()) && retiredIndex.contains(receipt.sequence());
+        return !isDirty() && durableReady() && !operations.containsKey(receipt.ticket()) && retiredIndex.contains(receipt.sequence());
     }
     int pendingCount() { return operations.size(); }
     @Override protected String ownerDiagnostic() {

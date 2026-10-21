@@ -52,6 +52,7 @@ final class FrontierV3NativeOperationMarkers {
     /** Only a positive DURABLE retirement fence can erase a marker. Absence is not proof. */
     static boolean prune(CompoundTag persistent, FrontierV3OperationLedger ledger) {
         if (ledger.isDirty()) throw new IllegalStateException("cannot prune native markers before journal acknowledgement");
+        if (!ledger.durableReady()) return false;
         var values = read(persistent); var retained = values.stream().filter(value -> !ledger.prunable(value)).toList();
         if (retained.size() != values.size()) write(persistent, retained);
         return retained.size() != values.size();

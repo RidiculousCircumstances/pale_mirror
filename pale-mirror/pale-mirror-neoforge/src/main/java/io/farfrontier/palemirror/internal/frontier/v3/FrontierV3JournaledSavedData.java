@@ -25,6 +25,7 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
     private Path path;
     private ServerLevel level;
     private boolean declared;
+    private java.util.concurrent.CompletableFuture<Long> pendingWrite = java.util.concurrent.CompletableFuture.completedFuture(0L);
     private io.farfrontier.palemirror.frontier.v3.api.WorldId worldId;
     private net.minecraft.resources.ResourceLocation dimension;
 
@@ -125,6 +126,45 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
         if (this.level != level) throw new IllegalArgumentException("foreign physical ledger");
         save(path.toFile(), level.registryAccess());
     }
+    /** Resident tables keep their submitted image in memory while the writer runs.
+     * Paged tables may evict rows, so they retain their existing synchronous path. */
+    final java.util.concurrent.CompletableFuture<Long> persistAsync(ServerLevel level) {
+        if (this.level != level) throw new IllegalArgumentException("foreign physical ledger");
+        return persistAsync();
+    }
+    final java.util.concurrent.CompletableFuture<Long> persistAsync() {
+        if (pagedRecovery()) throw new IllegalStateException("paged ledger requires its synchronous eviction fence");
+        try {
+            if (store == null || worldId == null || dimension == null) throw new IllegalStateException("unbound async physical journal");
+            store.checkHealthy();
+            if (!isDirty() && declared) return pendingWrite;
+            var updates = pendingUpdates();
+            pendingWrite = store.appendAsync(updates);
+            declared = true; tables.forEach(StoredTable::accept); setDirty(false);
+            submitted(pendingWrite);
+            return pendingWrite;
+        } catch (IOException failure) { throw new UncheckedIOException("unable to submit " + kind, failure); }
+    }
+    final boolean durableReady() {
+        if (!pendingWrite.isDone()) return false;
+        awaitPendingWrite(); return true;
+    }
+    /** Immutable durability prefix for owner-issued permissions in this submitted image. */
+    protected void submitted(java.util.concurrent.CompletableFuture<Long> receipt) { }
+    private void awaitPendingWrite() {
+        try { pendingWrite.join(); }
+        catch (java.util.concurrent.CompletionException failed) {
+            throw new UncheckedIOException("physical journal force failed: " + kind, new IOException(failed.getCause()));
+        }
+    }
+    private Map<String, byte[]> pendingUpdates() throws IOException {
+        var updates = new TreeMap<String, byte[]>();
+        var meta = new CompoundTag(); meta.putInt("kind", kind.wireTag);
+        meta.putString("world", worldId.value()); meta.putString("dimension", dimension.toString());
+        meta.put("payload", metadata()); updates.put("$meta", encode(meta));
+        for (StoredTable table : tables) table.collect(updates);
+        return updates;
+    }
     @Override public final void save(File file, HolderLookup.Provider registries) {
         try {
             Path target = file.toPath().toAbsolutePath().normalize();
@@ -132,18 +172,13 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
             if (worldId == null || dimension == null) throw new IllegalStateException("physical ledger has no declared journal binding");
             if (store == null) store = openJournal(target);
             store.checkHealthy();
+            awaitPendingWrite(); // A prior submitted clean image is not yet a durable image.
             if (!isDirty() && declared) return;
-            var updates = new TreeMap<String, byte[]>();
-            if (isDirty() || !declared) {
-                var meta = new CompoundTag(); meta.putInt("kind", kind.wireTag);
-                meta.putString("world", worldId.value());
-                meta.putString("dimension", dimension.toString());
-                meta.put("payload", metadata()); updates.put("$meta", encode(meta));
-                for (StoredTable table : tables) table.collect(updates);
-            }
-            store.append(updates); // Dirty state is accepted only after the journal force receipt.
+            var updates = pendingUpdates();
+            long sequence = store.append(updates); // Dirty state is accepted only after the journal force receipt.
             declared = true;
             tables.forEach(StoredTable::accept); setDirty(false);
+            submitted(java.util.concurrent.CompletableFuture.completedFuture(sequence));
         } catch (IOException failure) { throw new UncheckedIOException("unable to persist " + kind, failure); }
     }
     /** Small family metadata only; list/table content must not be rebuilt here. */

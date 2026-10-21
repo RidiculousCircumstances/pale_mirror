@@ -10,7 +10,7 @@ final class FrontierV3CarrierJournalImage {
     private static final List<String> FACETS = List.of("bodyResidences", "bodyDepartures", "bodyDepartureConflicts",
             "savedBodyDepartures", "carriers", "pendingAdoptions", "firstAdmissions", "departures", "savedDepartures",
             "readFencedDepartures", "returnReads", "departureConflicts", "ambientDepartures", "savedAmbientDepartures",
-            "ambientDepartureConflicts");
+            "ambientDepartureConflicts", "bodyOperations");
     private FrontierV3CarrierJournalImage() { }
     static CompoundTag marker(SubjectId actor) { var tag = new CompoundTag(); tag.putString("actor", actor.value()); return tag; }
     static CompoundTag marker(SubjectId actor, String field, long value) { var tag = marker(actor); tag.putLong(field, value); return tag; }
@@ -24,13 +24,13 @@ final class FrontierV3CarrierJournalImage {
         return bytes.toByteArray();
     }
     static CompoundTag merge(Map<String, byte[]> actors) throws IOException {
-        var image = new CompoundTag(); image.putInt("format", 11);
+        var image = new CompoundTag(); image.putInt("format", FrontierV3AmbientCarrierLedger.FORMAT);
         FACETS.forEach(key -> image.put(key, new ListTag()));
         for (var entry : new TreeMap<>(actors).entrySet()) {
             new SubjectId(entry.getKey());
             try (var input = new DataInputStream(new ByteArrayInputStream(entry.getValue()))) {
                 var row = NbtIo.read(input, NbtAccounter.create(16L * 1024 * 1024));
-                if (row.getInt("format") != 11 || !row.getString("actor").equals(entry.getKey())
+                if (row.getInt("format") != FrontierV3AmbientCarrierLedger.FORMAT || !row.getString("actor").equals(entry.getKey())
                         || row.size() != FACETS.size() + 2 || input.read() != -1)
                     throw new IOException("incompatible carrier journal row");
                 for (String facet : FACETS) {

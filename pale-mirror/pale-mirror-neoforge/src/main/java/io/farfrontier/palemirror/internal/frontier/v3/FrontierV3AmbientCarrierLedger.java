@@ -25,7 +25,8 @@ import java.util.Map;
 /** Bounded inactive-body evidence; canonical actors and rosters remain domain-owned. */
 final class FrontierV3AmbientCarrierLedger extends SavedData {
     private static final String NAME = "pale_mirror_frontier_v3_ambient_carriers";
-    private static final int FORMAT = 11, MAX_CARRIERS = 4_096;
+    static final int FORMAT = 12;
+    private static final int MAX_CARRIERS = 4_096;
     private final Map<SubjectId, Carrier> carriers;
     private final java.util.Set<SubjectId> dirtyActors = new java.util.TreeSet<>();
     private FrontierV3JournalStore journal;
@@ -50,6 +51,26 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
     private final Map<SubjectId, Long> savedBodyDepartures = new LinkedHashMap<>();
     /** High-water marks survive receipt withdrawal; loading a body is not a new physical incarnation. */
     private final Map<SubjectId, Long> bodyResidences = new LinkedHashMap<>();
+    private final Map<SubjectId, FrontierV3BodyAdmissionOperation> bodyOperations = new LinkedHashMap<>();
+    java.util.Optional<FrontierV3BodyAdmissionOperation> bodyOperation(SubjectId actor) { return java.util.Optional.ofNullable(bodyOperations.get(actor)); }
+    List<FrontierV3BodyAdmissionOperation> bodyOperations() { return List.copyOf(bodyOperations.values()); }
+    boolean canRetainBodyOperation(SubjectId actor) { return bodyOperations.size() < MAX_CARRIERS && !bodyOperations.containsKey(actor); }
+    void retainBodyOperation(FrontierV3BodyAdmissionOperation value) {
+        if (!currentBodyResidence(value.actor(), value.residence()) || !value.undo().current(this)
+                || value.rejected() || !canRetainBodyOperation(value.actor()))
+            throw new IllegalStateException("body operation lost exact admission authority");
+        bodyOperations.put(value.actor(), value); markDirty(value.actor());
+    }
+    void rejectBodyOperation(FrontierV3BodyAdmissionOperation value) {
+        if (!value.equals(bodyOperations.get(value.actor()))) throw new IllegalStateException("stale body operation rollback");
+        if (value.rejected()) return;
+        if (!value.undo().reject(this)) throw new IllegalStateException("body operation lost exact rollback predecessor");
+        bodyOperations.put(value.actor(), value.rejection()); markDirty(value.actor());
+    }
+    void forgetBodyOperation(FrontierV3BodyAdmissionOperation value) {
+        if (!bodyOperations.remove(value.actor(), value)) throw new IllegalStateException("stale body operation closure");
+        markDirty(value.actor());
+    }
     private FrontierV3AmbientCarrierLedger() { this(new LinkedHashMap<>()); }
     private FrontierV3AmbientCarrierLedger(Map<SubjectId, Carrier> carriers) { this.carriers = carriers; }
     static FrontierV3AmbientCarrierLedger emptyForTest() { return new FrontierV3AmbientCarrierLedger(); }
@@ -348,6 +369,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
     }
     private CompoundTag actorImage(SubjectId actor) {
         var row = new CompoundTag(); row.putInt("format", FORMAT); row.putString("actor", actor.value());
+        FrontierV3CarrierJournalImage.list(row, "bodyOperations", bodyOperations.containsKey(actor) ? bodyOperations.get(actor).save() : null);
         FrontierV3CarrierJournalImage.list(row, "bodyResidences", bodyResidences.containsKey(actor)
                 ? FrontierV3CarrierJournalImage.marker(actor, "generation", bodyResidences.get(actor)) : null);
         FrontierV3CarrierJournalImage.list(row, "bodyDepartures", bodyDepartures.containsKey(actor) ? bodyDepartures.get(actor).save() : null);
@@ -694,6 +716,10 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         }
         ListTag departures = inventory(tag, "departures");
         var ledger = new FrontierV3AmbientCarrierLedger(restored);
+        for (Tag raw : inventory(tag, "bodyOperations")) {
+            var value = FrontierV3BodyAdmissionOperation.load((CompoundTag) raw);
+            if (ledger.bodyOperations.putIfAbsent(value.actor(), value) != null) throw new IllegalStateException("duplicate body operation");
+        }
         for (Tag raw : inventory(tag, "bodyResidences")) {
             var row = (CompoundTag) raw;
             if (!row.contains("actor", Tag.TAG_STRING) || !row.contains("generation", Tag.TAG_LONG)
@@ -848,6 +874,8 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
     }
     @Override public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.putInt("format", FORMAT); ListTag values = new ListTag();
+        var operations = new ListTag(); bodyOperations.values().stream().sorted(Comparator.comparing(FrontierV3BodyAdmissionOperation::actor))
+                .map(FrontierV3BodyAdmissionOperation::save).forEach(operations::add); tag.put("bodyOperations", operations);
         var residences = new ListTag();
         bodyResidences.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
             var row = new CompoundTag(); row.putString("actor", entry.getKey().value()); row.putLong("generation", entry.getValue());

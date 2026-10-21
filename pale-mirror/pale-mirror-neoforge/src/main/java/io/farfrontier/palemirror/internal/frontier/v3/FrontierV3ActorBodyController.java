@@ -90,6 +90,7 @@ final class FrontierV3ActorBodyController {
                 actor.condition().health(), observed, FrontierV3ActorBodyDeparture.execution(state, declaration.actorId()), cause);
         var result = FrontierV3CommandSubmission.submit(runtime, "actor-body-death", declaration.actorId().value(), payload);
         if (!(result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return false;
+        FrontierV3BodyOperationIntegration.recover(level, runtime.decodedState().orElseThrow(), ledger, declaration.actorId());
         ledger.retireDeadActor(runtime.decodedState().orElseThrow(), declaration.actorId());
         FrontierV3GoalNavigation.retireIncarnation(body, id);
         resources.settle();
@@ -390,9 +391,10 @@ final class FrontierV3ActorBodyController {
         var location = state.actorLocations().get(declaration.actorId());
         var health = new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(Math.round(body.getHealth()
                 * (double) io.farfrontier.palemirror.frontier.v3.api.FixedScalar.SCALE));
-        FrontierV3CommandSubmission.submit(runtime, "actor-body-present", declaration.actorId().value(),
-                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyPresent(id,
-                        location.body(), location.condition().health(), observed.orElseThrow(), health));
+        var consequence = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyPresent(id,
+                location.body(), location.condition().health(), observed.orElseThrow(), health);
+        if (!FrontierV3BodyOperationIntegration.confirm(level, runtime, state, body, declaration.actorId(), consequence))
+            FrontierV3CommandSubmission.submit(runtime, "actor-body-present", declaration.actorId().value(), consequence);
     }
 
     /** A physical insertion is not execution readiness until the common observation is durable. */
@@ -585,6 +587,7 @@ final class FrontierV3ActorBodyController {
     static Result materialize(ServerLevel level, FrontierWorldState state, BirthRequest request) {
         var declaration = request.binding().declaration();
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        FrontierV3BodyOperationIntegration.recover(level, state, ledger, declaration.actorId());
         var ticket = FrontierV3BodyInsertionJournal.get(level, state.bootstrap().worldId(), declaration.actorId());
         if (ticket != null && (!ticket.binding().equals(request.binding()) || !ticket.current(ledger))) return Result.CONFLICT;
         if (ticket != null && !ticket.ready()) return Result.DEFERRED;
@@ -635,9 +638,11 @@ final class FrontierV3ActorBodyController {
             // Family initializers may prepare independent attached-inventory custody.
             // Do not open that dependent boundary while the insertion permit still
             // waits for disk: loss of HOT demand must remain safely cancellable.
-            ticket = FrontierV3BodyInsertionJournal.prepare(level, state, ledger, request.binding(), admission);
+            ticket = FrontierV3BodyInsertionJournal.prepare(level, state, ledger, request.binding(), admission, body);
             return Result.DEFERRED; // No server-thread wait or dependent projection.
         }
+        body.getPersistentData().putLong(FrontierV3NativeOperationMarkers.LIFETIME,
+                ledger.bodyOperation(declaration.actorId()).orElseThrow().participant().incarnation());
         if (!request.projection().initialize(body)) return Result.CONFLICT;
         // Every managed body uses the witnessed resource-transfer port, never autonomous Vanilla pickup.
         body.setCanPickUpLoot(false);
@@ -650,16 +655,18 @@ final class FrontierV3ActorBodyController {
             return Result.CONFLICT;
         if (!FrontierV3BodyPlacement.available(level, body, body.getBoundingBox())) return Result.DEFERRED;
         body.getPersistentData().putLong(RESIDENCE_KEY, ticket.residence());
-        if (!FrontierV3BodyInsertionJournal.consume(level, ticket)) throw new IllegalStateException("body insertion lost its durable ticket");
-        boolean added = level.addFreshEntity(body);
-        if (!added) {
-            if (!ticket.undo().reject(ledger)) throw new IllegalStateException("rejected uncreated body lost its predecessor");
-            ledger.persist(level, state.bootstrap().worldId());
+        var result = FrontierV3BodyOperationIntegration.insert(level, body, ledger, ticket);
+        if (result.status() == FrontierV3MinecraftOperation.Status.NOT_APPLIED) {
+            FrontierV3BodyInsertionJournal.consume(level, ticket); // A refused precondition may leave the unattempted ticket.
+            FrontierV3BodyOperationIntegration.reject(level, state.bootstrap().worldId(), ledger,
+                    ledger.bodyOperation(declaration.actorId()).orElseThrow());
         }
         // Both admission boundaries restore the exact unused permission on a synchronous
         // false, or throw if that absence is not provable. A canceled, uncreated insertion
         // is retryable, not a family conflict. Unknown outcomes remain durable and fenced.
-        return added ? Result.APPLIED : Result.DEFERRED;
+        return result.complete() ? Result.APPLIED
+                : result.status() == FrontierV3MinecraftOperation.Status.AMBIGUOUS
+                    || result.status() == FrontierV3MinecraftOperation.Status.SOURCE_CHANGED ? Result.CONFLICT : Result.DEFERRED;
     }
 
     /** Known same-column contact only; never relocate a live actor or manufacture missing-body authority. */

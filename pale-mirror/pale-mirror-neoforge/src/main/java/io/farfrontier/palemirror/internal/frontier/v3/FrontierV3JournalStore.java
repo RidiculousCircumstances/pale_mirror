@@ -84,7 +84,7 @@ final class FrontierV3JournalStore implements FrontierV3PhysicalJournal {
     static FrontierV3JournalStore open(Path checkpoint, Limits limits) throws IOException {
         return open(checkpoint, WRITES, limits);
     }
-    private static FrontierV3JournalStore open(Path checkpoint, Executor writer, Limits limits) throws IOException {
+    static FrontierV3JournalStore open(Path checkpoint, Executor writer, Limits limits) throws IOException {
         return open(checkpoint, writer, limits, new Health());
     }
     static FrontierV3JournalStore open(Path checkpoint, Limits limits, Health health) throws IOException {
@@ -147,7 +147,7 @@ final class FrontierV3JournalStore implements FrontierV3PhysicalJournal {
         try { return appendAsync(replacements).join(); }
         catch (CompletionException failure) { throw new IOException("physical journal append failed", failure.getCause()); }
     }
-    synchronized CompletableFuture<Long> appendAsync(Map<String, byte[]> replacements) throws IOException {
+    @Override public synchronized CompletableFuture<Long> appendAsync(Map<String, byte[]> replacements) throws IOException {
         checkHealthy();
         var next = new TreeMap<String, byte[]>();
         replacements.forEach((key, value) -> {

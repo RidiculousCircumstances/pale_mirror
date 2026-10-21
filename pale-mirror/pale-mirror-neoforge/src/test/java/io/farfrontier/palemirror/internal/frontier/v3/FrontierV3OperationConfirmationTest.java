@@ -89,7 +89,7 @@ class FrontierV3OperationConfirmationTest {
                 return new CommandResult.Accepted(id, new TransactionId("test:cancelled"), new Revision(1));
             }
         };
-        assertTrue(FrontierV3OperationConfirmation.submit(recovered, () -> { }, canonical, operation.ticket(), consequence));
+        assertTrue(FrontierV3OperationConfirmation.submit(recovered, () -> recovered.setDirty(false), canonical, operation.ticket(), consequence));
         assertEquals(1, calls.get()); assertTrue(recovered.find(operation.ticket()).isEmpty());
         assertTrue(recovered.prunable(operation.nativeReceipt(participant)), "cancelled action retires only after its canonical consequence");
     }

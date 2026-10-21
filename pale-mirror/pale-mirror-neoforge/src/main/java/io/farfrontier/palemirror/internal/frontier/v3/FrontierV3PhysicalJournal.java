@@ -14,6 +14,11 @@ interface FrontierV3PhysicalJournal {
     }
     default String layoutDiagnostic() { return "\"layout\":\"resident\""; }
     long append(Map<String, byte[]> replacements) throws IOException;
+    /** Providers without an asynchronous writer retain their synchronous contract.
+     * The future always denotes durability, never queue admission. */
+    default java.util.concurrent.CompletableFuture<Long> appendAsync(Map<String, byte[]> replacements) throws IOException {
+        return java.util.concurrent.CompletableFuture.completedFuture(append(replacements));
+    }
     void checkHealthy() throws IOException;
     void awaitCheckpoint() throws IOException;
     FrontierV3JournalStore.Pressure pressure();

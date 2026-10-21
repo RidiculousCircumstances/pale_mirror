@@ -34,13 +34,19 @@ final class FrontierV3BodyAdmissionGameTestFixture {
         var result = attempt.get();
         if (result != FrontierV3AmbientActorExecutor.Result.DEFERRED) return result;
         FrontierV3AmbientCarrierLedger.get(level, world).persist(level, world);
-        return attempt.get();
+        FrontierV3OperationLedger.get(level).persist(level);
+        var admitted = attempt.get();
+        FrontierV3OperationLedger.get(level).persist(level);
+        return admitted;
     }
     static FrontierV3ActorBodyController.Result body(ServerLevel level, WorldId world,
             Supplier<FrontierV3ActorBodyController.Result> attempt) {
         var result = attempt.get();
         if (result != FrontierV3ActorBodyController.Result.DEFERRED) return result;
         FrontierV3AmbientCarrierLedger.get(level, world).persist(level, world);
-        return attempt.get();
+        FrontierV3OperationLedger.get(level).persist(level);
+        var admitted = attempt.get();
+        FrontierV3OperationLedger.get(level).persist(level);
+        return admitted;
     }
 }

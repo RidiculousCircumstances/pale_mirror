@@ -213,6 +213,7 @@ public final class FrontierV3ServerLifecycle {
                     diagnosticIdentity, birthCommitter);
             if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE)
                 FrontierV3OperationConfirmation.recover(physicalWorld, runtime);
+            runtime.decodedState().ifPresent(recovered -> FrontierV3BodyOperationIntegration.recover(physicalWorld, recovered, birthLedger));
             runtime.decodedState().ifPresent(recovered -> FrontierV3ActorBirthRecovery.retireUnpublished(recovered,
                     birthLedger, () -> birthLedger.persist(physicalWorld, birthWorld)));
         } catch (RuntimeException error) {

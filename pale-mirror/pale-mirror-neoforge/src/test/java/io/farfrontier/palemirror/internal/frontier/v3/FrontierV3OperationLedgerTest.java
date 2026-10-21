@@ -89,4 +89,47 @@ class FrontierV3OperationLedgerTest {
         FrontierV3NativeOperationMarkers.prune(markers, ledger);
         assertEquals(1, FrontierV3NativeOperationMarkers.read(markers).size());
     }
+    @Test void asyncSubmissionDoesNotGrantAttemptOrRetirementBeforeTheActualForce() throws Exception {
+        Path path = directory.resolve("async.dat"); var work = new ArrayDeque<Runnable>();
+        var store = FrontierV3JournalStore.open(path, work::add, FrontierV3JournalStore.PHYSICAL);
+        var ledger = FrontierV3OperationLedger.inMemory(); ledger.attachJournal(path, WORLD, DIMENSION, store);
+        var first = ledger.prepare(declaration("async-first"));
+        var firstForce = ledger.persistAsync();
+        assertFalse(ledger.isDirty()); assertFalse(firstForce.isDone()); assertFalse(ledger.durableReady());
+        assertThrows(IllegalStateException.class, () -> ledger.beginAttempt(first.ticket()));
+        var second = ledger.prepare(declaration("async-second")); var secondForce = ledger.persistAsync();
+        assertEquals(1, work.size(), "one writer drains both immutable submitted prefixes");
+        work.remove().run(); assertTrue(firstForce.isDone()); assertTrue(secondForce.isDone());
+        assertTrue(ledger.durableReady());
+        var later = ledger.prepare(declaration("async-later")); ledger.persistAsync();
+        assertFalse(ledger.durableReady()); assertFalse(ledger.durableOperation(later.ticket()));
+        assertTrue(ledger.beginAttempt(first.ticket()), "unrelated later writes cannot delay this already durable permit");
+        ledger.finishAttempt(first.ticket());
+        for (var participant : first.declaration().participants()) ledger.saved(first.nativeReceipt(participant));
+        ledger.closeOwner(first.ticket()); ledger.retire(first.ticket()); ledger.persistAsync();
+        var markers = new CompoundTag(); FrontierV3NativeOperationMarkers.stamp(markers, first.nativeReceipt(BODY));
+        assertFalse(ledger.prunable(first.nativeReceipt(BODY)));
+        assertFalse(FrontierV3NativeOperationMarkers.prune(markers, ledger), "submitted retirement cannot erase native evidence");
+        work.remove().run(); assertTrue(FrontierV3NativeOperationMarkers.prune(markers, ledger));
+        var recovered = reopen(path);
+        assertEquals(second.declaration(), recovered.require(second.ticket()).declaration());
+        assertFalse(recovered.beginAttempt(second.ticket()), "unattempted memory permission does not survive restart");
+        assertTrue(recovered.prunable(first.nativeReceipt(BODY)));
+    }
+    @Test void onlyTheLiveAttemptMaySealPositiveNativeRefusal() throws Exception {
+        Path path = directory.resolve("refused.dat"); var ledger = fresh(path);
+        var refused = ledger.prepare(declaration("refused")); ledger.finish();
+        assertFalse(ledger.rejectCurrentAttempt(refused.ticket()));
+        assertTrue(ledger.beginAttempt(refused.ticket())); assertTrue(ledger.rejectCurrentAttempt(refused.ticket()));
+        ledger.finishAttempt(refused.ticket()); ledger.finish();
+        var recovered = reopen(path);
+        assertTrue(recovered.require(refused.ticket()).cancelled());
+        assertFalse(recovered.rejectCurrentAttempt(refused.ticket()));
+        assertThrows(IllegalStateException.class, () -> recovered.retire(refused.ticket()), "refusal still needs owner rollback");
+        recovered.closeOwner(refused.ticket()); recovered.retire(refused.ticket()); recovered.finish();
+        var unknown = recovered.prepare(declaration("unknown")); recovered.finish();
+        assertTrue(recovered.beginAttempt(unknown.ticket())); recovered.finishAttempt(unknown.ticket());
+        assertFalse(recovered.rejectCurrentAttempt(unknown.ticket()), "a later callback cannot turn an unknown effect into absence");
+        assertFalse(reopen(path).rejectCurrentAttempt(unknown.ticket()));
+    }
 }

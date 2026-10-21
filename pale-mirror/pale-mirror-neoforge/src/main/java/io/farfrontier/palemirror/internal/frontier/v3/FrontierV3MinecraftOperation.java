@@ -24,10 +24,15 @@ final class FrontierV3MinecraftOperation {
         boolean complete() { return status == Status.APPLIED || status == Status.OBSERVED; }
     }
     record Request(FrontierV3OperationReceipt.Declaration declaration, List<Participant> participants,
-            BooleanSupplier before, BooleanSupplier mutation, BooleanSupplier after) {
+            BooleanSupplier before, BooleanSupplier mutation, BooleanSupplier after, BooleanSupplier refusedWithoutEffect) {
+        Request(FrontierV3OperationReceipt.Declaration declaration, List<Participant> participants,
+                BooleanSupplier before, BooleanSupplier mutation, BooleanSupplier after) {
+            this(declaration, participants, before, mutation, after, () -> false);
+        }
         Request {
             Objects.requireNonNull(declaration); participants = List.copyOf(participants);
             Objects.requireNonNull(before); Objects.requireNonNull(mutation); Objects.requireNonNull(after);
+            Objects.requireNonNull(refusedWithoutEffect);
             var identities = participants.stream().map(Participant::identity).collect(java.util.stream.Collectors.toSet());
             if (identities.size() != participants.size() || !identities.equals(declaration.participants()))
                 throw new IllegalArgumentException("physical ports do not cover the exact operation participants");
@@ -89,6 +94,14 @@ final class FrontierV3MinecraftOperation {
     /** Disjoint effects share prepare/result force boundaries, not atomicity. An interrupted
      * batch retains exact per-operation evidence; it can never roll back or replay the batch. */
     static List<Result> applyBatch(ServerLevel level, List<Request> requests) {
+        return applyBatch(level, requests, false);
+    }
+    /** The same native boundary, with async force receipts. A waiting result has
+     * not invoked mutation; callers retain their live permission until it does. */
+    static Result applyDeferred(ServerLevel level, Request request) {
+        return applyBatch(level, List.of(request), true).getFirst();
+    }
+    private static List<Result> applyBatch(ServerLevel level, List<Request> requests, boolean deferred) {
         if (!level.getServer().isSameThread()) throw new IllegalStateException("native operation outside server thread");
         if (requests.isEmpty() || requests.size() > 256) throw new IllegalArgumentException("unbounded native operation batch");
         var all = new HashSet<FrontierV3OperationReceipt.Participant>();
@@ -100,7 +113,8 @@ final class FrontierV3MinecraftOperation {
         var additions = new IdentityHashMap<CompoundTag, Integer>();
         var pruned = Collections.newSetFromMap(new IdentityHashMap<CompoundTag, Boolean>());
         for (var request : requests) for (var participant : request.participants())
-            if (pruned.add(participant.persistent()) && FrontierV3NativeOperationMarkers.prune(participant.persistent(), ledger))
+            if (!ledger.isDirty() && ledger.durableReady() && pruned.add(participant.persistent())
+                    && FrontierV3NativeOperationMarkers.prune(participant.persistent(), ledger))
                 participant.dirty().run();
         for (int i = 0; i < requests.size(); i++) {
             var request = requests.get(i);
@@ -130,13 +144,18 @@ final class FrontierV3MinecraftOperation {
             retained = ledger.prepare(request.declaration()); prepared.set(i, retained);
             boolean observed = markers(request, retained);
             if (!observed && !request.before().getAsBoolean()) {
-                boolean cancelled = ledger.cancelUnattempted(retained.ticket());
+                boolean cancelled = deferred ? ledger.sealUnattemptedCancellation(retained.ticket())
+                        : ledger.cancelUnattempted(retained.ticket());
                 results.set(i, FrontierV3OperationDiagnostics.result(level, retained, cancelled ? Status.NOT_APPLIED : Status.AMBIGUOUS));
             }
         }
-        ledger.persist(level); // Every admitted intent is durable before the first mutation.
+        if (deferred) ledger.persistAsync(level); else ledger.persist(level);
         var attempts = new HashSet<Integer>();
         for (int i = 0; i < requests.size(); i++) if (results.get(i) == null && !markers(requests.get(i), prepared.get(i))) {
+            // A later unrelated append must not postpone an already durable permission.
+            if (deferred && ledger.unattempted(prepared.get(i).ticket()) && !ledger.durableOperation(prepared.get(i).ticket())) {
+                results.set(i, Result.waiting()); continue;
+            }
             if (ledger.beginAttempt(prepared.get(i).ticket())) attempts.add(i);
             else results.set(i, FrontierV3OperationDiagnostics.result(level, prepared.get(i), Status.AMBIGUOUS));
         }
@@ -144,8 +163,13 @@ final class FrontierV3MinecraftOperation {
             for (int i = 0; i < requests.size(); i++) if (results.get(i) == null) {
                 var request = requests.get(i); var retained = prepared.get(i);
                 boolean attempt = attempts.contains(i);
-                if (attempt && (!request.before().getAsBoolean() || !request.mutation().getAsBoolean())) {
+                if (attempt && !request.before().getAsBoolean()) {
                     results.set(i, FrontierV3OperationDiagnostics.result(level, retained, Status.AMBIGUOUS)); continue;
+                }
+                if (attempt && !request.mutation().getAsBoolean()) {
+                    boolean refused = request.refusedWithoutEffect().getAsBoolean() && ledger.rejectCurrentAttempt(retained.ticket());
+                    results.set(i, FrontierV3OperationDiagnostics.result(level, ledger.require(retained.ticket()),
+                            refused ? Status.NOT_APPLIED : Status.AMBIGUOUS)); continue;
                 }
                 if (!request.after().getAsBoolean()) {
                     results.set(i, FrontierV3OperationDiagnostics.result(level, retained, attempt ? Status.AMBIGUOUS : Status.SOURCE_CHANGED)); continue;
@@ -157,7 +181,10 @@ final class FrontierV3MinecraftOperation {
                 }
                 results.set(i, FrontierV3OperationDiagnostics.result(level, retained, attempt ? Status.APPLIED : Status.OBSERVED));
             }
-        } finally { ledger.persist(level); }
+        } finally {
+            for (int index : attempts) ledger.finishAttempt(prepared.get(index).ticket());
+            if (deferred) ledger.persistAsync(level); else ledger.persist(level);
+        }
         return List.copyOf(results);
     }
     private static boolean markers(Request request, FrontierV3OperationReceipt retained) {
