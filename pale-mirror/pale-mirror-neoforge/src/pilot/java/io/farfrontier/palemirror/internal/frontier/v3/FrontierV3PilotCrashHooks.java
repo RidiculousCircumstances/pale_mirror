@@ -2,7 +2,6 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
-import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
 import net.minecraft.server.MinecraftServer;
@@ -67,7 +66,7 @@ public final class FrontierV3PilotCrashHooks {
     }
 
     /** Pilot-only observation of the existing player-departure adapter immediately before submit. */
-    public static void afterVisibleFungiblePlayerDeparture(ServerLevel level, Object runtime, CustodyAccount account) {
+    public static void afterVisibleFungiblePlayerDeparture(ServerLevel level, Object runtime, io.farfrontier.palemirror.frontier.v3.api.SubjectId account) {
         if (!(runtime instanceof FrontierV3ServerRuntime<?, ?>)) {
             throw new IllegalArgumentException("pilot crash hook requires the Frontier v3 server runtime");
         }

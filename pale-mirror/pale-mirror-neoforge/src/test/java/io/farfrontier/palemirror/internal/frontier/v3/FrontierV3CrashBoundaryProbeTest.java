@@ -118,12 +118,12 @@ class FrontierV3CrashBoundaryProbeTest {
     void typedFungibleWindowAdmitsOnlyTheExactCanonicalAfterPhysicalArrival() {
         FrontierV3CrashBoundaryProbe probe = FrontierV3CrashBoundaryProbe.from(properties(7L, "settlement:1",
                 FrontierV3CrashBoundaryProbe.TYPED_OBSERVATION_DURABLE_BEFORE_NEXT_PROCESS_CHECKPOINT,
-                "frontier.fungible_resource_handoff_observed")::get, ignored -> { });
-        assertTrue(probe.matches(transaction(7L, "settlement:1", "frontier.fungible_resource_handoff_observed")));
-        assertFalse(probe.matches(transaction(7L, "custody:container-1-depot", "frontier.fungible_resource_handoff_observed")),
+                "frontier.ground_resource_player_withdrawal")::get, ignored -> { });
+        assertTrue(probe.matches(transaction(7L, "settlement:1", "frontier.ground_resource_player_withdrawal")));
+        assertFalse(probe.matches(transaction(7L, "custody:container-1-depot", "frontier.ground_resource_player_withdrawal")),
                 "the source account is diagnostic custody, not the canonical handoff event subject");
         assertFalse(probe.matches(transaction(7L, "settlement:1", "frontier.resource_site_harvest_progressed")));
-        assertFalse(probe.matches(transaction(8L, "settlement:1", "frontier.fungible_resource_handoff_observed")));
+        assertFalse(probe.matches(transaction(8L, "settlement:1", "frontier.ground_resource_player_withdrawal")));
     }
 
     @Test
@@ -330,7 +330,7 @@ class FrontierV3CrashBoundaryProbeTest {
                 java.util.Set.of("io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3HarvestCrashWindowMixin")));
         assertDoesNotThrow(() -> FrontierV3CrashBoundaryProbe.requireAppliedMixin(
                 FrontierV3CrashBoundaryProbe.PHYSICAL_EFFECT_VISIBLE_BEFORE_TYPED_OBSERVATION,
-                "frontier.fungible_resource_handoff_observed",
+                "frontier.ground_resource_player_withdrawal",
                 java.util.Set.of("io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3FungiblePlayerCrashWindowMixin")));
         assertThrows(IllegalStateException.class, () -> FrontierV3CrashBoundaryProbe.requireAppliedMixin(
                 FrontierV3CrashBoundaryProbe.RELEASE_DURABLE_BEFORE_COLD_RESUMPTION, java.util.Set.of()));
@@ -358,7 +358,7 @@ class FrontierV3CrashBoundaryProbeTest {
 
         Map<String, String> fungible = properties(0L, "custody:container-1-depot",
                 FrontierV3CrashBoundaryProbe.PHYSICAL_EFFECT_VISIBLE_BEFORE_TYPED_OBSERVATION,
-                "frontier.fungible_resource_handoff_observed");
+                "frontier.ground_resource_player_withdrawal");
         assertDoesNotThrow(() -> FrontierV3CrashBoundaryProbe.requireConfiguredMixinApplication(fungible::get, cacheKey -> {
             assertEquals("io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3FungiblePlayerCrashWindowMixin", cacheKey,
                     "the armed fungible payload must not fall back to the harvest mixin target");
@@ -387,16 +387,18 @@ class FrontierV3CrashBoundaryProbeTest {
                 mixinTargets("io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3DurableCrashWindowMixin"));
         assertEquals(List.of("io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ResourceSiteHarvestSceneExecutor"),
                 mixinTargets("io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3HarvestCrashWindowMixin"));
-        assertEquals(List.of("io.farfrontier.palemirror.internal.frontier.v3.FrontierV3FungibleResourceObservationExecutor"),
+        assertEquals(List.of("io.farfrontier.palemirror.internal.frontier.v3.FrontierV3GroundPlayerPickup"),
                 mixinTargets("io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3FungiblePlayerCrashWindowMixin"));
     }
 
     @Test
     void fungibleCrashWindowNamesTheExactProductionSubmissionPayloadDescriptor() throws IOException {
         List<String> constants = mixinUtf8("io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3FungiblePlayerCrashWindowMixin");
-        assertTrue(constants.contains("observeOneWorldPickup"));
+        assertTrue(constants.stream().anyMatch(value -> value.startsWith("add(") && value.contains("ServerLevel")));
+        assertFalse(constants.contains("observeOneWorldPickup"));
         assertFalse(constants.contains("observeOnePlayerDeparture"));
-        assertTrue(constants.stream().anyMatch(value -> value.contains("FrontierV3CommandSubmission;submit") && value.contains("FrontierPayload")));
+        assertTrue(constants.stream().anyMatch(value -> value.contains("FrontierV3GroundPlayerPickup;reconcile")
+                && value.contains("GroundResourcePlayerWithdrawal")));
         assertFalse(constants.stream().anyMatch(value -> value.contains("FrontierV3CommandSubmission;submit") && value.contains("FrontierEvent")));
     }
 

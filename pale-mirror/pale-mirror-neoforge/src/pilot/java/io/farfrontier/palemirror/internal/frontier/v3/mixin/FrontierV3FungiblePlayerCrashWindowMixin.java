@@ -1,7 +1,9 @@
 package io.farfrontier.palemirror.internal.frontier.v3.mixin;
 
-import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
-import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
+import io.farfrontier.palemirror.frontier.v3.model.GroundResourcePlayerWithdrawal;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.ItemStack;
 import io.farfrontier.palemirror.internal.frontier.v3.FrontierV3PilotCrashHooks;
 import net.minecraft.server.level.ServerLevel;
 import org.spongepowered.asm.mixin.Mixin;
@@ -12,20 +14,20 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import com.llamalad7.mixinextras.sugar.Local;
 
 /**
- * Pilot-only observation at the retained world-carrier/player handoff gap. Managed
- * container clicks have their own stock-exit journal, not this historical player-account
- * handoff. The production adapter has already read the physical state; this probe neither writes inventory nor
- * changes the submitted handoff when it is unarmed.
+ * Pilot-only observation after the actual native ground pickup, before its canonical
+ * stock-exit confirmation. No player-inventory matching or fabricated player account.
  */
-@Mixin(targets = "io.farfrontier.palemirror.internal.frontier.v3.FrontierV3FungibleResourceObservationExecutor")
+@Mixin(targets = "io.farfrontier.palemirror.internal.frontier.v3.FrontierV3GroundPlayerPickup")
 abstract class FrontierV3FungiblePlayerCrashWindowMixin {
-    @Inject(method = "observeOneWorldPickup", at = @At(value = "INVOKE",
-            target = "Lio/farfrontier/palemirror/internal/frontier/v3/FrontierV3CommandSubmission;submit"
-                    + "(Lio/farfrontier/palemirror/internal/frontier/v3/FrontierV3ServerRuntime;Ljava/lang/String;Ljava/lang/String;"
-                    + "Lio/farfrontier/palemirror/frontier/v3/api/FrontierPayload;)Lio/farfrontier/palemirror/frontier/v3/api/CommandResult;"), require = 1)
-    private static void stopAfterVisiblePlayerDeparture(ServerLevel level, @Coerce Object runtime, FrontierWorldState state,
+    @Inject(method = "add(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/item/ItemEntity;"
+            + "Lnet/minecraft/world/entity/player/Inventory;Lnet/minecraft/world/item/ItemStack;"
+            + "Lio/farfrontier/palemirror/internal/frontier/v3/FrontierV3ServerRuntime;)Z", at = @At(value = "INVOKE",
+            target = "Lio/farfrontier/palemirror/internal/frontier/v3/FrontierV3GroundPlayerPickup;reconcile"
+                    + "(Lnet/minecraft/server/level/ServerLevel;Lio/farfrontier/palemirror/internal/frontier/v3/FrontierV3ServerRuntime;"
+                    + "Lio/farfrontier/palemirror/frontier/v3/model/GroundResourcePlayerWithdrawal;)Z"), require = 1)
+    private static void stopAfterVisiblePlayerDeparture(ServerLevel level, ItemEntity entity, Inventory inventory, ItemStack stack, @Coerce Object runtime,
                                                         CallbackInfoReturnable<Boolean> ignored,
-                                                        @Local CustodyAccount account) {
-        FrontierV3PilotCrashHooks.afterVisibleFungiblePlayerDeparture(level, runtime, account);
+                                                        @Local GroundResourcePlayerWithdrawal receipt) {
+        FrontierV3PilotCrashHooks.afterVisibleFungiblePlayerDeparture(level, runtime, receipt.sourceAccountId());
     }
 }

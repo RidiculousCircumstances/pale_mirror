@@ -17,6 +17,53 @@ import java.util.Objects;
 public final class FungiblePhysicalHandoff {
     private FungiblePhysicalHandoff() { }
 
+    /** A causal native transfer into one exact slot; partial stacks and existing accounts
+     * use the same conservation rules as an empty destination. The caller supplies the
+     * actual endpoints, never a destination discovered by matching item counts. */
+    public static FungibleResourceHandoffObserved transferToSlot(FungibleResourceLedger ledger,
+            PhysicalStackBinding source, int amount, SubjectId destinationId, ResourceCustody custody,
+            long destinationEpoch, PhysicalStackAddress address) {
+        if (amount < 1 || amount > source.quantity() || destinationId.equals(source.accountId())
+                || destinationEpoch < 1 || !current(ledger, source.accountId(), source.authorityEpoch()).contains(source))
+            throw new IllegalArgumentException("native transfer lacks a current distinct source and destination");
+        var destination = ledger.accounts().get(destinationId);
+        if (destination == null)
+            return departToNew(ledger, source.accountId(), source.authorityEpoch(), source,
+                    source.quantity() - amount, destinationId, custody, destinationEpoch, address);
+        if (!destination.custody().equals(custody))
+            throw new IllegalArgumentException("native destination changed custody");
+        var destinationCurrent = current(ledger, destinationId, destinationEpoch);
+        var atAddress = destinationCurrent.stream().filter(binding -> binding.address().equals(address)).toList();
+        if (atAddress.size() > 1 || !atAddress.isEmpty() && !atAddress.getFirst().itemKind().equals(source.itemKind()))
+            throw new IllegalArgumentException("native destination has incompatible slot bindings");
+        var retainedLots = first(source.lotQuantities(), source.quantity() - amount);
+        var movedLots = subtract(source.lotQuantities(), retainedLots);
+        var retainedClaims = first(source.claimQuantities(), Math.min(source.quantity() - amount,
+                source.claimQuantities().values().stream().mapToInt(Integer::intValue).sum()));
+        var movedClaims = subtract(source.claimQuantities(), retainedClaims);
+        var remaining = new ArrayList<PhysicalStackBinding>();
+        for (var binding : current(ledger, source.accountId(), source.authorityEpoch())) {
+            if (!binding.equals(source)) remaining.add(binding);
+            else if (!retainedLots.isEmpty()) remaining.add(new PhysicalStackBinding(source.id(), source.accountId(),
+                    source.address(), source.authorityEpoch(), source.itemKind(), retainedLots, retainedClaims, source.playerSaveFence()));
+        }
+        var arrived = new ArrayList<>(destinationCurrent);
+        if (atAddress.isEmpty()) {
+            int index = 0;
+            var ids = destinationCurrent.stream().map(PhysicalStackBinding::id).collect(java.util.stream.Collectors.toSet());
+            while (ids.contains(PhysicalStackBinding.generatedId(destinationId, destinationEpoch, index))) index++;
+            arrived.add(new PhysicalStackBinding(PhysicalStackBinding.generatedId(destinationId, destinationEpoch, index),
+                    destinationId, address, destinationEpoch, source.itemKind(), movedLots, movedClaims));
+        } else {
+            var prior = atAddress.getFirst(); arrived.remove(prior);
+            arrived.add(new PhysicalStackBinding(prior.id(), prior.accountId(), prior.address(), prior.authorityEpoch(),
+                    prior.itemKind(), add(prior.lotQuantities(), movedLots), add(prior.claimQuantities(), movedClaims), prior.playerSaveFence()));
+        }
+        return new FungibleResourceHandoffObserved(source.accountId(), destination.withQuantities(
+                add(destination.lotQuantities(), movedLots), add(destination.claimQuantities(), movedClaims)),
+                source.authorityEpoch(), destinationEpoch, movedLots, movedClaims, remaining, arrived);
+    }
+
     /** Creates the destination account from the exact portion removed from one observed stack. */
     public static FungibleResourceHandoffObserved departToNew(FungibleResourceLedger ledger, SubjectId sourceAccountId,
                                                               long sourceEpoch, PhysicalStackBinding sourceBinding,

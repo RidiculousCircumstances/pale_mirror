@@ -265,7 +265,8 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
     }
     private static void validateHandoffOperation(FungibleResourceHandoffObserved receipt, FrontierV3OperationReceipt operation) {
         var declaration = operation.declaration();
-        if (declaration.protocol() != FrontierV3OperationReceipt.Protocol.GROUND_MERGE
+        if ((declaration.protocol() != FrontierV3OperationReceipt.Protocol.GROUND_MERGE
+                    && declaration.protocol() != FrontierV3OperationReceipt.Protocol.NATIVE_INVENTORY_TRANSFER)
                 || !declaration.owner().equals(io.farfrontier.palemirror.frontier.v3.model.FrontierExecutionSubjects.PHYSICAL_EXECUTOR)
                 || !declaration.fingerprint().equals(FrontierV3OperationConfirmation.fingerprint(receipt)))
             throw new IllegalArgumentException("handoff has a foreign native declaration");

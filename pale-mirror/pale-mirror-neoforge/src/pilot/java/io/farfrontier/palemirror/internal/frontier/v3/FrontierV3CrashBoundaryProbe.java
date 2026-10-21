@@ -6,7 +6,6 @@ import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
-import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
@@ -39,11 +38,11 @@ final class FrontierV3CrashBoundaryProbe {
     private static final java.util.Map<String, java.util.Set<String>> DURABLE_PAYLOADS = java.util.Map.of(
             LEASE_RECORDED_BEFORE_PHYSICAL_MATERIALIZATION, java.util.Set.of("frontier.resource_site_harvest_scene_lease_prepared"),
             TYPED_OBSERVATION_DURABLE_BEFORE_NEXT_PROCESS_CHECKPOINT,
-            java.util.Set.of("frontier.resource_site_harvest_progressed", "frontier.fungible_resource_handoff_observed"),
+            java.util.Set.of("frontier.resource_site_harvest_progressed", "frontier.ground_resource_player_withdrawal"),
             HOT_CHECKPOINT_DURABLE_BEFORE_DRAIN_RELEASE, java.util.Set.of("frontier.resource_site_harvest_hot_traversal_advanced"),
             RELEASE_DURABLE_BEFORE_COLD_RESUMPTION, java.util.Set.of("frontier.scene_lease_released_v2"));
     private static final String HARVEST_PHYSICAL_PAYLOAD = "frontier.resource_site_harvest_progressed";
-    private static final String FUNGIBLE_PLAYER_PHYSICAL_PAYLOAD = "frontier.fungible_resource_handoff_observed";
+    private static final String FUNGIBLE_PLAYER_PHYSICAL_PAYLOAD = "frontier.ground_resource_player_withdrawal";
     private static final String PILOT_RUN_ID = "pale_mirror.frontier_v3.pilot.run_id";
     private static final String BOUNDARY = "pale_mirror.frontier_v3.pilot.crash.boundary";
     private static final String OWNER = "pale_mirror.frontier_v3.pilot.crash.owner";
@@ -103,9 +102,9 @@ final class FrontierV3CrashBoundaryProbe {
         visibleEffect.set(new PhysicalEffect(Objects.requireNonNull(job, "harvest job").siteId().value(), HARVEST_PHYSICAL_PAYLOAD));
     }
 
-    /** Records an already-observed ordinary player split after Minecraft accepted the menu clicks. */
-    void fungiblePlayerDepartureBecameVisible(CustodyAccount account) {
-        visibleEffect.set(new PhysicalEffect(Objects.requireNonNull(account, "fungible source account").id().value(),
+    /** Records an actual ground pickup after Minecraft accepted the inventory addition. */
+    void fungiblePlayerDepartureBecameVisible(io.farfrontier.palemirror.frontier.v3.api.SubjectId account) {
+        visibleEffect.set(new PhysicalEffect(Objects.requireNonNull(account, "fungible source account").value(),
                 FUNGIBLE_PLAYER_PHYSICAL_PAYLOAD));
     }
 
@@ -122,13 +121,13 @@ final class FrontierV3CrashBoundaryProbe {
     }
 
     /** Parks only after the production adapter has observed one exact physical player departure. */
-    void afterVisibleFungiblePlayerDeparture(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, CustodyAccount account) {
+    void afterVisibleFungiblePlayerDeparture(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, io.farfrontier.palemirror.frontier.v3.api.SubjectId account) {
         Objects.requireNonNull(level, "level");
         fungiblePlayerDepartureBecameVisible(account);
         afterVisiblePhysicalEffect(runtime, () -> {
             // MinecraftServer.saveEverything flushes world/chunk storage but does not serialize
             // connected ServerPlayer data. The player list is the real vanilla ownership save
-            // boundary for the already-observed menu move; capture it before the crash marker.
+            // boundary for the already-observed native pickup; capture it before the crash marker.
             level.getServer().saveEverything(true, true, true);
             level.getServer().getPlayerList().saveAll();
         });
@@ -249,7 +248,7 @@ final class FrontierV3CrashBoundaryProbe {
                     RELEASE_DURABLE_BEFORE_COLD_RESUMPTION -> new MixinTarget(FrontierStoreTransactionCommitter.class,
                     "io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3DurableCrashWindowMixin");
             case PHYSICAL_EFFECT_VISIBLE_BEFORE_TYPED_OBSERVATION -> FUNGIBLE_PLAYER_PHYSICAL_PAYLOAD.equals(payload)
-                    ? new MixinTarget(FrontierV3FungibleResourceObservationExecutor.class,
+                    ? new MixinTarget(FrontierV3GroundPlayerPickup.class,
                     "io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3FungiblePlayerCrashWindowMixin")
                     : new MixinTarget(FrontierV3ResourceSiteHarvestSceneExecutor.class,
                     "io.farfrontier.palemirror.internal.frontier.v3.mixin.FrontierV3HarvestCrashWindowMixin");

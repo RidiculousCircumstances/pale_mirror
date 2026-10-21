@@ -118,7 +118,7 @@ public final class FrontierV3PlayerCustodyGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void activeChestHandsOneFungibleStackToItsObservedHopper(GameTestHelper helper) {
+    public static void uncorrelatedMatchingHopperCannotProveAWithdrawal(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); WorldId world = new WorldId("frontier:fungible-hopper-game-test");
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 acquiredFungibleChestRuntime(world);
@@ -133,17 +133,17 @@ public final class FrontierV3PlayerCustodyGameTests {
         HopperBlockEntity hopper = (HopperBlockEntity) level.getBlockEntity(hopperPosition);
         hopper.setItem(0, chest.removeItemNoUpdate(0)); hopper.setChanged(); chest.setChanged();
         observeFungibleChest(level, runtime, chest, container);
-        helper.assertTrue(state(runtime).inventory().fungibleResources().accounts().values().stream()
+        helper.assertFalse(state(runtime).inventory().fungibleResources().accounts().values().stream()
                         .anyMatch(account -> account.custody() instanceof ResourceCustody.WorldCarrier),
-                "one observed hopper stack remains a HOT carrier account instead of unbounded COLD stock");
-        helper.assertTrue(state(runtime).inventory().fungibleResources().bindings().values().stream()
-                        .anyMatch(binding -> binding.address() instanceof io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress.HopperSlot),
-                "the exact hopper slot is the retained physical binding");
+                "a matching nearby hopper stack does not prove a native transfer callback");
+        helper.assertTrue(state(runtime).inventory().fungibleResources().totalQuantity(new SubjectId("settlement:1"), "minecraft:wheat") == 64
+                        && state(runtime).inventory().surfaces().get(container).status() == ContainerSurfaceStatus.CONFLICT,
+                "unclassified drift retains its source obligation and reports a local conflict");
         runtime.shutdown(); helper.succeed();
     }
 
     @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void activeChestDropThenRealPlayerPickupKeepsOneFungibleHotLineage(GameTestHelper helper) {
+    public static void uncorrelatedDropAndPlayerStackCannotInventResourceHandoffs(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); WorldId world = new WorldId("frontier:fungible-drop-pickup-game-test");
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 acquiredFungibleChestRuntime(world);
@@ -159,16 +159,16 @@ public final class FrontierV3PlayerCustodyGameTests {
             helper.assertTrue(level.getEntity(drop.getUUID()) == drop && drop.getItem().getCount() == 64,
                     "the physical drop must be live and retain the exact departed stack before observation");
             observeFungibleChest(level, runtime, chest, container);
-            helper.assertTrue(state(runtime).inventory().fungibleResources().bindings().values().stream()
+            helper.assertFalse(state(runtime).inventory().fungibleResources().bindings().values().stream()
                             .anyMatch(binding -> binding.address() instanceof io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress.WorldEntity),
-                    "the world item entity must become the one HOT physical binding before pickup");
+                    "a matching nearby world entity cannot replace the missing native drop witness");
             var player = helper.makeMockServerPlayerInLevel(); player.getInventory().setItem(0, drop.getItem().copy()); drop.discard();
             FrontierV3FungibleResourceObservationExecutor.tick(level, runtime);
-            helper.assertTrue(state(runtime).inventory().fungibleResources().accounts().values().stream()
+            helper.assertFalse(state(runtime).inventory().fungibleResources().accounts().values().stream()
                             .anyMatch(account -> account.custody().equals(new ResourceCustody.Player(player.getUUID()))),
-                    "one real player pickup transfers the same live fungible portion without reopening COLD custody");
+                    "copying a matching stack to a player is not causal pickup evidence");
             helper.assertTrue(state(runtime).inventory().fungibleResources().totalQuantity(new SubjectId("settlement:1"), "minecraft:wheat") == 64,
-                    "drop and pickup preserve the exact canonical total");
+                    "unclassified native edits cannot rewrite canonical stock by proximity");
             runtime.shutdown(); helper.succeed();
         });
     }
@@ -229,6 +229,12 @@ public final class FrontierV3PlayerCustodyGameTests {
     acquiredFungibleChestRuntime(WorldId world) {
         var base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
         SubjectId depot = new SubjectId("container:1-depot");
+        var record = base.initialState().inventory().containers().get(depot);
+        var surface = base.initialState().inventory().surfaces().get(depot);
+        var recovery = io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryContainerSupport.transition(
+                base.initialState().fencedRecovery(), record, surface, ContainerSurfaceStatus.PREPARED);
+        recovery = io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryContainerSupport.transition(
+                recovery, record, surface.transitionTo(ContainerSurfaceStatus.PREPARED), ContainerSurfaceStatus.ACTIVE);
         FrontierWorldState state = base.initialState().withInventory(base.initialState().inventory()
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE));
@@ -240,7 +246,7 @@ public final class FrontierV3PlayerCustodyGameTests {
                 .acquire(new PhysicalCustodyLease(ReferenceContainerCustody.scopeId(depot), depot,
                         ReferenceContainerCustody.PROVIDER_ID, 1L, 0L, 2L,
                         PhysicalCustodyLeaseStatus.ACQUIRED, null));
-        state = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody));
+        state = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody).fencedRecovery(recovery));
         var config = new FrontierEngineConfiguration<>(base.worldId(), state, base.initialInstant(),
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(),
                 base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter(),
