@@ -14,32 +14,6 @@ import java.util.*;
 /** Vanilla drop adapter: the exact source slot and actual spawned entity, not proximity matching. */
 public final class FrontierV3ContainerDrops {
     private FrontierV3ContainerDrops() { }
-    /** Persist the actual old provider before vanilla disperses any of its slots. */
-    public static void prepareRemoval(Level level, Container container) {
-        if (!(level instanceof ServerLevel server)
-                || !FrontierV3PhysicalWorld.isPhysical(server)) return;
-        var runtime = FrontierV3ServerLifecycle.runtimeFor(server.getServer());
-        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
-        var state = runtime.decodedState().orElseThrow();
-        var physical = FrontierV3PhysicalContainer.observedFixed(server, state, container).orElse(null);
-        if (physical == null) return;
-        var id = physical.containerId();
-        if (!ReferenceContainerCustody.isReferenceContainer(state, id)) return;
-        var record = state.inventory().containers().get(id);
-        if (record == null || !physical.declared())
-            throw new IllegalStateException("container removal has a foreign provider declaration");
-        var surface = state.inventory().surfaces().get(id);
-        var lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(id));
-        var recovery = state.fencedRecovery().current().get(FencedRecoveryContainerSupport.bindingId(record));
-        if (surface.status() != ContainerSurfaceStatus.ACTIVE || lease == null || recovery == null
-                || !ReferenceContainerCustody.hasOperationalCustody(state, id)
-                || FrontierV3ContainerEffectFence.pending(server, state, id))
-            throw new IllegalStateException("container removal lacks an uncontested current provider");
-        var witness = new FrontierV3ContainerRemovalWitness(id, record.ownerId(), surface.position(),
-                lease.authorityEpoch(), recovery.authorityEpoch());
-        var journal = FrontierV3ResourceHandoffLedger.get(server);
-        journal.prepareRemoval(witness); journal.persist(server);
-    }
     public static void drop(Level level, double x, double y, double z, ItemStack stack, Container container) {
         if (stack.isEmpty() || !(level instanceof ServerLevel server) || !FrontierV3PhysicalWorld.isPhysical(server)) {
             Containers.dropItemStack(level, x, y, z, stack); return;

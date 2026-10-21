@@ -15,7 +15,7 @@ class FrontierV3ResourceHandoffLedgerTest {
     @BeforeAll static void version() { net.minecraft.SharedConstants.tryDetectVersion(); }
     @TempDir Path directory;
     private static FrontierV3ResourceHandoffLedger empty() {
-        var tag = new CompoundTag(); tag.putInt("format", 9); tag.putLong("nextSequence", 1);
+        var tag = new CompoundTag(); tag.putInt("format", 10); tag.putLong("nextSequence", 1);
         tag.put("entityDrops", new ListTag());
         tag.put("containerDrops", new ListTag());
         tag.put("lossOperations", new ListTag()); tag.put("handoffOperations", new ListTag());
@@ -24,7 +24,14 @@ class FrontierV3ResourceHandoffLedgerTest {
     }
     @Test void removalAndExactToolDropRecoverTheirOwnDeclarationsAndRejectCompetingAuthority() {
         var journal = empty(); var container = new SubjectId("container:mine-original");
-        var witness = new FrontierV3ContainerRemovalWitness(container, new SubjectId("settlement:6"), new BlockPosition(-77, 61, 2), 7, 3);
+        var position = new BlockPosition(-77, 61, 2);
+        var terrain = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.CHUNK_BLOCKS,
+                Long.toString(new net.minecraft.core.BlockPos(position.x(), position.y(), position.z()).asLong()), 1);
+        var removal = FrontierV3OperationReceipt.prepare(new FrontierV3OperationReceipt.Declaration(
+                FrontierV3OperationReceipt.Protocol.CONTAINER_REMOVAL, FrontierExecutionSubjects.PHYSICAL_EXECUTOR,
+                "remove-original", FrontierV3OperationConfirmation.fingerprint(
+                        new ContainerSurfaceTransition(container, ContainerSurfaceStatus.RETIRED)), Set.of(terrain)), 2);
+        var witness = new FrontierV3ContainerRemovalWitness(container, new SubjectId("settlement:6"), position, 7, 3, removal);
         var id = UUID.randomUUID();
         var drop = new ExactItemCustodyChanged(new SubjectId("item:mine-tool"), new InventoryCustody.ContainerSlot(container, 2),
                 new InventoryCustody.WorldCarrier(id));
@@ -48,12 +55,22 @@ class FrontierV3ResourceHandoffLedgerTest {
         assertEquals(List.of(applied), FrontierV3ResourceHandoffLedger.load(recovered.save(new CompoundTag(), null), null).containerDrops());
         assertThrows(IllegalArgumentException.class, () -> recovered.updateDrop(applied, draft));
         assertThrows(IllegalArgumentException.class, () -> recovered.retireRemoval(new FrontierV3ContainerRemovalWitness(
-                container, witness.owner(), witness.position(), 8, 3)));
+                container, witness.owner(), witness.position(), 8, 3, removal)));
+        assertThrows(IllegalArgumentException.class, () -> new FrontierV3ContainerRemovalWitness(
+                container, witness.owner(), witness.position(), 7, 3, operation));
+        var missing = witness.save(); missing.remove("operation");
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3ContainerRemovalWitness.read(missing));
         var obsolete = journal.save(new CompoundTag(), null); obsolete.putInt("format", 4);
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceHandoffLedger.load(obsolete, null));
         recovered.retireDrop(applied); recovered.retireRemoval(witness);
         assertFalse(recovered.removes(container)); assertFalse(recovered.blocks(id));
         assertFalse(recovered.dropsFrom(container)); assertTrue(recovered.canPrepareDrop(container, 2));
+        recovered.prepareRemoval(witness);
+        var cancelled = witness.bind(removal.cancel());
+        recovered.updateRemoval(witness, cancelled);
+        assertEquals(List.of(cancelled), FrontierV3ResourceHandoffLedger.load(recovered.save(new CompoundTag(), null), null).removals());
+        assertThrows(IllegalArgumentException.class, () -> cancelled.bind(removal));
+        assertEquals(cancelled, FrontierV3ContainerRemovalWitness.decode(cancelled.encode()));
     }
     @Test void entityDropOutboxRecoversExactOutcomeAndMonotonicOperationWithoutInferringCompletion() {
         var actor = new SubjectId("resident:drop-owner"); var entity = UUID.randomUUID();

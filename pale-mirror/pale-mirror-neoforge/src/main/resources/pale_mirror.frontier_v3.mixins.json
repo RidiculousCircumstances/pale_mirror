@@ -8,6 +8,7 @@
     "FrontierV3AutomationEjectionMixin",
     "FrontierV3SidedInventoryAccessor",
     "FrontierV3ContainerDropsMixin",
+    "FrontierV3ContainerBlockMutationMixin",
     "FrontierV3GroundItemMergeMixin",
     "FrontierV3ChunkPresentationMixin",
     "FrontierV3ResidentInventoryMixin",

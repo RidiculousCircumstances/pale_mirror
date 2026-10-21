@@ -61,9 +61,17 @@ final class FrontierV3ContainerDropOperation {
         journal.prepareDrop(transaction); journal.persist(level); operations.persist(level);
         var result = FrontierV3MinecraftOperation.apply(level, declaration, ports, () -> ItemStack.matches(stack, before)
                 && context.spawned.stream().allMatch(e -> level.getEntity(e.getUUID()) == null), () -> {
-            stack.setCount(0); physical.inventory().setChanged();
-            for (var drop : context.spawned) if (!level.addFreshEntity(drop))
-                throw new IllegalStateException("native container drop spawn rejected: " + drop.getUUID());
+            for (var drop : context.spawned) {
+                var remaining = stack.copy(); var fragment = context.expected.get(drop.getUUID());
+                // Vanilla/mod join hooks may refuse a fragment. Keep every uninserted
+                // unit in the real source; never clear the entire stack in advance.
+                if (!level.addFreshEntity(drop))
+                    throw new IllegalStateException("native container drop spawn rejected: " + drop.getUUID());
+                if (!ItemStack.matches(stack, remaining) || drop.isRemoved() || level.getEntity(drop.getUUID()) != drop
+                        || !ItemStack.matches(drop.getItem(), fragment) || fragment.getCount() > stack.getCount())
+                    throw new IllegalStateException("container drop endpoints changed during native admission");
+                stack.shrink(fragment.getCount()); physical.inventory().setChanged();
+            }
             return true;
         }, () -> stack.isEmpty() && !context.spawned.isEmpty()
                 && context.spawned.stream().allMatch(e -> !e.isRemoved() && level.getEntity(e.getUUID()) == e

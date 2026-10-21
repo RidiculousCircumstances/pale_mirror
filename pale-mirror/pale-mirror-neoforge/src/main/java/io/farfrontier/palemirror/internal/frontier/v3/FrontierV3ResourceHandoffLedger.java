@@ -131,13 +131,20 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
     Pickup pickup(SubjectId owner) { return actorPickups.get(owner); }
     List<FrontierV3ContainerRemovalWitness> removals() { return containerRemovals.values().stream().sorted(Comparator.comparing(FrontierV3ContainerRemovalWitness::container)).toList(); }
     boolean removes(SubjectId container) { return containerRemovals.containsKey(container); }
+    Optional<FrontierV3ContainerRemovalWitness> removal(SubjectId container) { return Optional.ofNullable(containerRemovals.get(container)); }
+    boolean canPrepareRemoval(SubjectId container) { return size() < MAX_PENDING && !removes(container); }
     void prepareRemoval(FrontierV3ContainerRemovalWitness removal) {
-        if (size() >= MAX_PENDING || containerRemovals.containsKey(removal.container())) throw new IllegalArgumentException("competing container removal witness");
+        if (!canPrepareRemoval(removal.container())) throw new IllegalArgumentException("competing container removal witness");
         containerRemovals.put(removal.container(), removal); setDirty();
     }
     void retireRemoval(FrontierV3ContainerRemovalWitness removal) {
         if (!removal.equals(containerRemovals.get(removal.container()))) throw new IllegalArgumentException("container removal lost its witness");
         containerRemovals.remove(removal.container()); setDirty();
+    }
+    void updateRemoval(FrontierV3ContainerRemovalWitness expected, FrontierV3ContainerRemovalWitness next) {
+        if (!expected.equals(containerRemovals.get(expected.container())) || !expected.bind(next.operation()).equals(next))
+            throw new IllegalArgumentException("container removal lost its exact owner intent");
+        containerRemovals.put(next.container(), next); setDirty();
     }
     List<FrontierV3ContainerDropTransaction> containerDrops() {
         return containerDrops.values().stream().sorted(Comparator.comparingLong(d -> d.operation().sequence())).toList();
@@ -278,7 +285,7 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
     private static CompoundTag encodeLoss(GroundStockExit loss) {
         var tag = new CompoundTag(); tag.putString("type", loss.type()); tag.putByteArray("receipt", FrontierWorldRuntimeDefinition.payloadCodecs().encode(loss)); return tag;
     }
-    @Override protected CompoundTag metadata() { var tag = new CompoundTag(); tag.putInt("format", 9); tag.putLong("nextSequence", nextSequence); return tag; }
+    @Override protected CompoundTag metadata() { var tag = new CompoundTag(); tag.putInt("format", 10); tag.putLong("nextSequence", nextSequence); return tag; }
     @Override public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.merge(metadata()); var entries = new ListTag();
         pending.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> entries.add(encode(entry.getKey(), entry.getValue())));
@@ -298,7 +305,7 @@ final class FrontierV3ResourceHandoffLedger extends FrontierV3JournaledSavedData
         var bodyDrops = new ListTag(); entityDrops().forEach(drop -> bodyDrops.add(drop.save())); tag.put("entityDrops", bodyDrops); return tag;
     }
     static FrontierV3ResourceHandoffLedger load(CompoundTag tag, HolderLookup.Provider registries) {
-        if (tag.getInt("format") != 9) throw new IllegalArgumentException("incompatible resource handoff journal");
+        if (tag.getInt("format") != 10) throw new IllegalArgumentException("incompatible resource handoff journal");
         var entries = tag.getList("pending", Tag.TAG_COMPOUND);
         if (entries.size() > MAX_PENDING) throw new IllegalArgumentException("resource witness bound exceeded");
         var values = new LinkedHashMap<UUID, Pending>();

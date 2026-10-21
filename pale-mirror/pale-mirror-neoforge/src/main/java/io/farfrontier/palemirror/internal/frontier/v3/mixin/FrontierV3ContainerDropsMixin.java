@@ -7,15 +7,10 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.*;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /** Capture the actual vanilla slot-to-entity call without replacing its drop/randomization rules. */
 @Mixin(Containers.class)
 abstract class FrontierV3ContainerDropsMixin {
-    @Inject(method = "dropContents(Lnet/minecraft/world/level/Level;DDDLnet/minecraft/world/Container;)V", at = @At("HEAD"))
-    private static void frontierV3$removal(Level level, double x, double y, double z, Container container, CallbackInfo ci) {
-        FrontierV3ContainerDrops.prepareRemoval(level, container);
-    }
     @Redirect(method = "dropContents(Lnet/minecraft/world/level/Level;DDDLnet/minecraft/world/Container;)V",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/world/Containers;dropItemStack(Lnet/minecraft/world/level/Level;DDDLnet/minecraft/world/item/ItemStack;)V"))
     private static void frontierV3$drop(Level target, double x, double y, double z, ItemStack stack,
