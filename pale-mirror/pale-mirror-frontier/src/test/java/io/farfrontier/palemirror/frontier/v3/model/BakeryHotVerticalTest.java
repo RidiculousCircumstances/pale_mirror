@@ -308,7 +308,7 @@ class BakeryHotVerticalTest {
                 lease.members().getFirst().entityId(), ActorContainerItemOrder.Hand.MAIN), "minecraft:wheat", 64);
         BakeryHotEffectObserved observed = new BakeryHotEffectObserved(job.id(), leaseId,
                 BakeryWorkState.Phase.DEPOT_PICKUP, actor.body(), 1L, 1L, List.of(), List.of(hand));
-        state = ProductionProcess.reduceBakeryHotEffectObserved(state, task.ownerId(), observed);
+        state = BakeryDeathEffectsFixture.observe(state, task.ownerId(), observed);
         assertEquals(BakeryWorkState.Phase.STATION_LOAD, state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
         // The actual pickup batch survives a failed no-demand release. Fresh recovery
         // may resume this exact body/hand, never clear an unknown pending recipe effect.
@@ -436,7 +436,7 @@ class BakeryHotVerticalTest {
                         new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(machine, station.outputSlot())),
                         "minecraft:wheat", 64)))),
                 "wheat placed in the output port cannot masquerade as station input");
-        state = ProductionProcess.reduceBakeryHotEffectObserved(state, task.ownerId(), new BakeryHotEffectObserved(
+        state = BakeryDeathEffectsFixture.observe(state, task.ownerId(), new BakeryHotEffectObserved(
                 job.id(), leaseId, BakeryWorkState.Phase.STATION_LOAD, station.workerStation().standingBody(),
                 37L, 1L, List.of(), List.of(new FungiblePhysicalObservation.Stack(
                 new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(machine, station.inputSlot())),
@@ -466,7 +466,7 @@ class BakeryHotVerticalTest {
         assertFalse(state.inventory().fungibleResources().lots().containsKey(job.consumedItemId()));
         state = ProductionProcess.reduceBakeryHotEffectPrepared(state, task.ownerId(),
                 new BakeryHotEffectPrepared(job.id(), leaseId, BakeryWorkState.Phase.STATION_UNLOAD, -1));
-        state = ProductionProcess.reduceBakeryHotEffectObserved(state, task.ownerId(), new BakeryHotEffectObserved(
+        state = BakeryDeathEffectsFixture.observe(state, task.ownerId(), new BakeryHotEffectObserved(
                 job.id(), leaseId, BakeryWorkState.Phase.STATION_UNLOAD, station.workerStation().standingBody(),
                 1L, 1L, List.of(), List.of(new FungiblePhysicalObservation.Stack(
                 new PhysicalStackAddress.ActorHand(job.workerId(), lease.members().getFirst().entityId(), ActorContainerItemOrder.Hand.MAIN),
@@ -534,7 +534,7 @@ class BakeryHotVerticalTest {
                         1L, 1L, List.of(), List.of(new FungiblePhysicalObservation.Stack(
                         new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, deliverySlot)),
                         "minecraft:bread", 64)))), "an observed receipt cannot erase existing depot bread");
-        state = ProductionProcess.reduceBakeryHotEffectObserved(state, task.ownerId(), new BakeryHotEffectObserved(
+        state = BakeryDeathEffectsFixture.observe(state, task.ownerId(), new BakeryHotEffectObserved(
                 job.id(), leaseId, BakeryWorkState.Phase.DEPOT_DELIVERY, actor.body(),
                 1L, 1L, List.of(), List.of(firstBread, new FungiblePhysicalObservation.Stack(
                 new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, deliverySlot)),

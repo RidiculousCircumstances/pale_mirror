@@ -85,14 +85,8 @@ final class FrontierV3BakeryPhysicalEffect {
         // A rejected post-effect receipt is non-replayable. Keep the physical
         // evidence and pending step stable for explicit reconciliation.
         if (work.block().map(value -> value.reason() == BakeryWorkBlock.Reason.AMBIGUOUS_EFFECT).orElse(false)) return;
-        var participants = work.phase() == BakeryWorkState.Phase.PROCESSING ? List.of(physical.persistence().get())
-                : List.of(physical.persistence().get(), FrontierV3OperationEntityParticipant.current(worker,
-                        ActorBodyAuthority.current(state, job.workerId()).physicalEpoch()));
-        String preparation = FrontierV3OperationConfirmation.fingerprint(
-                new BakeryHotEffectPrepared(job.id(), lease.id(), work.phase(), destinationSlot));
-        String identity = preparation + ":" + shape.sourceEpoch() + ":" + shape.destinationEpoch() + ":" + shape.kind();
-        var declaration = new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.BAKERY, job.id(), identity, identity,
-                participants.stream().map(FrontierV3MinecraftOperation.Participant::identity).collect(java.util.stream.Collectors.toSet()));
+        var participants = participants(shape);
+        var declaration = declaration(shape, participants);
         var effect = FrontierV3MinecraftOperation.apply(level, declaration, participants, shape::before,
                 () -> { shape.apply(); return true; }, shape::after);
         if (effect.status() == FrontierV3MinecraftOperation.Status.WAITING_DURABILITY) return;
@@ -105,6 +99,44 @@ final class FrontierV3BakeryPhysicalEffect {
             block(level, runtime, lease, job, new BakeryWorkBlock(BakeryWorkBlock.Reason.AMBIGUOUS_EFFECT,
                     containerId, destinationSlot, "minecraft:air", 0));
         }
+    }
+
+    /** Capture the existing boundary before loot changes the hand. Never execute a transfer here. */
+    static Optional<FrontierV3OperationAftermath> deathEffect(ServerLevel level, FrontierWorldState state,
+            ProductionJob job, Villager worker, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId identity) {
+        var work = job.bakeryWork().orElseThrow(); var pending = work.pendingPhysicalStep().orElse(null);
+        // Station-only effects are not cancelled by a body outcome. An unresolved
+        // legacy exact recipe remains retained; it is not an unused hand transfer.
+        if (pending == null || pending.phase() == BakeryWorkState.Phase.PROCESSING) return Optional.empty();
+        var lease = state.sceneLeases().get(pending.leaseId());
+        if (lease == null || lease.members().size() != 1 || !lease.members().getFirst().entityId().equals(worker.getUUID())
+                || !identity.body().actorId().equals(job.workerId()) || !identity.execution().activityOwnerId().equals(job.id()))
+            throw new IllegalArgumentException("bakery death has no exact retained transfer scene");
+        var container = work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY
+                ? BakeryStorage.current(job) : station(state, work).containerId();
+        var physical = FrontierV3PhysicalContainer.loaded(level, state, container).orElse(null);
+        if (physical == null) return Optional.empty();
+        var shape = shape(state, lease, job, worker, physical, container, pending.destinationSlot());
+        boolean applied = shape.after();
+        if (!applied && !shape.before()) return Optional.empty();
+        var effect = applied ? shape.observation() : new BakeryHotEffectObserved(job.id(), lease.id(), work.phase(),
+                BakeryWorkGoal.current(state, job).station().standingBody(), shape.sourceEpoch(), shape.destinationEpoch(), List.of(), List.of());
+        var ports = participants(shape);
+        return FrontierV3OperationAftermath.capture(level, declaration(shape, ports), ports,
+                new BakeryRetiredEffectObserved(identity, effect, applied), applied, applied ? shape::after : shape::before);
+    }
+
+    private static List<FrontierV3MinecraftOperation.Participant> participants(Shape shape) {
+        return shape.phase() == BakeryWorkState.Phase.PROCESSING ? List.of(shape.physical().persistence().get())
+                : List.of(shape.physical().persistence().get(), FrontierV3OperationEntityParticipant.current(shape.worker(),
+                    ActorBodyAuthority.current(shape.state(), shape.job().workerId()).physicalEpoch()));
+    }
+    private static FrontierV3OperationReceipt.Declaration declaration(Shape shape, List<FrontierV3MinecraftOperation.Participant> participants) {
+        String preparation = FrontierV3OperationConfirmation.fingerprint(new BakeryHotEffectPrepared(shape.job().id(),
+                shape.lease().id(), shape.phase(), shape.destinationSlot()));
+        String identity = preparation + ":" + shape.sourceEpoch() + ":" + shape.destinationEpoch() + ":" + shape.kind();
+        return new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.BAKERY, shape.job().id(), identity, identity,
+                participants.stream().map(FrontierV3MinecraftOperation.Participant::identity).collect(java.util.stream.Collectors.toSet()));
     }
 
     private static void observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

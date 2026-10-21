@@ -10,7 +10,7 @@ import java.util.Objects;
 
 /** Closed resource-owner hooks. Body death knows neither food phases nor equipment policy. */
 final class FrontierV3ActorDeathResourceComposition {
-    enum Owner { EXACT_EQUIPMENT, RESIDENT_MEAL, SETTLEMENT_SERVICE, EXPEDITION_TRANSFER, SHIPMENT, UNIT_INVENTORY, EXTRACTION, ATTACHED_STORAGE }
+    enum Owner { EXACT_EQUIPMENT, RESIDENT_MEAL, SETTLEMENT_SERVICE, EXPEDITION_TRANSFER, SHIPMENT, UNIT_INVENTORY, EXTRACTION, BAKERY, ATTACHED_STORAGE }
     @FunctionalInterface interface AfterFatality {
         void settle();
         default List<FrontierV3OperationAftermath> effects() { return List.of(); }
@@ -54,6 +54,8 @@ final class FrontierV3ActorDeathResourceComposition {
                     (level, runtime, body, id, snapshot) -> { }, FrontierV3ExpeditionTransferDeathResources::settled),
             new Handler(Owner.SHIPMENT, FrontierV3ShipmentDeathResources::prepare, (level, runtime, state) -> false,
                     FrontierV3ShipmentDeathResources::recover, FrontierV3ShipmentDeathResources::settled),
+            new Handler(Owner.BAKERY, FrontierV3BakeryDeathResources::prepare, (level, runtime, state) -> false,
+                    FrontierV3BakeryDeathResources::recover, FrontierV3BakeryDeathResources::settled),
             new Handler(Owner.UNIT_INVENTORY, FrontierV3UnitInventoryDeathResources::prepare, (level, runtime, state) -> false,
                     FrontierV3UnitInventoryDeathResources::recover, FrontierV3UnitInventoryDeathResources::settled),
             new Handler(Owner.EXTRACTION, FrontierV3ExtractionDeathResources::prepare, (level, runtime, state) -> false,

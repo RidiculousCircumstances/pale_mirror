@@ -88,4 +88,20 @@ public final class ProductionStationProcessing {
     public static ProductionStations unloaded(FrontierWorldState state, ProductionOperation previous) {
         return state.productionStations().with(state.productionStations().require(previous.stationId()).release(previous.id()));
     }
+    public record Abandoned(ExactInventory inventory, ProductionStations machines) { }
+    /** Stops an uncommitted operation but leaves its physical stock and already spent heat unchanged. */
+    public static Abandoned abandon(FrontierWorldState state, ProductionOperation expected) {
+        var machine = state.productionStations().require(expected.stationId());
+        if (!machine.operation().equals(Optional.of(expected)))
+            throw new IllegalArgumentException("station abandonment has a different operation");
+        var next = machine.cancel(expected.id()); // Rejects pending physical fuel/recipe effects.
+        var resources = state.inventory().fungibleResources();
+        if (expected.inputCustody() instanceof ProductionOperation.FungibleInput input) {
+            var claims = expected.transformed() ? java.util.Set.of(expected.outputClaimId()) : input.claims().keySet();
+            for (var id : claims) if (!resources.claims().containsKey(id))
+                throw new IllegalArgumentException("station abandonment lost its allocation");
+            resources = resources.releaseClaims(claims);
+        }
+        return new Abandoned(state.inventory().withFungibleResources(resources), state.productionStations().with(next));
+    }
 }

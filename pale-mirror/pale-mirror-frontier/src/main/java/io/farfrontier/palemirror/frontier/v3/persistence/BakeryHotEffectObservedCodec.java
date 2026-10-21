@@ -10,22 +10,26 @@ final class BakeryHotEffectObservedCodec implements PayloadCodec {
     @Override public String type() { return "frontier.bakery_hot_effect_observed"; }
     @Override public byte[] encode(FrontierPayload payload) {
         BakeryHotEffectObserved value = (BakeryHotEffectObserved) payload;
-        return FrontierWorldPayloadCodecs.encodeProduction(output -> {
-            FrontierWorldPayloadCodecs.writeSubject(output, value.jobId());
-            FrontierWorldStateCodec.writeString(output, value.leaseId().value());
-            output.writeByte(value.phase().wireTag());
-            output.writeInt(value.observedWorker().x()); output.writeInt(value.observedWorker().y()); output.writeInt(value.observedWorker().z());
-            output.writeLong(value.sourceEpoch()); output.writeLong(value.destinationEpoch());
-            PhysicalObservationStackCodec.writeStacks(output, value.remainingSource()); PhysicalObservationStackCodec.writeStacks(output, value.destination());
-        });
+        return FrontierWorldPayloadCodecs.encodeProduction(output -> write(output, value));
+    }
+    static void write(java.io.DataOutputStream output, BakeryHotEffectObserved value) throws java.io.IOException {
+        FrontierWorldPayloadCodecs.writeSubject(output, value.jobId());
+        FrontierWorldStateCodec.writeString(output, value.leaseId().value());
+        output.writeByte(value.phase().wireTag());
+        output.writeInt(value.observedWorker().x()); output.writeInt(value.observedWorker().y()); output.writeInt(value.observedWorker().z());
+        output.writeLong(value.sourceEpoch()); output.writeLong(value.destinationEpoch());
+        PhysicalObservationStackCodec.writeStacks(output, value.remainingSource()); PhysicalObservationStackCodec.writeStacks(output, value.destination());
     }
     @Override public FrontierPayload decode(byte[] bytes) {
-        return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new BakeryHotEffectObserved(
+        return FrontierWorldPayloadCodecs.decodeProduction(bytes, BakeryHotEffectObservedCodec::read);
+    }
+    static BakeryHotEffectObserved read(java.io.DataInputStream input) throws java.io.IOException {
+        return new BakeryHotEffectObserved(
                 FrontierWorldPayloadCodecs.readSubject(input).value(),
                 new SceneLeaseId(FrontierWorldStateCodec.readString(input)),
                 BakeryWorkState.Phase.fromWireTag(input.readUnsignedByte()),
                 new BodyPosition(input.readInt(), input.readInt(), input.readInt()),
-                input.readLong(), input.readLong(), PhysicalObservationStackCodec.readStacks(input), PhysicalObservationStackCodec.readStacks(input)));
+                input.readLong(), input.readLong(), PhysicalObservationStackCodec.readStacks(input), PhysicalObservationStackCodec.readStacks(input));
     }
 
 }

@@ -541,10 +541,25 @@ public final class BakeryProcess {
 
     static FrontierWorldState observeHotEffect(FrontierWorldState state, SubjectId subject,
                                                BakeryHotEffectObserved observed) {
+        return observeEffect(state, subject, observed, Optional.empty(), true);
+    }
+
+    static FrontierWorldState observeRetiredEffect(FrontierWorldState state, SubjectId subject,
+                                                   BakeryRetiredEffectObserved retired) {
+        ActorBodyAuthority.requireRetiredDeath(state, retired.identity().body());
+        state.actorExecutions().requireRetained(retired.identity().execution());
+        return observeEffect(state, subject, retired.effect(), Optional.of(retired.identity()), retired.applied());
+    }
+
+    private static FrontierWorldState observeEffect(FrontierWorldState state, SubjectId subject,
+            BakeryHotEffectObserved observed, Optional<io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId> retired,
+            boolean applied) {
         ProductionJob job = state.productionJobs().get(observed.jobId());
         if (job == null || !job.settlementId().equals(subject) || job.bakeryWork().isEmpty())
             throw new IllegalArgumentException("observed bakery effect has no retained owner job");
         BakeryWorkState work = job.bakeryWork().orElseThrow();
+        if (retired.filter(id -> !id.body().actorId().equals(job.workerId())).isPresent())
+            throw new IllegalArgumentException("retired bakery effect names a different worker");
         BakeryPhysicalStep pending = work.pendingPhysicalStep().orElseThrow(
                 () -> new IllegalArgumentException("observed bakery effect was not durably prepared"));
         SceneLease lease = state.sceneLeases().get(observed.leaseId());
@@ -555,8 +570,11 @@ public final class BakeryProcess {
             throw new IllegalArgumentException("bakery physical receipt has no current retained worker scene");
         if (pending.phase() != observed.phase() || !pending.leaseId().equals(observed.leaseId())
                 || !observed.observedWorker().equals(BakeryWorkGoal.current(state, job).station().standingBody())
-                || !lease.memberBody(state.actorLocations(), job.workerId()).equals(observed.observedWorker()))
+                || retired.isEmpty() && !lease.memberBody(state.actorLocations(), job.workerId()).equals(observed.observedWorker())
+                || retired.isPresent() && !lease.members().getFirst().entityId().equals(
+                    io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(state.bootstrap().worldId(), job.workerId())))
             throw new IllegalArgumentException("observed bakery effect has a foreign phase, body or lease");
+        if (!applied) return replace(state, job.withBakeryWork(work.withoutPhysical()), state.inventory());
         if (observed.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY
                 && !(job.inputHold() instanceof ProductionInputHold.Materialized)
                 && observed.destination().stream().filter(stack -> stack.address().equals(
@@ -591,8 +609,10 @@ public final class BakeryProcess {
             case DELIVERED -> throw new IllegalArgumentException("delivered bakery job has no physical transfer");
         };
         ActorContainerItemOrder order = itemOrder(state, job, action);
-        inventory = ActorItemCustody.transferObserved(state, order, observed.sourceEpoch(), observed.destinationEpoch(),
-                observed.remainingSource(), observed.destination());
+        inventory = retired.isEmpty() ? ActorItemCustody.transferObserved(state, order, observed.sourceEpoch(), observed.destinationEpoch(),
+                observed.remainingSource(), observed.destination())
+                : ActorItemCustody.transferRetiredObserved(state, order, retired.orElseThrow(), observed.sourceEpoch(),
+                    observed.destinationEpoch(), observed.remainingSource(), observed.destination());
         if (action == BakeryColdStep.Action.LOAD) {
             var loaded = BakeryStationOperation.settleLoad(state, job.withBakeryWork(ready), inventory, observed.destinationEpoch());
             return replace(state, loaded.job(), loaded.inventory(), loaded.machines());

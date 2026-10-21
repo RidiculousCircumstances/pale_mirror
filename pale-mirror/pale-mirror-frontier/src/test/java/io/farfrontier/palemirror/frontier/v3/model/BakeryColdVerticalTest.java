@@ -514,7 +514,7 @@ class BakeryColdVerticalTest {
         state = state.withInventory(state.inventory().withFungibleResources(new FungibleResourceLedger(
                 lots, resources.claims(), accounts, resources.bindings())));
         var wake = StrategicObjectiveProcess.stationReconsideration(
-                state.productionJobs().get(originalJob.id()), "test:confirmed-unload", due);
+                state, state.productionJobs().get(originalJob.id()), "test:confirmed-unload", due);
         var expansion = StrategicObjectiveProcess.planStockReconsideration(state, wake);
         var task = expansion.stream().map(ProposedEvent::payload).filter(StrategicTaskPlanned.class::isInstance)
                 .map(StrategicTaskPlanned.class::cast).map(StrategicTaskPlanned::task).findFirst().orElseThrow();

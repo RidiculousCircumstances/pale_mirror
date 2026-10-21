@@ -65,10 +65,10 @@ final class BakeryCompletionPlanning {
             SubjectId jobId, String receiptCause, long atTick) {
         ProductionJob prior = before.productionJobs().get(jobId);
         ProductionJob current = after.productionJobs().get(jobId);
-        if (prior == null || current == null || !prior.reservesFacility() || current.reservesFacility())
+        if (prior == null || !prior.reservesFacility() || current != null && current.reservesFacility())
             return List.of();
-        return List.of(new ProposedEvent(current.settlementId(), new ScheduleEffect.ReconsiderationRequested(
-                StrategicObjectiveProcess.stationReconsideration(current, receiptCause, Math.addExact(atTick, 1L)))));
+        return List.of(new ProposedEvent(prior.settlementId(), new ScheduleEffect.ReconsiderationRequested(
+                StrategicObjectiveProcess.stationReconsideration(after, prior, receiptCause, Math.addExact(atTick, 1L)))));
     }
 
 }

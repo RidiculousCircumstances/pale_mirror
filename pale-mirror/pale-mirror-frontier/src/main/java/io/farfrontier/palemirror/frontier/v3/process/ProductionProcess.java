@@ -346,6 +346,9 @@ public final class ProductionProcess {
     public static FrontierWorldState reduceBakeryHotEffectObserved(FrontierWorldState state, SubjectId subject, BakeryHotEffectObserved observed) {
         return BakeryProcess.observeHotEffect(state, subject, observed);
     }
+    public static FrontierWorldState reduceBakeryRetiredEffectObserved(FrontierWorldState state, SubjectId subject, BakeryRetiredEffectObserved observed) {
+        return BakeryProcess.observeRetiredEffect(state, subject, observed);
+    }
     public static FrontierWorldState reduceBakeryWorkChanged(FrontierWorldState state, SubjectId subject, BakeryWorkChanged changed) {
         return BakeryProcess.workChanged(state, subject, changed);
     }

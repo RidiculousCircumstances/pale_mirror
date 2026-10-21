@@ -176,6 +176,36 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), prepared)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
+        if (command.payload() instanceof BakeryDeathSettled settled) {
+            if (!command.actor().equals(io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR))
+                return FrontierWorldCommandPlanner.rejected("bakery death settlement requires the physical executor");
+            try {
+                var job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(settled.identity().execution().activityOwnerId()));
+                var next = BakeryDeathResources.settle(state, job.settlementId(), settled);
+                var events = new java.util.ArrayList<ProposedEvent>(); events.add(new ProposedEvent(job.settlementId(), settled));
+                events.add(new ProposedEvent(job.id(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled(ProductionContinuation.at(job, 0).id())));
+                events.addAll(BakeryCompletionPlanning.stationReleaseWake(state, next, job.id(), command.id().value(), command.submittedAt().ticks()));
+                return new CommandPlan.Accepted(List.copyOf(events));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
+        if (command.payload() instanceof BakeryRetiredEffectObserved retired) {
+            if (!command.actor().equals(io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR))
+                return FrontierWorldCommandPlanner.rejected("retired bakery outcome requires the physical executor");
+            try {
+                var job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(retired.effect().jobId()));
+                var successor = ProductionProcess.reduceBakeryRetiredEffectObserved(state, job.settlementId(), retired);
+                var events = new java.util.ArrayList<ProposedEvent>();
+                events.add(new ProposedEvent(job.settlementId(), retired));
+                var work = job.bakeryWork().orElseThrow();
+                var container = work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY
+                        ? BakeryStorage.current(job) : ProductionStationEnergy.record(state, work.stationId()).id();
+                events.addAll(ConfirmedContainerMutationPlan.close(successor, List.of(container), command.expectedRevision().next().value()));
+                events.addAll(BakeryCompletionPlanning.stationReleaseWake(state, successor, job.id(), command.id().value(), command.submittedAt().ticks()));
+                if (retired.applied() && retired.effect().phase() == BakeryWorkState.Phase.DEPOT_DELIVERY)
+                    events.addAll(GoodsParticipantWakeup.container(successor, container, command.id().value(), command.submittedAt().ticks()));
+                return new CommandPlan.Accepted(List.copyOf(events));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
         if (command.payload() instanceof BakeryHotEffectObserved observed) {
             if (!command.actor().equals(io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR))
                 return FrontierWorldCommandPlanner.rejected("bakery physical receipt requires the physical executor");
@@ -285,6 +315,8 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
             case BakeryHotEffectPrepared prepared -> ProductionProcess.reduceBakeryHotEffectPrepared(state, event.subject(), prepared);
             case BakeryHotDeliveryAborted aborted -> ProductionProcess.reduceBakeryHotDeliveryAborted(state, event.subject(), aborted);
             case BakeryHotEffectObserved observed -> ProductionProcess.reduceBakeryHotEffectObserved(state, event.subject(), observed);
+            case BakeryRetiredEffectObserved retired -> ProductionProcess.reduceBakeryRetiredEffectObserved(state, event.subject(), retired);
+            case BakeryDeathSettled settled -> BakeryDeathResources.settle(state, event.subject(), settled);
             case BakeryWorkChanged changed -> {
                 if (changed.change().atTick() != event.instant().ticks())
                     throw new IllegalArgumentException("bakery labour observation has a foreign simulation instant");

@@ -70,6 +70,11 @@ public final class ActorItemCustody {
         requireRetired(state, order, identity);
         return observed(state, order, sourceEpoch, destinationEpoch, source, destination, Optional.of(identity));
     }
+    public static ExactInventory transferRetiredObserved(FrontierWorldState state, ActorContainerItemOrder order,
+            ActorActuationId identity, long sourceEpoch, long destinationEpoch,
+            List<FungiblePhysicalObservation.Stack> source, List<FungiblePhysicalObservation.Stack> destination) {
+        return transferRetiredObservedUpdate(state, order, identity, sourceEpoch, destinationEpoch, source, destination).inventoryOnly();
+    }
     private static FrontierWorldStateUpdate observed(FrontierWorldState state, ActorContainerItemOrder order,
             long sourceEpoch, long destinationEpoch, List<FungiblePhysicalObservation.Stack> remainingSource,
             List<FungiblePhysicalObservation.Stack> destination, Optional<ActorActuationId> retired) {

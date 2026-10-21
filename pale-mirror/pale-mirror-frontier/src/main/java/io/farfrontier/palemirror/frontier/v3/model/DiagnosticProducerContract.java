@@ -106,7 +106,7 @@ public final class DiagnosticProducerContract {
         "frontier.production_work_progressed", "frontier.production_work_scene_finalized", "frontier.production_work_scene_lease_handoff",
         "frontier.production_work_scene_lease_prepared", "frontier.production_work_scene_preparation_aborted", "frontier.production_work_traversal_advanced",
         "frontier.production_work_traversal_blocked", "frontier.bakery_hot_effect_prepared",
-        "frontier.bakery_hot_effect_observed", "frontier.bakery_hot_delivery_aborted", "frontier.bakery_work_changed", "frontier.bakery_hot_hand_release",
+        "frontier.bakery_hot_effect_observed", "frontier.bakery_retired_effect_observed", "frontier.bakery_death_settled", "frontier.bakery_hot_delivery_aborted", "frontier.bakery_work_changed", "frontier.bakery_hot_hand_release",
         "frontier.bakery_hot_hand_materialized", "frontier.bakery_hot_block_changed", "frontier.bakery_scene_reconciled",
         "frontier.bakery_station_scene_reconciled", "frontier.resident_birth_cancelled", "frontier.resident_birth_started", "frontier.resident_born",
         "frontier.resident_health_transition", "frontier.resident_starvation_integrated", "frontier.resident_need_integrated", "frontier.resident_metabolism_changed", "frontier.resident_work_modifiers_changed",

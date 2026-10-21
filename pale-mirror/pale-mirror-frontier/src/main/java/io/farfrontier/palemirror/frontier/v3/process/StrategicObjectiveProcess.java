@@ -61,8 +61,9 @@ public final class StrategicObjectiveProcess {
     }
 
     /** Station release is an availability signal; settlement policy remains the assignment owner. */
-    public static ScheduledAction stationReconsideration(ProductionJob released, String receiptCause, long dueAt) {
-        if (released.reservesFacility()) throw new IllegalArgumentException("station wake precedes actual release");
+    public static ScheduledAction stationReconsideration(FrontierWorldState after, ProductionJob released, String receiptCause, long dueAt) {
+        var current = after.productionJobs().get(released.id());
+        if (current != null && current.reservesFacility()) throw new IllegalArgumentException("station wake precedes actual release");
         return new ScheduledAction(new ScheduleId("schedule:objective-station-release-"
                 + WorkOpportunityIdentity.digest(released.id().value() + "|" + receiptCause) + "-1"),
                 new SimInstant(dueAt), 0, released.settlementId(), "frontier.objective.stock_reconsider", 1);
