@@ -7,7 +7,7 @@ enum FrontierV3PhysicalStoreKind {
     FIELDS(1, "pale_mirror_frontier_v3_resource_sites", List.of(new Table(1,"fieldClaims"), new Table(2,"fieldDeliveries"), new Table(3,"fieldHandProjections"), new Table(4,"fieldPlayerBreaks"),
             new Table(5,"fieldWorldChanges"), new Table(6,"fieldForeignChanges"), new Table(7,"operationReceipts"))),
     BLOCKS(2, "pale_mirror_frontier_v3_graybox", List.of(new Table(1,"claims"), new Table(2,"worksiteCells"))),
-    PLAYER_CLICKS(3, "pale_mirror_frontier_v3_depot_clicks", List.of(new Table(1,"pending"))),
+    PLAYER_CLICKS(3, "pale_mirror_frontier_v3_depot_clicks", List.of(new Table(1,"pending"), new Table(2,"completed"))),
     BOARDS(4, "pale_mirror_frontier_v3_object_boards", List.of(new Table(1,"claims"))),
     HOPPERS(5, "pale_mirror_frontier_v3_hopper_carriers", List.of(new Table(1,"carriers"))),
     OBSERVATIONS(6, "pale_mirror_frontier_v3_physical_observations", List.of(new Table(1,"pending"))),

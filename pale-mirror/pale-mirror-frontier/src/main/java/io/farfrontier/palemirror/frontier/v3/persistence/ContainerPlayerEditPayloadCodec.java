@@ -11,6 +11,7 @@ final class ContainerPlayerEditPayloadCodec implements PayloadCodec {
     @Override public String type() { return "frontier.container_player_edit_observed"; }
     @Override public byte[] encode(FrontierPayload payload) { return encodeProduction(out -> {
         var edit = (ContainerPlayerEditObserved) payload;
+        out.writeByte(2);
         writeString(out, edit.playerId().toString()); writeString(out, edit.interactionId().toString());
         out.writeByte(edit.members().size());
         for (var member : edit.members()) {
@@ -23,8 +24,14 @@ final class ContainerPlayerEditPayloadCodec implements PayloadCodec {
             out.writeLong(source.epoch()); out.writeInt(source.slot()); writeString(out, source.itemKind());
             out.writeInt(source.quantity()); out.writeInt(source.remaining());
         }
+        out.writeBoolean(edit.exactIngress().isPresent());
+        if (edit.exactIngress().isPresent()) {
+            var exact = edit.exactIngress().orElseThrow();
+            writeSubject(out, exact.itemId()); writeCustody(out, exact.from()); writeCustody(out, exact.to());
+        }
     }); }
     @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, in -> {
+        if (in.readUnsignedByte() != 2) throw new IllegalArgumentException("incompatible player interaction payload format");
         var player = UUID.fromString(readString(in)); var interaction = UUID.fromString(readString(in));
         int count = in.readUnsignedByte(); if (count < 1 || count > 54) throw new IllegalArgumentException("invalid composed member count");
         var members = new ArrayList<ContainerPlayerEditObserved.Member>();
@@ -36,7 +43,9 @@ final class ContainerPlayerEditPayloadCodec implements PayloadCodec {
         Optional<ContainerPlayerEditObserved.PlayerReturn> source = in.readBoolean()
                 ? Optional.of(new ContainerPlayerEditObserved.PlayerReturn(readSubject(in).value(), readSubject(in).value(),
                     in.readLong(), in.readInt(), readString(in), in.readInt(), in.readInt())) : Optional.empty();
-        return new ContainerPlayerEditObserved(player, interaction, members, source);
+        var exact = in.readBoolean() ? Optional.of(new ExactItemCustodyChanged(readSubject(in).value(), readCustody(in), readCustody(in)))
+                : Optional.<ExactItemCustodyChanged>empty();
+        return new ContainerPlayerEditObserved(player, interaction, members, source, exact);
     }); }
     private static void stacks(DataOutputStream out, List<FungiblePhysicalObservation.Stack> stacks) throws IOException {
         out.writeByte(stacks.size());

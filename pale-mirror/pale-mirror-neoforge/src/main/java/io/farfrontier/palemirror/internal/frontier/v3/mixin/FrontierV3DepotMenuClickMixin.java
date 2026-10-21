@@ -9,12 +9,22 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.gen.Invoker;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /** Server-thread transaction boundary for a managed depot's familiar vanilla chest UI. */
 @Mixin(AbstractContainerMenu.class)
 abstract class FrontierV3DepotMenuClickMixin {
     @Unique private boolean frontierV3$managedDepotClick;
+    @Invoker("doClick") protected abstract void frontierV3$nativeClick(int slot, int button, ClickType kind, Player player);
+    @Redirect(method = "clicked", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/inventory/AbstractContainerMenu;doClick(IILnet/minecraft/world/inventory/ClickType;Lnet/minecraft/world/entity/player/Player;)V"))
+    private void frontierV3$durableNativeClick(AbstractContainerMenu menu, int slot, int button, ClickType kind, Player player) {
+        if (!frontierV3$managedDepotClick) { frontierV3$nativeClick(slot, button, kind, player); return; }
+        FrontierV3ServerLifecycle.performDepotMenuClick((ServerPlayer) player, menu,
+                () -> frontierV3$nativeClick(slot, button, kind, player));
+    }
 
     @Inject(method = "clicked", at = @At("HEAD"), cancellable = true)
     private void frontierV3$beforeDepotClick(int slot, int button, ClickType kind,

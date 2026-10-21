@@ -9,31 +9,41 @@ import java.util.*;
 /** Composes existing physical accounting owners atomically, never another inventory authority. */
 final class ContainerPlayerEditProcess {
     private ContainerPlayerEditProcess() { }
-    static CommandPlan plan(FrontierWorldState state, ContainerPlayerEditObserved edit, long now, long revision) {
+    static CommandPlan plan(FrontierWorldState state, ContainerPlayerEditObserved edit, FrontierCommand command) {
         var consequences = new ArrayList<ProposedEvent>();
         FrontierWorldState successor;
-        try { successor = apply(state, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, edit, now, consequences); }
+        try { successor = apply(state, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, edit, command.submittedAt().ticks(), consequences, command); }
         catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         var events = new ArrayList<ProposedEvent>();
         events.add(new ProposedEvent(FrontierExecutionSubjects.PHYSICAL_EXECUTOR, edit));
         // The source accounting and its released physical fence have one WAL receipt.
         // Later activity consequences do not own this container checkpoint.
         try { events.addAll(ConfirmedContainerMutationPlan.close(successor,
-                edit.members().stream().map(ContainerPlayerEditObserved.Member::containerId).toList(), revision)); }
+                edit.members().stream().map(ContainerPlayerEditObserved.Member::containerId).toList(), command.expectedRevision().value() + 1)); }
         catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         events.addAll(consequences);
         return new CommandPlan.Accepted(List.copyOf(events));
     }
     static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, ContainerPlayerEditObserved edit) {
-        return apply(state, subject, edit, 0, null);
+        return apply(state, subject, edit, 0, null, null);
     }
     private static FrontierWorldState apply(FrontierWorldState state, SubjectId subject,
-            ContainerPlayerEditObserved edit, long now, List<ProposedEvent> consequences) {
+            ContainerPlayerEditObserved edit, long now, List<ProposedEvent> consequences, FrontierCommand command) {
         if (!subject.equals(FrontierExecutionSubjects.PHYSICAL_EXECUTOR))
             throw new IllegalArgumentException("composed edit lacks physical executor authority");
         // Validate every predecessor against the same incoming state before publishing any successor.
         for (var member : edit.members()) validate(state, member);
         var next = state;
+        if (edit.exactIngress().isPresent()) {
+            var transfer = edit.exactIngress().orElseThrow();
+            var item = state.inventory().items().get(transfer.itemId());
+            if (item == null || !item.custody().equals(transfer.from()))
+                throw new IllegalArgumentException("exact ingress differs from its declared canonical source");
+            var observation = new ProposedEvent(FrontierWorldStateSupport.itemOwner(state, transfer), transfer);
+            if (consequences != null) consequences.addAll(ExactItemDepartureComposition.plan(state, command, transfer.itemId(), observation)
+                    .stream().filter(event -> !event.equals(observation)).toList());
+            next = FrontierPhysicalProcessModule.reduceCustodyChanged(next, observation.subject(), transfer);
+        }
         int returned = 0;
         for (var member : edit.members()) {
             if (member.before().equals(member.after())) continue;

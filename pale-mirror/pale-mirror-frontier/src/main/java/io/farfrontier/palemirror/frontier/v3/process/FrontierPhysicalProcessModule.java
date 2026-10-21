@@ -15,7 +15,7 @@ import java.util.List;
 final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule {
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof ContainerPlayerEditObserved edit)
-            return ContainerPlayerEditProcess.plan(state, edit, command.submittedAt().ticks(), command.expectedRevision().value() + 1);
+            return ContainerPlayerEditProcess.plan(state, edit, command);
         if (command.payload() instanceof GroundStockExit destroyed) {
             try { destroyed.apply(state, destroyed.economicOwner()); }
             catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
@@ -158,7 +158,7 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
         return state.recordStructureDamage(damage);
     }
 
-    private static FrontierWorldState reduceCustodyChanged(FrontierWorldState state, SubjectId subject, ExactItemCustodyChanged changed) {
+    static FrontierWorldState reduceCustodyChanged(FrontierWorldState state, SubjectId subject, ExactItemCustodyChanged changed) {
         if (!subject.equals(FrontierWorldStateSupport.itemOwner(state, changed))) throw new IllegalArgumentException("item custody observation lacks its canonical owner");
         return ExactItemDepartureComposition.observe(state, changed.itemId(), changed.from(),
                 state.inventory().moveObservedItem(changed.itemId(), changed.from(), changed.to()));

@@ -93,9 +93,18 @@ public final class FrontierV3ExactContainerIngressGameTests {
         var menu = net.minecraft.world.inventory.ChestMenu.threeRows(1, player.getInventory(), chest);
         player.containerMenu = menu;
         player.getInventory().setItem(9, FrontierV3ExactItemPresentation.materializedStack(tool));
+        var beforeNoOp = state(runtime);
+        helper.assertTrue(FrontierV3ContainerClickExecutor.before(player, menu, 1, 0, net.minecraft.world.inventory.ClickType.PICKUP, runtime)
+                == FrontierV3ContainerClickExecutor.Admission.ACCEPTED, "empty-slot click enters the same native boundary");
+        FrontierV3PlayerClickOperation.perform(player, menu, runtime,
+                () -> menu.clicked(1, 0, net.minecraft.world.inventory.ClickType.PICKUP, player));
+        FrontierV3ContainerClickExecutor.after(player, menu, runtime);
+        helper.assertTrue(state(runtime).equals(beforeNoOp) && FrontierV3DepotClickLedger.get(level).pending(container) == null,
+                "no-op retires locally without inventing stock or releasing the acquired container");
         helper.assertTrue(FrontierV3ContainerClickExecutor.before(player, menu, 27, 0, net.minecraft.world.inventory.ClickType.QUICK_MOVE, runtime)
                 == FrontierV3ContainerClickExecutor.Admission.ACCEPTED, "the exact tool is admitted under a durable click witness");
-        menu.clicked(27, 0, net.minecraft.world.inventory.ClickType.QUICK_MOVE, player);
+        FrontierV3PlayerClickOperation.perform(player, menu, runtime,
+                () -> menu.clicked(27, 0, net.minecraft.world.inventory.ClickType.QUICK_MOVE, player));
         FrontierV3ContainerClickExecutor.after(player, menu, runtime);
         helper.assertValueEqual(state(runtime).inventory().items().get(tool.id()).custody(), new InventoryCustody.ContainerSlot(container, 0),
                 "canonical custody follows the actual tool, not a fungible copy");
@@ -111,7 +120,8 @@ public final class FrontierV3ExactContainerIngressGameTests {
         player.getInventory().setItem(9, new ItemStack(Items.BREAD, 3));
         helper.assertTrue(FrontierV3ContainerClickExecutor.before(player, menu, 27, 0, net.minecraft.world.inventory.ClickType.QUICK_MOVE, runtime)
                 == FrontierV3ContainerClickExecutor.Admission.ACCEPTED, "the next bread deposit is not blocked by the tool");
-        menu.clicked(27, 0, net.minecraft.world.inventory.ClickType.QUICK_MOVE, player);
+        FrontierV3PlayerClickOperation.perform(player, menu, runtime,
+                () -> menu.clicked(27, 0, net.minecraft.world.inventory.ClickType.QUICK_MOVE, player));
         FrontierV3ContainerClickExecutor.after(player, menu, runtime);
         helper.assertTrue(chest.getItem(1).is(Items.BREAD) && chest.getItem(1).getCount() == 3, "ordinary bread still uses its normal physical slot");
         helper.assertTrue(FrontierV3DepotClickLedger.get(level).pending(container) == null, "the resource deposit also closes");

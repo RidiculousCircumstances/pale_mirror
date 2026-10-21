@@ -40,18 +40,27 @@ class FrontierV3DepotClickWitnessTest {
                 PLAYER, INTERACTION, List.of(), Optional.empty());
         var prepared = new FrontierV3ContainerClickTransaction(List.of(left, right));
         assertEquals(prepared, FrontierV3ContainerClickTransaction.read(prepared.save()));
-        var empty = new net.minecraft.nbt.CompoundTag(); empty.putInt("format", 3); empty.put("pending", new net.minecraft.nbt.ListTag());
+        var empty = new net.minecraft.nbt.CompoundTag(); empty.putInt("format", 4); empty.put("pending", new net.minecraft.nbt.ListTag());
+        empty.put("completed", new net.minecraft.nbt.ListTag());
         var ledger = FrontierV3DepotClickLedger.load(empty, null); ledger.prepare(prepared);
         assertEquals(left, ledger.pending(DEPOT)); assertEquals(right, ledger.pending(second));
         assertThrows(IllegalArgumentException.class, () -> ledger.prepare(right));
         assertThrows(IllegalArgumentException.class, () -> ledger.retire(left));
-        var observed = new FrontierV3ContainerClickTransaction(List.of(left.observed(List.of(stack(0, 1))), right.observed(List.of())));
-        ledger.observe(prepared, observed);
+        var outcome = new io.farfrontier.palemirror.frontier.v3.model.ContainerPlayerEditObserved(PLAYER, INTERACTION,
+                prepared.members().stream().map(m -> new io.farfrontier.palemirror.frontier.v3.model.ContainerPlayerEditObserved.Member(
+                        m.containerId(), m.accountId(), m.ownerId(), m.authorityEpoch(), m.before(), List.of())).toList(), Optional.empty());
+        ledger.capture(prepared, outcome);
+        var observed = ledger.transaction(DEPOT);
+        assertThrows(IllegalArgumentException.class, () -> ledger.capture(prepared, outcome));
+        var obsolete = ledger.save(new net.minecraft.nbt.CompoundTag(), null); obsolete.putInt("format", 3);
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3DepotClickLedger.load(obsolete, null));
+        var invalid = new io.farfrontier.palemirror.frontier.v3.model.ContainerPlayerEditObserved(UUID.randomUUID(), INTERACTION,
+                outcome.members(), Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> new FrontierV3ContainerClickTransaction(prepared.members(), Optional.empty(), Optional.of(invalid)));
         var recovered = FrontierV3DepotClickLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), null), null);
         assertEquals(observed, recovered.transaction(second));
         assertThrows(IllegalArgumentException.class, () -> recovered.retire(left));
         recovered.retire(observed); assertEquals(List.of(), recovered.pending());
-        assertThrows(IllegalArgumentException.class, () -> new FrontierV3ContainerClickTransaction(List.of(left.observed(List.of()), right)));
         assertThrows(IllegalArgumentException.class, () -> new FrontierV3ContainerClickTransaction(List.of(left, left)));
     }
     private static final SubjectId DEPOT = new SubjectId("container:one-depot");
@@ -77,25 +86,27 @@ class FrontierV3DepotClickWitnessTest {
         assertEquals(null, FrontierV3ContainerClickExecutor.ownedContainer(state, position.above(10)));
     }
 
-    @Test void durablePreAndPostLayoutsRoundTripIncludingAnEmptyChest() {
+    @Test void admittedLayoutRoundTripsWithoutInventingAnOutcome() {
         var prepared = new FrontierV3DepotClickWitness(DEPOT, ACCOUNT, OWNER, 7, PLAYER, INTERACTION,
                 List.of(stack(0, 64), stack(1, 8)), Optional.empty());
         assertEquals(prepared, FrontierV3DepotClickWitness.read(prepared.save()));
-        var observed = prepared.observed(List.of());
-        assertEquals(observed, FrontierV3DepotClickWitness.read(observed.save()));
-        assertThrows(IllegalArgumentException.class, () -> observed.observed(List.of(stack(0, 1))));
+        assertEquals(Optional.empty(), new FrontierV3ContainerClickTransaction(List.of(prepared)).outcome());
     }
 
-    @Test void trackedReturnPersistsBothExactSourceAndPostimageAndRejectsMissingEvidence() {
+    @Test void trackedReturnCannotLoseItsDeclaredSourceInTheComposedOutcome() {
         var source = new FrontierV3DepotClickWitness.ReturnSource(new SubjectId("binding:player-return"),
                 new SubjectId("custody:player-return"), 3, 9, "minecraft:bread", 10);
         var prepared = new FrontierV3DepotClickWitness(DEPOT, ACCOUNT, OWNER, 7, PLAYER, INTERACTION,
-                List.of(), Optional.empty(), Optional.of(source), Optional.empty());
+                List.of(), Optional.of(source));
         assertEquals(prepared, FrontierV3DepotClickWitness.read(prepared.save()));
-        assertThrows(IllegalArgumentException.class, () -> prepared.observed(List.of(stack(0, 6))));
-        var observed = prepared.observed(List.of(stack(0, 6)), Optional.of(4));
-        assertEquals(observed, FrontierV3DepotClickWitness.read(observed.save()));
-        assertThrows(IllegalArgumentException.class, () -> prepared.observed(List.of(stack(0, 6)), Optional.of(11)));
+        var member = new io.farfrontier.palemirror.frontier.v3.model.ContainerPlayerEditObserved.Member(DEPOT, ACCOUNT, OWNER, 7, List.of(), List.of(stack(0, 6)));
+        var missing = new io.farfrontier.palemirror.frontier.v3.model.ContainerPlayerEditObserved(PLAYER, INTERACTION, List.of(member), Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> new FrontierV3ContainerClickTransaction(List.of(prepared), Optional.empty(), Optional.of(missing)));
+        var remaining = new io.farfrontier.palemirror.frontier.v3.model.ContainerPlayerEditObserved.PlayerReturn(
+                source.bindingId(), source.accountId(), source.epoch(), source.playerSlot(), source.itemKind(), source.quantity(), 4);
+        var outcome = new io.farfrontier.palemirror.frontier.v3.model.ContainerPlayerEditObserved(PLAYER, INTERACTION, List.of(member), Optional.of(remaining));
+        var observed = new FrontierV3ContainerClickTransaction(List.of(prepared), Optional.empty(), Optional.of(outcome));
+        assertEquals(observed, FrontierV3ContainerClickTransaction.read(observed.save()));
     }
 
     private static FungiblePhysicalObservation.Stack stack(int slot, int count) {

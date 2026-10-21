@@ -6,7 +6,10 @@ import java.util.*;
 
 /** One causal player action over an explicitly composed inventory; members retain their identities. */
 public record ContainerPlayerEditObserved(UUID playerId, UUID interactionId, List<Member> members,
-        Optional<PlayerReturn> returning) implements FrontierPayload {
+        Optional<PlayerReturn> returning, Optional<ExactItemCustodyChanged> exactIngress) implements FrontierPayload {
+    public ContainerPlayerEditObserved(UUID playerId, UUID interactionId, List<Member> members, Optional<PlayerReturn> returning) {
+        this(playerId, interactionId, members, returning, Optional.empty());
+    }
     public record Member(SubjectId containerId, SubjectId accountId, SubjectId ownerId, long epoch,
             List<FungiblePhysicalObservation.Stack> before, List<FungiblePhysicalObservation.Stack> after) {
         public Member {
@@ -31,12 +34,19 @@ public record ContainerPlayerEditObserved(UUID playerId, UUID interactionId, Lis
         }
     }
     public ContainerPlayerEditObserved {
-        Objects.requireNonNull(playerId); Objects.requireNonNull(interactionId); Objects.requireNonNull(returning);
+        Objects.requireNonNull(playerId); Objects.requireNonNull(interactionId); Objects.requireNonNull(returning); Objects.requireNonNull(exactIngress);
         members = List.copyOf(members);
         if (members.isEmpty() || members.size() > 54
                 || members.stream().map(Member::containerId).distinct().count() != members.size()
                 || members.stream().map(Member::accountId).distinct().count() != members.size())
             throw new IllegalArgumentException("composed edit requires distinct explicitly declared members");
+        if (exactIngress.isPresent()) {
+            var transfer = exactIngress.orElseThrow(); var declared = members;
+            if (returning.isPresent() || !transfer.from().equals(new InventoryCustody.Player(playerId))
+                    || !(transfer.to() instanceof InventoryCustody.ContainerSlot destination)
+                    || declared.stream().noneMatch(m -> m.containerId().equals(destination.containerId())))
+                throw new IllegalArgumentException("exact ingress requires this player and an explicitly declared destination");
+        }
     }
     @Override public String type() { return "frontier.container_player_edit_observed"; }
     @Override public boolean requiresDurableBeforeEffect() { return true; }

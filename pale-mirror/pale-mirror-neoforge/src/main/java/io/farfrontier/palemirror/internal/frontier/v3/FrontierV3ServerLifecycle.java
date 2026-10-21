@@ -100,6 +100,13 @@ public final class FrontierV3ServerLifecycle {
         if (runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE)
             FrontierV3ContainerClickExecutor.after(player, menu, runtime);
     }
+    public static void performDepotMenuClick(ServerPlayer player,
+            net.minecraft.world.inventory.AbstractContainerMenu menu, Runnable nativeClick) {
+        var runtime = RUNTIMES.get(player.getServer());
+        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE)
+            throw new IllegalStateException("admitted native player click lost its active runtime");
+        FrontierV3PlayerClickOperation.perform(player, menu, runtime, nativeClick);
+    }
     public static String status(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
         if (!ownsPhysicalWorld(server)) return "Frontier v3 is not selected for this server.";

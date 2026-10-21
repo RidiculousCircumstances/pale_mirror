@@ -15,12 +15,14 @@ import java.util.Map;
 
 /** Durable pre/post physical witness for one player edit at each PM-owned depot. */
 final class FrontierV3DepotClickLedger extends FrontierV3JournaledSavedData {
-    private static final int FORMAT = 3;
+    private static final int FORMAT = 4;
     private static final int MAX_PENDING = 1_024;
     private final Map<SubjectId, FrontierV3ContainerClickTransaction> pending;
+    private final FrontierV3LocalOperationReceipts completed;
 
-    private FrontierV3DepotClickLedger() { this(new LinkedHashMap<>()); }
-    private FrontierV3DepotClickLedger(Map<SubjectId, FrontierV3ContainerClickTransaction> pending) {
+    private FrontierV3DepotClickLedger() { this(new LinkedHashMap<>(), Map.of()); }
+    private FrontierV3DepotClickLedger(Map<SubjectId, FrontierV3ContainerClickTransaction> pending,
+            Map<java.util.UUID, FrontierV3OperationReceipt> completed) {
         super(FrontierV3PhysicalStoreKind.PLAYER_CLICKS);
         if (pending.size() > MAX_PENDING || pending.entrySet().stream()
                 .anyMatch(entry -> !entry.getKey().equals(entry.getValue().id()))
@@ -29,10 +31,15 @@ final class FrontierV3DepotClickLedger extends FrontierV3JournaledSavedData {
             throw new IllegalArgumentException("invalid bounded depot click witnesses");
         }
         this.pending = table("pending", pending, SubjectId::value, (id, witness) -> witness.save());
+        if (pending.values().stream().flatMap(value -> value.operation().stream()).anyMatch(value -> completed.containsKey(value.ticket())))
+            throw new IllegalArgumentException("completed click still retains a pending operation owner");
+        this.completed = new FrontierV3LocalOperationReceipts(table("completed", completed, java.util.UUID::toString,
+                (id, operation) -> FrontierV3OperationReceiptCodec.write(operation)));
     }
 
     static FrontierV3DepotClickLedger get(ServerLevel level) {
-        return FrontierV3JournaledSavedData.get(level, FrontierV3PhysicalStoreKind.PLAYER_CLICKS, FrontierV3DepotClickLedger::new, FrontierV3DepotClickLedger::load);
+        var ledger = FrontierV3JournaledSavedData.get(level, FrontierV3PhysicalStoreKind.PLAYER_CLICKS, FrontierV3DepotClickLedger::new, FrontierV3DepotClickLedger::load);
+        ledger.complete(level); return ledger;
     }
 
     FrontierV3ContainerClickTransaction transaction(SubjectId containerId) {
@@ -60,24 +67,6 @@ final class FrontierV3DepotClickLedger extends FrontierV3JournaledSavedData {
         pending.put(witness.id(), witness); setDirty();
     }
 
-    void observe(FrontierV3DepotClickWitness before, FrontierV3DepotClickWitness after) {
-        observe(new FrontierV3ContainerClickTransaction(java.util.List.of(before)), new FrontierV3ContainerClickTransaction(java.util.List.of(after)));
-    }
-    void observe(FrontierV3ContainerClickTransaction before, FrontierV3ContainerClickTransaction after) {
-        if (!before.id().equals(after.id()) || before.members().size() != after.members().size()
-                || !before.equals(pending.get(before.id()))) {
-            throw new IllegalArgumentException("depot click postcondition lacks its exact pre-effect witness");
-        }
-        for (int i = 0; i < before.members().size(); i++) {
-            var a = before.members().get(i); var b = after.members().get(i);
-            if (a.after().isPresent() || !a.containerId().equals(b.containerId()) || !a.accountId().equals(b.accountId())
-                    || !a.ownerId().equals(b.ownerId()) || a.authorityEpoch() != b.authorityEpoch()
-                    || !a.playerId().equals(b.playerId()) || !a.interactionId().equals(b.interactionId())
-                    || !a.before().equals(b.before()) || !a.returnSource().equals(b.returnSource()) || b.after().isEmpty())
-                throw new IllegalArgumentException("composed postimage changed its admitted predecessor");
-        }
-        pending.put(before.id(), after); setDirty();
-    }
 
     void retire(FrontierV3DepotClickWitness witness) {
         retire(new FrontierV3ContainerClickTransaction(java.util.List.of(witness)));
@@ -88,6 +77,27 @@ final class FrontierV3DepotClickLedger extends FrontierV3JournaledSavedData {
         }
         pending.remove(witness.id()); setDirty();
     }
+    FrontierV3ContainerClickTransaction bind(FrontierV3ContainerClickTransaction witness, FrontierV3OperationReceipt receipt) {
+        if (!witness.equals(pending.get(witness.id()))) throw new IllegalArgumentException("click lost its operation witness");
+        if (witness.operation().isPresent()) {
+            var prior = witness.operation().orElseThrow();
+            if (!prior.ticket().equals(receipt.ticket()) || prior.sequence() != receipt.sequence()
+                    || !prior.declaration().equals(receipt.declaration())) throw new IllegalArgumentException("click changed native operation");
+            return witness;
+        }
+        var next = new FrontierV3ContainerClickTransaction(witness.members(), java.util.Optional.of(receipt), witness.outcome());
+        pending.put(witness.id(), next); setDirty(); return next;
+    }
+    void capture(FrontierV3ContainerClickTransaction witness, io.farfrontier.palemirror.frontier.v3.model.ContainerPlayerEditObserved outcome) {
+        if (!witness.equals(pending.get(witness.id())) || witness.outcome().isPresent())
+            throw new IllegalArgumentException("native click outcome has no exact unfinished witness");
+        pending.put(witness.id(), new FrontierV3ContainerClickTransaction(witness.members(), witness.operation(), java.util.Optional.of(outcome)));
+        setDirty();
+    }
+    void retireNoEffect(FrontierV3ContainerClickTransaction witness, FrontierV3OperationReceipt receipt, ServerLevel level) {
+        completed.add(receipt); retire(witness); complete(level);
+    }
+    private void complete(ServerLevel level) { completed.complete(level, () -> persist(level)); }
 
     @Override protected CompoundTag metadata() { var tag = new CompoundTag(); tag.putInt("format", FORMAT); return tag; }
 
@@ -97,6 +107,7 @@ final class FrontierV3DepotClickLedger extends FrontierV3JournaledSavedData {
         pending.values().stream().sorted(Comparator.comparing(FrontierV3ContainerClickTransaction::id))
                 .forEach(value -> entries.add(value.save()));
         tag.put("pending", entries);
+        tag.put("completed", completed.write());
         return tag;
     }
 
@@ -109,6 +120,6 @@ final class FrontierV3DepotClickLedger extends FrontierV3JournaledSavedData {
             var witness = FrontierV3ContainerClickTransaction.read(entries.getCompound(index));
             if (values.put(witness.id(), witness) != null) throw new IllegalArgumentException("duplicate depot click witness");
         }
-        return new FrontierV3DepotClickLedger(values);
+        return new FrontierV3DepotClickLedger(values, FrontierV3LocalOperationReceipts.read(tag, "completed"));
     }
 }

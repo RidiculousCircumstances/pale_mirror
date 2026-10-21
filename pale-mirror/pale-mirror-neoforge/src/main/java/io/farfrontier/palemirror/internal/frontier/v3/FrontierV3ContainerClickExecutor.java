@@ -120,8 +120,7 @@ final class FrontierV3ContainerClickExecutor {
         try { returning = playerReturnSource(player, menu, slot, kind, state); }
         catch (IllegalArgumentException invalid) { return refused(player, target, slot, kind, "INVALID_PLAYER_RETURN:" + invalid.getMessage()); }
         return new FrontierV3DepotClickWitness(containerId, accountId, owned.ownerId(),
-                lease.authorityEpoch(), player.getUUID(), interaction, before, java.util.Optional.empty(),
-                returning, java.util.Optional.empty());
+                lease.authorityEpoch(), player.getUUID(), interaction, before, returning);
     }
 
     static boolean ownsContainer(ServerPlayer player, AbstractContainerMenu menu,
@@ -165,26 +164,6 @@ final class FrontierV3ContainerClickExecutor {
     }
 
 
-    /** A real no-op keeps its acquired epoch. Exact ingress has changed the complete
-     * canonical image even though its fungible predecessor/successor are equal. */
-    static boolean confirmUnchangedClick(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-            SubjectId container, FrontierV3PhysicalContainer physical) {
-        var state = runtime.decodedState().orElseThrow();
-        var replica = state.replicaCustody().replicas().get(container);
-        return replica != null && replica.fingerprint().equals(ReferenceContainerCustody.canonicalFingerprint(state, container))
-                || FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime, container, physical);
-    }
-
-    static boolean canonicalMatches(FungibleResourceLedger resources, SubjectId account, long epoch,
-                                            List<FungiblePhysicalObservation.Stack> physical) {
-        try {
-            List<PhysicalStackBinding> expected = FungiblePhysicalObservation.bind(resources, account, epoch, physical);
-            List<PhysicalStackBinding> current = resources.bindings().values().stream()
-                    .filter(binding -> binding.accountId().equals(account))
-                    .sorted(Comparator.comparing(PhysicalStackBinding::id)).toList();
-            return current.equals(expected);
-        } catch (IllegalArgumentException invalid) { return false; }
-    }
 
     /** Only the clicked exact player slot supplies return authority; no inventory-wide stack matching. */
     private static java.util.Optional<FrontierV3DepotClickWitness.ReturnSource> playerReturnSource(ServerPlayer player,

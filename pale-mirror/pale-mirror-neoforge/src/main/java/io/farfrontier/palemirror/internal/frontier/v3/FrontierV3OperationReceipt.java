@@ -17,7 +17,7 @@ record FrontierV3OperationReceipt(Declaration declaration, UUID ticket, long seq
         EXTRACTION_CARGO("extraction-cargo-v1"), EXPEDITION_SUPPLY("expedition-supply-v1"),
         EXPEDITION_REPLENISHMENT("expedition-replenishment-v1"), FIELD_DELIVERY("field-delivery-v1"), FIELD_WORK("field-work-v1"),
         SHIPMENT_TRANSFER("shipment-transfer-v1"), FIELD_PROJECTION("field-projection-v1"),
-        PLAYER_GROUND_PICKUP("player-ground-pickup-v1");
+        PLAYER_GROUND_PICKUP("player-ground-pickup-v1"), PLAYER_CONTAINER_CLICK("player-container-click-v1");
         private final String wire;
         Protocol(String wire) { this.wire = wire; }
         String wire() { return wire; }

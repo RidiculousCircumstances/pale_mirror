@@ -13,12 +13,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
-/** Pre-effect player cause and optional witnessed post-click depot layout. */
+/** Pre-effect member admission. The composed transaction owns the one captured outcome. */
 record FrontierV3DepotClickWitness(SubjectId containerId, SubjectId accountId, SubjectId ownerId,
                                   long authorityEpoch, UUID playerId, UUID interactionId,
-                                  List<FungiblePhysicalObservation.Stack> before,
-                                  Optional<List<FungiblePhysicalObservation.Stack>> after,
-                                  Optional<ReturnSource> returnSource, Optional<Integer> returnedRemaining) {
+                                  List<FungiblePhysicalObservation.Stack> before, Optional<ReturnSource> returnSource) {
     record ReturnSource(SubjectId bindingId, SubjectId accountId, long epoch, int playerSlot,
                         String itemKind, int quantity) {
         ReturnSource {
@@ -28,11 +26,6 @@ record FrontierV3DepotClickWitness(SubjectId containerId, SubjectId accountId, S
         }
     }
 
-    FrontierV3DepotClickWitness(SubjectId containerId, SubjectId accountId, SubjectId ownerId,
-            long epoch, UUID playerId, UUID interactionId, List<FungiblePhysicalObservation.Stack> before,
-            Optional<List<FungiblePhysicalObservation.Stack>> after) {
-        this(containerId, accountId, ownerId, epoch, playerId, interactionId, before, after, Optional.empty(), Optional.empty());
-    }
     FrontierV3DepotClickWitness {
         Objects.requireNonNull(containerId, "click container");
         Objects.requireNonNull(accountId, "click account");
@@ -40,29 +33,11 @@ record FrontierV3DepotClickWitness(SubjectId containerId, SubjectId accountId, S
         Objects.requireNonNull(playerId, "click player");
         Objects.requireNonNull(interactionId, "click id");
         before = List.copyOf(Objects.requireNonNull(before, "click predecessor"));
-        after = Objects.requireNonNull(after, "click successor").map(List::copyOf);
-        Objects.requireNonNull(returnSource); Objects.requireNonNull(returnedRemaining);
-        if (returnedRemaining.isPresent() && (returnSource.isEmpty() || after.isEmpty()
-                || returnedRemaining.orElseThrow() < 0 || returnedRemaining.orElseThrow() > returnSource.orElseThrow().quantity()))
-            throw new IllegalArgumentException("player return successor lacks exact predecessor");
-        if (after.isPresent() && returnSource.isPresent() && returnedRemaining.isEmpty())
-            throw new IllegalArgumentException("player return must witness both physical postimages");
+        Objects.requireNonNull(returnSource);
         if (authorityEpoch < 1 || before.size() > 54
-                || after.map(value -> value.size() > 54).orElse(false)
-                || !addressesMatch(containerId, before)
-                || after.map(value -> !addressesMatch(containerId, value)).orElse(false)) {
+                || !addressesMatch(containerId, before)) {
             throw new IllegalArgumentException("depot click witness must retain bounded exact container layout");
         }
-    }
-
-    FrontierV3DepotClickWitness observed(List<FungiblePhysicalObservation.Stack> successor) {
-        return observed(successor, Optional.empty());
-    }
-
-    FrontierV3DepotClickWitness observed(List<FungiblePhysicalObservation.Stack> successor, Optional<Integer> remaining) {
-        if (after.isPresent()) throw new IllegalArgumentException("depot click already has a postcondition");
-        return new FrontierV3DepotClickWitness(containerId, accountId, ownerId, authorityEpoch,
-                playerId, interactionId, before, Optional.of(successor), returnSource, remaining);
     }
 
     CompoundTag save() {
@@ -70,15 +45,13 @@ record FrontierV3DepotClickWitness(SubjectId containerId, SubjectId accountId, S
         tag.putString("container", containerId.value()); tag.putString("account", accountId.value());
         tag.putString("owner", ownerId.value()); tag.putLong("epoch", authorityEpoch);
         tag.putUUID("player", playerId); tag.putUUID("interaction", interactionId);
-        tag.put("before", stacks(before)); tag.putBoolean("hasAfter", after.isPresent());
-        after.ifPresent(value -> tag.put("after", stacks(value)));
+        tag.put("before", stacks(before));
         returnSource.ifPresent(source -> {
             var value = new CompoundTag(); value.putString("binding", source.bindingId().value());
             value.putString("account", source.accountId().value()); value.putLong("epoch", source.epoch());
             value.putInt("slot", source.playerSlot()); value.putString("kind", source.itemKind()); value.putInt("quantity", source.quantity());
             tag.put("returnSource", value);
         });
-        returnedRemaining.ifPresent(value -> tag.putInt("returnedRemaining", value));
         return tag;
     }
 
@@ -87,10 +60,8 @@ record FrontierV3DepotClickWitness(SubjectId containerId, SubjectId accountId, S
         return new FrontierV3DepotClickWitness(container, new SubjectId(tag.getString("account")),
                 new SubjectId(tag.getString("owner")), tag.getLong("epoch"), tag.getUUID("player"),
                 tag.getUUID("interaction"), readStacks(container, tag.getList("before", Tag.TAG_COMPOUND)),
-                tag.getBoolean("hasAfter") ? Optional.of(readStacks(container, tag.getList("after", Tag.TAG_COMPOUND)))
-                        : Optional.empty(), tag.contains("returnSource", Tag.TAG_COMPOUND)
-                        ? Optional.of(readReturnSource(tag.getCompound("returnSource"))) : Optional.empty(),
-                tag.contains("returnedRemaining", Tag.TAG_INT) ? Optional.of(tag.getInt("returnedRemaining")) : Optional.empty());
+                tag.contains("returnSource", Tag.TAG_COMPOUND)
+                        ? Optional.of(readReturnSource(tag.getCompound("returnSource"))) : Optional.empty());
     }
 
     private static ReturnSource readReturnSource(CompoundTag tag) {

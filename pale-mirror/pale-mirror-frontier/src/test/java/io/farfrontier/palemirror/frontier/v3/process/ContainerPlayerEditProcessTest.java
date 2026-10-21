@@ -41,6 +41,30 @@ class ContainerPlayerEditProcessTest {
         return new ContainerPlayerEditObserved(PLAYER, CLICK, List.of(member(state, LEFT, List.of(), List.of(stack(LEFT, 1))),
                 member(state, RIGHT, List.of(), List.of(stack(RIGHT, 16)))), Optional.empty());
     }
+    private static FrontierCommand command(ContainerPlayerEditObserved edit) {
+        var id = new CommandId("test:container-click");
+        return new FrontierCommand(1, id, new WorldId("frontier:composed-test"), new Revision(99), new SimInstant(12),
+                FrontierExecutionSubjects.PHYSICAL_EXECUTOR, CauseChain.root(id), edit);
+    }
+    @Test void exactToolIngressAndAllMemberFencesShareOneCanonicalTransaction() {
+        var state = fixture(); var owner = state.inventory().containers().get(LEFT).ownerId();
+        var tool = new ExactItemStack(new SubjectId("item:player-tool"), owner, "minecraft:iron_pickaxe", 1,
+                new InventoryCustody.ContainerSlot(LEFT, 0));
+        state = state.withInventory(state.inventory().store(tool).moveObservedItem(tool.id(), tool.custody(), new InventoryCustody.Player(PLAYER)));
+        var edit = new ContainerPlayerEditObserved(PLAYER, CLICK,
+                List.of(member(state, LEFT, List.of(), List.of())), Optional.empty(),
+                Optional.of(new ExactItemCustodyChanged(tool.id(), new InventoryCustody.Player(PLAYER), tool.custody())));
+        var codec = FrontierWorldPayloadCodecs.create(); assertEquals(edit, codec.decode(edit.type(), codec.encode(edit)));
+        var registry = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.processRegistry();
+        var plan = assertInstanceOf(CommandPlan.Accepted.class, FrontierWorldCommandPlanner.plan(state, command(edit), registry,
+                FrontierExecutionSubjects.PHYSICAL_EXECUTOR));
+        assertEquals(1, plan.events().stream().filter(e -> e.payload().type().equals("frontier.reference_mutation_closed")).count());
+        var successor = ContainerPlayerEditProcess.reduce(state, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, edit);
+        assertEquals(tool.custody(), successor.inventory().items().get(tool.id()).custody());
+        var invalid = new ContainerPlayerEditObserved(PLAYER, CLICK, edit.members(), Optional.empty(),
+                Optional.of(new ExactItemCustodyChanged(new SubjectId("item:missing"), new InventoryCustody.Player(PLAYER), tool.custody())));
+        assertInstanceOf(CommandPlan.Rejected.class, ContainerPlayerEditProcess.plan(state, invalid, command(invalid)));
+    }
     @Test void singleAndCompositeClicksCloseTheirPhysicalFencesInTheSameRegisteredCommand() {
         for (var count : List.of(1, 2)) {
             var state = fixture();
@@ -74,7 +98,7 @@ class ContainerPlayerEditProcessTest {
     }
     @Test void oneClickCreditsBothMembersWithDistinctLotsAndRoundTripsItsWholeSuccessor() {
         var state = fixture(); var edit = gift(state);
-        var plan = assertInstanceOf(CommandPlan.Accepted.class, ContainerPlayerEditProcess.plan(state, edit, 12, 100));
+        var plan = assertInstanceOf(CommandPlan.Accepted.class, ContainerPlayerEditProcess.plan(state, edit, command(edit)));
         assertEquals(edit, plan.events().getFirst().payload());
         assertEquals(1, plan.events().stream().filter(e -> e.payload() instanceof ContainerPlayerEditObserved).count());
         var next = ContainerPlayerEditProcess.reduce(state, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, edit);
@@ -100,7 +124,7 @@ class ContainerPlayerEditProcessTest {
                 new ContainerPlayerEditObserved.Member(right.containerId(), right.accountId(), right.ownerId(), 1, List.of(stack(RIGHT, 1)), right.after()));
         for (var forged : invalid) {
             var bad = new ContainerPlayerEditObserved(PLAYER, CLICK, List.of(edit.members().getFirst(), forged), Optional.empty());
-            assertInstanceOf(CommandPlan.Rejected.class, ContainerPlayerEditProcess.plan(state, bad, 12, 100));
+            assertInstanceOf(CommandPlan.Rejected.class, ContainerPlayerEditProcess.plan(state, bad, command(bad)));
             assertThrows(IllegalArgumentException.class, () -> ContainerPlayerEditProcess.reduce(state, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, bad));
         }
         assertFalse(state.inventory().fungibleResources().accounts().containsKey(ReferenceContainerCustody.scopeId(LEFT)));

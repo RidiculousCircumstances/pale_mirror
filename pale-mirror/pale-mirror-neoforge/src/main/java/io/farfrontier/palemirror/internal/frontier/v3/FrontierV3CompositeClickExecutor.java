@@ -1,99 +1,36 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
-import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import net.minecraft.server.level.ServerLevel;
-import java.util.*;
 
-/** The same pre/post protocol as a single container, with one all-member commit/retirement. */
+/** Confirms the outcome captured inside the actual native callback. A later layout
+ * comparison cannot invent either the callback or its canonical acceptance. */
 final class FrontierV3CompositeClickExecutor {
     private FrontierV3CompositeClickExecutor() { }
     static boolean reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-            FrontierWorldState state, FrontierV3ContainerClickTransaction transaction) {
+            FrontierWorldState state, FrontierV3ContainerClickTransaction witness) {
+        var transaction = FrontierV3PlayerClickOperation.ready(level, state, witness);
+        if (transaction == null) return false;
         var ledger = FrontierV3DepotClickLedger.get(level);
-        var ingress = FrontierV3ExactContainerIngress.reconcile(level, runtime, state, transaction);
-        if (ingress != FrontierV3ExactContainerIngress.Result.NONE)
-            return ingress == FrontierV3ExactContainerIngress.Result.ADVANCED;
-        var physical = new ArrayList<FrontierV3PhysicalContainer>();
-        var layouts = new ArrayList<List<FungiblePhysicalObservation.Stack>>();
-        for (var member : transaction.members()) {
-            var provider = FrontierV3PhysicalContainer.loaded(level, state, member.containerId()).orElse(null);
-            if (provider == null) return false;
-            if (!FrontierV3ContainerClickExecutor.exactSlotsCurrent(state, member.containerId(), provider.inventory())
-                    || FrontierV3ContainerSurfaceExecutor.hasForeignFungibleComponents(provider.inventory(), state, member.containerId()))
-                return conflict(runtime, transaction, "composed member has foreign or changed exact components");
-            physical.add(provider);
-            layouts.add(FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(provider.inventory(), state, member.containerId()));
-        }
-        boolean witnessed = transaction.members().getFirst().after().isPresent();
-        if (witnessed) {
-            for (int i = 0; i < transaction.members().size(); i++)
-                if (!transaction.members().get(i).after().orElseThrow().equals(layouts.get(i)))
-                    return conflict(runtime, transaction, "composed member diverged from durable postimage");
-            // A committed WAL may precede witness retirement; only the complete successor can retire it.
-            if (committed(state, transaction, physical)) return retire(level, runtime, ledger, transaction, physical);
-        }
-        boolean unchanged = true;
-        for (int i = 0; i < layouts.size(); i++) unchanged &= layouts.get(i).equals(transaction.members().get(i).before());
-        if (unchanged && !witnessed) {
-            for (int i = 0; i < physical.size(); i++)
-                if (!FrontierV3ContainerClickExecutor.confirmUnchangedClick(runtime, transaction.members().get(i).containerId(), physical.get(i))) return false;
+        if (FrontierV3PlayerClickOperation.confirmed(level, transaction)) {
             ledger.retire(transaction); ledger.persist(level); return true;
         }
-        var observed = transaction;
-        if (!witnessed) {
-            Optional<Integer> remaining = Optional.empty();
-            var returning = transaction.members().getFirst().returnSource();
-            if (returning.isPresent()) {
-                var player = level.getServer().getPlayerList().getPlayer(transaction.members().getFirst().playerId());
-                if (player == null) return false;
-                var source = returning.orElseThrow(); var actual = player.getInventory().getItem(source.playerSlot());
-                if (!actual.isEmpty() && !net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(actual.getItem()).toString().equals(source.itemKind()))
-                    return conflict(runtime, transaction, "composed player source changed kind");
-                remaining = Optional.of(actual.isEmpty() ? 0 : actual.getCount());
-            }
-            var members = new ArrayList<FrontierV3DepotClickWitness>();
-            for (int i = 0; i < layouts.size(); i++) members.add(transaction.members().get(i).observed(layouts.get(i), remaining));
-            observed = new FrontierV3ContainerClickTransaction(members);
-            ledger.observe(transaction, observed); ledger.persist(level);
+        var outcome = transaction.outcome().orElse(null);
+        if (outcome == null) {
+            FrontierV3ContainerClickExecutor.conflict(runtime, transaction.members().getFirst(), "native click has no captured outcome");
+            return false;
         }
-        try {
-            var first = observed.members().getFirst();
-            var source = first.returnSource();
-            var returning = source.map(s -> new ContainerPlayerEditObserved.PlayerReturn(s.bindingId(), s.accountId(),
-                    s.epoch(), s.playerSlot(), s.itemKind(), s.quantity(), first.returnedRemaining().orElseThrow()));
-            var members = observed.members().stream().map(m -> new ContainerPlayerEditObserved.Member(m.containerId(),
-                    m.accountId(), m.ownerId(), m.authorityEpoch(), m.before(), m.after().orElseThrow())).toList();
-            var payload = new ContainerPlayerEditObserved(first.playerId(), first.interactionId(), members, returning);
-            var result = FrontierV3CommandSubmission.submit(runtime, "composed-container-player-edit", first.interactionId().toString(), payload);
-            if (result instanceof CommandResult.Accepted) return retire(level, runtime, ledger, observed, physical);
-            return conflict(runtime, observed, "composed canonical edit rejected: " + result);
-        } catch (IllegalArgumentException invalid) { return conflict(runtime, observed, invalid.getMessage()); }
-    }
-    private static boolean committed(FrontierWorldState state, FrontierV3ContainerClickTransaction transaction,
-            List<FrontierV3PhysicalContainer> physical) {
-        for (int i = 0; i < physical.size(); i++) {
-            var member = transaction.members().get(i);
-            var lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(member.containerId()));
-            var replica = state.replicaCustody().replicas().get(member.containerId());
-            var observed = FrontierV3ReferenceContainerCustodyExecutor.observedContainer(state, member.containerId(), physical.get(i));
-            if (lease == null || replica == null || lease.authorityEpoch() != member.authorityEpoch()
-                    || !FrontierV3ReferenceContainerCustodyExecutor.confirmedMutationAlreadyClosed(lease, replica,
-                        ReferenceContainerCustody.canonicalFingerprint(state, member.containerId()), observed.fingerprint(), observed.provenance()))
-                return false;
+        boolean unchanged = outcome.exactIngress().isEmpty()
+                && outcome.members().stream().allMatch(member -> member.before().equals(member.after()))
+                && outcome.returning().map(source -> source.quantity() == source.remaining()).orElse(true);
+        if (unchanged) {
+            ledger.retireNoEffect(transaction, FrontierV3PlayerClickOperation.operation(level, transaction).orElseThrow(), level);
+            return true;
         }
-        return true;
-    }
-    private static boolean retire(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-            FrontierV3DepotClickLedger ledger, FrontierV3ContainerClickTransaction transaction,
-            List<FrontierV3PhysicalContainer> physical) {
-        for (int i = 0; i < physical.size(); i++)
-            if (!FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedContainerMutation(runtime,
-                    transaction.members().get(i).containerId(), physical.get(i))) return false;
+        if (!FrontierV3PlayerClickOperation.confirm(level, runtime, transaction, outcome)) {
+            FrontierV3ContainerClickExecutor.conflict(runtime, transaction.members().getFirst(), "captured canonical click outcome rejected");
+            return false;
+        }
         ledger.retire(transaction); ledger.persist(level); return true;
-    }
-    private static boolean conflict(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-            FrontierV3ContainerClickTransaction transaction, String reason) {
-        FrontierV3ContainerClickExecutor.conflict(runtime, transaction.members().getFirst(), reason); return false;
     }
 }
