@@ -6,7 +6,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.item.ItemStack;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
@@ -32,15 +31,9 @@ final class FrontierV3ExactHeldItemDeath {
         drop.setUUID(carrier);
         FrontierV3ExactItemPresentation.bindWorldCarrier(drop.getItem(), carrier);
         drop.setItem(drop.getItem());
-        var result = FrontierV3CommandSubmission.submit(runtime, "actor-held-death-drop", item.id().value(),
-                new ExactItemCustodyChanged(item.id(), source, new InventoryCustody.WorldCarrier(carrier)));
-        FrontierV3DiagnosticTrace.record(level.getServer(), correlation, tracePrefix + "_drop_receipt", source.actorId(), result);
-        if (!(result instanceof CommandResult.Accepted)) return false;
-        body.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
-        if (!level.addFreshEntity(drop))
-            return destroy(level, runtime, item, new InventoryCustody.WorldCarrier(carrier), correlation, tracePrefix,
-                    "actor-death-drop-spawn-failed");
-        FrontierV3DiagnosticTrace.record(level.getServer(), correlation, tracePrefix + "_dropped", source.actorId(), result);
+        var consequence = new ExactItemCustodyChanged(item.id(), source, new InventoryCustody.WorldCarrier(carrier));
+        FrontierV3EntityResourceDropOperation.perform(level, runtime, body,
+                new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN), hand.copy(), drop, consequence);
         return true;
     }
 

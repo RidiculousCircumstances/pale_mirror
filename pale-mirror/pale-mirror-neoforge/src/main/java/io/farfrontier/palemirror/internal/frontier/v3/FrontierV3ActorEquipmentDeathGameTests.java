@@ -40,12 +40,47 @@ public final class FrontierV3ActorEquipmentDeathGameTests {
     private FrontierV3ActorEquipmentDeathGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-equipment-death", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void refusedNativeDropKeepsTheExactHandAndCannotConfirmSuccessfulCustody(GameTestHelper helper) {
+        var level = helper.getLevel(); var runtime = fixtureRuntime("frontier:exact-death-drop-refusal");
+        var item = exactWeapon(runtime); var actor = ((InventoryCustody.Actor) item.custody()).actorId();
+        helper.setBlock(new BlockPos(0, 0, 0), Blocks.STONE.defaultBlockState());
+        var body = body(level, state(runtime), actor, helper.absolutePos(new BlockPos(0, 1, 0)));
+        var original = FrontierV3ExactItemPresentation.materializedStack(item);
+        body.setItemSlot(EquipmentSlot.MAINHAND, original.copy()); level.addFreshEntity(body);
+        java.util.function.Consumer<net.neoforged.neoforge.event.entity.EntityJoinLevelEvent> refusal = event -> {
+            if (event.getLevel() == level && event.getEntity() instanceof ItemEntity drop
+                    && FrontierV3ExactItemPresentation.exactMatch(drop.getItem(), item)) event.setCanceled(true);
+        };
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(refusal);
+        try {
+            boolean rejected = false;
+            try { FrontierV3ActorEquipmentDeathExecutor.resolve(level, runtime, body, actor); }
+            catch (IllegalStateException failure) { rejected = failure.getMessage().startsWith("resource drop did not complete: NOT_APPLIED"); }
+            helper.assertTrue(rejected, "real cancelled native birth must fail visibly, not declare fictional destruction");
+            helper.assertTrue(net.minecraft.world.item.ItemStack.matches(original, body.getMainHandItem()),
+                    "positive native refusal must leave the original source, including custody tags, untouched");
+            helper.assertValueEqual(state(runtime).inventory().items().get(item.id()), item, "no successful custody or loss was committed");
+            var transaction = FrontierV3ResourceHandoffLedger.get(level).entityDrops().stream()
+                    .filter(t -> t.source().identity().equals(body.getUUID().toString())).findFirst().orElseThrow();
+            helper.assertTrue(FrontierV3OperationLedger.get(level).require(transaction.id()).cancelled(),
+                    "refusal is durable positive cancellation, not an inferred absent entity");
+            helper.assertTrue(FrontierV3EntityResourceDropOperation.reconcile(level, runtime, transaction),
+                    "cancelled outbox can retire without applying its successful-transfer consequence");
+            helper.assertValueEqual(state(runtime).inventory().items().get(item.id()), item, "retirement leaves original custody unchanged");
+        } finally {
+            net.neoforged.neoforge.common.NeoForge.EVENT_BUS.unregister(refusal);
+            body.discard(); runtime.shutdown();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-equipment-death", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void deathDropsTheSameSeenStackAndDestroysOnlyAChangedHandClaim(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 fixtureRuntime("frontier:actor-equipment-death-game-test");
         ExactItemStack first = exactWeapon(runtime); SubjectId firstActor = ((InventoryCustody.Actor) first.custody()).actorId();
-        helper.setBlock(new BlockPos(2, 7, 0), Blocks.STONE.defaultBlockState());
-        Villager firstBody = body(level, state(runtime), firstActor, helper.absolutePos(new BlockPos(2, 8, 0)));
+        helper.setBlock(new BlockPos(0, 0, 0), Blocks.STONE.defaultBlockState());
+        Villager firstBody = body(level, state(runtime), firstActor, helper.absolutePos(new BlockPos(0, 1, 0)));
         firstBody.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3ExactItemPresentation.materializedStack(first)); level.addFreshEntity(firstBody);
         helper.assertTrue(FrontierV3ActorEquipmentDeathExecutor.resolve(level, runtime, firstBody, firstActor), "the exact actor-held stack must be accounted before the managed body dies");
         ExactItemStack released = state(runtime).inventory().items().get(first.id());
@@ -64,14 +99,16 @@ public final class FrontierV3ActorEquipmentDeathGameTests {
             FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> changedRuntime =
                     fixtureRuntime("frontier:actor-equipment-death-changed-hand-game-test");
             ExactItemStack second = exactWeapon(changedRuntime); SubjectId secondActor = ((InventoryCustody.Actor) second.custody()).actorId();
-            helper.setBlock(new BlockPos(6, 7, 0), Blocks.STONE.defaultBlockState());
-            Villager secondBody = body(level, state(changedRuntime), secondActor, helper.absolutePos(new BlockPos(6, 8, 0)));
+            level.getEntitiesOfClass(ItemEntity.class, firstBody.getBoundingBox().inflate(2.0D),
+                    drop -> firstCarrier.carrierId().equals(drop.getUUID())).forEach(ItemEntity::discard);
+            firstBody.discard();
+            Villager secondBody = body(level, state(changedRuntime), secondActor, helper.absolutePos(new BlockPos(0, 1, 0)));
             secondBody.setItemSlot(EquipmentSlot.MAINHAND, Items.STICK.getDefaultInstance()); level.addFreshEntity(secondBody);
             helper.assertTrue(FrontierV3ActorEquipmentDeathExecutor.resolve(level, changedRuntime, secondBody, secondActor), "a changed physical hand is still an accounted equipment outcome");
             helper.assertTrue(!state(changedRuntime).inventory().items().containsKey(second.id()), "a missing exact hand is destroyed rather than replaced or dropped");
             helper.assertTrue(level.getEntitiesOfClass(ItemEntity.class, secondBody.getBoundingBox().inflate(2.0D), drop -> FrontierV3ExactItemPresentation.exactMatch(drop.getItem(), second)).isEmpty(),
                     "a changed hand cannot manufacture an exact physical drop");
-            changedRuntime.shutdown(); helper.succeed();
+            secondBody.discard(); changedRuntime.shutdown(); helper.succeed();
         });
     }
 

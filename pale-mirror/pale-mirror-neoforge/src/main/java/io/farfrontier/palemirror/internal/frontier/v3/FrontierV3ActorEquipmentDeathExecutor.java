@@ -13,8 +13,8 @@ import java.util.List;
 /**
  * Resolves one exact actor-held stack before Vanilla removes a managed body on death.
  *
- * <p>A matching physical hand becomes one tagged world drop only after the canonical custody
- * transfer is durable. A missing or altered hand is an observed loss instead; it is never
+ * <p>A matching physical hand becomes one tagged world drop through the common native
+ * operation, then its exact custody consequence is confirmed. An absent hand is never
  * reconstructed into the world. This first boundary intentionally supports the single visible
  * hand surface used by the current graybox equipment contract.</p>
  */

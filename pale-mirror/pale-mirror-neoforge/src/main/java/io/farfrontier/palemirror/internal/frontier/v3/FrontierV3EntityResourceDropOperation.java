@@ -21,6 +21,16 @@ final class FrontierV3EntityResourceDropOperation {
         var before = FrontierV3ActorResourceSlots.get(body, slot).copy();
         if (before.isEmpty() || !ItemStack.matches(before, drop.getItem()))
             throw new IllegalArgumentException("resource drop differs from the admitted source slot");
+        perform(level, runtime, body, slot, before, drop, outcome);
+    }
+    /** The resource owner may change custody metadata on its detached destination.
+     * Both images are retained for validation; item kind and quantity cannot change. */
+    static void perform(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            Mob body, ActorItemSlot slot, ItemStack sourceWitness, ItemEntity drop, FrontierPayload outcome) {
+        var before = sourceWitness.copy(); var after = drop.getItem().copy();
+        if (before.isEmpty() || !ItemStack.isSameItem(before, after) || before.getCount() != after.getCount()
+                || !ItemStack.matches(before, FrontierV3ActorResourceSlots.get(body, slot)))
+            throw new IllegalArgumentException("resource drop changed the admitted native item or quantity");
         var source = FrontierV3OperationEntityParticipant.nativeObject(body);
         var destination = FrontierV3OperationEntityParticipant.birth(drop);
         var ports = List.of(source, destination);
@@ -32,14 +42,21 @@ final class FrontierV3EntityResourceDropOperation {
             throw new IllegalStateException("resource drop cannot discard stock under journal backpressure");
         var transaction = new FrontierV3EntityResourceDropTransaction(source.identity(), destination.identity(), operations.prepare(declaration), outcome);
         journal.prepareEntityDrop(transaction); journal.persist(level); operations.persist(level);
-        var result = FrontierV3MinecraftOperation.apply(level, declaration, ports,
+        var result = FrontierV3MinecraftOperation.applyBatch(level, List.of(new FrontierV3MinecraftOperation.Request(declaration, ports,
                 () -> ItemStack.matches(before, FrontierV3ActorResourceSlots.get(body, slot)) && level.getEntity(drop.getUUID()) == null,
                 () -> {
+                    // A native join refusal must not eat the source. Admission callbacks
+                    // run synchronously; revalidate before clearing after a successful birth.
+                    if (!level.addFreshEntity(drop)) return false;
+                    if (!ItemStack.matches(before, FrontierV3ActorResourceSlots.get(body, slot))
+                            || level.getEntity(drop.getUUID()) != drop || drop.isRemoved() || !ItemStack.matches(after, drop.getItem()))
+                        throw new IllegalStateException("resource endpoints changed during native drop admission");
                     FrontierV3ActorResourceSlots.set(body, slot, ItemStack.EMPTY);
-                    if (!level.addFreshEntity(drop)) throw new IllegalStateException("resource drop birth rejected: " + drop.getUUID());
                     return true;
                 }, () -> FrontierV3ActorResourceSlots.get(body, slot).isEmpty() && level.getEntity(drop.getUUID()) == drop
-                        && !drop.isRemoved() && ItemStack.matches(before, drop.getItem()));
+                        && !drop.isRemoved() && ItemStack.matches(after, drop.getItem()),
+                () -> !drop.isAddedToLevel() && level.getEntity(drop.getUUID()) == null
+                        && ItemStack.matches(before, FrontierV3ActorResourceSlots.get(body, slot))))).getFirst();
         if (!result.complete()) throw new IllegalStateException("resource drop did not complete: " + result.status() + " ticket=" + transaction.id());
         var applied = transaction.bind(operations.require(result.ticket()));
         journal.updateEntityDrop(transaction, applied); journal.persist(level);
@@ -61,6 +78,12 @@ final class FrontierV3EntityResourceDropOperation {
             // APPLIED owner cut. Neither authorizes another spawn or canonical command.
         } else {
             transaction.bind(current); // Validate identity even before examining native markers.
+            if (current.cancelled()) {
+                // Positive refusal leaves custody unchanged. Never submit the retained
+                // successful-transfer consequence for a cancelled operation.
+                operations.closeOwner(current.ticket()); operations.retire(current.ticket()); operations.persist(level);
+                journal.retireEntityDrop(transaction); journal.persist(level); return true;
+            }
             if (!FrontierV3MinecraftOperation.recoverOutcome(level, current.ticket())) return false;
             current = operations.require(current.ticket());
             var applied = transaction.bind(current); journal.updateEntityDrop(transaction, applied); journal.persist(level); transaction = applied;
