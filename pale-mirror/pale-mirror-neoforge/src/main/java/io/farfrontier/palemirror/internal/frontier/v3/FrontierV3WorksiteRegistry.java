@@ -13,6 +13,7 @@ final class FrontierV3WorksiteRegistry {
     private static Map<Long, WorksiteBlock> points = Map.of();
     private static Map<Long, List<WorksiteBlock>> chunks = Map.of();
     private static List<List<WorksiteBlock>> versions = List.of();
+    private static final FrontierV3WorksiteCurrentIndex CURRENT = new FrontierV3WorksiteCurrentIndex();
     static {
         var owners = new EnumMap<CellMutationKey.OwnerFamily, FrontierV3WorksiteProjectionOwner>(CellMutationKey.OwnerFamily.class);
         for (var owner : OWNERS) if (owners.putIfAbsent(owner.family(), owner) != null) throw new IllegalStateException("duplicate worksite owner");
@@ -23,6 +24,9 @@ final class FrontierV3WorksiteRegistry {
         return Objects.requireNonNull(BY_FAMILY.get(family), "unregistered worksite family");
     }
     static Map<Long, List<WorksiteBlock>> chunks(FrontierWorldState state) { index(state); return chunks; }
+    static Map<Long, List<WorksiteBlock>> currentChunks(FrontierWorldState state) {
+        return CURRENT.update(OWNERS.stream().map(owner -> owner.currentBlocks(state)).toList());
+    }
     static Optional<WorksiteBlock> point(FrontierWorldState state, BlockPos position) {
         index(state); return Optional.ofNullable(points.get(position.asLong()));
     }

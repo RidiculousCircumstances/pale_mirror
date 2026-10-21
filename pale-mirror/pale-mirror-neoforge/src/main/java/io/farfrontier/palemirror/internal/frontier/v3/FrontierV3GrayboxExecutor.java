@@ -462,6 +462,10 @@ final class FrontierV3GrayboxExecutor {
         var visibility = FIRST_VISIBILITY.getOrDefault(runtime, Map.of()).get(chunk);
         return visibility != null && visibility.status().presentable(initialHandoff);
     }
+    static boolean presentationWaiting(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos chunk) {
+        var visibility = FIRST_VISIBILITY.getOrDefault(runtime, Map.of()).get(chunk);
+        return visibility != null && (visibility.status() == FirstVisibility.PENDING || visibility.status() == FirstVisibility.STATIC_CURRENT);
+    }
     static FirstVisibilitySnapshot firstVisibility(FrontierV3ServerRuntime<?, ?> runtime, String id) {
         String[] parts = Objects.requireNonNull(id, "first visibility id").split(",", -1);
         if (parts.length != 2) return FirstVisibilitySnapshot.unavailable();

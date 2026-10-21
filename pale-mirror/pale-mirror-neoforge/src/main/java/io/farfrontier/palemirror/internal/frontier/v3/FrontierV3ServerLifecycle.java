@@ -475,6 +475,7 @@ public final class FrontierV3ServerLifecycle {
         var physicalWorld = server.getLevel(FrontierV3PhysicalWorld.DIMENSION);
         if (physicalWorld != null) {
             for (var owner : FrontierV3WorksiteRegistry.OWNERS) owner.shutdown(physicalWorld, runtime);
+            FrontierV3WorksiteProjection.forget(physicalWorld);
             var ledger = FrontierV3AmbientCarrierLedger.get(physicalWorld, FrontierV3PhysicalWorld.WORLD_ID);
             FrontierV3BodyInsertionJournal.cancelAll(physicalWorld, FrontierV3PhysicalWorld.WORLD_ID, ledger);
             ledger.persist(physicalWorld, FrontierV3PhysicalWorld.WORLD_ID);

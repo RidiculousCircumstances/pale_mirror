@@ -113,6 +113,31 @@ unchanged projection reconciliation, and no watchdog stall. Worldgen slice timin
 is also reported by the Visuals runtime and in
 the server log when its immutable catalog becomes ready.
 
+## Worksite chunk preparation (R207)
+
+Initial mine visibility uses a shared pending projection queue, not a cyclic census
+of all loaded authored blocks. `ExtractionWorksiteView` publishes current immutable
+regional facts through the worksite owner SPI; `FrontierV3WorksiteCurrentIndex`
+retains unchanged chunk versions. Only changed cells re-enter the queue. Declaration
+extension does not reset other chunks. Physical witness changes also wake their
+exact positions; restart reconstructs pending work from current declarations and
+retained PREPARED/SETTLED/external witnesses, never an ephemeral completion flag.
+
+Loaded chunk incarnation and block-ticking demand changes trigger renewed owner
+assessment. A pending player-visible chunk receives contiguous progress on alternate
+turns, with round-robin service on the other turns so a blocked chunk cannot starve
+its neighbours. Existing runtime read/time limits and extraction write ceiling bound
+each batch. Durable intent precedes writes; external changes are not overwritten.
+Initial handoff waits cheaply on pending work, then performs the exact physical
+proof. A completed queue alone never grants custody or chunk readiness.
+
+`first_visibility` includes `worksitePendingCells`. The focused scheduling fixture
+uses the same 20 x 512 declarations and 64-write ceiling: first complete chunk in
+15 queue turns versus 160 old round-robin turns; one dirty cell among settled
+declarations in 1 versus 160 turns. These are deterministic scheduler counts, not
+measured native/network milliseconds. The live ingress scenario checks actual
+client arrival, current worksite proof and revisit without mutating canonical state.
+
 ## Frontier v3 physical-scene scale protocol
 
 The v3 world keeps exact people, bioforms, cargo and objects. It must not

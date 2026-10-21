@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "id": "live_worksite_chunk_ingress",
+  "server": {"host": "127.0.0.1", "port": 25565},
+  "pilot": {"username": "PMTestPilot"},
+  "setup": [
+    {"type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      {"view": "process", "id": "extraction:quarry-0cb794ca-3d1d-3a16-9957-4f365ca76268", "expect": {"status": "ok"}}
+    ]},
+    {"type": "command", "command": "/gamemode spectator"}
+  ],
+  "actions": [
+    {"type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": {"x": 88, "y": 76, "z": 408}, "settleMs": 0},
+    {"type": "wait_until_diagnostic", "view": "first_visibility", "id": "5,25", "expect": {"presentationReady": true, "dynamicReady": true, "worksitePendingCells": 0}, "timeoutMs": 60000},
+    {"type": "look", "at": {"x": 88, "y": 60, "z": 408}},
+    {"type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": {"x": 1800, "y": 76, "z": 1800}, "settleMs": 0},
+    {"type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": {"x": 88, "y": 76, "z": 408}, "settleMs": 0},
+    {"type": "wait_until_diagnostic", "view": "first_visibility", "id": "5,25", "expect": {"presentationReady": true, "dynamicReady": true, "worksitePendingCells": 0}, "timeoutMs": 60000},
+    {"type": "inspect", "view": "summary", "id": ""}
+  ],
+  "assertions": [
+    {"after": 2, "view": "first_visibility", "id": "5,25", "expect": {"presentationReady": true, "dynamicReady": true, "worksitePendingCells": 0}},
+    {"after": 6, "view": "first_visibility", "id": "5,25", "expect": {"presentationReady": true, "dynamicReady": true, "worksitePendingCells": 0}},
+    {"after": 7, "view": "summary", "id": "", "expect": {"status": "ok", "requiredConflicts": 0}}
+  ],
+  "frames": [{"after": 3, "name": "projected-mine-chunk"}]
+}

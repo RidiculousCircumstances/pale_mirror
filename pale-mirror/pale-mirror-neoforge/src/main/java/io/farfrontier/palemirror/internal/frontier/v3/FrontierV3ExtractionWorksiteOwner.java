@@ -9,6 +9,10 @@ import java.util.*;
 
 /** Finite-source policy behind the common worksite projection SPI. */
 final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProjectionOwner {
+    private final ExtractionWorksiteView currentView = new ExtractionWorksiteView();
+    @Override public io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockMap<WorksiteBlock> currentBlocks(FrontierWorldState state) {
+        return currentView.current(state);
+    }
     private FrontierBootstrap bootstrap;
     private List<WorksiteBlock> declarations = List.of();
     private ExtractionGeometryIndex geometry;
@@ -112,7 +116,8 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
                         && witness.declaration().revision() == current.revision()
                         && FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position)).equals(current.knownBlock());
             });
-            if (complete) complete = declarations(state).stream().filter(cell -> cell.key().owner().equals(region.siteId())
+            if (complete) complete = currentBlocks(state).in(new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region(
+                    region.chunkX(), region.chunkZ())).values().stream().filter(cell -> cell.key().owner().equals(region.siteId())
                     && cell.key().role() == WorksiteBlock.Role.NATURAL_TERRAIN && region.contains(cell.position()))
                     .allMatch(cell -> {
                         var position = FrontierV3WorksiteProjection.position(cell);

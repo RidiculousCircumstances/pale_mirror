@@ -7,9 +7,21 @@ import java.util.*;
 
 /** Shared bounded block projection. Never re-evaluates loot, force-loads or overwrites foreign facts. */
 final class FrontierV3WorksiteProjection {
-    private static final int PROBES_PER_TURN = 64;
-    private static final Map<ServerLevel, FrontierV3IndexedProbeCursor<WorksiteBlock>> CURSORS = new WeakHashMap<>();
+    private static final Map<ServerLevel, FrontierV3PendingProjection> QUEUES = new WeakHashMap<>();
+    private record Availability(net.minecraft.world.level.chunk.LevelChunk chunk, boolean ticking) { }
     private FrontierV3WorksiteProjection() { }
+    static void forget(ServerLevel level) { QUEUES.remove(level); }
+    private static FrontierV3PendingProjection queue(ServerLevel level, FrontierWorldState state) {
+        var queue = QUEUES.computeIfAbsent(level, ignored -> new FrontierV3PendingProjection());
+        queue.update(FrontierV3WorksiteRegistry.currentChunks(state));
+        return queue;
+    }
+    static int pending(ServerLevel level, FrontierWorldState state, net.minecraft.world.level.ChunkPos chunk) {
+        return queue(level, state).pending(chunk.toLong());
+    }
+    private static long chunk(WorksiteBlock block) {
+        return net.minecraft.world.level.ChunkPos.asLong(block.position().x() >> 4, block.position().z() >> 4);
+    }
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         var state = runtime.decodedState().orElse(null);
         if (state == null || !state.bootstrap().ruleset().extraction().enabled()) return;
@@ -18,13 +30,24 @@ final class FrontierV3WorksiteProjection {
         var ledger = FrontierV3GrayboxLedger.get(level);
         var writes = new ArrayList<FrontierV3WorksiteBlockWitness>();
         int budget = state.bootstrap().ruleset().extraction().projectionWritesPerTurn();
-        var cursor = CURSORS.computeIfAbsent(level, ignored -> new FrontierV3IndexedProbeCursor<>());
-        var probes = cursor.probes(FrontierV3WorksiteRegistry.chunks(state), key -> {
+        int readBudget = io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_WEIGHT_BUDGET.get();
+        var queue = queue(level, state);
+        for (long address : ledger.takeWorksiteChanges()) {
+            var position = BlockPos.of(address);
+            queue.invalidate(net.minecraft.world.level.ChunkPos.asLong(position.getX() >> 4, position.getZ() >> 4),
+                    new BlockPosition(position.getX(), position.getY(), position.getZ()));
+        }
+        var probes = queue.batch(key -> {
             var chunk = new net.minecraft.world.level.ChunkPos(key);
-            return level.getChunkSource().hasChunk(chunk.x, chunk.z);
-        }, PROBES_PER_TURN);
+            var loaded = level.getChunkSource().getChunkNow(chunk.x, chunk.z);
+            return loaded == null ? null : new Availability(loaded, level.shouldTickBlocksAt(
+                    new BlockPos(chunk.x * 16, level.getMinBuildHeight(), chunk.z * 16)));
+        }, key -> FrontierV3GrayboxExecutor.presentationWaiting(runtime, new net.minecraft.world.level.ChunkPos(key)), readBudget);
+        var preparation = new FrontierV3FirstVisibilityBudget(readBudget, budget,
+                (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D),
+                System::nanoTime);
         var iterator = probes.iterator();
-        while (writes.size() < budget && iterator.hasNext()) {
+        while (writes.size() < budget && iterator.hasNext() && preparation.takeRead()) {
             var declared = iterator.next();
             var owner = FrontierV3WorksiteRegistry.owner(declared.key().family());
             if (declared.key().family() != owner.family()) throw new IllegalStateException("worksite owner returned foreign declaration");
@@ -34,17 +57,25 @@ final class FrontierV3WorksiteProjection {
             if (prior != null && !prior.declaration().key().equals(current.key())) continue;
             if (prior != null && prior.phase() == FrontierV3WorksiteBlockWitness.Phase.EFFECT_BLOCK_APPLIED) {
                 var committed = owner.committedEffect(state, prior);
-                if (committed.isEmpty()) continue;
+                if (committed.isEmpty()) {
+                    // The effect owner, not projection, resumes this split. Handoff still
+                    // checks its exact operation/postimage before allowing that owner back.
+                    queue.complete(chunk(current), current); continue;
+                }
                 if (!owner.beforeProjection(level, runtime, state, current)) continue;
                 prior = committed.orElseThrow(); ledger.worksite(prior);
             }
             if (prior != null && (prior.phase() == FrontierV3WorksiteBlockWitness.Phase.EXTERNAL
                     || prior.phase() == FrontierV3WorksiteBlockWitness.Phase.EXTERNAL_PENDING
-                    || prior.phase() == FrontierV3WorksiteBlockWitness.Phase.EFFECT_BLOCK_APPLIED)) continue;
+                    || prior.phase() == FrontierV3WorksiteBlockWitness.Phase.EFFECT_BLOCK_APPLIED)) {
+                queue.complete(chunk(current), current); continue;
+            }
             if (!owner.beforeProjection(level, runtime, state, current)) {
                 state = runtime.decodedState().orElseThrow(); continue;
             }
-            if (prior != null && prior.phase() == FrontierV3WorksiteBlockWitness.Phase.SETTLED && prior.declaration().equals(current)) continue;
+            if (prior != null && prior.phase() == FrontierV3WorksiteBlockWitness.Phase.SETTLED && prior.declaration().equals(current)) {
+                queue.complete(chunk(current), current); continue;
+            }
             var actual = FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position));
             if (prior != null && (prior.phase() == FrontierV3WorksiteBlockWitness.Phase.PREPARED
                     || prior.phase() == FrontierV3WorksiteBlockWitness.Phase.EFFECT_COMMITTED)) {
@@ -78,8 +109,10 @@ final class FrontierV3WorksiteProjection {
                 if (!FrontierV3WorksiteWrites.apply(write.declaration().key(), () ->
                         level.setBlock(position, FrontierV3MinecraftBlockExtraction.block(write.declaration().block()), 3))) continue;
             }
-            if (FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position)).equals(write.declaration().block()))
+            if (FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position)).equals(write.declaration().block())) {
                 ledger.worksite(new FrontierV3WorksiteBlockWitness(write.declaration(), write.before(), FrontierV3WorksiteBlockWitness.Phase.SETTLED));
+                queue.complete(chunk(write.declaration()), write.declaration());
+            }
         }
         if (ledger.isDirty()) ledger.persist(level);
         for (var owner : FrontierV3WorksiteRegistry.OWNERS) owner.afterProjection(level, runtime);

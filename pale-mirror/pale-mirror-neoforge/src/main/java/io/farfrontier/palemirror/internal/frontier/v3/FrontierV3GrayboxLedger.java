@@ -31,6 +31,7 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
      */
     private final NavigableSet<Long> worksiteStagingPositions;
     private final NavigableSet<Long> externalWorksitePositions = new TreeSet<>();
+    private final java.util.Set<Long> changedWorksites = new java.util.HashSet<>();
 
     private FrontierV3GrayboxLedger() { this(new HashMap<>(), new HashMap<>()); }
     private FrontierV3GrayboxLedger(Map<Long, Claim> claims, Map<Long, FrontierV3WorksiteBlockWitness> worksiteCells) {
@@ -52,6 +53,9 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
     static FrontierV3GrayboxLedger inMemory() { return new FrontierV3GrayboxLedger(); }
     Claim claim(BlockPos position) { return claims.get(position.asLong()); }
     FrontierV3WorksiteBlockWitness worksite(BlockPos position) { return worksiteCells.get(position.asLong()); }
+    java.util.Set<Long> takeWorksiteChanges() {
+        var changes = java.util.Set.copyOf(changedWorksites); changedWorksites.clear(); return changes;
+    }
     List<BlockPos> externalWorksites() { return externalWorksitePositions.stream().map(BlockPos::of).toList(); }
     private void indexExternalWorksite(long address, FrontierV3WorksiteBlockWitness witness) {
         if (witness.phase() == FrontierV3WorksiteBlockWitness.Phase.EXTERNAL
@@ -70,7 +74,7 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
         if (prior == null && claims.size() + worksiteCells.size() >= MAX_CELLS)
             throw new IllegalStateException("bounded physical block provenance is full");
         if (!witness.equals(prior)) {
-            worksiteCells.put(address, witness); indexExternalWorksite(address, witness); setDirty();
+            worksiteCells.put(address, witness); indexExternalWorksite(address, witness); changedWorksites.add(address); setDirty();
         }
     }
     /** The registered owner's exact proof changes declaration identity, never the witnessed world block. */
@@ -87,7 +91,7 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
         var rebound = new FrontierV3WorksiteBlockWitness(new io.farfrontier.palemirror.frontier.v3.model.WorksiteBlock(
                 successor.key(), successor.position(), successor.revision(), expected.declaration().block()),
                 expected.before(), FrontierV3WorksiteBlockWitness.Phase.SETTLED);
-        worksiteCells.put(address, rebound); indexExternalWorksite(address, rebound); setDirty();
+        worksiteCells.put(address, rebound); indexExternalWorksite(address, rebound); changedWorksites.add(address); setDirty();
         return rebound;
     }
     void ensureCapacityFor(BlockPos position) {
