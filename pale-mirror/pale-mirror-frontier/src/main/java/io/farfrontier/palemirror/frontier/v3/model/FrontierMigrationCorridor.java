@@ -29,7 +29,7 @@ public final class FrontierMigrationCorridor {
             var target = new SurfaceAnchor(anchors.get(ordinal));
             var order = new MovementOrder(residentId, residentId, ordinal, 1L, List.of(target),
                     TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-            var segment = knowledge.path(route.getLast(), order);
+            var segment = knowledge.plannedPath(route.getLast(), order);
             if (route.size() + segment.size() - 1 > ResidentMigrationJourney.MAX_WAYPOINTS)
                 throw new IllegalArgumentException("migration route exceeds bounded frontier profile");
             route.addAll(segment.subList(1, segment.size()));
