@@ -1,5 +1,36 @@
 # Pale Mirror runtime performance
 
+## Regional extraction geometry (2026-10-21)
+
+Extraction supplies immutable block facts to `RegionalNavigationProjection`,
+which owns resource-independent support/collision/unknown interpretation.
+`ExtractionGeometryFacts` retains each site's declared footprint separately
+from its current source/observed overrides. A local change samples only affected
+16x16 regions, retaining their full vertical columns. Unchanged regions and
+other mines are shared. There is no repeatedly flattened world-wide mine union.
+`LocalBlockExclusions` intersects only changed regional facts; remote edits do
+not resample mines. Existing shape-neighbour/profile invalidation remains active.
+
+Compact geological declarations remain the geology owner's authority, not a
+mutable navigation reserve or a worker cursor. Initial construction, changed
+declarations, a new knowledge baseline or recovery still need their appropriate
+compilation. Changing a layout compares that site's declarations, not every
+mine; changed regional facts alone flow into navigation projection. This does
+not claim O(1) layout admission, lazy world generation or arbitrary scale support.
+
+The R205 live profile attributed 107 of 874 server-thread execution samples to
+the old global footprint's `Set.copyOf` construction. On the same tick560400
+snapshot, alternating one authored block between its two retained observations
+and building the complete frontier route-knowledge view took a median3819ms per
+pair before versus9.25ms after (seven warm pairs, Java21, 2GiB heap; first build
+excluded). Both expose117148 retained blocks with the same result hash. Focused
+checks additionally compare complete incremental/reconstructed views, mining,
+extension, unknown/observed facts, recovery and multi-level support withdrawal.
+This is a specific geometry-path comparison, not a server TPS multiplier or
+proof of every cause of chunk-delivery delay. Raw probe/input/results remain in
+ignored `build/R206GeometryProbe.java`, `r205-economy.snapshot` and
+`r206-{geometry,full}-{before,after}.log` in the assigned implementation checkout.
+
 ## Frontier v3 current scheduler and diagnostics
 
 Quarry graybox r2 pins a hashed64-action/128-weight execution budget; explicit

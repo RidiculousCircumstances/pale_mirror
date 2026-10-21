@@ -47,7 +47,7 @@ final class KnownPedestrianGeometryScopes {
         // A changed neighbour can alter a contextual shape which itself extends
         // across the next chunk boundary. Include the exact dependent origin
         // before applying the ordinary shape-protrusion halo.
-        for (var position : Set.copyOf(positions))
+        for (var position : new ArrayList<>(positions))
             for (int dx = -1; dx <= 1; dx++) for (int dy = -1; dy <= 1; dy++) for (int dz = -1; dz <= 1; dz++) {
                 var dependent = position.offset(dx, dy, dz);
                 var evidence = cells.get(dependent);

@@ -1,0 +1,47 @@
+package io.farfrontier.palemirror.frontier.v3.model.geometry;
+
+import io.farfrontier.palemirror.frontier.v3.model.*;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region;
+import java.util.*;
+
+/** Derived, owner-thread block-to-navigation projection. No resource, work or movement authority.
+ * Regions contain complete vertical columns, so a ceiling and its upper floor update together. */
+public final class RegionalNavigationProjection {
+    public record View(KnownBlockNavigationProjection.View geometry, RegionalBlockMap<NavigationBlockState> blocks) { }
+    private RegionalBlockMap<Optional<NavigationBlockState>> previous = RegionalBlockMap.copyOf(Map.of());
+    private Object definitions;
+    private View view = new View(new KnownBlockNavigationProjection.View(Map.of(), Set.of(), Set.of(), Set.of()),
+            RegionalBlockMap.copyOf(Map.of()));
+
+    public View read(RegionalBlockMap<Optional<NavigationBlockState>> facts, NavigationGeometryState knowledge) {
+        var changed = new HashSet<>(facts.changesFrom(previous));
+        if (definitions != knowledge.definitions()) changed.addAll(facts.regions());
+        if (changed.isEmpty()) { previous = facts; definitions = knowledge.definitions(); return view; }
+        var supports = new HashMap<Region, Map<TerrainColumn, List<SurfaceAnchor>>>();
+        var volumes = new HashMap<Region, Set<BlockPosition>>();
+        var absent = new HashMap<Region, Set<BlockPosition>>();
+        var unknown = new HashMap<Region, Set<BlockPosition>>();
+        var blocks = new HashMap<Region, Map<BlockPosition, NavigationBlockState>>();
+        for (var region : changed) {
+            var local = facts.in(region);
+            var projected = KnownBlockNavigationProjection.project(local.keySet(), position ->
+                    local.get(position).flatMap(block -> KnownBlockCollision.coarse(knowledge, block)));
+            supports.put(region, projected.supports()); volumes.put(region, projected.volumes());
+            absent.put(region, projected.absentSupports()); unknown.put(region, projected.unknown());
+            var known = new HashMap<BlockPosition, NavigationBlockState>();
+            local.forEach((position, block) -> block.ifPresent(value -> known.put(position, value)));
+            blocks.put(region, known);
+        }
+        var old = view.geometry();
+        var nextSupports = RegionalSurfaceMap.copyOf(old.supports()).replace(supports);
+        var nextVolumes = RegionalBlockSet.copyOf(old.volumes()).replace(volumes);
+        var nextAbsent = RegionalBlockSet.copyOf(old.absentSupports()).replace(absent);
+        var nextUnknown = RegionalBlockSet.copyOf(old.unknown()).replace(unknown);
+        var nextBlocks = view.blocks().replace(blocks);
+        if (nextSupports != old.supports() || nextVolumes != old.volumes() || nextAbsent != old.absentSupports()
+                || nextUnknown != old.unknown() || nextBlocks != view.blocks())
+            view = new View(new KnownBlockNavigationProjection.View(nextSupports, nextVolumes, nextAbsent, nextUnknown), nextBlocks);
+        previous = facts; definitions = knowledge.definitions();
+        return view;
+    }
+}
