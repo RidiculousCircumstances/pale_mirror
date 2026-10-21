@@ -45,6 +45,8 @@ class ContainerPlayerEditProcessTest {
         for (var count : List.of(1, 2)) {
             var state = fixture();
             var edit = new ContainerPlayerEditObserved(PLAYER, CLICK, gift(state).members().subList(0, count), Optional.empty());
+            var codecs = FrontierWorldPayloadCodecs.create();
+            assertEquals(edit, codecs.decode(edit.type(), codecs.encode(edit)), "single and composed transactions must both recover");
             var id = new CommandId("test:container-click");
             var command = new FrontierCommand(1, id, new WorldId("frontier:composed-test"), new Revision(99), new SimInstant(12),
                     FrontierExecutionSubjects.PHYSICAL_EXECUTOR, CauseChain.root(id), edit);

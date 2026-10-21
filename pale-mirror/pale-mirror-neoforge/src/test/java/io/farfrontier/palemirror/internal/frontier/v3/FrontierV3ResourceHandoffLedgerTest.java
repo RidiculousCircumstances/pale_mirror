@@ -15,7 +15,8 @@ class FrontierV3ResourceHandoffLedgerTest {
     @BeforeAll static void version() { net.minecraft.SharedConstants.tryDetectVersion(); }
     @TempDir Path directory;
     private static FrontierV3ResourceHandoffLedger empty() {
-        var tag = new CompoundTag(); tag.putInt("format", 5); tag.putLong("nextSequence", 1);
+        var tag = new CompoundTag(); tag.putInt("format", 6); tag.putLong("nextSequence", 1);
+        tag.put("lossOperations", new ListTag());
         tag.put("pending", new ListTag()); tag.put("actorPickups", new ListTag()); tag.put("groundLosses", new ListTag());
         return FrontierV3ResourceHandoffLedger.load(tag, null);
     }
@@ -98,7 +99,20 @@ class FrontierV3ResourceHandoffLedgerTest {
                 "recovery must reject competing effect families just as live prepare does");
         var exitRecovered = FrontierV3ResourceHandoffLedger.load(exits.save(new CompoundTag(), null), null);
         assertEquals(List.of(pickup), exitRecovered.losses());
+        var participant = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.PLAYER, pickup.playerId().toString(), 1);
+        var operation = FrontierV3OperationReceipt.prepare(new FrontierV3OperationReceipt.Declaration(
+                FrontierV3OperationReceipt.Protocol.PLAYER_GROUND_PICKUP, pickup.economicOwner(), pickup.witnessId().toString(),
+                FrontierV3OperationConfirmation.fingerprint(pickup), Set.of(participant)), 1);
+        assertThrows(IllegalArgumentException.class, () -> exitRecovered.bindLossOperation(pickup, operation));
+        var applied = operation.applied(operation.nativeReceipt(participant));
+        exitRecovered.bindLossOperation(pickup, applied);
+        var linked = FrontierV3ResourceHandoffLedger.load(exitRecovered.save(new CompoundTag(), null), null);
+        assertEquals(Optional.of(applied), linked.lossOperation(pickup));
+        var foreign = linked.save(new CompoundTag(), null);
+        foreign.getList("lossOperations", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0).putUUID("witness", UUID.randomUUID());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceHandoffLedger.load(foreign, null));
         exitRecovered.retireLoss(pickup); assertFalse(exitRecovered.blocks(ids.getFirst()));
+        assertTrue(exitRecovered.lossOperation(pickup).isEmpty());
         var obsolete = exits.save(new CompoundTag(), null); obsolete.putInt("format", 3);
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceHandoffLedger.load(obsolete, null));
         journal.finish(); // Offline readFile returns a read-only image, not a live writable store.

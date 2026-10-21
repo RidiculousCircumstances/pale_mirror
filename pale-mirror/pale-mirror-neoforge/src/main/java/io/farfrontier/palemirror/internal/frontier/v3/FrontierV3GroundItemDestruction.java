@@ -67,38 +67,28 @@ public final class FrontierV3GroundItemDestruction {
     }
     static boolean reconcileOne(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         for (var loss : FrontierV3ResourceHandoffLedger.get(level).losses()) {
+            if (loss instanceof GroundResourcePlayerWithdrawal pickup) {
+                if (FrontierV3GroundPlayerPickup.reconcile(level, runtime, pickup)) return true;
+                continue;
+            }
             var position = loss.source().position();
             if (!level.hasChunkAt(new BlockPos(position.x(), position.y(), position.z()))) continue;
             var entity = level.getEntity(loss.source().entityId());
-            if (loss instanceof GroundResourcePlayerWithdrawal pickup && !matchesPickupPostimage(entity, pickup)) continue;
             if (loss instanceof GroundResourceDestroyed && entity != null && !entity.isRemoved()) continue;
             if (reconcile(level, runtime, loss)) return true;
         }
         return false;
     }
     static boolean reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, GroundStockExit loss) {
+        if (loss instanceof GroundResourcePlayerWithdrawal pickup) return FrontierV3GroundPlayerPickup.reconcile(level, runtime, pickup);
         var state = runtime.decodedState().orElseThrow(); var journal = FrontierV3ResourceHandoffLedger.get(level);
         var account = state.inventory().fungibleResources().accounts().get(loss.sourceAccountId());
         boolean applied = account == null;
-        if (loss instanceof GroundResourcePlayerWithdrawal pickup && account != null) {
-            var expected = new HashMap<>(pickup.beforeLots());
-            pickup.departedLots().forEach((id, quantity) -> { int left = expected.getOrDefault(id, 0) - quantity; if (left == 0) expected.remove(id); else expected.put(id, left); });
-            applied = account.custody().equals(pickup.source()) && account.lotQuantities().equals(expected)
-                    && Collections.disjoint(account.claimQuantities().keySet(), pickup.forfeitedClaims());
-        }
         if (applied) {
             journal.retireLoss(loss); journal.persist(level); return true;
         }
         if (!(FrontierV3CommandSubmission.submit(runtime, "ground-causal-stock-exit", loss.witnessId().toString(), loss) instanceof CommandResult.Accepted)) return false;
         journal.retireLoss(loss); journal.persist(level); return true;
-    }
-    private static boolean matchesPickupPostimage(Entity entity, GroundResourcePlayerWithdrawal receipt) {
-        if (receipt.remaining().isEmpty()) return entity == null || entity.isRemoved()
-                || entity instanceof ItemEntity item && item.getItem().isEmpty();
-        if (!(entity instanceof ItemEntity item) || item.isRemoved()) return false;
-        var expected = receipt.remaining().getFirst(); var stack = item.getItem();
-        return stack.getCount() == expected.quantity() && stack.getComponentsPatch().isEmpty()
-                && BuiltInRegistries.ITEM.getKey(stack.getItem()).toString().equals(expected.itemKind());
     }
     private FrontierV3GroundItemDestruction() { }
 }

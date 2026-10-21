@@ -77,7 +77,11 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
                 && pendingParticipants <= MAX_NATIVE_RECEIPTS - declaration.participants().size();
     }
     Optional<FrontierV3OperationReceipt> find(FrontierV3OperationReceipt.Declaration declaration) {
-        var ticket = byOwner.get(Key.of(declaration));
+        return find(declaration.protocol(), declaration.owner(), declaration.operation());
+    }
+    Optional<FrontierV3OperationReceipt> find(FrontierV3OperationReceipt.Protocol protocol,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId owner, String operation) {
+        var ticket = byOwner.get(new Key(protocol, owner, operation));
         return ticket == null ? Optional.empty() : Optional.of(require(ticket));
     }
     /** Must follow persist(). Even matching preimages do not permit replay after restart. */

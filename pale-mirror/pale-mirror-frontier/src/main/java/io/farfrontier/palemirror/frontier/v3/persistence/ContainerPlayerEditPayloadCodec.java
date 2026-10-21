@@ -26,7 +26,7 @@ final class ContainerPlayerEditPayloadCodec implements PayloadCodec {
     }); }
     @Override public FrontierPayload decode(byte[] bytes) { return decodeProduction(bytes, in -> {
         var player = UUID.fromString(readString(in)); var interaction = UUID.fromString(readString(in));
-        int count = in.readUnsignedByte(); if (count < 2 || count > 54) throw new IllegalArgumentException("invalid composed member count");
+        int count = in.readUnsignedByte(); if (count < 1 || count > 54) throw new IllegalArgumentException("invalid composed member count");
         var members = new ArrayList<ContainerPlayerEditObserved.Member>();
         for (int i = 0; i < count; i++) {
             var container = readSubject(in).value(); var account = readSubject(in).value(); var owner = readSubject(in).value();

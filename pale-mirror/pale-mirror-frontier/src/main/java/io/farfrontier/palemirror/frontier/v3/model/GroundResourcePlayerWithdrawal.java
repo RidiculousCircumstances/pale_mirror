@@ -22,6 +22,7 @@ public record GroundResourcePlayerWithdrawal(SubjectId sourceAccountId, Resource
             throw new IllegalArgumentException("ground pickup requires bounded exact source/postimage evidence");
     }
     @Override public String type() { return "frontier.ground_resource_player_withdrawal"; }
+    @Override public boolean requiresDurableBeforeEffect() { return true; }
     public static GroundResourcePlayerWithdrawal prepare(FrontierWorldState state, SubjectId accountId, UUID player,
             UUID witness, int amount) {
         var ledger = state.inventory().fungibleResources(); var account = ledger.accounts().get(accountId);

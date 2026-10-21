@@ -15,6 +15,36 @@ import java.util.*;
 @PrefixGameTestTemplate(false)
 public final class FrontierV3OperationStorageGameTests {
     private FrontierV3OperationStorageGameTests() { }
+    @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
+    public static void actualPlayerFileCoSavesReceiptButNeverAcknowledgesUnsavedCursor(GameTestHelper helper) throws Exception {
+        var player = helper.makeMockServerPlayerInLevel(); var port = FrontierV3OperationPlayers.current(player);
+        var operation = FrontierV3OperationReceipt.prepare(new FrontierV3OperationReceipt.Declaration(
+                FrontierV3OperationReceipt.Protocol.PLAYER_GROUND_PICKUP, new SubjectId("test:player-save"),
+                "pickup", "bread", Set.of(port.identity())), 1);
+        player.getInventory().setItem(0, new ItemStack(Items.BREAD, 3));
+        FrontierV3NativeOperationMarkers.stamp(port.persistent(), operation.nativeReceipt(port.identity()));
+        var root = java.nio.file.Files.createTempDirectory(java.nio.file.Path.of("."), "operation-player-");
+        try (var access = net.minecraft.world.level.storage.LevelStorageSource.createDefault(root).createAccess("save-test")) {
+            var storage = new net.minecraft.world.level.storage.PlayerDataStorage(access, net.minecraft.util.datafix.DataFixers.getDataFixer());
+            var target = storage.getPlayerDir().toPath().resolve(player.getStringUUID() + ".dat");
+            storage.save(player);
+            var saved = FrontierV3OperationPlayers.durableImage(target);
+            helper.assertTrue(FrontierV3OperationPlayers.receipts(player.getUUID(), saved)
+                    .equals(List.of(operation.nativeReceipt(port.identity()))), "actual player save retains its native receipt");
+            helper.assertTrue(!saved.getList("Inventory", 10).isEmpty(), "receipt is saved alongside real inventory");
+            player.containerMenu.setCarried(player.getInventory().removeItemNoUpdate(0));
+            storage.save(player);
+            helper.assertTrue(FrontierV3OperationPlayers.receipts(player.getUUID(), FrontierV3OperationPlayers.durableImage(target)).isEmpty(),
+                    "vanilla cursor is not a saved inventory slot; save must withhold receipt");
+            helper.assertTrue(FrontierV3NativeOperationMarkers.contains(port.persistent(), operation.nativeReceipt(port.identity())),
+                    "withholding snapshot acknowledgement must not erase the live obligation");
+            player.getInventory().setItem(0, player.containerMenu.getCarried()); player.containerMenu.setCarried(ItemStack.EMPTY);
+            storage.save(player);
+            helper.assertTrue(FrontierV3OperationPlayers.receipts(player.getUUID(), FrontierV3OperationPlayers.durableImage(target))
+                    .equals(List.of(operation.nativeReceipt(port.identity()))), "normal inventory save can now acknowledge the same operation");
+        }
+        helper.succeed();
+    }
     @GameTest(batch = "pm-frontier-v3-shared-storage", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void disjointNativeEffectsShareForcesAndInterruptedBatchCannotReplay(GameTestHelper helper) {
         var level = helper.getLevel(); var ledger = FrontierV3OperationLedger.get(level); ledger.persist(level);
