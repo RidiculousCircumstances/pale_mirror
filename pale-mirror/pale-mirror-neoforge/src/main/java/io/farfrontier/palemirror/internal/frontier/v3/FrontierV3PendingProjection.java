@@ -3,7 +3,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import java.util.*;
 import java.util.function.LongFunction;
-import java.util.function.LongPredicate;
+import java.util.function.LongUnaryOperator;
 
 /** Ephemeral work queue, never a physical receipt. Settled facts leave; revisions re-enter locally. */
 final class FrontierV3PendingProjection {
@@ -42,7 +42,7 @@ final class FrontierV3PendingProjection {
     }
     int pending(long chunk) { var slice = slices.get(chunk); return slice == null ? 0 : slice.pending.size(); }
     /** A whole chunk gets a bounded contiguous slice; alternating preferred/fair turns prevent starvation. */
-    List<WorksiteBlock> batch(LongFunction<Object> availability, LongPredicate preferred, int limit) {
+    List<WorksiteBlock> batch(LongFunction<Object> availability, LongUnaryOperator priority, int limit) {
         if (limit < 1) throw new IllegalArgumentException("positive projection budget required");
         for (var entry : slices.entrySet()) {
             var slice = entry.getValue(); var token = availability.apply(entry.getKey());
@@ -54,10 +54,13 @@ final class FrontierV3PendingProjection {
         priorityTurn = !priorityTurn;
         var keys = new ArrayList<>(slices.keySet());
         if (focus != null && (!slices.containsKey(focus) || slices.get(focus).pending.isEmpty()
-                || slices.get(focus).availability == null || !preferred.test(focus))) focus = null;
-        if (focus == null) focus = keys.stream().filter(key -> preferred.test(key)
-                && slices.get(key).availability != null && !slices.get(key).pending.isEmpty()).findFirst().orElse(null);
-        if (priorityTurn) keys.sort(Comparator.comparingInt(key -> key.equals(focus) ? 0 : preferred.test(key) ? 1 : 2));
+                || slices.get(focus).availability == null || priority.applyAsLong(focus) == Long.MAX_VALUE)) focus = null;
+        var nearest = keys.stream().filter(key -> priority.applyAsLong(key) != Long.MAX_VALUE
+                && slices.get(key).availability != null && !slices.get(key).pending.isEmpty())
+                .min(Comparator.comparingLong(priority::applyAsLong)).orElse(null);
+        if (focus == null || nearest != null && priority.applyAsLong(nearest) < priority.applyAsLong(focus)) focus = nearest;
+        if (priorityTurn) keys.sort(Comparator.<Long>comparingInt(key -> key.equals(focus) ? 0 : 1)
+                .thenComparingLong(priority::applyAsLong));
         var result = new ArrayList<WorksiteBlock>();
         for (long key : keys) {
             var slice = slices.get(key);

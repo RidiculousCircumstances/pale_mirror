@@ -124,7 +124,7 @@ exact positions; restart reconstructs pending work from current declarations and
 retained PREPARED/SETTLED/external witnesses, never an ephemeral completion flag.
 
 Loaded chunk incarnation and block-ticking demand changes trigger renewed owner
-assessment. A pending player-visible chunk receives contiguous progress on alternate
+assessment. The nearest pending player-visible chunk receives contiguous progress on alternate
 turns, with round-robin service on the other turns so a blocked chunk cannot starve
 its neighbours. Existing runtime read/time limits and extraction write ceiling bound
 each batch. Durable intent precedes writes; external changes are not overwritten.

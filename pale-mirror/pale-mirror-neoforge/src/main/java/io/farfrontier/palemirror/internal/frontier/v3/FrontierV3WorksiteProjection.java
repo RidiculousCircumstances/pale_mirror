@@ -37,12 +37,18 @@ final class FrontierV3WorksiteProjection {
             queue.invalidate(net.minecraft.world.level.ChunkPos.asLong(position.getX() >> 4, position.getZ() >> 4),
                     new BlockPosition(position.getX(), position.getY(), position.getZ()));
         }
+        var viewers = level.players().stream().map(net.minecraft.server.level.ServerPlayer::chunkPosition).toList();
         var probes = queue.batch(key -> {
             var chunk = new net.minecraft.world.level.ChunkPos(key);
             var loaded = level.getChunkSource().getChunkNow(chunk.x, chunk.z);
             return loaded == null ? null : new Availability(loaded, level.shouldTickBlocksAt(
                     new BlockPos(chunk.x * 16, level.getMinBuildHeight(), chunk.z * 16)));
-        }, key -> FrontierV3GrayboxExecutor.presentationWaiting(runtime, new net.minecraft.world.level.ChunkPos(key)), readBudget);
+        }, key -> {
+            var chunk = new net.minecraft.world.level.ChunkPos(key);
+            if (!FrontierV3GrayboxExecutor.presentationWaiting(runtime, chunk)) return Long.MAX_VALUE;
+            return viewers.stream().mapToLong(viewer -> Math.abs((long) viewer.x - chunk.x) + Math.abs((long) viewer.z - chunk.z))
+                    .min().orElse(Long.MAX_VALUE);
+        }, readBudget);
         var preparation = new FrontierV3FirstVisibilityBudget(readBudget, budget,
                 (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D),
                 System::nanoTime);
