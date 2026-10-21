@@ -12,7 +12,7 @@ import java.util.zip.CRC32C;
 /** Opaque keyed images: one ordered durable append lane, immutable background checkpoints.
  * No actor, activity, Minecraft-world or resource policy belongs to this storage owner.
  */
-final class FrontierV3JournalStore {
+final class FrontierV3JournalStore implements FrontierV3PhysicalJournal {
     private static final int VERSION = 1, MAGIC = 0x504d4a31;
     private static final int MAX_FRAME = 16 * 1024 * 1024;
     record Limits(int rows, long imageBytes) {
@@ -23,6 +23,13 @@ final class FrontierV3JournalStore {
     }
     static final Limits ACTORS = new Limits(4_096, 32L * 1024 * 1024);
     static final Limits PHYSICAL = new Limits(131_072, 64L * 1024 * 1024);
+    /** Shared failure publication avoids polling every spatial journal on each block lookup. */
+    static final class Health {
+        private volatile IOException failure;
+        synchronized void failed(IOException error) { if (failure == null) failure = error; }
+        void check() throws IOException { if (failure != null) throw new IOException("physical journal writer failed", failure); }
+    }
+    private final Health health;
     private final Limits limits;
     private static final long MAX_RETAINED_BYTES = 64L * 1024 * 1024;
     private static final int SEGMENT_RECORDS = 64, CHECKPOINT_RECORDS = 128;
@@ -37,7 +44,6 @@ final class FrontierV3JournalStore {
     private final ArrayDeque<Pending> queue = new ArrayDeque<>();
     private long queuedBytes;
     private boolean writerScheduled;
-    private volatile IOException appendFailure;
     private final Path checkpoint, journal;
     private final SortedMap<String, byte[]> rows = new TreeMap<>();
     private volatile long sequence, checkpointSequence;
@@ -45,11 +51,11 @@ final class FrontierV3JournalStore {
     private volatile long forcedGroups, appendedBytes;
     private final java.util.concurrent.atomic.AtomicLong retainedBytes = new java.util.concurrent.atomic.AtomicLong();
     private CompletableFuture<Void> pendingCheckpoint;
-    private volatile IOException checkpointFailure;
     private Path tornSegment;
     private long tornLength;
 
-    private FrontierV3JournalStore(Path checkpoint, Executor writer, Limits limits) {
+    private FrontierV3JournalStore(Path checkpoint, Executor writer, Limits limits, Health health) {
+        this.health = Objects.requireNonNull(health);
         this.limits = Objects.requireNonNull(limits);
         this.writer = Objects.requireNonNull(writer);
         this.checkpoint = checkpoint.toAbsolutePath().normalize();
@@ -73,7 +79,13 @@ final class FrontierV3JournalStore {
         return open(checkpoint, WRITES, limits);
     }
     private static FrontierV3JournalStore open(Path checkpoint, Executor writer, Limits limits) throws IOException {
-        var store = new FrontierV3JournalStore(checkpoint, writer, limits);
+        return open(checkpoint, writer, limits, new Health());
+    }
+    static FrontierV3JournalStore open(Path checkpoint, Limits limits, Health health) throws IOException {
+        return open(checkpoint, WRITES, limits, health);
+    }
+    private static FrontierV3JournalStore open(Path checkpoint, Executor writer, Limits limits, Health health) throws IOException {
+        var store = new FrontierV3JournalStore(checkpoint, writer, limits, health);
         synchronized (store.fileLock) {
         if (Files.exists(store.checkpoint)) {
             var root = NbtIo.readCompressed(store.checkpoint, NbtAccounter.create(128L * 1024 * 1024));
@@ -106,19 +118,19 @@ final class FrontierV3JournalStore {
         return store;
     }
 
-    synchronized Map<String, byte[]> image() {
+    public synchronized Map<String, byte[]> image() {
         var copy = new TreeMap<String, byte[]>(); rows.forEach((key, value) -> copy.put(key, value.clone()));
         return Collections.unmodifiableMap(copy);
     }
     record Pressure(long durableSequence, long checkpointSequence, int queuedWrites, long queuedBytes,
                     long retainedBytes, long forcedGroups, long appendedBytes) { }
-    synchronized Pressure pressure() {
+    public synchronized Pressure pressure() {
         return new Pressure(sequence, checkpointSequence, queue.size(), queuedBytes,
                 retainedBytes.get(), forcedGroups, appendedBytes);
     }
 
     /** Required synchronous callers wait for their own ordered receipt, not a background snapshot. */
-    long append(Map<String, byte[]> replacements) throws IOException {
+    public long append(Map<String, byte[]> replacements) throws IOException {
         try { return appendAsync(replacements).join(); }
         catch (CompletionException failure) { throw new IOException("physical journal append failed", failure.getCause()); }
     }
@@ -146,9 +158,8 @@ final class FrontierV3JournalStore {
         }
         return pending.receipt();
     }
-    void checkHealthy() throws IOException {
-        if (appendFailure != null) throw new IOException("physical journal writer failed", appendFailure);
-        if (checkpointFailure != null) throw new IOException("physical checkpoint writer failed", checkpointFailure);
+    public void checkHealthy() throws IOException {
+        health.check();
     }
     private record Pending(Map<String, byte[]> changes, long bytes, CompletableFuture<Long> receipt) { }
     private void drainWrites() {
@@ -167,7 +178,7 @@ final class FrontierV3JournalStore {
             } catch (IOException | RuntimeException failure) {
                 var error = failure instanceof IOException io ? io : new IOException("physical journal writer failed", failure);
                 synchronized (this) {
-                    appendFailure = error;
+                    health.failed(error);
                     batch.forEach(pending -> pending.receipt().completeExceptionally(error));
                     queue.forEach(pending -> pending.receipt().completeExceptionally(error));
                     queue.clear(); queuedBytes = 0; writerScheduled = false;
@@ -276,7 +287,7 @@ final class FrontierV3JournalStore {
                     } } finally { Files.deleteIfExists(staged); }
                     completion.complete(null);
                 } catch (IOException failure) {
-                    checkpointFailure = failure; completion.completeExceptionally(failure);
+                    health.failed(failure); completion.completeExceptionally(failure);
                 } finally { synchronized (this) { pendingCheckpoint = null; } }
             });
         } catch (RejectedExecutionException busy) {
@@ -285,14 +296,14 @@ final class FrontierV3JournalStore {
     }
 
     /** Orderly shutdown/offline publication can wait; ordinary ticks never wait for checkpoints. */
-    void awaitCheckpoint() throws IOException {
+    public void awaitCheckpoint() throws IOException {
         CompletableFuture<Void> pending;
         synchronized (this) { pending = pendingCheckpoint; }
         if (pending != null) {
             try { pending.join(); }
             catch (CompletionException failure) { throw new IOException("physical checkpoint failed", failure.getCause()); }
         }
-        if (checkpointFailure != null) throw new IOException("physical checkpoint failed", checkpointFailure);
+        health.check();
     }
 
     private void writeCheckpoint(long captured, Map<String, byte[]> image) throws IOException {

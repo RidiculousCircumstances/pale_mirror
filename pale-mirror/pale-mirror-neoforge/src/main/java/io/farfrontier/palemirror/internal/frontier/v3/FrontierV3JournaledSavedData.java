@@ -9,12 +9,13 @@ import java.io.*;
 import java.nio.file.*;
 import java.util.*;
 import java.util.function.*;
+import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3JournalNbt.*;
 
 /** Storage protocol only. Families declare their tables, record codec and physical fences. */
 abstract class FrontierV3JournaledSavedData extends SavedData {
     private final FrontierV3PhysicalStoreKind kind;
     private final List<Table<?, ?>> tables = new ArrayList<>();
-    private FrontierV3JournalStore store;
+    private FrontierV3PhysicalJournal store;
     private Path path;
     private ServerLevel level;
     private boolean declared;
@@ -24,6 +25,10 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
     protected FrontierV3JournaledSavedData(FrontierV3PhysicalStoreKind kind) { this.kind = Objects.requireNonNull(kind); }
 
     final FrontierV3PhysicalStoreKind storeKind() { return kind; }
+    /** Families choose a storage layout explicitly, never by inspecting a row's business meaning. */
+    FrontierV3PhysicalJournal openJournal(Path path) throws IOException {
+        return FrontierV3JournalStore.open(path, FrontierV3JournalStore.PHYSICAL);
+    }
     interface Fragments<K,V> {
         Map<String, CompoundTag> split(K key, V value);
         CompoundTag merge(Map<String, CompoundTag> fragments);
@@ -52,8 +57,8 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
         Path path = storageFile(level, kind);
         Supplier<T> recover = () -> {
             try {
-                var store = FrontierV3JournalStore.open(path, FrontierV3JournalStore.PHYSICAL);
                 T composition = fresh.get();
+                var store = composition.openJournal(path);
                 var rows = store.image();
                 T ledger = rows.isEmpty() ? composition : decode.apply(composition.hydrate(rows, FrontierV3PhysicalWorld.WORLD_ID.value(), level.dimension().location().toString()), level.registryAccess());
                 if (!rows.isEmpty()) ledger.validateRecoveredRows(rows);
@@ -71,12 +76,12 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
         return ledger;
     }
 
-    final void attach(ServerLevel level, Path path, FrontierV3JournalStore store) {
+    final void attach(ServerLevel level, Path path, FrontierV3PhysicalJournal store) {
         attachLevel(level, path);
         attachJournal(path, FrontierV3PhysicalWorld.WORLD_ID, level.dimension().location(), store);
     }
     final void attachJournal(Path path, io.farfrontier.palemirror.frontier.v3.api.WorldId world,
-            net.minecraft.resources.ResourceLocation dimension, FrontierV3JournalStore store) {
+            net.minecraft.resources.ResourceLocation dimension, FrontierV3PhysicalJournal store) {
         if (this.worldId != null && (!this.worldId.equals(world) || !this.dimension.equals(dimension) || !this.path.equals(path)))
             throw new IllegalStateException("physical journal changed binding");
         this.path = path.toAbsolutePath().normalize(); this.worldId = Objects.requireNonNull(world);
@@ -108,7 +113,7 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
             Path target = file.toPath().toAbsolutePath().normalize();
             if (path != null && !path.equals(target)) throw new IllegalArgumentException("physical store changed path");
             if (worldId == null || dimension == null) throw new IllegalStateException("physical ledger has no declared journal binding");
-            if (store == null) store = FrontierV3JournalStore.open(target, FrontierV3JournalStore.PHYSICAL);
+            if (store == null) store = openJournal(target);
             store.checkHealthy();
             if (!isDirty() && declared) return;
             var updates = new TreeMap<String, byte[]>();
@@ -138,18 +143,6 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
         if (level == null) save(path.toFile(), null); else persist(level);
         try { if (store != null) store.awaitCheckpoint(); }
         catch (IOException failure) { throw new UncheckedIOException("physical checkpoint failed: " + kind, failure); }
-    }
-    private static byte[] encode(CompoundTag value) throws IOException {
-        var bytes = new ByteArrayOutputStream();
-        try (var output = new DataOutputStream(bytes)) { NbtIo.write(value, output); }
-        return bytes.toByteArray();
-    }
-    private static CompoundTag decode(byte[] bytes) throws IOException {
-        try (var input = new DataInputStream(new ByteArrayInputStream(bytes))) {
-            var tag = NbtIo.read(input, NbtAccounter.create(16L * 1024 * 1024));
-            if (input.read() != -1) throw new IOException("trailing physical row payload");
-            return tag;
-        }
     }
     final CompoundTag hydrate(Map<String, byte[]> rows, String world, String dimension) throws IOException {
         byte[] raw = rows.get("$meta");
@@ -184,8 +177,8 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
     static <T extends FrontierV3JournaledSavedData> T readFile(Path path, String world, String dimension,
             Supplier<T> fresh, BiFunction<CompoundTag, HolderLookup.Provider, T> decode, HolderLookup.Provider registries) {
         try {
-            var store = FrontierV3JournalStore.open(path, FrontierV3JournalStore.PHYSICAL);
-            var rows = store.image(); T composition = fresh.get();
+            T composition = fresh.get(); var store = composition.openJournal(path);
+            var rows = store.image();
             if (rows.isEmpty()) return composition;
             T value = decode.apply(composition.hydrate(rows, world, dimension), registries);
             if (value.storeKind() != composition.storeKind()) throw new IOException("recovered physical adapter kind mismatch");
@@ -199,7 +192,7 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
         var actual = new TreeMap<>(rows); actual.remove("$meta");
         if (!expected.keySet().equals(actual.keySet())) throw new IOException("physical record key/content identity mismatch");
         for (var entry : expected.entrySet())
-            if (!Arrays.equals(entry.getValue(), actual.get(entry.getKey()))) throw new IOException("physical record content mismatch: " + entry.getKey());
+            if (!same(entry.getValue(), actual.get(entry.getKey()))) throw new IOException("physical record content mismatch: " + entry.getKey());
     }
     private static String address(int table, String key, String part) { return table + ":" + key.length() + ":" + key + ":" + part; }
     private final class Table<K, V> extends AbstractMap<K, V> {

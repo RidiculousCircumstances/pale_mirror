@@ -16,16 +16,15 @@ import java.util.Map;
 import java.util.NavigableSet;
 import java.util.TreeSet;
 
-/** Durable, bounded provenance for v3 graybox cells; it never grants overwrite authority. */
+/** Spatially partitioned durable provenance; it never grants overwrite authority. */
 final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
     /* Format 6 adds explicitly declared worksite cells in the same block-provenance store. */
     private static final int FORMAT = 6;
-    private static final int MAX_CELLS = 65_536;
     private final Map<Long, Claim> claims;
     private final Map<Long, FrontierV3WorksiteBlockWitness> worksiteCells;
     /**
      * The only claim family that needs ordinary per-tick retirement.  Keeping its bounded
-     * position index beside the durable provenance map prevents a global 65,536-cell scan just
+     * position index beside the durable provenance map prevents a world-wide cell scan just
      * to discover at most 48 temporary work floors.  It is derived from {@link #claims} on
      * hydration, so it grants no independent materialization authority.
      */
@@ -51,6 +50,9 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
     }
     /** Same bounded provenance implementation for the physical-owner composition harness. */
     static FrontierV3GrayboxLedger inMemory() { return new FrontierV3GrayboxLedger(); }
+    @Override FrontierV3PhysicalJournal openJournal(java.nio.file.Path path) throws java.io.IOException {
+        return FrontierV3BlockJournal.open(path);
+    }
     Claim claim(BlockPos position) { return claims.get(position.asLong()); }
     FrontierV3WorksiteBlockWitness worksite(BlockPos position) { return worksiteCells.get(position.asLong()); }
     java.util.Set<Long> takeWorksiteChanges() {
@@ -71,8 +73,6 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
             throw new IllegalStateException("competing block provenance at worksite cell " + position
                     + "; retained=" + (prior == null ? claims.get(address) : prior.declaration().key())
                     + "; proposed=" + witness.declaration().key());
-        if (prior == null && claims.size() + worksiteCells.size() >= MAX_CELLS)
-            throw new IllegalStateException("bounded physical block provenance is full");
         if (!witness.equals(prior)) {
             worksiteCells.put(address, witness); indexExternalWorksite(address, witness); changedWorksites.add(address); setDirty();
         }
@@ -96,9 +96,6 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
     }
     void ensureCapacityFor(BlockPos position) {
         if (worksiteCells.containsKey(position.asLong())) throw new IllegalStateException("graybox write crosses declared worksite provenance");
-        if (!claims.containsKey(position.asLong()) && claims.size() + worksiteCells.size() >= MAX_CELLS) {
-            throw new IllegalStateException("v3 graybox claim limit exceeded");
-        }
     }
     void applied(BlockPos position, String owner, int targetTag, String material, String semanticPart) {
         ensureCapacityFor(position);
@@ -189,7 +186,6 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
     static FrontierV3GrayboxLedger load(CompoundTag tag, HolderLookup.Provider registries) {
         int format = tag.getInt("format"); if (format != FORMAT) throw new IllegalStateException("incompatible v3 graybox ledger; fresh current-schema world required");
         Map<Long, Claim> claims = new HashMap<>(); ListTag entries = tag.getList("claims", Tag.TAG_COMPOUND);
-        if (entries.size() > MAX_CELLS) throw new IllegalStateException("v3 graybox claim limit exceeded");
         for (Tag value : entries) { CompoundTag entry = (CompoundTag) value; long position = entry.getLong("pos");
             Claim claim = new Claim(requireText(entry.getString("owner"), "owner"), requireTargetTag(entry.getInt("targetTag")), requireText(entry.getString("material"), "material"),
                     requireText(entry.getString("part"), "semantic part"), entry.getLong("revision"), entry.getBoolean("deferred"));
@@ -197,7 +193,6 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
         if (!tag.contains("worksiteCells", Tag.TAG_LIST)) throw new IllegalStateException("current block journal lacks its worksite provenance table");
         Map<Long, FrontierV3WorksiteBlockWitness> worksite = new HashMap<>();
         ListTag cells = tag.getList("worksiteCells", Tag.TAG_COMPOUND);
-        if (entries.size() + cells.size() > MAX_CELLS) throw new IllegalStateException("bounded physical block provenance is full");
         for (Tag value : cells) {
             CompoundTag entry = (CompoundTag) value;
             if (!entry.contains("pos", Tag.TAG_LONG)) throw new IllegalStateException("worksite cell lacks its physical address");

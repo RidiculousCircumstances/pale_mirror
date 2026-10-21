@@ -102,7 +102,7 @@ class FrontierV3PhysicalStoresTest {
     @TestFactory Collection<DynamicTest> everyAdapterRecoversCheckpointAndTailAndNoopDoesNotWrite() {
         return cases().stream().map(item -> DynamicTest.dynamicTest(item.name, () -> {
             Path path=directory.resolve(item.name+".dat"); var ledger=item.fresh.get();
-            var store=FrontierV3JournalStore.open(path,FrontierV3JournalStore.PHYSICAL);
+            var store=ledger.openJournal(path);
             ledger.attachJournal(path,WORLD,DIMENSION,store); ledger.setDirty(); ledger.save(path.toFile(),null);
             byte[] checkpoint=Files.readAllBytes(path);
             item.change.accept(ledger); ledger.save(path.toFile(),null);
