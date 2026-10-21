@@ -14,7 +14,13 @@ import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3JournalNb
 /** Storage protocol only. Families declare their tables, record codec and physical fences. */
 abstract class FrontierV3JournaledSavedData extends SavedData {
     private final FrontierV3PhysicalStoreKind kind;
-    private final List<Table<?, ?>> tables = new ArrayList<>();
+    interface StoredTable {
+        int index();
+        CompoundTag merge(Map<String,CompoundTag> fragments);
+        void collect(Map<String,byte[]> updates) throws IOException;
+        void accept();
+    }
+    private final List<StoredTable> tables = new ArrayList<>();
     private FrontierV3PhysicalJournal store;
     private Path path;
     private ServerLevel level;
@@ -25,6 +31,16 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
     protected FrontierV3JournaledSavedData(FrontierV3PhysicalStoreKind kind) { this.kind = Objects.requireNonNull(kind); }
 
     final FrontierV3PhysicalStoreKind storeKind() { return kind; }
+    /** Explicit family composition choice, not a runtime type inference. */
+    boolean pagedRecovery() { return false; }
+    void attachedJournal(FrontierV3PhysicalJournal journal) throws IOException { }
+    protected final <K,V> Map<K,V> pagedTable(String name, Map<K,V> initial, Function<K,String> key,
+            Function<String,K> parse, BiFunction<K,V,CompoundTag> encode, BiFunction<K,CompoundTag,V> decode) {
+        int index = kind.table(name).wireTag();
+        if (tables.stream().anyMatch(table -> table.index() == index)) throw new IllegalArgumentException("duplicate physical table");
+        var table = new FrontierV3PagedJournalTable<>(index, initial, key, parse, encode, decode, () -> store, this::setDirty);
+        tables.add(table); return table;
+    }
     /** Families choose a storage layout explicitly, never by inspecting a row's business meaning. */
     FrontierV3PhysicalJournal openJournal(Path path) throws IOException {
         return FrontierV3JournalStore.open(path, FrontierV3JournalStore.PHYSICAL);
@@ -46,7 +62,7 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
     }
     protected final <K,V> Map<K,V> fragmentedTable(String name, Map<K,V> initial, Function<K,String> key, Fragments<K,V> codec) {
         int index = kind.table(name).wireTag();
-        if (index < 0 || tables.stream().anyMatch(table -> table.index == index))
+        if (index < 0 || tables.stream().anyMatch(table -> table.index() == index))
             throw new IllegalArgumentException("undeclared or duplicate physical table: " + name);
         var table = new Table<K, V>(index, initial, key, codec);
         tables.add(table); return table;
@@ -59,9 +75,7 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
             try {
                 T composition = fresh.get();
                 var store = composition.openJournal(path);
-                var rows = store.image();
-                T ledger = rows.isEmpty() ? composition : decode.apply(composition.hydrate(rows, FrontierV3PhysicalWorld.WORLD_ID.value(), level.dimension().location().toString()), level.registryAccess());
-                if (!rows.isEmpty()) ledger.validateRecoveredRows(rows);
+                T ledger = recover(composition, store, FrontierV3PhysicalWorld.WORLD_ID.value(), level.dimension().location().toString(), decode, level.registryAccess());
                 if (ledger.storeKind() != kind) throw new IOException("physical adapter/store kind mismatch");
                 ledger.attach(level, path, store);
                 return ledger;
@@ -86,8 +100,11 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
             throw new IllegalStateException("physical journal changed binding");
         this.path = path.toAbsolutePath().normalize(); this.worldId = Objects.requireNonNull(world);
         this.dimension = Objects.requireNonNull(dimension); this.store = store;
-        declared = !store.image().isEmpty();
-        if (declared) tables.forEach(Table::accept);
+        try {
+            declared = store.read("$meta") != null;
+            if (declared) tables.forEach(StoredTable::accept);
+            attachedJournal(store);
+        } catch (IOException failure) { throw new UncheckedIOException("physical journal attachment failed", failure); }
         setDirty(false);
     }
     final void attachLevel(ServerLevel value, Path selected) {
@@ -122,11 +139,11 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
                 meta.putString("world", worldId.value());
                 meta.putString("dimension", dimension.toString());
                 meta.put("payload", metadata()); updates.put("$meta", encode(meta));
-                for (Table<?, ?> table : tables) table.collect(updates);
+                for (StoredTable table : tables) table.collect(updates);
             }
             store.append(updates); // Dirty state is accepted only after the journal force receipt.
             declared = true;
-            tables.forEach(Table::accept); setDirty(false);
+            tables.forEach(StoredTable::accept); setDirty(false);
         } catch (IOException failure) { throw new UncheckedIOException("unable to persist " + kind, failure); }
     }
     /** Small family metadata only; list/table content must not be rebuilt here. */
@@ -137,7 +154,8 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
         return "{\"attached\":true,\"durableSequence\":" + p.durableSequence()
                 + ",\"checkpointSequence\":" + p.checkpointSequence() + ",\"queuedWrites\":" + p.queuedWrites()
                 + ",\"queuedBytes\":" + p.queuedBytes() + ",\"retainedBytes\":" + p.retainedBytes()
-                + ",\"forcedGroups\":" + p.forcedGroups() + ",\"appendedBytes\":" + p.appendedBytes() + "}";
+                + ",\"forcedGroups\":" + p.forcedGroups() + ",\"appendedBytes\":" + p.appendedBytes()
+                + "," + store.layoutDiagnostic() + "}";
     }
     final void finish() {
         if (level == null) save(path.toFile(), null); else persist(level);
@@ -166,10 +184,10 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
             if (parts.putIfAbsent(row.getString("part"), row.getCompound("record")) != null)
                 throw new IOException("duplicate physical fragment");
         }
-        for (Table<?,?> table : tables) {
+        for (StoredTable table : tables) {
             var values = new ListTag();
-            for (var parts : grouped.getOrDefault(table.index, Map.of()).values()) values.add(table.codec.merge(parts));
-            image.put(kind.table(table.index).name(), values);
+            for (var parts : grouped.getOrDefault(table.index(), Map.of()).values()) values.add(table.merge(parts));
+            image.put(kind.table(table.index()).name(), values);
         }
         return image;
     }
@@ -178,24 +196,42 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
             Supplier<T> fresh, BiFunction<CompoundTag, HolderLookup.Provider, T> decode, HolderLookup.Provider registries) {
         try {
             T composition = fresh.get(); var store = composition.openJournal(path);
-            var rows = store.image();
-            if (rows.isEmpty()) return composition;
-            T value = decode.apply(composition.hydrate(rows, world, dimension), registries);
-            if (value.storeKind() != composition.storeKind()) throw new IOException("recovered physical adapter kind mismatch");
-            value.validateRecoveredRows(rows);
+            T value = recover(composition, store, world, dimension, decode, registries);
+            if (value.pagedRecovery()) value.attachJournal(path, new io.farfrontier.palemirror.frontier.v3.api.WorldId(world),
+                    net.minecraft.resources.ResourceLocation.parse(dimension), store);
             return value;
         } catch (IOException failure) { throw new UncheckedIOException("physical recovery failed: " + path, failure); }
     }
+    private static <T extends FrontierV3JournaledSavedData> T recover(T composition, FrontierV3PhysicalJournal store,
+            String world, String dimension, BiFunction<CompoundTag,HolderLookup.Provider,T> decode,
+            HolderLookup.Provider registries) throws IOException {
+        byte[] header = store.read("$meta");
+        if (header == null) {
+            if (!store.image().isEmpty()) throw new IOException("missing physical store declaration");
+            return composition;
+        }
+        if (composition.pagedRecovery()) {
+            var meta = FrontierV3JournalNbt.decode(header);
+            if (!meta.contains("kind", Tag.TAG_INT) || meta.getInt("kind") != composition.storeKind().wireTag
+                    || !meta.getString("world").equals(world) || !meta.getString("dimension").equals(dimension)
+                    || !meta.contains("payload", Tag.TAG_COMPOUND) || !meta.getCompound("payload").equals(composition.metadata()))
+                throw new IOException("paged physical store identity/schema mismatch");
+            return composition;
+        }
+        var rows = store.image(); T value = decode.apply(composition.hydrate(rows, world, dimension), registries);
+        if (value.storeKind() != composition.storeKind()) throw new IOException("recovered physical adapter kind mismatch");
+        value.validateRecoveredRows(rows); return value;
+    }
     final void validateRecoveredRows(Map<String,byte[]> rows) throws IOException {
         var expected = new TreeMap<String,byte[]>();
-        for (Table<?,?> table : tables) table.collect(expected);
+        for (StoredTable table : tables) table.collect(expected);
         var actual = new TreeMap<>(rows); actual.remove("$meta");
         if (!expected.keySet().equals(actual.keySet())) throw new IOException("physical record key/content identity mismatch");
         for (var entry : expected.entrySet())
             if (!same(entry.getValue(), actual.get(entry.getKey()))) throw new IOException("physical record content mismatch: " + entry.getKey());
     }
-    private static String address(int table, String key, String part) { return table + ":" + key.length() + ":" + key + ":" + part; }
-    private final class Table<K, V> extends AbstractMap<K, V> {
+    static String address(int table, String key, String part) { return table + ":" + key.length() + ":" + key + ":" + part; }
+    private final class Table<K, V> extends AbstractMap<K, V> implements StoredTable {
         private final int index;
         private final Map<K, V> values;
         private final Set<K> dirty = new LinkedHashSet<>();
@@ -207,6 +243,8 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
             this.index = index; values = new LinkedHashMap<>(initial); this.key = key; this.codec = codec;
             dirty.addAll(initial.keySet());
         }
+        public int index() { return index; }
+        public CompoundTag merge(Map<String,CompoundTag> parts) { return codec.merge(parts); }
         @Override public Set<Entry<K, V>> entrySet() { return Collections.unmodifiableMap(values).entrySet(); }
         @Override public V get(Object key) { return values.get(key); }
         @Override public boolean containsKey(Object key) { return values.containsKey(key); }
@@ -222,7 +260,7 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
             return prior;
         }
         @Override public void clear() { dirty.addAll(values.keySet()); if (!values.isEmpty()) setDirty(); values.clear(); }
-        void accept() {
+        public void accept() {
             if (prepared.isEmpty() && !declared) {
                 for (var identity : values.keySet()) committed.put(identity, codec.split(identity, values.get(identity)));
             } else if (prepared.isEmpty() && declared && committed.isEmpty()) {
@@ -231,7 +269,7 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
             prepared.forEach((identity, parts) -> { if (parts.isEmpty()) { committed.remove(identity); codec.retire(identity); } else committed.put(identity, parts); });
             prepared.clear(); dirty.clear();
         }
-        void collect(Map<String, byte[]> updates) throws IOException {
+        public void collect(Map<String, byte[]> updates) throws IOException {
             for (K identity : dirty) {
                 String encodedKey = key.apply(identity);
                 Map<String,CompoundTag> next = values.containsKey(identity) ? codec.split(identity, values.get(identity)) : Map.of();

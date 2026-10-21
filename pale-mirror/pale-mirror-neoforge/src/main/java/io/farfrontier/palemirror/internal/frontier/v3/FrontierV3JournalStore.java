@@ -39,7 +39,12 @@ final class FrontierV3JournalStore implements FrontierV3PhysicalJournal {
             }, new ThreadPoolExecutor.AbortPolicy());
     private static final Executor WRITES = FrontierPersistenceIo.writer();
     private final Executor writer;
-    private static final Map<Path, java.lang.ref.WeakReference<Object>> FILE_LOCKS = new HashMap<>();
+    private static final java.lang.ref.ReferenceQueue<Object> RETIRED_LOCKS = new java.lang.ref.ReferenceQueue<>();
+    private static final Map<Path, LockReference> FILE_LOCKS = new HashMap<>();
+    private static final class LockReference extends java.lang.ref.WeakReference<Object> {
+        final Path path;
+        LockReference(Path path, Object lock) { super(lock, RETIRED_LOCKS); this.path = path; }
+    }
     private final Object fileLock;
     private final ArrayDeque<Pending> queue = new ArrayDeque<>();
     private long queuedBytes;
@@ -60,11 +65,12 @@ final class FrontierV3JournalStore implements FrontierV3PhysicalJournal {
         this.writer = Objects.requireNonNull(writer);
         this.checkpoint = checkpoint.toAbsolutePath().normalize();
         synchronized (FILE_LOCKS) {
-            FILE_LOCKS.values().removeIf(value -> value.get() == null);
+            LockReference retired;
+            while ((retired = (LockReference) RETIRED_LOCKS.poll()) != null) FILE_LOCKS.remove(retired.path, retired);
             var previous = FILE_LOCKS.get(this.checkpoint);
             Object retained = previous == null ? null : previous.get();
             fileLock = retained == null ? new Object() : retained;
-            FILE_LOCKS.put(this.checkpoint, new java.lang.ref.WeakReference<>(fileLock));
+            if (retained == null) FILE_LOCKS.put(this.checkpoint, new LockReference(this.checkpoint, fileLock));
         }
         journal = this.checkpoint.resolveSibling(this.checkpoint.getFileName() + ".journal");
     }
@@ -121,6 +127,13 @@ final class FrontierV3JournalStore implements FrontierV3PhysicalJournal {
     public synchronized Map<String, byte[]> image() {
         var copy = new TreeMap<String, byte[]>(); rows.forEach((key, value) -> copy.put(key, value.clone()));
         return Collections.unmodifiableMap(copy);
+    }
+    public synchronized byte[] read(String key) {
+        byte[] value = rows.get(key); return value == null ? null : value.clone();
+    }
+    /** A cache may drop this writer only after every task that could publish files has ended. */
+    synchronized boolean quiescent() {
+        return !writerScheduled && queue.isEmpty() && pendingCheckpoint == null;
     }
     record Pressure(long durableSequence, long checkpointSequence, int queuedWrites, long queuedBytes,
                     long retainedBytes, long forcedGroups, long appendedBytes) { }

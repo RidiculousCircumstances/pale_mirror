@@ -35,10 +35,11 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
     private FrontierV3GrayboxLedger() { this(new HashMap<>(), new HashMap<>()); }
     private FrontierV3GrayboxLedger(Map<Long, Claim> claims, Map<Long, FrontierV3WorksiteBlockWitness> worksiteCells) {
         super(FrontierV3PhysicalStoreKind.BLOCKS);
-        this.claims = table("claims", claims, Object::toString, (position, claim) -> encodeClaim(position, claim));
-        this.worksiteCells = table("worksiteCells", worksiteCells, Object::toString, (position, witness) -> {
+        this.claims = pagedTable("claims", claims, Object::toString, Long::parseLong, FrontierV3GrayboxLedger::encodeClaim,
+                FrontierV3GrayboxLedger::decodeClaim);
+        this.worksiteCells = pagedTable("worksiteCells", worksiteCells, Object::toString, Long::parseLong, (position, witness) -> {
             var encoded = witness.write(); encoded.putLong("pos", position); return encoded;
-        });
+        }, FrontierV3GrayboxLedger::decodeWorksite);
         this.worksiteStagingPositions = new TreeSet<>();
         claims.forEach((position, claim) -> {
             if (claim.semanticPart().equals(GrayboxSemanticPart.WORKSITE_STAGING.name())) worksiteStagingPositions.add(position);
@@ -50,8 +51,55 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
     }
     /** Same bounded provenance implementation for the physical-owner composition harness. */
     static FrontierV3GrayboxLedger inMemory() { return new FrontierV3GrayboxLedger(); }
+    @Override boolean pagedRecovery() { return true; }
     @Override FrontierV3PhysicalJournal openJournal(java.nio.file.Path path) throws java.io.IOException {
-        return FrontierV3BlockJournal.open(path);
+        return openBlocks(path);
+    }
+    static FrontierV3BlockJournal openBlocks(java.nio.file.Path path) throws java.io.IOException {
+        return FrontierV3BlockJournal.open(path, queryIndex());
+    }
+    static FrontierV3BlockJournal.IndexPolicy queryIndex() {
+        return new FrontierV3BlockJournal.IndexPolicy("graybox-reconciliation-v1", row -> {
+            // Closed table codec, not generic storage deciding a worksite's business outcome.
+            var record = row.getCompound("record");
+            return switch (FrontierV3PhysicalStoreKind.BLOCKS.table(row.getInt("table")).wireTag()) {
+                case 1 -> decodeClaim(record.getLong("pos"), record).semanticPart().equals(GrayboxSemanticPart.WORKSITE_STAGING.name());
+                case 2 -> external(decodeWorksite(record.getLong("pos"), record));
+                default -> throw new IllegalStateException("unregistered block query codec");
+            };
+        });
+    }
+    @Override void attachedJournal(FrontierV3PhysicalJournal journal) throws java.io.IOException {
+        // Initial decoded/unsaved rows may precede attachment in an offline composition.
+        // Preserve their indexes; point reads below also see those pending replacements.
+        for (String key : journal.indexedKeys()) {
+            byte[] bytes = journal.read(key); if (bytes == null) continue; // Conservative stale index after a partial save.
+            var row = FrontierV3JournalNbt.decode(bytes); var record = row.getCompound("record");
+            long position = Long.parseLong(row.getString("key"));
+            switch (FrontierV3PhysicalStoreKind.BLOCKS.table(row.getInt("table")).wireTag()) {
+                case 1 -> index(java.util.Objects.requireNonNull(claims.get(position)), position);
+                case 2 -> indexExternalWorksite(position, java.util.Objects.requireNonNull(worksiteCells.get(position)));
+                default -> throw new java.io.IOException("unregistered block query codec");
+            }
+        }
+    }
+    private static boolean external(FrontierV3WorksiteBlockWitness witness) {
+        return witness.phase() == FrontierV3WorksiteBlockWitness.Phase.EXTERNAL
+                || witness.phase() == FrontierV3WorksiteBlockWitness.Phase.EXTERNAL_PENDING;
+    }
+    private static Claim decodeClaim(long position, CompoundTag entry) {
+        if (!entry.contains("pos", Tag.TAG_LONG) || entry.getLong("pos") != position)
+            throw new IllegalStateException("claim address differs from its record");
+        return new Claim(requireText(entry.getString("owner"), "owner"), requireTargetTag(entry.getInt("targetTag")),
+                requireText(entry.getString("material"), "material"), requireText(entry.getString("part"), "semantic part"),
+                entry.getLong("revision"), entry.getBoolean("deferred"));
+    }
+    private static FrontierV3WorksiteBlockWitness decodeWorksite(long position, CompoundTag entry) {
+        var witness = FrontierV3WorksiteBlockWitness.read(entry); var actual = witness.declaration().position();
+        if (!entry.contains("pos", Tag.TAG_LONG) || entry.getLong("pos") != position
+                || position != new BlockPos(actual.x(), actual.y(), actual.z()).asLong())
+            throw new IllegalStateException("worksite address differs from its record");
+        return witness;
     }
     Claim claim(BlockPos position) { return claims.get(position.asLong()); }
     FrontierV3WorksiteBlockWitness worksite(BlockPos position) { return worksiteCells.get(position.asLong()); }
@@ -60,8 +108,7 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
     }
     List<BlockPos> externalWorksites() { return externalWorksitePositions.stream().map(BlockPos::of).toList(); }
     private void indexExternalWorksite(long address, FrontierV3WorksiteBlockWitness witness) {
-        if (witness.phase() == FrontierV3WorksiteBlockWitness.Phase.EXTERNAL
-                || witness.phase() == FrontierV3WorksiteBlockWitness.Phase.EXTERNAL_PENDING)
+        if (external(witness))
             externalWorksitePositions.add(address);
         else externalWorksitePositions.remove(address);
     }

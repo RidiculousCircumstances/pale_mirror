@@ -60,15 +60,15 @@ class FrontierV3BlockJournalTest {
         ledger.attachJournal(path, WORLD, DIMENSION, old);
         claim(ledger, new BlockPos(0,64,0)); ledger.worksite(witness(new BlockPos(-1,64,-1)));
         ledger.save(path.toFile(), null); ledger.finish(); var before = old.image();
-        var conversion = FrontierV3BlockJournal.open(path); assertRowsEqual(before, conversion.image());
+        var conversion = FrontierV3GrayboxLedger.openBlocks(path); assertRowsEqual(before, conversion.image());
         conversion.append(Map.of("$meta", before.get("$meta"))); conversion.awaitCheckpoint();
-        assertRowsEqual(before, FrontierV3BlockJournal.open(path).image());
+        assertRowsEqual(before, FrontierV3GrayboxLedger.openBlocks(path).image());
         // Simulate power loss before the single root manifest commit: completed child journals
         // exist, but the old root remains authoritative. Never discard or reinterpret a witness.
         var root = FrontierV3JournalStore.open(path, FrontierV3JournalStore.PHYSICAL);
         var rewind = new TreeMap<String, byte[]>(); root.image().keySet().forEach(key -> rewind.put(key, null));
         rewind.putAll(before); root.append(rewind); root.awaitCheckpoint();
-        var resumed = FrontierV3BlockJournal.open(path); assertRowsEqual(before, resumed.image());
+        var resumed = FrontierV3GrayboxLedger.openBlocks(path); assertRowsEqual(before, resumed.image());
         resumed.append(Map.of("$meta", before.get("$meta"))); resumed.awaitCheckpoint();
         assertEquals(ledger.save(new CompoundTag(), null), read(path).save(new CompoundTag(), null));
     }
@@ -82,7 +82,7 @@ class FrontierV3BlockJournalTest {
         ledger.defer(first); ledger.save(path.toFile(), null);
         assertArrayEquals(unchanged, Files.readAllBytes(otherPath));
         ledger.finish(); Files.delete(otherPath);
-        assertThrows(java.io.IOException.class, () -> FrontierV3BlockJournal.open(path));
+        assertThrows(java.io.IOException.class, () -> FrontierV3GrayboxLedger.openBlocks(path));
     }
     private static void assertRowsEqual(Map<String, byte[]> expected, Map<String, byte[]> actual) {
         assertEquals(expected.keySet(), actual.keySet());
@@ -101,6 +101,45 @@ class FrontierV3BlockJournalTest {
     }
     @Test void orphanSectionsCannotBeMistakenForAFreshWorld() throws Exception {
         Files.createDirectory(directory.resolve("missing.dat.sections"));
-        assertThrows(java.io.IOException.class, () -> FrontierV3BlockJournal.open(directory.resolve("missing.dat")));
+        assertThrows(java.io.IOException.class, () -> FrontierV3GrayboxLedger.openBlocks(directory.resolve("missing.dat")));
+    }
+    @Test void liveLedgerRecoversAndReadsOnlySelectedSectionsWithBoundedEviction() throws Exception {
+        Path path = directory.resolve("paged.dat"); var initial = FrontierV3GrayboxLedger.inMemory();
+        initial.attachJournal(path, WORLD, DIMENSION, initial.openJournal(path));
+        for (int i = 0; i < 20; i++) claim(initial, new BlockPos(i * 16, 64, 0));
+        initial.save(path.toFile(), null); initial.finish();
+        var journal = FrontierV3BlockJournal.open(path, 8, FrontierV3GrayboxLedger.queryIndex());
+        var live = FrontierV3GrayboxLedger.inMemory(); live.attachJournal(path, WORLD, DIMENSION, journal);
+        assertEquals(0, journal.cachePressure().sectionReads(), "no eager hydration on live attachment");
+        assertTrue(read(path).journalDiagnostic().contains("\"sectionReads\":0"), "offline recovery uses the same lazy composition");
+        for (int i = 0; i < 20; i++) assertNotNull(live.claim(new BlockPos(i * 16, 64, 0)));
+        assertEquals(20, journal.cachePressure().sectionReads());
+        assertEquals(8, journal.cachePressure().residentSections());
+        assertEquals(12, journal.cachePressure().evictions());
+        // Evict the decoded cache too: later point use must reload the exact durable row.
+        var restarted = read(path); assertNotNull(restarted.claim(new BlockPos(0,64,0)));
+        long before = journal.cachePressure().sectionReads();
+        live.defer(new BlockPos(19 * 16,64,0)); live.save(path.toFile(), null);
+        assertEquals(before, journal.cachePressure().sectionReads(), "one write does not rescan the other sections");
+        live.finish(); assertTrue(read(path).claim(new BlockPos(19 * 16,64,0)).deferred());
+    }
+    @Test void conservativeQueryIndexSurvivesEitherSideOfChildPublicationWithoutInventingEffects() throws Exception {
+        Path path = directory.resolve("indexed.dat"); var live = FrontierV3GrayboxLedger.inMemory();
+        live.attachJournal(path, WORLD, DIMENSION, live.openJournal(path));
+        var p = new BlockPos(0,64,0); var pending = witness(p);
+        live.worksite(pending); live.save(path.toFile(), null); live.finish();
+        assertEquals(List.of(p), read(path).externalWorksites());
+        var settled = new FrontierV3WorksiteBlockWitness(pending.declaration(), pending.before(), FrontierV3WorksiteBlockWitness.Phase.SETTLED);
+        live.worksite(settled); live.save(path.toFile(), null); live.finish();
+        var root = FrontierV3JournalStore.open(path, FrontierV3JournalStore.PHYSICAL);
+        String key = FrontierV3JournaledSavedData.address(2, Long.toString(p.asLong()), "");
+        var absent = new BlockPos(1,64,0);
+        String missing = FrontierV3JournaledSavedData.address(2, Long.toString(absent.asLong()), "");
+        // Crash after root predeclaration, or after a child settles but before index removal:
+        // both retain a conservative candidate, never a fictitious pending world operation.
+        root.append(Map.of("index:" + key, new byte[0], "index:" + missing, new byte[0])); root.awaitCheckpoint();
+        var recovered = read(path);
+        assertTrue(recovered.externalWorksites().isEmpty());
+        assertEquals(settled, recovered.worksite(p)); assertNull(recovered.worksite(absent));
     }
 }
