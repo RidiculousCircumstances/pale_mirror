@@ -106,6 +106,23 @@ public final class ShipmentPhysicalStateSupport {
     }
     public static FrontierWorldState observed(FrontierWorldState state, SubjectId subject, ShipmentHotTransferred receipt) {
         Shipment shipment = require(state, subject, receipt.shipmentId(), receipt.step());
+        return settle(state, shipment, receipt, false);
+    }
+    public static FrontierWorldState retired(FrontierWorldState state, SubjectId subject, ShipmentRetiredEffectObserved outcome) {
+        var receipt = outcome.effect(); var identity = receipt.step().observation().actuation();
+        ActorBodyAuthority.requireRetiredDeath(state, identity.body());
+        state.actorExecutions().requireRetained(identity.execution());
+        var shipment = state.shipments().shipments().get(receipt.shipmentId());
+        if (shipment == null || !subject.equals(shipment.id()) || shipment.terminal()
+                || !shipment.execution().equals(identity.execution())
+                || shipment.status() != receipt.step().status() || shipment.revision() != receipt.step().shipmentRevision()
+                || !shipment.pendingPhysicalStep().equals(Optional.of(receipt.step())))
+            throw new IllegalArgumentException("retired shipment effect lacks its exact retained obligation");
+        ShipmentStateSupport.validateOrder(state, shipment.itemOrder(receipt.step().lotQuantities()));
+        return outcome.applied() ? settle(state, shipment, receipt, true)
+                : state.withChanges(FrontierWorldStateUpdate.begin().shipments(state.shipments().cancelUnusedEffect(shipment)));
+    }
+    private static FrontierWorldState settle(FrontierWorldState state, Shipment shipment, ShipmentHotTransferred receipt, boolean retired) {
         if (!shipment.pendingPhysicalStep().equals(Optional.of(receipt.step())))
             throw new IllegalArgumentException("shipment physical receipt lacks its exact durable pre-effect declaration");
         var order = shipment.itemOrder(receipt.step().lotQuantities());
@@ -127,8 +144,10 @@ public final class ShipmentPhysicalStateSupport {
                     && stack.itemKind().equals(shipment.itemKind()) && stack.quantity() == receipt.step().destinationBefore() + order.portion().quantity()))
                 throw new IllegalArgumentException("shipment unload did not preserve its exact remaining hand and receiver portion");
         }
-        var transfer = ActorResourceTransferComposition.observed(state, order, receipt.step().sourceEpoch(),
-                receipt.step().destinationEpoch(), receipt.remainingSource(), receipt.destination());
+        var transfer = retired ? ActorResourceTransferComposition.retiredObserved(state, order, receipt.step().observation().actuation(),
+                receipt.step().sourceEpoch(), receipt.step().destinationEpoch(), receipt.remainingSource(), receipt.destination())
+                : ActorResourceTransferComposition.observed(state, order, receipt.step().sourceEpoch(),
+                    receipt.step().destinationEpoch(), receipt.remainingSource(), receipt.destination());
         return ShipmentStateSupport.transferred(state, shipment, receipt.step().lotQuantities(), transfer);
     }
     public static long destinationEpoch(FrontierWorldState state, Shipment shipment, long bodyEpoch) {

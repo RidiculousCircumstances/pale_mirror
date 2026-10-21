@@ -1,11 +1,13 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import java.util.*;
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId;
 
 /** Closed endpoint adapters. The common work/haul caller does not distinguish a chest from a ground pickup. */
 public final class ActorResourceTransferComposition {
     private record Evidence(long sourceEpoch, long destinationEpoch,
-                            List<FungiblePhysicalObservation.Stack> source, List<FungiblePhysicalObservation.Stack> destination) { }
+                            List<FungiblePhysicalObservation.Stack> source, List<FungiblePhysicalObservation.Stack> destination,
+                            Optional<ActorActuationId> retired) { }
     private interface Port {
         FrontierWorldStateUpdate cold(FrontierWorldState state, ActorResourceItemOrder order);
         FrontierWorldStateUpdate observed(FrontierWorldState state, ActorResourceItemOrder order, Evidence evidence);
@@ -20,6 +22,8 @@ public final class ActorResourceTransferComposition {
                     return ActorItemCustody.transferColdUpdate(state, require(order));
                 }
                 @Override public FrontierWorldStateUpdate observed(FrontierWorldState state, ActorResourceItemOrder order, Evidence evidence) {
+                    if (evidence.retired().isPresent()) return ActorItemCustody.transferRetiredObservedUpdate(state, require(order),
+                            evidence.retired().orElseThrow(), evidence.sourceEpoch(), evidence.destinationEpoch(), evidence.source(), evidence.destination());
                     return ActorItemCustody.transferObservedUpdate(state, require(order), evidence.sourceEpoch(), evidence.destinationEpoch(), evidence.source(), evidence.destination());
                 }
             },
@@ -29,6 +33,8 @@ public final class ActorResourceTransferComposition {
                 }
                 @Override public FrontierWorldStateUpdate observed(FrontierWorldState state, ActorResourceItemOrder order, Evidence evidence) {
                     if (!(order instanceof ActorGroundItemOrder ground)) throw new IllegalArgumentException("foreign ground transfer schema");
+                    if (evidence.retired().isPresent()) return ActorItemCustody.transferRetiredObservedUpdate(state, ground,
+                            evidence.retired().orElseThrow(), evidence.sourceEpoch(), evidence.destinationEpoch(), evidence.source(), evidence.destination());
                     return ActorItemCustody.transferObservedUpdate(state, ground, evidence.sourceEpoch(), evidence.destinationEpoch(), evidence.source(), evidence.destination());
                 }
             });
@@ -45,6 +51,12 @@ public final class ActorResourceTransferComposition {
     public static FrontierWorldStateUpdate cold(FrontierWorldState state, ActorResourceItemOrder order) { return port(order).cold(state, order); }
     public static FrontierWorldStateUpdate observed(FrontierWorldState state, ActorResourceItemOrder order, long sourceEpoch,
             long destinationEpoch, List<FungiblePhysicalObservation.Stack> remainingSource, List<FungiblePhysicalObservation.Stack> destination) {
-        return port(order).observed(state, order, new Evidence(sourceEpoch, destinationEpoch, List.copyOf(remainingSource), List.copyOf(destination)));
+        return port(order).observed(state, order, new Evidence(sourceEpoch, destinationEpoch, List.copyOf(remainingSource), List.copyOf(destination), Optional.empty()));
+    }
+    public static FrontierWorldStateUpdate retiredObserved(FrontierWorldState state, ActorResourceItemOrder order,
+            ActorActuationId identity, long sourceEpoch, long destinationEpoch,
+            List<FungiblePhysicalObservation.Stack> remainingSource, List<FungiblePhysicalObservation.Stack> destination) {
+        return port(order).observed(state, order, new Evidence(sourceEpoch, destinationEpoch,
+                List.copyOf(remainingSource), List.copyOf(destination), Optional.of(identity)));
     }
 }

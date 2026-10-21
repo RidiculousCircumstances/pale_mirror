@@ -7,7 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinit
 /** Exercises the whole physical confirmation command, including container closure. */
 final class ShipmentConfirmationFixture {
     private ShipmentConfirmationFixture() { }
-    static FrontierWorldState apply(FrontierWorldState state, ShipmentHotTransferred payload) {
+    static FrontierWorldState apply(FrontierWorldState state, FrontierPayload payload) {
         var id = new CommandId("command:test-shipment-confirmation");
         var command = new FrontierCommand(FrontierCommand.SCHEMA_VERSION, id, state.bootstrap().worldId(),
                 new Revision(100), new SimInstant(0), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), payload);

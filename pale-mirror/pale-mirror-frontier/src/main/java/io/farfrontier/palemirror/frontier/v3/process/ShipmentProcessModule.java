@@ -18,9 +18,10 @@ final class ShipmentProcessModule implements FrontierWorldProcessModule {
     }
     static final Set<String> TYPES = Set.of("frontier.shipment_storage_retargeted", "frontier.shipment_dispatched", "frontier.shipment_cold_transferred", "frontier.shipment_retired",
             "frontier.shipment_hot_prepared", "frontier.shipment_hot_transferred", "frontier.shipment_hand_custody_observed", "frontier.shipment_receipt_acknowledged", "frontier.shipment_cargo_disposition_observed",
-            "frontier.internal_shipment_dispatched", "frontier.internal_shipment_received");
+            "frontier.internal_shipment_dispatched", "frontier.internal_shipment_received", "frontier.shipment_retired_effect_observed", "frontier.shipment_death_settled");
     static final DeterministicProcessDescriptor DESCRIPTOR = new DeterministicProcessDescriptor("shipments",
-            Set.of("frontier.shipment_dispatch_requested", "frontier.shipment_hot_prepared", "frontier.shipment_hot_transferred", "frontier.shipment_hand_custody_observed", "frontier.shipment_cargo_disposition_observed"),
+            Set.of("frontier.shipment_dispatch_requested", "frontier.shipment_hot_prepared", "frontier.shipment_hot_transferred", "frontier.shipment_hand_custody_observed",
+                    "frontier.shipment_cargo_disposition_observed", "frontier.shipment_retired_effect_observed", "frontier.shipment_death_settled"),
             Set.of(ShipmentProcess.PROGRESS, InternalShipmentReceipts.RECEIVE, ResourceHaulingPolicy.REVIEW), TYPES, java.util.stream.Stream.concat(TYPES.stream(), Set.of(
                     "frontier.actor_movement_started", "frontier.actor_movement_interrupted", "kernel.schedule_created", "kernel.schedule_rescheduled", "kernel.schedule_cancelled", "frontier.reference_mutation_closed").stream())
                     .collect(java.util.stream.Collectors.toUnmodifiableSet()), java.util.stream.Stream.concat(TYPES.stream(),
@@ -38,6 +39,8 @@ final class ShipmentProcessModule implements FrontierWorldProcessModule {
             case ShipmentColdTransferred value -> ShipmentStateSupport.transferCold(state, event.subject(), value.shipmentId(), value.expectedRevision(), value.expectedStatus());
             case ShipmentRetired value -> ShipmentStateSupport.retire(state, event.subject(), value.shipmentId(), value.expectedRevision());
             case ShipmentHotPrepared value -> ShipmentPhysicalStateSupport.prepare(state, event.subject(), value);
+            case ShipmentRetiredEffectObserved value -> ShipmentPhysicalStateSupport.retired(state, event.subject(), value);
+            case ShipmentDeathSettled value -> value.apply(state, event.subject());
             case ShipmentHandCustodyObserved value -> ShipmentPhysicalStateSupport.handCustody(state, event.subject(), value);
             case ShipmentReceiptAcknowledged value -> ShipmentStateSupport.acknowledge(state, event.subject(), value);
             case ShipmentCargoDispositionObserved value -> ShipmentCargoDisposition.apply(state, event.subject(), value);
@@ -53,6 +56,10 @@ final class ShipmentProcessModule implements FrontierWorldProcessModule {
             var events = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent>();
             io.farfrontier.palemirror.frontier.v3.api.SubjectId id;
             switch (command.payload()) {
+                case ShipmentDeathSettled value -> {
+                    id = value.shipmentId(); value.apply(state, id);
+                    events.add(ShipmentProcess.wake(id, command.submittedAt().ticks()));
+                }
                 case ShipmentCargoDispositionObserved value -> {
                     id = value.shipmentId(); ShipmentCargoDisposition.apply(state, id, value);
                     var shipment = state.shipments().shipments().get(id);
@@ -85,6 +92,23 @@ final class ShipmentProcessModule implements FrontierWorldProcessModule {
                         events.addAll(ShipmentDeliveryNotifications.delivered(preview.shipments().shipments().get(shipment.id()), command.submittedAt().ticks()));
                     else events.addAll(ShipmentDeliveryNotifications.loaded(preview.shipments().shipments().get(shipment.id()), command.submittedAt().ticks()));
                     events.add(ShipmentProcess.wake(shipment.id(), command.submittedAt().ticks()));
+                }
+                case ShipmentRetiredEffectObserved value -> {
+                    id = value.effect().shipmentId();
+                    var shipment = state.shipments().shipments().get(id);
+                    var preview = ShipmentPhysicalStateSupport.retired(state, id, value);
+                    var containers = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.api.SubjectId>();
+                    ShipmentServiceAccess.point(shipment).ifPresent(containers::add);
+                    // Its dead carrier's attached storage retains exact native bindings
+                    // until the attachment owner drops the contents. It cannot be
+                    // released to COLD/projection between transfer and death loot.
+                    events.addAll(ConfirmedContainerMutationPlan.close(preview, containers, command.expectedRevision().next().value()));
+                    if (value.applied()) {
+                        var following = preview.shipments().shipments().get(id);
+                        events.addAll(shipment.carrying() ? ShipmentDeliveryNotifications.delivered(following, command.submittedAt().ticks())
+                                : ShipmentDeliveryNotifications.loaded(following, command.submittedAt().ticks()));
+                    }
+                    events.add(ShipmentProcess.wake(id, command.submittedAt().ticks()));
                 }
                 default -> throw new IllegalArgumentException("shipment rejects an undeclared physical command");
             }

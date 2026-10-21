@@ -2,6 +2,8 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId;
 
 /** Shared COLD handoff preconditions; the owning process publishes inventory and job phase atomically. */
 public final class ActorItemCustody {
@@ -18,7 +20,7 @@ public final class ActorItemCustody {
         ExactInventory inventory = state.inventory();
         ContainerRecord container = inventory.containers().get(order.containerEndpoint().containerId());
         requireEndpoint(container, order);
-        requireAttachedStorage(state, order, false);
+        requireAttachedStorage(state, order, false, Optional.empty());
         if (order.containerEndpoint() instanceof ActorContainerItemOrder.ContainerEndpoint.ExactStationSlot
                 || order.containerEndpoint() instanceof ActorContainerItemOrder.ContainerEndpoint.FungibleStation)
             order.requireCurrentStation(inventory);
@@ -60,13 +62,24 @@ public final class ActorItemCustody {
                                                   long sourceEpoch, long destinationEpoch,
                                                   List<FungiblePhysicalObservation.Stack> remainingSource,
                                                   List<FungiblePhysicalObservation.Stack> destination) {
+        return observed(state, order, sourceEpoch, destinationEpoch, remainingSource, destination, Optional.empty());
+    }
+    public static FrontierWorldStateUpdate transferRetiredObservedUpdate(FrontierWorldState state, ActorContainerItemOrder order,
+            ActorActuationId identity, long sourceEpoch, long destinationEpoch,
+            List<FungiblePhysicalObservation.Stack> source, List<FungiblePhysicalObservation.Stack> destination) {
+        requireRetired(state, order, identity);
+        return observed(state, order, sourceEpoch, destinationEpoch, source, destination, Optional.of(identity));
+    }
+    private static FrontierWorldStateUpdate observed(FrontierWorldState state, ActorContainerItemOrder order,
+            long sourceEpoch, long destinationEpoch, List<FungiblePhysicalObservation.Stack> remainingSource,
+            List<FungiblePhysicalObservation.Stack> destination, Optional<ActorActuationId> retired) {
         Objects.requireNonNull(state, "observed actor item state");
         Objects.requireNonNull(order, "observed actor item order");
         ActorClaimDelegationComposition.validate(state, order);
         ExactInventory inventory = state.inventory();
         ContainerRecord container = inventory.containers().get(order.containerEndpoint().containerId());
         requireEndpoint(container, order);
-        requireAttachedStorage(state, order, true);
+        requireAttachedStorage(state, order, true, retired);
         if (!(ReferenceContainerCustody.hasOperationalCustody(state, container.id())
                 || ReferenceContainerCustody.hasLiveCustody(state, container.id())
                 && ContainerPhysicalAuthorityComposition.pending(state, container.id()))
@@ -90,11 +103,12 @@ public final class ActorItemCustody {
         return preparation.ownerChanges().inventory(inventory.withFungibleResources(inventory.fungibleResources()
                 .transferActorOrderObservedStacks(preparation.order(), sourceEpoch, destinationEpoch, remainingSource, destination)));
     }
-    private static void requireAttachedStorage(FrontierWorldState state, ActorContainerItemOrder order, boolean observed) {
+    private static void requireAttachedStorage(FrontierWorldState state, ActorContainerItemOrder order, boolean observed, Optional<ActorActuationId> retired) {
         if (!(order.actorSlot() instanceof ActorItemSlot.AttachedStorage storage)) return;
         var surface = state.inventory().surfaces().get(storage.containerId());
         if (surface == null || !surface.location().equals(new ContainerLocation.Mobile(order.actorId()))
-                || ReferenceContainerCustody.blocksCanonicalUse(state, storage.containerId()))
+                || (retired.isPresent() ? ReferenceContainerCustody.blocksRetiredAttachmentObservation(state, storage.containerId(), retired.orElseThrow().body())
+                    : ReferenceContainerCustody.blocksCanonicalUse(state, storage.containerId())))
             throw new IllegalArgumentException("item order has no exact live body/storage attachment");
         if (observed ? !ReferenceContainerCustody.hasOperationalCustody(state, storage.containerId())
                     && !(ReferenceContainerCustody.hasLiveCustody(state, storage.containerId())
@@ -115,17 +129,28 @@ public final class ActorItemCustody {
     public static FrontierWorldStateUpdate transferObservedUpdate(FrontierWorldState state, ActorGroundItemOrder order,
             long sourceEpoch, long destinationEpoch, List<FungiblePhysicalObservation.Stack> remainingSource,
             List<FungiblePhysicalObservation.Stack> destination) {
+        return observedGround(state, order, sourceEpoch, destinationEpoch, remainingSource, destination, Optional.empty());
+    }
+    public static FrontierWorldStateUpdate transferRetiredObservedUpdate(FrontierWorldState state, ActorGroundItemOrder order,
+            ActorActuationId identity, long sourceEpoch, long destinationEpoch,
+            List<FungiblePhysicalObservation.Stack> source, List<FungiblePhysicalObservation.Stack> destination) {
+        requireRetired(state, order, identity);
+        return observedGround(state, order, sourceEpoch, destinationEpoch, source, destination, Optional.of(identity));
+    }
+    private static FrontierWorldStateUpdate observedGround(FrontierWorldState state, ActorGroundItemOrder order,
+            long sourceEpoch, long destinationEpoch, List<FungiblePhysicalObservation.Stack> remainingSource,
+            List<FungiblePhysicalObservation.Stack> destination, Optional<ActorActuationId> retired) {
         Objects.requireNonNull(state); Objects.requireNonNull(order);
         var actor = state.actorLocations().get(order.actorId());
         var execution = state.actorExecutions().actors().get(order.actorId());
-        if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
+        if (actor == null || retired.isEmpty() && (actor.condition().status() != ActorLifeStatus.ALIVE
                 || !actor.supportingSurface().equals(order.station()) || execution == null
-                || execution.current().filter(current -> current.activityOwnerId().equals(order.ownerId())).isEmpty()
+                || execution.current().filter(current -> current.activityOwnerId().equals(order.ownerId())).isEmpty())
                 || sourceEpoch != order.sourceEpoch())
             throw new IllegalArgumentException("ground pickup has no living exact execution at its declared source");
-        var body = ActorBodyAuthority.current(state, order.actorId());
+        var body = retired.map(ActorActuationId::body).orElseGet(() -> ActorBodyAuthority.current(state, order.actorId()));
         if (body.physicalEpoch() != destinationEpoch
-                || ActorBodyAuthority.require(state, body).phase() != FencedRecoveryPhase.RUNNING)
+                || retired.isEmpty() && ActorBodyAuthority.require(state, body).phase() != FencedRecoveryPhase.RUNNING)
             throw new IllegalArgumentException("ground pickup has a stale or non-operational body epoch");
         if (order.actorSlot().equals(new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN))
                 && !state.inventory().actorItems(order.actorId()).isEmpty())
@@ -146,6 +171,11 @@ public final class ActorItemCustody {
             throw new IllegalArgumentException("declared storage filter refuses this resource portion");
         // Fungible custody and title are independent. The calling owner authorizes the order;
         // the resource ledger validates quantities/claims and preserves each lot's actual owner.
+    }
+    private static void requireRetired(FrontierWorldState state, ActorResourceItemOrder order, ActorActuationId identity) {
+        if (!order.actorId().equals(identity.body().actorId())) throw new IllegalArgumentException("retired transfer names a foreign actor");
+        ActorBodyAuthority.requireRetiredDeath(state, identity.body());
+        state.actorExecutions().requireRetained(identity.execution());
     }
     private static void requireExactDestinationSlot(FrontierWorldState state, ActorContainerItemOrder order) {
         if (!(order.actorSlot() instanceof ActorItemSlot.Hand hand) || hand.hand() != ActorContainerItemOrder.Hand.MAIN)

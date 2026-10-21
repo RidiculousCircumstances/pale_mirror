@@ -9,6 +9,16 @@ final class ShipmentPayloadCodecs {
     private ShipmentPayloadCodecs() { }
     static PayloadCodecs create() {
         return new PayloadCodecs(List.of(
+                codec("frontier.shipment_death_settled", (out, p) -> {
+                    var value = (ShipmentDeathSettled) p; out.writeUTF(value.shipmentId().value()); out.writeLong(value.expectedRevision());
+                    out.writeUTF(value.identity().body().actorId().value()); out.writeLong(value.identity().body().physicalEpoch());
+                    ActorExecutionStateCodec.writeId(out, value.identity().execution());
+                }, in -> {
+                    var id = new SubjectId(in.readUTF()); long revision = in.readLong();
+                    var body = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(new SubjectId(in.readUTF()), in.readLong());
+                    return new ShipmentDeathSettled(id, revision, new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(body,
+                            ActorExecutionStateCodec.readId(in)));
+                }),
                 codec("frontier.shipment_storage_retargeted", (out, p) -> {
                     var value = (ShipmentStorageRetargeted) p; out.writeUTF(value.shipmentId().value()); out.writeLong(value.expectedRevision());
                     ShipmentStateCodec.endpoint(out, value.destination());
@@ -84,6 +94,15 @@ final class ShipmentPayloadCodecs {
                     PhysicalObservationStackCodec.writeStacks(out, value.remainingSource()); PhysicalObservationStackCodec.writeStacks(out, value.destination());
                 }, in -> new ShipmentHotTransferred(new SubjectId(in.readUTF()), ShipmentPhysicalStepCodec.read(in),
                         PhysicalObservationStackCodec.readStacks(in), PhysicalObservationStackCodec.readStacks(in))),
+                codec("frontier.shipment_retired_effect_observed", (out, p) -> {
+                    var value = (ShipmentRetiredEffectObserved) p; out.writeBoolean(value.applied());
+                    var effect = value.effect(); out.writeUTF(effect.shipmentId().value()); ShipmentPhysicalStepCodec.write(out, effect.step());
+                    PhysicalObservationStackCodec.writeStacks(out, effect.remainingSource()); PhysicalObservationStackCodec.writeStacks(out, effect.destination());
+                }, in -> {
+                    boolean applied = in.readBoolean();
+                    return new ShipmentRetiredEffectObserved(new ShipmentHotTransferred(new SubjectId(in.readUTF()), ShipmentPhysicalStepCodec.read(in),
+                            PhysicalObservationStackCodec.readStacks(in), PhysicalObservationStackCodec.readStacks(in)), applied);
+                }),
                 codec("frontier.shipment_dispatched", (out, p) -> ShipmentStateCodec.writeShipment(out, ((ShipmentDispatched) p).shipment()), in -> new ShipmentDispatched(ShipmentStateCodec.readShipment(in))),
                 codec("frontier.shipment_cold_transferred", (out, p) -> {
                     var step = (ShipmentColdTransferred) p; out.writeUTF(step.shipmentId().value()); out.writeLong(step.expectedRevision()); ShipmentStateCodec.status(out, step.expectedStatus());

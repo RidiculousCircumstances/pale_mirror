@@ -96,6 +96,12 @@ public record Shipment(SubjectId id, ResourceClaimDelegation authorization, Acto
                 receivingAccountId, itemKind, lotQuantities, status, revision, Optional.of(step), reception, transportMissionId, mobileContainerId);
     }
     public int quantity() { return lotQuantities.values().stream().mapToInt(Integer::intValue).sum(); }
+    public Shipment withoutUnusedEffect() {
+        if (pendingPhysicalStep.isEmpty()) throw new IllegalArgumentException("shipment has no effect to cancel");
+        return new Shipment(id, authorization, execution, sender, receiver, sourceAccountId, carriedAccountId,
+                receivingAccountId, itemKind, lotQuantities, status, Math.addExact(revision, 1),
+                Optional.empty(), reception, transportMissionId, mobileContainerId);
+    }
     public boolean carrying() { return status == Status.CARRYING || status == Status.RETURNING; }
     /** Immutable sale destination is not changed when logistics returns unsold cargo. */
     public ShipmentEndpoint unloadingEndpoint() {

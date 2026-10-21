@@ -427,6 +427,7 @@ class GoodsTradeTest {
                     "the prepared transfer fences actual mutation, independently of a free-slot planning hint");
         }
         var prepared = state;
+        if (mobile) ShipmentDeathEffectsTest.checkPreparedMobileDeath(prepared, receipt);
         assertThrows(IllegalArgumentException.class, () -> ModeledActorBodyFacts.unloaded(prepared, actor));
         var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
         if (mobile) {

@@ -15,20 +15,36 @@ import java.util.*;
 final class FrontierV3ShipmentDeathResources {
     private FrontierV3ShipmentDeathResources() { }
     static boolean settled(FrontierWorldState state, ActorBodyId id) {
-        return state.shipments().shipments().values().stream().noneMatch(shipment -> shipment.pendingPhysicalStep()
-                .filter(step -> step.observation().actuation().body().equals(id)).isPresent());
+        return state.shipments().shipments().values().stream().filter(shipment -> shipment.execution().actorId().equals(id.actorId()))
+                .noneMatch(shipment -> shipment.pendingPhysicalStep().isPresent()
+                        || shipment.status() == Shipment.Status.AWAITING_LOAD
+                        || shipment.carrying() && shipment.quantity() > 0 && shipment.mobileContainerId().isEmpty());
     }
     static FrontierV3ActorDeathResourceComposition.AfterFatality prepare(ServerLevel level,
             FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Mob body, ActorBodyId id) {
         var state = runtime.decodedState().orElseThrow();
         if (!ActorBodyAuthority.current(state, id.actorId()).equals(id)) return () -> { };
-        return captured(level, runtime, body, id, body.getMainHandItem().copy());
+        var witness = body.getMainHandItem().copy();
+        var effects = FrontierV3ShipmentDeathEffects.capture(level, state, body, id);
+        return FrontierV3ActorDeathResourceComposition.retained(effects,
+                () -> settle(level, runtime, body, id, witness));
     }
     static void recover(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             Mob body, ActorBodyId id, FrontierV3BodyResourceSnapshot snapshot) {
         ActorBodyAuthority.requireRetiredDeath(runtime.decodedState().orElseThrow(), id);
         var witness = snapshot.slots(level).get(new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN));
         if (witness == null) throw new IllegalStateException("shipment recovery lacks a pre-loot native hand");
+        settle(level, runtime, body, id, witness);
+    }
+    private static void settle(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            Mob body, ActorBodyId id, ItemStack witness) {
+        var state = runtime.decodedState().orElseThrow(); ActorBodyAuthority.requireRetiredDeath(state, id);
+        var uncollected = state.shipments().shipments().values().stream()
+                .filter(s -> s.execution().actorId().equals(id.actorId()) && s.status() == Shipment.Status.AWAITING_LOAD
+                        && s.pendingPhysicalStep().isEmpty() && s.reception().isEmpty()).toList();
+        for (var shipment : uncollected)
+            FrontierV3CommandSubmission.submit(runtime, "shipment-death-settled", shipment.id().value(),
+                    new ShipmentDeathSettled(shipment.id(), shipment.revision(), new ActorActuationId(id, shipment.execution())));
         captured(level, runtime, body, id, witness).settle();
     }
     private static FrontierV3ActorDeathResourceComposition.AfterFatality captured(ServerLevel level,

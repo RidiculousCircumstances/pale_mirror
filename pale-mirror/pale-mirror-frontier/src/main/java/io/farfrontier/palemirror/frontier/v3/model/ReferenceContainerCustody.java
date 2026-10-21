@@ -90,11 +90,26 @@ public final class ReferenceContainerCustody {
     public static boolean blocksCanonicalUse(FrontierWorldState state, SubjectId containerId) {
         if (!isReferenceContainer(state, containerId)) return false;
         var surface = state.inventory().surfaces().get(containerId);
-        if (surface.status() == ContainerSurfaceStatus.CONFLICT || surface.status() == ContainerSurfaceStatus.ADOPTING
-                || surface.status() == ContainerSurfaceStatus.RETIRED) return true;
         if (surface.location() instanceof ContainerLocation.Mobile mobile
                 && state.actorLocations().get(mobile.actorId()).condition().status() != ActorLifeStatus.ALIVE)
             return true; // Cargo disposition, not a free replacement animal, must close this owner.
+        return blocksResourceBoundary(state, containerId);
+    }
+    /** A retired observation may settle an already prepared effect, never start
+     * work or project the dead body's inventory. Other conflict fences remain. */
+    public static boolean blocksRetiredAttachmentObservation(FrontierWorldState state, SubjectId containerId,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId body) {
+        ActorBodyAuthority.requireRetiredDeath(state, body);
+        var surface = state.inventory().surfaces().get(containerId);
+        if (!isReferenceContainer(state, containerId) || surface == null
+                || !surface.location().equals(new ContainerLocation.Mobile(body.actorId())))
+            throw new IllegalArgumentException("retired observation names a foreign attached container");
+        return blocksResourceBoundary(state, containerId);
+    }
+    private static boolean blocksResourceBoundary(FrontierWorldState state, SubjectId containerId) {
+        var surface = state.inventory().surfaces().get(containerId);
+        if (surface.status() == ContainerSurfaceStatus.CONFLICT || surface.status() == ContainerSurfaceStatus.ADOPTING
+                || surface.status() == ContainerSurfaceStatus.RETIRED) return true;
         PhysicalCustodyLease lease = state.replicaCustody().custodyByScope().get(scopeId(containerId));
         return hasConflict(state, containerId) || lease != null && lease.objectId().equals(containerId)
                 && lease.providerId().equals(PROVIDER_ID) && lease.status() == PhysicalCustodyLeaseStatus.UNRESOLVED;
