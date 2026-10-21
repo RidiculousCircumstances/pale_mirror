@@ -168,6 +168,45 @@ public final class ResourceSiteHarvestProcess {
     }
 
     public static FrontierWorldState reduceProgressed(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestProgressed progressed) {
+        return settleProgressed(state, subject, progressed, java.util.Optional.empty());
+    }
+
+    public static FrontierWorldState reduceRetiredEffect(FrontierWorldState state, SubjectId subject, HarvestRetiredEffectObserved retired) {
+        var identity = retired.identity();
+        ActorBodyAuthority.requireRetiredDeath(state, identity.body());
+        state.actorExecutions().requireRetained(identity.execution());
+        var effect = retired.effect();
+        if (!subject.equals(effect.siteId())) throw new IllegalArgumentException("retired field effect has a foreign site");
+        var lifecycle = state.resourceSites().site(subject);
+        var job = lifecycle.harvestJob(effect.jobId()).orElseThrow();
+        if (!job.workerId().equals(identity.body().actorId()) || !job.progress().hasPendingCrop()
+                || !effect.observedHand().orElseThrow().address().entityId().equals(
+                    io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(state.bootstrap().worldId(), job.workerId())))
+            throw new IllegalArgumentException("retired field effect lost its exact worker or pending cell");
+        if (retired.applied()) return settleProgressed(state, subject, effect, java.util.Optional.of(identity));
+        var field = state.resourceSites().cycle(subject);
+        requireContinuationBinding(job, new ScheduledAction(effect.coldScheduleId(), new SimInstant(effect.coldDueAt()),
+                0, subject, COLD_PROGRESS_KIND, 1));
+        if (effect.epoch() != field.epoch() || effect.layoutRevision() != field.layout().revision()
+                || !effect.cellId().equals(job.target().cellId()) || effect.generation() != job.target().generation()
+                || !job.target().current(field) || effect.outcome() != field.expectedWorkOutcome(effect.cellId())
+                || effect.completedCropSlots() != job.progress().completedCropSlots() + 1
+                || effect.observedHand().orElseThrow().quantity() != ResourceSiteHarvestCargo.quantity(state, job))
+            throw new IllegalArgumentException("unused field effect has a stale cell or changed cargo");
+        var lease = state.sceneLeases().values().stream().filter(FrontierSceneBehaviors::isResourceSiteHarvest)
+                .filter(value -> value.status() != SceneLeaseStatus.CLOSED
+                        && FrontierSceneBehaviors.resourceSiteHarvest(value).siteId().equals(job.siteId())
+                        && FrontierSceneBehaviors.resourceSiteHarvest(value).jobId().equals(job.id()))
+                .reduce((left, right) -> { throw new IllegalArgumentException("retired field has competing scene owners"); }).orElseThrow();
+        if (lease.members().size() != 1 || !lease.members().getFirst().actorId().equals(job.workerId())
+                || effect.observedHand().orElseThrow().authorityEpoch() != ResourceSiteHarvestCargo.handEpoch(state, job, lease))
+            throw new IllegalArgumentException("unused field effect has a stale hand authority");
+        return state.withChanges(FrontierWorldStateUpdate.begin().resourceSites(state.resourceSites().replace(
+                lifecycle.withHarvestProgress(job, job.progress().cancelPreparedCrop()))));
+    }
+
+    private static FrontierWorldState settleProgressed(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestProgressed progressed,
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId> retired) {
         if (!subject.equals(progressed.siteId()))
             throw new IllegalArgumentException("resource-site harvest progress has a foreign declared site owner");
         // The event already declares its site owner. Never discover authority by
@@ -177,7 +216,7 @@ public final class ResourceSiteHarvestProcess {
                 .orElseThrow(() -> new IllegalArgumentException("resource-site harvest progress has no active job at its declared site owner"));
         if (!job.id().equals(progressed.jobId()))
             throw new IllegalArgumentException("resource-site harvest progress has a foreign job for its declared site owner");
-        if (!ResourceSiteHarvestGoal.actorAtWorkCell(state, job))
+        if (retired.isEmpty() && !ResourceSiteHarvestGoal.actorAtWorkCell(state, job))
             throw new IllegalArgumentException("resource-site harvest receipt lacks its actual farmer at the current CellId station");
         requireContinuationBinding(job, new ScheduledAction(progressed.coldScheduleId(), new SimInstant(progressed.coldDueAt()),
                 0, subject, COLD_PROGRESS_KIND, 1));
@@ -191,18 +230,20 @@ public final class ResourceSiteHarvestProcess {
         var extraction = progressed.outcome() == ResourceFieldCycle.WorkOutcome.HARVESTED
                 ? FieldHarvestExtraction.prepareKnown(field, cell.id(),
                     FieldCellOperation.id(job.id(), field.epoch(), cell.id(), progressed.generation()),
-                    state.actorExecutions().current(
-                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST).get(job.workerId()),
+                    retired.map(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId::execution).orElseGet(() ->
+                        state.actorExecutions().current(
+                            io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST).get(job.workerId())),
                     FieldHarvestExtraction.definition(state.bootstrap(), cell.crop()))
                     : null;
         int extractedQuantity = extraction == null ? 0 : extraction.quantity(FieldHarvestExtraction.ITEM);
         int carriedAfter = Math.addExact(ResourceSiteHarvestCargo.quantity(state, job), extractedQuantity);
         SurfaceAnchor workerStation = state.actorLocations().get(job.workerId()).supportingSurface();
-        int nextSelected = lifecycle.nextHarvestTarget(job, worked);
-        ResourceSiteLifecycle advanced = lifecycle.advanceHarvest(job, progressed.completedCropSlots(),
-                ResourceSiteHarvestGoal.current(state, job), workerStation, nextSelected, progressed.outcome(), worked, extractedQuantity);
+        ResourceSiteLifecycle advanced = retired.isPresent()
+                ? lifecycle.settleRetiredHarvestCrop(job, progressed.completedCropSlots(), progressed.outcome(), worked, extractedQuantity)
+                : lifecycle.advanceHarvest(job, progressed.completedCropSlots(), ResourceSiteHarvestGoal.current(state, job),
+                    workerStation, lifecycle.nextHarvestTarget(job, worked), progressed.outcome(), worked, extractedQuantity);
         ResourceSiteHarvestJob advancedJob = advanced.harvestJob(job.id()).orElseThrow();
-        if (!advancedJob.progress().complete()
+        if (retired.isEmpty() && !advancedJob.progress().complete()
                 && carriedAfter > 64 - FieldAgronomy.maximumYield(state.bootstrap())) {
             advanced = advanced.returnFullHarvestBatch(advancedJob);
         }
@@ -211,11 +252,12 @@ public final class ResourceSiteHarvestProcess {
         SubjectId actorAccount = job.actorAccountId();
         List<SceneLease> hot = state.sceneLeases().values().stream()
                 .filter(FrontierSceneBehaviors::isResourceSiteHarvest)
-                .filter(lease -> lease.status() == SceneLeaseStatus.HOT
+                .filter(lease -> (retired.isPresent() ? lease.status() != SceneLeaseStatus.CLOSED : lease.status() == SceneLeaseStatus.HOT)
                         && FrontierSceneBehaviors.resourceSiteHarvest(lease).siteId().equals(job.siteId())
                         && FrontierSceneBehaviors.resourceSiteHarvest(lease).jobId().equals(job.id()))
                 .toList();
         if (hot.size() > 1) throw new IllegalArgumentException("field crop work has competing HOT owners");
+        if (retired.isPresent() && hot.isEmpty()) throw new IllegalArgumentException("retired physical field effect lost its retained scene");
         if (hot.isEmpty() && FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job))
             throw new IllegalArgumentException("COLD field crop work cannot bypass a retained physical scene");
         if (!hot.isEmpty()) {

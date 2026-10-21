@@ -17,20 +17,16 @@ final class HarvestActivityCapability implements ActorActivityCapability {
     /** Current and paused claims enter the same owning callback; the scene is not the owner. */
     private static FrontierWorldStateUpdate acknowledgeWorkerDeath(FrontierWorldState state, ResourceSiteHarvestJob job, long tick) {
         var lifecycle = state.resourceSites().site(job.siteId());
-        var site = state.resourceSite(job.siteId());
         if (job.progress().work().filter(WorkProgress::running).isPresent())
             lifecycle = lifecycle.withHarvestLabour(job, job.progress().work().orElseThrow().pause(tick));
-        var conflict = new ResourceSiteConflictObserved(job.siteId(), site.cropSlots().getFirst(),
-                ResourceSiteDiagnosticProducer.WORKER_DIED);
-        var sites = state.resourceSites().replace(lifecycle.conflicted(ResourceSiteConflictDisposition.terminal(
-                site.cropSlots().getFirst(), ResourceSiteConflictReason.WORKER_DIED,
-                ResourceSiteConflictIncidents.first(lifecycle, conflict))));
+        // Death retires this worker's authority, not the field or its other workers.
+        // Keep this exact job/cell/cargo until its physical aftermath is acknowledged.
+        var sites = state.resourceSites().replace(lifecycle);
         var intent = state.physicalIntents().get(job.intentId());
         if (intent == null) throw new IllegalArgumentException("dead harvest worker has no exact physical intent");
         var intents = new java.util.LinkedHashMap<>(state.physicalIntents());
         intents.put(intent.id(), intent.withRecoveryUnknown(PhysicalIntentRecoveryDiagnosticProducer.RESOURCE_SITE_HARVEST.stamp(intent)));
         return FrontierWorldStateUpdate.begin().resourceSites(sites)
-                .strategicPlans(state.strategicPlans().transitionTask(job.taskId(), StrategicTaskStatus.BLOCKED))
                 .physicalIntents(intents);
     }
     @Override public FrontierWorldState release(FrontierWorldState state, ActorExecutionId execution) {

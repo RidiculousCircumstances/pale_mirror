@@ -21,6 +21,40 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3ResourceFieldWitnessTest {
+    @Test void unusedRetiredHarvestCancelsOnlyItsUnattemptedWitnessAndPreservesOtherCells() {
+        var original = FrontierV3ResourceFieldWitness.claimed(SITE, 1, ResourceFieldPhysicalSurface.restore(
+                layout(), Map.of(FIRST, RIPE, SECOND, PLANTED)));
+        var execution = extraction().execution();
+        var cause = io.farfrontier.palemirror.frontier.v3.model.FieldCellOperation.id(execution.activityOwnerId(), 1, FIRST, 1);
+        var extraction = io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.prepareKnown(cause, execution,
+                extraction().target(), extraction().definition(), extraction().definition().before());
+        var pending = original.begin(ResourceFieldCellTransition.harvest(SITE, 1, 1, FIRST, RIPE), cause).write();
+        var body = UUID.fromString("00000000-0000-0000-0000-000000000125");
+        var hand = new CompoundTag(); hand.putString("site", SITE.value());
+        hand.putString("job", execution.activityOwnerId().value()); hand.putString("actor", execution.actorId().value());
+        hand.putUUID("entity", body); hand.putLong("authorityEpoch", 3); hand.putInt("before", 36); hand.putInt("after", 37);
+        hand.put("extraction", FrontierV3BlockExtractionCodec.write(extraction));
+        pending.getList("cells", Tag.TAG_COMPOUND).getCompound(0).getCompound("pending").put("hand", hand);
+        var retained = FrontierV3ResourceFieldWitness.read(pending);
+        var identity = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(execution.actorId(), 1), execution);
+        var effect = new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgressed(SITE, 1, execution.activityOwnerId(),
+                1, 1, FIRST, 1, ResourceFieldCycle.WorkOutcome.HARVESTED,
+                new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:field-cancel"), 1, java.util.Optional.of(
+                    new io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgressed.HandObservation(
+                        new io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress.ActorHand(execution.actorId(), body), 3, 36)));
+        var unused = new io.farfrontier.palemirror.frontier.v3.model.HarvestRetiredEffectObserved(identity, effect, false);
+        var cancelled = retained.cancelUnusedWork(unused);
+        assertEquals(original, cancelled);
+        assertEquals(cancelled, FrontierV3ResourceFieldWitness.read(cancelled.write()).cancelUnusedWork(unused));
+        assertThrows(IllegalArgumentException.class, () -> retained.cancelUnusedWork(
+                new io.farfrontier.palemirror.frontier.v3.model.HarvestRetiredEffectObserved(identity, effect, true)));
+        var attempted = pending.copy();
+        var cell = attempted.getList("cells", Tag.TAG_COMPOUND).getCompound(0);
+        cell.getCompound("pending").putInt("completed", 1);
+        // The strict image constructor or cancellation must reject an attempted boundary.
+        assertThrows(RuntimeException.class, () -> FrontierV3ResourceFieldWitness.read(attempted).cancelUnusedWork(unused));
+    }
     @Test void externalSoilChangeDuringProjectionLagIsObservedWithoutReplayingOlderBiology() {
         var physical = new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.GRASS, ResourceFieldCycle.Crop.ABSENT, 0);
         var canonical = new ResourceFieldPhysicalSurface.Condition(ResourceFieldCycle.Soil.FARMLAND, ResourceFieldCycle.Crop.GROWING, 5);

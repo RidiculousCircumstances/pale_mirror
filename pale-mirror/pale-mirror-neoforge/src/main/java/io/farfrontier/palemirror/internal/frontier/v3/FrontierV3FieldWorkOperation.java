@@ -14,6 +14,48 @@ import java.util.*;
 final class FrontierV3FieldWorkOperation {
     private record Binding(FrontierV3OperationReceipt.Declaration declaration, List<FrontierV3MinecraftOperation.Participant> participants) { }
     private FrontierV3FieldWorkOperation() { }
+    static Optional<FrontierV3OperationAftermath> deathEffect(ServerLevel level,
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease,
+            ResourceSiteHarvestJob job, Mob worker,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId identity) {
+        var cycle = state.resourceSites().cycle(job.siteId());
+        var pending = FrontierV3ResourceSiteHarvestReconciliation.ownedPending(
+                FrontierV3ResourceSiteLedger.get(level), lease, job, cycle).orElse(null);
+        if (pending == null) return Optional.empty();
+        // Only a real hand participant can share the fatality cancellation gate.
+        // Terrain-only sow/till effects retain their independent operation owner.
+        var hand = pending.handEffect().orElseThrow();
+        var cell = cycle.layout().cells().get(job.progress().pendingCropSlotIndex());
+        var due = FrontierV3TraversalScheduleGate.dueBinding(runtime.executionView().orElseThrow(), job).orElse(null);
+        if (due == null) return Optional.empty();
+        var binding = binding(level, state, job, worker, cell, pending);
+        boolean applied = after(level, state, lease, job, cell, pending);
+        var effect = new ResourceSiteHarvestProgressed(job.siteId(), cycle.epoch(), job.id(),
+                job.progress().completedCropSlots() + 1, cycle.layout().revision(), cell.id(), job.target().generation(),
+                cycle.expectedWorkOutcome(cell.id()), due.id(), due.dueAt().ticks(), Optional.of(
+                new ResourceSiteHarvestProgressed.HandObservation(new PhysicalStackAddress.ActorHand(job.workerId(), worker.getUUID()),
+                        hand.authorityEpoch(), applied ? hand.afterCount() : hand.beforeCount())));
+        var retained = FrontierV3OperationAftermath.capture(level, binding.declaration(), binding.participants(),
+                new HarvestRetiredEffectObserved(identity, effect, applied), applied,
+                () -> applied ? after(level, state, lease, job, cell, pending)
+                        : condition(level, cell, pending).equals(new FrontierV3ResourceFieldObservation.Owned(pending.transition().before()))
+                            && FrontierV3ActorHandObservation.observe(level, state, lease, job).matchesBefore(hand));
+        if (applied && retained.isPresent()) confirmWitness(level, state, lease, job, cell.id());
+        return retained;
+    }
+    /** Called only after the common operation proves the complete native outcome. */
+    static void confirmWitness(ServerLevel level, FrontierWorldState state, SceneLease lease,
+            ResourceSiteHarvestJob job, ResourceFieldLayout.CellId id) {
+        var ledger = FrontierV3ResourceSiteLedger.get(level);
+        var owner = (FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(job.siteId());
+        var witness = owner.witness(); var pending = witness.cell(id).pending().orElseThrow();
+        if (pending.completedSteps() < pending.transition().steps().size())
+            witness = witness.confirm(id, FrontierV3ResourceFieldObservation.observe(level,
+                    state.resourceSites().cycle(job.siteId()), witness, id, pending.causationId()));
+        if (pending.handEffect().isPresent() && !pending.handConfirmed())
+            witness = witness.confirmHand(id, FrontierV3ActorHandObservation.observe(level, state, lease, job));
+        if (!witness.equals(owner.witness())) { ledger.replaceFieldClaim(owner, owner.withWitness(witness)); ledger.persist(level); }
+    }
     static FrontierV3MinecraftOperation.Result apply(ServerLevel level, FrontierWorldState state, SceneLease lease,
             ResourceSiteHarvestJob job, Mob worker, ResourceFieldLayout.Cell cell,
             FrontierV3ResourceFieldWitness.Pending pending, BlockExtractionPort extraction) {

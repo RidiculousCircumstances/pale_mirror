@@ -5,6 +5,8 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldCycle;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceFieldPhysicalSurface;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestWorkAcceptance;
+import io.farfrontier.palemirror.frontier.v3.model.HarvestRetiredEffectObserved;
+import io.farfrontier.palemirror.frontier.v3.model.FieldCellOperation;
 import io.farfrontier.palemirror.frontier.v3.persistence.ResourceSiteHarvestAcceptanceCodec;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState;
@@ -542,6 +544,25 @@ final class FrontierV3ResourceFieldWitness {
         return replace(id, new Cell(prior.committed(), Optional.of(new Pending(pending.transition(),
                 pending.completedSteps(), pending.causationId(), pending.handEffect(), true,
                 pending.canonicalSource())), prior.foreign()));
+    }
+
+    /** Field owner supplies the common ledger's positively cancelled operation. */
+    FrontierV3ResourceFieldWitness cancelUnusedWork(HarvestRetiredEffectObserved cancelled) {
+        var receipt = cancelled.effect();
+        if (cancelled.applied() || !receipt.siteId().equals(siteId) || receipt.epoch() != epoch
+                || receipt.layoutRevision() != layoutRevision)
+            throw new IllegalArgumentException("unused field cancellation has a foreign witness");
+        var prior = cell(receipt.cellId());
+        if (prior.pending().isEmpty()) return this;
+        var pending = prior.pending().orElseThrow(); var hand = pending.handEffect().orElseThrow();
+        if (!pending.causationId().equals(FieldCellOperation.id(receipt.jobId(), receipt.epoch(), receipt.cellId(), receipt.generation()))
+                || pending.canonicalSource().isPresent() || pending.completedSteps() != 0 || pending.handConfirmed()
+                || !prior.committed().equals(pending.transition().before())
+                || !hand.extraction().execution().equals(cancelled.identity().execution())
+                || hand.beforeCount() != receipt.observedHand().orElseThrow().quantity()
+                || hand.authorityEpoch() != receipt.observedHand().orElseThrow().authorityEpoch())
+            throw new IllegalArgumentException("unused field cancellation cannot clear another or attempted operation");
+        return replace(receipt.cellId(), new Cell(prior.committed(), Optional.empty(), prior.foreign(), prior.retiredWork()));
     }
 
     /** Retire using the durable historical pair; no current body, scene or next-cell cursor is authority. */

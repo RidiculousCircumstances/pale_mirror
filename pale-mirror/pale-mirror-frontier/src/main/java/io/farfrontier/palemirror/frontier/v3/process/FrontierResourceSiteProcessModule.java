@@ -16,6 +16,26 @@ import java.util.Set;
 
 /** Exact reducer and physical-observation admission owner for resource sites. */
 final class FrontierResourceSiteProcessModule implements FrontierWorldProcessModule {
+    static Set<String> commands() { return ProcessTypeSets.types(
+            "frontier.resource_site_conflict_observed",
+            "frontier.resource_field_cell_observed", "frontier.resource_field_work_access_observed",
+            "frontier.resource_field_world_change_held", "frontier.resource_field_world_change_acknowledged",
+            "frontier.resource_field_foreign_change_held", "frontier.resource_field_foreign_cell_observed",
+            "frontier.resource_field_foreign_change_acknowledged",
+            "frontier.resource_field_player_break_prepared",
+            "frontier.resource_site_harvest_crop_prepared",
+            "frontier.harvest_death_settled", "frontier.harvest_retired_effect_observed", "frontier.resource_site_harvest_progressed", "frontier.resource_site_harvest_work_acknowledged",
+            "frontier.resource_site_harvest_scene_reconciled",
+            "frontier.resource_site_harvest_effect_reconciled",
+            "frontier.resource_site_harvest_hand_projected",
+            "frontier.resource_site_harvest_hand_release", "frontier.resource_site_harvest_work_suspended",
+            "frontier.resource_site_harvest_segment_renewed", "frontier.resource_site_harvest_blocked_cell_skipped", "frontier.resource_site_harvest_immature_cell_skipped", "frontier.resource_site_harvest_work_changed",
+            "frontier.resource_site_harvest_target_retargeted", "frontier.resource_site_harvest_route_blocked",
+            "frontier.resource_site_harvest_batch_prepared", "frontier.resource_site_harvest_batch_delivered",
+            "frontier.resource_site_harvest_hot_traversal_advanced", "frontier.resource_site_harvest_hot_goal_arrived",
+            "frontier.resource_site_harvest_scene_lease_prepared",
+            "frontier.resource_site_harvest_scene_preparation_aborted",
+            "frontier.resource_site_harvest_scene_lease_handoff"); }
     @Override public List<PhysicalIntentLifecycleCapability> physicalIntentLifecycleCapabilities() {
         return List.of(new FunctionalPhysicalIntentLifecycleCapability(
                 PhysicalIntentLifecycleDeclaration.physical(PhysicalIntentLifecycleOwner.RESOURCE_SITE_PREPARATION,
@@ -271,6 +291,29 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                         FrontierResourceSiteHarvestSceneSupport.owner(state, FrontierSceneBehaviors.resourceSiteHarvest(handoff.lease())), handoff)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
+        if (command.payload() instanceof HarvestDeathSettled settled) {
+            if (!command.actor().equals(io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR))
+                return FrontierWorldCommandPlanner.rejected("field death settlement requires physical executor");
+            try {
+                HarvestDeathResources.settle(state, settled.siteId(), settled);
+                var job = state.resourceSites().site(settled.siteId()).harvestJob(settled.identity().execution().activityOwnerId()).orElseThrow();
+                return new CommandPlan.Accepted(java.util.List.of(new ProposedEvent(settled.siteId(), settled),
+                        new ProposedEvent(job.id(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled(
+                                ResourceSiteHarvestProcess.coldProgress(job, 0).id()))));
+            } catch (IllegalArgumentException | IllegalStateException invalid) {
+                return FrontierWorldCommandPlanner.rejected(invalid.getMessage());
+            }
+        }
+        if (command.payload() instanceof HarvestRetiredEffectObserved retired) {
+            if (!command.actor().equals(io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR))
+                return FrontierWorldCommandPlanner.rejected("retired field effect requires physical executor");
+            try {
+                ResourceSiteHarvestProcess.reduceRetiredEffect(state, retired.effect().siteId(), retired);
+                return new CommandPlan.Accepted(java.util.List.of(new ProposedEvent(retired.effect().siteId(), retired)));
+            } catch (IllegalArgumentException | IllegalStateException invalid) {
+                return FrontierWorldCommandPlanner.rejected(invalid.getMessage());
+            }
+        }
         if (command.payload() instanceof ResourceSiteHarvestWorkAcknowledged acknowledged) {
             try {
                 var site = acknowledged.acceptance().receipt().siteId();
@@ -518,6 +561,8 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
             case ResourceSiteHarvestHotTraversalAdvanced advanced -> ResourceSiteHarvestProcess.reduceHotTraversalAdvanced(state, event.subject(), advanced);
             case ResourceSiteHarvestHotGoalArrived arrived -> ResourceSiteHarvestProcess.reduceHotGoalArrived(state, event.subject(), arrived);
             case ResourceSiteHarvestProgressed progressed -> ResourceSiteHarvestProcess.reduceProgressed(state, event.subject(), progressed);
+            case HarvestRetiredEffectObserved retired -> ResourceSiteHarvestProcess.reduceRetiredEffect(state, event.subject(), retired);
+            case HarvestDeathSettled settled -> HarvestDeathResources.settle(state, event.subject(), settled);
             case ResourceSiteHarvestWorkAcknowledged acknowledged -> ResourceSiteHarvestAcceptanceProcess.acknowledge(state, event.subject(), acknowledged);
             case ResourceSiteHarvestSceneReconciled reconciled -> ResourceSiteHarvestSceneReconciliation.reduce(state, event.subject(), reconciled);
             case ResourceSiteHarvestEffectReconciled reconciled -> ResourceSiteHarvestSceneReconciliation.reduceApplied(state, event.subject(), reconciled);

@@ -139,13 +139,7 @@ final class FrontierV3ResourceFieldWorkExecutor {
         if (!operation.complete()) return Result.conflict("cell-operation-" + operation.status().name().toLowerCase(java.util.Locale.ROOT));
         // The common receipt, not a matching block/count, authorizes advancement of
         // the family's bounded cell witness after a restart.
-        if (pending.completedSteps() < pending.transition().steps().size()) {
-            var after = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, id, cause(job, cycle, id));
-            witness = witness.confirm(id, after);
-        }
-        if (pending.handEffect().isPresent() && !pending.handConfirmed())
-            witness = witness.confirmHand(id, FrontierV3ActorHandObservation.observe(level, state, lease, job));
-        if (!witness.equals(owner.witness())) { ledger.replaceFieldClaim(owner, owner.withWitness(witness)); ledger.persist(level); }
+        FrontierV3FieldWorkOperation.confirmWitness(level, state, lease, job, id);
         var result = handResult(level, state, lease, job, outcome, pending.handEffect()
                 .map(FrontierV3ResourceFieldWitness.HandEffect::afterCount).orElse(ResourceSiteHarvestCargo.quantity(state, job)));
         return result.disposition() == Disposition.READY ? result.withOperation(operation.ticket()) : result;

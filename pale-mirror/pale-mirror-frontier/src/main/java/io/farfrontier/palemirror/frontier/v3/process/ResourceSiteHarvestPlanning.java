@@ -285,6 +285,8 @@ final class ResourceSiteHarvestPlanning {
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Consumed(action.id())));
         if (state.resourceSites().site(job.siteId()).phase() != ResourceSitePhase.HARVESTING)
             throw new IllegalArgumentException("resource-site harvest continuation has an active job outside HARVESTING or terminal CONFLICT");
+        if (state.actorLocations().get(job.workerId()).condition().status() == ActorLifeStatus.DEAD)
+            return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Consumed(action.id())));
         long now = Math.max(action.dueAt().ticks(), currentTick);
         var replacement = HarvestStorageReplacement.select(state, job);
         if (replacement.isPresent()) {

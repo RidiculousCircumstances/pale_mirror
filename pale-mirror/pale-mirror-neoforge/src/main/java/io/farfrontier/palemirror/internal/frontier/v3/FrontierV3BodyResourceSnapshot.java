@@ -34,7 +34,7 @@ final class FrontierV3BodyResourceSnapshot {
         var plans = new ListTag(); effects.forEach(effect -> plans.add(effect.save())); image.put("effects", plans);
         return new FrontierV3BodyResourceSnapshot(image);
     }
-    private List<FrontierV3OperationAftermath> effects() {
+    List<FrontierV3OperationAftermath> effects() {
         var tags = image.getList("effects", Tag.TAG_COMPOUND);
         if (!image.contains("effects", Tag.TAG_LIST) || !tags.equals(image.get("effects")) || tags.size() > 64)
             throw new IllegalArgumentException("invalid or unbounded pre-loot effect plan");

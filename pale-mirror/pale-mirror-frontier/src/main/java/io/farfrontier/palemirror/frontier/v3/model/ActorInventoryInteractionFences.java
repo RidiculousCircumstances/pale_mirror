@@ -10,7 +10,7 @@ import java.util.function.BiFunction;
 public final class ActorInventoryInteractionFences {
     private static final List<BiFunction<FrontierWorldState, SubjectId, Optional<SubjectId>>> OWNERS = List.of(
             ExpeditionSupplyAuthority::pendingOwnerForActor, ReferenceContainerCustody::pendingOwnerForActor,
-            ExtractionWorkAuthority::pendingOwner, BakeryDeathResources::pendingOwner);
+            ExtractionWorkAuthority::pendingOwner, BakeryDeathResources::pendingOwner, HarvestDeathResources::pendingOwner);
     private ActorInventoryInteractionFences() { }
     public static boolean pending(FrontierWorldState state, SubjectId actor) {
         return pendingOwner(state, actor).isPresent();

@@ -62,6 +62,22 @@ class ConcurrentFieldExecutionTest {
         assertEquals(Set.of(task.id()), jobs.values().stream().map(ResourceSiteHarvestJob::taskId)
                 .collect(java.util.stream.Collectors.toSet()));
         assertEquals(3, jobs.values().stream().map(ResourceSiteHarvestJob::target).distinct().count());
+        // Family callback isolation, not native death evidence: all three executions
+        // deliberately share the strategic task, but only one loses its authority.
+        var branch = engine.canonicalState().state();
+        var victim = jobs.get(started.job().id());
+        var execution = HarvestDeathResources.execution(branch, victim.workerId()).orElseThrow();
+        var acknowledgement = new HarvestActivityCapability().deathAcknowledgement().orElseThrow()
+                .acknowledge(branch, execution, 27_086L);
+        var interrupted = branch.withChanges(acknowledgement.changes());
+        assertEquals(ResourceSitePhase.HARVESTING, interrupted.resourceSites().site(site).phase());
+        assertEquals(branch.strategicPlans(), interrupted.strategicPlans());
+        for (var peer : jobs.values()) if (!peer.id().equals(victim.id())) {
+            assertEquals(peer, interrupted.resourceSites().site(site).harvestJob(peer.id()).orElseThrow());
+            assertEquals(branch.physicalIntents().get(peer.intentId()), interrupted.physicalIntents().get(peer.intentId()));
+            assertFalse(ResourceSiteHarvestProcess.planColdProgress(interrupted,
+                    ResourceSiteHarvestProcess.coldProgress(peer, 27_087L)).isEmpty());
+        }
         var recovered = FrontierEngines.recoverCanonicalStateAccess(config,
                 new RecoveryImage(base.worldId(), Optional.of(new SnapshotRecord(initial, 0L)), journal));
         assertEquals(engine.canonicalState().state(), recovered.canonicalState().state());

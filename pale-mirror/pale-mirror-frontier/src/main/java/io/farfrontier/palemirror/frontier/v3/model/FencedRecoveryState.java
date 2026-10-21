@@ -134,6 +134,14 @@ public record FencedRecoveryState(Map<SubjectId, FencedRecoveryBinding> current,
         binding.require(FencedRecoveryPhase.PREPARED);
         return retire(binding, FencedRecoveryDisposition.REJECT_STALE, "canonical-composition");
     }
+    /** Owning family has discharged every retained native effect and resource obligation.
+     * This abandons the original work; it never fabricates its successful postcondition. */
+    FencedRecoveryState retireSettledOwnerEffect(SubjectId bindingId, long epoch, SubjectId owner) {
+        var binding = requireCurrent(bindingId, epoch);
+        if (binding.asset() != FencedRecoveryAsset.EFFECT || !binding.ownerId().equals(owner))
+            throw new IllegalArgumentException("settled owner retirement has a foreign effect fence");
+        return retire(binding, FencedRecoveryDisposition.ABANDON, "owner-aftermath-settled");
+    }
     public static final String CANCELLED_BEFORE_EFFECT = "cancelled-before-effect";
     /** A distinct durable fact: the physical attempt was never begun. */
     public FencedRecoveryState cancelBeforeEffect(SubjectId bindingId, long epoch) {

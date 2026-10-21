@@ -152,6 +152,17 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
         return replace(job.withConfirmedCrop(job.progress().confirmPreparedCrop(nextSlot), outcome, extractedQuantity).bindTarget(cycle));
     }
     public ResourceSiteLifecycle returnFullHarvestBatch(ResourceSiteHarvestJob job) { return replace(require(job).withFullBatchReturn()); }
+    /** Settle only the retained cell. Do not choose work for a retired execution.
+     * The same slot remains held until acceptance/owner retirement; binding its
+     * successor generation satisfies the cell ledger, not new execution authority. */
+    public ResourceSiteLifecycle settleRetiredHarvestCrop(ResourceSiteHarvestJob expected, int count,
+            ResourceFieldCycle.WorkOutcome outcome, ResourceFieldCycle cycle, int extractedQuantity) {
+        var job = require(expected);
+        if (count != job.progress().completedCropSlots() + 1)
+            throw new IllegalArgumentException("retired field outcome has a foreign completion count");
+        int retainedSlot = count == job.progress().totalCropSlots() ? -1 : job.progress().nextCropSlotIndex();
+        return replace(job.withConfirmedCrop(job.progress().confirmPreparedCrop(retainedSlot), outcome, extractedQuantity).bindTarget(cycle));
+    }
     public ResourceSiteLifecycle retargetHarvestStorage(ResourceSiteHarvestJob job, InventoryCustody.ContainerSlot slot,
             io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId replacement) {
         return replace(require(job).retargetStorage(slot, replacement));
@@ -269,6 +280,14 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
         return copy(nextPhase, growthEpoch, growthStage, preparationWork, Optional.empty(), jobs, histories, harvestSequence);
     }
     public ResourceSiteLifecycle confirmDeferredHarvestReceipt(PhysicalIntentId intent) { return confirmDeferredHarvestReceipt(intent, null); }
+    /** Explicit interrupted owner removal; not a successful delivery or completed field lineage. */
+    public ResourceSiteLifecycle abandonHarvest(ResourceSiteHarvestJob job) {
+        require(job);
+        if (job.progress().hasPendingPhysicalWork()) throw new IllegalArgumentException("field owner still retains a physical cell");
+        var jobs = new LinkedHashMap<>(harvestJobs); jobs.remove(job.id());
+        var next = jobs.isEmpty() ? growthStage == MATURE_STAGE ? ResourceSitePhase.READY : ResourceSitePhase.GROWING : ResourceSitePhase.HARVESTING;
+        return copy(next, growthEpoch, growthStage, preparationWork, Optional.empty(), jobs, harvestLineages, harvestSequence);
+    }
     public ResourceSiteLifecycle confirmDeferredHarvestReceipt(PhysicalIntentId intent, io.farfrontier.palemirror.frontier.v3.api.PhysicalObservationId observation) {
         var lineage = harvestLineage(intent).filter(ResourceSiteHarvestLineage::receiptPending).orElseThrow();
         var histories = new LinkedHashMap<>(harvestLineages); histories.put(intent, lineage.resolveReceipt(observation));
