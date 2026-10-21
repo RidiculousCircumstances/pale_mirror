@@ -38,6 +38,8 @@ class FrontierV3ResourceHandoffLedgerTest {
         var recovered = FrontierV3ResourceHandoffLedger.load(journal.save(new CompoundTag(), null), null);
         assertEquals(List.of(witness), recovered.removals()); assertEquals(List.of(draft), recovered.containerDrops());
         assertTrue(recovered.removes(container)); assertTrue(recovered.blocks(id));
+        assertTrue(recovered.dropsFrom(container)); assertFalse(recovered.canPrepareDrop(container, 2));
+        assertTrue(recovered.canPrepareDrop(container, 3), "unrelated slot is not fenced by this source");
         assertThrows(IllegalArgumentException.class, () -> recovered.prepareRemoval(witness));
         assertThrows(IllegalArgumentException.class, () -> recovered.prepareDrop(draft));
         assertTrue(draft.operation().applied().isEmpty(), "a complete plan does not prove physical execution");
@@ -51,6 +53,7 @@ class FrontierV3ResourceHandoffLedgerTest {
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceHandoffLedger.load(obsolete, null));
         recovered.retireDrop(applied); recovered.retireRemoval(witness);
         assertFalse(recovered.removes(container)); assertFalse(recovered.blocks(id));
+        assertFalse(recovered.dropsFrom(container)); assertTrue(recovered.canPrepareDrop(container, 2));
     }
     @Test void entityDropOutboxRecoversExactOutcomeAndMonotonicOperationWithoutInferringCompletion() {
         var actor = new SubjectId("resident:drop-owner"); var entity = UUID.randomUUID();
@@ -106,6 +109,16 @@ class FrontierV3ResourceHandoffLedgerTest {
             journal.prepare(id, receipt);
         }
         assertEquals(ids, new ArrayList<>(journal.pending().keySet()));
+        var indexed = FrontierV3ResourceHandoffLedger.load(journal.save(new CompoundTag(), null), null);
+        for (int i = 0; i < ids.size(); i++) {
+            var id = ids.get(i); var receipt = indexed.pending().get(id);
+            assertTrue(indexed.blocks(id)); assertTrue(indexed.blocksAccount(accountId));
+            assertTrue(indexed.blocksAccount(receipt.destinationAccount().id()));
+            indexed.retire(id, receipt);
+            assertFalse(indexed.blocks(id)); assertFalse(indexed.blocksAccount(receipt.destinationAccount().id()));
+            assertEquals(i < ids.size() - 1, indexed.blocksAccount(accountId),
+                    "retiring one fragment cannot release the source still used by remaining fragments");
+        }
         var finalResources = journal.projected(state).inventory().fungibleResources();
         assertFalse(finalResources.accounts().containsKey(accountId));
         assertEquals(64, finalResources.accounts().values().stream().filter(a -> a.custody() instanceof ResourceCustody.Ground)
@@ -173,6 +186,16 @@ class FrontierV3ResourceHandoffLedgerTest {
         foreign.getList("lossOperations", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0).putUUID("witness", UUID.randomUUID());
         assertThrows(IllegalArgumentException.class, () -> FrontierV3ResourceHandoffLedger.load(foreign, null));
         exitRecovered.retireLoss(pickup); assertFalse(exitRecovered.blocks(ids.getFirst()));
+        assertFalse(exitRecovered.blocksAccount(groundAccount.id()));
+        var admittedPickup = new FrontierV3ResourceHandoffLedger.Pickup(new SubjectId("work:test-pickup"), groundAccount.id(),
+                ids.getFirst(), io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.MEAL, 1, "exact-pickup");
+        exitRecovered.preparePickup(admittedPickup);
+        var recoveredPickup = FrontierV3ResourceHandoffLedger.load(exitRecovered.save(new CompoundTag(), null), null);
+        assertTrue(recoveredPickup.blocks(admittedPickup.entity())); assertTrue(recoveredPickup.blocksAccount(admittedPickup.account()));
+        assertThrows(IllegalArgumentException.class, () -> recoveredPickup.prepare(ids.getFirst(), first));
+        recoveredPickup.retirePickup(admittedPickup);
+        assertFalse(recoveredPickup.blocks(admittedPickup.entity())); assertFalse(recoveredPickup.blocksAccount(admittedPickup.account()));
+        exitRecovered.retirePickup(admittedPickup);
         assertTrue(exitRecovered.lossOperation(pickup).isEmpty());
         var destroyed = new GroundResourceDestroyed(groundAccount.id(), (ResourceCustody.Ground) groundAccount.custody(),
                 1, owner, UUID.randomUUID(), "KILLED", groundAccount.lotQuantities(), Set.of());
