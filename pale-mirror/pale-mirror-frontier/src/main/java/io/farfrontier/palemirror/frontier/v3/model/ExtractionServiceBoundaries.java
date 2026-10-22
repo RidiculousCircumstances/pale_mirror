@@ -26,10 +26,15 @@ final class ExtractionServiceBoundaries implements ServiceBoundaryProvider {
         return KnownPedestrianRouteKnowledge.forFrontier(state);
     }
     @Override public synchronized ServiceAccessPoint geometry(FrontierWorldState state, Declaration declaration) {
-        var knowledge = knowledge(state, declaration);
+        return geometry.get(declaration.pointId(), request(state, declaration), knowledge(state, declaration));
+    }
+    @Override public Set<TerrainColumn> searchColumns(FrontierWorldState state, Declaration declaration) {
+        return request(state, declaration).searchColumns();
+    }
+    private ServicePointGeometryCache.Request request(FrontierWorldState state, Declaration declaration) {
         var endpoint = endpoint(state, declaration.pointId());
-        return geometry.get(declaration.pointId(), new ServicePointGeometryCache.Request(
+        return new ServicePointGeometryCache.Request(
                 endpoint.siteId(), endpoint.settlementId(), endpoint.station(), declaration.boundary(),
-                endpoint.station(), List.of(), 0, false), knowledge);
+                endpoint.station(), List.of(), 0, false);
     }
 }

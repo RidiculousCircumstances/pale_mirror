@@ -14,6 +14,8 @@ public interface ServiceBoundaryProvider {
     ServicePointId.Kind kind();
     Object version(FrontierWorldState state);
     List<Declaration> declarations(FrontierWorldState state);
+    /** Conservative declared search footprint. Must not resolve navigation or inspect terrain. */
+    Set<TerrainColumn> searchColumns(FrontierWorldState state, Declaration declaration);
     KnownPedestrianRouteKnowledge knowledge(FrontierWorldState state, Declaration declaration);
     ServiceAccessPoint geometry(FrontierWorldState state, Declaration declaration);
 }

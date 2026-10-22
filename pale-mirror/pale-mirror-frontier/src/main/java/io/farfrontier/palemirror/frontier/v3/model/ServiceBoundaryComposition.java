@@ -19,11 +19,13 @@ public final class ServiceBoundaryComposition {
     private static Object activeSurfaces;
     private static Object activeDeclarations;
     private static Map<SubjectId, ServiceBoundaryProvider.Declaration> active;
-    /** One latest rebuildable spatial view; actor positions, permits and stock never enter this cache. */
+    /** Explicit all-points view; ordinary local turnover uses the declaration-only column index. */
     private record TurnoverIndex(Map<SubjectId, ServiceBoundaryProvider.Declaration> declarations,
-            Object providerVersions, KnownPedestrianRouteKnowledge knowledge, Object residents, List<ServiceAccessPoint> points,
-            Map<SurfaceAnchor, ServiceBoundaryProvider.Declaration> bySurface) { }
+            Object providerVersions, KnownPedestrianRouteKnowledge knowledge, Object residents, List<ServiceAccessPoint> points) { }
     private static TurnoverIndex turnoverIndex;
+    private record ColumnIndex(Object declarations, Object providerVersions, Object residents,
+            Map<TerrainColumn, List<ServiceBoundaryProvider.Declaration>> candidates) { }
+    private static ColumnIndex columnIndex;
     private ServiceBoundaryComposition() { }
     static synchronized Map<SubjectId, ServiceBoundaryProvider.Declaration> declarations(FrontierWorldState state) {
         var nextVersions = PROVIDERS.stream().map(provider -> provider.version(state)).toList();
@@ -88,7 +90,35 @@ public final class ServiceBoundaryComposition {
                 .anyMatch(point -> point.boundary().occupied(previous) || point.boundary().occupied(observed));
     }
     public static Optional<ServiceBoundaryProvider.Declaration> turnoverPoint(FrontierWorldState state, SurfaceAnchor actual) {
-        return Optional.ofNullable(turnoverIndex(state).bySurface().get(actual));
+        var candidates = nearbyDeclarations(state, new TerrainColumn(actual.x(), actual.z()));
+        // Actual service boundaries outrank adjacent aprons, in stable point-ID order.
+        for (var declaration : candidates)
+            if (declaration.boundary().occupiedSurfaces().contains(actual)) return Optional.of(declaration);
+        // Resolve terrain only for points whose declared search footprint contains this column.
+        // Height, obstructions and current regional versions are still checked by their owner.
+        for (var declaration : candidates) {
+            var point = geometry(state, declaration.identity());
+            if (point.waitingSurfaces().contains(actual) || point.egressSurfaces().contains(actual))
+                return Optional.of(declaration);
+        }
+        return Optional.empty();
+    }
+    static List<ServiceBoundaryProvider.Declaration> nearbyDeclarations(FrontierWorldState state, TerrainColumn column) {
+        return columnIndex(state).candidates().getOrDefault(column, List.of());
+    }
+    private static synchronized ColumnIndex columnIndex(FrontierWorldState state) {
+        var declared = operationalDeclarations(state);
+        var residents = state.humanPopulation().residents();
+        if (columnIndex != null && columnIndex.declarations() == declared
+                && columnIndex.providerVersions() == versions && columnIndex.residents() == residents) return columnIndex;
+        var byColumn = new HashMap<TerrainColumn, List<ServiceBoundaryProvider.Declaration>>();
+        declared.values().stream().sorted(Comparator.comparing(ServiceBoundaryProvider.Declaration::pointId)).forEach(value -> {
+            for (var column : provider(value.kind()).searchColumns(state, value))
+                byColumn.computeIfAbsent(column, ignored -> new ArrayList<>()).add(value);
+        });
+        byColumn.replaceAll((column, values) -> List.copyOf(values));
+        columnIndex = new ColumnIndex(declared, versions, residents, Map.copyOf(byColumn));
+        return columnIndex;
     }
     private static synchronized TurnoverIndex turnoverIndex(FrontierWorldState state) {
         var declared = operationalDeclarations(state);
@@ -98,7 +128,6 @@ public final class ServiceBoundaryComposition {
                 && turnoverIndex.providerVersions() == versions
                 && turnoverIndex.knowledge() == knowledge && turnoverIndex.residents() == residents) return turnoverIndex;
         var points = new ArrayList<ServiceAccessPoint>();
-        var surfaces = new HashMap<SurfaceAnchor, ServiceBoundaryProvider.Declaration>();
         var ordered = declared.values().stream().sorted(Comparator.comparing(ServiceBoundaryProvider.Declaration::pointId)).toList();
         ordered.forEach(value -> {
             var point = geometry(state, value.identity());
@@ -112,22 +141,11 @@ public final class ServiceBoundaryComposition {
             for (int i = 0; unchanged && i < points.size(); i++) unchanged = points.get(i) == turnoverIndex.points().get(i);
             if (unchanged) {
                 turnoverIndex = new TurnoverIndex(declared, versions, knowledge, residents,
-                        turnoverIndex.points(), turnoverIndex.bySurface());
+                        turnoverIndex.points());
                 return turnoverIndex;
             }
         }
-        for (int index = 0; index < ordered.size(); index++) {
-            var value = ordered.get(index);
-            points.get(index).boundary().occupiedSurfaces().forEach(surface -> surfaces.putIfAbsent(surface, value));
-        }
-        // A real service boundary takes precedence over another facility's nearby waiting/egress apron.
-        for (int index = 0; index < ordered.size(); index++) {
-            var value = ordered.get(index);
-            var point = points.get(index);
-            point.waitingSurfaces().forEach(surface -> surfaces.putIfAbsent(surface, value));
-            point.egressSurfaces().forEach(surface -> surfaces.putIfAbsent(surface, value));
-        }
-        turnoverIndex = new TurnoverIndex(declared, versions, knowledge, residents, List.copyOf(points), Map.copyOf(surfaces));
+        turnoverIndex = new TurnoverIndex(declared, versions, knowledge, residents, List.copyOf(points));
         return turnoverIndex;
     }
 }

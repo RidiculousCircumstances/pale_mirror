@@ -206,11 +206,18 @@ final class FrontierV3NavigationObservation {
     }
     private static boolean publish(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                    Map<BlockPosition, NavigationObservation> observations) {
-        var known = KnownPedestrianRouteKnowledge.forFrontier(state).geometry().collisions().orElseThrow();
         var confirmed = new HashSet<BlockPosition>();
         observations.forEach((position, evidence) -> { if (evidence.cell().isPresent()) confirmed.add(position); });
+        // A pre-write UNKNOWN fence has no shape to compare. Do not rebuild global
+        // navigation merely to publish this local invalidation. Resolve knowledge
+        // only when an actual new shape could be omitted as redundant.
+        boolean needsComparison = observations.entrySet().stream().anyMatch(entry ->
+                !state.navigationGeometry().cells().containsKey(entry.getKey())
+                        && entry.getValue().dependencies().isEmpty() && entry.getValue().cell().isPresent());
+        var known = needsComparison ? KnownPedestrianRouteKnowledge.forFrontier(state).geometry().collisions().orElseThrow() : null;
         observations.entrySet().removeIf(entry -> {
-            if (state.navigationGeometry().cells().containsKey(entry.getKey()) || !entry.getValue().dependencies().isEmpty()) return false;
+            if (state.navigationGeometry().cells().containsKey(entry.getKey()) || !entry.getValue().dependencies().isEmpty()
+                    || entry.getValue().cell().isEmpty()) return false;
             var expected = known.cell(entry.getKey()); var actual = entry.getValue().cell();
             return expected.isPresent() && actual.isPresent() && expected.orElseThrow().shape().equals(actual.orElseThrow().shape())
                     && expected.orElseThrow().dry() == actual.orElseThrow().dry();

@@ -25,7 +25,14 @@ position/mesh changes instead of stopping after64 startup records. Visit duratio
 includes target resolution, teleport/received terrain and the vanilla loading
 screen, not only server chunk sending. R213 measured19.3s/11.1s fresh and1.4s/0.1s
 after restart; those are different cold/warm cases, not a before/after speed ratio.
-R214 native timing verification is pending; bounded work is not a latency claim.
+The first R214 native measurement was19.6s/11.1s: queue bounding alone did not
+improve ingress. Its server JFR attributes173/419 server execution samples during
+visits to global service-turnover geometry discovery. This is sampled CPU, not
+41% of wall-clock waiting. The follow-up uses declaration-only column discovery
+before current local terrain checks, retains authored access-exclusion overlays
+independently of shape observations, and avoids resolving navigation to publish
+an UNKNOWN-only write fence. The complete-geometry API remains explicit; ordinary
+actor turnover does not call it. Native follow-up timing is pending.
 
 ## Regional extraction geometry (2026-10-21)
 

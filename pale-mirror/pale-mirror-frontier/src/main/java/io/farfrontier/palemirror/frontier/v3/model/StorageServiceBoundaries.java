@@ -26,11 +26,16 @@ final class StorageServiceBoundaries implements ServiceBoundaryProvider {
         return ShipmentEndpointComposition.knowledge(state, List.of(endpoint(state, declaration.pointId())));
     }
     @Override public synchronized ServiceAccessPoint geometry(FrontierWorldState state, Declaration declaration) {
+        return geometries.get(declaration.pointId(), request(state, declaration), knowledge(state, declaration));
+    }
+    @Override public Set<TerrainColumn> searchColumns(FrontierWorldState state, Declaration declaration) {
+        return request(state, declaration).searchColumns();
+    }
+    private ServicePointGeometryCache.Request request(FrontierWorldState state, Declaration declaration) {
         var endpoint = endpoint(state, declaration.pointId());
-        var knowledge = knowledge(state, declaration);
         int population = SettlementServiceAccessPoints.population(state, endpoint.settlementId());
-        return geometries.get(declaration.pointId(), new ServicePointGeometryCache.Request(
+        return new ServicePointGeometryCache.Request(
                 endpoint.facilityId().orElse(endpoint.containerId()), endpoint.settlementId(), endpoint.station(),
-                declaration.boundary(), endpoint.station(), List.of(), population, true), knowledge);
+                declaration.boundary(), endpoint.station(), List.of(), population, true);
     }
 }

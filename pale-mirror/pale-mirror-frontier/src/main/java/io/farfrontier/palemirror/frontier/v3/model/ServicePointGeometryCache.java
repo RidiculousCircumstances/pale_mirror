@@ -11,6 +11,9 @@ final class ServicePointGeometryCache {
                    ServiceAccessBoundary boundary, SurfaceAnchor center,
                    List<SurfaceAnchor> preferred, int population, boolean waiting) {
         Request { preferred = List.copyOf(preferred); }
+        Set<TerrainColumn> searchColumns() {
+            return ServiceWaitingTargets.searchColumns(boundary, center, preferred, population, waiting);
+        }
     }
     private record Entry(Request request, KnownPedestrianRouteKnowledge knowledge,
                          Set<PedestrianGeometryRevision.Region> dependencies, ServiceAccessPoint point) { }

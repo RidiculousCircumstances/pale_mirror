@@ -6,6 +6,25 @@ import java.util.*;
 final class ServiceWaitingTargets {
     private ServiceWaitingTargets() { }
     static int radius(int population) { return Math.min(16, Math.max(2, (int) Math.ceil(Math.sqrt(population)))); }
+    /** Declaration-only broad phase; includes every possible vertical surface, not terrain verdicts. */
+    static Set<TerrainColumn> searchColumns(ServiceAccessBoundary boundary, SurfaceAnchor center,
+            List<SurfaceAnchor> preferred, int population, boolean waiting) {
+        var columns = new HashSet<TerrainColumn>();
+        for (var surface : boundary.occupiedSurfaces()) {
+            columns.add(new TerrainColumn(surface.x(), surface.z()));
+            columns.add(new TerrainColumn(surface.x() + 1, surface.z()));
+            columns.add(new TerrainColumn(surface.x() - 1, surface.z()));
+            columns.add(new TerrainColumn(surface.x(), surface.z() + 1));
+            columns.add(new TerrainColumn(surface.x(), surface.z() - 1));
+        }
+        if (waiting) {
+            preferred.forEach(surface -> columns.add(new TerrainColumn(surface.x(), surface.z())));
+            int radius = radius(population);
+            for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++)
+                columns.add(new TerrainColumn(center.x() + dx, center.z() + dz));
+        }
+        return Set.copyOf(columns);
+    }
     static List<SurfaceAnchor> select(ServiceAccessBoundary boundary, KnownPedestrianRouteKnowledge knowledge,
             SurfaceAnchor center, List<SurfaceAnchor> preferred, Set<SurfaceAnchor> egress, int population) {
         Set<SurfaceAnchor> waiting = new LinkedHashSet<>();

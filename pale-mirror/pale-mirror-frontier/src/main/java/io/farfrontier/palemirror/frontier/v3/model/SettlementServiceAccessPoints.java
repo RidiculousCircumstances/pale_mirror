@@ -101,16 +101,25 @@ public final class SettlementServiceAccessPoints {
         SettlementDepotServicePort port = SettlementDepotServicePort.forDepot(depot);
         ServiceAccessBoundary boundary = geometry.boundary;
         SurfaceAnchor apron = port.facing().step(port.exteriorApproach(), -1);
+        var preferred = preferred(settlement, port, apron);
+        // Applicants must never park on the current user's escape perimeter.
+        var egress = geometry.egress;
+        var waiting = ServiceWaitingTargets.select(boundary, knowledge, apron, preferred, egress, population);
+        return new ServiceAccessPoint(port.depotId(), settlement.id(), port.serviceSurface(), boundary, waiting, egress);
+    }
+    static Set<TerrainColumn> searchColumns(FrontierWorldState state, Settlement settlement, SettlementStructure depot) {
+        var port = SettlementDepotServicePort.forDepot(depot);
+        var apron = port.facing().step(port.exteriorApproach(), -1);
+        return ServiceWaitingTargets.searchColumns(port.accessBoundary(), apron, preferred(settlement, port, apron),
+                population(state, settlement.id()), true);
+    }
+    private static List<SurfaceAnchor> preferred(Settlement settlement, SettlementDepotServicePort port, SurfaceAnchor apron) {
         var preferred = new java.util.ArrayList<SurfaceAnchor>();
         for (int distance = 1; distance <= Math.max(4, (settlement.residents().size() + 1) / 2); distance++) {
             for (SurfaceAnchor side : List.of(port.facing().stepLeft(apron, distance), port.facing().stepRight(apron, distance))) {
                 preferred.add(side);
             }
         }
-        // Applicants must never park on the current user's escape perimeter.
-        // The same geometry policy governs clearance and both HOT/COLD waiting.
-        var egress = geometry.egress;
-        var waiting = ServiceWaitingTargets.select(boundary, knowledge, apron, preferred, egress, population);
-        return new ServiceAccessPoint(port.depotId(), settlement.id(), port.serviceSurface(), boundary, waiting, egress);
+        return List.copyOf(preferred);
     }
 }

@@ -24,10 +24,16 @@ final class ProductionServiceBoundaries implements ServiceBoundaryProvider {
         return ShipmentEndpointComposition.knowledge(state, List.of(endpoint(state, declaration)));
     }
     @Override public synchronized ServiceAccessPoint geometry(FrontierWorldState state, Declaration declaration) {
-        var endpoint = endpoint(state, declaration); var knowledge = knowledge(state, declaration);
+        return geometries.get(declaration.pointId(), request(state, declaration), knowledge(state, declaration));
+    }
+    @Override public Set<TerrainColumn> searchColumns(FrontierWorldState state, Declaration declaration) {
+        return request(state, declaration).searchColumns();
+    }
+    private ServicePointGeometryCache.Request request(FrontierWorldState state, Declaration declaration) {
+        var endpoint = endpoint(state, declaration);
         int population = SettlementServiceAccessPoints.population(state, declaration.settlementId());
-        return geometries.get(declaration.pointId(), new ServicePointGeometryCache.Request(
+        return new ServicePointGeometryCache.Request(
                 endpoint.spec().facilityId(), declaration.settlementId(), endpoint.station(), declaration.boundary(),
-                endpoint.exteriorApproach(), List.of(), population, true), knowledge);
+                endpoint.exteriorApproach(), List.of(), population, true);
     }
 }

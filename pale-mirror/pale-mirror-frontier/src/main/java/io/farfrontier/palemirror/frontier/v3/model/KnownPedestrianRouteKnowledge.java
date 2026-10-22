@@ -23,6 +23,9 @@ public final class KnownPedestrianRouteKnowledge {
     private static FrontierBootstrap cachedBootstrap;
     private static RegionalBlockSet cachedStaticOccupancy = RegionalBlockSet.copyOf(Set.of());
     private static KnownPedestrianObstacleIndex obstacleIndex = new KnownPedestrianObstacleIndex();
+    private static Object accessBootstrap, accessStorage;
+    private static final java.util.Map<Set<BlockPosition>, RegionalBlockSet> ACCESS_EXCLUSIONS =
+            new java.util.LinkedHashMap<>(16, .75f, true);
     private record ViewKey(SubjectId settlementId, List<Passage> passages) { }
     private static Object viewBootstrap, viewOrgans, viewDeltas, viewTopology, viewSites, viewStorageGeometry, viewDepartureSupports;
     private static io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryState viewNavigation;
@@ -474,8 +477,18 @@ public final class KnownPedestrianRouteKnowledge {
      * collision volumes. Opening a passage never opens a physical container. */
     private static BoundedPedestrianApproach.SurveyedSurface accessSurvey(FrontierWorldState state,
             BoundedPedestrianApproach.SurveyedSurface ground, Set<BlockPosition> cleared) {
-        var denied = RegionalBlockSet.copyOf(retainedStaticOccupancy(state.bootstrap()))
-                .overlay(cleared, KnownStorageGeometry.fixedSupports(state));
+        var storage = KnownStorageGeometry.fixedSupports(state);
+        // Authored support exclusions do not depend on moving actors, crop stages or
+        // newly observed navigation shapes. Reuse that immutable overlay, not the terrain view.
+        if (accessBootstrap != state.bootstrap() || accessStorage != storage) {
+            ACCESS_EXCLUSIONS.clear(); accessBootstrap = state.bootstrap(); accessStorage = storage;
+        }
+        var denied = ACCESS_EXCLUSIONS.get(cleared);
+        if (denied == null) {
+            denied = RegionalBlockSet.copyOf(retainedStaticOccupancy(state.bootstrap())).overlay(cleared, storage);
+            if (ACCESS_EXCLUSIONS.size() >= 64) ACCESS_EXCLUSIONS.remove(ACCESS_EXCLUSIONS.keySet().iterator().next());
+            ACCESS_EXCLUSIONS.put(Set.copyOf(cleared), denied);
+        }
         return BoundedPedestrianApproach.excluding(ground, denied);
     }
 

@@ -55,6 +55,8 @@ class ServiceAccessCapabilitiesTest {
             var samples = new java.util.HashSet<SurfaceAnchor>(point.boundary().occupiedSurfaces());
             samples.addAll(point.waitingSurfaces()); samples.addAll(point.egressSurfaces());
             for (var surface : samples) {
+                var nearby = ServiceBoundaryComposition.nearbyDeclarations(initial, new TerrainColumn(surface.x(), surface.z()));
+                assertTrue(nearby.size() < points.size(), "local turnover cannot require every world's service geometry");
                 var expected = ServiceBoundaryComposition.operationalDeclarations(initial).values().stream()
                         .sorted(java.util.Comparator.<ServiceBoundaryProvider.Declaration, Boolean>comparing(value ->
                                 !value.boundary().occupied(surface.standingBody()))
@@ -62,6 +64,8 @@ class ServiceAccessCapabilitiesTest {
                         .filter(value -> ServiceAreaDestinations.temporary(
                                 ServiceBoundaryComposition.geometry(initial, value.identity()), surface)).findFirst();
                 assertEquals(expected, ServiceBoundaryComposition.turnoverPoint(initial, surface));
+                assertTrue(expected.isEmpty() || nearby.contains(expected.orElseThrow()),
+                        "declaration-only broad phase cannot omit a valid waiting/egress surface");
             }
         }
         var home = initial.bootstrap().settlements().getFirst();

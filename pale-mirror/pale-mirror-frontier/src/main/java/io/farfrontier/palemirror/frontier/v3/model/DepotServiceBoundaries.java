@@ -24,4 +24,8 @@ final class DepotServiceBoundaries implements ServiceBoundaryProvider {
         return SettlementServiceAccessPoints.forDepot(state,
                 FrontierWorldStateSupport.settlement(state.bootstrap(), declaration.settlementId()), depot(state, declaration));
     }
+    @Override public java.util.Set<TerrainColumn> searchColumns(FrontierWorldState state, Declaration declaration) {
+        return SettlementServiceAccessPoints.searchColumns(state,
+                FrontierWorldStateSupport.settlement(state.bootstrap(), declaration.settlementId()), depot(state, declaration));
+    }
 }
