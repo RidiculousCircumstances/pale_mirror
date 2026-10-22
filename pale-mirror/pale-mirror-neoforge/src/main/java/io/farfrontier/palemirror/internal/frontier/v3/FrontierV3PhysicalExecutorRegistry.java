@@ -96,6 +96,7 @@ final class FrontierV3PhysicalExecutorRegistry {
                     definition.id(), definition.stage().name().toLowerCase(java.util.Locale.ROOT))) {
                 definition.tick().run(world, runtime);
             }
+            if (definition.admission() == Admission.DEFERABLE_PREPARATION) admission.completeCandidate(definition.id());
         }); } finally { activePreparation.remove(world); }
     }
 

@@ -9,8 +9,32 @@ class FrontierV3PreparationAdmissionTest {
     @Test void disabledCandidateCannotStrandEarlierPreparation() {
         var admission = new FrontierV3PreparationAdmission(List.of("live", "disabled"));
         assertTrue(admission.begin(1, () -> 0).admit("live"));
-        assertFalse(admission.begin(1, () -> 0).admit("live"));
+        var resumed = admission.begin(1, () -> 0);
+        assertFalse(resumed.admit("live"));
+        resumed.completeCandidate("disabled");
         assertTrue(admission.begin(1, () -> 0).admit("live"));
+    }
+    @Test void durabilityYieldsCannotPhaseLockPreparationOutOfTheExecutionPlan() {
+        var owners = List.of("structures", "fields", "worksites");
+        var admission = new FrontierV3PreparationAdmission(owners);
+        var execution = new FrontierV3CooperativeStageCursor();
+        var ready = new java.util.concurrent.atomic.AtomicBoolean();
+        var admitted = new java.util.ArrayList<String>();
+        for (int tick = 0; tick < 9; tick++) {
+            ready.set(true);
+            var turn = admission.begin(10, () -> 0);
+            execution.run(4, ready::get, stage -> {
+                if (stage > 0) {
+                    var owner = owners.get(stage - 1);
+                    if (turn.admit(owner)) admitted.add(owner);
+                    turn.completeCandidate(owner);
+                }
+                // Observation and field submission each yield on durable publication.
+                if (stage == 0 || stage == 2) ready.set(false);
+            });
+        }
+        assertEquals(List.of("structures", "fields", "worksites", "structures", "fields", "worksites",
+                "structures", "fields", "worksites"), admitted);
     }
     @Test void overrunRotatesAdmissionWithoutReorderingOwnersOrStarvingTheLastOne() {
         var clock = new AtomicLong();
