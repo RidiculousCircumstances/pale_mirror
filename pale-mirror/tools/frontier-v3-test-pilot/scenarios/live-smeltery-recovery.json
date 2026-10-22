@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "id": "live_smeltery_recovery",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/gamemode creative" },
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "process", "id": "station:structure-7-smeltery", "expect": { "status": "ok", "result": { "operation": null, "storedHeat": 1000 } } }
+    ] }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": {
+      "diagnostic": { "view": "container", "id": "container:structure-7-smeltery-metals", "field": "position" }
+    }, "offset": { "x": -2, "y": -1, "z": 0 }, "settleMs": 0 },
+    { "type": "wait_until_block", "position": {
+      "diagnostic": { "view": "container", "id": "container:structure-7-smeltery-station", "field": "position" }
+    }, "block": "pale_mirror:smelter", "timeoutMs": 60000 },
+    { "type": "look", "at": { "x": 111, "y": 66, "z": -20 } },
+    { "type": "open_container", "position": {
+      "diagnostic": { "view": "container", "id": "container:structure-7-smeltery-metals", "field": "position" }
+    }, "timeoutMs": 30000 },
+    { "type": "wait_until_container_item", "containerId": "container:structure-7-smeltery-metals", "item": "minecraft:iron_ingot", "count": 3, "timeoutMs": 30000 },
+    { "type": "close_container" },
+    { "type": "inspect", "view": "process", "id": "station:structure-7-smeltery" },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 7, "view": "process", "id": "station:structure-7-smeltery", "expect": { "status": "ok", "result": { "operation": null, "storedHeat": 1000, "stocks": [] } } },
+    { "after": 8, "view": "summary", "id": "", "expect": { "status": "ok", "requiredConflicts": 0, "sceneConflicts": 0, "inventoryConflicts": 0 } }
+  ],
+  "frames": [ { "after": 3, "name": "smeltery-building" }, { "after": 5, "name": "retained-three-ingots", "presentation": "player" } ]
+}

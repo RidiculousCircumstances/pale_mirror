@@ -55,5 +55,39 @@ delivery. Affected NeoForge v3 tests and guardrails passed. Native production
 effect slice passed5/5. Broad NeoForge invocation was stopped in unchanged
 reference-world full-year presentation test; it is NOT a full-suite pass.
 Local receipts: build/r226-affected-tests.log, r226-native-production.log and
-r226-package.log. Full-pack live scenario is checked in; deployment, native
-building/logistics and restart result are pending, not yet claimed.
+r226-package.log. Latest focused automatic suite13/13, NeoForge v3 slice744/744;
+unchanged adjacent evidence was reused, not counted as a new complete suite.
+
+## Live deployment and physical receipts
+
+Source e7f25032; clean detached `/home/rd/proj/pm-r226-release/pale-mirror`.
+Preflight, packaged JAR and post-start verification PASS. Live world
+`frontier-v3-r226-smeltery-20261022`, seed126/r24. Previous R225 world retained;
+both transitions used ordinary `save-all flush` / `stop`, all dimensions saved.
+Artifact SHA512:
+`5beda4ff409c72d3b92b7f4e8ad1c962293fa103787504edc3088e5244d5bf96c8500a5ee101b1102b053e1416a3562b6493e3b8b5218638d12ff5cce48f237e`.
+Final restart1792692799, wrapperPID1013179. Pack tracked files unchanged.
+
+Full-pack pilot20FPS/private Xvfb, ordinary inventory packets:
+
+- `live-smeltery-supply`, run b7f12001-757e-4d6d-8eb2-5b1061bb7a9a,
+  build/r226-live-smeltery2.json PASS. Player puts3 raw iron +1 coal into the
+  nearby warehouse; common haulers load the station; settlement starts automatic
+  processing without a player start click or resident attendant. Actual UI shows
+  processing. The machine spends600 of1600 heat, and common output hauling
+  delivers exactly3 ingots to the preferred warehouse; output clears.
+- Graceful restart then `live-smeltery-recovery`, run
+  e6a54626-e206-41c5-9bd5-df73f837e2f0, build/r226-live-recovery.json PASS.
+  Same3 physical ingots in ordinary chest UI, retained1000 heat, no operation or
+  duplicated machine output. Required/scene/inventory conflicts and incidents0.
+  Building and machine/chest frames inspected. Client/display stopped afterward.
+
+First supply attempt used an invalid player arrival Y above the ground; it was
+stopped and the scenario corrected to actual feet height. No product fallback
+or timeout relaxation. Start-up had a2.965s keep-up warning; this cut does not
+claim a general performance improvement or long-run economic balance. Native
+destructive replacement mid-smelt was not separately exercised; shared effect
+and recovery gates remain the supporting evidence, not a claimed human pass.
+
+Clearwater machine111/65/-18, nearby warehouse107/65/-23. Clients need the new
+hosted mod because `pale_mirror:smelter` is a new registered block.

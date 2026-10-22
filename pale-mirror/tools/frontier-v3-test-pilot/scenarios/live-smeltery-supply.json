@@ -8,13 +8,15 @@
     { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
       { "view": "process", "id": "station:structure-7-smeltery", "expect": { "status": "ok", "result": { "operation": null } } }
     ] },
+    { "type": "command", "command": "/clear PMTestPilot minecraft:raw_iron" },
+    { "type": "command", "command": "/clear PMTestPilot minecraft:coal" },
     { "type": "command", "command": "/give PMTestPilot minecraft:raw_iron 3" },
     { "type": "command", "command": "/give PMTestPilot minecraft:coal 1" }
   ],
   "actions": [
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": {
       "diagnostic": { "view": "container", "id": "container:structure-7-smeltery-metals", "field": "position" }
-    }, "offset": { "x": -2, "y": 0, "z": 0 }, "settleMs": 0 },
+    }, "offset": { "x": -2, "y": -1, "z": 0 }, "settleMs": 0 },
     { "type": "wait_until_block", "position": {
       "diagnostic": { "view": "container", "id": "container:structure-7-smeltery-metals", "field": "position" }
     }, "block": "minecraft:chest", "timeoutMs": 60000 },
