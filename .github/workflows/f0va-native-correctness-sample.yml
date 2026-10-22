@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       measurement:
-        description: Exact immutable F0.VA timing-sample identity.
+        description: Exact immutable F0.VA correctness-sample identity.
         required: true
         type: string
       workers:

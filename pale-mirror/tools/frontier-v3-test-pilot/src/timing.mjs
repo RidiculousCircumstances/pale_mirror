@@ -56,67 +56,6 @@ export function elapsedMillis(started, finished = process.hrtime.bigint()) {
   return Number(finished - started) / 1_000_000;
 }
 
-/**
- * F0.V's timing gate deliberately compares complete native runs, not an isolated client phase.
- * The caller supplies exactly three successful baseline and candidate records made from the
- * same immutable prepared artifact/profile.  A missing sample, a failed native run or a changed
- * experiment identity is a gate failure rather than an opportunity to retry selectively.
- */
-export function compareNativeTimingMedians({ baseline, candidate, targetImprovement = 0.25 }) {
-  validateSeries('baseline', baseline); validateSeries('candidate', candidate);
-  if (!Number.isFinite(targetImprovement) || targetImprovement <= 0 || targetImprovement >= 1) {
-    throw new Error('timing target improvement must be a fraction between zero and one');
-  }
-  const baselineEnvironment = stableEnvironment(baseline[0].environment);
-  for (const sample of [...baseline, ...candidate]) {
-    if (stableEnvironment(sample.environment) !== baselineEnvironment) {
-      throw new Error('native timing samples do not share one host/seed/profile/view-distance/build identity');
-    }
-  }
-  const baselineMedianMillis = median(baseline.map((sample) => sample.totalMillis));
-  const candidateMedianMillis = median(candidate.map((sample) => sample.totalMillis));
-  const improvement = (baselineMedianMillis - candidateMedianMillis) / baselineMedianMillis;
-  if (improvement <= 0) {
-    throw new Error(`native timing median has no positive improvement: ${(improvement * 100).toFixed(2)}%`);
-  }
-  return Object.freeze({
-    baselineMedianMillis,
-    candidateMedianMillis,
-    improvement,
-    targetMet: improvement >= targetImprovement,
-    comparisonPolicy: Object.freeze({ version: 2, thresholdMode: 'advisory-target', targetImprovement }),
-    environment: baseline[0].environment
-  });
-}
-
-export function median(values) {
-  if (!Array.isArray(values) || values.length === 0 || values.some((value) => !Number.isFinite(value) || value <= 0)) {
-    throw new Error('median needs positive finite timing values');
-  }
-  const sorted = [...values].sort((left, right) => left - right);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-}
-
-function validateSeries(name, series) {
-  if (!Array.isArray(series) || series.length !== 3) throw new Error(`native timing ${name} must contain exactly three complete samples`);
-  for (const sample of series) {
-    if (!sample || sample.status !== 'ok' || !Number.isFinite(sample.totalMillis) || sample.totalMillis <= 0
-        || !sample.environment || typeof sample.environment !== 'object') {
-      throw new Error(`native timing ${name} contains failed or malformed sample`);
-    }
-  }
-}
-
-function stableEnvironment(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('native timing sample lacks environment identity');
-  const required = ['host', 'seed', 'profile', 'viewDistance', 'sourceCommit', 'preparedArtifactSha256', 'serverClasspathSha256', 'clientClasspathSha256'];
-  for (const key of required) if (value[key] === undefined || value[key] === null || value[key] === '') {
-    throw new Error(`native timing environment lacks ${key}`);
-  }
-  return JSON.stringify(Object.fromEntries(required.map((key) => [key, value[key]])));
-}
-
 function requireName(name) {
   if (typeof name !== 'string' || !/^[a-z][a-z0-9_.-]{0,95}$/.test(name)) throw new Error(`invalid timing phase: ${name}`);
 }

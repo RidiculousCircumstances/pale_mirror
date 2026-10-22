@@ -1,5 +1,9 @@
 # Frontier v3 Wave 1 kernel baseline
 
+Historical record only. The fixture and `wave1Benchmark` command were retired
+on 2026-10-22; see [timing-test sanitation](../test-timing-sanitation-20261022.md).
+The command below records the original measurement, not an available gate.
+
 Date: 2026-08-27
 Scope: pure in-memory kernel only; this is neither a Minecraft-server TPS claim
 nor a full-world profile.

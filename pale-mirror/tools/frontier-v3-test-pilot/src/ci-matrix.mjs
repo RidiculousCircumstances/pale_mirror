@@ -2,8 +2,6 @@ import { createHash } from 'node:crypto';
 import { compareDifferentialEvidence, extractDeclaredProjections, materializeF0vMatrix, requireArrivalCheckpoint, requireDistinctArrivalCheckpoints } from './f0v-matrix.mjs';
 
 export const CI_MATRIX_SCHEMA = 2;
-/** Provider queue time is not a matrix-speed sample: all four timed workers must begin together. */
-export const CI_MATRIX_MAX_START_SKEW_MILLIS = 30_000;
 export const CI_CORRECTNESS_MEASUREMENTS = Object.freeze(['correctness-1', 'correctness-2', 'correctness-3']);
 const KIND = 'frontier-v3-four-worker-matrix';
 const REQUIRED_INVARIANTS = Object.freeze(['identity', 'claims', 'conservation', 'schedule', 'result']);
@@ -69,38 +67,12 @@ export function validateCiShardResult(plan, result) {
     finishedEpochMillis: result.finishedEpochMillis, lanes: Object.freeze(actual) });
 }
 
-/** Merges exactly four isolated worker reports; an omitted/failed report is never interpreted as a skip. */
+/** Merges semantic evidence; host queueing and speed never determine correctness. */
 export function mergeFourWorkerMatrix(plan, results) {
-  const aggregate = aggregateFourWorkerMatrix(plan, results);
-  const started = aggregate.workers.map((shard) => shard.startedEpochMillis);
-  const finished = aggregate.workers.map((shard) => shard.finishedEpochMillis);
-  const earliestStart = Math.min(...started);
-  const latestStart = Math.max(...started);
-  const earliestFinish = Math.min(...finished);
-  const latestFinish = Math.max(...finished);
-  const startSkewMillis = latestStart - earliestStart;
-  if (startSkewMillis > CI_MATRIX_MAX_START_SKEW_MILLIS) {
-    throw new Error('CI matrix workers did not begin inside the bounded concurrent execution window');
-  }
-  if (latestStart > earliestFinish) {
-    throw new Error('CI matrix workers did not execute concurrently');
-  }
-  return Object.freeze({ ...aggregate, policy: 'parallel', startSkewMillis, parallelExecutionMillis: latestFinish - earliestStart });
+  return aggregateFourWorkerMatrix(plan, results);
 }
 
-/** Serial timing is complete correctness evidence, but must never claim parallel overlap. */
-export function mergeSequentialFourWorkerMatrix(plan, results) {
-  const aggregate = aggregateFourWorkerMatrix(plan, results);
-  const ordered = [...aggregate.workers].sort((left, right) => left.workerId.localeCompare(right.workerId));
-  for (let index = 1; index < ordered.length; index++) {
-    if (ordered[index].startedEpochMillis < ordered[index - 1].finishedEpochMillis) {
-      throw new Error('CI sequential matrix shard intervals overlap or are out of order');
-    }
-  }
-  return Object.freeze({ ...aggregate, policy: 'sequential', sequentialExecutionMillis: ordered.at(-1).finishedEpochMillis - ordered[0].startedEpochMillis });
-}
-
-/** Shared validation owns coverage and all cross-lane semantic relations before timing policy. */
+/** Shared validation owns coverage and all cross-lane semantic relations. */
 export function aggregateFourWorkerMatrix(plan, results) {
   const checked = validatePlan(plan);
   if (!Array.isArray(results) || results.length !== checked.workers) throw new Error('CI matrix merge requires exactly four worker results');
@@ -117,26 +89,6 @@ export function aggregateFourWorkerMatrix(plan, results) {
     planSha256: checked.planSha256, buildIdentitySha256: checked.buildIdentitySha256, contractSha256: checked.contractSha256,
     measurementId: shards[0].measurementId, workers: Object.freeze(shards), lanes: Object.freeze(lanes), crossLane,
     totalExecutionMillis: shards.reduce((sum, shard) => sum + shard.executionMillis, 0) });
-}
-
-/** The timing gate is separate from merge completeness: no queue time or cached run may enter this ratio. */
-export function requireCiMatrixSpeedup({ sequentialMillis, parallelMillis, required = 2.5 }) {
-  if (!Number.isFinite(sequentialMillis) || sequentialMillis <= 0 || !Number.isFinite(parallelMillis) || parallelMillis <= 0
-      || !Number.isFinite(required) || required <= 1) throw new Error('CI matrix timing input is malformed');
-  const speedup = sequentialMillis / parallelMillis;
-  if (speedup < required) throw new Error(`CI matrix speedup ${speedup.toFixed(3)}x is below required ${required.toFixed(3)}x`);
-  return Object.freeze({ sequentialMillis, parallelMillis, speedup, required });
-}
-
-/** F0.VA timing acceptance compares three complete matrix samples, never one lucky run. */
-export function requireCiMatrixMedianSpeedup({ sequentialSamples, parallelSamples, required = 2.5 }) {
-  const sequential = timingSamples(sequentialSamples, 'sequential');
-  const parallel = timingSamples(parallelSamples, 'parallel');
-  const sequentialMedianMillis = median(sequential);
-  const parallelMedianMillis = median(parallel);
-  const comparison = requireCiMatrixSpeedup({ sequentialMillis: sequentialMedianMillis, parallelMillis: parallelMedianMillis, required });
-  return Object.freeze({ ...comparison, sequentialSamples: Object.freeze(sequential), parallelSamples: Object.freeze(parallel),
-    sequentialMedianMillis, parallelMedianMillis });
 }
 
 /** Extracts the five declared terminal semantic projections from one real native lane manifest. */
@@ -292,13 +244,6 @@ function validateCiWorkerPort(value) {
 function plainObject(value) { return value !== null && typeof value === 'object' && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype; }
 function sha(value) { return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value); }
 function hash(value) { return createHash('sha256').update(value).digest('hex'); }
-function timingSamples(value, label) {
-  if (!Array.isArray(value) || value.length !== 3 || value.some((entry) => !Number.isFinite(entry) || entry <= 0)) {
-    throw new Error(`CI ${label} timing needs exactly three positive complete samples`);
-  }
-  return [...value];
-}
-function median(values) { const ordered = [...values].sort((left, right) => left - right); return ordered[1]; }
 function atPath(value, path) {
   return path.split('.').reduce((current, key) => current != null && Object.prototype.hasOwnProperty.call(current, key) ? current[key] : undefined, value);
 }

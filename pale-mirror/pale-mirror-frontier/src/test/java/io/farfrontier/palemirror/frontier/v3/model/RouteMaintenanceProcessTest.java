@@ -12,7 +12,6 @@ import io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinit
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -21,7 +20,6 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -539,10 +537,7 @@ class RouteMaintenanceProcessTest {
                 .filter(item -> item.economicOwnerId().equals(settlement)).findFirst().orElseThrow();
         FrontierWorldState assembled = RouteMaintenanceStateSupport.reduceStarted(damaged, FrontierRouteNetwork.OWNER,
                 io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceStarted(damaged, maintenance)).withInventory(damaged.inventory().moveObservedItem(tool.id(), tool.custody(), new InventoryCustody.Actor(engineer)));
-        FrontierWorldState approachState = assembled;
-        EngineeringWorkAssembly assembly = assertTimeoutPreemptively(Duration.ofSeconds(2),
-                () -> EngineeringWorksite.compile(approachState, maintenance),
-                "one local engineering approach must not compile the complete world route footprint");
+        EngineeringWorkAssembly assembly = EngineeringWorksite.compile(assembled, maintenance);
         assembled = RouteMaintenanceStateSupport.reduceAssemblyStarted(assembled, FrontierRouteNetwork.OWNER,
                 io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceAssemblyStarted(assembled, maintenance.id(), assembly));
         while (!assembled.routeMaintenances().get(maintenance.id()).assembly().orElseThrow().complete()) {

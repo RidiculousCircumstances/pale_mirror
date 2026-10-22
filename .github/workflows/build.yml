@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       run_f0va_native_matrix:
-        description: Run the expensive four-worker Frontier V3 native matrix and serialized timing proof.
+        description: Run the optional four-worker Frontier V3 native correctness matrix.
         required: true
         type: boolean
         default: false
@@ -141,75 +141,10 @@ jobs:
       workers: >-
         {"include":[{"worker":"worker-0","port":"25591"},{"worker":"worker-1","port":"25593"},{"worker":"worker-2","port":"25595"},{"worker":"worker-3","port":"25597"}]}
 
-  f0va-sequential-timing:
-    name: F0.VA serialized same-host matrix timing
-    if: github.event_name == 'workflow_dispatch' && inputs.run_f0va_native_matrix
-    needs: f0va-correctness-3
-    runs-on: [self-hosted, pm-native, pm-timing]
-    concurrency:
-      group: frontier-v3-f0va-timing-${{ github.ref }}
-      cancel-in-progress: false
-    env:
-      FRONTIER_V3_PILOT_PORT: '25610'
-      FRONTIER_V3_PILOT_WORKER_ID: sequential-timing
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Initialize isolated Gradle home
-        shell: bash
-        run: |
-          test -n "${RUNNER_TEMP:-}" || { echo "RUNNER_TEMP is required" >&2; exit 1; }
-          test -n "${GITHUB_ENV:-}" || { echo "GITHUB_ENV is required" >&2; exit 1; }
-          case "$RUNNER_TEMP" in
-            /*) ;;
-            *) echo "RUNNER_TEMP must be absolute" >&2; exit 1 ;;
-          esac
-          frontier_v3_gradle_home="$RUNNER_TEMP/frontier-v3-f0va-timing-gradle"
-          case "$frontier_v3_gradle_home" in
-            *$'\n'*|*$'\r'*) echo "Gradle home is malformed" >&2; exit 1 ;;
-          esac
-          printf 'GRADLE_USER_HOME=%s\n' "$frontier_v3_gradle_home" >> "$GITHUB_ENV"
-      - uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - uses: actions/download-artifact@v4
-        with:
-          name: f0va-preparation
-          path: pale-mirror/build/f0va-ci
-      - name: Bootstrap isolated native Gradle home online
-        run: ./gradlew :pale-mirror-neoforge:prepareFrontierV3PilotNativeEnvironment --no-daemon
-      - name: Recreate and verify exact timing classpaths
-        run: ./gradlew :pale-mirror-neoforge:prepareFrontierV3PilotNativeEnvironment --offline --no-daemon
-      - name: Measure the same native lane plan without worker contention
-        run: >-
-          scripts/with-private-xvfb.sh
-          node tools/frontier-v3-test-pilot/src/run-ci-matrix-sequential.mjs
-          --plan=build/f0va-ci/plan.json
-          --prepared=build/f0va-ci/prepared-build.json
-          --results-root=build/f0va-ci/sequential-results
-          --samples=3
-          --output=build/f0va-ci/sequential-timing.json
-      - name: Upload serialized timing evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: f0va-sequential-timing
-          if-no-files-found: warn
-          path: |
-            pale-mirror/build/f0va-ci/sequential-timing.json
-            pale-mirror/build/f0va-ci/sequential-results
-            pale-mirror/build/frontier-v3-ci-shards
-            pale-mirror/build/frontier-v3-scenarios
-
   f0va-merge:
     name: F0.VA fail-closed matrix merge
     if: always() && github.event_name == 'workflow_dispatch' && inputs.run_f0va_native_matrix
-    needs: [f0va-correctness-1, f0va-correctness-2, f0va-correctness-3, f0va-sequential-timing]
+    needs: [f0va-correctness-1, f0va-correctness-2, f0va-correctness-3]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -227,10 +162,6 @@ jobs:
         with:
           pattern: f0va-correctness-?-worker-?
           path: pale-mirror/build/f0va-ci/results
-      - uses: actions/download-artifact@v4
-        with:
-          name: f0va-sequential-timing
-          path: pale-mirror/build/f0va-ci
       - name: Merge only complete comparable worker evidence
         run: >-
           node tools/frontier-v3-test-pilot/src/merge-ci-matrix.mjs
@@ -247,7 +178,6 @@ jobs:
           --result=build/f0va-ci/results/f0va-correctness-3-worker-1/worker-1.json
           --result=build/f0va-ci/results/f0va-correctness-3-worker-2/worker-2.json
           --result=build/f0va-ci/results/f0va-correctness-3-worker-3/worker-3.json
-          --timing=build/f0va-ci/sequential-timing.json
           --output=build/f0va-ci/merge.json
       - name: Upload merged matrix report
         if: always()

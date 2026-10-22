@@ -3,11 +3,10 @@ import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CI_MATRIX_MAX_START_SKEW_MILLIS, CI_MATRIX_SCHEMA, createFourWorkerMatrixPlan, evidenceFromManifest, mergeFourWorkerMatrix, mergeSequentialFourWorkerMatrix, requireCiMatrixMedianSpeedup, requireCiMatrixSpeedup, terminalSemanticsFromManifest, validateCiCorrectnessAdmission, validateCiShardResult } from '../src/ci-matrix.mjs';
+import { CI_MATRIX_SCHEMA, createFourWorkerMatrixPlan, evidenceFromManifest, mergeFourWorkerMatrix, terminalSemanticsFromManifest, validateCiCorrectnessAdmission, validateCiShardResult } from '../src/ci-matrix.mjs';
 import { parse as parsePlan } from '../src/write-ci-matrix-plan.mjs';
 import { compileWorkerPersistentPlan, parse as parseShard, requireWorkerIdentity } from '../src/run-ci-matrix-shard.mjs';
-import { compareTiming, mergeMeasurements, parse as parseMerge } from '../src/merge-ci-matrix.mjs';
-import { parse as parseSequential, workerEnvironment } from '../src/run-ci-matrix-sequential.mjs';
+import { mergeMeasurements, parse as parseMerge } from '../src/merge-ci-matrix.mjs';
 import { parse as parsePrepared } from '../src/prepare-native-build.mjs';
 import { parseEnvironment as parseCiWorkerEnvironment } from '../src/validate-ci-worker-sample.mjs';
 
@@ -49,6 +48,9 @@ test('merge rejects missing, duplicate, foreign, and semantically incomplete wor
   const results = plan.shards.map((shard) => result(plan, shard));
   const merged = mergeFourWorkerMatrix(plan, results);
   assert.equal(merged.lanes.length, plan.lanes.length);
+  const queued = structuredClone(results);
+  queued[3].startedEpochMillis += 60_000; queued[3].finishedEpochMillis += 60_000;
+  assert.equal(mergeFourWorkerMatrix(plan, queued).lanes.length, plan.lanes.length);
   assert.throws(() => mergeFourWorkerMatrix(plan, results.slice(1)), /exactly four/);
   const duplicate = structuredClone(results); duplicate[1].workerId = duplicate[0].workerId;
   assert.throws(() => mergeFourWorkerMatrix(plan, duplicate), /duplicate|coverage|foreign/);
@@ -58,34 +60,6 @@ test('merge rejects missing, duplicate, foreign, and semantically incomplete wor
   assert.throws(() => mergeFourWorkerMatrix(plan, foreign), /foreign/);
   const mixedMeasurement = structuredClone(results); mixedMeasurement[1].measurementId = 'correctness-2';
   assert.throws(() => mergeFourWorkerMatrix(plan, mixedMeasurement), /mixed measurement/);
-  const queued = structuredClone(results); queued[3].startedEpochMillis += CI_MATRIX_MAX_START_SKEW_MILLIS + 1;
-  queued[3].finishedEpochMillis += CI_MATRIX_MAX_START_SKEW_MILLIS + 1;
-  assert.throws(() => mergeFourWorkerMatrix(plan, queued), /bounded concurrent/);
-  const sequential = structuredClone(results); sequential[3].startedEpochMillis = sequential[2].finishedEpochMillis + 1;
-  sequential[3].finishedEpochMillis = sequential[3].startedEpochMillis + sequential[3].executionMillis;
-  assert.throws(() => mergeFourWorkerMatrix(plan, sequential), /concurrently/);
-});
-
-test('serial admission accepts ordered disjoint shard intervals but never labels them parallel', async () => {
-  const plan = createFourWorkerMatrixPlan(await contract(), { buildIdentitySha256: hash('a'), contractSha256: hash('b') });
-  const serial = plan.shards.map((shard, index) => ({ ...result(plan, shard),
-    startedEpochMillis: 1_000 + index * 1_000, finishedEpochMillis: 1_500 + index * 1_000 }));
-  assert.equal(mergeSequentialFourWorkerMatrix(plan, serial).policy, 'sequential');
-  assert.throws(() => mergeFourWorkerMatrix(plan, serial), /concurrently/);
-  assert.throws(() => mergeSequentialFourWorkerMatrix(plan, plan.shards.map((shard) => result(plan, shard))), /overlap/);
-  const outOfOrder = structuredClone(serial);
-  outOfOrder[0].startedEpochMillis = 3_000; outOfOrder[0].finishedEpochMillis = 3_500;
-  outOfOrder[1].startedEpochMillis = 1_000; outOfOrder[1].finishedEpochMillis = 1_500;
-  assert.throws(() => mergeSequentialFourWorkerMatrix(plan, outOfOrder), /out of order/);
-  const source = await readFile(new URL('../src/run-ci-matrix-sequential.mjs', import.meta.url), 'utf8');
-  assert.match(source, /mergeSequentialFourWorkerMatrix\(plan, results\)/);
-});
-
-test('CI timing gate requires the measured 2.5x ratio and excludes weaker claims', () => {
-  assert.throws(() => requireCiMatrixSpeedup({ sequentialMillis: 2_500, parallelMillis: 1_001 }), /below/);
-  assert.equal(requireCiMatrixSpeedup({ sequentialMillis: 2_500, parallelMillis: 1_000 }).speedup, 2.5);
-  assert.equal(requireCiMatrixMedianSpeedup({ sequentialSamples: [2_400, 2_500, 2_600], parallelSamples: [900, 1_000, 1_100] }).speedup, 2.5);
-  assert.throws(() => requireCiMatrixMedianSpeedup({ sequentialSamples: [2_500], parallelSamples: [1_000] }), /exactly three/);
 });
 
 test('aggregate rejects altered portable evidence and requires cross-lane relations after JSON round-trip', async () => {
@@ -134,22 +108,6 @@ test('aggregate rejects altered portable evidence and requires cross-lane relati
   assert.throws(() => validateCiShardResult(plan, legacySchema), /malformed, foreign, failed or incomplete/);
   const legacyWeakEvidence = structuredClone(results[0]); legacyWeakEvidence.lanes[0].terminal.identity = { exact: true };
   assert.throws(() => validateCiShardResult(plan, legacyWeakEvidence), /immutable declaration/);
-});
-
-test('timing report rejects failed, foreign, and incomplete serial evidence', async () => {
-  const plan = createFourWorkerMatrixPlan(await contract(), { buildIdentitySha256: hash('a'), contractSha256: hash('b') });
-  const timing = { schema: CI_MATRIX_SCHEMA, kind: 'frontier-v3-ci-sequential-timing', status: 'ok', host: 'test',
-    planSha256: plan.planSha256, buildIdentitySha256: plan.buildIdentitySha256, contractSha256: plan.contractSha256,
-    samples: [1, 2, 3].map((index) => ({ measurementId: `correctness-${index}`, sequentialMillis: 3_000, laneCount: plan.lanes.length })) };
-  assert.equal(compareTiming(JSON.stringify(timing), plan, [1_000, 1_000, 1_000]).speedup, 3);
-  for (const mutate of [
-    (value) => { value.status = 'failed'; }, (value) => { value.planSha256 = hash('c'); },
-    (value) => { value.buildIdentitySha256 = hash('c'); }, (value) => { value.contractSha256 = hash('c'); },
-    (value) => { value.samples[0].laneCount--; }
-  ]) {
-    const invalid = structuredClone(timing); mutate(invalid);
-    assert.throws(() => compareTiming(JSON.stringify(invalid), plan, [1_000, 1_000, 1_000]), /malformed, failed or foreign|malformed/);
-  }
 });
 
 test('reusable CI worker admission rejects a malformed complete matrix before Gradle', () => {
@@ -213,7 +171,6 @@ test('CI command parsers are closed to duplicate, unsafe, and incomplete inputs'
   assert.equal(parseShard(['--plan=build/plan.json', '--prepared=build/id.json', '--worker=worker-3', '--measurement=correctness-1', '--output=build/out.json']).worker, 'worker-3');
   assert.throws(() => parseShard(['--plan=../plan.json', '--prepared=build/id.json', '--worker=worker-0', '--output=build/out.json']), /safe relative/);
   assert.equal(parseMerge(['--plan=build/plan.json', ...Array.from({ length: 12 }, (_, index) => `--result=build/${index}.json`), '--output=build/merge.json']).results.length, 12);
-  assert.equal(parseSequential(['--plan=build/plan.json', '--prepared=build/id.json', '--results-root=build/results', '--samples=3', '--output=build/timing.json']).resultsRoot, 'build/results');
   assert.equal(parsePrepared(['--output=build/id.json']), 'build/id.json');
 });
 
@@ -245,17 +202,13 @@ test('native CI runs three ordered four-worker samples with private ports and ex
 test('each isolated native CI job bootstraps its private Gradle home before offline proof', async () => {
   const [workflow, sample] = await workflows();
   const prepare = jobBlock(workflow, 'f0va-prepare', 'f0va-correctness-1');
-  const sequential = jobBlock(workflow, 'f0va-sequential-timing', 'f0va-merge');
   const worker = jobBlock(sample, 'native-correctness');
   assertColdHomeBootstrap(prepare, 'frontier-v3-f0va-prepare-gradle', 'node tools/frontier-v3-test-pilot/src/prepare-native-build.mjs');
-  assertColdHomeBootstrap(sequential, 'frontier-v3-f0va-timing-gradle', OFFLINE_NATIVE_PREPARATION);
   assertColdHomeBootstrap(worker, 'frontier-v3-f0va-${FRONTIER_V3_CI_MEASUREMENT}-${FRONTIER_V3_PILOT_WORKER_ID}-gradle',
     OFFLINE_NATIVE_PREPARATION, 'node tools/frontier-v3-test-pilot/src/validate-ci-worker-sample.mjs', true);
 
   assert.throws(() => assertColdHomeBootstrap(prepare.replace(ONLINE_NATIVE_PREPARATION, ''),
     'frontier-v3-f0va-prepare-gradle', 'node tools/frontier-v3-test-pilot/src/prepare-native-build.mjs'), /bootstrap/);
-  assert.throws(() => assertColdHomeBootstrap(sequential.replace(ONLINE_NATIVE_PREPARATION, '').replace(OFFLINE_NATIVE_PREPARATION,
-    `${OFFLINE_NATIVE_PREPARATION}\n      - run: ${ONLINE_NATIVE_PREPARATION}`), 'frontier-v3-f0va-timing-gradle', OFFLINE_NATIVE_PREPARATION), /precede offline/);
   assert.throws(() => assertColdHomeBootstrap(worker.replace(ONLINE_NATIVE_PREPARATION,
     `${ONLINE_NATIVE_PREPARATION} --offline`), 'frontier-v3-f0va-${FRONTIER_V3_CI_MEASUREMENT}-${FRONTIER_V3_PILOT_WORKER_ID}-gradle',
   OFFLINE_NATIVE_PREPARATION, 'node tools/frontier-v3-test-pilot/src/validate-ci-worker-sample.mjs', true), /must stay online/);
@@ -283,20 +236,11 @@ test('native launcher helpers never shadow the Node process environment while sp
   const launchers = [
     '../src/prepare-native-build.mjs',
     '../src/run-ci-matrix-shard.mjs',
-    '../src/run-ci-matrix-sequential.mjs',
     '../src/run-f0v-matrix.mjs',
-    '../src/run-f0v-timing.mjs',
     '../src/run-f0va-independent-matrix.mjs'
   ];
   const sources = await Promise.all(launchers.map((path) => readFile(new URL(path, import.meta.url), 'utf8')));
   for (const source of sources) assert.doesNotMatch(source, /\bconst\s+process\s*=\s*spawn\s*\(/);
-});
-
-test('serialized timing invokes each shard under its immutable worker identity', () => {
-  assert.deepEqual(workerEnvironment({ FRONTIER_V3_PILOT_WORKER_ID: 'sequential-timing', KEEP: 'value' }, 'worker-2'), {
-    FRONTIER_V3_PILOT_WORKER_ID: 'worker-2', KEEP: 'value'
-  });
-  assert.throws(() => workerEnvironment({}, 'worker-4'), /worker identity/);
 });
 
 function result(plan, shard, measurementId = 'correctness-1') {

@@ -3,28 +3,35 @@ import { EventEmitter } from 'node:events';
 import test from 'node:test';
 import { abortSignalFailure, awaitChildExit, awaitWithin, childExitCancellation, childExitWatch, deadlineWatchdog } from '../src/deadline-watchdog.mjs';
 
-test('a completed protocol transition closes its watchdog without weakening the deadline', async () => {
+test('a completed protocol transition closes its watchdog without weakening the deadline', (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] });
   const watchdog = deadlineWatchdog(20, 'must fail when left open');
   watchdog.close();
-  await new Promise((resolve) => setTimeout(resolve, 35));
+  context.mock.timers.tick(35);
   assert.equal(watchdog.closed(), true);
 });
 
-test('an unclosed watchdog remains an attributable deadline failure', async () => {
+test('an unclosed watchdog remains an attributable deadline failure', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] });
   const watchdog = deadlineWatchdog(5, 'named protocol deadline');
-  await assert.rejects(watchdog.wait, /named protocol deadline/);
+  const rejected = assert.rejects(watchdog.wait, /named protocol deadline/);
+  context.mock.timers.tick(5);
+  await rejected;
   assert.equal(watchdog.closed(), false);
   watchdog.close();
 });
 
-test('awaitWithin closes the losing timeout after a successful protocol operation', async () => {
+test('awaitWithin closes the losing timeout after a successful protocol operation', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] });
   assert.equal(await awaitWithin(Promise.resolve('arrived'), 20, 'unexpected deadline'), 'arrived');
-  // A leaked timeout would keep this test process alive beyond the short operation.
-  await new Promise((resolve) => setTimeout(resolve, 35));
+  context.mock.timers.tick(35);
 });
 
-test('awaitWithin retains the named deadline when its protocol operation never arrives', async () => {
-  await assert.rejects(awaitWithin(new Promise(() => {}), 5, 'exact lifecycle deadline'), /exact lifecycle deadline/);
+test('awaitWithin retains the named deadline when its protocol operation never arrives', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] });
+  const rejected = assert.rejects(awaitWithin(new Promise(() => {}), 5, 'exact lifecycle deadline'), /exact lifecycle deadline/);
+  context.mock.timers.tick(5);
+  await rejected;
 });
 
 test('a serial native barrier removes its child-exit watcher once the barrier resolves', () => {
@@ -61,7 +68,8 @@ test('a child-exit watch releases the listener when a lifecycle signal wins its 
   assert.equal(child.listenerCount('exit'), 0);
 });
 
-test('a bounded child-exit wait closes both timeout and listener on success or timeout', async () => {
+test('a bounded child-exit wait closes both timeout and listener on success or timeout', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] });
   const success = new EventEmitter();
   success.exitCode = null; success.signalCode = null;
   const arrived = awaitChildExit(success, 20, 'unexpected child deadline');
@@ -71,7 +79,9 @@ test('a bounded child-exit wait closes both timeout and listener on success or t
 
   const timeout = new EventEmitter();
   timeout.exitCode = null; timeout.signalCode = null;
-  await assert.rejects(awaitChildExit(timeout, 5, 'exact child deadline'), /exact child deadline/);
+  const rejected = assert.rejects(awaitChildExit(timeout, 5, 'exact child deadline'), /exact child deadline/);
+  context.mock.timers.tick(5);
+  await rejected;
   assert.equal(timeout.listenerCount('exit'), 0);
 });
 
