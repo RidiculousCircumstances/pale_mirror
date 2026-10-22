@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "id": "live_iron_deposits",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/gamemode spectator" },
+    { "type": "command", "command": "/gamemode creative" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -168, "y": 67, "z": -1 }, "settleMs": 0 },
+    { "type": "wait_until_block", "position": { "x": -168, "y": 62, "z": -1 }, "block": "minecraft:iron_ore", "timeoutMs": 60000 },
+    { "type": "look", "at": { "x": -168, "y": 62, "z": -1 } },
+    { "type": "inspect", "view": "settlement", "id": "settlement:6" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -408, "y": 67, "z": -341 }, "settleMs": 0 },
+    { "type": "wait_until_block", "position": { "x": -408, "y": 62, "z": -341 }, "block": "minecraft:iron_ore", "timeoutMs": 60000 },
+    { "type": "look", "at": { "x": -408, "y": 62, "z": -341 } },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 8, "view": "summary", "id": "", "expect": { "status": "ok", "requiredConflicts": 0, "sceneConflicts": 0, "inventoryConflicts": 0 } }
+  ],
+  "frames": [ { "after": 3, "name": "hearthvale-iron" }, { "after": 7, "name": "northwatch-iron" } ]
+}
