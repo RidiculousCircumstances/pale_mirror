@@ -54,6 +54,11 @@ combat or medical feature is enabled by this audit.
 
 ## Inspected paths with no equivalent contradiction established
 
+Native verification also exposed a misleading body-inspection message: ordinary
+Pending was logged as OBSERVATION_REJECTED, with a changing command/revision in
+the deduplication key. It now records the stable pending reason; actual rejection
+retains its full result. This changes diagnostics only, not movement admission.
+
 - Bakery COLD recomputes a route before selecting a station action; extraction
   and expedition supply/replenishment check arrival and their service/custody
   permissions. Their old phase alone does not authorize remote item handoff.

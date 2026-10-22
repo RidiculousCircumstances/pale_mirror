@@ -455,6 +455,8 @@ final class FrontierV3ActorBodyController {
         if (result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted) {
             INSPECTION_WAITS.remove(body); return true;
         }
+        if (result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Pending pending)
+            return inspectionDeferred(body, "OBSERVATION_PENDING:" + pending.reason());
         return inspectionDeferred(body, "OBSERVATION_REJECTED:" + result);
     }
 
