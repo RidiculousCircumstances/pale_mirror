@@ -125,12 +125,21 @@ public final class FrontierV3ExactContainerIngressGameTests {
         helper.assertTrue(FrontierV3ExactItemPresentation.exactMatch(chest.getItem(0), tool), "tool identity survives beside fungible resources");
         for (int index = 0; index < 3; index++) {
             player.getInventory().setItem(9, new ItemStack(Items.COAL, 64));
+            var click = index == 1 ? net.minecraft.world.inventory.ClickType.PICKUP
+                    : net.minecraft.world.inventory.ClickType.QUICK_MOVE;
             helper.assertTrue(FrontierV3ContainerClickExecutor.before(player, menu, 27, 0,
-                    net.minecraft.world.inventory.ClickType.QUICK_MOVE, runtime) == FrontierV3ContainerClickExecutor.Admission.ACCEPTED,
+                    click, runtime) == FrontierV3ContainerClickExecutor.Admission.ACCEPTED,
                     "every consecutive stack is admitted without waiting for a discovery or recovery turn");
             FrontierV3PlayerClickOperation.perform(player, menu, runtime,
-                    () -> menu.clicked(27, 0, net.minecraft.world.inventory.ClickType.QUICK_MOVE, player));
+                    () -> menu.clicked(27, 0, click, player));
             FrontierV3ContainerClickExecutor.after(player, menu, runtime);
+            if (click == net.minecraft.world.inventory.ClickType.PICKUP) {
+                int destination = index + 2;
+                helper.assertTrue(FrontierV3ContainerClickExecutor.before(player, menu, destination, 0, click, runtime)
+                        == FrontierV3ContainerClickExecutor.Admission.ACCEPTED, "ordinary carried-stack deposit follows inventory pickup immediately");
+                FrontierV3PlayerClickOperation.perform(player, menu, runtime, () -> menu.clicked(destination, 0, click, player));
+                FrontierV3ContainerClickExecutor.after(player, menu, runtime);
+            }
             helper.assertTrue(chest.getItem(index + 2).is(Items.COAL) && chest.getItem(index + 2).getCount() == 64,
                     "each physical coal stack is retained exactly once");
         }
