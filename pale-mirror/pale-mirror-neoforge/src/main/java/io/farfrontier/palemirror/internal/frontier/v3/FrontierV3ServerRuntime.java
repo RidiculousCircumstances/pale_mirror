@@ -170,6 +170,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
         return Optional.of(engine.commandAdmissionCapacity());
     }
+    boolean awaitingCanonicalDurability() { return engine.hasPendingCommit(); }
 
     /** Returns the exact immutable state/revision/instant for an owning server-thread adapter. */
     Optional<FrontierCanonicalState<S>> canonicalState() {

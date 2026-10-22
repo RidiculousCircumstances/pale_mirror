@@ -65,7 +65,8 @@ public final class ReferenceProjectionStateSupport {
         PhysicalReplicaRecord expected = custody.replicas().get(containerId);
         custody = custody.prepareProjection(new PhysicalCustodyLease(ReferenceContainerCustody.scopeId(containerId), containerId,
                 ReferenceContainerCustody.PROVIDER_ID, request.authorityEpoch(), revision, expected.replicaRevision(),
-                PhysicalCustodyLeaseStatus.PREPARING, null));
+                PhysicalCustodyLeaseStatus.PREPARING, null), prior == null ? java.util.Optional.empty()
+                    : java.util.Optional.of(new ProjectionPreimage(prior.fingerprint(), prior.provenance())));
         return transferred.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody).fencedRecovery(recovery));
     }
 }

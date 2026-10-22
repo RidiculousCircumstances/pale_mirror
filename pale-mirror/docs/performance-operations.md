@@ -1,5 +1,48 @@
 # Pale Mirror runtime performance
 
+## Async continuation repair (R219)
+
+Live R218 Clearwater storage was not full: container:7-depot had20 free slots,
+but its released replica entered FINGERPRINT_MISMATCH at canonical revision71651,
+tick39570. The asynchronous preparation published PREPARING after its caller had
+returned; the next invocation compared the old chest with the new expected image
+instead of executing the deferred write. This was not evidence of player damage.
+
+Preparation now retains the exact physical predecessor fingerprint/provenance.
+Only that image permits the pending catch-up write. An already-written expected
+image is confirmed; any third image stays untouched and unresolved. Confirmation
+retires the predecessor. Both state and event codecs retain this bounded evidence;
+schema298 deliberately requires a new disposable world.
+
+Physical executor passes now resume their ordered suffix after canonical WAL
+durability. Repeated early observers cannot monopolize every turn while later
+projection/custody stages receive only PREDECESSOR rejections. Geometry wakeups
+and body-admission owner cleanup follow the actual durable command receipt, not
+the initial Pending return. Existing journals still own crash recovery.
+
+Verification: focused domain/runtime checks and guardrails PASS; all817 NeoForge
+unit checks PASS; native reference-projection11/11 PASS including restart between
+preparation/write and a foreign-slot non-overwrite case. The first new native
+test incorrectly used a read-only recovered fixture store; corrected its append
+port, not the product's recovery assertions. A separate full native run393/397
+also found combat fixture timeout, patrol return and a whole-journal drop assertion;
+the latter was scoped to its own operation rather than other fixtures' retained
+negative cases. Do not treat this receipt as an all-native-suite green result.
+
+Checked-in `disposable-async-storage-ingress.json`, seed125/quarry-r22-world,
+PASS in `build/r219-async-ingress-ground.{json,log}`. The native client visited
+reported X/Z(-137,347) at actual walking Y64, observed container:10-depot ACTIVE,
+visited Clearwater, departed, waited for RELEASED custody, gracefully restarted,
+advanced6000 ticks without players and revisited Clearwater. Final tick6995 has
+zero required/scene/inventory/custody conflicts and no preparing replica scopes.
+Both captured frames were inspected: rendered buildings/ground, no transparent
+scene claim inferred from diagnostics alone. The initial attempt at requested
+Y74 fell to64 and was stopped: its visit-height barrier was invalid, not product
+acceptance. First nearby rendered chunks took about4s, first settlement warehouse
+readiness about14s; Clearwater revisit about2s. These are isolated pilot timings,
+not a controlled live-server speedup or proof that all ingress latency is gone.
+No full economic-cycle or extended-soak claim is made.
+
 ## Cooperative durability and generated geology (R218)
 
 Ordinary canonical transactions now retain one immutable prepared transition

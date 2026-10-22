@@ -6,7 +6,8 @@ import java.io.*;
 final class FrontierStateSchema {
     // Runtime field declarations are explicit, not inferred from the genesis layout.
     // Accounts retain exact cumulative cash turnover. Never invent history for old worlds.
-    static final int VERSION = 297;
+    // Prepared container projections retain their exact physical predecessor.
+    static final int VERSION = 298;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

@@ -89,9 +89,17 @@ final class FrontierV3BodyOperationIntegration {
         }
         if (!operations.durableOperation(link.operation().ticket())) return true;
         if (FrontierV3OperationConfirmation.submitRecovery(level, runtime, link.operation().ticket(), consequence, java.util.Optional.empty())) {
-            carriers.forgetBodyOperation(link); carriers.persist(level, state.bootstrap().worldId());
-        }
+            closeAdmissionOwner(level, carriers, link);
+        } else operations.ownerCommand(link.operation().ticket()).ifPresent(command ->
+                runtime.afterCommandReceipt(command.id(), () -> closeAdmissionOwner(level, carriers, link)));
         return true;
+    }
+    private static void closeAdmissionOwner(ServerLevel level, FrontierV3AmbientCarrierLedger carriers,
+            FrontierV3BodyAdmissionOperation link) {
+        // ActorBodyPresent may become durable between turns. Once RUNNING, ordinary
+        // inspection no longer calls confirm, so exact owner cleanup must follow that receipt.
+        if (carriers.bodyOperation(link.actor()).filter(link::equals).isEmpty()) return;
+        carriers.forgetBodyOperation(link); carriers.persist(level, link.world());
     }
     private static boolean retired(FrontierV3OperationLedger operations, FrontierV3BodyAdmissionOperation link) {
         return operations.prunable(link.operation().nativeReceipt(link.participant()));

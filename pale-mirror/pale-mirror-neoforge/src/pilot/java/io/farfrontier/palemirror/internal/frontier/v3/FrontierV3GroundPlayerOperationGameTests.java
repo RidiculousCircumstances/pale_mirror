@@ -136,7 +136,10 @@ public final class FrontierV3GroundPlayerOperationGameTests {
                     && next.lots().get(lot.id()).equals(lot), "fragmented drops preserve the original lot and all 64 resources");
             helper.assertTrue(drops.stream().allMatch(a -> level.getEntity(((ResourceCustody.Ground) a.custody()).entityId()) instanceof ItemEntity e
                     && e.getItem().getCount() == a.lotQuantities().get(lot.id())), "every canonical fragment is the actual native drop");
-            helper.assertTrue(FrontierV3ResourceHandoffLedger.get(level).containerDrops().isEmpty(), "one owner outcome closes the whole native split");
+            var sourceMarkers = FrontierV3NativeOperationMarkers.read(chest.getPersistentData());
+            helper.assertTrue(FrontierV3ResourceHandoffLedger.get(level).containerDrops().stream()
+                    .noneMatch(drop -> sourceMarkers.stream().anyMatch(marker -> marker.ticket().equals(drop.id()))),
+                    "one owner outcome closes this native split, independent of other fixtures' retained operations");
             helper.assertTrue(FrontierV3NativeOperationMarkers.read(chest.getPersistentData()).size() == 1,
                     "one operation covers the original stack, not one operation per fragment");
             var fragment = (ItemEntity) level.getEntity(((ResourceCustody.Ground) drops.getFirst().custody()).entityId());
@@ -154,7 +157,8 @@ public final class FrontierV3GroundPlayerOperationGameTests {
                     && runtime.decodedState().orElseThrow().equals(canonical), "existing destination and empty source never prove another drop");
             helper.assertTrue(operations.cancelUnattempted(unproved.ticket()), "only unattempted callback is cancellable"); operations.persist(level);
             helper.assertTrue(FrontierV3ContainerDropOperation.reconcile(level, runtime, retained)
-                    && runtime.decodedState().orElseThrow().equals(canonical) && journal.containerDrops().isEmpty(),
+                    && runtime.decodedState().orElseThrow().equals(canonical)
+                    && journal.containerDrops().stream().noneMatch(drop -> drop.id().equals(retained.id())),
                     "cancel-before-owner-retire recovery neither spawns nor submits a new outcome");
         } finally { runtime.shutdown(); }
         helper.succeed();

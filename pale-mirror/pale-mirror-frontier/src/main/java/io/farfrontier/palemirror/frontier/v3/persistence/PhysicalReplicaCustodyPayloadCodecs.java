@@ -156,6 +156,11 @@ final class PhysicalReplicaCustodyPayloadCodecs {
             FrontierWorldPayloadCodecs.writeString(output, value.observedProvenance().orElseThrow());
             output.writeByte(value.conflictReason().orElseThrow().wireTag());
         }
+        output.writeBoolean(value.preparationPreimage().isPresent());
+        if (value.preparationPreimage().isPresent()) {
+            FrontierWorldPayloadCodecs.writeString(output, value.preparationPreimage().orElseThrow().fingerprint());
+            FrontierWorldPayloadCodecs.writeString(output, value.preparationPreimage().orElseThrow().provenance());
+        }
     }
     private static PhysicalReplicaRecord readReplica(DataInputStream input) throws IOException {
         var object = FrontierWorldPayloadCodecs.readSubject(input).value(); String kind = FrontierWorldPayloadCodecs.readString(input);
@@ -168,7 +173,10 @@ final class PhysicalReplicaCustodyPayloadCodecs {
             observedProvenance = java.util.Optional.of(FrontierWorldPayloadCodecs.readString(input));
             reason = java.util.Optional.of(readConflictReason(input.readUnsignedByte()));
         }
-        return new PhysicalReplicaRecord(object, kind, emitted, observed, replicaRevision, fingerprint, provenance, state, observedFingerprint, observedProvenance, reason);
+        var preimage = input.readBoolean() ? java.util.Optional.of(new ProjectionPreimage(
+                FrontierWorldPayloadCodecs.readString(input), FrontierWorldPayloadCodecs.readString(input)))
+                : java.util.Optional.<ProjectionPreimage>empty();
+        return new PhysicalReplicaRecord(object, kind, emitted, observed, replicaRevision, fingerprint, provenance, state, observedFingerprint, observedProvenance, reason, preimage);
     }
     private static void writeLease(DataOutputStream output, PhysicalCustodyLease lease) throws IOException {
         FrontierWorldPayloadCodecs.writeSubject(output, lease.scopeId()); FrontierWorldPayloadCodecs.writeSubject(output, lease.objectId()); FrontierWorldPayloadCodecs.writeSubject(output, lease.providerId());

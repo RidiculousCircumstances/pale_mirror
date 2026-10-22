@@ -9,7 +9,15 @@ import java.util.Optional;
 public record PhysicalReplicaRecord(SubjectId objectId, String semanticKind, long emittedCanonicalRevision,
                                     long observedCanonicalRevision, long replicaRevision, String fingerprint, String provenance,
                                     PhysicalReplicaState state, Optional<String> observedFingerprint,
-                                    Optional<String> observedProvenance, Optional<PhysicalReplicaConflictReason> conflictReason) {
+                                    Optional<String> observedProvenance, Optional<PhysicalReplicaConflictReason> conflictReason,
+                                    Optional<ProjectionPreimage> preparationPreimage) {
+    public PhysicalReplicaRecord(SubjectId objectId, String semanticKind, long emittedCanonicalRevision,
+            long observedCanonicalRevision, long replicaRevision, String fingerprint, String provenance,
+            PhysicalReplicaState state, Optional<String> observedFingerprint, Optional<String> observedProvenance,
+            Optional<PhysicalReplicaConflictReason> conflictReason) {
+        this(objectId, semanticKind, emittedCanonicalRevision, observedCanonicalRevision, replicaRevision,
+                fingerprint, provenance, state, observedFingerprint, observedProvenance, conflictReason, Optional.empty());
+    }
     public PhysicalReplicaRecord {
         Objects.requireNonNull(objectId, "object id"); Objects.requireNonNull(semanticKind, "semantic kind");
         Objects.requireNonNull(fingerprint, "replica fingerprint"); Objects.requireNonNull(provenance, "replica provenance");
@@ -17,6 +25,9 @@ public record PhysicalReplicaRecord(SubjectId objectId, String semanticKind, lon
         observedFingerprint = Objects.requireNonNull(observedFingerprint, "observed fingerprint");
         observedProvenance = Objects.requireNonNull(observedProvenance, "observed provenance");
         conflictReason = Objects.requireNonNull(conflictReason, "conflict reason");
+        preparationPreimage = Objects.requireNonNull(preparationPreimage, "preparation predecessor");
+        if (state == PhysicalReplicaState.OBSERVED_CURRENT && preparationPreimage.isPresent())
+            throw new IllegalArgumentException("completed replica cannot retain write permission");
         if (semanticKind.isBlank() || fingerprint.isBlank() || provenance.isBlank() || emittedCanonicalRevision < 0
                 || observedCanonicalRevision != emittedCanonicalRevision || replicaRevision < 1
                 || (state == PhysicalReplicaState.CONFLICT) != conflictReason.isPresent()
@@ -24,6 +35,13 @@ public record PhysicalReplicaRecord(SubjectId objectId, String semanticKind, lon
                 || observedFingerprint.isPresent() != observedProvenance.isPresent()) {
             throw new IllegalArgumentException("replica record is invalid");
         }
+    }
+    public PhysicalReplicaRecord withPreparationPreimage(ProjectionPreimage preimage) {
+        if (state != PhysicalReplicaState.EXPECTED || preparationPreimage.isPresent())
+            throw new IllegalArgumentException("predecessor requires a fresh expected projection");
+        return new PhysicalReplicaRecord(objectId, semanticKind, emittedCanonicalRevision, observedCanonicalRevision,
+                replicaRevision, fingerprint, provenance, state, observedFingerprint, observedProvenance, conflictReason,
+                Optional.of(preimage));
     }
     public static PhysicalReplicaRecord expected(SubjectId objectId, String semanticKind, long canonicalRevision,
                                                  String fingerprint, String provenance) {
@@ -53,7 +71,7 @@ public record PhysicalReplicaRecord(SubjectId objectId, String semanticKind, lon
                     : !observedFingerprint.equals(fingerprint) ? PhysicalReplicaConflictReason.FINGERPRINT_MISMATCH
                     : PhysicalReplicaConflictReason.PROVENANCE_MISMATCH;
             return new PhysicalReplicaRecord(objectId, semanticKind, emittedCanonicalRevision, observedRevision, replicaRevision + 1, fingerprint, provenance,
-                    PhysicalReplicaState.CONFLICT, Optional.of(observedFingerprint), Optional.of(observedProvenance), Optional.of(reason));
+                    PhysicalReplicaState.CONFLICT, Optional.of(observedFingerprint), Optional.of(observedProvenance), Optional.of(reason), preparationPreimage);
         }
         return new PhysicalReplicaRecord(objectId, semanticKind, emittedCanonicalRevision, observedRevision, replicaRevision + 1, fingerprint, provenance,
                 PhysicalReplicaState.OBSERVED_CURRENT, Optional.empty(), Optional.empty(), Optional.empty());

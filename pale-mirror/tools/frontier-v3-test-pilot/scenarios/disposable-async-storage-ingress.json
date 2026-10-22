@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "id": "disposable_async_storage_ingress",
+  "isolation": { "mode": "disposable_lite", "seed": 125 },
+  "server": { "host": "127.0.0.1", "port": 25127, "profile": "quarry-r22-world", "viewDistance": 8 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "container", "id": "container:10-depot", "expect": { "status": "ok", "position": { "x": -103, "y": 65, "z": 354 } } }
+    ] },
+    { "type": "command", "command": "/gamemode creative" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -137, "y": 64, "z": 347 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "first_visibility", "id": "-9,21", "expect": { "presentationReady": true, "dynamicReady": true }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:10-depot", "expect": { "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } }, "timeoutMs": 60000 },
+    { "type": "look", "at": { "x": -103, "y": 65, "z": 354 } },
+    { "type": "inspect", "view": "performance", "id": "" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 129, "y": 64, "z": 6 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:7-depot", "expect": { "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } }, "timeoutMs": 60000 },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 8, "y": 65, "z": -5 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:7-depot", "expect": { "custody": { "status": "RELEASED" } }, "timeoutMs": 90000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 129, "y": 64, "z": 6 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:7-depot", "expect": { "surface": "ACTIVE", "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } }, "timeoutMs": 60000, "causalMilestone": "storage_reacquired_after_cold_restart" },
+    { "type": "look", "at": { "x": 137, "y": 65, "z": 14 } },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "restart": { "mode": "graceful", "afterAction": 9, "zeroPlayerAdvanceTicks": 6000, "zeroPlayerTimeoutMs": 180000, "zeroPlayerSettleMs": 1000 },
+  "assertions": [
+    { "after": 13, "view": "summary", "id": "", "expect": { "status": "ok", "requiredConflicts": 0, "sceneConflicts": 0, "inventoryConflicts": 0 } }
+  ],
+  "frames": [ { "after": 4, "name": "reported-settlement-loaded" }, { "after": 12, "name": "clearwater-storage-after-cold-restart" } ]
+}

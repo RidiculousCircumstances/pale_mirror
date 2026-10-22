@@ -155,9 +155,9 @@ final class FrontierV3NavigationObservation {
             if (checked.isEmpty()) { window.declarations = declarations; return false; }
             return true;
         }
-        if (FrontierV3CommandSubmission.submitResult(runtime, "navigation-definitions", NavigationGeometryObserved.OWNER.value(),
-                new NavigationGeometryObserved(state.navigationGeometry().revision(), Map.of(), additions)) instanceof CommandResult.Accepted)
-            window.checkedDefinitions.addAll(checked);
+        var result = FrontierV3CommandSubmission.submitResult(runtime, "navigation-definitions", NavigationGeometryObserved.OWNER.value(),
+                new NavigationGeometryObserved(state.navigationGeometry().revision(), Map.of(), additions));
+        runtime.afterCommand(result, () -> window.checkedDefinitions.addAll(checked));
         return true;
     }
     static boolean blockWrite(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
@@ -258,12 +258,10 @@ final class FrontierV3NavigationObservation {
             FrontierV3PedestrianPlanning.geometryObserved(runtime, confirmed);
             return true;
         }
-        boolean accepted = FrontierV3CommandSubmission.submitResult(runtime, "navigation-geometry", NavigationGeometryObserved.OWNER.value(),
-                new NavigationGeometryObserved(state.navigationGeometry().revision(), observations)) instanceof CommandResult.Accepted;
-        if (accepted) {
-            confirmed.addAll(observations.keySet());
-            FrontierV3PedestrianPlanning.geometryObserved(runtime, confirmed);
-        }
-        return accepted;
+        var result = FrontierV3CommandSubmission.submitResult(runtime, "navigation-geometry", NavigationGeometryObserved.OWNER.value(),
+                new NavigationGeometryObserved(state.navigationGeometry().revision(), observations));
+        confirmed.addAll(observations.keySet());
+        runtime.afterCommand(result, () -> FrontierV3PedestrianPlanning.geometryObserved(runtime, confirmed));
+        return result instanceof CommandResult.Accepted;
     }
 }

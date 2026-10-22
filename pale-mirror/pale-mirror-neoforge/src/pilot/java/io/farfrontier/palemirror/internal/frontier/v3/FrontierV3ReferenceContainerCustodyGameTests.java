@@ -42,6 +42,52 @@ import java.util.Optional;
 public final class FrontierV3ReferenceContainerCustodyGameTests {
     private FrontierV3ReferenceContainerCustodyGameTests() { }
 
+    @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 80)
+    public static void delayedCatchupResumesAfterRecoveryWithoutOverwritingForeignSlots(GameTestHelper helper) {
+        for (boolean foreign : List.of(false, true)) {
+            WorldId world = new WorldId("frontier:delayed-projection-" + foreign);
+            var state = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
+            var depot = FrontierWorldState.depotId(state.bootstrap().settlements().getFirst().id());
+            var local = helper.absolutePos(new BlockPos(2, 2, 2));
+            var original = state.inventory().surfaces().get(depot).position();
+            state = FrontierWorldState.initial(FrontierV3BootstrapGameTestFixtures.translatedBootstrap(state.bootstrap(),
+                    local.getX() - original.x(), local.getY() - original.y(), local.getZ() - original.z()));
+            state = held(activated(state, depot), depot);
+            var scope = ReferenceContainerCustody.scopeId(depot);
+            state = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(state.replicaCustody()
+                    .checkpoint(scope, 1L, 0L, 2L).release(scope, 1L, 0L, 2L)));
+            var chest = chest(helper, local, depot);
+            chest.clearContent();
+            FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, state, depot);
+            int slot = state.inventory().firstFreeSlot(depot).orElseThrow();
+            state = state.withInventory(state.inventory().store(new ExactItemStack(new SubjectId("item:cold-arrival"),
+                    state.bootstrap().settlements().getFirst().id(), "minecraft:cobblestone", 8,
+                    new InventoryCustody.ContainerSlot(depot, slot))));
+            var runtime = runtime(world, state);
+            helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.prepareReleasedProjection(runtime, state,
+                    state.replicaCustody().replicas().get(depot)), "exact before-write receipt");
+            helper.assertTrue(chest.getItem(slot).isEmpty(), "preparation must not write native slots");
+            var checkpoint = runtime.checkpointImage().orElseThrow(); runtime.shutdown();
+            var restored = recovered(world, checkpoint, state.bootstrap());
+            var pending = restored.decodedState().orElseThrow();
+            helper.assertTrue(pending.replicaCustody().replicas().get(depot).preparationPreimage().isPresent(),
+                    "recovery must retain physical predecessor, not guess permission from PREPARING");
+            if (foreign) chest.setItem(slot, new ItemStack(Items.DIAMOND, 3));
+            FrontierV3ReferenceContainerCustodyExecutor.reconcile(helper.getLevel(), restored, pending,
+                    pending.inventory().surfaces().get(depot));
+            var result = restored.decodedState().orElseThrow();
+            if (foreign) helper.assertTrue(chest.getItem(slot).is(Items.DIAMOND) && chest.getItem(slot).getCount() == 3
+                    && result.replicaCustody().custodyByScope().get(scope).status() == PhysicalCustodyLeaseStatus.UNRESOLVED,
+                    "actual player mutation must remain intact and locally unresolved");
+            else helper.assertTrue(chest.getItem(slot).is(Items.COBBLESTONE) && chest.getItem(slot).getCount() == 8
+                    && ReferenceContainerCustody.hasOperationalCustody(result, depot)
+                    && result.replicaCustody().replicas().get(depot).preparationPreimage().isEmpty(),
+                    "ordinary recovered preparation must finish once and retire its write permission");
+            restored.shutdown();
+        }
+        helper.succeed();
+    }
+
     @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void savedAttachmentReleasesThroughRealCustodyExecutorAfterBodyRetirement(GameTestHelper helper) {
         WorldId world = new WorldId("frontier:retired-attachment-drain");
@@ -810,7 +856,9 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
             if (!world.equals(worldId)) throw new IllegalArgumentException("recovery world mismatch");
             return new RecoveryImage(world, Optional.of(new SnapshotRecord(checkpoint, checkpoint.revision().value())), List.of());
         }
-        @Override public AppendReceipt append(TransactionRecord transaction, Durability durability) { throw new UnsupportedOperationException("recovered GameTest store is read-only"); }
+        @Override public AppendReceipt append(TransactionRecord transaction, Durability durability) {
+            return new AppendReceipt(transaction.id(), transaction.revision(), durability, transaction.revision().value());
+        }
         @Override public SnapshotReceipt installSnapshot(SnapshotRecord snapshot) { throw new UnsupportedOperationException("recovered GameTest store is read-only"); }
         @Override public CompactionReceipt compact(WorldId worldId, io.farfrontier.palemirror.frontier.v3.api.Revision coveredRevision) { throw new UnsupportedOperationException("recovered GameTest store is read-only"); }
     }

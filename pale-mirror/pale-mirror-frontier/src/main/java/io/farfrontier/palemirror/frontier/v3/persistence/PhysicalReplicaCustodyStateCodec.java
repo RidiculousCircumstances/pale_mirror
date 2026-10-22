@@ -22,6 +22,11 @@ final class PhysicalReplicaCustodyStateCodec {
             output.writeBoolean(replica.observedFingerprint().isPresent());
             if (replica.observedFingerprint().isPresent()) { writeString(output, replica.observedFingerprint().orElseThrow()); writeString(output, replica.observedProvenance().orElseThrow());
                 output.writeByte(replica.conflictReason().orElseThrow().wireTag()); }
+            output.writeBoolean(replica.preparationPreimage().isPresent());
+            if (replica.preparationPreimage().isPresent()) {
+                writeString(output, replica.preparationPreimage().orElseThrow().fingerprint());
+                writeString(output, replica.preparationPreimage().orElseThrow().provenance());
+            }
         }
         writeCount(output, state.custodyByScope().size());
         for (PhysicalCustodyLease lease : state.custodyByScope().values().stream().sorted(Comparator.comparing(PhysicalCustodyLease::scopeId)).toList()) {
@@ -42,8 +47,10 @@ final class PhysicalReplicaCustodyStateCodec {
             PhysicalReplicaState lifecycle = replicaState(state);
             Optional<String> observedFingerprint = Optional.empty(), observedProvenance = Optional.empty(); Optional<PhysicalReplicaConflictReason> conflictReason = Optional.empty();
             if (input.readBoolean()) { observedFingerprint = Optional.of(readString(input)); observedProvenance = Optional.of(readString(input)); conflictReason = Optional.of(replicaConflictReason(input.readUnsignedByte())); }
+            Optional<ProjectionPreimage> preimage = input.readBoolean()
+                    ? Optional.of(new ProjectionPreimage(readString(input), readString(input))) : Optional.empty();
             if (replicas.put(object, new PhysicalReplicaRecord(object, semanticKind, emitted, observed, replicaRevision, fingerprint, provenance, lifecycle,
-                    observedFingerprint, observedProvenance, conflictReason)) != null) {
+                    observedFingerprint, observedProvenance, conflictReason, preimage)) != null) {
                 throw new IllegalArgumentException("duplicate physical replica identity");
             } }
         Map<SubjectId, PhysicalCustodyLease> leases = new LinkedHashMap<>();

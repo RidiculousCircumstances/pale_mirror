@@ -132,6 +132,10 @@ public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> 
 
     /** Fences an already-declared exact expected write without pretending it was observed. */
     public PhysicalReplicaCustodyState prepareProjection(PhysicalCustodyLease requested) {
+        return prepareProjection(requested, java.util.Optional.empty());
+    }
+    public PhysicalReplicaCustodyState prepareProjection(PhysicalCustodyLease requested,
+            java.util.Optional<ProjectionPreimage> preimage) {
         Objects.requireNonNull(requested, "projection custody lease");
         PhysicalReplicaRecord replica = requireReplica(requested.objectId());
         if (requested.status() != PhysicalCustodyLeaseStatus.PREPARING || replica.state() != PhysicalReplicaState.EXPECTED
@@ -149,7 +153,10 @@ public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> 
         }
         Map<SubjectId, PhysicalCustodyLease> next = new LinkedHashMap<>(custodyByScope);
         next.put(requested.scopeId(), requested);
-        return new PhysicalReplicaCustodyState(replicas, next, diagnostics);
+        if (preimage.isEmpty()) return new PhysicalReplicaCustodyState(replicas, next, diagnostics);
+        var preparedReplicas = new LinkedHashMap<>(replicas);
+        preparedReplicas.put(replica.objectId(), replica.withPreparationPreimage(preimage.orElseThrow()));
+        return new PhysicalReplicaCustodyState(preparedReplicas, next, diagnostics);
     }
 
     /** Confirm only matching actual evidence; a mismatch retains the fence for explicit recovery. */

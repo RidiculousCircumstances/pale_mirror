@@ -232,7 +232,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 else if (reconcilePreparedProjection(runtime, state, projectionLease, physical))
                     activateMobileProjection(runtime, state, containerId);
             } else if (surface.status() == ContainerSurfaceStatus.ACTIVE && stableLoadedObservation(level, containerId, physical)) {
-                reconcilePreparedProjection(runtime, state, projectionLease, physical);
+                resumePreparedProjection(level, runtime, state, projectionLease, physical);
             }
             return;
         }
@@ -303,7 +303,8 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 // reacquiring directly would strand that input outside the physical chest.
                 FrontierWorldState emitted = runtime.decodedState()
                         .orElseThrow(() -> new IllegalStateException("reference replica emission did not publish state"));
-                writeAndConfirmProjection(level, runtime, emitted, containerId, physical);
+                resumePreparedProjection(level, runtime, emitted,
+                        emitted.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(containerId)), physical);
             }
             return;
         }
@@ -445,6 +446,19 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         return submit(runtime, "projection-conflict", lease.objectId(), replica.replicaRevision(),
                 ReplicaCustodyDiagnosticProducer.projectionConflict(lease.scopeId(), lease.authorityEpoch(), lease.expectedCanonicalRevision(),
                         lease.expectedReplicaRevision(), actual.fingerprint(), actual.provenance()));
+    }
+
+    /** Record the actual write now; its durable confirmation may complete on a later turn. */
+    static void resumePreparedProjection(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            FrontierWorldState state, PhysicalCustodyLease lease, FrontierV3PhysicalContainer physical) {
+        var replica = state.replicaCustody().replicas().get(lease.objectId());
+        // The saved predecessor is permission only for this exact preparing epoch.
+        // A third image (player/automation change) is evidence, never overwritten.
+        var actual = observedRetainedContainer(state, lease.objectId(), physical);
+        if (lease.status() == PhysicalCustodyLeaseStatus.PREPARING
+                && replica.preparationPreimage().filter(before -> before.matches(actual.fingerprint(), actual.provenance())).isPresent()) {
+            writeAndConfirmProjection(level, runtime, state, lease.objectId(), physical);
+        } else reconcilePreparedProjection(runtime, state, lease, physical);
     }
 
     /** Record the actual write now; its durable confirmation may complete on a later turn. */

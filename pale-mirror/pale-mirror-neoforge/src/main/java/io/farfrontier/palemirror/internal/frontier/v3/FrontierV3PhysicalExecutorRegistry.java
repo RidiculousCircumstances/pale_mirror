@@ -64,6 +64,7 @@ final class FrontierV3PhysicalExecutorRegistry {
     private final List<Diagnostic> diagnostics;
     private final java.util.Map<ServerLevel, FrontierV3PreparationAdmission> preparation = new java.util.WeakHashMap<>();
     private final java.util.Map<ServerLevel, FrontierV3PreparationAdmission.Turn> activePreparation = new java.util.IdentityHashMap<>();
+    private final java.util.Map<FrontierV3ServerRuntime<?, ?>, FrontierV3CooperativeStageCursor> continuations = new java.util.WeakHashMap<>();
 
     FrontierV3PhysicalExecutorRegistry(Collection<Definition> definitions) {
         List<DeterministicStagePlan.Definition<Definition>> staged = List.copyOf(definitions).stream()
@@ -82,18 +83,20 @@ final class FrontierV3PhysicalExecutorRegistry {
                         .map(Definition::id).toList())).begin((long)
                 (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D), System::nanoTime);
         activePreparation.put(world, admission);
-        try { for (Definition definition : ordered) {
+        try { continuations.computeIfAbsent(runtime, ignored -> new FrontierV3CooperativeStageCursor()).run(ordered.size(), () -> {
             var capacity = runtime.commandAdmissionCapacity();
             // A predecessor can quarantine the runtime. Preserve that primary trace and
             // stop this turn instead of throwing a second missing-Optional exception.
-            if (capacity.isEmpty() || !capacity.orElseThrow().hasCausalHeadroom()) break;
+            return capacity.isPresent() && capacity.orElseThrow().hasCausalHeadroom() && !runtime.awaitingCanonicalDurability();
+        }, index -> {
+            Definition definition = ordered.get(index);
             // Definitions presently represent one invocation.  A future multi-slice executor must
             // declare and consume its own bounded work units rather than adding a second tick call.
             try (FrontierExecutionMetrics.Span ignored = FrontierExecutionMetrics.safelyBegin(runtime.executionMetrics(), FrontierExecutionMetrics.Stage.PHYSICAL,
                     definition.id(), definition.stage().name().toLowerCase(java.util.Locale.ROOT))) {
                 definition.tick().run(world, runtime);
             }
-        } } finally { activePreparation.remove(world); }
+        }); } finally { activePreparation.remove(world); }
     }
 
     boolean admitPreparation(ServerLevel world, String id) {

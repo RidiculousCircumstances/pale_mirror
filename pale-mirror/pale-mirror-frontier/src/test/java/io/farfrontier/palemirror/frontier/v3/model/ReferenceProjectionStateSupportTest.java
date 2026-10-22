@@ -75,6 +75,9 @@ class ReferenceProjectionStateSupportTest {
         assertEquals(fixture.input(), repeated.inventory().items().get(job.consumedItemId()));
         assertEquals(transferred, repeated.productionJobs().get(job.id()));
         assertEquals(2L, repeated.replicaCustody().custodyByScope().get(scope).authorityEpoch());
+        assertEquals(java.util.Optional.of(new ProjectionPreimage(prior.fingerprint(), prior.provenance())),
+                repeated.replicaCustody().replicas().get(depot).preparationPreimage(),
+                "checkpoint hydration retains the exact predecessor for a delayed write");
     }
 
     private static CommandResult submit(FrontierEngine<FrontierWorldProjection> engine, String suffix, FrontierPayload payload) {
