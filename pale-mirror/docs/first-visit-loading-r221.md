@@ -46,6 +46,40 @@ fences and existing physical work bounds remain unchanged.
 
 ## Acceptance status
 
-Focused admission/continuation/window checks pass. Live latency after this fix
-has not yet been measured. This is not a claim that the five-second target is
-met or that every latency contribution has been fixed.
+Fix committed/deployed as bfa33068. Focused admission/continuation/window checks
+6/6, guardrails, clean-detached JAR/packaging, preflight and deployment verification
+pass. Same retained R220 world, restart1792674491, source gameplay changed only
+in preparation scheduling.
+
+Live first visit to settlement8 at380/0 (`r221-fairness-live`): teleport18:08:54,
+central packet18:08:58, all central-neighbour receipts/first central mesh18:09:05.
+The target is **not met** (~11s). Different settlement/state from the prior run:
+do not claim a controlled 16->11s speedup. Existing settlement9 login was~3s,
+which is not first construction evidence. Parallel RCON samplers timed out
+before the visit and are not usable attribution for this interval. Native client
+finished and was closed. Its terminal summary has one retained required incident
+and one preparing replica scope (no scene/inventory conflicts); not yet attributed,
+and must not be called a clean acceptance run. Current server remains ACTIVE.
+
+## Proposed architectural next step — requires user agreement
+
+Do not just multiply the tick budget. Static first construction is still a
+post-load simulation-stage task, sharing cadence with durable physical work;
+neighbour chunks withheld by that task prevent the client's chunk mesh from
+becoming visible even after its own packet arrived.
+
+Propose moving the immutable initial roads/building baseline into chunk
+generation, extending the existing generated-geology baseline integration.
+The generator owns initial blocks/provenance, runtime owners own subsequent
+changes and never repair player damage from that baseline. Dynamic field and
+container state still needs exact current projection and recovery before usable
+handoff; do not replay historical work or expose stale inventories to achieve
+a timing number. A bounded ingress pipeline should prioritize the player's
+render dependency neighbourhood, with explicit per-chunk completion rather than
+waiting for a whole gameplay-stage rotation. No duplicate write authority,
+weakened durable-before-effect rule or second navigation truth is proposed.
+
+This changes ownership of initial construction and its recovery boundary, so it
+has **not been implemented** pending the user's requested architecture agreement.
+Retest first settlement/mine construction, COLD->HOT and revisit separately;
+retain visible-target/packet timings and investigate the recorded incident.
