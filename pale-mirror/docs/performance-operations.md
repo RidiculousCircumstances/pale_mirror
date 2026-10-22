@@ -362,6 +362,31 @@ index; ground-protection views use bucketed sets for dense coordinates. Same-inp
 tick560400 forecast rounds fell from~10ms to~0.5ms with equal results; the complete
 planning round still measured~80-120ms. Neither figure is a chunk latency promise.
 
+## R216: bakery route quarantine, 2026-10-22
+
+The R215 server later stopped at tick54899 (13:14:11 +05), not from an
+OOM/watchdog: `BakeryCompletionPlanning` previewed a move whose appended workshop
+ingress failed `requireAcceptedRoute` at support `(98,64,15)`. Read-only recovery
+of the actual snapshot plus WAL reproduced the same failure. The adjacent
+production bench `(99,65,16)` retained `WRITE_PENDING`; both input/work stations
+therefore lacked complete clearance knowledge. Bakery had searched only the
+outdoor leg and appended the internal cells without a knowledge request.
+
+`BakeryKnownNavigation` now declares the semantic goal and facility access once;
+the shared navigator owns the entire path, including workshop entry/exit, for
+HOT hints, COLD moves and storage replacement. Replay uses that same knowledge
+composition without searching. A real obstruction stays blocked; unknown facts
+retain the common addressed planning wait rather than producing an invalid move.
+No collision check, custody fence, event validation or quarantine is suppressed.
+
+Focused bakery tests:31 passed, including real pending-geometry admission,
+snapshot round-trip, confirmed-shape resumption and stale/blocked receipt refusal.
+Guardrails passed. The recovered live failure now yields `UNKNOWN_GEOMETRY` and
+an exact wake dependency, with no movement/resource mutation. Native same-world
+recovery is separately checked by `live-bakery-workshop-knowledge-recovery.json`;
+its result must not be inferred from these isolated checks. R215 startup/render
+latency limitations remain open; this correction makes no performance claim.
+
 ## Frontier v3 physical-scene scale protocol
 
 The v3 world keeps exact people, bioforms, cargo and objects. It must not

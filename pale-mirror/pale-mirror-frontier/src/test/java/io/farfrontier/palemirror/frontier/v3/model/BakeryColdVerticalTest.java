@@ -20,6 +20,71 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BakeryColdVerticalTest {
+    @Test void workshopKnowledgeWaitSurvivesRecoveryAndResumesWithoutInventedIngress() throws Exception {
+        var state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
+                FrontierBootstrapper.create(new WorldId("frontier:bakery-workshop-fence"), 41L)), StrategicTaskStatus.PENDING);
+        var task = state.strategicPlans().tasks().values().iterator().next();
+        var started = ProductionProcess.planStart(state, ProductionProcess.start(task, 200L)).stream()
+                .map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
+                .map(ProductionStarted.class::cast).findFirst().orElseThrow();
+        state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(),
+                new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
+        state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
+        for (long due = 300; due < 10_000 && state.productionJobs().get(started.job().id())
+                .bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DEPOT_PICKUP; due += 20) {
+            var job = state.productionJobs().get(started.job().id());
+            var step = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, due)).stream()
+                    .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
+                    .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
+            state = ProductionProcess.reduceBakeryColdStep(state, task.ownerId(), step);
+        }
+        var job = state.productionJobs().get(started.job().id());
+        assertEquals(BakeryWorkState.Phase.STATION_LOAD, job.bakeryWork().orElseThrow().phase());
+        var station = state.inventory().containers().values().stream().flatMap(c -> c.productionStation().stream())
+                .filter(value -> value.id().equals(job.bakeryWork().orElseThrow().stationId())).findFirst().orElseThrow();
+        var machine = station.socketSurface().support().offset(0, 1, 0);
+        var fence = io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.unavailable(
+                io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.Kind.WRITE_PENDING);
+        state = observeNavigation(state, machine, fence);
+        var codec = new FrontierWorldStateCodec();
+        var recovered = codec.decode(codec.encode(state));
+        var waiting = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.observe(
+                () -> ProductionProcess.planCompletion(recovered, ProductionProcess.complete(job, 12_000)));
+        assertTrue(waiting.result().stream().noneMatch(event -> event.payload() instanceof BakeryColdStep),
+                "a workshop knowledge fence must defer before producing a movement receipt");
+        assertFalse(waiting.requests().isEmpty(), "interior uncertainty must retain a geometry/planning wake");
+        assertEquals(state.inventory(), recovered.inventory(), "waiting preserves the wheat in the baker's hands");
+        var confirmed = observeNavigation(recovered, machine,
+                io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.known(
+                        io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.SOLID));
+        var step = ProductionProcess.planCompletion(confirmed, ProductionProcess.complete(job, 12_001)).stream()
+                .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance)
+                .map(BakeryColdStep.class::cast).findFirst().orElseThrow();
+        assertEquals(BakeryColdStep.Action.MOVE, step.action());
+        try (var ignored = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((g, from, to) -> {
+            fail("accepted workshop movement replays without searching again"); return null;
+        })) {
+            var advanced = ProductionProcess.reduceBakeryColdStep(codec.decode(codec.encode(confirmed)), job.settlementId(), step);
+            assertEquals(step.nextSurface(), advanced.actorLocations().get(job.workerId()).supportingSurface());
+            assertEquals(confirmed.inventory(), advanced.inventory());
+        }
+        var obstructed = observeNavigation(confirmed, station.workerStation().support().offset(0, 1, 0),
+                io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation.known(
+                        io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationCell.SOLID));
+        assertTrue(ProductionProcess.planCompletion(obstructed, ProductionProcess.complete(job, 12_002)).stream()
+                .noneMatch(event -> event.payload() instanceof BakeryColdStep), "known obstruction cannot become an authored passage");
+        assertThrows(IllegalArgumentException.class,
+                () -> ProductionProcess.reduceBakeryColdStep(obstructed, job.settlementId(), step),
+                "replay validation must still reject a stale route");
+    }
+
+    private static FrontierWorldState observeNavigation(FrontierWorldState state, BlockPosition position,
+            io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationObservation observation) {
+        return new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved(
+                state.navigationGeometry().revision(), java.util.Map.of(position, observation)).apply(state,
+                io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved.OWNER);
+    }
+
     @Test void pendingAdmissionRetainsARecoveryWaitAndAcceptedAccessReplaysWithoutAnyPlanner() throws Exception {
         var state = ProductionProcessTest.productionTask(FrontierWorldState.initial(
                 FrontierBootstrapper.create(new WorldId("frontier:bakery-admission-access"), 41L)), StrategicTaskStatus.PENDING);

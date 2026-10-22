@@ -1,8 +1,5 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
-import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
-import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianPathComposition;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -39,53 +36,18 @@ public final class BakeryKnownNavigation {
         Objects.requireNonNull(state, "bakery navigation state");
         Objects.requireNonNull(start, "bakery navigation start");
         BakeryWorkState work = job.bakeryWork().orElseThrow(() -> new IllegalArgumentException("job has no bakery movement goal"));
-        Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), job.settlementId());
-        SettlementStructure facility = settlement.structures().stream().filter(value -> value.id().equals(job.facilityId()))
-                .findFirst().orElseThrow();
-        var depotPort = BakeryStorage.access(state, job);
-        var serviceStation = depotPort.interactionStation(state);
-        var exterior = ShipmentEndpointComposition.exteriorApproach(state, depotPort.endpoint());
-        SettlementWorkshopServicePort workshopPort = SettlementWorkshopServicePort.forWorkshop(facility);
-        boolean clearing = work.phase() == BakeryWorkState.Phase.DELIVERED;
-        boolean toDepot = work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
-                || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY;
-        if (clearing) return retainedOnly
+        if (work.phase() == BakeryWorkState.Phase.DELIVERED) return retainedOnly
                 ? KnownServiceExitNavigation.retainedClearancePathFrom(state, job.settlementId(),
                     BakeryStorage.destination(job), job.id(), job.workerId(), work.phase().wireTag(), 1L, start)
                 : KnownServiceExitNavigation.plannedClearancePathFrom(state, job.settlementId(),
                     BakeryStorage.destination(job), job.id(), job.workerId(), work.phase().wireTag(), 1L, start);
-        SurfaceAnchor goal = BakeryWorkGoal.current(state, job).station();
-        if (start.equals(goal)) return List.of(start);
-        boolean atWorkshop = start.equals(workshopPort.workStation()) || start.equals(workshopPort.inputStation())
-                || start.equals(workshopPort.interiorSurface()) || start.equals(workshopPort.throatSurface())
-                || start.equals(workshopPort.approachSurface());
-        if (!toDepot && !clearing && atWorkshop) return workshopIngress(workshopPort, start);
-        List<SurfaceAnchor> prefix = atWorkshop ? workshopExit(workshopPort, start)
-                : start.equals(serviceStation) ? List.of(start, exterior) : List.of(start);
-        SurfaceAnchor outdoorStart = prefix.getLast();
-        SurfaceAnchor outdoorGoal = toDepot ? exterior : workshopPort.exteriorApproach();
-        MovementOrder outdoor = new MovementOrder(job.id(), job.workerId(), work.phase().wireTag(), 1,
-                List.of(outdoorGoal), TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
-        var passages = new ArrayList<>(ShipmentEndpointComposition.passages(state, depotPort.endpoint()));
-        passages.add(new KnownPedestrianRouteKnowledge.SettlementPassage(job.settlementId(),
-                new KnownPedestrianRouteKnowledge.Passage(facility, KnownPedestrianRouteKnowledge.Passage.Reach.EXTERIOR)));
-        KnownPedestrianRouteKnowledge routeKnowledge = KnownPedestrianRouteKnowledge.forJourney(state, passages).forActor(state, job.workerId());
-        List<SurfaceAnchor> route = retainedOnly ? routeKnowledge.retainedPath(outdoorStart, outdoor)
-                : routeKnowledge.plannedPath(outdoorStart, outdoor);
-        List<SurfaceAnchor> result = new ArrayList<>(prefix);
-        result.addAll(route.subList(1, route.size()));
-        if (toDepot) {
-            MovementOrder serviceOrder = new MovementOrder(job.id(), job.workerId(), work.phase().wireTag(), 1L,
-                    List.of(serviceStation), TraversalCapability.PEDESTRIAN,
-                    MovementOrder.ArrivalPolicy.EXACT_STATION);
-            List<SurfaceAnchor> serviceLeg = retainedOnly ? routeKnowledge.retainedPath(exterior, serviceOrder)
-                    : routeKnowledge.plannedPath(exterior, serviceOrder);
-            result.addAll(serviceLeg.subList(1, serviceLeg.size()));
-        } else if (!clearing) {
-            result.addAll(List.of(workshopPort.approachSurface(), workshopPort.throatSurface(),
-                    workshopPort.interiorSurface(), workshopPort.inputStation(), workshopPort.workStation()));
-        }
-        return PedestrianPathComposition.withoutLoops(result);
+        var goal = BakeryWorkGoal.current(state, job);
+        // A completed arrival needs no new movement proof. Every nonempty move,
+        // including workshop ingress/egress, uses the same current knowledge as replay.
+        if (start.equals(goal.station())) return List.of(start);
+        var knowledge = journeyKnowledge(state, job);
+        return retainedOnly ? knowledge.retainedPath(start, goal.movementOrder())
+                : knowledge.plannedPath(start, goal.movementOrder());
     }
 
     /** Bounded current-fact validation; replay does not calculate or rank routes. */
@@ -113,23 +75,16 @@ public final class BakeryKnownNavigation {
         }
         if (!route.getLast().equals(BakeryWorkGoal.current(state, job).station()))
             throw new IllegalArgumentException("bakery route has a foreign phase goal");
+        journeyKnowledge(state, job).requireRoute(route);
+    }
+
+    /** Bakery declares its destinations and access rights, never a private chain of traversable cells. */
+    private static KnownPedestrianRouteKnowledge journeyKnowledge(FrontierWorldState state, ProductionJob job) {
         var home = FrontierWorldStateSupport.settlement(state.bootstrap(), job.settlementId());
         var facility = home.structures().stream().filter(value -> value.id().equals(job.facilityId())).findFirst().orElseThrow();
         var passages = new ArrayList<>(ShipmentEndpointComposition.passages(state, BakeryStorage.access(state, job).endpoint()));
         passages.add(new KnownPedestrianRouteKnowledge.SettlementPassage(job.settlementId(),
                 new KnownPedestrianRouteKnowledge.Passage(facility, KnownPedestrianRouteKnowledge.Passage.Reach.STATIONS)));
-        KnownPedestrianRouteKnowledge.forJourney(state, passages).forActor(state, job.workerId()).requireRoute(route);
-    }
-
-    private static List<SurfaceAnchor> workshopExit(SettlementWorkshopServicePort port, SurfaceAnchor start) {
-        List<SurfaceAnchor> exit = List.of(port.workStation(), port.inputStation(), port.interiorSurface(),
-                port.throatSurface(), port.approachSurface(), port.exteriorApproach());
-        return exit.subList(exit.indexOf(start), exit.size());
-    }
-
-    private static List<SurfaceAnchor> workshopIngress(SettlementWorkshopServicePort port, SurfaceAnchor start) {
-        List<SurfaceAnchor> ingress = List.of(port.approachSurface(), port.throatSurface(), port.interiorSurface(),
-                port.inputStation(), port.workStation());
-        return ingress.subList(ingress.indexOf(start), ingress.size());
+        return KnownPedestrianRouteKnowledge.forJourney(state, passages).forActor(state, job.workerId());
     }
 }

@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "id": "live_bakery_workshop_knowledge_recovery",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "process", "id": "task:objective-stock-site-harvest-7-wheat-field-1-part-0-1",
+        "expect": { "status": "ok", "result": { "taskStatus": "ACTIVE" } } },
+      { "view": "summary", "id": "", "expect": { "status": "ok", "inventoryConflicts": 0, "sceneConflicts": 0 } }
+    ] }
+  ],
+  "actions": [
+    { "type": "inspect", "view": "process", "id": "job:production-objective-stock-site-harvest-7-wheat-field-1-part-0-1",
+      "causalMilestone": "same_recovered_bakery_job_before_observation" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 94, "y": 66, "z": 14 }, "settleMs": 0,
+      "causalMilestone": "ordinary_player_loads_workshop_geometry" },
+    { "type": "look", "at": { "x": 98, "y": 66, "z": 16 } },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "task:objective-stock-site-harvest-7-wheat-field-1-part-0-1",
+      "expect": { "status": "ok", "result": { "taskStatus": "COMPLETED" } }, "timeoutMs": 180000,
+      "causalMilestone": "same_job_finished_not_cancelled_after_geometry_recovery" },
+    { "type": "inspect", "view": "actor", "id": "resident:7-15" },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 24, "y": 64, "z": -132 }, "settleMs": 0 },
+    { "type": "wait", "ms": 5000 },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 4, "view": "process", "id": "task:objective-stock-site-harvest-7-wheat-field-1-part-0-1",
+      "expect": { "status": "ok", "result": { "taskStatus": "COMPLETED" } } },
+    { "after": 5, "view": "actor", "id": "resident:7-15", "expect": { "status": "ok", "life": "ALIVE" } },
+    { "after": 8, "view": "summary", "id": "", "expect": { "status": "ok", "inventoryConflicts": 0, "sceneConflicts": 0, "replicaCustodyDiagnostics": 0 } }
+  ],
+  "frames": [ { "after": 4, "name": "same-workshop-after-bakery-completion" } ]
+}
