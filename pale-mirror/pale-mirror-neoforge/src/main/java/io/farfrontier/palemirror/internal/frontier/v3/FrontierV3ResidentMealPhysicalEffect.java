@@ -186,11 +186,10 @@ final class FrontierV3ResidentMealPhysicalEffect {
         var remaining = remainingCount == 0 ? List.<FungiblePhysicalObservation.Stack>of()
                 : List.of(new FungiblePhysicalObservation.Stack(FrontierV3ActorResourceSlots.address(
                         meal.residentId(), worker, meal.inventorySlot()), meal.portion().itemKind(), remainingCount));
-        boolean consumed = FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(),
+        return FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(),
                 new ResidentMealHotEffectObserved(meal.residentId(), ResidentMeal.Phase.CONSUME,
-                        lease.revision(), FrontierV3SupportedBodyCapture.observe(level, worker).orElseThrow(), remaining, List.of(), meal.executionId()));
-        if (consumed) FrontierV3ActorCarryProjection.rememberConfirmed(runtime.decodedState().orElseThrow(), meal.residentId(), worker);
-        return consumed;
+                        lease.revision(), FrontierV3SupportedBodyCapture.observe(level, worker).orElseThrow(), remaining, List.of(), meal.executionId()),
+                () -> FrontierV3ActorCarryProjection.rememberConfirmed(runtime.decodedState().orElseThrow(), meal.residentId(), worker));
     }
 
     private static boolean accepted(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

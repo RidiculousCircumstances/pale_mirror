@@ -31,8 +31,7 @@ public final class ActorItemCustody {
         ActorLocation actor = state.actorLocations().get(order.actorId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
                 || !actor.supportingSurface().equals(order.station())
-                || !FrontierSceneAdmission.available(state, List.of(order.actorId()))
-                || state.sceneLeases().values().stream().anyMatch(lease -> lease.retainsMemberCustody(order.actorId())))
+                || !ActorExecutionCoordinator.coldAvailable(state, order.actorId()))
             throw new IllegalArgumentException("cold actor item handoff has no exclusive living actor at its station");
         if (ReferenceContainerCustody.hasLiveCustody(state, container.id())
                 || ReferenceContainerCustody.blocksCanonicalUse(state, container.id()))

@@ -99,7 +99,8 @@ final class FrontierV3SceneReleaseExecutor {
         var payload = ((FrontierV3SceneReleaseEffects.Ready) effects).payload();
         CommandResult result = releaseLoaded(runtime, lease, binding, payload);
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "scene_released", lease, result);
-        if (result instanceof CommandResult.Accepted) {
+        runtime.afterCommand(result, () -> {
+            forgetLeaseTransient(runtime, lease.id());
             FrontierWorldState releasedState = runtime.decodedState().orElseThrow();
             for (SceneMember member : lease.members()) {
                 if (level.getEntity(member.entityId()) instanceof Mob body)
@@ -110,7 +111,7 @@ final class FrontierV3SceneReleaseExecutor {
             for (SceneMember member : departedMembers) {
                 FrontierV3ActorBodyController.progressDeparture(level, runtime, runtime.decodedState().orElseThrow(), member.actorId());
             }
-        }
+        });
     }
     static void releaseCustodyConflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                        FrontierWorldState state, SceneLease lease, String reason) {
@@ -123,7 +124,6 @@ final class FrontierV3SceneReleaseExecutor {
         CommandResult result = binding.map(action -> FrontierV3CommandSubmission.submitBound(runtime, "scene-release", lease.id().value(),
                         payload, action))
                 .orElseGet(() -> submit(runtime, "scene-release", lease.id().value(), payload));
-        runtime.afterCommand(result, () -> forgetLeaseTransient(runtime, lease.id()));
         return result;
     }
 }

@@ -34,7 +34,8 @@ class FrontierV3OperationConfirmationTest {
             }
             public void afterCommit(CommandResult result, Runnable continuation) { completion.set(continuation); }
         };
-        assertFalse(FrontierV3OperationConfirmation.submit(ledger, () -> ledger.setDirty(false), canonical, operation.ticket(), consequence));
+        assertEquals(FrontierV3OperationConfirmation.Outcome.AWAITING_CANONICAL_COMMIT,
+                FrontierV3OperationConfirmation.submitOutcome(ledger, () -> ledger.setDirty(false), canonical, operation.ticket(), consequence));
         var command = ledger.ownerCommand(operation.ticket()).orElseThrow();
         assertEquals(Set.of(command.id()), pins);
         assertFalse(ledger.require(operation.ticket()).ownerClosed());
@@ -227,7 +228,8 @@ class FrontierV3OperationConfirmationTest {
                 return new CommandResult.Accepted(id, new TransactionId("test:accepted"), new Revision(2));
             }
         };
-        assertFalse(FrontierV3OperationConfirmation.submit(ledger, () -> { }, canonical, operation.ticket(), first));
+        assertEquals(FrontierV3OperationConfirmation.Outcome.REJECTED,
+                FrontierV3OperationConfirmation.submitOutcome(ledger, () -> { }, canonical, operation.ticket(), first));
         assertTrue(pins.isEmpty(), "a rejected command has no receipt to retain while awaiting owner recovery");
         assertThrows(IllegalArgumentException.class, () -> FrontierV3OperationConfirmation.submit(ledger, () -> { }, canonical, operation.ticket(), recovery));
         assertTrue(FrontierV3OperationConfirmation.submitRecovery(ledger, () -> { }, canonical, operation.ticket(), recovery));

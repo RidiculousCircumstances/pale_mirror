@@ -72,6 +72,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.resident_meal_portion_disposition_observed",
             "frontier.resident_meal_hot_hand_materialized", "frontier.resident_meal_hot_hand_released",
             "frontier.resident_meal_hot_access_cleared", "frontier.resident_meal_clearance_required",
+            "frontier.resident_meal_approach_required",
             "frontier.resident_health_transition", "frontier.settlement_quarantine_transition",
             "frontier.medical_treatment_started", "frontier.medical_treatment_transition",
             "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff");
@@ -850,6 +851,7 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.resident_meal_portion_disposition_observed",
                     "frontier.resident_meal_hot_hand_materialized", "frontier.resident_meal_hot_hand_released",
                     "frontier.resident_meal_hot_access_cleared", "frontier.resident_meal_clearance_required",
+                    "frontier.resident_meal_approach_required",
                     "frontier.resident_health_transition", "frontier.settlement_quarantine_transition",
                     "frontier.medical_treatment_started", "frontier.medical_treatment_transition",
                     "frontier.medical_treatment_scene_lease_prepared", "frontier.medical_treatment_scene_lease_handoff", "frontier.physical_delta_observed", "frontier.physical_deltas_observed",

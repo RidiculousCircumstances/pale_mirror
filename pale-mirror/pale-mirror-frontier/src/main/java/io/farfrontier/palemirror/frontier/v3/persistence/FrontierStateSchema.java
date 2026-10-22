@@ -7,7 +7,8 @@ final class FrontierStateSchema {
     // Runtime field declarations are explicit, not inferred from the genesis layout.
     // Accounts retain exact cumulative cash turnover. Never invent history for old worlds.
     // Prepared container projections retain their exact physical predecessor.
-    static final int VERSION = 298;
+    // Population event grammar includes exact displaced-pickup reapproach.
+    static final int VERSION = 299;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

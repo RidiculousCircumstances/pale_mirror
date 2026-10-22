@@ -26,11 +26,10 @@ final class FrontierV3ResourceSiteConflictExecutor {
                                   FrontierV3ResourceSiteLedger ledger, ResourceSite site, BlockPosition position,
                                   ResourceSiteDiagnosticProducer producer, CommandId id) {
         CommandResult result = submitConflict(runtime, site, position, producer, id);
-        if (!(result instanceof CommandResult.Accepted)) return false;
-        ledger.conflict(site.id());
+        runtime.afterCommand(result, () -> ledger.conflict(site.id()));
         FrontierV3DiagnosticTrace.record(level.getServer(), incidentTrace(site),
                 "resource_site_conflict:" + producer.source().name().toLowerCase(Locale.ROOT), site.id(), result);
-        return true;
+        return result instanceof CommandResult.Accepted;
     }
 
     static void recordLifecycleConflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
@@ -59,8 +58,7 @@ final class FrontierV3ResourceSiteConflictExecutor {
         CommandId id = new CommandId("executor:resource-site-conflict-" + originId + "-r" + checkpoint.revision().value()
                 + "-p" + minecraft(position).asLong());
         CommandResult result = submitConflict(runtime, site, position, producer, id);
-        if (!(result instanceof CommandResult.Accepted)) return;
-        ledger.conflict(site.id());
+        runtime.afterCommand(result, () -> ledger.conflict(site.id()));
         FrontierV3DiagnosticTrace.record(level.getServer(), incidentTrace(site), lifecycleConflictTraceKind(origin, lifecycle, claim, producer.reason(), admission, claimState), site.id(), result);
     }
 
@@ -114,8 +112,8 @@ final class FrontierV3ResourceSiteConflictExecutor {
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         CommandId id = new CommandId("executor:resource-site-conflict-r" + checkpoint.revision().value() + "-p" + minecraft(position).asLong());
         CommandResult result = submitConflict(runtime, site, position, ResourceSiteDiagnosticProducer.PLAYER_REMOVED, id);
-        if (result instanceof CommandResult.Accepted) {
-            ledger.conflict(site.id());
+        runtime.afterCommand(result, () -> ledger.conflict(site.id()));
+        if (!(result instanceof CommandResult.Rejected)) {
             FrontierV3DiagnosticTrace.record(level.getServer(), incidentTrace(site), "resource_site_conflict:player_world_observation", site.id(), result);
         } else if (result instanceof CommandResult.Rejected rejected) {
             PaleMirrorMod.LOGGER.info("PMV3_PLAYER_BREAK resource-disposition={} detail={}", rejected.rejection().code(), rejected.rejection().detail());

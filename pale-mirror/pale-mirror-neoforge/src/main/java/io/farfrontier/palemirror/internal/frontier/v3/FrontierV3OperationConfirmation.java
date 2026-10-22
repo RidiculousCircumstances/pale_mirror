@@ -8,6 +8,7 @@ import java.util.UUID;
 /** Joins the canonical command receipt to the physical journal without treating their
  * two independent WAL writes as one transaction. Neither payload nor job is interpreted. */
 final class FrontierV3OperationConfirmation {
+    enum Outcome { CONFIRMED, AWAITING_NATIVE_EVIDENCE, AWAITING_CANONICAL_COMMIT, REJECTED }
     interface Canonical {
         void pin(CommandId id);
         void release(CommandId id);
@@ -42,10 +43,19 @@ final class FrontierV3OperationConfirmation {
         if (!FrontierV3MinecraftOperation.recoverOutcome(level, ticket)) return false;
         return submit(ledger, () -> ledger.persist(level), canonical(level, runtime, binding), ticket, consequence);
     }
+    /** Waiting is not a rejected consequence or permission to replay the native effect. */
+    static Outcome submitOutcome(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime, UUID ticket, FrontierPayload consequence) {
+        var ledger = FrontierV3OperationLedger.get(level);
+        if (!FrontierV3MinecraftOperation.recoverOutcome(level, ticket)) return Outcome.AWAITING_NATIVE_EVIDENCE;
+        return submitOutcome(ledger, () -> ledger.persist(level), canonical(level, runtime, java.util.Optional.empty()), ticket, consequence);
+    }
     static boolean submit(FrontierV3OperationLedger ledger, Runnable force, Canonical canonical, UUID ticket, FrontierPayload consequence) {
+        return submitOutcome(ledger, force, canonical, ticket, consequence) == Outcome.CONFIRMED;
+    }
+    static Outcome submitOutcome(FrontierV3OperationLedger ledger, Runnable force, Canonical canonical, UUID ticket, FrontierPayload consequence) {
         var operation = ledger.require(ticket);
-        if (!ledger.nativeOutcomeAvailable(ticket)) return false;
-        if (operation.ownerClosed()) return true;
+        if (!ledger.nativeOutcomeAvailable(ticket)) return Outcome.AWAITING_NATIVE_EVIDENCE;
+        if (operation.ownerClosed()) return Outcome.CONFIRMED;
         var retained = ledger.ownerCommand(ticket);
         var command = retained.orElseGet(() -> new FrontierV3OperationLedger.OwnerCommand(
                 new CommandId("physical-operation:" + ticket), consequence));
@@ -64,12 +74,12 @@ final class FrontierV3OperationConfirmation {
                 if (result instanceof CommandResult.Rejected
                         || result instanceof CommandResult.Pending pending && pending.reason() == CommandResult.Pending.Reason.PREDECESSOR)
                     canonical.release(command.id());
-                return false;
+                return result instanceof CommandResult.Rejected ? Outcome.REJECTED : Outcome.AWAITING_CANONICAL_COMMIT;
             }
         }
         if (command.closure() == FrontierV3OperationLedger.OwnerCommand.Closure.AUTOMATIC)
             close(ledger, force, canonical, ticket, command);
-        return true;
+        return Outcome.CONFIRMED;
     }
     /** Canonical acceptance does not discharge an owner's retained aftermath.
      * The caller supplies that completion; the coordinator checks the exact command. */

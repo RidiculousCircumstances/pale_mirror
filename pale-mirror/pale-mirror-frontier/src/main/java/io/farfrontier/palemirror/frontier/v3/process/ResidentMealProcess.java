@@ -70,7 +70,8 @@ public final class ResidentMealProcess {
         if (meal.carriesFood() && state.inventory().fungibleResources().bindings().values().stream()
                 .anyMatch(binding -> binding.accountId().equals(meal.actorAccountId()))) return true;
         return switch (meal.phase()) {
-            case TAKE -> ReferenceContainerCustody.hasLiveCustody(state, meal.depotId());
+            case TAKE -> !ResidentMealApproach.displaced(state, meal)
+                    && ReferenceContainerCustody.hasLiveCustody(state, meal.depotId());
             case CONSUME -> state.inventory().fungibleResources().bindings().values().stream()
                     .anyMatch(binding -> binding.accountId().equals(meal.actorAccountId()));
             case MOVE, CLEAR_ACCESS -> {
@@ -99,6 +100,10 @@ public final class ResidentMealProcess {
         if (body == null || body.condition().status() != ActorLifeStatus.ALIVE)
             return List.of(new ProposedEvent(meal.residentId(), new ScheduleEffect.Consumed(action.id())));
         long now = Math.max(action.dueAt().ticks(), currentTick);
+        var approach = ResidentMealApproach.plan(state, meal);
+        if (approach.isPresent()) return List.of(new ProposedEvent(meal.residentId(), approach.orElseThrow()),
+                new ProposedEvent(meal.residentId(), new ScheduleEffect.Rescheduled(action.id(),
+                        progress(meal, Math.addExact(now, 1L)))));
         var grounding = ResidentMealGrounding.plan(state, meal, now);
         if (grounding.isPresent()) return List.of(new ProposedEvent(meal.residentId(), grounding.orElseThrow()),
                 new ProposedEvent(meal.residentId(), new ScheduleEffect.Rescheduled(action.id(),
@@ -473,6 +478,7 @@ public final class ResidentMealProcess {
         ResidentMeal meal = state.humanPopulation().meals().get(residentId);
         if (meal == null || now < meal.startedAtTick()) return Optional.empty();
         if (coldEffectHeld(state, meal)) return Optional.empty();
+        if (ResidentMealApproach.displaced(state, meal)) return Optional.empty();
         ActorLocation actor = state.actorLocations().get(residentId);
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
                 || !ActorExecutionCoordinator.coldAvailable(state, residentId))

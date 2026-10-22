@@ -118,7 +118,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
         // historical vanilla fall counter is no longer an in-flight physical fact.  Clear only
         // at this accepted observation boundary; an unsupported or rejected body retains its
         // ordinary fall outcome.
-        if (handoff instanceof CommandResult.Accepted) clearHistoricalFallDistanceAtAcceptedHandoff(level, body, capture.body());
+        runtime.afterCommand(handoff, () -> clearHistoricalFallDistanceAtAcceptedHandoff(level, body, capture.body()));
     }
     private static void work(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
         ProductionJob job = FrontierProductionWorkSceneSupport.require(state, FrontierSceneBehaviors.productionWork(lease));

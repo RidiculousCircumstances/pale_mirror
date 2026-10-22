@@ -92,7 +92,7 @@ final class FrontierV3SettlementServiceWorkSceneExecutor {
                 io.farfrontier.palemirror.frontier.v3.model.SettlementServiceExecutionAuthority.current(state, work), runtime::decodedState);
         CommandResult result = submit(runtime, "settlement-service-work-handoff", lease.id().value(), new SettlementServiceWorkSceneLeaseHandoff(captured, List.of(capture)));
         // Capture before submission: a later STOP cannot acquire a successor's authority.
-        if (result instanceof CommandResult.Accepted) FrontierV3GoalNavigation.stop(body, actuation);
+        runtime.afterCommand(result, () -> FrontierV3GoalNavigation.stop(body, actuation));
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "settlement_service_work_handoff", captured, result);
     }
 

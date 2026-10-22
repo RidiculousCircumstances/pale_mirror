@@ -143,7 +143,8 @@ final class FrontierV3BakeryPhysicalEffect {
     private static void observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                 SceneLease lease, ProductionJob job, SubjectId containerId,
                                 java.util.UUID ticket, BakeryHotEffectObserved receipt) {
-        if (!FrontierV3OperationConfirmation.submit(level, runtime, ticket, receipt)) {
+        if (FrontierV3OperationConfirmation.submitOutcome(level, runtime, ticket, receipt)
+                == FrontierV3OperationConfirmation.Outcome.REJECTED) {
             // The chest/hand may already contain the effect. Keep the prepared
             // step and its exact worker local; do not quarantine unrelated sites.
             block(level, runtime, lease, job, new BakeryWorkBlock(BakeryWorkBlock.Reason.AMBIGUOUS_EFFECT,
