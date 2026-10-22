@@ -36,19 +36,21 @@ final class FrontierV3BlockJournal implements FrontierV3PhysicalJournal {
     private final Map<Long, FrontierV3JournalStore.Pressure> observedPressure = new HashMap<>();
     private final Map<Long, FrontierV3JournalStore.Pressure> lastSample = new HashMap<>();
     private final int cacheLimit;
+    private final java.util.concurrent.Executor writer;
     private long sectionReads, cacheHits, evictions, observedSequence;
     private boolean partitioned;
     private byte[] metadata;
     private AsyncAppend pendingAppend;
 
-    private FrontierV3BlockJournal(Path path, int cacheLimit, IndexPolicy indexPolicy) throws IOException {
+    private FrontierV3BlockJournal(Path path, int cacheLimit, IndexPolicy indexPolicy, java.util.concurrent.Executor writer) throws IOException {
         // One checkpoint worker + four queued jobs and the synchronous append lane may be
         // pinned. This minimum leaves an evictable slot without blocking on compression.
         if (cacheLimit < 8 || cacheLimit > CACHE_SECTIONS) throw new IllegalArgumentException("invalid block cache bound");
         this.cacheLimit = cacheLimit;
+        this.writer = Objects.requireNonNull(writer);
         this.indexPolicy = Objects.requireNonNull(indexPolicy);
         directory = path.resolveSibling(path.getFileName() + ".sections");
-        root = FrontierV3JournalStore.open(path, FrontierV3JournalStore.PHYSICAL, health);
+        root = FrontierV3JournalStore.open(path, writer, FrontierV3JournalStore.PHYSICAL, health);
         var image = root.image(); metadata = image.get("$meta");
         partitioned = image.containsKey(LAYOUT);
         if (image.isEmpty() && Files.exists(directory))
@@ -78,7 +80,12 @@ final class FrontierV3BlockJournal implements FrontierV3PhysicalJournal {
                 throw new IOException("block query index references an undeclared section");
     }
     static FrontierV3BlockJournal open(Path path, IndexPolicy policy) throws IOException { return open(path, CACHE_SECTIONS, policy); }
-    static FrontierV3BlockJournal open(Path path, int cacheLimit, IndexPolicy policy) throws IOException { return new FrontierV3BlockJournal(path, cacheLimit, policy); }
+    static FrontierV3BlockJournal open(Path path, int cacheLimit, IndexPolicy policy) throws IOException {
+        return open(path, cacheLimit, policy, FrontierPersistenceIo.writer());
+    }
+    static FrontierV3BlockJournal open(Path path, int cacheLimit, IndexPolicy policy, java.util.concurrent.Executor writer) throws IOException {
+        return new FrontierV3BlockJournal(path, cacheLimit, policy, writer);
+    }
     /** Conservative discovery only. Callers must reread/validate every row, never execute
      * from membership. Additions precede child writes; removals follow their durable receipt. */
     public Set<String> indexedKeys() throws IOException {
@@ -100,7 +107,7 @@ final class FrontierV3BlockJournal implements FrontierV3PhysicalJournal {
         if (!declaredSections.contains(id)) return null;
         reserveCacheSlot();
         if (!Files.isRegularFile(file(id))) throw new IOException("missing declared block section " + id);
-        var loaded = FrontierV3JournalStore.open(file(id), SECTION, health);
+        var loaded = FrontierV3JournalStore.open(file(id), writer, SECTION, health);
         addresses.put(id, validate(id, loaded.image())); sections.put(id, loaded);
         sectionReads++; observe(id, loaded); return loaded;
     }
@@ -109,7 +116,7 @@ final class FrontierV3BlockJournal implements FrontierV3PhysicalJournal {
         var iterator = sections.entrySet().iterator();
         while (iterator.hasNext()) {
             var candidate = iterator.next();
-            if (pendingAppend != null && pendingAppend.selected == candidate.getValue()) continue;
+            if (pendingAppend != null && pendingAppend.pinned.contains(candidate.getKey())) continue;
             if (!candidate.getValue().quiescent()) continue;
             observe(candidate.getKey(), candidate.getValue());
             addresses.remove(candidate.getKey()); lastSample.remove(candidate.getKey()); iterator.remove(); evictions++; return;
@@ -218,7 +225,7 @@ final class FrontierV3BlockJournal implements FrontierV3PhysicalJournal {
         for (var group : groups.entrySet()) {
             reserveCacheSlot();
             long section = group.getKey(); var expected = new TreeMap<>(group.getValue()); expected.put(BINDING, binding(section));
-            var store = FrontierV3JournalStore.open(file(section), SECTION, health);
+            var store = FrontierV3JournalStore.open(file(section), writer, SECTION, health);
             for (var prior : store.image().entrySet())
                 if (!Arrays.equals(prior.getValue(), expected.get(prior.getKey())))
                     throw new IOException("partial block migration differs from authoritative root " + section);
@@ -286,25 +293,99 @@ final class FrontierV3BlockJournal implements FrontierV3PhysicalJournal {
         checkHealthy();
     }
     /** All index/cache publication stays on the calling owner thread. Only immutable
-     * journal bytes run on the existing bounded I/O lane. One section is pinned at a
-     * time; a partial append is recovered by the same conservative root/child order. */
+     * journal bytes run on the existing bounded I/O lane. Bounded section waves share
+     * binding/manifest/data barriers instead of waiting another tick for each section.
+     * Partial waves retain the same conservative root/child recovery order. */
     private final class AsyncAppend {
         private final Iterator<Map.Entry<Long, Map<String, byte[]>>> groups;
         private final byte[] declaration;
         private final java.util.concurrent.CompletableFuture<Long> receipt = new java.util.concurrent.CompletableFuture<>();
-        private java.util.concurrent.CompletableFuture<Long> waiting;
+        private java.util.concurrent.CompletableFuture<?> waiting;
         private Runnable accepted = () -> { };
         private int phase;
-        private long section;
-        private FrontierV3JournalStore selected;
-        private Map<String, byte[]> rows;
-        private Map<Long, String> occupied, updates;
-        private final Map<String, byte[]> additions = new TreeMap<>(), removals = new TreeMap<>();
+        private final Set<Long> pinned = new HashSet<>();
+        private final List<SectionWrite> wave = new ArrayList<>();
+        private final Map<String, byte[]> declarations = new TreeMap<>(), additions = new TreeMap<>(), removals = new TreeMap<>();
+        private record SectionWrite(long id, FrontierV3JournalStore store, Map<String, byte[]> rows,
+                                    Map<Long, String> occupied, Map<Long, String> updates, boolean fresh) {
+            void publish() {
+                rows.forEach((key, value) -> { if (value == null) {
+                    try { occupied.remove(position(key, null), key); }
+                    catch (IOException bad) { throw new UncheckedIOException(bad); }
+                } });
+                occupied.putAll(updates);
+            }
+        }
         AsyncAppend(Map<Long, Map<String, byte[]>> groups, byte[] declaration) {
             this.groups = groups.entrySet().iterator(); this.declaration = declaration;
         }
         private void write(FrontierV3JournalStore store, Map<String, byte[]> values, Runnable after) throws IOException {
             waiting = store.appendAsync(values); accepted = after;
+        }
+        private void prepareWave() throws IOException {
+            wave.clear(); pinned.clear(); declarations.clear(); additions.clear(); removals.clear();
+            // Reserve room for the five independently pinned checkpoint jobs and a
+            // reader. The bound limits both I/O admission and owner-thread preparation.
+            // At most half the normal read cache is occupied by a write wave;
+            // leave the remainder for other section reads while I/O is pending.
+            int limit = Math.min(cacheLimit / 2, cacheLimit - 6);
+            while (wave.size() < limit && groups.hasNext()) {
+                var group = groups.next(); long id = group.getKey(); var rows = group.getValue();
+                var selected = section(id); boolean fresh = selected == null;
+                if (fresh) {
+                    reserveCacheSlot(); selected = FrontierV3JournalStore.open(file(id), writer, SECTION, health);
+                    var prior = selected.image();
+                    if (!prior.isEmpty() && (prior.size() != 1 || !Arrays.equals(binding(id), prior.get(BINDING))))
+                        throw new IOException("unregistered block section contains records " + id);
+                    // Reserve the actual slot now; reads during the asynchronous wait
+                    // must not consume it and make publication exceed the cache bound.
+                    sections.put(id, selected); addresses.put(id, new HashMap<>());
+                    declarations.put(PREFIX + id, identity(id));
+                }
+                pinned.add(id);
+                var occupied = addresses.get(id); var updates = new HashMap<Long, String>();
+                for (var row : rows.entrySet()) {
+                    if (row.getValue() != null) {
+                        long cell = position(row.getKey(), null); String retained = occupied.get(cell);
+                        if (retained != null && !retained.equals(row.getKey())
+                                && !(rows.containsKey(retained) && rows.get(retained) == null)
+                                || updates.putIfAbsent(cell, row.getKey()) != null)
+                            throw new IOException("competing block provenance " + row.getKey());
+                    }
+                    if (indexed(row.getValue())) {
+                        if (!indexedKeys.contains(row.getKey())) additions.put(INDEX_PREFIX + row.getKey(), new byte[0]);
+                    } else if (indexedKeys.contains(row.getKey())) removals.put(INDEX_PREFIX + row.getKey(), null);
+                }
+                wave.add(new SectionWrite(id, selected, rows, occupied, updates, fresh));
+            }
+        }
+        private java.util.concurrent.CompletableFuture<?> appendStage(FrontierV3JournalStore store, Map<String, byte[]> rows) {
+            try { return rows.isEmpty() ? java.util.concurrent.CompletableFuture.completedFuture(null) : store.appendAsync(rows); }
+            catch (IOException failure) { return java.util.concurrent.CompletableFuture.failedFuture(failure); }
+        }
+        private void writeWave() {
+            // Immutable I/O stages may follow one another on the existing writer;
+            // no Minecraft tick is needed between force receipts. Only publication
+            // into cache/address/query indexes waits for the owner-thread poll.
+            var retained = List.copyOf(wave);
+            var manifest = new TreeMap<>(declarations); manifest.putAll(additions);
+            var retired = new TreeMap<>(removals);
+            var bindings = retained.stream().filter(SectionWrite::fresh)
+                    .map(entry -> appendStage(entry.store(), Map.of(BINDING, binding(entry.id()))))
+                    .toArray(java.util.concurrent.CompletableFuture[]::new);
+            waiting = java.util.concurrent.CompletableFuture.allOf(bindings)
+                    .thenCompose(ignored -> appendStage(root, manifest))
+                    .thenCompose(ignored -> java.util.concurrent.CompletableFuture.allOf(retained.stream()
+                            .map(entry -> appendStage(entry.store(), entry.rows()))
+                            .toArray(java.util.concurrent.CompletableFuture[]::new)))
+                    .thenCompose(ignored -> appendStage(root, retired));
+            accepted = () -> {
+                for (var entry : retained) {
+                    declaredSections.add(entry.id()); entry.publish(); observe(entry.id(), entry.store());
+                }
+                additions.keySet().forEach(key -> indexedKeys.add(key.substring(INDEX_PREFIX.length())));
+                removals.keySet().forEach(key -> indexedKeys.remove(key.substring(INDEX_PREFIX.length())));
+            };
         }
         void poll() throws IOException {
             for (int steps = 0; steps < 8 && !receipt.isDone(); steps++) {
@@ -330,52 +411,7 @@ final class FrontierV3BlockJournal implements FrontierV3PhysicalJournal {
                     }
                     case 1 -> {
                         if (!groups.hasNext()) { receipt.complete(root.pressure().durableSequence() + observedSequence); return; }
-                        var group = groups.next(); section = group.getKey(); rows = group.getValue();
-                        selected = section(section); additions.clear(); removals.clear(); updates = new HashMap<>();
-                        if (selected == null) {
-                            reserveCacheSlot(); selected = FrontierV3JournalStore.open(file(section), SECTION, health);
-                            var prior = selected.image();
-                            if (!prior.isEmpty() && (prior.size() != 1 || !Arrays.equals(binding(section), prior.get(BINDING))))
-                                throw new IOException("unregistered block section contains records " + section);
-                            write(selected, Map.of(BINDING, binding(section)), () -> { }); phase = 2;
-                        } else phase = 3;
-                    }
-                    case 2 -> {
-                        write(root, Map.of(PREFIX + section, identity(section)), () -> {
-                            sections.put(section, selected); declaredSections.add(section); addresses.put(section, new HashMap<>());
-                        }); phase = 3;
-                    }
-                    case 3 -> {
-                        occupied = addresses.get(section);
-                        for (var row : rows.entrySet()) {
-                            if (row.getValue() != null) {
-                                long cell = position(row.getKey(), null); String retained = occupied.get(cell);
-                                if (retained != null && !retained.equals(row.getKey())
-                                        && !(rows.containsKey(retained) && rows.get(retained) == null)
-                                        || updates.putIfAbsent(cell, row.getKey()) != null)
-                                    throw new IOException("competing block provenance " + row.getKey());
-                            }
-                            if (indexed(row.getValue())) {
-                                if (!indexedKeys.contains(row.getKey())) additions.put(INDEX_PREFIX + row.getKey(), new byte[0]);
-                            } else if (indexedKeys.contains(row.getKey())) removals.put(INDEX_PREFIX + row.getKey(), null);
-                        }
-                        if (!additions.isEmpty()) write(root, additions,
-                                () -> additions.keySet().forEach(key -> indexedKeys.add(key.substring(INDEX_PREFIX.length()))));
-                        phase = 4;
-                    }
-                    case 4 -> {
-                        write(selected, rows, () -> {
-                            rows.forEach((key, value) -> { if (value == null) {
-                                try { occupied.remove(position(key, null), key); }
-                                catch (IOException bad) { throw new UncheckedIOException(bad); }
-                            } });
-                            occupied.putAll(updates); observe(section, selected);
-                        }); phase = 5;
-                    }
-                    case 5 -> {
-                        if (!removals.isEmpty()) write(root, removals,
-                                () -> removals.keySet().forEach(key -> indexedKeys.remove(key.substring(INDEX_PREFIX.length()))));
-                        phase = 1;
+                        prepareWave(); writeWave();
                     }
                     default -> throw new IllegalStateException("invalid block write continuation");
                 }

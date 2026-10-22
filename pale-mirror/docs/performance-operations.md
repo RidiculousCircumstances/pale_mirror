@@ -1,5 +1,66 @@
 # Pale Mirror runtime performance
 
+## Hearthvale first-mine ingress (R217)
+
+Fresh seed125/r22 reproduction at (-121,76,43), mine
+`extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24`, chunks(-8,2)/(-8,3):
+the baseline client visit took24.61s and both chunks became READY after26.82s.
+This is first entry, not a warm teleport. The disposable lite fixture uses the
+actual r22 geological volume, view8 and a20FPS software client; it is not an
+exact full-pack or human-rendering benchmark. The earlier `world` fixture had
+no mine and was rejected, not counted as product evidence.
+
+Confirmed connected bottlenecks:
+
+- Worksite projection waited for the shared block ledger to become entirely
+  clean while structures/roads continued adding writes.
+- Section binding/root/data/index stages each waited for another server poll;
+  narrow waves still serialized a large image across many server ticks.
+- Prepared-but-not-applied cells re-entered preparation, and the shared NEW
+  preparation admission also delayed execution of already-fenced windows.
+- Querying two extraction container support/socket cells rebuilt the complete
+  mine declaration.65/521 baseline server CPU samples included `socketSupport`.
+- Structural presentation priority ignored spectator cameras while worksite
+  priority included them. Priority now follows all viewers; no new ticking or
+  physical interaction authority is granted.
+
+The common journal now runs immutable I/O stages through force-driven futures
+on its existing single writer. A wave occupies at most half the section cache
+(32/64 normally;2/8 in small-cache tests), leaving checkpoint/read headroom.
+The shared bounded writer queue is64 tasks; neither physical block-write limits
+nor worker count increased. Cache/address/query publication stays on the owner
+thread. New cache slots are reserved before asynchronous submission, preventing
+the former65/64 residency overflow.
+
+An exact scalar-record durability fence can acknowledge the prepared window
+before unrelated sections of the same image finish. It compares the actual
+forced records, not a queue-admission flag; failure remains latched globally.
+An acknowledged fence is historical evidence, not current execution permission.
+Every execution rechecks the exact retained witness, current declaration/owner
+and actual preimage. The unfinished bounded suffix keeps its proved fence;
+SETTLED successors cannot revoke a force that already happened. Explicit native
+save/shutdown still drain the complete image. No persistent format changed.
+
+Focused tests cover interrupted waves, sibling receipts, newer dirty successors,
+foreign fences, failures, cache bounds and recovery. The96-section deterministic
+case takes three owner continuations after initial admission, not a tick for
+every file barrier. Native shared-storage coverage is47 required tests.
+Frozen-candidate run `50dc07ed-3bcd-4499-a166-cb97cad40578`:
+first target visit7.26s (baseline24.61s), both requested chunks READY12.49s
+(baseline26.82s). That is roughly70%/53% lower latency in these runs, not a
+percentile guarantee. Zero required/scene/inventory conflicts; native frame
+reviewed: quarry stone, coal, access floor and stairs are present. Some outer
+software-client meshes are still absent at capture; not whole-scene rendering
+acceptance. The two-chunk12.49s remainder is explicitly NOT closed.
+
+Evidence: `build/r217-fresh-reviewed.{json,log,pmv3.jsonl}` and
+`build/profiles/r217-fresh-reviewed.jfr`;33 focused NeoForge tests plus one
+extraction point-view test and guardrails passed (`r217-final-reviewed-tests`).
+The47-test native shared-storage pass is `r217-exact-native-storage.log`.
+An earlier exact-record native attempt was aborted before client connection
+because source changed during preparation; it is not latency/product evidence.
+No instantaneous-loading or complete economy acceptance is claimed.
+
 ## Receipt-driven section preparation (R215)
 
 The R214 JFR contains107 distinct worksite-path server parks totalling2257ms

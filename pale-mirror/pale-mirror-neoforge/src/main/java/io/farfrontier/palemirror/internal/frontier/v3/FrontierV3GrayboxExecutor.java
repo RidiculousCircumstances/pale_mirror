@@ -326,7 +326,7 @@ final class FrontierV3GrayboxExecutor {
                 firstVisibilityCellBudget(operationBudget),
                 (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D),
                 System::nanoTime);
-        var origins = level.players().stream().filter(player -> !player.isSpectator())
+        var origins = level.players().stream()
                 .map(net.minecraft.server.level.ServerPlayer::chunkPosition).toList();
         for (int processed = 0; processed < MAX_FIRST_VISIBILITY_CHUNKS_PER_TICK && budget.canRead(); processed++) {
             ChunkPos chunk = pollFirstVisibility(runtime, origins);
@@ -430,7 +430,7 @@ final class FrontierV3GrayboxExecutor {
         // Allocation safety ceiling: bound discovery as well as mutation. Requeued owners
         // retain FIFO fairness; a stalled chunk cannot multiply this turn's proof work.
         int attempts = pending == null ? 0 : Math.min(pending.size(), 32);
-        var origins = level.players().stream().filter(player -> !player.isSpectator())
+        var origins = level.players().stream()
                 .map(net.minecraft.server.level.ServerPlayer::chunkPosition).toList();
         var deferred = new java.util.LinkedHashSet<ChunkPos>();
         var budget = FrontierV3PreparationWindow.handoffBudget();

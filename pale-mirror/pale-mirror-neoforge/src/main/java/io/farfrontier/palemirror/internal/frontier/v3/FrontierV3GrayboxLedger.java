@@ -103,6 +103,17 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
     }
     Claim claim(BlockPos position) { return claims.get(position.asLong()); }
     FrontierV3WorksiteBlockWitness worksite(BlockPos position) { return worksiteCells.get(position.asLong()); }
+    DurabilityFence worksiteFence(List<FrontierV3WorksiteBlockWitness> witnesses) {
+        var records = new java.util.LinkedHashMap<String, CompoundTag>();
+        for (var witness : witnesses) {
+            var point = witness.declaration().position();
+            long position = BlockPos.asLong(point.x(), point.y(), point.z());
+            if (!witness.equals(worksiteCells.get(position))) throw new IllegalArgumentException("worksite fence is not current");
+            var record = witness.write(); record.putLong("pos", position);
+            if (records.putIfAbsent(Long.toString(position), record) != null) throw new IllegalArgumentException("duplicate worksite fence");
+        }
+        return scalarDurabilityFence("worksiteCells", records);
+    }
     java.util.Set<Long> takeWorksiteChanges() {
         var changes = java.util.Set.copyOf(changedWorksites); changedWorksites.clear(); return changes;
     }

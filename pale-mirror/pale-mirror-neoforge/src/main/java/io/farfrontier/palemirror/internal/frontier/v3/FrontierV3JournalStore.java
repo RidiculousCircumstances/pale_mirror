@@ -90,7 +90,7 @@ final class FrontierV3JournalStore implements FrontierV3PhysicalJournal {
     static FrontierV3JournalStore open(Path checkpoint, Limits limits, Health health) throws IOException {
         return open(checkpoint, WRITES, limits, health);
     }
-    private static FrontierV3JournalStore open(Path checkpoint, Executor writer, Limits limits, Health health) throws IOException {
+    static FrontierV3JournalStore open(Path checkpoint, Executor writer, Limits limits, Health health) throws IOException {
         var store = new FrontierV3JournalStore(checkpoint, writer, limits, health);
         synchronized (store.fileLock) {
         if (Files.exists(store.checkpoint)) {

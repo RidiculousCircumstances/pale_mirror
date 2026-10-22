@@ -27,11 +27,56 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
     private ServerLevel level;
     private boolean declared;
     private java.util.concurrent.CompletableFuture<Long> pendingWrite = java.util.concurrent.CompletableFuture.completedFuture(0L);
+    /** A local durability prefix, not permission to execute or a persisted domain identity. */
+    static final class DurabilityFence {
+        private final FrontierV3JournaledSavedData owner;
+        private final Map<String, byte[]> rows;
+        private boolean confirmed;
+        private DurabilityFence(FrontierV3JournaledSavedData owner, Map<String, byte[]> rows) {
+            this.owner = owner; this.rows = rows;
+        }
+    }
     private io.farfrontier.palemirror.frontier.v3.api.WorldId worldId;
     private net.minecraft.resources.ResourceLocation dimension;
 
     protected FrontierV3JournaledSavedData(FrontierV3PhysicalStoreKind kind) { this.kind = Objects.requireNonNull(kind); }
 
+    /** Exact scalar records may become durable before unrelated sections of an image.
+     * This proves storage only; the effect owner must still validate current authority. */
+    final DurabilityFence scalarDurabilityFence(String tableName, Map<String, CompoundTag> records) {
+        int table = kind.table(tableName).wireTag();
+        if (records.size() > 4096) throw new IllegalArgumentException("unbounded physical record fence");
+        var rows = new LinkedHashMap<String, byte[]>();
+        try {
+            for (var entry : records.entrySet()) {
+                var row = new CompoundTag(); row.putInt("table", table); row.putString("key", entry.getKey());
+                row.putString("part", ""); row.put("record", entry.getValue());
+                rows.put(address(table, entry.getKey(), ""), encode(row));
+            }
+        } catch (IOException failure) { throw new UncheckedIOException("physical record fence capture failed", failure); }
+        return new DurabilityFence(this, Collections.unmodifiableMap(rows));
+    }
+    private boolean satisfied(DurabilityFence fence) throws IOException {
+        if (fence.confirmed) return true;
+        for (var row : fence.rows.entrySet()) {
+            byte[] durable = store.read(row.getKey());
+            if (durable == null || !FrontierV3JournalNbt.same(durable, row.getValue())) return false;
+        }
+        // Durability is historical. Later SETTLED records must not revoke the
+        // proved PREPARED window; current execution authority is checked separately.
+        fence.confirmed = true;
+        return true;
+    }
+    /** New unrelated writes cannot move a caller's captured prefix into the future. */
+    final boolean durable(DurabilityFence fence) {
+        if (fence.owner != this) throw new IllegalArgumentException("foreign physical durability fence");
+        try {
+            store.checkHealthy(); store.advanceWrites();
+            if (satisfied(fence)) return true;
+            persistAsync();
+            return satisfied(fence);
+        } catch (IOException failure) { throw new UncheckedIOException("physical durability prefix failed", failure); }
+    }
     final FrontierV3PhysicalStoreKind storeKind() { return kind; }
     /** Explicit family composition choice, not a runtime type inference. */
     boolean pagedRecovery() { return false; }

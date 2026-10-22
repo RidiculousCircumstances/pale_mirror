@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "id": "disposable_hearthvale_mine_ingress",
+  "isolation": { "mode": "disposable_lite", "seed": 125 },
+  "server": { "host": "127.0.0.1", "port": 25127, "profile": "quarry-r22-world", "viewDistance": 8 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "expect": { "status": "ok", "settlement": "settlement:6" } }
+    ] },
+    { "type": "command", "command": "/gamemode spectator" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -121, "y": 76, "z": 43 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "first_visibility", "id": "-8,2", "expect": { "presentationReady": true, "dynamicReady": true, "worksitePendingCells": 0 }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "first_visibility", "id": "-8,3", "expect": { "presentationReady": true, "dynamicReady": true, "worksitePendingCells": 0 }, "timeoutMs": 60000 },
+    { "type": "look", "at": { "x": -125, "y": 61, "z": 50 } },
+    { "type": "wait", "ms": 5000 },
+    { "type": "inspect", "view": "summary", "id": "" },
+    { "type": "inspect", "view": "performance", "id": "" }
+  ],
+  "assertions": [
+    { "after": 6, "view": "summary", "id": "", "expect": { "status": "ok", "requiredConflicts": 0, "sceneConflicts": 0, "inventoryConflicts": 0 } }
+  ],
+  "frames": [ { "after": 5, "name": "hearthvale-first-mine-ingress" } ]
+}

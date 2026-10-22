@@ -48,9 +48,11 @@ public final class FrontierV3FixtureCatalog {
             "quarry-front", FrontierRulesets.installed("frontier-v3-quarry-graybox-r7"),
             "fuelled-quarry", FrontierRulesets.fuelledQuarryGraybox(),
             "supply-quarry", FrontierRulesets.supplyQuarryGraybox(),
-            "market-quarry", FrontierRulesets.marketQuarryGraybox());
+            "market-quarry", FrontierRulesets.marketQuarryGraybox(),
+            "quarry-r22", FrontierRulesets.installed("frontier-v3-quarry-graybox-r22"));
     private static final Map<String, BiFunction<WorldId, Long, FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>>> PROVIDERS = Map.ofEntries(
             Map.entry("world", FrontierWorldRuntimeDefinition::configuration),
+            Map.entry("quarryR22World", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("quarry-r22"))),
             Map.entry("quarryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("quarry-graybox"))),
             Map.entry("fuelledQuarryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("fuelled-quarry"))),
             Map.entry("supplyQuarryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("supply-quarry"))),

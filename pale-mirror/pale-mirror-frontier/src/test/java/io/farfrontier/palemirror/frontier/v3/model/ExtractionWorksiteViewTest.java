@@ -12,10 +12,12 @@ class ExtractionWorksiteViewTest {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:worksite-view"),
                 125, FrontierRulesets.installed("frontier-v3-quarry-graybox-r22")));
         var site = state.extractionSites().deposits().values().iterator().next();
+        assertPointDeclarations(site);
         var view = new ExtractionWorksiteView(); var before = view.current(state);
         assertSame(before, view.current(state));
         var cell = site.site().layout().cells().getFirst();
         var changed = site.extracted(cell.id(), 1, "effect:worksite-view");
+        assertPointDeclarations(changed);
         var next = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(changed)));
         var after = view.current(next);
         assertEquals(Set.of(Region.at(cell.source())), after.changesFrom(before));
@@ -26,6 +28,7 @@ class ExtractionWorksiteViewTest {
         var position = site.site().layout().terrainSupports().keySet().stream()
                 .filter(p -> site.site().layout().cells().stream().noneMatch(c -> c.source().equals(p))).findFirst().orElseThrow();
         var external = site.observeGeometry(position, 1, new BlockExtraction.Block("minecraft:air", Map.of()));
+        assertPointDeclarations(external);
         var observed = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(external)));
         assertEquals(new ExtractionWorksiteView().current(observed), view.current(observed));
         assertEquals(before, view.current(state), "rollback removes observed override, not just its revision");
@@ -40,8 +43,17 @@ class ExtractionWorksiteViewTest {
                 layout.accessSurfaces(), station, layout.container(), layout.storagePort(), layout.infrastructureIds(),
                 layout.terrainSupports(), layout.terrainIds()));
         var extension = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().extend(site, extended)));
+        assertPointDeclarations(extended);
         var extendedView = view.current(extension);
         assertEquals(Set.of(Region.at(source)), extendedView.changesFrom(before));
         assertEquals(new ExtractionWorksiteView().current(extension), extendedView);
+    }
+    private static void assertPointDeclarations(ExtractionDeposit deposit) {
+        for (var cell : ExtractionWorksiteBlocks.declared(deposit)) {
+            var point = ExtractionWorksiteBlocks.declaredAt(deposit, cell.position()).orElseThrow();
+            assertEquals(cell, point);
+            assertEquals(ExtractionWorksiteBlocks.current(deposit, cell), ExtractionWorksiteBlocks.current(deposit, point));
+        }
+        assertTrue(ExtractionWorksiteBlocks.declaredAt(deposit, new BlockPosition(100000, -64, 100000)).isEmpty());
     }
 }

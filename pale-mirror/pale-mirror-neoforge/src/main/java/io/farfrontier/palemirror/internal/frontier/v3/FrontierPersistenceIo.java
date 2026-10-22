@@ -9,7 +9,9 @@ import java.util.concurrent.TimeUnit;
  * never a Minecraft world, canonical reducer or mutable domain image. */
 final class FrontierPersistenceIo {
     private static final Executor WRITER = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
-            new ArrayBlockingQueue<>(16), task -> {
+            // A paged write wave admits up to32 section drains; keep bounded room
+            // for the other physical stores and canonical journal on this SAME lane.
+            new ArrayBlockingQueue<>(64), task -> {
                 var thread = new Thread(task, "PM durability journal"); thread.setDaemon(true); return thread;
             }, new ThreadPoolExecutor.AbortPolicy());
     private FrontierPersistenceIo() { }

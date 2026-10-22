@@ -20,6 +20,7 @@ final class FrontierV3HotHandoffDiagnostic {
                 .collect(Collectors.joining(","));
         return base.substring(0, base.length() - 1) + ",\"handoffRevision\":" + review.revision()
                 + ",\"worksitePendingCells\":" + FrontierV3WorksiteProjection.pending(level, runtime.decodedState().orElseThrow(), visibility.chunk())
+                + ",\"worksiteProjectionProgress\":" + FrontierV3WorksiteProjection.progressDiagnostic(level)
                 + ",\"presentationReady\":" + FrontierV3GrayboxExecutor.presentationReady(runtime, visibility.chunk())
                 + ",\"dynamicReady\":" + review.ready() + ",\"dynamicPresentable\":" + review.presentable()
                 + ",\"handoffChecks\":[" + checks + "]}";
