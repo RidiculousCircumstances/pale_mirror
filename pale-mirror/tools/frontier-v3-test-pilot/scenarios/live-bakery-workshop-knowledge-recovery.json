@@ -7,13 +7,15 @@
     { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
       { "view": "process", "id": "task:objective-stock-site-harvest-7-wheat-field-1-part-0-1",
         "expect": { "status": "ok", "result": { "taskStatus": "ACTIVE" } } },
+      { "view": "process", "id": "station:structure-7-workshop-bakery",
+        "expect": { "status": "ok", "result": { "fuelReady": true } } },
       { "view": "summary", "id": "", "expect": { "status": "ok", "inventoryConflicts": 0, "sceneConflicts": 0 } }
     ] }
   ],
   "actions": [
     { "type": "inspect", "view": "process", "id": "job:production-objective-stock-site-harvest-7-wheat-field-1-part-0-1",
       "causalMilestone": "same_recovered_bakery_job_before_observation" },
-    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 94, "y": 66, "z": 14 }, "settleMs": 0,
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 94, "y": 64, "z": 14 }, "settleMs": 0,
       "causalMilestone": "ordinary_player_loads_workshop_geometry" },
     { "type": "look", "at": { "x": 98, "y": 66, "z": 16 } },
     { "type": "wait_until_diagnostic", "view": "process", "id": "task:objective-stock-site-harvest-7-wheat-field-1-part-0-1",

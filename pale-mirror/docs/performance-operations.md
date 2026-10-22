@@ -387,6 +387,34 @@ recovery is separately checked by `live-bakery-workshop-knowledge-recovery.json`
 its result must not be inferred from these isolated checks. R215 startup/render
 latency limitations remain open; this correction makes no performance claim.
 
+Deployed clean detached source `eedf4702` into the SAME incident world
+`frontier-v3-r215-peak-repair-20261022`, Java22, full pack/C2ME. Detached
+guardrails/JAR/package verification passed; deployment identity verification
+passed at startEpoch1792657998, JavaPID3847173, service active. PM SHA512:
+`f4f96671f7d3ff8e9d7f4b18979e258f752bb9d5ae52b880958d5d0d00944407f3735e34bdcd8a6182385e8daa6a73ba1ff63cc55ad3043e3a66ce47819b8807`.
+
+Native run `f4362475-8041-49f0-bf89-5bdafe4f4278` is exploratory, NOT terminal
+acceptance: visit requested feetY66 but the player fell to64, so it never crossed
+the visit barrier. Stopped the task client; corrected scenarioY64. Its ordinary
+chunk load nevertheless resolved the missing workshop observation. After leaving
+HOT, the exact recovered baker advanced from `(135,65,14)` to `(98,65,15)`.
+At tick60318 the world had advanced beyond the former crash tick54899, with no
+new quarantine and zero inventory/scene/custody conflicts. One old kernel
+incident remains retained; it was not erased for a green summary.
+Accumulated keep-up warnings remain:2981ms at startup and2132ms during client
+ingress. The explicit client termination produced a connection-reset log,
+not a server failure. Neither ingress performance nor full visual acceptance
+is claimed by this repair.
+
+The exact bakery task is still ACTIVE, not completed: station diagnostic has
+storedHeat0, no fuel stock, no pending fuel/recipe and no operation. The shared
+station-energy admission reports `INSUFFICIENT_HEAT`; production service access
+therefore withholds entry to the work cell. This is not another invented-route
+receipt. The completion scenario now explicitly requires fuelReady before
+attempting its unchanged terminal assertion. No forced fuel injection, completion
+or repeated fruitless native run was used. Fuel replenishment/economy and full
+baking-cycle acceptance are not established by this navigation repair.
+
 ## Frontier v3 physical-scene scale protocol
 
 The v3 world keeps exact people, bioforms, cargo and objects. It must not
