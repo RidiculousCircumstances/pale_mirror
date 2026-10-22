@@ -168,3 +168,44 @@ handoff now uses its existing exact per-cell witness/revision/postimage checks
 regardless of queue membership. It does not complete queue entries or acquire
 mutation custody; the worksite owner retains that work. Prepared, changed, absent
 or externally modified evidence follows the same waiting/conflict checks as before.
+
+## Final R222 live acceptance
+
+Source508b02f605a96bbc45596bd845239a0f9fe411e1, clean detached package and
+focused handoff/witness/generated-provenance tests PASS (`r222-handoff-checks`).
+Full integration of the preceding implementation finished PASS: domain324,
+frontier1781, NeoForge821 tests, guardrails, API/visuals checks and packaging.
+The final change touches only worksite readiness; unchanged domain/recovery
+evidence is reused, not claimed rerun. Native storage48 and structure12 checks
+remain applicable. No timing assertions were added to unit/CI suites.
+
+Deployed after normal save/stop to fresh world
+`frontier-v3-r222-current-handoff-20261022`, seed125, service start1792679696,
+wrapperPID517495. SHA512:
+`ce8b8852d81cede6a0d13b09befff5b62a3a74d0d42ebb8451b1ee933c8e2e71697266be091170f04c4d3cef2fff7f2c07fa977adfa95fd311a38eb2d332b82a`.
+Deployment preflight and fresh-start verification PASS. Client update required
+for the genesis/attachment registry change. Old test worlds were retained, not deleted.
+
+Full-pack ordinary graphical client, run22f795c7-21d4-4184-8c17-54ffc78d16c8,
+checked-in `live-generated-ingress`, receipt `build/r222-live-current.*`:
+
+| First visit | Physical client evidence from visit start |
+| --- | --- |
+| Clearwater | central render3.693s; depot section3.793s; frame4.619s |
+| Mine at -121/61/43 | central render2.200s; coal section2.400s; neighbouring current handoff4.500s |
+| Previously failing settlement -137/64/347 | ground2.599s; depot2.699s; frame3.521s |
+
+Mine screenshot captured5.323s includes the explicit neighbour-queue diagnostic,
+camera and screenshot barriers after the physical render; it is not a5.323s
+chunk delivery claim. All three frames inspected: roads, buildings, geology,
+mine access/container visible, no transparent scene gaps. The measured first
+ingress paths meet the under5s target; this is not a latency guarantee for all
+client hardware, later arbitrarily large construction or an economic soak.
+The full-pack test ran after the CPU-heavy integration suite finished. Earlier
+runs differed in world age/load; no controlled multiplier claim is made.
+
+Final native summary instant800/revision1470: required/scene/inventory/custody
+conflicts0, incident0, preparingReplicaScopes0. Navigation waiting0/active0;
+ready-event lag0. Last64 host samples averaged10.38ms, max27.23ms; whole-startup
+max1.58s remains separately reported (not presented as a27ms all-time bound).
+Client capped20FPS and automatically disconnected. No push.
