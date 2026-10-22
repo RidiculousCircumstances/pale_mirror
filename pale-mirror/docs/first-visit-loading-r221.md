@@ -61,7 +61,7 @@ finished and was closed. Its terminal summary has one retained required incident
 and one preparing replica scope (no scene/inventory conflicts); not yet attributed,
 and must not be called a clean acceptance run. Current server remains ACTIVE.
 
-## Proposed architectural next step — requires user agreement
+## Architectural next step — approved 2026-10-22
 
 Do not just multiply the tick budget. Static first construction is still a
 post-load simulation-stage task, sharing cadence with durable physical work;
@@ -79,7 +79,77 @@ render dependency neighbourhood, with explicit per-chunk completion rather than
 waiting for a whole gameplay-stage rotation. No duplicate write authority,
 weakened durable-before-effect rule or second navigation truth is proposed.
 
-This changes ownership of initial construction and its recovery boundary, so it
-has **not been implemented** pending the user's requested architecture agreement.
+The user approved this ownership/recovery change and requested an active goal.
 Retest first settlement/mine construction, COLD->HOT and revisit separately;
 retain visible-target/packet timings and investigate the recorded incident.
+
+### Implementation / acceptance boundary (R222)
+
+- `compileInitialSettlementFabric` derives only initial buildings and roads
+  from immutable bootstrap, using the same semantic compiler as runtime.
+- `FrontierV3GrayboxGenesisFeature` places chunk-local geology and initial
+  settlement fabric during generation. Serializable chunk attachments retain
+  provider/configuration/seed and complete semantic cell ownership. It never
+  reads the running simulation, creates inventory or advances jobs.
+- Authored initial mine access (stairs, clearance, platforms) uses a separate
+  typed worksite generation receipt. The container socket remains a runtime
+  ownership handoff. Later mine development is not moved into generation.
+- The block ledger overlays later loss/repair witnesses over that immutable
+  provenance; observing air where a generated wall stood is not permission to
+  recreate it. Runtime construction and other future COLD mutations remain
+  separate owner-controlled current-state reconciliation, not history replay.
+- One bounded read-only ingress lane shares the existing per-chunk cursor. It
+  can confirm generated cells while unrelated WAL work waits. Dynamic field,
+  container and worksite handoff still gates admission; no unsafe partial image.
+- The first native run found a connected liveness defect: mine socket remained
+  PREPARED/AIR while navigation repeatedly published WRITE_PENDING, then observed
+  its preimage before the container writer retried. Static preparation had
+  applied zero blocks and was already current. Evidence:
+  `build/r222-genesis-recovery.{log,json}` and query at revision1490/1878.
+  Shared planned-write preparation now offers an exact post-durability producer
+  continuation. Container ownership revalidates its current PREPARED surface and
+  native socket there, before an observation pass can undo that write fence.
+- The same fence/preimage loop was confirmed in mine worksite projection and
+  initial fields; all three now resume through the shared continuation port.
+  Continuations revalidate retained ownership and physical preimages and share
+  one native-turn mutation budget. Only positions in the prepared write batch
+  may consume that permit. The immutable ruleset digest is not recalculated
+  per observed block.
+- A connected restart defect was traced to unstarted ambient admission:
+  asynchronous DRAINING publication lost the cancellation suffix, and no body
+  existed to enter the ordinary release path. Exact lease/absence-checked
+  resumption closes that cancellation and releases unstarted body authority.
+  This does not authorize recreating an absent formerly running body.
+- The R221 retained incident is identified: `AMBIENT_LEASE_RESTART_ABSENCE`,
+  `bioform:west-1`, first instant77504, at -340/64/340. It is not a settlement
+  static-generation conflict. Read-only saved-state evidence:
+  `build/r222-live-incident.log`. It remains unclosed, outside this initial
+  settlement/mine construction migration; do not label that old world clean.
+
+Checked-in `disposable-genesis-ingress-recovery` passed on a fresh seed125 world,
+lite native client, run071375b1-000a-481f-930b-2a94ae894b7a:
+
+- Mine: target rendered3.217s after visit; neighbouring mine handoff current4.369s.
+  Linked screenshot captured5.303s after visit (includes camera/capture barrier).
+- Previously unvisited settlement8: target rendered2.257s; farm and depot section
+  checks2.458s; linked screenshot3.346s. All neighbouring packets received.
+- Ordinary player broke a mine source and generated farm wall, left to COLD,
+  restarted gracefully and revisited. Both remained removed, canonical loss
+  retained, quarry chest ACTIVE/OWNED; zero required/scene/inventory conflicts.
+  One preparing replica scope at final immediate mine re-entry is not a claim
+  that every background preparation has drained.
+- All three frames inspected: mine coal/stone/access/container and settlement
+  surfaces visible; wall hole survives restart. No whole-game/economic soak claim.
+
+Receipt: `build/r222-genesis-current.{json,log,pmv3.jsonl}`. Before this repair,
+the same generated-world scenario hung specifically on field_initialization
+(`r222-genesis-complete`); the static layer was already current with0writes.
+Full-pack live acceptance is still OPEN. New worlds are necessary to measure generation;
+old already-generated chunks cannot retroactively acquire initial provenance.
+
+Verification before packaging: generated provenance/overlay, field budget,
+ambient recovery and runtime tests passed. Native shared-storage48/48 and
+adapter-mirrors12/12 passed (`r222-native-storage`, `r222-native-structures`).
+Integration `guardrails check`: domain324/324 and NeoForge821/821 passed;
+the wider frontier suite was still running when this source checkpoint was made.
+No claim of an all-family native aggregate or inactive combat/hive acceptance.

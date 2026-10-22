@@ -21,6 +21,7 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
     /* Format 6 adds explicitly declared worksite cells in the same block-provenance store. */
     private static final int FORMAT = 6;
     private final Map<Long, Claim> claims;
+    private java.util.function.Function<BlockPos, Claim> initialClaims = ignored -> null;
     private final Map<Long, FrontierV3WorksiteBlockWitness> worksiteCells;
     /**
      * The only claim family that needs ordinary per-tick retirement.  Keeping its bounded
@@ -47,7 +48,9 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
         worksiteCells.forEach(this::indexExternalWorksite);
     }
     static FrontierV3GrayboxLedger get(ServerLevel level) {
-        return FrontierV3JournaledSavedData.get(level, FrontierV3PhysicalStoreKind.BLOCKS, FrontierV3GrayboxLedger::new, FrontierV3GrayboxLedger::load);
+        var ledger = FrontierV3JournaledSavedData.get(level, FrontierV3PhysicalStoreKind.BLOCKS, FrontierV3GrayboxLedger::new, FrontierV3GrayboxLedger::load);
+        ledger.initialClaims = position -> FrontierV3GeneratedStructures.claim(level, position);
+        return ledger;
     }
     /** Same bounded provenance implementation for the physical-owner composition harness. */
     static FrontierV3GrayboxLedger inMemory() { return new FrontierV3GrayboxLedger(); }
@@ -101,7 +104,14 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
             throw new IllegalStateException("worksite address differs from its record");
         return witness;
     }
-    Claim claim(BlockPos position) { return claims.get(position.asLong()); }
+    Claim claim(BlockPos position) {
+        var changed = claims.get(position.asLong());
+        return changed == null ? initialClaims.apply(position) : changed;
+    }
+    /** Initial provenance is read-only; runtime changes are the only journal rows. */
+    static FrontierV3GrayboxLedger inMemory(java.util.function.Function<BlockPos, Claim> initialClaims) {
+        var ledger = inMemory(); ledger.initialClaims = java.util.Objects.requireNonNull(initialClaims); return ledger;
+    }
     FrontierV3WorksiteBlockWitness worksite(BlockPos position) { return worksiteCells.get(position.asLong()); }
     DurabilityFence worksiteFence(List<FrontierV3WorksiteBlockWitness> witnesses) {
         var records = new java.util.LinkedHashMap<String, CompoundTag>();
@@ -127,7 +137,7 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
         var position = witness.declaration().position();
         long address = new BlockPos(position.x(), position.y(), position.z()).asLong();
         var prior = worksiteCells.get(address);
-        if (claims.containsKey(address) || prior != null && !prior.declaration().key().equals(witness.declaration().key()))
+        if (claim(BlockPos.of(address)) != null || prior != null && !prior.declaration().key().equals(witness.declaration().key()))
             throw new IllegalStateException("competing block provenance at worksite cell " + position
                     + "; retained=" + (prior == null ? claims.get(address) : prior.declaration().key())
                     + "; proposed=" + witness.declaration().key());
@@ -141,7 +151,7 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
         java.util.Objects.requireNonNull(expected); java.util.Objects.requireNonNull(transition);
         var position = expected.declaration().position();
         long address = new BlockPos(position.x(), position.y(), position.z()).asLong();
-        if (claims.containsKey(address) || !expected.equals(worksiteCells.get(address))
+        if (claim(BlockPos.of(address)) != null || !expected.equals(worksiteCells.get(address))
                 || expected.phase() != FrontierV3WorksiteBlockWitness.Phase.SETTLED
                 || !transition.predecessor().equals(expected.declaration()))
             throw new IllegalStateException("worksite reclassification lacks its exact settled predecessor at " + position);
@@ -158,11 +168,12 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
     void applied(BlockPos position, String owner, int targetTag, String material, String semanticPart) {
         ensureCapacityFor(position);
         Claim replacement = new Claim(requireText(owner, "owner"), requireTargetTag(targetTag), requireText(material, "material"), requireText(semanticPart, "semantic part"), 0L, false);
-        Claim prior = claims.putIfAbsent(position.asLong(), replacement);
+        Claim prior = claim(position);
         if (prior != null && !prior.equals(replacement)) {
             throw new IllegalStateException("v3 graybox claim already belongs to another semantic cell");
         }
         if (prior == null) {
+            claims.put(position.asLong(), replacement);
             index(replacement, position.asLong());
             setDirty();
         }
@@ -171,18 +182,19 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
     void obstructed(BlockPos position, String owner, int targetTag, String material, String semanticPart) {
         ensureCapacityFor(position);
         Claim blocked = new Claim(requireText(owner, "owner"), requireTargetTag(targetTag), requireText(material, "material"), requireText(semanticPart, "semantic part"), 0L, true);
-        Claim prior = claims.putIfAbsent(position.asLong(), blocked);
+        Claim prior = claim(position);
         if (prior != null && !prior.equals(blocked)) {
             throw new IllegalStateException("v3 graybox obstruction collides with another semantic cell");
         }
         if (prior == null) {
+            claims.put(position.asLong(), blocked);
             index(blocked, position.asLong());
             setDirty();
         }
     }
     /** A physical mirror may defer its exact claim, never manufacture a terminal conflict. */
     void defer(BlockPos position) {
-        Claim prior = claims.get(position.asLong());
+        Claim prior = claim(position);
         if (prior == null || prior.deferred()) return;
         claims.put(position.asLong(), new Claim(prior.owner(), prior.targetTag(), prior.material(), prior.semanticPart(), Math.addExact(prior.revision(), 1L), true)); setDirty();
     }
@@ -197,13 +209,13 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
     void damaged(BlockPos position, String owner, int targetTag, String material, String semanticPart) {
         ensureCapacityFor(position);
         Claim tombstone = new Claim(requireText(owner, "owner"), requireTargetTag(targetTag), requireText(material, "material"), requireText(semanticPart, "semantic part"), 0L, true);
-        Claim prior = claims.putIfAbsent(position.asLong(), tombstone);
+        Claim prior = claim(position);
         if (prior != null && (!prior.owner().equals(tombstone.owner()) || !prior.material().equals(tombstone.material())
                 || !prior.semanticPart().equals(tombstone.semanticPart()) || prior.targetTag() != tombstone.targetTag())) {
             throw new IllegalStateException("v3 graybox damage tombstone collides with another semantic cell");
         }
         if (prior == null) {
-            index(tombstone, position.asLong()); setDirty();
+            claims.put(position.asLong(), tombstone); index(tombstone, position.asLong()); setDirty();
         } else if (!prior.deferred()) {
             claims.put(position.asLong(), new Claim(tombstone.owner(), tombstone.targetTag(), tombstone.material(), tombstone.semanticPart(), Math.addExact(prior.revision(), 1L), true)); setDirty();
         }
@@ -222,7 +234,9 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
     }
     /** Removes one exact temporary claim only after its owned world block has been cleared. */
     void retire(BlockPos position, String owner, int targetTag, String material, String semanticPart) {
-        Claim claim = claims.get(position.asLong());
+        Claim claim = claim(position);
+        if (initialClaims.apply(position) != null)
+            throw new IllegalStateException("initial structure cannot be retired as temporary staging");
         if (claim == null || claim.deferred() || !claim.owner().equals(owner) || claim.targetTag() != requireTargetTag(targetTag) || !claim.material().equals(material)
                 || !claim.semanticPart().equals(semanticPart)) {
             throw new IllegalStateException("v3 graybox retirement does not match its exact claim");
@@ -233,7 +247,7 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
     }
     /** Restores an exact previously claimed semantic cell after its separately durable repair receipt. */
     void repaired(BlockPos position, String owner, int targetTag, String material, String semanticPart) {
-        Claim prior = claims.get(position.asLong());
+        Claim prior = claim(position);
         Claim restored = new Claim(requireText(owner, "owner"), requireTargetTag(targetTag), requireText(material, "material"), requireText(semanticPart, "semantic part"), Math.addExact(prior.revision(), 1L), false);
         if (prior == null || !prior.owner().equals(restored.owner()) || !prior.material().equals(restored.material())
                 || !prior.semanticPart().equals(restored.semanticPart()) || prior.targetTag() != restored.targetTag()) {

@@ -16,14 +16,15 @@ import net.minecraft.world.level.levelgen.feature.FeaturePlaceContext;
 import net.minecraft.world.level.levelgen.feature.configurations.NoneFeatureConfiguration;
 import java.util.*;
 
-/** Graybox content adapter on the normal worldgen feature seam. Future terrain
- * providers may use the same native baseline without depending on this flat plan. */
-public final class FrontierV3GrayboxGeologyFeature extends Feature<NoneFeatureConfiguration> {
+/** Initial graybox geology and settlement fabric, written once through native
+ * chunk generation. Runtime construction, inventories and fields are not genesis. */
+public final class FrontierV3GrayboxGenesisFeature extends Feature<NoneFeatureConfiguration> {
     static final String PROVIDER = "pale_mirror:graybox_geology_v1";
-    private record Plan(long seed, FrontierRuleset rules, String configuration, RegionalBlockMap<BlockExtraction.Block> blocks) { }
+    private record Plan(long seed, FrontierRuleset rules, String configuration, RegionalBlockMap<BlockExtraction.Block> blocks,
+                        RegionalBlockMap<GrayboxCell> structures, RegionalBlockMap<WorksiteBlock> worksites) { }
     // Generator lifetime owns the immutable plan. Values contain neither worlds nor generators.
     private final Map<ChunkGenerator, Plan> plans = new WeakHashMap<>();
-    public FrontierV3GrayboxGeologyFeature() { super(NoneFeatureConfiguration.CODEC); }
+    public FrontierV3GrayboxGenesisFeature() { super(NoneFeatureConfiguration.CODEC); }
 
     private synchronized Plan plan(ChunkGenerator generator, long seed) {
         var rules = FrontierV3WorldgenSettings.ruleset();
@@ -34,7 +35,9 @@ public final class FrontierV3GrayboxGeologyFeature extends Feature<NoneFeatureCo
             return retained;
         }
         var bootstrap = FrontierBootstrapper.create(FrontierV3PhysicalWorld.WORLD_ID, seed, rules);
-        var value = new Plan(seed, rules, rules.contentSha256(), GrayboxNaturalGeology.compile(bootstrap));
+        var value = new Plan(seed, rules, rules.contentSha256(), GrayboxNaturalGeology.compile(bootstrap),
+                RegionalBlockMap.copyOf(FrontierGrayboxPlan.compileInitialSettlementFabric(bootstrap).cells()),
+                GrayboxInitialWorksites.compile(bootstrap));
         plans.put(generator, value); return value;
     }
     @Override public boolean place(FeaturePlaceContext<NoneFeatureConfiguration> context) {
@@ -47,7 +50,9 @@ public final class FrontierV3GrayboxGeologyFeature extends Feature<NoneFeatureCo
         var origin = context.origin();
         var region = new Region(origin.getX() >> 4, origin.getZ() >> 4);
         var cells = plan.blocks().in(region);
-        if (cells.isEmpty()) return false;
+        var structures = plan.structures().in(region);
+        var worksites = plan.worksites().in(region);
+        if (cells.isEmpty() && structures.isEmpty() && worksites.isEmpty()) return false;
         var chunk = level.getChunk(region.x(), region.z());
         if (chunk.hasData(GeologyRegistration.BASELINE))
             throw new IllegalStateException("geological baseline cannot be generated twice for " + chunk.getPos());
@@ -65,6 +70,35 @@ public final class FrontierV3GrayboxGeologyFeature extends Feature<NoneFeatureCo
             placed.put(position, expected);
         }
         chunk.setData(GeologyRegistration.BASELINE, Optional.of(new GeneratedGeology(PROVIDER, plan.configuration(), plan.seed(), placed)));
+        var authored = new HashMap<BlockPos, GrayboxCell>();
+        for (var cell : structures.values()) {
+            var p = cell.position(); var position = new BlockPos(p.x(), p.y(), p.z());
+            // The selected graybox provider declares empty space for its initial fabric.
+            // It cannot silently bulldoze natural geology or another generator's structure.
+            if (!chunk.getBlockState(position).isAir())
+                throw new IllegalStateException("initial structure overlaps undeclared host at " + position);
+            var expected = FrontierV3GrayboxExecutor.material(cell.material());
+            if (!level.setBlock(position, expected, 2) && !chunk.getBlockState(position).equals(expected))
+                throw new IllegalStateException("initial structure placement failed at " + position);
+            authored.put(position, cell);
+        }
+        chunk.setData(GeologyRegistration.STRUCTURES, Optional.of(new FrontierV3GeneratedStructures(
+                "pale_mirror:graybox_structures_v1", plan.configuration(), plan.seed(), authored)));
+        var infrastructure = new HashMap<BlockPos, WorksiteBlock>();
+        for (var cell : worksites.values()) {
+            var position = FrontierV3WorksiteProjection.position(cell);
+            if (authored.containsKey(position)) throw new IllegalStateException("initial worksite overlaps structure at " + position);
+            var host = placed.getOrDefault(position, context.chunkGenerator().getBaseColumn(position.getX(), position.getZ(), level,
+                    level.getLevel().getChunkSource().randomState()).getBlock(position.getY()));
+            if (!chunk.getBlockState(position).equals(host))
+                throw new IllegalStateException("initial worksite encountered an undeclared host at " + position);
+            var expected = FrontierV3MinecraftBlockExtraction.block(cell.block());
+            if (!level.setBlock(position, expected, 2) && !chunk.getBlockState(position).equals(expected))
+                throw new IllegalStateException("initial worksite placement failed at " + position);
+            infrastructure.put(position, cell);
+        }
+        chunk.setData(GeologyRegistration.WORKSITES, Optional.of(new FrontierV3GeneratedWorksites(
+                plan.configuration(), plan.seed(), infrastructure)));
         return true;
     }
 }

@@ -64,6 +64,16 @@ public final class FrontierGrayboxPlan {
         return compile(state, false, false, false);
     }
 
+    /** Initial settlement fabric only. No runtime jobs, losses, inventory or growing overlays. */
+    public static FrontierGrayboxPlan compileInitialSettlementFabric(FrontierBootstrap bootstrap) {
+        requireStructuralDerivationAllowed();
+        Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
+        bootstrap.settlements().forEach(settlement -> settlement.structures().forEach(structure ->
+                addStructure(cells, bootstrap.terrain(), structure, StructureCondition.INTACT)));
+        addRoutes(cells, bootstrap, RouteTopology.initial());
+        return new FrontierGrayboxPlan(cells, Map.of());
+    }
+
     /**
      * The growing hive is an exact, small overlay over the immutable bootstrap silhouette.
      * A newly committed organ must become materializable immediately, but it must not force the

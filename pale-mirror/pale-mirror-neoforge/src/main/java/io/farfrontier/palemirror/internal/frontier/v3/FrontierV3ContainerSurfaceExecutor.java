@@ -124,12 +124,7 @@ final class FrontierV3ContainerSurfaceExecutor {
                 state = state(runtime);
                 if (state == null) return;
             } else if (!transition(runtime, surface.containerId(), ContainerSurfaceStatus.PREPARED)) return;
-            var physical = claimFreshFixed(level, target, state, surface);
-            if (physical == null || !writeCanonicalSlots(physical.inventory(), state, surface.containerId())) {
-                transition(runtime, surface.containerId(), ContainerSurfaceStatus.CONFLICT);
-                return;
-            }
-            activateAndConfirm(runtime, surface, physical);
+            resumePrepared(level, runtime, surface.containerId());
             return;
         }
         // PREPARED can survive a restart both before and after the physical chest write.  Its
@@ -156,9 +151,22 @@ final class FrontierV3ContainerSurfaceExecutor {
             else activateAndConfirm(runtime, surface, physical);
             return;
         }
+        if (level.getBlockState(target).isAir()) {
+            var block = FrontierV3FixedContainerProviders.block(state.inventory().containers().get(surface.containerId())).defaultBlockState();
+            if (!FrontierV3ManagedBlockWrites.preparePlannedWrites(level, runtime,
+                    List.of(new FrontierV3ManagedBlockWrites.PlannedWrite(target, block)),
+                    () -> resumePrepared(level, runtime, surface.containerId()))) return;
+        }
         physical = claimFreshFixed(level, target, state, surface);
         if (physical == null || !writeCanonicalSlots(physical.inventory(), state, surface.containerId())) reportConflict(runtime, surface.containerId());
         else activateAndConfirm(runtime, surface, physical);
+    }
+
+    private static void resumePrepared(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId id) {
+        var current = state(runtime); if (current == null) return;
+        var surface = current.inventory().surfaces().get(id);
+        if (surface == null || surface.status() != ContainerSurfaceStatus.PREPARED || !level.hasChunkAt(position(surface))) return;
+        executeLifecycle(level, runtime, current, surface);
     }
 
     /** Retire our exact observed write fence before this same loaded chest can disappear. */

@@ -30,6 +30,10 @@ final class FrontierV3ProjectionWriteBudget {
         if (budget.limit != limit) throw new IllegalArgumentException("competing projection budgets in the same turn");
         return budget;
     }
+    static FrontierV3ProjectionWriteBudget current(ServerLevel level) {
+        return current(level, Math.min(FrontierV3ManagedBlockWrites.MAX_PLANNED_WRITES,
+                io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_WEIGHT_BUDGET.get()));
+    }
     int remaining() { return remaining; }
     // Preparation is already count-bounded and may await durable fences. Charging
     // that wait to the effect window could starve it forever. Start once at the

@@ -42,10 +42,16 @@ final class FrontierV3ManagedBlockWrites {
     private FrontierV3ManagedBlockWrites() { }
     static boolean preparePlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             List<PlannedWrite> writes) {
+        return preparePlannedWrites(level, runtime, writes, () -> { });
+    }
+    /** The producer owns durable intent and revalidates it on continuation. This
+     * integration layer owns only ordering of knowledge fences and native effects. */
+    static boolean preparePlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            List<PlannedWrite> writes, Runnable resume) {
         writes = List.copyOf(writes);
         if (writes.isEmpty() || writes.size() > MAX_PLANNED_WRITES)
             throw new IllegalArgumentException("unbounded planned native write window");
-        if (!FrontierV3NavigationObservation.preparePlannedWrites(level, runtime, writes)) return false;
+        if (!FrontierV3NavigationObservation.preparePlannedWrites(level, runtime, writes, resume)) return false;
         for (var owner : OWNERS) if (!owner.preparePlannedWrites(level, runtime, writes)) return false;
         return true;
     }

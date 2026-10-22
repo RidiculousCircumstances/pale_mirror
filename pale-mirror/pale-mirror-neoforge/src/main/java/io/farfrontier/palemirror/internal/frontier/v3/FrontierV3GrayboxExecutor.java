@@ -191,7 +191,7 @@ final class FrontierV3GrayboxExecutor {
                     return delta != null && matchesKnownLoss(delta, cell);
                 }).findFirst();
     }
-    static void forget(FrontierV3ServerRuntime<?, ?> runtime) { CURSORS.remove(runtime); WORK.remove(runtime); }
+    static void forget(FrontierV3ServerRuntime<?, ?> runtime) { CURSORS.remove(runtime); WORK.remove(runtime); FrontierV3GeneratedIngress.forget(runtime); }
     static Optional<FrontierGrayboxPlan> publishedStructuralBaseline(FrontierV3ServerRuntime<?, ?> runtime) {
         Cursor cursor = CURSORS.get(runtime);
         return cursor == null || cursor.structuralBaseline == null
@@ -484,6 +484,28 @@ final class FrontierV3GrayboxExecutor {
         var visibility = FIRST_VISIBILITY.getOrDefault(runtime, Map.of()).get(chunk);
         return visibility != null && visibility.status().presentable();
     }
+    /** Packet admission can prove immutable generated facts even while an unrelated
+     * canonical transaction is waiting for durability. Never executes physical effects. */
+    static void observeGeneratedIngress(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ChunkPos chunk) {
+        var records = FIRST_VISIBILITY.get(runtime);
+        var record = records == null ? null : records.get(chunk);
+        var cursor = CURSORS.get(runtime);
+        if (record == null || record.status().presentable() || cursor == null
+                || level.getChunkSource().getChunkNow(chunk.x, chunk.z) == null) return;
+        var budget = FrontierV3GeneratedIngress.admit(level, runtime, chunk);
+        if (budget == null) return;
+        if (record.status() == FirstVisibility.PENDING) {
+            var work = firstVisibilityWork(runtime, chunk, cursor.cellsIn(chunk));
+            work.observeCurrent(cell -> FrontierV3GeneratedIngress.current(level, runtime.decodedState().orElseThrow(), cell), budget);
+            if (!work.complete()) return;
+            firstVisibilityWork(runtime).remove(chunk);
+            record = new FirstVisibilityRecord(FirstVisibility.STATIC_CURRENT, runtime.canonicalState().orElseThrow().revision().value(), work.cells());
+            records.put(chunk, record);
+            DYNAMIC_CATCH_UP.computeIfAbsent(runtime, ignored -> new java.util.LinkedHashSet<>()).add(chunk);
+        }
+        if (budget.takeRead() && FrontierV3HotHandoff.inspect(level, runtime, chunk).ready())
+            records.put(chunk, new FirstVisibilityRecord(FirstVisibility.READY, record.revision(), record.cells()));
+    }
     static FirstVisibilitySnapshot firstVisibility(FrontierV3ServerRuntime<?, ?> runtime, String id) {
         String[] parts = Objects.requireNonNull(id, "first visibility id").split(",", -1);
         if (parts.length != 2) return FirstVisibilitySnapshot.unavailable();
@@ -631,30 +653,7 @@ final class FrontierV3GrayboxExecutor {
                 && delta.semanticPart().equals(Optional.of(cell.semanticPart()));
     }
     static BlockState material(GrayboxMaterial material) {
-        return switch (material) {
-            case HALL -> Blocks.WHITE_CONCRETE.defaultBlockState();
-            case HOUSING -> Blocks.ORANGE_CONCRETE.defaultBlockState();
-            case FARM -> Blocks.LIME_CONCRETE.defaultBlockState();
-            case WORKSHOP -> Blocks.BLUE_CONCRETE.defaultBlockState();
-            case WORKSHOP_INPUT -> Blocks.CYAN_CONCRETE.defaultBlockState();
-            case WORKSHOP_PROCESS -> Blocks.MAGENTA_CONCRETE.defaultBlockState();
-            case DEPOT -> Blocks.YELLOW_CONCRETE.defaultBlockState();
-            case INFIRMARY -> Blocks.PINK_CONCRETE.defaultBlockState();
-            case HIVE_GANGLION -> Blocks.RED_CONCRETE.defaultBlockState();
-            case HIVE_RELAY -> Blocks.PINK_CONCRETE.defaultBlockState();
-            case HIVE_BROOD -> Blocks.PURPLE_CONCRETE.defaultBlockState();
-            case HIVE_STORE -> Blocks.MAGENTA_CONCRETE.defaultBlockState();
-            case HIVE_DIGESTER -> Blocks.BROWN_CONCRETE.defaultBlockState();
-            case HIVE_HIBERNACULUM -> Blocks.CYAN_CONCRETE.defaultBlockState();
-            case HIVE_COCOON -> Blocks.WHITE_CONCRETE.defaultBlockState();
-            case HIVE_MORPHER -> Blocks.LIME_CONCRETE.defaultBlockState();
-            case HIVE_SPORULATOR -> Blocks.ORANGE_CONCRETE.defaultBlockState();
-            case HIVE_SENSOR -> Blocks.LIGHT_BLUE_CONCRETE.defaultBlockState();
-            case ROUTE -> Blocks.GRAY_CONCRETE.defaultBlockState();
-            case ROUTE_FOUNDATION -> Blocks.GRAY_CONCRETE.defaultBlockState();
-            case WORKSITE -> Blocks.LIGHT_BLUE_CONCRETE.defaultBlockState();
-            case INFECTION -> throw new IllegalArgumentException("infection requires the dynamic overlay executor");
-        };
+        return FrontierV3GrayboxPalette.block(material);
     }
     private static void retireStaleWorksiteStaging(ServerLevel level, FrontierV3GrayboxLedger ledger, Cursor cursor) {
         for (FrontierV3GrayboxLedger.ClaimAt staged : ledger.claimsWithSemanticPart(GrayboxSemanticPart.WORKSITE_STAGING.name())) {

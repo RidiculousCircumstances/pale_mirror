@@ -188,6 +188,12 @@ final class FrontierV3NavigationObservation {
      * not permission to mutate: every actual write still passes blockWrite above. */
     static boolean preparePlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             List<FrontierV3ManagedBlockWrites.PlannedWrite> writes) {
+        return preparePlannedWrites(level, runtime, writes, () -> { });
+    }
+    /** Resume the exact producer after the durable fence, before another observer
+     * can replace it with the still-existing preimage. Producer revalidates ownership. */
+    static boolean preparePlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            List<FrontierV3ManagedBlockWrites.PlannedWrite> writes, Runnable resume) {
         var state = runtime.passiveOwnershipState().orElse(null);
         if (state == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
         var changes = new LinkedHashMap<BlockPosition, NavigationObservation>();
@@ -197,11 +203,11 @@ final class FrontierV3NavigationObservation {
         for (var entry : changes.entrySet()) {
             batch.put(entry.getKey(), entry.getValue());
             if (batch.size() == NavigationGeometryState.MAX_CHANGE) {
-                if (!publish(runtime, runtime.decodedState().orElseThrow(), batch)) return false;
+                if (!publish(runtime, runtime.decodedState().orElseThrow(), batch, resume)) return false;
                 batch = new LinkedHashMap<>();
             }
         }
-        return batch.isEmpty() || publish(runtime, runtime.decodedState().orElseThrow(), batch);
+        return batch.isEmpty() || publish(runtime, runtime.decodedState().orElseThrow(), batch, resume);
     }
     private static void collectWriteFence(ServerLevel level, FrontierWorldState state, BlockPos physical,
             net.minecraft.world.level.block.state.BlockState replacement, Map<BlockPosition, NavigationObservation> changes) {
@@ -234,6 +240,10 @@ final class FrontierV3NavigationObservation {
     }
     private static boolean publish(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                    Map<BlockPosition, NavigationObservation> observations) {
+        return publish(runtime, state, observations, () -> { });
+    }
+    private static boolean publish(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
+                                   Map<BlockPosition, NavigationObservation> observations, Runnable resume) {
         var confirmed = new HashSet<BlockPosition>();
         observations.forEach((position, evidence) -> { if (evidence.cell().isPresent()) confirmed.add(position); });
         // A pre-write UNKNOWN fence has no shape to compare. Do not rebuild global
@@ -261,7 +271,10 @@ final class FrontierV3NavigationObservation {
         var result = FrontierV3CommandSubmission.submitResult(runtime, "navigation-geometry", NavigationGeometryObserved.OWNER.value(),
                 new NavigationGeometryObserved(state.navigationGeometry().revision(), observations));
         confirmed.addAll(observations.keySet());
-        runtime.afterCommand(result, () -> FrontierV3PedestrianPlanning.geometryObserved(runtime, confirmed));
+        runtime.afterCommand(result, () -> {
+            FrontierV3PedestrianPlanning.geometryObserved(runtime, confirmed);
+            if (result instanceof CommandResult.Pending) resume.run();
+        });
         return result instanceof CommandResult.Accepted;
     }
 }

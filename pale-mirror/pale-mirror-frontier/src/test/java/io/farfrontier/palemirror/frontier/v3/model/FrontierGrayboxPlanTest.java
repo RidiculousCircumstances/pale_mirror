@@ -10,6 +10,21 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierGrayboxPlanTest {
+    @Test void generationUsesTheSameInitialSettlementCellsButNoRuntimeWorkOrHiveOverlay() {
+        var state = initial();
+        var generated = FrontierGrayboxPlan.compileInitialSettlementFabric(state.bootstrap()).cells();
+        var runtime = FrontierGrayboxPlan.compileStableStructuralBaseline(state).cells();
+        assertTrue(generated.size() > 1000);
+        generated.forEach((position, cell) -> {
+            assertEquals(cell, runtime.get(position));
+            assertTrue(java.util.Set.of(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE,
+                    PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE, PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK)
+                    .contains(cell.semanticTarget().kind()));
+        });
+        var targets = java.util.Set.of(PhysicalDeltaSemanticTargetKind.SETTLEMENT_STRUCTURE,
+                PhysicalDeltaSemanticTargetKind.SETTLEMENT_INFRASTRUCTURE, PhysicalDeltaSemanticTargetKind.ROUTE_NETWORK);
+        assertEquals(runtime.values().stream().filter(c -> targets.contains(c.semanticTarget().kind())).count(), generated.size());
+    }
     @Test void freightEndpointsUseDeclaredExteriorStationsWithClearWideBodyFootprints() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:wide-freight-stations"), 41L));
         var plan = FrontierGrayboxPlan.compile(state);

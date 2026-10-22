@@ -1,6 +1,6 @@
 {
   "type": "neoforge:add_features",
   "biomes": ["pale_mirror:fertile_plain", "pale_mirror:temperate_plain", "pale_mirror:rocky_upland"],
-  "features": "pale_mirror:graybox_geology",
+  "features": "pale_mirror:graybox_genesis",
   "step": "underground_ores"
 }

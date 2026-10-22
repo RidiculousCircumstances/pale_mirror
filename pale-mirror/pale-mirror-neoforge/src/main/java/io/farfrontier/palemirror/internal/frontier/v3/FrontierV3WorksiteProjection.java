@@ -148,6 +148,19 @@ final class FrontierV3WorksiteProjection {
             progress.prepared += writes.size();
             windows.add(new PreparedWindow(List.copyOf(writes), ledger.worksiteFence(writes)));
         }
+        completePrepared(level, runtime);
+        for (var owner : FrontierV3WorksiteRegistry.OWNERS) owner.afterProjection(level, runtime);
+    }
+    /** Continue only retained exact windows; do not run new observation/preparation
+     * between an acknowledged geometry fence and its physical action. */
+    private static void completePrepared(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        var windows = PREPARING.get(level); if (windows == null || windows.isEmpty()) return;
+        var progress = PROGRESS.get(level);
+        var ledger = FrontierV3GrayboxLedger.get(level);
+        var queue = queue(level, runtime.decodedState().orElseThrow());
+        var viewers = level.players().stream().map(net.minecraft.server.level.ServerPlayer::chunkPosition).toList();
+        var writes = new ArrayList<FrontierV3WorksiteBlockWitness>();
+        var effects = FrontierV3ProjectionWriteBudget.current(level);
         // Independent immutable windows share ONE turn allowance. A pending fence
         // withholds only its own cells, not already-durable neighbouring work.
         windows.sort(Comparator.comparingLong(window -> window.writes().stream()
@@ -167,12 +180,15 @@ final class FrontierV3WorksiteProjection {
             var planned = writes.stream().filter(write -> level.hasChunkAt(position(write.declaration()))
                             && !FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position(write.declaration())))
                                 .equals(write.declaration().block()))
-                    .limit(Math.min(preparation.remainingWrites(), FrontierV3ManagedBlockWrites.MAX_PLANNED_WRITES))
+                    .limit(Math.min(effects.remaining(), FrontierV3ManagedBlockWrites.MAX_PLANNED_WRITES))
                     .map(write -> new FrontierV3ManagedBlockWrites.PlannedWrite(position(write.declaration()),
                             FrontierV3MinecraftBlockExtraction.block(write.declaration().block()))).toList();
-            if (!planned.isEmpty() && !FrontierV3ManagedBlockWrites.preparePlannedWrites(level, runtime, planned)) {
+            if (!planned.isEmpty() && !FrontierV3ManagedBlockWrites.preparePlannedWrites(level, runtime, planned,
+                    () -> completePrepared(level, runtime))) {
                 retained.add(new PreparedWindow(List.copyOf(writes), pending.fence())); continue;
             }
+            var permitted = planned.stream().map(FrontierV3ManagedBlockWrites.PlannedWrite::position)
+                    .collect(java.util.stream.Collectors.toSet());
             var remaining = new ArrayList<FrontierV3WorksiteBlockWitness>();
             for (var write : writes) {
                 var position = position(write.declaration());
@@ -186,7 +202,7 @@ final class FrontierV3WorksiteProjection {
                     // Current preimages need a durable witness, not a block-write permit.
                     // Unused prepared intents remain pending if actual mutations exhaust
                     // this turn's allowance; their owner/recovery proof is unchanged.
-                    if (!preparation.takeWrite()) { remaining.add(write); continue; }
+                    if (!permitted.contains(position) || !effects.take()) { remaining.add(write); continue; }
                     if (!FrontierV3WorksiteWrites.apply(write.declaration().key(), () ->
                             level.setBlock(position, FrontierV3MinecraftBlockExtraction.block(write.declaration().block()), 3))) {
                         remaining.add(write); continue;
@@ -203,7 +219,6 @@ final class FrontierV3WorksiteProjection {
         }
         PREPARING.put(level, retained);
         if (ledger.isDirty()) ledger.persistAsync(level);
-        for (var owner : FrontierV3WorksiteRegistry.OWNERS) owner.afterProjection(level, runtime);
     }
     private static boolean currentPreparation(ServerLevel level, FrontierWorldState state,
             FrontierV3GrayboxLedger ledger, FrontierV3WorksiteBlockWitness write) {

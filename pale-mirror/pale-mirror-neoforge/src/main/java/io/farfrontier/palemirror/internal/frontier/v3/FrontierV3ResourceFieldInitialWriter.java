@@ -30,8 +30,15 @@ final class FrontierV3ResourceFieldInitialWriter {
                              ResourceSite site) {
         if (!FrontierV3PhysicalWorld.isPhysical(level) || !FrontierV3ServerLifecycle.ownsRuntime(level, runtime))
             throw new IllegalArgumentException("initial field projection has a foreign runtime or dimension");
-        return writePreparedBatch(level, site,
-                writes -> FrontierV3ManagedBlockWrites.preparePlannedWrites(level, runtime, writes));
+        return writePreparedBatch(level, site, writes -> {
+            var prepared = FrontierV3ResourceSiteLedger.get(level).fieldClaim(site.id());
+            return FrontierV3ManagedBlockWrites.preparePlannedWrites(level, runtime, writes, () -> {
+                var state = runtime.decodedState().orElseThrow();
+                if (prepared.equals(FrontierV3ResourceSiteLedger.get(level).fieldClaim(site.id()))
+                        && site.equals(state.resourceSiteDescriptors().get(site.id())))
+                    writeBatch(level, runtime, site);
+            });
+        });
     }
 
     static int initialWriteBudget(int operations) {
@@ -49,7 +56,7 @@ final class FrontierV3ResourceFieldInitialWriter {
             throw new IllegalStateException("initial field has no exact current physical owner");
         if (claim.cursor().complete()) return Result.CURSOR_COMPLETE;
         int limit = initialWriteBudget(io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_WEIGHT_BUDGET.get());
-        var budget = FrontierV3ProjectionWriteBudget.current(level, limit);
+        var budget = FrontierV3ProjectionWriteBudget.current(level);
         if (!budget.available()) return Result.RETRY;
         int count = Math.min(limit, budget.remaining());
         if (!claim.cursor().prepared()) {

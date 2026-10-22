@@ -19,7 +19,11 @@ final class FrontierV3GrayboxPreparation {
     }
     static boolean prepare(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             FrontierWorldState state, List<GrayboxCell> cells) {
+        var ledger = FrontierV3GrayboxLedger.get(level);
         var writes = cells.stream().filter(cell -> !state.physicalDeltas().containsKey(cell.position()))
+                // An existing claim is current or externally changed; neither permits a
+                // template write. In particular generated fabric needs no mutation fence.
+                .filter(cell -> ledger.claim(new BlockPos(cell.position().x(), cell.position().y(), cell.position().z())) == null)
                 .map(cell -> new FrontierV3ManagedBlockWrites.PlannedWrite(
                         new BlockPos(cell.position().x(), cell.position().y(), cell.position().z()),
                         FrontierV3GrayboxExecutor.material(cell.material()))).toList();

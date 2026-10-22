@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "id": "live_generated_ingress",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "container", "id": "container:10-depot", "expect": { "status": "ok", "position": { "x": -103, "y": 65, "z": 354 } } }
+    ] },
+    { "type": "command", "command": "/gamemode creative" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 129, "y": 64, "z": 6 }, "settleMs": 0 },
+    { "type": "assert_visible_block", "position": { "x": 137, "y": 65, "z": 14 }, "timeoutMs": 60000 },
+    { "type": "look", "at": { "x": 137, "y": 65, "z": 14 } },
+    { "type": "inspect", "view": "first_visibility", "id": "8,0" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -121, "y": 61, "z": 43 }, "settleMs": 0 },
+    { "type": "assert_visible_block", "position": { "x": -122, "y": 62, "z": 46 }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "first_visibility", "id": "-8,3", "expect": { "presentationReady": true, "dynamicReady": true, "worksitePendingCells": 0 }, "timeoutMs": 60000 },
+    { "type": "look", "at": { "x": -125, "y": 61, "z": 50 } },
+    { "type": "inspect", "view": "performance", "id": "" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -137, "y": 64, "z": 347 }, "settleMs": 0 },
+    { "type": "assert_visible_block", "position": { "x": -137, "y": 63, "z": 349 }, "timeoutMs": 60000 },
+    { "type": "assert_visible_block", "position": { "x": -103, "y": 65, "z": 354 }, "timeoutMs": 60000 },
+    { "type": "look", "at": { "x": -103, "y": 65, "z": 354 } },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 14, "view": "summary", "id": "", "expect": { "requiredConflicts": 0, "sceneConflicts": 0, "inventoryConflicts": 0 } }
+  ],
+  "frames": [ { "after": 3, "name": "clearwater-initial" }, { "after": 8, "name": "mine-initial" }, { "after": 13, "name": "reported-southern-settlement-initial" } ]
+}

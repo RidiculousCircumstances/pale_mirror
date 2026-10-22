@@ -61,6 +61,7 @@ final class FrontierV3ContainerSocketProvenance {
         // Once the opening has been prepared, the common container owner may hold a chest
         // there. Its own provenance check validates that chest; do not require AIR again.
         var witness = ledger.worksite(position);
+        if (witness == null) witness = FrontierV3GeneratedWorksites.support(level, declared.cell());
         if (witness == null || witness.phase() == FrontierV3WorksiteBlockWitness.Phase.PREPARED)
             return FrontierV3ContainerSurfaceExecutor.SocketReadiness.DEFERRED;
         return witness.phase() == FrontierV3WorksiteBlockWitness.Phase.SETTLED && witness.declaration().equals(declared.cell())

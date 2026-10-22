@@ -29,6 +29,13 @@ final class FirstVisibilityWork {
         return true;
     }
     GrayboxCell next() { return current = pending.removeFirst(); }
+    /** Same cursor as the writer lane, but no writes or mutation admission. */
+    void observeCurrent(java.util.function.Predicate<GrayboxCell> currentImage, FrontierV3FirstVisibilityBudget budget) {
+        while (!pending.isEmpty() && budget.takeRead()) {
+            if (!currentImage.test(pending.peekFirst())) return;
+            next(); observe(ProjectionResult.CURRENT);
+        }
+    }
     void observe(ProjectionResult result) {
         if (result == ProjectionResult.YIELDED) {
             // Resume this attempt before repeating a previously deferred cell in the same pass.

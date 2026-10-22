@@ -15,8 +15,16 @@ public final class GeologyRegistration {
     public static final Supplier<AttachmentType<Optional<GeneratedGeology>>> BASELINE = ATTACHMENTS.register("generated_geology",
             () -> AttachmentType.<Optional<GeneratedGeology>>builder(Optional::empty)
                     .serialize(GeneratedGeology.CODEC.optionalFieldOf("baseline").codec()).build());
+    public static final Supplier<AttachmentType<Optional<io.farfrontier.palemirror.internal.frontier.v3.FrontierV3GeneratedStructures>>> STRUCTURES =
+            ATTACHMENTS.register("generated_structures", () -> AttachmentType
+                    .<Optional<io.farfrontier.palemirror.internal.frontier.v3.FrontierV3GeneratedStructures>>builder(Optional::empty)
+                    .serialize(io.farfrontier.palemirror.internal.frontier.v3.FrontierV3GeneratedStructures.CODEC.optionalFieldOf("baseline").codec()).build());
+    public static final Supplier<AttachmentType<Optional<io.farfrontier.palemirror.internal.frontier.v3.FrontierV3GeneratedWorksites>>> WORKSITES =
+            ATTACHMENTS.register("generated_worksites", () -> AttachmentType
+                    .<Optional<io.farfrontier.palemirror.internal.frontier.v3.FrontierV3GeneratedWorksites>>builder(Optional::empty)
+                    .serialize(io.farfrontier.palemirror.internal.frontier.v3.FrontierV3GeneratedWorksites.CODEC.optionalFieldOf("baseline").codec()).build());
     static {
-        FEATURES.register("graybox_geology", io.farfrontier.palemirror.internal.frontier.v3.FrontierV3GrayboxGeologyFeature::new);
+        FEATURES.register("graybox_genesis", io.farfrontier.palemirror.internal.frontier.v3.FrontierV3GrayboxGenesisFeature::new);
     }
     private GeologyRegistration() { }
     public static void register(IEventBus bus) { ATTACHMENTS.register(bus); FEATURES.register(bus); }

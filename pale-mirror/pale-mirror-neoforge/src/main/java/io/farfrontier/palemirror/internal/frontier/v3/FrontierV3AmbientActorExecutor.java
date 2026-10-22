@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.model.ActorKind;
+import io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority;
 
 import io.farfrontier.palemirror.frontier.v3.model.AmbientPlacementPolicy;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
@@ -172,6 +173,7 @@ final class FrontierV3AmbientActorExecutor {
             if (lease != null && lease.status() == AmbientLeaseStatus.DRAINING) {
                 Entity body = level.getEntity(entityId(state, actorId));
                 if (body instanceof Mob mob && release(runtime, mob).isPresent()) admitted++;
+                else if (body == null && resumeUnstartedDrain(level, runtime, actorId, lease).isPresent()) admitted++;
                 // A draining owner cannot return to motion or prepare another authority.
                 continue;
             }
@@ -196,8 +198,7 @@ final class FrontierV3AmbientActorExecutor {
                 } else if (body == null && restartAbsenceIsObserved(level, runtime, state, actorId, lease)) {
                     var result = submit(runtime, "ambient-restart-absence", actorId.value(),
                             new AmbientLeaseRestartAbsenceObserved(actorId, lease.handoffBody()));
-                    if (result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)
-                        FrontierV3ActorBodyCustody.releaseUnstartedAbsence(level, runtime, actorId);
+                    runtime.afterCommand(result, () -> FrontierV3ActorBodyCustody.releaseUnstartedAbsence(level, runtime, actorId));
                     FrontierV3DiagnosticTrace.record(level.getServer(), FrontierV3DiagnosticTrace.ambientLeaseRecoveryCorrelation(actorId),
                             "ambient_restart_absence_observed", actorId, result);
                     admitted++;
@@ -745,23 +746,40 @@ final class FrontierV3AmbientActorExecutor {
         var carrier = ledger.reconciliation(declaration, false);
         if (!cancelledUnstarted && !preparedCancellationHasEvidence(carrier, hasNeverCreatedFirstAdmission(ledger, declaration))) return Optional.empty();
         ledger.persist(level, state.bootstrap().worldId());
-        if (!(submit(runtime, "ambient-reserved-draining", actorId.value(),
-                new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING)) instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) {
+        var result = submit(runtime, "ambient-reserved-draining", actorId.value(),
+                new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING));
+        var draining = lease.withStatus(AmbientLeaseStatus.DRAINING);
+        if (result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Pending) {
+            runtime.afterCommand(result, () -> resumeUnstartedDrain(level, runtime, actorId, draining));
             return Optional.empty();
         }
+        return resumeUnstartedDrain(level, runtime, actorId, draining);
+    }
+    /** A cancelled pre-insertion admission can drain across asynchronous durability.
+     * Every resumption proves the same lease and physical absence; null lookup alone
+     * cannot close a formerly running body. */
+    private static Optional<FrontierV3AmbientAdmissionPolicy.EffectResult> resumeUnstartedDrain(ServerLevel level,
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId actorId, AmbientActorLease lease) {
         FrontierWorldState drained = runtime.decodedState().orElse(null);
-        if (drained == null || drained.ambientLeases().get(actorId) == null
-                || drained.ambientLeases().get(actorId).status() != AmbientLeaseStatus.DRAINING) return Optional.empty();
+        if (drained == null || lease.status() != AmbientLeaseStatus.DRAINING
+                || !lease.equals(drained.ambientLeases().get(actorId))
+                || !FrontierV3ActorBodyCustody.unstartedAbsenceProven(level, runtime, drained, actorId)) return Optional.empty();
         var condition = drained.actorLocations().get(actorId);
         if (condition == null || condition.condition().status() != ActorLifeStatus.ALIVE) return Optional.empty();
-        boolean released = submit(runtime, "ambient-reserved-release", actorId.value(),
-                new AmbientLeaseReleased(actorId, lease.handoffBody(), condition.condition().health()))
-                instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted;
-        if (!released) return Optional.empty();
+        var release = new AmbientLeaseReleased(actorId, lease.handoffBody(), condition.condition().health());
+        if (!releaseEligible(drained, release)) return Optional.empty();
+        var exactBody = ActorBodyAuthority.current(drained, actorId);
+        var result = submit(runtime, "ambient-reserved-release", actorId.value(), release);
+        runtime.afterCommand(result, () -> {
+            var current = runtime.decodedState().orElseThrow();
+            if (lease.withStatus(AmbientLeaseStatus.CLOSED).equals(current.ambientLeases().get(actorId))
+                    && exactBody.equals(ActorBodyAuthority.current(current, actorId)))
+                FrontierV3ActorBodyCustody.releaseUnstartedAbsence(level, runtime, actorId);
+        });
+        if (!(result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return Optional.empty();
         FrontierWorldState resulting = runtime.decodedState().orElse(null);
         if (resulting == null || resulting.ambientLeases().get(actorId) == null
                 || resulting.ambientLeases().get(actorId).status() != AmbientLeaseStatus.CLOSED) return Optional.empty();
-        FrontierV3ActorBodyCustody.releaseUnstartedAbsence(level, runtime, actorId);
         resulting = runtime.decodedState().orElseThrow();
         return Optional.of(new FrontierV3AmbientAdmissionPolicy.EffectResult(drained, resulting));
     }

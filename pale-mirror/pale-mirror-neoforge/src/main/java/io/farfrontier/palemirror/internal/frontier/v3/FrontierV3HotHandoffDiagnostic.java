@@ -17,12 +17,14 @@ final class FrontierV3HotHandoffDiagnostic {
         var review = FrontierV3HotHandoff.inspect(level, runtime, visibility.chunk());
         var geology = io.farfrontier.palemirror.internal.world.GeneratedGeology.loaded(level,
                 visibility.chunk().getWorldPosition()).orElse(null);
+        var structures = FrontierV3GeneratedStructures.loaded(level, visibility.chunk().getWorldPosition()).orElse(null);
         String checks = review.checks().stream().map(check -> "{\"owner\":\"" + quote(check.owner().value())
                 + "\",\"status\":\"" + check.status().name() + "\",\"reason\":\"" + quote(check.reason()) + "\"}")
                 .collect(Collectors.joining(","));
         return base.substring(0, base.length() - 1) + ",\"handoffRevision\":" + review.revision()
                 + ",\"staticProjectionProgress\":" + FrontierV3GrayboxExecutor.visibilityProgress(runtime, visibility.chunk())
                 + ",\"chunkLoaded\":" + (level.getChunkSource().getChunkNow(visibility.chunk().x, visibility.chunk().z) != null)
+                + ",\"generatedStructureCells\":" + (structures == null ? 0 : structures.cells().size())
                 + ",\"worksitePendingCells\":" + FrontierV3WorksiteProjection.pending(level, runtime.decodedState().orElseThrow(), visibility.chunk())
                 + ",\"worksiteProjectionProgress\":" + FrontierV3WorksiteProjection.progressDiagnostic(level)
                 + ",\"generatedGeology\":" + (geology == null ? "null" : "{\"provider\":\"" + quote(geology.provider())

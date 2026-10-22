@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "id": "disposable_genesis_ingress_recovery",
+  "isolation": { "mode": "disposable_lite", "seed": 125 },
+  "server": { "host": "127.0.0.1", "port": 25127, "profile": "quarry-r22-world", "viewDistance": 8 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "expect": { "status": "ok", "settlement": "settlement:6" } }
+    ] },
+    { "type": "command", "command": "/gamemode creative" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -121, "y": 61, "z": 43 }, "settleMs": 0 },
+    { "type": "assert_visible_block", "position": { "x": -122, "y": 62, "z": 46 }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "first_visibility", "id": "-8,3", "expect": { "presentationReady": true, "dynamicReady": true, "worksitePendingCells": 0 }, "timeoutMs": 60000 },
+    { "type": "look", "at": { "x": -125, "y": 61, "z": 50 } },
+    { "type": "break", "position": { "x": -120, "y": 62, "z": 46 } },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "expect": { "result": { "external": 1 } }, "timeoutMs": 60000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 380, "y": 64, "z": 0 }, "settleMs": 0 },
+    { "type": "assert_visible_block", "position": { "x": 376, "y": 65, "z": -9 }, "timeoutMs": 60000 },
+    { "type": "assert_visible_block", "position": { "x": 376, "y": 65, "z": 11 }, "timeoutMs": 60000 },
+    { "type": "look", "at": { "x": 390, "y": 65, "z": 10 } },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 374, "y": 64, "z": -10 }, "settleMs": 0 },
+    { "type": "wait_until_block", "position": { "x": 376, "y": 65, "z": -10 }, "block": "minecraft:lime_concrete", "timeoutMs": 30000 },
+    { "type": "break", "position": { "x": 376, "y": 65, "z": -10 } },
+    { "type": "wait_until_diagnostic", "view": "physical_delta", "id": "376,65,-10", "expect": { "status": "ok", "deltaKind": "KNOWN_SEMANTIC_LOSS" }, "timeoutMs": 30000 },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 8, "y": 65, "z": -5 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "expect": { "result": { "liveSourceRegions": 0, "workersCold": true } }, "timeoutMs": 90000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 374, "y": 64, "z": -10 }, "settleMs": 0 },
+    { "type": "wait_until_block", "position": { "x": 376, "y": 65, "z": -10 }, "block": "minecraft:air", "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "physical_delta", "id": "376,65,-10", "expect": { "status": "ok", "deltaKind": "KNOWN_SEMANTIC_LOSS" }, "timeoutMs": 30000, "causalMilestone": "generated_structure_loss_survives_restart" },
+    { "type": "look", "at": { "x": 376, "y": 65, "z": -10 } },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -121, "y": 61, "z": 43 }, "settleMs": 0 },
+    { "type": "wait_until_block", "position": { "x": -120, "y": 62, "z": 46 }, "block": "minecraft:air", "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "expect": { "surface": "ACTIVE", "physicalSocket": { "chest": "OWNED", "support": "READY" } }, "timeoutMs": 60000 },
+    { "type": "inspect", "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24" },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "restart": { "mode": "graceful", "afterAction": 16 },
+  "assertions": [
+    { "after": 24, "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "expect": { "result": { "external": 1 } } },
+    { "after": 25, "view": "summary", "id": "", "expect": { "requiredConflicts": 0, "sceneConflicts": 0, "inventoryConflicts": 0 } }
+  ],
+  "frames": [ { "after": 4, "name": "fresh-generated-mine" }, { "after": 10, "name": "fresh-generated-settlement" }, { "after": 20, "name": "generated-wall-loss-after-restart" } ]
+}
