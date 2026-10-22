@@ -530,12 +530,13 @@ public final class FrontierV3TestPilotClient {
         double distance = delta.length();
         boolean aimed = distance > 0.0D && distance <= 128.0D
                 && minecraft.player.getViewVector(1.0F).normalize().dot(delta.scale(1.0D / distance)) >= Math.cos(Math.toRadians(5.0D));
-        if (!minecraft.level.getBlockState(expected).isAir() && aimed) {
+        if (!minecraft.level.getBlockState(expected).isAir() && aimed && minecraft.levelRenderer.isSectionCompiled(expected)) {
             advance("assert_visible_block"); return;
         }
         if ((minecraft.level.getGameTime() - actionStartedTick) * 50L >= action.get("timeoutMs").getAsLong()) {
             throw new IllegalStateException("camera never targeted visible block " + expected
                     + "; clientBlock=" + minecraft.level.getBlockState(expected)
+                    + " sectionCompiled=" + minecraft.levelRenderer.isSectionCompiled(expected)
                     + " aimed=" + aimed + " distance=" + distance
                     + " eye=" + minecraft.player.getEyePosition()
                     + " view=" + minecraft.player.getViewVector(1.0F));

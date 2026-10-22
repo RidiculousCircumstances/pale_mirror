@@ -43,6 +43,27 @@ readiness about14s; Clearwater revisit about2s. These are isolated pilot timings
 not a controlled live-server speedup or proof that all ingress latency is gone.
 No full economic-cycle or extended-soak claim is made.
 
+Live full-pack follow-up exposed a test-oracle gap: non-air client blocks and
+camera alignment can precede compiled render sections. `assert_visible_block`
+now also requires Minecraft's `isSectionCompiled`; the checked-in ingress
+scenario explicitly uses this barrier before its frames. The original isolated
+receipt above predates these stronger barriers. Its OBSERVED_CURRENT assertion
+means a current replica, not acquired interactive custody; the milestone name
+now states that distinction.
+
+Live diagnostic `build/r219-live-rendered.{json,log}`, run
+051f56a7-c748-4d4b-b7f1-fa3865483f64, passed with the new render check at both
+reported X/Z and Clearwater. Both frames show rendered ground/buildings; final
+tick6995 has zero required/scene/inventory/custody conflicts. An earlier diagnostic
+returned ok but captured sky at Clearwater: that image was rejected, not counted
+as visual success. Installed Sodium waits for neighbouring chunk data before
+compiling a section; received blocks alone do not prove visible geometry.
+The repeat visit needed about6s from arrival to rendered ground at the reported
+location; Clearwater ground compiled within the following second. This is a warm
+live diagnostic, not a fresh-world latency benchmark or proof of instant loading.
+At tick11692, the last64 PM turns averaged1.79ms, maximum2.77ms, ordinary-tick and
+route queues were empty; historical startup/ingress max through PM post was1.17s.
+
 ## Cooperative durability and generated geology (R218)
 
 Ordinary canonical transactions now retain one immutable prepared transition
