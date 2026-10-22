@@ -114,6 +114,9 @@ public final class HiveGroundNavigation {
             if (surface.equals(destination)) return materialize(origin, current.node(), previous);
             for (Step direction : STEPS) {
                 SurfaceAnchor next = surfaceAt(state, home, surface.x() + direction.x(), surface.z() + direction.z());
+                // A mined/observed empty column has no support. It is not an edge,
+                // not permission to reuse the original terrain and not a fatal route error.
+                if (next == null) continue;
                 int nextCost = Math.addExact(current.cost(), 1);
                 if ((!next.equals(destination) && excluded.contains(next)) || !traversable(state, home, next, intact, blocked)
                         || Math.abs(next.y() - surface.y()) > 1 || !admission.permits(surface, next, nextCost)) continue;

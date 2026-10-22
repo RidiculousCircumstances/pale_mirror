@@ -94,6 +94,15 @@ to `frontier-v3-r215-peak-repair-20261022`:
 No claim of instantaneous first loading or x30 capacity. Test client and capture
 are stopped after checks; current deployment remains running for manual testing.
 
+Post-check incident at12:29:46/instant5619: the existing COLD scout route consumed
+a legitimately absent support from the shared geometry provider and dereferenced
+it. This was not a storage receipt failure. The legacy consumer now skips absent
+edges and reports its existing RouteUnavailable result if isolated; it does not
+synthesize ground or swallow unrelated errors. Twelve focused patrol/missing-
+support checks and guardrails pass, including detour and isolated-start cases.
+The same saved world is retained for recovery after deploying this crash fix;
+no additional hive feature is activated by this repair.
+
 ## Initial chunk ingress (R214)
 
 The native sender retains Minecraft's pending membership, batch quota and actual
