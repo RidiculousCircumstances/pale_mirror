@@ -8,11 +8,15 @@
     { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -354, "y": 70, "z": -12 }, "settleMs": 0 },
     { "type": "assert_fixture", "timeoutMs": 60000, "checks": [
       { "view": "field_physical", "id": "site:5-wheat-field", "expect": { "status": "ACTIVE", "layoutCurrent": true, "worldChangePending": false, "foreignChangePending": false } }
-    ] }
+    ] },
+    { "type": "command", "command": "/give PMTestPilot minecraft:redstone_block 1" },
+    { "type": "command", "command": "/execute in pale_mirror:frontier_graybox run fill -361 64 -18 -348 64 -5 minecraft:wheat[age=3] replace minecraft:wheat" },
+    { "type": "command", "command": "/execute in pale_mirror:frontier_graybox run setblock -354 64 -12 minecraft:tnt" },
+    { "type": "command", "command": "/execute in pale_mirror:frontier_graybox run setblock -354 64 -13 minecraft:air" }
   ],
   "actions": [
-    { "type": "command", "command": "/execute in pale_mirror:frontier_graybox run fill -361 64 -18 -348 64 -5 minecraft:wheat[age=3] replace minecraft:wheat" },
-    { "type": "command", "command": "/execute in pale_mirror:frontier_graybox run summon minecraft:tnt -354 64 -12 {Fuse:1s}" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -354, "y": 65, "z": -15 }, "settleMs": 0 },
+    { "type": "place", "position": { "x": -354, "y": 64, "z": -13 }, "item": "minecraft:redstone_block", "timeoutMs": 15000 },
     { "type": "wait_until_block", "position": { "x": -354, "y": 63, "z": -12 }, "block": "minecraft:air", "timeoutMs": 30000 },
     { "type": "wait_until_diagnostic", "view": "field_physical", "id": "site:5-wheat-field", "expect": { "status": "ACTIVE", "worldChangePending": false, "foreignChangePending": false }, "timeoutMs": 120000, "causalMilestone": "blast_cell_obligations_closed" },
     { "type": "look", "at": { "x": -354, "y": 62, "z": -12 } },
