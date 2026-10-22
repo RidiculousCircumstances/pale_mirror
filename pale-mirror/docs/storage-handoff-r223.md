@@ -44,7 +44,7 @@ surface verification restores the falsely isolated live chest on observation.
 
 ## Verification
 
-Focused runtime/physical-executor checks, full NeoForge unit suite and guardrails
+Focused runtime/physical-executor checks, full NeoForge unit suite821/821 and guardrails
 PASS (`build/r223-final-checks.log`). Native reference-projection13/13 PASS,
 including actual double trapped-chest inspection, rejection of an unsupported
 barrel, genuine provider loss with a Pending disk receipt, and asynchronous
@@ -55,7 +55,7 @@ Unchanged domain/frontier evidence from R222 is reused; no domain/schema change.
 Checked-in `live-storage-handoff-recovery.json` visits the retained live chest,
 checks its ACTIVE recovery, visits Ironmeadow and checks unloaded storage reaches
 RELEASED. This is a scoped existing-world diagnostic, not whole-economy acceptance.
-Clean-ref packaging, deployment and live recovery remain pending.
+Clean-ref packaging and same-world deployment completed (receipt below).
 
 First same-world client check exposed one additional legacy call: surface
 recovery requested only graybox support, so an adopted RESOURCE_STORAGE on
@@ -64,3 +64,34 @@ current. Recovery now consumes `declaredSupport`, like initial admission and
 normal readiness (terrain, worksite and graybox remain separately owned).
 The live scenario is the regression: before correction the exact retained
 double trapped chest stayed CONFLICT with READY support/CURRENT slots.
+
+## Delivery and retained-world check
+
+Implementation commits79d4dc06 and0453d60e; final clean detached source
+`/home/rd/proj/pm-r223b-release/pale-mirror`. JAR/verifyPackagedJar PASS;
+last support-call correction compile/focused executor tests/guardrails PASS.
+No domain or wire-schema change; no mandatory client update for this fix.
+Published/installed SHA512:
+`c878e7054c2a43b8a265373d2e9319413a270767c4813253c8f6aec3a093617d09ac43fd4a84c2fa007ee0eeae1ae3373dd7f6df597a3ffaf430ee9ab774e4aa`.
+Deploy preflight/verify PASS; service `far-frontier-v3-live.service`, wrapperPID714983,
+start1792685156, unchanged world `frontier-v3-r222-current-handoff-20261022`.
+No world reset or canonical repair edits. The intermediate service stop was via
+systemd, not a separately proven graceful save; the final check therefore includes
+actual retained-world startup/recovery, not a claimed graceful-restart scenario.
+
+Full-pack ordinary client diagnostic PASS:
+`build/r223b-live-recovery.json`, run4af5daca-401f-4f29-8e0d-a2ae1643b2b2.
+Task-private Xvfb/20FPS (physical display unavailable), client/display stopped.
+At revision199732 the exact trapped chest resumed through `reference-surface-verified`;
+frame21:06:48 inspected: same double chest physically present. Ironmeadow storage
+acquired epoch3 on visit, then RELEASED/unloaded by21:06:57 after departure21:06:53.
+Bindings released normally, no physical stock rewrite to resolve the conflict.
+Resident8-7 NOURISHED916/no meal/no held action (consumption predated this fix).
+Terminal diagnostics required/scene/inventory/custody conflicts0, incidentIndex0.
+Follow-up tick80293: recent64 host turns mean7.99ms/max76.60ms, ready event lag0,
+WAL awaitingDurability=false. These are narrow observations, not an economic soak
+or universal performance guarantee; startup had a2.7s keep-up warning.
+
+Source tree clean after the task receipt; outer pack tracked files unchanged,
+pre-existing `.f0v-baseline/` retained. No push. Canonical governance contains
+pre-existing WIP, with only the active continuity entry amended for this task.
