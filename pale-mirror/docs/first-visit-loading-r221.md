@@ -153,3 +153,18 @@ adapter-mirrors12/12 passed (`r222-native-storage`, `r222-native-structures`).
 Integration `guardrails check`: domain324/324 and NeoForge821/821 passed;
 the wider frontier suite was still running when this source checkpoint was made.
 No claim of an all-family native aggregate or inactive combat/hive acceptance.
+
+First full-pack live run61a3afbb-b08c-4c43-9c12-97d6f6921070 on31439cfc:
+Clearwater visible4.300s; mine source visible5.098s/neighbor current5.199s;
+reported southern settlement visible2.199s. All frames inspected, final retained
+conflicts0/preparing scopes0, client disconnected. Five-second target NOT met for
+the mine. Full frontier unit suite was concurrently consuming one worker's CPU;
+do not claim a controlled speedup ratio from this sample.
+
+Source review found a remaining scheduling proxy in WorksiteHandoff: nonempty
+projection queue returned WAITING before reading exact physical evidence. That
+queue also schedules custody admission for already-generated current cells. The
+handoff now uses its existing exact per-cell witness/revision/postimage checks
+regardless of queue membership. It does not complete queue entries or acquire
+mutation custody; the worksite owner retains that work. Prepared, changed, absent
+or externally modified evidence follows the same waiting/conflict checks as before.

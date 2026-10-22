@@ -14,9 +14,10 @@ final class FrontierV3WorksiteHandoff {
         var checks = new ArrayList<FrontierV3HotHandoff.Check>(); var ledger = FrontierV3GrayboxLedger.get(level);
         var byOwner = new LinkedHashMap<io.farfrontier.palemirror.frontier.v3.api.SubjectId, List<WorksiteBlock>>();
         var current = FrontierV3WorksiteRegistry.currentChunks(state).getOrDefault(chunk.toLong(), List.of());
-        if (!current.isEmpty() && FrontierV3WorksiteProjection.pending(level, state, chunk) > 0)
-            return current.stream().map(cell -> cell.key().owner()).distinct()
-                    .map(owner -> new FrontierV3HotHandoff.Check(owner, WAITING, "worksite_projection_pending")).toList();
+        // Queue membership is work scheduling, not a physical fact. In particular,
+        // generated current cells can still await custody admission in that queue.
+        // Prove their exact witness/postimage below; never grant mutation custody
+        // or discard scheduled owner work merely to make a chunk presentable.
         for (var declared : current)
             byOwner.computeIfAbsent(declared.key().owner(), ignored -> new ArrayList<>()).add(declared);
         for (var entry : byOwner.entrySet()) {
