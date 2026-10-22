@@ -103,7 +103,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         var lease = prepared.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(container));
         var slots = java.util.stream.IntStream.range(0, asset.stackSlots()).mapToObj(ReferenceContainerCustody.ObservedSlot::empty).toList();
         var storage = new FrontierV3StoredAttachedStorage(container, ReferenceContainerCustody.provenance(container), slots);
-        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.confirmSavedAttachmentProjection(runtime, prepared, lease, storage), "projection confirmation");
+        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.confirmSavedAttachmentProjection(helper.getLevel(), runtime, prepared, lease, storage), "projection confirmation");
         var confirmed = runtime.decodedState().orElseThrow();
         var body = ActorBodyAuthority.current(confirmed, asset.actorId());
         var identity = new FrontierV3ActorCarrierComposition.Declaration(asset.actorId(), ActorKind.PACK_ANIMAL,
@@ -154,7 +154,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         var slots = java.util.stream.IntStream.range(0, asset.stackSlots())
                 .mapToObj(ReferenceContainerCustody.ObservedSlot::empty).toList();
         var saved = new FrontierV3StoredAttachedStorage(container, ReferenceContainerCustody.provenance(container), slots);
-        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.confirmSavedAttachmentProjection(runtime, prepared, lease, saved),
+        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.confirmSavedAttachmentProjection(helper.getLevel(), runtime, prepared, lease, saved),
                 "the exact saved inventory must close the pending image without loading or rewriting a body");
         var confirmed = runtime.decodedState().orElseThrow();
         helper.assertTrue(!ActorInventoryInteractionFences.pending(confirmed, asset.actorId())
@@ -163,7 +163,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
                         && initial.inventory().fungibleResources().equals(confirmed.inventory().fungibleResources()),
                 "confirmation opens only custody, never creates stock or an activity");
         boolean staleRejected = false;
-        try { FrontierV3ReferenceContainerCustodyExecutor.confirmSavedAttachmentProjection(runtime, confirmed, lease, saved); }
+        try { FrontierV3ReferenceContainerCustodyExecutor.confirmSavedAttachmentProjection(helper.getLevel(), runtime, confirmed, lease, saved); }
         catch (IllegalArgumentException expected) { staleRejected = true; }
         helper.assertTrue(staleRejected, "a stale projection cannot be consumed twice");
         runtime.shutdown();
@@ -173,7 +173,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         var pending = negative.decodedState().orElseThrow();
         var pendingLease = pending.replicaCustody().custodyByScope().get(lease.scopeId());
         var foreign = new FrontierV3StoredAttachedStorage(container, "foreign:saved-attachment", slots);
-        helper.assertTrue(!FrontierV3ReferenceContainerCustodyExecutor.confirmSavedAttachmentProjection(negative, pending, pendingLease, foreign)
+        helper.assertTrue(!FrontierV3ReferenceContainerCustodyExecutor.confirmSavedAttachmentProjection(helper.getLevel(), negative, pending, pendingLease, foreign)
                         && ActorInventoryInteractionFences.pending(negative.decodedState().orElseThrow(), asset.actorId())
                         && !ReferenceContainerCustody.hasOperationalCustody(negative.decodedState().orElseThrow(), container)
                         && negative.decodedState().orElseThrow().inventory().fungibleResources().equals(initial.inventory().fungibleResources()),
@@ -308,7 +308,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
                         && runtime.canonicalState().orElseThrow().revision().equals(pendingRevision),
                 "an effect checkpoint cannot reclassify pending projection as provider loss");
         chest.getItem(0).shrink(1); chest.setChanged();
-        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.reconcilePreparedProjection(runtime, prepared, lease, chest),
+        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.reconcilePreparedProjection(helper.getLevel(), runtime, prepared, lease, chest),
                 "actual mismatching chest must produce a retained local conflict");
         var checkpoint = runtime.checkpointImage().orElseThrow();
         runtime.shutdown();
@@ -322,7 +322,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.eligibleReferenceSurfaces(conflicted,
                         List.of(conflicted.inventory().surfaces().get(depot))).size() == 1,
                 "pending-write conflict remains eligible for later exact observation");
-        helper.assertTrue(!FrontierV3ReferenceContainerCustodyExecutor.reconcilePreparedProjection(recovered, conflicted, retained, chest)
+        helper.assertTrue(!FrontierV3ReferenceContainerCustodyExecutor.reconcilePreparedProjection(helper.getLevel(), recovered, conflicted, retained, chest)
                         && chest.getItem(0).getCount() == 63 && recovered.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE,
                 "a repeated observation neither overwrites loss nor quarantines the instance");
         recovered.shutdown(); helper.succeed();
@@ -384,7 +384,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
                 "catch-up must not grant work permission before actual observation");
         ChestBlockEntity chest = chest(helper, local, depot);
         FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, prepared, depot);
-        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.reconcilePreparedProjection(runtime, prepared, lease, chest),
+        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.reconcilePreparedProjection(helper.getLevel(), runtime, prepared, lease, chest),
                 "real projected slots confirm the same fresh epoch");
         FrontierWorldState confirmed = runtime.decodedState().orElseThrow();
         helper.assertTrue(ReferenceContainerCustody.hasOperationalCustody(confirmed, depot)
@@ -775,7 +775,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         recovered.shutdown(); runtime.shutdown(); helper.succeed();
     }
 
-    private static FrontierWorldState activated(FrontierWorldState state, SubjectId containerId) {
+    static FrontierWorldState activated(FrontierWorldState state, SubjectId containerId) {
         java.util.Map<SubjectId, ContainerSurface> surfaces = new LinkedHashMap<>(state.inventory().surfaces());
         surfaces.put(containerId, new ContainerSurface(containerId, surfaces.get(containerId).position(), ContainerSurfaceStatus.ACTIVE));
         ExactInventory inventory = new ExactInventory(state.inventory().containers(), state.inventory().items(), state.inventory().cargo(),

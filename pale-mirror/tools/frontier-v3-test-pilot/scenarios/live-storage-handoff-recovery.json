@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "id": "live_storage_handoff_recovery",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "container", "id": "container:observed--110_64_-333", "expect": {
+        "status": "ok", "position": { "x": -110, "y": 64, "z": -333 }
+      } }
+    ] },
+    { "type": "command", "command": "/gamemode creative" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -114, "y": 64, "z": -330 }, "settleMs": 0 },
+    { "type": "assert_visible_block", "position": { "x": -110, "y": 64, "z": -333 }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:observed--110_64_-333", "expect": { "surface": "ACTIVE" }, "timeoutMs": 60000 },
+    { "type": "look", "at": { "x": -110, "y": 64, "z": -333 } },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 373, "y": 65, "z": 17 }, "settleMs": 0 },
+    { "type": "assert_visible_block", "position": { "x": 377, "y": 65, "z": 14 }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:8-depot", "expect": { "surface": "ACTIVE", "custody": { "status": "ACQUIRED" } }, "timeoutMs": 60000 },
+    { "type": "look", "at": { "x": 377, "y": 65, "z": 14 } },
+    { "type": "inspect", "view": "resident_life", "id": "resident:8-7" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": 1800, "y": 80, "z": 1800 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:8-depot", "expect": { "custody": { "status": "RELEASED" }, "physicalSocket": { "chunk": "UNLOADED" } }, "timeoutMs": 90000 },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 11, "view": "container", "id": "container:8-depot", "expect": { "surface": "ACTIVE", "custody": { "status": "RELEASED" } } }
+  ],
+  "frames": [ { "after": 3, "name": "retained-double-trapped-chest" }, { "after": 7, "name": "ironmeadow-storage" } ]
+}

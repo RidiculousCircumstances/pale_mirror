@@ -19,10 +19,13 @@ import java.util.function.Supplier;
 
 /** Declared-purpose provider composition. Inventory observations do not infer equipment type. */
 final class FrontierV3FixedContainerProviders {
-    private record Provider(Supplier<? extends Block> block, Function<BlockEntity, Container> inventory) { }
+    private record Provider(Supplier<? extends Block> block, java.util.function.Predicate<Block> accepts,
+                            Function<BlockEntity, Container> inventory) { }
     private static final Provider CHEST = new Provider(() -> Blocks.CHEST,
+            block -> block instanceof net.minecraft.world.level.block.ChestBlock,
             entity -> entity instanceof ChestBlockEntity chest ? chest : null);
     private static final Provider BENCH = new Provider(PaleMirrorProductionStations.BENCH,
+            block -> block == PaleMirrorProductionStations.BENCH.get(),
             entity -> entity instanceof ProductionBenchBlockEntity bench ? bench : null);
     private static final Map<ContainerPurpose, Provider> PROVIDERS = Map.of(
             ContainerPurpose.UNSCOPED, CHEST, ContainerPurpose.SETTLEMENT_DEPOT, CHEST,
@@ -38,10 +41,12 @@ final class FrontierV3FixedContainerProviders {
         return provider;
     }
     static Block block(ContainerRecord record) { return require(record).block().get(); }
+    static boolean acceptsBlock(ContainerRecord record, net.minecraft.world.level.block.state.BlockState state) {
+        return require(record).accepts().test(state.getBlock());
+    }
     static Optional<FrontierV3PhysicalContainer> inspect(ServerLevel level, BlockPos pos, ContainerRecord record) {
         if (!level.hasChunkAt(pos)) return Optional.empty();
-        var provider = require(record);
-        if (!level.getBlockState(pos).is(provider.block().get())) return Optional.empty();
+        if (!acceptsBlock(record, level.getBlockState(pos))) return Optional.empty();
         var entity = level.getBlockEntity(pos);
         if (entity == null) return Optional.empty();
         return observed(entity, record);

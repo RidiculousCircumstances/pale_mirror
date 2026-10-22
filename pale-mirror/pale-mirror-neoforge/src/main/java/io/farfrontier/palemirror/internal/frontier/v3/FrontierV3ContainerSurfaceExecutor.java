@@ -146,9 +146,9 @@ final class FrontierV3ContainerSurfaceExecutor {
             // player/world evidence and is never overwritten.
             if (chest.isEmpty()) {
                 if (!restorePreparedOwnedEmptyChest(chest, state, surface.containerId())) reportConflict(runtime, surface.containerId());
-                else activateAndConfirm(runtime, surface, physical);
+                else activateAndConfirm(level, runtime, surface, physical);
             } else if (!matchesCanonicalSlotsOrPendingProductionOutput(chest, state, surface.containerId())) reportConflict(runtime, surface.containerId());
-            else activateAndConfirm(runtime, surface, physical);
+            else activateAndConfirm(level, runtime, surface, physical);
             return;
         }
         if (level.getBlockState(target).isAir()) {
@@ -159,7 +159,7 @@ final class FrontierV3ContainerSurfaceExecutor {
         }
         physical = claimFreshFixed(level, target, state, surface);
         if (physical == null || !writeCanonicalSlots(physical.inventory(), state, surface.containerId())) reportConflict(runtime, surface.containerId());
-        else activateAndConfirm(runtime, surface, physical);
+        else activateAndConfirm(level, runtime, surface, physical);
     }
 
     private static void resumePrepared(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId id) {
@@ -172,16 +172,16 @@ final class FrontierV3ContainerSurfaceExecutor {
     /** Retire our exact observed write fence before this same loaded chest can disappear. */
     static void activateAndConfirm(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                           ContainerSurface surface, ChestBlockEntity chest) {
-        activateAndConfirm(runtime, surface, FrontierV3PhysicalContainer.observedChest(surface.containerId(), chest));
+        activateAndConfirm((ServerLevel) chest.getLevel(), runtime, surface, FrontierV3PhysicalContainer.observedChest(surface.containerId(), chest));
     }
-    private static void activateAndConfirm(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    private static void activateAndConfirm(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                            ContainerSurface surface, FrontierV3PhysicalContainer physical) {
         if (!transition(runtime, surface.containerId(), ContainerSurfaceStatus.ACTIVE)) return;
         FrontierWorldState current = state(runtime);
         if (current == null || !ReferenceContainerCustody.isReferenceContainer(current, surface.containerId())) return;
         var lease = current.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(surface.containerId()));
         if (lease != null && lease.status() == io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLeaseStatus.PREPARING)
-            FrontierV3ReferenceContainerCustodyExecutor.reconcilePreparedProjection(runtime, current, lease, physical);
+            FrontierV3ReferenceContainerCustodyExecutor.reconcilePreparedProjection(level, runtime, current, lease, physical);
     }
 
     /** Initial installation uses the exact declared provider and existing durable projection. */
@@ -424,6 +424,10 @@ final class FrontierV3ContainerSurfaceExecutor {
         return transition(runtime, containerId, ContainerSurfaceStatus.CONFLICT);
     }
 
+    static CommandResult reportConflictResult(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId containerId) {
+        return transitionResult(runtime, containerId, ContainerSurfaceStatus.CONFLICT);
+    }
+
     static Readiness readiness(ServerLevel level, FrontierWorldState state, SubjectId containerId) {
         ContainerSurface surface = state.inventory().surfaces().get(containerId);
         if (surface == null) return new Readiness("UNKNOWN_CONTAINER", "", "", "", "", "", "", false, false, 0, 0);
@@ -539,13 +543,18 @@ final class FrontierV3ContainerSurfaceExecutor {
 
     private static boolean transition(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId containerId,
                                       ContainerSurfaceStatus status) {
+        return transitionResult(runtime, containerId, status) instanceof CommandResult.Accepted;
+    }
+
+    private static CommandResult transitionResult(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId containerId,
+                                                   ContainerSurfaceStatus status) {
         io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         CommandId commandId = new CommandId("executor:surface-" + status.name().toLowerCase(java.util.Locale.ROOT)
                 + "-" + containerId.value().replace(':', '-'));
         CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId),
                 new ContainerSurfaceTransition(containerId, status))).orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        return result instanceof CommandResult.Accepted;
+        return result;
     }
 
     private static BlockPos position(ContainerSurface surface) {

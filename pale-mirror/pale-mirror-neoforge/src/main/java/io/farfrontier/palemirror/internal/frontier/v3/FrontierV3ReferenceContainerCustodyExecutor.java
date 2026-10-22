@@ -127,7 +127,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                         // A new attachment may unload between its durable write and the
                         // first discovery turn. The verified serialized inventory closes
                         // that SAME projection; it never rewrites or invents its contents.
-                        if (confirmSavedAttachmentProjection(runtime, state, lease, attached))
+                        if (confirmSavedAttachmentProjection(level, runtime, state, lease, attached))
                             rememberCurrentProcessObservation(level, runtime.decodedState().orElseThrow()
                                     .replicaCustody().custodyByScope().get(lease.scopeId()));
                         return;
@@ -159,8 +159,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 // its saved physical split into an unexplainable COLD mismatch before its
                 // naturally loaded recovery visit.  Retain only a current, same-epoch binding;
                 // stale or unbound scopes keep the ordinary bounded drain path.
-                if (retainsUnobservedRestartFungibleHot(observedCustodyEpochs(level),
-                        state.inventory().fungibleResources(), lease)) continue;
+                if (retainsUnobservedRestartFungibleHot(level, state, lease)) continue;
                 drain(runtime, lease, "unloaded");
                 return;
             }
@@ -229,7 +228,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                             || physical.declaration().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY).isBlank()
                                 && physical.declaration().getString(REPLICA_PROVENANCE_KEY).isBlank()))
                     writeAndConfirmProjection(level, runtime, state, containerId, physical);
-                else if (reconcilePreparedProjection(runtime, state, projectionLease, physical))
+                else if (reconcilePreparedProjection(level, runtime, state, projectionLease, physical))
                     activateMobileProjection(runtime, state, containerId);
             } else if (surface.status() == ContainerSurfaceStatus.ACTIVE && stableLoadedObservation(level, containerId, physical)) {
                 resumePreparedProjection(level, runtime, state, projectionLease, physical);
@@ -247,7 +246,8 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         // That short normal-world lifecycle window is neither missing evidence nor foreign
         // evidence; wait until the exact block entity can be classified.  A non-chest block
         // with no entity is still actual missing evidence below.
-        if (surface.fixed() && physical == null && level.getBlockState(position(state, surface)).is(Blocks.CHEST)) {
+        if (surface.fixed() && physical == null && FrontierV3FixedContainerProviders.acceptsBlock(
+                state.inventory().containers().get(containerId), level.getBlockState(position(state, surface)))) {
             forgetAbsent(level, containerId);
             return;
         }
@@ -265,8 +265,11 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
             // Retain exact local uncertainty; never erase stock, invent drops or rebuild.
             if (lease != null && lease.live()
                     && !retainUnresolved(runtime, lease, PhysicalCustodyUnresolvedReason.PROVIDER_LOST)) return;
-            if (!FrontierV3ContainerSurfaceExecutor.reportConflict(runtime, containerId))
-                throw new IllegalStateException("confirmed missing container could not isolate its exact surface: " + containerId);
+            var result = FrontierV3ContainerSurfaceExecutor.reportConflictResult(runtime, containerId);
+            if (result instanceof CommandResult.Rejected rejected)
+                throw new IllegalStateException("confirmed missing container could not isolate its exact surface: "
+                        + containerId + ": " + rejected.rejection());
+            if (!(result instanceof CommandResult.Accepted)) return;
             io.farfrontier.palemirror.PaleMirrorMod.LOGGER.warn(
                     "PMV3_CONTAINER_PROVIDER_LOST container={} position={} replicaRevision={} custodyEpoch={} actualBlock={}",
                     containerId, position(state, surface), replica.replicaRevision(), lease == null ? 0 : lease.authorityEpoch(),
@@ -392,7 +395,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         if (lease == null) return false;
         if (lease.status() == PhysicalCustodyLeaseStatus.PREPARING) {
             var physical = FrontierV3PhysicalContainer.loaded(level, state, container).orElse(null);
-            if (physical == null || !reconcilePreparedProjection(runtime, state, lease, physical)) return false;
+            if (physical == null || !reconcilePreparedProjection(level, runtime, state, lease, physical)) return false;
             activateMobileProjection(runtime, state, container);
         }
         var confirmed = runtime.decodedState().orElseThrow();
@@ -403,7 +406,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
 
     /** Caller must have validated the exact body incarnation, residence, saved slots and
      * absence. This container owner accepts only the pending projection's actual image. */
-    static boolean confirmSavedAttachmentProjection(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    static boolean confirmSavedAttachmentProjection(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             FrontierWorldState state, PhysicalCustodyLease lease, FrontierV3StoredAttachedStorage saved) {
         if (!lease.equals(state.replicaCustody().custodyByScope().get(lease.scopeId()))
                 || lease.status() != PhysicalCustodyLeaseStatus.PREPARING
@@ -411,26 +414,26 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 || !lease.objectId().equals(saved.containerId())
                 || !(state.inventory().surfaces().get(saved.containerId()).location() instanceof ContainerLocation.Mobile))
             throw new IllegalArgumentException("saved attachment has a foreign or stale projection boundary");
-        if (!confirmProjectionObservation(runtime, state, lease, new Observed(saved.fingerprint(state), saved.provenance())))
+        if (!confirmProjectionObservation(level, runtime, state, lease, new Observed(saved.fingerprint(state), saved.provenance())))
             return false;
         activateMobileProjection(runtime, state, saved.containerId());
         return ReferenceContainerCustody.hasOperationalCustody(runtime.decodedState().orElseThrow(), saved.containerId());
     }
 
     /** Only actual loaded slots may confirm or conflict the already durable write fence. */
-    static boolean reconcilePreparedProjection(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
+    static boolean reconcilePreparedProjection(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                                PhysicalCustodyLease lease, ChestBlockEntity chest) {
-        return reconcilePreparedProjection(runtime, state, lease, chest == null ? null
+        return reconcilePreparedProjection(level, runtime, state, lease, chest == null ? null
                 : FrontierV3PhysicalContainer.observedChest(lease.objectId(), chest));
     }
 
-    static boolean reconcilePreparedProjection(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    static boolean reconcilePreparedProjection(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                        FrontierWorldState state, PhysicalCustodyLease lease,
                                                        FrontierV3PhysicalContainer physical) {
-        return confirmProjectionObservation(runtime, state, lease, observedContainer(state, lease.objectId(), physical));
+        return confirmProjectionObservation(level, runtime, state, lease, observedContainer(state, lease.objectId(), physical));
     }
 
-    private static boolean confirmProjectionObservation(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    private static boolean confirmProjectionObservation(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                         FrontierWorldState state, PhysicalCustodyLease lease, Observed actual) {
         PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(lease.objectId());
         if (replica.fingerprint().equals(actual.fingerprint()) && replica.provenance().equals(actual.provenance())) {
@@ -439,7 +442,17 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                             lease.expectedReplicaRevision(), actual.fingerprint(), actual.provenance()));
             if (result instanceof CommandResult.Rejected)
                 throw new IllegalStateException("exact reference projection observation rejected: " + result);
-            runtime.afterCommand(result, () -> activateMobileProjection(runtime, state, lease.objectId()));
+            runtime.afterCommand(result, () -> {
+                var confirmed = runtime.decodedState().orElseThrow();
+                var current = confirmed.replicaCustody().custodyByScope().get(lease.scopeId());
+                // The physical witness was captured before submitting. A disk wait must
+                // not turn this process's exact observation into "unseen after restart"
+                // when the chunk unloads before the next discovery visit.
+                if (current != null && current.authorityEpoch() == lease.authorityEpoch()
+                        && ReferenceContainerCustody.hasOperationalCustody(confirmed, lease.objectId()))
+                    rememberCurrentProcessObservation(level, current);
+                activateMobileProjection(runtime, state, lease.objectId());
+            });
             return result instanceof CommandResult.Accepted;
         }
         if (lease.status() != PhysicalCustodyLeaseStatus.PREPARING) return false;
@@ -458,7 +471,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         if (lease.status() == PhysicalCustodyLeaseStatus.PREPARING
                 && replica.preparationPreimage().filter(before -> before.matches(actual.fingerprint(), actual.provenance())).isPresent()) {
             writeAndConfirmProjection(level, runtime, state, lease.objectId(), physical);
-        } else reconcilePreparedProjection(runtime, state, lease, physical);
+        } else reconcilePreparedProjection(level, runtime, state, lease, physical);
     }
 
     /** Record the actual write now; its durable confirmation may complete on a later turn. */
@@ -478,7 +491,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         physical.stampPreparedProjection();
         if (!FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(physical.inventory(), prepared, containerId))
             throw new IllegalStateException("reference projection could not write its prepared slot image: " + containerId);
-        if (!reconcilePreparedProjection(runtime, prepared, lease, physical)) return;
+        if (!reconcilePreparedProjection(level, runtime, prepared, lease, physical)) return;
         activateMobileProjection(runtime, prepared, containerId);
         FrontierWorldState confirmed = runtime.decodedState().orElseThrow();
         PhysicalCustodyLease current = confirmed.replicaCustody().custodyByScope().get(lease.scopeId());
@@ -587,6 +600,10 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 && resources.bindings().values().stream().anyMatch(binding -> binding.authorityEpoch() == lease.authorityEpoch()
                 && resources.accounts().get(binding.accountId()).custody() instanceof ResourceCustody.Container container
                 && container.containerId().equals(lease.objectId()));
+    }
+
+    static boolean retainsUnobservedRestartFungibleHot(ServerLevel level, FrontierWorldState state, PhysicalCustodyLease lease) {
+        return retainsUnobservedRestartFungibleHot(observedCustodyEpochs(level), state.inventory().fungibleResources(), lease);
     }
 
     static boolean requiresLoadedMutationConfirmation(PhysicalCustodyLease lease, PhysicalReplicaRecord replica,

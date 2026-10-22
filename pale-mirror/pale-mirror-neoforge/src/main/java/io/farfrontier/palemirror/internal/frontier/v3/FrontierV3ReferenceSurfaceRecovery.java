@@ -19,14 +19,14 @@ final class FrontierV3ReferenceSurfaceRecovery {
                 || FrontierV3ContainerSurfaceExecutor.supportReadiness(level, FrontierV3GrayboxLedger.get(level), position,
                     FrontierContainerSocketPlan.support(state, surface).orElse(null))
                     != FrontierV3ContainerSurfaceExecutor.SocketReadiness.READY) return false;
-        var chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, position, id);
-        if (chest == null) return false;
+        var physical = FrontierV3PhysicalContainer.loaded(level, state, id).orElse(null);
+        if (physical == null) return false;
         var binding = state.fencedRecovery().current().get(FencedRecoveryContainerSupport.bindingId(container));
         if (binding == null || binding.phase() != FencedRecoveryPhase.AMBIGUOUS) return false;
         var lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(id));
         var actual = lease != null && !lease.live()
-                ? FrontierV3ReferenceContainerCustodyExecutor.observedRetained(state, id, chest)
-                : FrontierV3ReferenceContainerCustodyExecutor.observed(state, id, chest);
+                ? FrontierV3ReferenceContainerCustodyExecutor.observedRetainedContainer(state, id, physical)
+                : FrontierV3ReferenceContainerCustodyExecutor.observedContainer(state, id, physical);
         var receipt = new ReferenceSurfaceVerified(id, replica.emittedCanonicalRevision(), replica.replicaRevision(),
                 binding.authorityEpoch(), actual.fingerprint(), actual.provenance());
         try { ReferenceSurfaceRecovery.verify(state, receipt); }

@@ -71,6 +71,7 @@ final class FrontierV3StorageAdoption {
         var policy = new ResourceStoragePolicy(endpoint, ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE);
         var container = new ContainerRecord(id, home.id(), chest.getContainerSize(), ContainerPurpose.RESOURCE_STORAGE,
                 Optional.empty(), Optional.of(policy));
+        if (!FrontierV3FixedContainerProviders.acceptsBlock(container, chest.getBlockState())) return false;
         var lots = new ArrayList<ResourceLot>();
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
             var item = chest.getItem(slot); if (item.isEmpty()) continue;
