@@ -27,8 +27,8 @@ Point ownership queries use the existing regional worksite view instead of
 rebuilding the full declared point index when one mine changes.
 
 Focused failure/cache/recovery checks and native affected checks are recorded in
-`build/r215-*`. Live ingress measurements remain pending until deployment;
-nonblocking submission alone is not a claim of shorter complete scene loading.
+`build/r215-*`. Nonblocking submission alone is not a claim of shorter complete
+scene loading; the measured results and their limits follow below.
 
 The first R215 live run at4412a14a passed both storage visits/re-entry, with zero
 retained conflicts. Clearwater visit6.7s, Ironmeadow target1.6s, re-entry0.3s:
@@ -57,6 +57,42 @@ Packed X/Z longs have strongly colliding boxed hashes. The index now uses a
 mixed-hash primitive-long map behind an unmodifiable Map view, preserving exact
 column keys, maximum declared heights and null for absent columns. The startup
 cost is separate from player-entry latency and must not be added to it.
+
+Final production code `fffc71c2`, clean detached package verified and deployed
+to `frontier-v3-r215-peak-repair-20261022`:
+
+- 75 focused storage/execution tests, 47 shared-storage native cases, 1 extraction
+  native case, 12 structural native cases; final 14 actor/budget/ceiling checks.
+  Guardrails and packaged-JAR verification passed. This is affected coverage,
+  not a new full-suite result.
+- Fresh storage run `21657915-cda5-4d8e-bea7-8c061a496f90`: zero retained
+  conflicts; visits6.8s/1.3s/re-entry0.0s. The first target chunk arrived around
+  12:25:04, while the software client compiled its centre mesh/closed loading
+  around12:25:08. The 6.8s includes rendering; it is NOT 6.8s of server blocking.
+  Three storage GUI frames inspected, but they are not inventory or economy
+  acceptance (immediate menu captures can precede slot packets).
+- `r215-peak-repair.jfr`: actor-stage maximum347.3->80.9ms versus the preceding
+  same-seed fresh scenario; structural projection maximum51.1ms. No server
+  keep-up warning during visits. Warm quiet64-turn mean2.0ms/max3.0ms PM,
+  mean2.2ms/max3.2ms through native PM-post. No ready backlog or deferred actors.
+- Fresh startup still has a1.94s PM invocation and one2.09s accumulated-lag
+  warning, before player connection. Profile shows eager planning-dependency
+  restoration and initial geometry in `PedestrianPlanning.tick`, before its
+  worker-advance budget starts. Column-index MapN clustering disappeared. The
+  startup planner boundary is a remaining separate optimization, not fixed by
+  the section/actor changes or disguised as chunk-sender time.
+- Graceful stop12:26:47 completed all-dimension saves; same-world restart,
+  deploy identity check and render scenario `f5033aa1-7551-4be2-974a-13fd3b7663ca`
+  completed with revision4637/instant3562 and zero required/inventory/scene/
+  custody conflicts. No keep-up warning in this process through the check.
+  Two inspected frames show loaded surroundings; the third still lacks neighbour
+  meshes at the short observation window, despite all3x3 chunk packets arriving.
+  This is persistence/ingress evidence, not full-render acceptance for all three
+  views. The pilot's `wait.ms` currently counts client ticks, so reported measured
+  wall timings, not its nominal wait setting, define these observations.
+
+No claim of instantaneous first loading or x30 capacity. Test client and capture
+are stopped after checks; current deployment remains running for manual testing.
 
 ## Initial chunk ingress (R214)
 
