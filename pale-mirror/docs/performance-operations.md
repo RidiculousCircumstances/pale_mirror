@@ -46,7 +46,34 @@ Field effect budgeting starts once at the first actual effect after bounded
 durable preparation, not before its disk wait; repeated calls in the same native
 tick share the count/time allowance. This removes a preparation-induced zero-work
 loop without raising operation ceilings or weakening durable-before-effect.
-Final native follow-up timing is pending.
+Final full-pack fresh-world follow-up at4d381880 measured6.5s for first
+Clearwater entry (previous19.3s) and0.9s to receive Ironmeadow's target chunk
+(previous visit11.1s). The second number is NOT complete scene rendering:
+the immediate GUI frame still had missing surrounding terrain. Evidence:
+`build/r214-batch-storage.json`, run3e461bc0-d1c4-4053-afd5-ea07594e9cce.
+
+The separate checked-in `live-settlement-ingress-render.json` scenario revisits
+two prepared settlements after a native graceful stop/restart and visits a third
+previously unvisited settlement. Run ca0270a7-cfd0-43b2-9c8b-b6b92eeea236 passed;
+all three captured scenes were personally inspected and contained terrain and
+buildings. Clearwater entry took4.8s after restart; Ironmeadow's centre arrived
+in0.2s, its3x3 packet neighbourhood and centre mesh were ready about2s later.
+The new third target arrived in0.9s; its3x3 packets and centre mesh followed
+about4s after teleport. Software-rendered neighbouring meshes continued compiling
+after those endpoints. Capture waits are observation windows, not render-time
+benchmarks; neither a centre mesh nor these views prove the entire view radius.
+Receipts: `build/r214-render-restart.json/log`, current artifact SHA512 beginning
+9ed28382bf0e8530. Final revision5920/instant4153 had zero retained required,
+inventory, scene or replica-custody conflicts. The client was disconnected.
+
+Focused native navigation42/42 and field19/19 checks passed, including current
+shape and partial-write recovery; detached packaging/guardrails passed. Earlier
+395/395 native checks remain evidence for unchanged boundaries. The aggregate
+check was interrupted in unchanged economic simulations and is not reported
+green. Residual2.1–2.3s server lag peaks occurred during ingress; this result is
+a measured removal of dominant repeated work, not an instantaneous-loading or
+large-world throughput guarantee. Same seed/profile/route were retained, but
+single-run cold/warm and JIT variation preclude a universal speedup claim.
 
 ## Regional extraction geometry (2026-10-21)
 
