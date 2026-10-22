@@ -25,7 +25,7 @@ public final class ProductionBenchBlockEntity extends BaseContainerBlockEntity {
         if (next.size() != SLOT_COUNT) throw new IllegalArgumentException("station inventory has wrong slot count");
         items = next;
     }
-    @Override protected Component getDefaultName() { return Component.translatable("container.pale_mirror.production_bench"); }
+    @Override protected Component getDefaultName() { return getBlockState().getBlock().getName(); }
     @Override protected AbstractContainerMenu createMenu(int id, Inventory player) {
         return new ProductionBenchMenu(id, player, this);
     }

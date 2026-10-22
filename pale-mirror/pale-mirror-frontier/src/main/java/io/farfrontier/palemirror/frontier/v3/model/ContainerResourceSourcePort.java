@@ -13,8 +13,7 @@ final class ContainerResourceSourcePort implements ResourceSourcePort {
     }
     @Override public void admit(FrontierWorldState state, ResourceSourceEndpoint source) {
         validate(state, source);
-        if (source instanceof ShipmentEndpoint.ProductionPort)
-            throw new IllegalArgumentException("declared machine receiving port cannot serve as a haul source");
+        ResourceSourceComposition.requireContainer(source).pickupPort();
     }
     @Override public boolean coldAvailable(FrontierWorldState state, ResourceSourceEndpoint source) {
         var id = ResourceSourceComposition.requireContainer(source).containerId();
@@ -24,6 +23,6 @@ final class ContainerResourceSourcePort implements ResourceSourcePort {
             ActorContainerItemOrder.Portion.Fungible portion, ActorItemSlot slot, long ordinal, long revision) {
         var endpoint = ResourceSourceComposition.requireContainer(source);
         return new ActorContainerItemOrder(owner, actor, ActorContainerItemOrder.Direction.TAKE, portion,
-                new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(endpoint.containerId()), endpoint.station(), slot, ordinal, revision);
+                endpoint.pickupPort(), endpoint.station(), slot, ordinal, revision);
     }
 }

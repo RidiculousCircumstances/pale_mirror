@@ -101,6 +101,12 @@ public record ProductionStations(Map<SubjectId, Machine> machines) {
             machine.operation().ifPresent(operation -> {
                 var recipe = catalog.require(operation.recipeId());
                 equipment.require(recipe);
+                if (operation.initiator() instanceof ProductionOperation.SettlementInitiator institution) {
+                    var record = inventory.containers().get(station.containerId());
+                    if (!institution.settlementId().equals(record.ownerId()) || !operation.orderId().equals(operation.id().value())
+                            || catalog.automaticPolicies().stream().noneMatch(policy -> policy.recipeId().equals(recipe.id())))
+                        throw new IllegalArgumentException("automatic station operation lost its explicit institution mandate");
+                }
                 if (recipe.capability() != station.capability() || recipe.outputForInput(operation.inputQuantity()) != operation.outputQuantity()
                         || Math.multiplyExact(recipe.heatPerBatch(), operation.inputQuantity() / recipe.ingredient().quantity()) != operation.committedHeat())
                     throw new IllegalArgumentException("machine operation differs from its declared recipe");

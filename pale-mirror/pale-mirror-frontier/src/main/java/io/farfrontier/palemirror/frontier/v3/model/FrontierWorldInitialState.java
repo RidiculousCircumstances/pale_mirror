@@ -48,10 +48,13 @@ final class FrontierWorldInitialState {
                     .withStorage(new ResourceStoragePolicy(GoodsParticipantDeclarations.endpoint(settlement), ResourceStorageFilter.all(), 0, ResourceStorageRole.WAREHOUSE)));
         });
         bootstrap.settlements().forEach(settlement -> settlement.structures().stream()
-                .filter(structure -> structure.kind() == StructureKind.WORKSHOP).findFirst().ifPresent(workshop -> {
-                    ProductionStationSpec station = ProductionStationSpec.grayboxBakery(workshop);
+                .filter(structure -> ProductionFacilityLayout.supports(structure.kind())).forEach(workshop -> {
+                    ProductionStationSpec station = ProductionFacilityLayout.station(workshop);
                     containers.put(station.containerId(), new ContainerRecord(station.containerId(), settlement.id(), 3, ContainerPurpose.PRODUCTION_STATION,
                             java.util.Optional.of(station)));
+                    if (workshop.kind() == StructureKind.SMELTERY) {
+                        var storage = ProductionFacilityLayout.metalStorage(workshop); containers.put(storage.id(), storage);
+                    }
                 }));
         bootstrap.hive().organs().forEach(organ -> organ.containerId().ifPresent(container -> containers.put(container, new ContainerRecord(container, bootstrap.hive().id(), 27, ContainerPurpose.HIVE_STORE))));
         containers.put(FrontierRouteNetwork.MAINTENANCE_CONTAINER, new ContainerRecord(FrontierRouteNetwork.MAINTENANCE_CONTAINER, FrontierRouteNetwork.OWNER, 27, ContainerPurpose.ROUTE_MAINTENANCE));

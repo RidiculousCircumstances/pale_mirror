@@ -8,7 +8,7 @@ import java.util.*;
 /** One shared projection; no market-view recursion or family-specific dispatch in the coordinator. */
 public final class SettlementReservePlanning {
     private static final Map<ReserveSupplyPort.Key, ReserveSupplyPort> PORTS = register(List.of(
-            new NutritionReserveSupply(), new BakeryReserveSupply(), new FieldReserveSupply(), new ExtractionReserveSupply(), new LogisticsReserveSupply()));
+            new NutritionReserveSupply(), new BakeryReserveSupply(), new FieldReserveSupply(), new ExtractionReserveSupply(), new LogisticsReserveSupply(), new AutomaticStationReserveSupply()));
     private static final ImmutableInputView<Map<SubjectId, Map<String, Target>>> CACHE = new ImmutableInputView<>();
     private static final ImmutableInputView<Map<SubjectId, Basis>> BASIS = new ImmutableInputView<>();
     private record InstantKey(SubjectId home, long atTick) { }

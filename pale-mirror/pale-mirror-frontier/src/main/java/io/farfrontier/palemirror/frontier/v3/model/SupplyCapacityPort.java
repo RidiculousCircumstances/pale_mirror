@@ -6,7 +6,7 @@ import java.util.*;
 
 /** A production owner adapts its availability; the planner never reads concrete work state. */
 public interface SupplyCapacityPort {
-    enum Key { BAKERY, FIELD, EXTRACTION }
+    enum Key { BAKERY, FIELD, EXTRACTION, AUTOMATIC_STATIONS }
     Key key();
     List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home,
                                     Map<String, SupplyPlanner.Stock> stocks, SupplyPlanningWindow window);

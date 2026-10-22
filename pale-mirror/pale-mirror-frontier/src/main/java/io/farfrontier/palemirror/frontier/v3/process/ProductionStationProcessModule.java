@@ -9,11 +9,12 @@ import java.util.*;
 final class ProductionStationProcessModule implements FrontierWorldProcessModule {
     static final String REVIEW = "frontier.production_station.review";
     static final Set<String> TYPES = Set.of(ProductionStationFuelChanged.TYPE, ProductionStationProgressed.TYPE,
-            ProductionStationOperatorChanged.TYPE, ProductionStationRecipeChanged.TYPE, ProductionStationInstalled.TYPE, ProductionStationRetired.TYPE);
+            ProductionStationOperatorChanged.TYPE, ProductionStationRecipeChanged.TYPE, ProductionStationInstalled.TYPE, ProductionStationRetired.TYPE,
+            ProductionStationAutomaticStarted.TYPE);
     static final DeterministicProcessDescriptor DESCRIPTOR = new DeterministicProcessDescriptor("production-stations",
             TYPES, Set.of(REVIEW), TYPES, Set.of(ProductionStationFuelChanged.TYPE, ProductionStationProgressed.TYPE,
                     ProductionStationOperatorChanged.TYPE, ProductionStationRecipeChanged.TYPE, ProductionStationInstalled.TYPE, ProductionStationRetired.TYPE,
-                    "frontier.reference_mutation_closed",
+                    ProductionStationAutomaticStarted.TYPE, "frontier.reference_mutation_closed",
                     "kernel.schedule_rescheduled", "kernel.schedule_created", "kernel.schedule_cancelled"), TYPES);
     static ScheduledAction review(SubjectId id, long at) {
         return new ScheduledAction(new ScheduleId("schedule:station-" + UUID.nameUUIDFromBytes(
@@ -22,8 +23,8 @@ final class ProductionStationProcessModule implements FrontierWorldProcessModule
     @Override public List<ScheduledAction> initialSchedules(FrontierBootstrap bootstrap) {
         if (bootstrap.ruleset().production().recipes().stream().noneMatch(recipe -> recipe.heatPerBatch() > 0
                 || recipe.processingMode() == ProductionRecipe.ProcessingMode.AUTOMATIC)) return List.of();
-        return bootstrap.settlements().stream().flatMap(home -> home.structures().stream()).filter(facility -> facility.kind() == StructureKind.WORKSHOP)
-                .map(ProductionStationSpec::grayboxBakery).map(station -> review(station.id(), 1)).toList();
+        return bootstrap.settlements().stream().flatMap(home -> home.structures().stream()).filter(facility -> ProductionFacilityLayout.supports(facility.kind()))
+                .map(ProductionFacilityLayout::station).map(station -> review(station.id(), 1)).toList();
     }
     static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, SimInstant now) {
         if (!review(action.subject(), action.dueAt().ticks()).equals(action)) throw new IllegalArgumentException("foreign station review schedule");
@@ -31,6 +32,13 @@ final class ProductionStationProcessModule implements FrontierWorldProcessModule
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id())),
                     new ProposedEvent(action.subject(), new ProductionStationRetired(action.subject(), state.productionStations().require(action.subject()).revision())));
         var events = new ArrayList<ProposedEvent>();
+        var automatic = AutomaticStationProduction.offer(state, action.subject(), now.ticks());
+        if (automatic.isPresent()) {
+            events.add(new ProposedEvent(action.subject(), new ProductionStationAutomaticStarted(action.subject(),
+                    state.productionStations().require(action.subject()).revision(), automatic.orElseThrow().operation().recipeId(), now.ticks())));
+            events.add(new ProposedEvent(action.subject(), new ScheduleEffect.Rescheduled(action.id(), review(action.subject(), Math.addExact(now.ticks(), 20)))));
+            return List.copyOf(events);
+        }
         ProductionStationEnergy.next(state, action.subject()).filter(burn -> burn.authorityEpoch() == 0).ifPresent(burn ->
                 events.add(new ProposedEvent(action.subject(), new ProductionStationFuelChanged(
                         ProductionStationFuelChanged.Stage.COLD_CONSUMED, burn, List.of()))));
@@ -46,11 +54,12 @@ final class ProductionStationProcessModule implements FrontierWorldProcessModule
     @Override public FrontierWorldState reduce(FrontierWorldState state, FrontierEvent event) {
         return switch (event.payload()) {
             case ProductionStationFuelChanged changed -> ProductionStationEnergy.apply(state, event.subject(), changed);
+            case ProductionStationAutomaticStarted started -> AutomaticStationProduction.start(state, event.subject(), started);
             case ProductionStationProgressed changed -> ProductionStationProgressed.apply(state, event.subject(), changed);
             case ProductionStationOperatorChanged changed -> ProductionStationOperator.apply(state, event.subject(), changed);
             case ProductionStationRecipeChanged changed -> ProductionStationTransformation.apply(state, event.subject(), changed,
                     ProductionOperationCompletionComposition::completed);
-            case ProductionStationInstalled installed -> installed.apply(state, event.subject(), BakeryStationInstallation::installed);
+            case ProductionStationInstalled installed -> installed.apply(state, event.subject(), ProductionInstallationComposition::installed);
             case ProductionStationRetired retired -> retired.apply(state, event.subject());
             default -> throw new IllegalArgumentException("machine owner rejects undeclared event");
         };
@@ -85,7 +94,7 @@ final class ProductionStationProcessModule implements FrontierWorldProcessModule
                 }
                 case ProductionStationInstalled installed -> {
                     subject = installed.container().productionStation().orElseThrow().id();
-                    installed.apply(state, subject, BakeryStationInstallation::installed);
+                    installed.apply(state, subject, ProductionInstallationComposition::installed);
                     return new CommandPlan.Accepted(List.of(new ProposedEvent(subject, installed),
                             new ProposedEvent(subject, new ScheduleEffect.Created(review(subject, Math.addExact(command.submittedAt().ticks(), 1))))));
                 }

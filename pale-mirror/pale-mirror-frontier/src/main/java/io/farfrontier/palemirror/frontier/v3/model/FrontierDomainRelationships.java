@@ -259,6 +259,7 @@ public final class FrontierDomainRelationships {
             surface(ProductionOperation.class, "stationId", "orderId", "outputId"),
             surface(ProductionOperation.Id.class, "value"),
             surface(ProductionOperation.OrderInitiator.class, "orderId"),
+            surface(ProductionOperation.SettlementInitiator.class, "settlementId"),
             surface(ProductionOperation.ExactInput.class, "itemId"),
             surface(ProductionOperation.FungibleInput.class, "accountId", "lots", "claims"),
             surface(ProductionStations.Machine.class, "stationId"),

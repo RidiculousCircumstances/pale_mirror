@@ -10,7 +10,7 @@ public record ProductionStationSpec(SubjectId id, SubjectId facilityId, SubjectI
                                     Capability capability, SurfaceAnchor workerStation,
                                     SurfaceAnchor socketSurface, int inputSlot, int outputSlot, int fuelSlot) {
     public enum Capability {
-        BAKING(1);
+        BAKING(1), SMELTING(2);
 
         private final int wireTag;
         Capability(int wireTag) { this.wireTag = wireTag; }

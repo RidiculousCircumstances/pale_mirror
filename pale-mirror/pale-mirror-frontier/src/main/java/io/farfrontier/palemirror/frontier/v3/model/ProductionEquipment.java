@@ -11,6 +11,7 @@ public record ProductionEquipment(Id id, String portableItemKind,
         public Id { ProductionRecipe.requireItemKey(value); }
     }
     public static final Id BENCH = new Id("pale_mirror:production_bench");
+    public static final Id SMELTER = new Id("pale_mirror:smelter");
     public ProductionEquipment {
         Objects.requireNonNull(id); ProductionRecipe.requireItemKey(portableItemKind);
         capabilities = Set.copyOf(Objects.requireNonNull(capabilities));
@@ -30,5 +31,9 @@ public record ProductionEquipment(Id id, String portableItemKind,
         return new ProductionEquipment(BENCH, "pale_mirror:production_bench",
                 Set.of(ProductionStationSpec.Capability.BAKING), Set.of(ProductionRecipe.ProcessingMode.ATTENDED,
                         ProductionRecipe.ProcessingMode.AUTOMATIC));
+    }
+    public static ProductionEquipment smelter() {
+        return new ProductionEquipment(SMELTER, "pale_mirror:smelter",
+                Set.of(ProductionStationSpec.Capability.SMELTING), Set.of(ProductionRecipe.ProcessingMode.AUTOMATIC));
     }
 }

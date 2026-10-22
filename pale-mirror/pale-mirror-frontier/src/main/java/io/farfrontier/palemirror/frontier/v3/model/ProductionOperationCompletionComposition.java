@@ -34,18 +34,21 @@ public final class ProductionOperationCompletionComposition {
         return switch (operation.initiator()) {
             case ProductionOperation.OrderInitiator order -> port(before, operation, order).completed(before, operation);
             case ProductionOperation.PlayerInitiator ignored -> FrontierWorldStateUpdate.begin();
+            case ProductionOperation.SettlementInitiator ignored -> FrontierWorldStateUpdate.begin();
         };
     }
     static FungibleForfeitureSettlement inputLost(FrontierWorldState before, ProductionOperation operation, FungibleForfeitureSettlement transaction) {
         return switch (operation.initiator()) {
             case ProductionOperation.OrderInitiator order -> port(before, operation, order).inputLost(before, operation, transaction);
             case ProductionOperation.PlayerInitiator ignored -> transaction;
+            case ProductionOperation.SettlementInitiator ignored -> transaction;
         };
     }
     static java.util.List<SourceStockClaimLossOwner.ReleasedActivity> released(FrontierWorldState before, ProductionOperation operation) {
         return switch (operation.initiator()) {
             case ProductionOperation.OrderInitiator order -> port(before, operation, order).released(before, operation);
             case ProductionOperation.PlayerInitiator ignored -> java.util.List.of();
+            case ProductionOperation.SettlementInitiator ignored -> java.util.List.of();
         };
     }
 }

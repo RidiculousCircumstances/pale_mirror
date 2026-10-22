@@ -17,7 +17,10 @@ public record Settlement(
         residents = List.copyOf(residents);
         structures = List.copyOf(structures);
         if (residents.size() < 20 || residents.size() > 40) throw new IllegalArgumentException("settlement must start with 20 to 40 residents");
-        if (structures.size() != StructureKind.values().length) throw new IllegalArgumentException("settlement must have one structure for each bootstrap function");
+        var kinds = structures.stream().map(SettlementStructure::kind).collect(java.util.stream.Collectors.toSet());
+        if (kinds.size() != structures.size() || !kinds.containsAll(java.util.Set.of(StructureKind.HALL,
+                StructureKind.HOUSING, StructureKind.FARM, StructureKind.WORKSHOP, StructureKind.DEPOT, StructureKind.INFIRMARY)))
+            throw new IllegalArgumentException("settlement requires unique facilities and its core bootstrap functions");
         if (residents.stream().anyMatch(resident -> !id.equals(resident.settlementId()))
                 || structures.stream().anyMatch(structure -> !id.equals(structure.settlementId()))) {
             throw new IllegalArgumentException("settlement child ownership does not match");

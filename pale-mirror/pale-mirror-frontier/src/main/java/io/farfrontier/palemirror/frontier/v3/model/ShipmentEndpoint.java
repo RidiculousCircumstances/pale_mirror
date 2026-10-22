@@ -15,6 +15,7 @@ public sealed interface ShipmentEndpoint extends ResourceSourceEndpoint permits 
     default ActorContainerItemOrder.ContainerEndpoint receivingPort() {
         return new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(containerId());
     }
+    default ActorContainerItemOrder.ContainerEndpoint pickupPort() { return receivingPort(); }
     @Override default ResourceSourceEndpoint.Kind sourceKind() { return ResourceSourceEndpoint.Kind.CONTAINER; }
     @Override default ResourceCustody custody() { return new ResourceCustody.Container(containerId()); }
     @Override default java.util.Optional<SubjectId> container() { return java.util.Optional.of(containerId()); }
@@ -50,8 +51,6 @@ public sealed interface ShipmentEndpoint extends ResourceSourceEndpoint permits 
         public ProductionPort {
             Objects.requireNonNull(settlementId); Objects.requireNonNull(spec); Objects.requireNonNull(port);
             Objects.requireNonNull(exteriorApproach);
-            if (port == ActorContainerItemOrder.StationPort.OUTPUT)
-                throw new IllegalArgumentException("logistics cannot supply a machine output port");
         }
         @Override public Kind kind() { return Kind.PRODUCTION_PORT; }
         @Override public SubjectId containerId() { return spec.containerId(); }
@@ -61,6 +60,13 @@ public sealed interface ShipmentEndpoint extends ResourceSourceEndpoint permits 
             return this;
         }
         @Override public ActorContainerItemOrder.ContainerEndpoint receivingPort() {
+            if (port == ActorContainerItemOrder.StationPort.OUTPUT)
+                throw new IllegalArgumentException("logistics cannot supply a machine output port");
+            return new ActorContainerItemOrder.ContainerEndpoint.FungibleStation(spec, port);
+        }
+        @Override public ActorContainerItemOrder.ContainerEndpoint pickupPort() {
+            if (port != ActorContainerItemOrder.StationPort.OUTPUT)
+                throw new IllegalArgumentException("logistics cannot withdraw reserved machine inputs or fuel");
             return new ActorContainerItemOrder.ContainerEndpoint.FungibleStation(spec, port);
         }
     }

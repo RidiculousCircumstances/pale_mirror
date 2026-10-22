@@ -5,7 +5,7 @@ import java.util.*;
 /** Closed composition names owners; the stock policy does not inspect their job types or stages. */
 public final class StockSupplyComposition {
     private static final Map<StockSupplyPort.Key, StockSupplyPort> PORTS = register(List.of(
-            new BakeryStockSupply(), new HarvestStockSupply(), new ExtractionStockSupply(), new TradeStockSupply()));
+            new BakeryStockSupply(), new HarvestStockSupply(), new ExtractionStockSupply(), new TradeStockSupply(), new AutomaticStationStockSupply()));
     private static final ImmutableInputView<List<StockSupplyPort.Commitment>> VIEW = new ImmutableInputView<>();
     private StockSupplyComposition() { }
     /** Read one producer's promises without re-entering commercial consent/reserve calculations. */
@@ -25,7 +25,7 @@ public final class StockSupplyComposition {
         return Map.copyOf(result);
     }
     static List<StockSupplyPort.Commitment> pending(FrontierWorldState state) {
-        return VIEW.get(List.of(state.productionJobs(), state.resourceSites(), state.extractionSites(),
+        return VIEW.get(List.of(state.productionJobs(), state.productionStations(), state.resourceSites(), state.extractionSites(),
                 state.inventory(), state.companies().goodsTrade().contracts(), state.companies().goodsTrade().participants(),
                 state.humanPopulation(), LivingResidentStockView.counts(state), state.shipments(), state.bootstrap()), () -> {
             var result = new ArrayList<StockSupplyPort.Commitment>();

@@ -6,7 +6,7 @@ import java.util.*;
 
 /** Family-owned forecast facts, with no stock, route, job or financial mutation authority. */
 public interface ReserveSupplyPort {
-    enum Key { NUTRITION, BAKERY, FIELD, EXTRACTION, LOGISTICS }
+    enum Key { NUTRITION, BAKERY, FIELD, EXTRACTION, LOGISTICS, AUTOMATIC_STATIONS }
     record Facts(Map<String, Need> needs, List<Flow> flows, Map<String, Timing> timing) {
         public Facts { needs = Map.copyOf(needs); flows = List.copyOf(flows); timing = Map.copyOf(timing); }
     }

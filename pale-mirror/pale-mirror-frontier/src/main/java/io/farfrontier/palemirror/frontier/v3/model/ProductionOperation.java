@@ -10,7 +10,11 @@ public record ProductionOperation(Id id, SubjectId stationId, SubjectId orderId,
                                   ProductionRecipe.Id recipeId, InputCustody inputCustody, SubjectId outputId,
                                   int inputQuantity, int outputQuantity, long committedHeat,
                                   Optional<WorkProgress> progress, boolean transformed, Initiator initiator) {
-    public sealed interface Initiator permits OrderInitiator, PlayerInitiator { }
+    public sealed interface Initiator permits OrderInitiator, PlayerInitiator, SettlementInitiator { }
+    /** Explicit institution mandate; the station owns the operation, not a retained worker/job. */
+    public record SettlementInitiator(SubjectId settlementId) implements Initiator {
+        public SettlementInitiator { Objects.requireNonNull(settlementId); }
+    }
     public record OrderInitiator(ProductionOrderKind kind, SubjectId orderId) implements Initiator {
         public OrderInitiator { Objects.requireNonNull(kind); Objects.requireNonNull(orderId); }
     }

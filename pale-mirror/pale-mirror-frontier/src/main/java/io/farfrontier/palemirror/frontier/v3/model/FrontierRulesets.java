@@ -55,6 +55,7 @@ public final class FrontierRulesets {
     private static final FrontierRuleset PREVIOUS_DYNAMIC_FARMING_GRAYBOX = dynamicFarming(MARKET_QUARRY_GRAYBOX);
     private static final FrontierRuleset DYNAMIC_FARMING_GRAYBOX = higherFuelDemand(PREVIOUS_DYNAMIC_FARMING_GRAYBOX);
     private static final FrontierRuleset MINERAL_DEPOSITS_GRAYBOX = ironDeposits(DYNAMIC_FARMING_GRAYBOX);
+    private static final FrontierRuleset SMELTING_GRAYBOX = smelting(MINERAL_DEPOSITS_GRAYBOX);
     /** Existing worlds retain their exact selector and timing; they are never silently retuned. */
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R6 = ruleset("frontier-v3-production-r6", 8, 1L, 20L, 1L);
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R4 = ruleset("frontier-v3-production-r4", 6, 1L, 20L, 1L);
@@ -69,6 +70,7 @@ public final class FrontierRulesets {
     private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L, 200L);
     private static final Map<String, FrontierRuleset> INSTALLED = Map.ofEntries(
             Map.entry(MINERAL_DEPOSITS_GRAYBOX.id(), MINERAL_DEPOSITS_GRAYBOX),
+            Map.entry(SMELTING_GRAYBOX.id(), SMELTING_GRAYBOX),
             Map.entry(DYNAMIC_FARMING_GRAYBOX.id(), DYNAMIC_FARMING_GRAYBOX),
             Map.entry(PREVIOUS_DYNAMIC_FARMING_GRAYBOX.id(), PREVIOUS_DYNAMIC_FARMING_GRAYBOX),
             Map.entry(MARKET_QUARRY_GRAYBOX.id(), MARKET_QUARRY_GRAYBOX),
@@ -109,6 +111,35 @@ public final class FrontierRulesets {
     public static FrontierRuleset marketQuarryGraybox() { return MARKET_QUARRY_GRAYBOX; }
     public static FrontierRuleset dynamicFarmingGraybox() { return DYNAMIC_FARMING_GRAYBOX; }
     public static FrontierRuleset mineralDepositsGraybox() { return MINERAL_DEPOSITS_GRAYBOX; }
+    public static FrontierRuleset smeltingGraybox() { return SMELTING_GRAYBOX; }
+
+    private static FrontierRuleset smelting(FrontierRuleset base) {
+        var id = new ProductionRecipe.Id("pale_mirror:iron_smelting");
+        var recipes = new java.util.ArrayList<>(base.production().recipes());
+        recipes.add(new ProductionRecipe(id, ProductionStationSpec.Capability.SMELTING,
+                new ProductionRecipe.Ingredient(java.util.Set.of("minecraft:raw_iron"), 1),
+                new ProductionRecipe.Product("minecraft:iron_ingot", 1), 200, ProductionRecipe.ProcessingMode.AUTOMATIC));
+        var equipment = new java.util.ArrayList<>(base.production().equipment()); equipment.add(ProductionEquipment.smelter());
+        var production = new ProductionCatalog(recipes, base.production().fuels(), equipment,
+                java.util.List.of(new ProductionCatalog.AutomaticPolicy(id, 64, 8)));
+        var policies = new java.util.EnumMap<GoodsPolicyKind, java.util.List<GoodsTradeRules.Commodity>>(GoodsPolicyKind.class);
+        policies.putAll(base.goodsTrade().policies());
+        var commodities = new java.util.ArrayList<>(policies.get(GoodsPolicyKind.PUBLIC_SETTLEMENT));
+        commodities.add(new GoodsTradeRules.Commodity("minecraft:iron_ingot", 0, 0, FixedScalar.whole(3), FixedScalar.whole(5)));
+        policies.put(GoodsPolicyKind.PUBLIC_SETTLEMENT, java.util.List.copyOf(commodities));
+        var prior = base.goodsTrade().supplyPlanning(); var supplies = new java.util.HashMap<>(prior.commodities());
+        supplies.put("minecraft:iron_ingot", new io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPolicy(500, 64, 64, 12000, 12000, false));
+        var planning = new io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanningRules(supplies,
+                prior.maximumOrderItems(), prior.workCargoSlots(), prior.personalFoodItems(), prior.maximumTripCargoStacks(),
+                prior.reserves(), prior.sourcing(), prior.economics());
+        var trade = new GoodsTradeRules(base.goodsTrade().reviewInterval(), base.goodsTrade().orderLifetime(),
+                base.goodsTrade().maximumBatch(), base.goodsTrade().maximumPairReviews(), policies, planning, base.goodsTrade().pricing());
+        return new FrontierRuleset("frontier-v3-quarry-graybox-r24", base.schemaVersion(), base.cadence(), base.spatial(), base.rates(),
+                base.facilityCapacity(), base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
+                base.workCatalog().withDefinition(new WorkCatalog.Definition("minecraft:iron_ingot", WorkOperation.PRODUCE,
+                        HumanCapability.INDUSTRY, 200)), trade, base.initialSettlementStocks(), base.labour(), base.expedition(),
+                base.extraction(), base.execution(), production, base.fields());
+    }
 
     /** Finite iron sources, not a stock grant or a reason to manufacture demand.
      * Existing coal installations remain unchanged; every second mining town

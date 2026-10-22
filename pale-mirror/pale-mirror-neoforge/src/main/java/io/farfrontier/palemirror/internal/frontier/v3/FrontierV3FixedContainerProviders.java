@@ -32,7 +32,11 @@ final class FrontierV3FixedContainerProviders {
             ContainerPurpose.HIVE_STORE, CHEST,
             ContainerPurpose.EXTRACTIVE_STORAGE, CHEST, ContainerPurpose.ROUTE_MAINTENANCE, CHEST,
             ContainerPurpose.RESOURCE_STORAGE, CHEST);
-    private static final Map<ProductionEquipment.Id, Provider> EQUIPMENT = Map.of(ProductionEquipment.BENCH, BENCH);
+    private static final Provider SMELTER = new Provider(PaleMirrorProductionStations.SMELTER,
+            block -> block == PaleMirrorProductionStations.SMELTER.get(),
+            entity -> entity instanceof ProductionBenchBlockEntity bench ? bench : null);
+    private static final Map<ProductionEquipment.Id, Provider> EQUIPMENT = Map.of(
+            ProductionEquipment.BENCH, BENCH, ProductionEquipment.SMELTER, SMELTER);
     private FrontierV3FixedContainerProviders() { }
     private static Provider require(ContainerRecord record) {
         var provider = record.purpose() == ContainerPurpose.PRODUCTION_STATION
@@ -41,6 +45,11 @@ final class FrontierV3FixedContainerProviders {
         return provider;
     }
     static Block block(ContainerRecord record) { return require(record).block().get(); }
+    static Block equipmentBlock(ProductionEquipment.Id equipment) {
+        var provider = EQUIPMENT.get(equipment);
+        if (provider == null) throw new IllegalArgumentException("unsupported equipment " + equipment);
+        return provider.block().get();
+    }
     static boolean acceptsBlock(ContainerRecord record, net.minecraft.world.level.block.state.BlockState state) {
         return require(record).accepts().test(state.getBlock());
     }

@@ -46,9 +46,15 @@ class ProductionStationOperatorTest {
                 state.bootstrap().ruleset().production().equipment());
         var operation = state.productionStations().require(fixture.station().id()).operation().orElseThrow();
         var work = state.bootstrap().ruleset().workCatalog();
-        var running = ProductionStationClock.next(catalog, work, operation, 200, Optional.empty());
+        // A new automatic recipe starts a new clock; never reinterpret retained attended work.
+        var machineOperation = new ProductionOperation(operation.id(), operation.stationId(), operation.orderId(), operation.recipeId(),
+                operation.inputCustody(), operation.outputId(), operation.inputQuantity(), operation.outputQuantity(), operation.committedHeat(),
+                Optional.empty(), false, operation.initiator());
+        var running = ProductionStationClock.next(catalog, work, machineOperation, 200, Optional.empty());
         assertTrue(running.running());
-        var complete = ProductionStationClock.next(catalog, work, operation.withProgress(running), 1_800, Optional.empty());
+        long finish = 200 + work.require(automatic.product().itemKind(), WorkOperation.PRODUCE).workUnits()
+                * (machineOperation.inputQuantity() / automatic.ingredient().quantity());
+        var complete = ProductionStationClock.next(catalog, work, machineOperation.withProgress(running), finish, Optional.empty());
         assertTrue(complete.complete());
         assertThrows(IllegalArgumentException.class, () -> ProductionStationClock.next(catalog, work, operation, 200,
                 Optional.of(new ProductionStationClock.Attendance(1_000, 240))));

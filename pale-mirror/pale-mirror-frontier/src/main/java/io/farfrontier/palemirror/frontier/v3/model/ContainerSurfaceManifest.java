@@ -17,9 +17,13 @@ final class ContainerSurfaceManifest {
                     surfaces.put(container, unmaterialized(container, SettlementDepotServicePort.forDepot(depot).containerPosition().offset(0, -1, 0)));
                 }));
         bootstrap.settlements().forEach(settlement -> settlement.structures().stream()
-                .filter(structure -> structure.kind() == StructureKind.WORKSHOP).findFirst().ifPresent(workshop -> {
-                    ProductionStationSpec station = ProductionStationSpec.grayboxBakery(workshop);
+                .filter(structure -> ProductionFacilityLayout.supports(structure.kind())).forEach(workshop -> {
+                    ProductionStationSpec station = ProductionFacilityLayout.station(workshop);
                     surfaces.put(station.containerId(), unmaterialized(station.containerId(), station.socketSurface().support()));
+                    if (workshop.kind() == StructureKind.SMELTERY) {
+                        var id = ProductionFacilityLayout.metalStorageId(workshop);
+                        surfaces.put(id, new ContainerSurface(id, ProductionFacilityLayout.metalStoragePosition(workshop), ContainerSurfaceStatus.UNMATERIALIZED));
+                    }
                 }));
         bootstrap.hive().organs().forEach(organ -> organ.containerId().ifPresent(container ->
                 surfaces.put(container, unmaterialized(container, organ.anchor()))));

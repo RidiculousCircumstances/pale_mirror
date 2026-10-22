@@ -18,6 +18,11 @@ final class FrontierV3ProductionStationDiagnosticJson {
             return "{\"id\":" + string(value.id().value().value()) + ",\"order\":" + string(value.orderId().value())
                     + ",\"recipe\":" + string(value.recipeId().value()) + ",\"mode\":"
                     + string(state.bootstrap().ruleset().production().require(value.recipeId()).processingMode().name())
+                    + ",\"initiator\":" + string(switch (value.initiator()) {
+                        case ProductionOperation.OrderInitiator ignored -> "ORDER";
+                        case ProductionOperation.PlayerInitiator ignored -> "PLAYER";
+                        case ProductionOperation.SettlementInitiator ignored -> "SETTLEMENT";
+                    })
                     + ",\"playerAttendanceIntent\":" + (value.initiator() instanceof ProductionOperation.PlayerInitiator player
                             ? string(player.attendanceIntent().name()) : "null")
                     + ",\"inputQuantity\":" + value.inputQuantity() + ",\"outputQuantity\":" + value.outputQuantity()

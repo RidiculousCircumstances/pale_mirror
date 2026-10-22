@@ -77,7 +77,7 @@ public final class ProductionStationTransformation {
         }
         inventory = ProductionStationProcessing.reserveOutput(inventory, operation, boundary.authorityEpoch());
         var finished = machine.completeRecipe(operation);
-        if (operation.initiator() instanceof ProductionOperation.PlayerInitiator) finished = finished.release(operation.id());
+        if (!(operation.initiator() instanceof ProductionOperation.OrderInitiator)) finished = finished.release(operation.id());
         return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory)
                 .productionStations(state.productionStations().with(finished)).merge(completion.completed(state, operation)));
     }

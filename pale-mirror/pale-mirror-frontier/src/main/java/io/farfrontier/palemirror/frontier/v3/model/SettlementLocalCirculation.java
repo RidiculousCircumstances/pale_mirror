@@ -78,14 +78,21 @@ public final class SettlementLocalCirculation {
         structures = List.copyOf(Objects.requireNonNull(structures, "settlement structures"));
         SettlementStructure depot = structures.stream().filter(value -> value.kind() == StructureKind.DEPOT)
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("settlement has no depot"));
-        SettlementStructure workshop = structures.stream().filter(value -> value.kind() == StructureKind.WORKSHOP)
-                .findFirst().orElseThrow(() -> new IllegalArgumentException("settlement has no workshop"));
         SurfaceAnchor publicRoute = SettlementAccessPort.forHall(structures.stream().filter(value -> value.kind() == StructureKind.HALL)
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("settlement has no Hall"))).routeSurface();
         SurfaceAnchor depotExterior = SettlementDepotServicePort.forDepot(depot).exteriorApproach();
-        SurfaceAnchor workshopExterior = SettlementWorkshopServicePort.forWorkshop(workshop).exteriorApproach();
-        return List.of(infirmarySidewalk(structures), manhattanWithFinalGrade(publicRoute, depotExterior),
-                manhattanWithFinalGrade(publicRoute, workshopExterior));
+        var branches = new ArrayList<List<SurfaceAnchor>>();
+        branches.add(infirmarySidewalk(structures)); branches.add(manhattanWithFinalGrade(publicRoute, depotExterior));
+        for (var facility : structures) if (ProductionFacilityLayout.supports(facility.kind())) {
+            var exterior = SettlementWorkshopServicePort.forWorkshop(facility).exteriorApproach();
+            branches.add(manhattanWithFinalGrade(publicRoute, exterior));
+            if (facility.kind() == StructureKind.SMELTERY) {
+                branches.add(manhattanWithFinalGrade(exterior, ProductionFacilityLayout.metalStorageStation(facility)));
+                branches.add(manhattanWithFinalGrade(ProductionFacilityLayout.metalStorageStation(facility),
+                        new SurfaceAnchor(ProductionFacilityLayout.metalStoragePosition(facility).offset(0, -1, 0))));
+            }
+        }
+        return List.copyOf(branches);
     }
 
     private static TraversalNodeId node(SurfaceAnchor surface) {

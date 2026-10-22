@@ -154,7 +154,7 @@ public final class FrontierReadabilityPlan {
         boolean caravan = state.shipments().shipments().values().stream().anyMatch(shipment -> !shipment.terminal());
         RouteConstruction construction = state.routeConstructions().values().stream()
                 .sorted(Comparator.comparing(RouteConstruction::id)).findFirst().orElse(null);
-        return new ReadabilityInput(state.bootstrap(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(),
+        return new ReadabilityInput(state.bootstrap(), state.structureConditions(), state.infection(), state.inventory(), state.productionJobs(), state.productionStations(),
                 state.hiveColony().addedOrgans(), state.physicalDeltas(), state.resourceSites(), state.routeTopology(), state.humanPopulation(),
                 state.companies(), state.hiveColony().mobilizations(), state.strategicPlans().objectives(), ambientLeaseStatuses(state),
                 new ActorConditionView(state.actorLocations()), routeDamaged, sceneConflict, caravan, construction);
@@ -169,7 +169,7 @@ public final class FrontierReadabilityPlan {
     /** Immutable equality key for the bounded physical board cursor. */
     public record ReadabilityInput(FrontierBootstrap bootstrap, Map<SubjectId, StructureCondition> structureConditions,
                                    Map<InfectionCell, io.farfrontier.palemirror.frontier.v3.api.FixedRatio> infection,
-                                   ExactInventory inventory, Map<SubjectId, ProductionJob> productionJobs,
+                                   ExactInventory inventory, Map<SubjectId, ProductionJob> productionJobs, ProductionStations productionStations,
                                    Map<SubjectId, HiveOrgan> addedOrgans, Map<BlockPosition, PhysicalDelta> physicalDeltas,
                                    ResourceSiteState resourceSites, RouteTopology routeTopology, HumanPopulation humanPopulation,
                                    CompanyRegistry companies, Map<SubjectId, HiveMobilization> mobilizations,
@@ -180,6 +180,7 @@ public final class FrontierReadabilityPlan {
             Objects.requireNonNull(bootstrap, "bootstrap"); Objects.requireNonNull(structureConditions, "structure conditions");
             Objects.requireNonNull(infection, "infection"); Objects.requireNonNull(inventory, "inventory");
             Objects.requireNonNull(productionJobs, "production jobs"); Objects.requireNonNull(addedOrgans, "added organs");
+            Objects.requireNonNull(productionStations, "production stations");
             Objects.requireNonNull(physicalDeltas, "physical deltas"); Objects.requireNonNull(resourceSites, "resource sites");
             Objects.requireNonNull(routeTopology, "route topology"); Objects.requireNonNull(humanPopulation, "human population");
             Objects.requireNonNull(companies, "companies"); Objects.requireNonNull(mobilizations, "hive mobilizations");
@@ -196,7 +197,7 @@ public final class FrontierReadabilityPlan {
         public boolean matchesStableBaseline(ReadabilityInput other) {
             Objects.requireNonNull(other, "readability input");
             return bootstrap == other.bootstrap && structureConditions == other.structureConditions && infection == other.infection
-                    && inventory == other.inventory && productionJobs == other.productionJobs && physicalDeltas == other.physicalDeltas
+                    && inventory == other.inventory && productionJobs == other.productionJobs && productionStations == other.productionStations && physicalDeltas == other.physicalDeltas
                     && resourceSites == other.resourceSites && routeTopology == other.routeTopology && humanPopulation == other.humanPopulation
                     && companies == other.companies && mobilizations == other.mobilizations && objectives == other.objectives
                     && ambientLeaseStatuses.equals(other.ambientLeaseStatuses) && actorConditions.equals(other.actorConditions)
@@ -316,12 +317,12 @@ public final class FrontierReadabilityPlan {
 
     private static BlockPosition structureBoardPosition(SettlementStructure structure, StructureCondition condition) {
         int depth = switch (structure.kind()) {
-            case HALL, FARM, WORKSHOP, DEPOT -> 7;
+            case HALL, FARM, WORKSHOP, SMELTERY, DEPOT -> 7;
             case HOUSING, INFIRMARY -> 6;
         };
         int height = condition == StructureCondition.DAMAGED ? 2 : switch (structure.kind()) {
             case HALL -> 5;
-            case DEPOT, WORKSHOP -> 4;
+            case DEPOT, WORKSHOP, SMELTERY -> 4;
             default -> 3;
         };
         return structure.anchor().offset(0, Math.max(2, height - 1), -depth / 2 - 1);
@@ -369,6 +370,7 @@ public final class FrontierReadabilityPlan {
             case HOUSING -> "HOMES";
             case FARM -> "FARM";
             case WORKSHOP -> "BAKERY";
+            case SMELTERY -> "SMELTERY";
             case DEPOT -> "DEPOT";
             case INFIRMARY -> "INFIRMARY";
         };
@@ -505,6 +507,8 @@ public final class FrontierReadabilityPlan {
         }
         if (structure.kind() == StructureKind.DEPOT) return conditionText(condition) + "\n" + foodText(state, settlement.id(), atTick);
         if (structure.kind() == StructureKind.WORKSHOP) return workshopText(state, settlement, condition);
+        if (structure.kind() == StructureKind.SMELTERY) return condition != StructureCondition.INTACT
+                ? conditionText(condition) : AutomaticStationReadability.text(state, structure, atTick);
         if (structure.kind() != StructureKind.HOUSING) return conditionText(condition);
         int residents = SettlementFacilityCapability.livingResidents(state, settlement.id());
         int beds = SettlementFacilityCapability.forStructure(state, structure).residentCapacity();

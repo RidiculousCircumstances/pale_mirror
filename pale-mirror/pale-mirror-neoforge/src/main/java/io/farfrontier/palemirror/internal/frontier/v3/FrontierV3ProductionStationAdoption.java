@@ -23,19 +23,19 @@ final class FrontierV3ProductionStationAdoption {
             finish(level, runtime, state, record); return;
         }
         for (var home : state.bootstrap().settlements()) for (var facility : home.structures()) {
-            if (facility.kind() != StructureKind.WORKSHOP || state.structureConditions().get(facility.id()) != StructureCondition.INTACT) continue;
-            var placement = ProductionStationSpec.grayboxBakery(facility);
+            if (!ProductionFacilityLayout.supports(facility.kind()) || state.structureConditions().get(facility.id()) != StructureCondition.INTACT) continue;
+            var placement = ProductionFacilityLayout.station(facility);
             var p = placement.socketSurface().support().offset(0, 1, 0); var pos = new BlockPos(p.x(), p.y(), p.z());
             if (level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4) == null
                     || state.inventory().surfaces().values().stream().filter(ContainerSurface::fixed)
                         .anyMatch(surface -> surface.status() != ContainerSurfaceStatus.RETIRED && surface.position().equals(p))
-                    || !level.getBlockState(pos).is(PaleMirrorProductionStations.BENCH.get())
+                    || !level.getBlockState(pos).is(FrontierV3FixedContainerProviders.equipmentBlock(placement.equipmentType()))
                     || !(level.getBlockEntity(pos) instanceof ProductionBenchBlockEntity bench)
                     || !bench.getPersistentData().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY).isBlank()
                     || !bench.getPersistentData().getString(FrontierV3ReferenceContainerCustodyExecutor.REPLICA_PROVENANCE_KEY).isBlank()) continue;
             var containerId = new SubjectId("container:installed-" + UUID.randomUUID());
             var spec = new ProductionStationSpec(new SubjectId("station:installed-" + UUID.randomUUID()), facility.id(), containerId,
-                    ProductionEquipment.BENCH, placement.capability(), placement.workerStation(), placement.socketSurface(),
+                    placement.equipmentType(), placement.capability(), placement.workerStation(), placement.socketSurface(),
                     ProductionBenchBlockEntity.INPUT, ProductionBenchBlockEntity.OUTPUT, ProductionBenchBlockEntity.FUEL);
             var slots = new HashMap<Integer, FungibleContainerLayout.Stack>(); var lots = new ArrayList<ResourceLot>(); boolean admissible = true;
             for (int slot = 0; slot < bench.getContainerSize(); slot++) {

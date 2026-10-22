@@ -58,6 +58,7 @@ public final class DiagnosticProducerContract {
         "frontier.production_station_recipe_changed",
         "frontier.production_station_installed",
         "frontier.production_station_retired",
+        "frontier.production_station_automatic_started",
         "frontier.container_player_edit_observed", "frontier.resource_storage_adopted", "frontier.resource_storage_declared", "frontier.resource_storage_policy_changed",
         "frontier.shipment_storage_retargeted", "frontier.ground_resource_destroyed", "frontier.ground_resource_player_withdrawal",
         "frontier.pedestrian_planning_ready",

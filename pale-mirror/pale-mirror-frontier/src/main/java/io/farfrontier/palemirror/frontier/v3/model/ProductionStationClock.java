@@ -20,8 +20,10 @@ public final class ProductionStationClock {
         var recipe = recipes.require(operation.recipeId());
         var definition = work.require(recipe.product().itemKind(), WorkOperation.PRODUCE);
         if (operation.transformed()) throw new IllegalArgumentException("completed output cannot accrue processing");
-        var prior = operation.progress().orElseGet(() -> WorkProgress.pending(definition.workUnits(), tick));
-        if (prior.requiredMilliWork() != Math.multiplyExact(definition.workUnits(), 1_000L))
+        long required = recipe.processingMode() == ProductionRecipe.ProcessingMode.AUTOMATIC
+                ? Math.multiplyExact(definition.workUnits(), operation.inputQuantity() / recipe.ingredient().quantity()) : definition.workUnits();
+        var prior = operation.progress().orElseGet(() -> WorkProgress.pending(required, tick));
+        if (prior.requiredMilliWork() != Math.multiplyExact(required, 1_000L))
             throw new IllegalArgumentException("station clock differs from its pinned work definition");
         var settled = prior.pause(tick);
         if (settled.complete()) return settled;

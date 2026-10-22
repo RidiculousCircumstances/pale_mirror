@@ -19,6 +19,7 @@ final class InternalShipmentPlanning {
                 || !SettlementLabourAllocation.canCommitToMission(state, worker.settlementId(), ResidentWorkKind.LOGISTICS, List.of(worker.id())))
             return Optional.empty();
         ResourceSourceComposition.admit(state, source); ShipmentEndpointComposition.validate(state, destination);
+        destination.receivingPort();
         var account = state.inventory().fungibleResources().accounts().values().stream()
                 .filter(value -> value.custody().equals(source.custody())).findFirst().orElse(null);
         if (account == null) return Optional.empty();

@@ -30,7 +30,7 @@ public record SettlementWorkshopServicePort(SubjectId settlementId, SubjectId wo
 
     public static SettlementWorkshopServicePort forWorkshop(SettlementStructure workshop) {
         Objects.requireNonNull(workshop, "settlement workshop");
-        if (workshop.kind() != StructureKind.WORKSHOP) throw new IllegalArgumentException("only a workshop owns a workshop service port");
+        if (!ProductionFacilityLayout.supports(workshop.kind())) throw new IllegalArgumentException("facility has no production service port");
         FacilityFacing facing = workshop.facing(); SurfaceAnchor center = new SurfaceAnchor(workshop.anchor());
         SurfaceAnchor interior = facing.step(center, 2); SurfaceAnchor throat = facing.step(center, 3);
         SurfaceAnchor approach = facing.step(center, 4); SurfaceAnchor exterior = facing.step(approach, 1);

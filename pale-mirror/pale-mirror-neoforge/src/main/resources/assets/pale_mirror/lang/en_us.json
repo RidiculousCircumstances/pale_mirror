@@ -1,4 +1,5 @@
 {
+  "block.pale_mirror.smelter": "Smelter",
   "block.pale_mirror.production_bench": "Production Bench",
   "container.pale_mirror.production_bench": "Production Bench",
   "container.pale_mirror.production_bench.start": "Start / resume",

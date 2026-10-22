@@ -36,6 +36,7 @@ final class ProductionStationsCodec {
                 case ProductionOperation.PlayerInitiator player -> {
                     out.writeByte(2); writeString(out, player.playerId().toString()); out.writeByte(player.attendanceIntent().wireTag());
                 }
+                case ProductionOperation.SettlementInitiator institution -> { out.writeByte(3); writeString(out, institution.settlementId().value()); }
             }
         }
     }
@@ -70,6 +71,7 @@ final class ProductionStationsCodec {
             case 1 -> new ProductionOperation.OrderInitiator(ProductionOrderKind.fromWireTag(in.readUnsignedByte()), new SubjectId(readString(in)));
             case 2 -> new ProductionOperation.PlayerInitiator(UUID.fromString(readString(in)),
                     ProductionOperation.PlayerAttendanceIntent.fromWireTag(in.readUnsignedByte()));
+            case 3 -> new ProductionOperation.SettlementInitiator(new SubjectId(readString(in)));
             default -> throw new IllegalArgumentException("unknown station operation initiator");
         };
     }

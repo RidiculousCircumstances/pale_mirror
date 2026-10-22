@@ -27,7 +27,7 @@ public final class SettlementStructureFootprint {
         switch (structure.kind()) {
             case HALL -> surfaces.addAll(SettlementAccessPort.forHall(structure).ownedSurfaces());
             case DEPOT -> surfaces.addAll(SettlementDepotServicePort.forDepot(structure).ownedAccessSurfaces());
-            case WORKSHOP -> surfaces.addAll(SettlementWorkshopServicePort.forWorkshop(structure).ownedAccessSurfaces());
+            case WORKSHOP, SMELTERY -> surfaces.addAll(SettlementWorkshopServicePort.forWorkshop(structure).ownedAccessSurfaces());
             case INFIRMARY -> surfaces.addAll(SettlementInfirmaryTreatmentPort.forInfirmary(structure).ownedAccessSurfaces());
             default -> { }
         }
@@ -64,13 +64,13 @@ public final class SettlementStructureFootprint {
 
     public static int width(StructureKind kind) {
         return switch (Objects.requireNonNull(kind, "structure kind")) {
-            case HALL, DEPOT -> 8; case FARM -> 9; case WORKSHOP, INFIRMARY -> 7; case HOUSING -> 6;
+            case HALL, DEPOT -> 8; case FARM -> 9; case WORKSHOP, SMELTERY, INFIRMARY -> 7; case HOUSING -> 6;
         };
     }
 
     public static int depth(StructureKind kind) {
         return switch (Objects.requireNonNull(kind, "structure kind")) {
-            case HALL, FARM, WORKSHOP, DEPOT -> 7; case HOUSING, INFIRMARY -> 6;
+            case HALL, FARM, WORKSHOP, SMELTERY, DEPOT -> 7; case HOUSING, INFIRMARY -> 6;
         };
     }
 }

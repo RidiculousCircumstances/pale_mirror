@@ -6,7 +6,19 @@ import java.util.Objects;
 import java.util.Set;
 
 /** Ruleset-pinned recipe and fuel properties. No inventories, jobs or machine state. */
-public record ProductionCatalog(List<ProductionRecipe> recipes, List<Fuel> fuels, List<ProductionEquipment> equipment) {
+public record ProductionCatalog(List<ProductionRecipe> recipes, List<Fuel> fuels, List<ProductionEquipment> equipment,
+                                List<AutomaticPolicy> automaticPolicies) {
+    /** Institution authorizes a recipe and bounded output reserve; equipment alone never implies an order. */
+    public record AutomaticPolicy(ProductionRecipe.Id recipeId, int outputReserve, int maximumBatches) {
+        public AutomaticPolicy {
+            Objects.requireNonNull(recipeId);
+            if (outputReserve < 0 || outputReserve > 4096 || maximumBatches < 1 || maximumBatches > 64)
+                throw new IllegalArgumentException("invalid automatic production policy");
+        }
+    }
+    public ProductionCatalog(List<ProductionRecipe> recipes, List<Fuel> fuels, List<ProductionEquipment> equipment) {
+        this(recipes, fuels, equipment, List.of());
+    }
     public record Fuel(String itemKind, long heatUnits) {
         public Fuel {
             ProductionRecipe.requireItemKey(itemKind);
@@ -18,12 +30,20 @@ public record ProductionCatalog(List<ProductionRecipe> recipes, List<Fuel> fuels
         recipes = List.copyOf(Objects.requireNonNull(recipes));
         fuels = List.copyOf(Objects.requireNonNull(fuels));
         equipment = List.copyOf(Objects.requireNonNull(equipment));
+        automaticPolicies = List.copyOf(Objects.requireNonNull(automaticPolicies));
         if (recipes.isEmpty() || recipes.size() > 256 || fuels.size() > 256
                 || recipes.stream().map(ProductionRecipe::id).distinct().count() != recipes.size()
                 || fuels.stream().map(Fuel::itemKind).distinct().count() != fuels.size()
                 || equipment.isEmpty() || equipment.size() > 256
                 || equipment.stream().map(ProductionEquipment::id).distinct().count() != equipment.size())
             throw new IllegalArgumentException("invalid closed production catalog");
+        if (automaticPolicies.size() > 256 || automaticPolicies.stream().map(AutomaticPolicy::recipeId).distinct().count() != automaticPolicies.size())
+            throw new IllegalArgumentException("duplicate automatic production policy");
+        for (var policy : automaticPolicies) {
+            var recipe = recipes.stream().filter(value -> value.id().equals(policy.recipeId())).findFirst().orElseThrow();
+            if (recipe.processingMode() != ProductionRecipe.ProcessingMode.AUTOMATIC)
+                throw new IllegalArgumentException("automatic policy requires automatic equipment processing");
+        }
     }
     public ProductionRecipe require(ProductionRecipe.Id id) {
         Objects.requireNonNull(id, "declared recipe identity");
@@ -44,7 +64,11 @@ public record ProductionCatalog(List<ProductionRecipe> recipes, List<Fuel> fuels
                 + "|" + fuels.stream().sorted(Comparator.comparing(Fuel::itemKind))
                 .map(fuel -> fuel.itemKind() + ":" + fuel.heatUnits()).collect(java.util.stream.Collectors.joining(";"))
                 + "|" + equipment.stream().sorted(Comparator.comparing(value -> value.id().value()))
-                .map(ProductionEquipment::canonicalText).collect(java.util.stream.Collectors.joining(";"));
+                .map(ProductionEquipment::canonicalText).collect(java.util.stream.Collectors.joining(";"))
+                + (automaticPolicies.isEmpty() ? "" : "|automatic:" + automaticPolicies.stream()
+                    .sorted(Comparator.comparing(policy -> policy.recipeId().value()))
+                    .map(policy -> policy.recipeId().value() + ":" + policy.outputReserve() + ":" + policy.maximumBatches())
+                    .collect(java.util.stream.Collectors.joining(";")));
     }
     /** Exact old balance for installed historical selectors; new heated profiles are explicit. */
     public static ProductionCatalog initial() {
