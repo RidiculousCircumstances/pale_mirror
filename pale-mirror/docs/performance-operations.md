@@ -30,6 +30,17 @@ Focused failure/cache/recovery checks and native affected checks are recorded in
 `build/r215-*`. Live ingress measurements remain pending until deployment;
 nonblocking submission alone is not a claim of shorter complete scene loading.
 
+The first R215 live run at4412a14a passed both storage visits/re-entry, with zero
+retained conflicts. Clearwater visit6.7s, Ironmeadow target1.6s, re-entry0.3s:
+no total-loading speedup claim versus R214. JFR `r215-live-ingress.jfr` contains
+no worksite-path server parks but exposes45 ordinary structural projection
+geology-fence waits totalling995ms. This second structural path had bypassed
+the shared planned-write batch used by first visibility. It now prepares one
+distinct bounded window through the same native adapter before projecting;
+actual block callbacks still recheck current permission. Before/after native
+storage protocol and force guarantees are unchanged. A broad NeoForge run was
+stopped in unchanged reference first-year simulation, not reported green.
+
 ## Initial chunk ingress (R214)
 
 The native sender retains Minecraft's pending membership, batch quota and actual

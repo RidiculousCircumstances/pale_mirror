@@ -6,8 +6,17 @@ import net.minecraft.server.level.ServerLevel;
 import java.util.List;
 
 /** Static intent translation only; registered mutation owners retain all knowledge/custody policy. */
-final class FrontierV3FirstVisibilityPreparation {
-    private FrontierV3FirstVisibilityPreparation() { }
+final class FrontierV3GrayboxPreparation {
+    private FrontierV3GrayboxPreparation() { }
+    /** One bounded distinct window; a circular cursor must not duplicate planned writes. */
+    static List<GrayboxCell> window(int limit, java.util.function.Supplier<java.util.Optional<GrayboxCell>> next) {
+        var selected = new java.util.LinkedHashSet<GrayboxCell>();
+        for (int count = 0; count < limit; count++) {
+            var cell = next.get().orElse(null);
+            if (cell == null || !selected.add(cell)) break;
+        }
+        return List.copyOf(selected);
+    }
     static void prepare(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             FrontierWorldState state, List<GrayboxCell> cells) {
         var writes = cells.stream().filter(cell -> !state.physicalDeltas().containsKey(cell.position()))

@@ -63,6 +63,7 @@ class FrontierV3AftermathOwnerSeamTest {
             TestPhysicalWorld world = new TestPhysicalWorld(cold, target.position());
             assertNull(world.claim(target.position()), "the physical ledger starts untouched");
             FrontierV3AftermathOwnerComposition.tick(world, runtime);
+            assertEquals(1, world.preparedWindows, "ordinary structural projection prepares one shared bounded window");
             assertTrue(FrontierV3GrayboxExecutor.publishedStructuralBaseline(runtime).orElseThrow().cells().containsKey(target.position()),
                     "the physical loss must retain a cell in the projector's stable structural baseline");
             assertEquals(DeferredAftermathCellStatus.RUNNING, cell(runtime, aftermath).status(),
@@ -140,6 +141,13 @@ class FrontierV3AftermathOwnerSeamTest {
     private static final class TestPhysicalWorld implements FrontierV3AftermathPhysicalWorld {
         private final Set<Long> loadedChunks; private final FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.inMemory();
         private final Map<BlockPosition, GrayboxMaterial> blocks = new HashMap<>();
+        private int preparedWindows;
+        @Override public void prepareProjection(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                List<io.farfrontier.palemirror.frontier.v3.model.GrayboxCell> cells) {
+            assertTrue(cells.size() <= FrontierV3GrayboxExecutor.structuralCellBudget());
+            assertEquals(cells.size(), cells.stream().map(io.farfrontier.palemirror.frontier.v3.model.GrayboxCell::position).distinct().count());
+            preparedWindows++;
+        }
         private TestPhysicalWorld(FrontierWorldState state, BlockPosition target) {
             List<Long> chunks = io.farfrontier.palemirror.frontier.v3.model.FrontierGrayboxPlan.compileStructuralBaseline(state).cells().values().stream()
                     .map(cell -> chunk(cell.position())).distinct().sorted().toList();

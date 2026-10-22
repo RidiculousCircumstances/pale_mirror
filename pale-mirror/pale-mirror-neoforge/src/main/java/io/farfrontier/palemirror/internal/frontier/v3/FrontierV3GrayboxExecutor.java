@@ -166,10 +166,10 @@ final class FrontierV3GrayboxExecutor {
             retainKnownLoss(world, pendingLoss);
             count++;
         }
-        for (; count < MAX_CELLS_PER_TICK; count++) {
-            GrayboxCell cell = cursor.nextNaturallyLoaded(candidate -> world.naturallyLoaded(candidate.position())
-                    && allowsDeferredProjection(runtime, candidate)).orElse(null);
-            if (cell == null) return;
+        var selected = FrontierV3GrayboxPreparation.window(MAX_CELLS_PER_TICK - count, () ->
+                cursor.nextNaturallyLoaded(candidate -> world.naturallyLoaded(candidate.position()) && allowsDeferredProjection(runtime, candidate)));
+        world.prepareProjection(runtime, selected);
+        for (var cell : selected) {
             PhysicalDelta delta = state.physicalDeltas().get(cell.position());
             if (delta != null) {
                 if (matchesKnownLoss(delta, cell)) retainKnownLoss(world, cell);
@@ -343,7 +343,7 @@ final class FrontierV3GrayboxExecutor {
             FirstVisibility result = FirstVisibility.PENDING;
             while (!work.complete() && budget.takeRead()) {
                 work.preparePending(Math.min(operationBudget, FrontierV3ManagedBlockWrites.MAX_PLANNED_WRITES),
-                        cells -> FrontierV3FirstVisibilityPreparation.prepare(level, runtime, state, cells));
+                        cells -> FrontierV3GrayboxPreparation.prepare(level, runtime, state, cells));
                 ProjectionResult projection = projectFirstVisible(FrontierV3AftermathPhysicalWorld.firstVisibility(level), ledger, state,
                         work.next(), budget::takeWrite);
                 if (projection == ProjectionResult.CONFLICT) { result = FirstVisibility.BLOCKED; break; }

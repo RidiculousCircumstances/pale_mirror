@@ -14,6 +14,9 @@ interface FrontierV3AftermathPhysicalWorld {
     boolean placeMaterial(BlockPosition position, GrayboxMaterial material);
     boolean clear(BlockPosition position);
     FrontierV3GrayboxLedger ledger();
+    /** Non-native fixtures have no Minecraft knowledge fence; the native adapter always supplies it. */
+    default void prepareProjection(FrontierV3ServerRuntime<io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState, ?> runtime,
+            java.util.List<io.farfrontier.palemirror.frontier.v3.model.GrayboxCell> cells) { }
 
     static FrontierV3AftermathPhysicalWorld minecraft(ServerLevel level) {
         return minecraft(level, 3);
@@ -30,6 +33,10 @@ interface FrontierV3AftermathPhysicalWorld {
 
     private static FrontierV3AftermathPhysicalWorld minecraft(ServerLevel level, int blockUpdateFlags) {
         return new FrontierV3AftermathPhysicalWorld() {
+            @Override public void prepareProjection(FrontierV3ServerRuntime<io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState, ?> runtime,
+                    java.util.List<io.farfrontier.palemirror.frontier.v3.model.GrayboxCell> cells) {
+                FrontierV3GrayboxPreparation.prepare(level, runtime, runtime.decodedState().orElseThrow(), cells);
+            }
             @Override public boolean naturallyLoaded(BlockPosition position) { return level.hasChunkAt(block(position)); }
             @Override public boolean isAir(BlockPosition position) { return level.getBlockState(block(position)).isAir(); }
             @Override public boolean hasMaterial(BlockPosition position, GrayboxMaterial material) {
