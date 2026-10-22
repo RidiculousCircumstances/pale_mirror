@@ -44,6 +44,7 @@ final class FrontierV3ManagedBlockWrites {
         writes = List.copyOf(writes);
         if (writes.isEmpty() || writes.size() > MAX_PLANNED_WRITES)
             throw new IllegalArgumentException("unbounded planned native write window");
+        FrontierV3NavigationObservation.preparePlannedWrites(level, runtime, writes);
         for (var owner : OWNERS) owner.preparePlannedWrites(level, runtime, writes);
     }
     static boolean observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

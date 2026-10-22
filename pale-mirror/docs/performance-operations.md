@@ -32,7 +32,21 @@ visits to global service-turnover geometry discovery. This is sampled CPU, not
 before current local terrain checks, retains authored access-exclusion overlays
 independently of shape observations, and avoids resolving navigation to publish
 an UNKNOWN-only write fence. The complete-geometry API remains explicit; ordinary
-actor turnover does not call it. Native follow-up timing is pending.
+actor turnover does not call it. That follow-up measured16.3s/11.2s: lower CPU
+did not remove field preparation latency. Its read-only field timeline showed
+roughly two initial block writes per canonical tick, and JFR captured a durable
+navigation invalidation commit from the individual `setBlock` callback.
+
+All existing planned block-write windows now prepare navigation invalidations
+in bounded groups, including exact retained contextual dependents. The native
+per-block guard remains authoritative and rechecks current facts; rejection or a
+later neighbour update cannot borrow the batch as a write permit. Worksite
+projection uses this same path. UNKNOWN-only fences do not build a route view.
+Field effect budgeting starts once at the first actual effect after bounded
+durable preparation, not before its disk wait; repeated calls in the same native
+tick share the count/time allowance. This removes a preparation-induced zero-work
+loop without raising operation ceilings or weakening durable-before-effect.
+Final native follow-up timing is pending.
 
 ## Regional extraction geometry (2026-10-21)
 

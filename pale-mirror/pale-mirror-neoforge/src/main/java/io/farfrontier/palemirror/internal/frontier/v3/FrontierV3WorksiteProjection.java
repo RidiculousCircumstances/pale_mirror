@@ -105,6 +105,13 @@ final class FrontierV3WorksiteProjection {
         }
         // One bounded journal force group BEFORE all writes, not a full-registry save per block.
         if (ledger.isDirty()) ledger.persist(level);
+        var planned = writes.stream().filter(write -> level.hasChunkAt(position(write.declaration()))
+                        && !FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position(write.declaration())))
+                            .equals(write.declaration().block()))
+                .limit(Math.min(budget, FrontierV3ManagedBlockWrites.MAX_PLANNED_WRITES))
+                .map(write -> new FrontierV3ManagedBlockWrites.PlannedWrite(position(write.declaration()),
+                        FrontierV3MinecraftBlockExtraction.block(write.declaration().block()))).toList();
+        if (!planned.isEmpty()) FrontierV3ManagedBlockWrites.preparePlannedWrites(level, runtime, planned);
         for (var write : writes) {
             var position = position(write.declaration());
             if (!level.hasChunkAt(position)) continue;

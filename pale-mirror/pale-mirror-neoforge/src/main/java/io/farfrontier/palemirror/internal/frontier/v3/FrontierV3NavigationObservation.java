@@ -172,37 +172,65 @@ final class FrontierV3NavigationObservation {
             // operation must not leave a cached pre-update dependent shape.
             return true;
         }
-        var chunk = level.getChunkSource().getChunkNow(physical.getX() >> 4, physical.getZ() >> 4);
-        if (chunk == null || chunk.getBlockState(physical).equals(replacement)) return true;
-        var before = FrontierV3NavigationShapes.capture(level, position).cell();
-        var after = FrontierV3NavigationShapes.declared(replacement, position, level.getHeight(), level.getMinBuildHeight()).cell();
-        // Retained contextual samples own exact neighbour dependencies. Invalidate
-        // them before the write even when this block's own collision stays equal.
-        int radius = NavigationObservation.DEPENDENCY_RADIUS;
-        for (int dx = -radius; dx <= radius; dx++) for (int dy = -radius; dy <= radius; dy++) for (int dz = -radius; dz <= radius; dz++) {
-            var dependent = position.offset(dx, dy, dz);
-            var evidence = state.navigationGeometry().cells().get(dependent);
-            if (evidence != null && evidence.dependencies().containsKey(position))
-                changes.put(dependent, NavigationObservation.unavailable(NavigationObservation.Kind.WRITE_PENDING, evidence.dependencies()));
-        }
-        if (changes.isEmpty() && before.isPresent() && after.isPresent() && before.orElseThrow().shape().equals(after.orElseThrow().shape())
-                && before.orElseThrow().dry() == after.orElseThrow().dry()) return true;
-        if (changes.isEmpty() && !state.navigationGeometry().cells().containsKey(position) && after.isPresent()) {
-            var planned = KnownPedestrianRouteKnowledge.forFrontier(state).geometry().collisions().orElseThrow().cell(position);
-            if (planned.isPresent() && planned.orElseThrow().shape().equals(after.orElseThrow().shape())
-                    && planned.orElseThrow().dry() == after.orElseThrow().dry()) return true;
-        }
-        changes.put(position, NavigationObservation.unavailable(NavigationObservation.Kind.WRITE_PENDING));
+        collectWriteFence(level, state, physical, replacement, changes);
         window.dirty.addAll(changes.keySet());
         if (!changes.isEmpty() && (runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE || !publish(runtime, state, changes))) {
             if (!window.fenceRejected) io.farfrontier.palemirror.PaleMirrorMod.LOGGER.warn(
                     "PMV3_NAVIGATION_WRITE_WAIT position={} geometryRevision={} reason=KNOWLEDGE_FENCE_NOT_ADMITTED runtime={}",
                     position, state.navigationGeometry().revision(), runtime.status());
             window.fenceRejected = true;
-            return false; // Refuse this physical write, never kill the server or mutate without its fence.
+            return false;
         }
         window.fenceRejected = false;
         return true;
+    }
+    /** Amortize durable invalidation over a bounded declared write window. This is
+     * not permission to mutate: every actual write still passes blockWrite above. */
+    static void preparePlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            List<FrontierV3ManagedBlockWrites.PlannedWrite> writes) {
+        var state = runtime.passiveOwnershipState().orElse(null);
+        if (state == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
+        var changes = new LinkedHashMap<BlockPosition, NavigationObservation>();
+        for (var write : writes) collectWriteFence(level, state, write.position(), write.replacement(), changes);
+        window(level, state).dirty.addAll(changes.keySet());
+        var batch = new LinkedHashMap<BlockPosition, NavigationObservation>();
+        for (var entry : changes.entrySet()) {
+            batch.put(entry.getKey(), entry.getValue());
+            if (batch.size() == NavigationGeometryState.MAX_CHANGE) {
+                if (!publish(runtime, runtime.decodedState().orElseThrow(), batch)) return;
+                batch = new LinkedHashMap<>();
+            }
+        }
+        if (!batch.isEmpty()) publish(runtime, runtime.decodedState().orElseThrow(), batch);
+    }
+    private static void collectWriteFence(ServerLevel level, FrontierWorldState state, BlockPos physical,
+            net.minecraft.world.level.block.state.BlockState replacement, Map<BlockPosition, NavigationObservation> changes) {
+        var position = new BlockPosition(physical.getX(), physical.getY(), physical.getZ());
+        if (!state.bootstrap().bounds().contains(position)) return;
+        var chunk = level.getChunkSource().getChunkNow(physical.getX() >> 4, physical.getZ() >> 4);
+        if (chunk == null || chunk.getBlockState(physical).equals(replacement)) return;
+        var before = FrontierV3NavigationShapes.capture(level, position).cell();
+        var after = FrontierV3NavigationShapes.declared(replacement, position, level.getHeight(), level.getMinBuildHeight()).cell();
+        // Retained contextual samples own exact neighbour dependencies. Invalidate
+        // them before the write even when this block's own collision stays equal.
+        int radius = NavigationObservation.DEPENDENCY_RADIUS;
+        boolean dependentChanged = false;
+        for (int dx = -radius; dx <= radius; dx++) for (int dy = -radius; dy <= radius; dy++) for (int dz = -radius; dz <= radius; dz++) {
+            var dependent = position.offset(dx, dy, dz);
+            var evidence = state.navigationGeometry().cells().get(dependent);
+            if (evidence != null && evidence.dependencies().containsKey(position)) {
+                changes.put(dependent, NavigationObservation.unavailable(NavigationObservation.Kind.WRITE_PENDING, evidence.dependencies()));
+                dependentChanged = true;
+            }
+        }
+        if (!dependentChanged && before.isPresent() && after.isPresent() && before.orElseThrow().shape().equals(after.orElseThrow().shape())
+                && before.orElseThrow().dry() == after.orElseThrow().dry()) return;
+        if (!dependentChanged && !state.navigationGeometry().cells().containsKey(position) && after.isPresent()) {
+            var planned = KnownPedestrianRouteKnowledge.forFrontier(state).geometry().collisions().orElseThrow().cell(position);
+            if (planned.isPresent() && planned.orElseThrow().shape().equals(after.orElseThrow().shape())
+                    && planned.orElseThrow().dry() == after.orElseThrow().dry()) return;
+        }
+        changes.put(position, NavigationObservation.unavailable(NavigationObservation.Kind.WRITE_PENDING));
     }
     private static boolean publish(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state,
                                    Map<BlockPosition, NavigationObservation> observations) {

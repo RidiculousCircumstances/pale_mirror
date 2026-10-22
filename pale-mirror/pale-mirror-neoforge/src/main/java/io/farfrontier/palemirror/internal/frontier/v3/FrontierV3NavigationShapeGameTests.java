@@ -28,21 +28,35 @@ public final class FrontierV3NavigationShapeGameTests {
     public static void neighbourWriteFencesOnlyItsDependentsAndObservationPublishesTorchAsKnownEmpty(GameTestHelper helper) {
         var level = helper.getLevel(); var pos = helper.absolutePos(new BlockPos(3, 2, 3));
         var neighbourPos = pos.north();
+        var secondPos = pos.south();
         var origin = new BlockPosition(pos.getX(), pos.getY(), pos.getZ());
         var neighbour = new BlockPosition(neighbourPos.getX(), neighbourPos.getY(), neighbourPos.getZ());
+        var second = new BlockPosition(secondPos.getX(), secondPos.getY(), secondPos.getZ());
         var bootstrap = FrontierV3AmbientPhysicsGameTests.translatedBootstrap(FrontierBootstrapper.create(
                 new WorldId("frontier:neighbour-observation"), 41), pos.getX(), pos.getY() - 64, pos.getZ());
         level.setBlock(pos, Blocks.STONE.defaultBlockState(), 2);
         level.setBlock(neighbourPos, Blocks.STONE.defaultBlockState(), 2);
+        level.setBlock(secondPos, Blocks.STONE.defaultBlockState(), 2);
         var runtime = FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(bootstrap), new EphemeralStore(), 10_000);
         try {
             var sample = FrontierV3NavigationShapes.capture(level, origin).cell().orElseThrow();
             var evidence = NavigationObservation.known(sample, java.util.Map.of(neighbour, Optional.of(FrontierV3BlockStates.describe(Blocks.STONE.defaultBlockState()))));
             FrontierV3CommandSubmission.submit(runtime, "shape-dependent", "test",
-                    new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved(0, java.util.Map.of(origin, evidence)));
+                    new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved(0, java.util.Map.of(origin, evidence,
+                            second, FrontierV3NavigationShapes.capture(level, second))));
+            long beforeBatch = runtime.decodedState().orElseThrow().navigationGeometry().revision();
+            FrontierV3NavigationObservation.preparePlannedWrites(level, runtime, List.of(
+                    new FrontierV3ManagedBlockWrites.PlannedWrite(neighbourPos, Blocks.TORCH.defaultBlockState()),
+                    new FrontierV3ManagedBlockWrites.PlannedWrite(secondPos, Blocks.AIR.defaultBlockState())));
+            helper.assertTrue(runtime.decodedState().orElseThrow().navigationGeometry().revision() == beforeBatch + 1,
+                    "both planned writes and contextual dependents share one durable navigation transition");
             helper.assertTrue(FrontierV3NavigationObservation.blockWrite(level, runtime, neighbourPos, Blocks.TORCH.defaultBlockState(), false),
                     "ordinary physical mutation can install its durable fence");
             var fenced = runtime.decodedState().orElseThrow().navigationGeometry();
+            helper.assertTrue(fenced.revision() == beforeBatch + 1
+                            && fenced.cells().get(second).kind() == NavigationObservation.Kind.WRITE_PENDING,
+                    "per-block validation preserves the exact batch fence without another canonical commit");
+            helper.assertTrue(level.getBlockState(secondPos).is(Blocks.STONE), "preparation must not perform a physical write");
             helper.assertTrue(fenced.cells().get(origin).kind() == NavigationObservation.Kind.WRITE_PENDING
                     && fenced.cells().get(neighbour).kind() == NavigationObservation.Kind.WRITE_PENDING,
                     "both the changed cell and exact contextual dependent are fenced before effects");
@@ -56,6 +70,7 @@ public final class FrontierV3NavigationShapeGameTests {
             helper.assertTrue(observed.cells().get(origin).cell().isPresent(), "dependent is resampled without actor movement or a timer retry");
         } finally {
             runtime.shutdown(); level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2); level.setBlock(neighbourPos, Blocks.AIR.defaultBlockState(), 2);
+            level.setBlock(secondPos, Blocks.AIR.defaultBlockState(), 2);
         }
         helper.succeed();
     }
