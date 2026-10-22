@@ -118,16 +118,15 @@ public final class FrontierV3OperationStorageGameTests {
     public static void lastGroundItemReceiptSurvivesNativeEmptyEntityColumnWrite(GameTestHelper helper) throws Exception {
         var level = helper.getLevel();
         var chunk = new net.minecraft.world.level.ChunkPos(helper.absolutePos(new BlockPos(1, 1, 1)));
-        var bag = new net.minecraft.nbt.CompoundTag();
+        // GameTest templates can share a native column with earlier body-removal
+        // cases. Add this fixture to that column's actual bag; a second loaded()
+        // image cannot replace the already admitted incarnation/receipts.
+        var bag = FrontierV3OperationEntityColumns.forRemoval(level, chunk);
         var participant = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.ENTITY_COLUMN,
                 Long.toString(chunk.toLong()), FrontierV3NativeOperationMarkers.lifetime(bag));
         var operation = FrontierV3OperationReceipt.prepare(new FrontierV3OperationReceipt.Declaration(
                 FrontierV3OperationReceipt.Protocol.SHIPMENT_TRANSFER, new SubjectId("test:ground-pickup"), "pickup", "removed-last-item", Set.of(participant)), 1);
         FrontierV3NativeOperationMarkers.stamp(bag, operation.nativeReceipt(participant));
-        var source = new net.minecraft.nbt.CompoundTag();
-        source.putIntArray("Position", new int[]{chunk.x, chunk.z});
-        source.put("pm_v3_column_operations", bag);
-        FrontierV3OperationEntityColumns.loaded(level, chunk, source);
         // Exercise actual EntityStorage including its empty-column cache, in a separate
         // test-owned region directory. Never overwrite the running world's entity file.
         var directory = java.nio.file.Files.createTempDirectory(java.nio.file.Path.of("."), "operation-column-");
@@ -138,11 +137,11 @@ public final class FrontierV3OperationStorageGameTests {
             storage.storeEntities(empty); regions.synchronize(true).join();
             var image = regions.read(chunk).join().orElseThrow();
             helper.assertTrue(image.getList("Entities", 10).isEmpty(), "last item is actually gone");
-            helper.assertTrue(FrontierV3OperationEntityColumns.receipts(chunk, image).equals(List.of(operation.nativeReceipt(participant))),
+            helper.assertTrue(FrontierV3OperationEntityColumns.receipts(chunk, image).contains(operation.nativeReceipt(participant)),
                     "empty native column retains exact pickup receipt");
             storage.storeEntities(empty); regions.synchronize(true).join();
             helper.assertTrue(FrontierV3OperationEntityColumns.receipts(chunk, regions.read(chunk).join().orElseThrow())
-                    .equals(List.of(operation.nativeReceipt(participant))), "vanilla empty-column cache must not erase receipt");
+                    .contains(operation.nativeReceipt(participant)), "vanilla empty-column cache must not erase receipt");
             var pig = Objects.requireNonNull(net.minecraft.world.entity.EntityType.PIG.create(level));
             var position = helper.absolutePos(new BlockPos(1, 1, 1)); pig.moveTo(position.getX() + .5, position.getY(), position.getZ() + .5);
             helper.assertTrue(level.addFreshEntity(pig), "test entity admitted");

@@ -18,6 +18,8 @@ final class FrontierV3PagedJournalTable<K,V> extends AbstractMap<K,V> implements
     private final Supplier<FrontierV3PhysicalJournal> store;
     private final Runnable changed;
     private final Map<K,V> pending = new LinkedHashMap<>();
+    private final Map<K,V> submitted = new LinkedHashMap<>();
+    private java.util.concurrent.CompletableFuture<Long> receipt = java.util.concurrent.CompletableFuture.completedFuture(0L);
     private final Map<K,V> cache = new LinkedHashMap<>(16, .75f, true);
 
     FrontierV3PagedJournalTable(int index, Map<K,V> initial, Function<K,String> key, Function<String,K> parse,
@@ -45,6 +47,8 @@ final class FrontierV3PagedJournalTable<K,V> extends AbstractMap<K,V> implements
     }
     @Override public V get(Object identity) {
         if (pending.containsKey(identity)) return pending.get(identity);
+        reapSubmitted();
+        if (submitted.containsKey(identity)) return submitted.get(identity);
         V retained = cache.get(identity); if (retained != null) return retained;
         var journal = store.get(); if (journal == null) return null;
         @SuppressWarnings("unchecked") K exact = (K) identity;
@@ -83,6 +87,8 @@ final class FrontierV3PagedJournalTable<K,V> extends AbstractMap<K,V> implements
                 all.put(identity, value(identity, entry.getValue()));
             } catch (IOException failure) { throw new UncheckedIOException("paged physical export failed", failure); }
         }
+        reapSubmitted();
+        submitted.forEach((identity, value) -> { if (value == null) all.remove(identity); else all.put(identity, value); });
         pending.forEach((identity, value) -> { if (value == null) all.remove(identity); else all.put(identity, value); });
         return Collections.unmodifiableMap(all).entrySet();
     }
@@ -102,5 +108,14 @@ final class FrontierV3PagedJournalTable<K,V> extends AbstractMap<K,V> implements
         pending.forEach((identity, value) -> { if (value == null) cache.remove(identity); else cache.put(identity, value); });
         pending.clear();
         while (cache.size() > READ_CACHE) cache.remove(cache.keySet().iterator().next());
+    }
+    @Override public void submitted(java.util.concurrent.CompletableFuture<Long> nextReceipt) {
+        reapSubmitted();
+        if (!submitted.isEmpty()) throw new IllegalStateException("paged image submitted before prior receipt");
+        submitted.putAll(pending); receipt = nextReceipt; accept();
+    }
+    private void reapSubmitted() {
+        if (!receipt.isDone()) return;
+        receipt.join(); submitted.clear();
     }
 }

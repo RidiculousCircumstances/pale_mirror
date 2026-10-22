@@ -8,9 +8,10 @@ import java.util.*;
 /** Shared bounded block projection. Never re-evaluates loot, force-loads or overwrites foreign facts. */
 final class FrontierV3WorksiteProjection {
     private static final Map<ServerLevel, FrontierV3PendingProjection> QUEUES = new WeakHashMap<>();
+    private static final Map<ServerLevel, List<WorksiteBlock>> PREPARING = new WeakHashMap<>();
     private record Availability(net.minecraft.world.level.chunk.LevelChunk chunk, boolean ticking) { }
     private FrontierV3WorksiteProjection() { }
-    static void forget(ServerLevel level) { QUEUES.remove(level); }
+    static void forget(ServerLevel level) { QUEUES.remove(level); PREPARING.remove(level); }
     private static FrontierV3PendingProjection queue(ServerLevel level, FrontierWorldState state) {
         var queue = QUEUES.computeIfAbsent(level, ignored -> new FrontierV3PendingProjection());
         queue.update(FrontierV3WorksiteRegistry.currentChunks(state));
@@ -26,8 +27,10 @@ final class FrontierV3WorksiteProjection {
         var state = runtime.decodedState().orElse(null);
         if (state == null || !state.bootstrap().ruleset().extraction().enabled()) return;
         for (var owner : FrontierV3WorksiteRegistry.OWNERS) owner.beforeTurn(level, runtime);
+        if (!FrontierV3PhysicalExecutors.registry().admitPreparation(level, "worksite-projection")) return;
         state = runtime.decodedState().orElseThrow();
         var ledger = FrontierV3GrayboxLedger.get(level);
+        if (!ledger.prepareDurable(level)) return;
         var writes = new ArrayList<FrontierV3WorksiteBlockWitness>();
         int budget = state.bootstrap().ruleset().extraction().projectionWritesPerTurn();
         int readBudget = io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_WEIGHT_BUDGET.get();
@@ -54,7 +57,7 @@ final class FrontierV3WorksiteProjection {
         var preparation = new FrontierV3FirstVisibilityBudget(readBudget, budget,
                 (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D),
                 System::nanoTime);
-        var iterator = probes.iterator();
+        var iterator = PREPARING.getOrDefault(level, probes).iterator();
         while (iterator.hasNext() && preparation.takeRead()) {
             var declared = iterator.next();
             var owner = FrontierV3WorksiteRegistry.owner(declared.key().family());
@@ -103,8 +106,13 @@ final class FrontierV3WorksiteProjection {
             var prepared = new FrontierV3WorksiteBlockWitness(current, preimage, FrontierV3WorksiteBlockWitness.Phase.PREPARED);
             ledger.worksite(prepared); writes.add(prepared);
         }
-        // One bounded journal force group BEFORE all writes, not a full-registry save per block.
-        if (ledger.isDirty()) ledger.persist(level);
+        // Retain the exact prepared window while storage advances on later turns.
+        // Re-entry still rechecks owner/current declaration and the actual preimage.
+        if (!ledger.prepareDurable(level)) {
+            PREPARING.put(level, writes.stream().map(FrontierV3WorksiteBlockWitness::declaration).toList());
+            return;
+        }
+        PREPARING.remove(level);
         var planned = writes.stream().filter(write -> level.hasChunkAt(position(write.declaration()))
                         && !FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position(write.declaration())))
                             .equals(write.declaration().block()))
@@ -133,7 +141,7 @@ final class FrontierV3WorksiteProjection {
                 queue.complete(chunk(write.declaration()), write.declaration());
             }
         }
-        if (ledger.isDirty()) ledger.persist(level);
+        if (ledger.isDirty()) ledger.persistAsync(level);
         for (var owner : FrontierV3WorksiteRegistry.OWNERS) owner.afterProjection(level, runtime);
     }
     /** Same metadata-only boundary for projection and an unloaded region's proven withdrawal. */

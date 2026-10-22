@@ -9,17 +9,22 @@ import java.util.function.Supplier;
 /** Shared lifecycle only. Exact world/store identity is supplied by the owning adapter. */
 final class FrontierV3PhysicalStores {
     private record Key(WorldId world, FrontierV3PhysicalStoreKind kind) { }
-    private record Entry(Object owner, Runnable flush, Runnable finish, Supplier<String> diagnostic) { }
+    private record Entry(Object owner, Runnable advance, Runnable flush, Runnable finish, Supplier<String> diagnostic) { }
     private static final Map<ServerLevel, Map<Key,Entry>> STORES = new IdentityHashMap<>();
     private FrontierV3PhysicalStores() { }
     static void register(ServerLevel level, FrontierV3PhysicalStoreKind kind, FrontierV3JournaledSavedData ledger) {
-        register(level, FrontierV3PhysicalWorld.WORLD_ID, kind, ledger, () -> ledger.persist(level), ledger::finish, ledger::journalDiagnostic);
+        register(level, FrontierV3PhysicalWorld.WORLD_ID, kind, ledger, () -> ledger.persistAsync(level),
+                () -> ledger.persist(level), ledger::finish, ledger::journalDiagnostic);
     }
     static void register(ServerLevel level, WorldId world, FrontierV3PhysicalStoreKind kind, Object owner,
             Runnable flush, Runnable finish, Supplier<String> diagnostic) {
+        register(level, world, kind, owner, flush, flush, finish, diagnostic);
+    }
+    private static void register(ServerLevel level, WorldId world, FrontierV3PhysicalStoreKind kind, Object owner,
+            Runnable advance, Runnable flush, Runnable finish, Supplier<String> diagnostic) {
         Objects.requireNonNull(world); Objects.requireNonNull(kind); Objects.requireNonNull(owner);
         var entries = STORES.computeIfAbsent(level, ignored -> new LinkedHashMap<>());
-        var prior = entries.putIfAbsent(new Key(world,kind), new Entry(owner,flush,finish,diagnostic));
+        var prior = entries.putIfAbsent(new Key(world,kind), new Entry(owner,advance,flush,finish,diagnostic));
         if (prior != null && prior.owner != owner) throw new IllegalStateException("competing physical store owner: " + world + "/" + kind);
     }
     static void release(ServerLevel level, WorldId world, FrontierV3PhysicalStoreKind kind, Object expected) {
@@ -30,6 +35,11 @@ final class FrontierV3PhysicalStores {
     static void flush(ServerLevel level) {
         var entries = STORES.get(level);
         if (entries != null) entries.values().forEach(entry -> entry.flush.run());
+    }
+    /** Ordinary turn submission is not a durable barrier. Explicit flush retains that contract. */
+    static void advance(ServerLevel level) {
+        var entries = STORES.get(level);
+        if (entries != null) entries.values().forEach(entry -> entry.advance.run());
     }
     static void finish(MinecraftServer server) {
         var owned = STORES.keySet().stream().filter(level -> level.getServer() == server).toList();

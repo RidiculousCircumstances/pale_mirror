@@ -19,6 +19,7 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
         CompoundTag merge(Map<String,CompoundTag> fragments);
         void collect(Map<String,byte[]> updates) throws IOException;
         void accept();
+        default void submitted(java.util.concurrent.CompletableFuture<Long> receipt) { accept(); }
     }
     private final List<StoredTable> tables = new ArrayList<>();
     private FrontierV3PhysicalJournal store;
@@ -126,33 +127,43 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
         if (this.level != level) throw new IllegalArgumentException("foreign physical ledger");
         save(path.toFile(), level.registryAccess());
     }
-    /** Resident tables keep their submitted image in memory while the writer runs.
-     * Paged tables may evict rows, so they retain their existing synchronous path. */
+    /** Submitted paged rows stay readable independently of bounded cache eviction. */
     final java.util.concurrent.CompletableFuture<Long> persistAsync(ServerLevel level) {
         if (this.level != level) throw new IllegalArgumentException("foreign physical ledger");
         return persistAsync();
     }
     final java.util.concurrent.CompletableFuture<Long> persistAsync() {
-        if (pagedRecovery()) throw new IllegalStateException("paged ledger requires its synchronous eviction fence");
         try {
             if (store == null || worldId == null || dimension == null) throw new IllegalStateException("unbound async physical journal");
             store.checkHealthy();
+            store.advanceWrites();
+            // At most one captured paged image; later edits remain dirty for the next
+            // submission, not silently covered by the older receipt.
+            if (pagedRecovery() && !pendingWrite.isDone()) return pendingWrite;
             if (!isDirty() && declared) return pendingWrite;
             var updates = pendingUpdates();
             pendingWrite = store.appendAsync(updates);
-            declared = true; tables.forEach(StoredTable::accept); setDirty(false);
+            declared = true; tables.forEach(table -> table.submitted(pendingWrite)); setDirty(false);
             submitted(pendingWrite);
             return pendingWrite;
         } catch (IOException failure) { throw new UncheckedIOException("unable to submit " + kind, failure); }
     }
     final boolean durableReady() {
+        try { if (store != null) store.advanceWrites(); }
+        catch (IOException failure) { throw new UncheckedIOException("physical write continuation failed", failure); }
         if (!pendingWrite.isDone()) return false;
         awaitPendingWrite(); return true;
+    }
+    /** Receipt-driven live admission; pending newer edits cannot borrow an older receipt. */
+    final boolean prepareDurable(ServerLevel level) {
+        persistAsync(level);
+        return !isDirty() && durableReady();
     }
     /** Immutable durability prefix for owner-issued permissions in this submitted image. */
     protected void submitted(java.util.concurrent.CompletableFuture<Long> receipt) { }
     private void awaitPendingWrite() {
-        try { pendingWrite.join(); }
+        try { if (store != null) store.awaitWrites(); pendingWrite.join(); }
+        catch (IOException failure) { throw new UncheckedIOException("physical journal continuation failed", failure); }
         catch (java.util.concurrent.CompletionException failed) {
             throw new UncheckedIOException("physical journal force failed: " + kind, new IOException(failed.getCause()));
         }

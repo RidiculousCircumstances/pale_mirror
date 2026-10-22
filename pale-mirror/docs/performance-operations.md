@@ -1,5 +1,35 @@
 # Pale Mirror runtime performance
 
+## Receipt-driven section preparation (R215)
+
+The R214 JFR contains107 distinct worksite-path server parks totalling2257ms
+across visits (max41.3ms per recorded park). Duplicate events from an explicit
+dump must be deduplicated by type/start/thread. The cause was a synchronous
+`BlockJournal.appendAsync` default: each section binding, root declaration,
+conservative index update and child image forced separately on the server path.
+Those samples do not identify every historical multi-second PM maximum.
+
+BLOCKS now submits one bounded immutable image (16MiB/131072 rows) to its existing
+I/O lane. A cooperative continuation publishes indices on the owner thread;
+at most eight phase transitions are advanced per poll. New binding precedes root
+registration; conservative index additions precede data and removals follow it.
+One selected section is pinned, and submitted decoded rows survive cache eviction
+until the exact aggregate receipt. Newer edits cannot borrow that receipt.
+Failed writes latch storage failure and fail the outstanding receipt.
+
+Ordinary turn exit advances submissions without waiting. Explicit flush, native
+save and shutdown drain them. Prepared worksite windows are revalidated after
+receipt, before mutation; current preimage and owner/custody remain mandatory.
+Custody confirmation and projection withdrawal also wait for durable readiness.
+Shared soft preparation admission rotates structures, fields and worksites;
+it does not skip recovery, external observations or already-fenced effects.
+Point ownership queries use the existing regional worksite view instead of
+rebuilding the full declared point index when one mine changes.
+
+Focused failure/cache/recovery checks and native affected checks are recorded in
+`build/r215-*`. Live ingress measurements remain pending until deployment;
+nonblocking submission alone is not a claim of shorter complete scene loading.
+
 ## Initial chunk ingress (R214)
 
 The native sender retains Minecraft's pending membership, batch quota and actual

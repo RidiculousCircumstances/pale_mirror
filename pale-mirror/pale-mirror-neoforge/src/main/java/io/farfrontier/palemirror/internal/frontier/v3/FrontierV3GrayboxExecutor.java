@@ -93,7 +93,8 @@ final class FrontierV3GrayboxExecutor {
         Cursor cursor = cursor(runtime, state);
         work.cursorPath(System.nanoTime() - started);
         started = System.nanoTime();
-        projectPendingFirstVisibility(level, ledger, runtime, state, cursor);
+        if (FrontierV3PhysicalExecutors.registry().admitPreparation(level, "graybox-projection"))
+            projectPendingFirstVisibility(level, ledger, runtime, state, cursor);
         work.firstVisibilityPath(System.nanoTime() - started);
         started = System.nanoTime();
         retireStaleWorksiteStaging(level, ledger, cursor);

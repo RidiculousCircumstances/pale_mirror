@@ -103,6 +103,7 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
     }
     @Override public void afterProjection(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         var state = runtime.decodedState().orElseThrow(); var ledger = FrontierV3GrayboxLedger.get(level);
+        if (!ledger.prepareDurable(level)) return; // Never publish custody from a submitted-but-unforced image.
         var index = geometry(state);
         for (var region : index.regions()) {
             var lease = state.replicaCustody().custodyByScope().get(region.scopeId());
@@ -157,7 +158,7 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
             if (chunk != null && witness != null && !FrontierV3MinecraftBlockExtraction.describe(chunk.getBlockState(position))
                     .equals(witness.declaration().block())) return;
         }
-        if (ledger.isDirty()) ledger.persist(level);
+        if (!ledger.prepareDurable(level)) return;
         submit(runtime, new ExtractionSourceBoundary(region, ExtractionSourceBoundary.Operation.WITHDRAW_PROJECTION,
                 lease.authorityEpoch(), lease.expectedReplicaRevision(), ExtractionSourceCustody.fingerprint(state.extractionSites(), region)));
     }

@@ -142,4 +142,33 @@ class FrontierV3BlockJournalTest {
         assertTrue(recovered.externalWorksites().isEmpty());
         assertEquals(settled, recovered.worksite(p)); assertNull(recovered.worksite(absent));
     }
+    @Test void asynchronousPagedImageSurvivesCacheEvictionAndNewerEditsUntilItsExactReceipt() throws Exception {
+        Path path = directory.resolve("async.dat"); var live = FrontierV3GrayboxLedger.inMemory();
+        var journal = live.openJournal(path); live.attachJournal(path, WORLD, DIMENSION, journal);
+        // More than the decoded cache: submitting cannot discard readable unsaved rows.
+        for (int i = 0; i < 600; i++) claim(live, new BlockPos(i % 32, 64, i / 32));
+        var first = new BlockPos(0,64,0);
+        var receipt = live.persistAsync();
+        assertFalse(receipt.isDone(), "submission is not a synchronous cross-file force");
+        assertNotNull(live.claim(first)); live.defer(first);
+        assertTrue(live.isDirty(), "a newer edit is not part of the submitted receipt");
+        assertSame(receipt, live.persistAsync(), "only one paged captured image is admitted");
+        journal.awaitWrites(); assertTrue(receipt.isDone());
+        assertTrue(live.claim(first).deferred());
+        assertFalse(read(path).claim(first).deferred(), "recovery sees only the first durable image");
+        var next = live.persistAsync(); journal.awaitWrites(); next.join(); live.finish();
+        var recovered = read(path); assertTrue(recovered.claim(first).deferred());
+        for (int i = 0; i < 600; i++) assertNotNull(recovered.claim(new BlockPos(i % 32,64,i / 32)));
+    }
+    @Test void failedAsynchronousSectionNeverGrantsDurability() throws Exception {
+        Path path = directory.resolve("async-failed.dat"); var live = FrontierV3GrayboxLedger.inMemory();
+        var journal = live.openJournal(path); live.attachJournal(path, WORLD, DIMENSION, journal);
+        claim(live, new BlockPos(0,64,0));
+        // The root can persist; child creation must fail without awarding the batch.
+        Files.writeString(directory.resolve("async-failed.dat.sections"), "not a directory");
+        var receipt = live.persistAsync();
+        assertThrows(java.io.IOException.class, journal::awaitWrites);
+        assertTrue(receipt.isCompletedExceptionally());
+        assertThrows(java.io.IOException.class, journal::checkHealthy);
+    }
 }

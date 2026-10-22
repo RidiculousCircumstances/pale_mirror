@@ -39,6 +39,7 @@ final class FrontierV3BlockJournal implements FrontierV3PhysicalJournal {
     private long sectionReads, cacheHits, evictions, observedSequence;
     private boolean partitioned;
     private byte[] metadata;
+    private AsyncAppend pendingAppend;
 
     private FrontierV3BlockJournal(Path path, int cacheLimit, IndexPolicy indexPolicy) throws IOException {
         // One checkpoint worker + four queued jobs and the synchronous append lane may be
@@ -92,13 +93,6 @@ final class FrontierV3BlockJournal implements FrontierV3PhysicalJournal {
     private boolean indexed(byte[] row) throws IOException {
         return row != null && indexPolicy.includes().test(FrontierV3JournalNbt.decode(row));
     }
-    private void persistIndex() throws IOException {
-        if (indexPersisted) return;
-        indexedKeys(); var changes = new TreeMap<String, byte[]>();
-        changes.put(INDEX_POLICY, indexPolicy.id().getBytes(StandardCharsets.UTF_8));
-        for (String key : indexedKeys) changes.put(INDEX_PREFIX + key, new byte[0]);
-        root.append(changes); indexPersisted = true;
-    }
     private FrontierV3JournalStore section(long id) throws IOException {
         checkHealthy();
         var retained = sections.get(id);
@@ -115,6 +109,7 @@ final class FrontierV3BlockJournal implements FrontierV3PhysicalJournal {
         var iterator = sections.entrySet().iterator();
         while (iterator.hasNext()) {
             var candidate = iterator.next();
+            if (pendingAppend != null && pendingAppend.selected == candidate.getValue()) continue;
             if (!candidate.getValue().quiescent()) continue;
             observe(candidate.getKey(), candidate.getValue());
             addresses.remove(candidate.getKey()); lastSample.remove(candidate.getKey()); iterator.remove(); evictions++; return;
@@ -137,6 +132,7 @@ final class FrontierV3BlockJournal implements FrontierV3PhysicalJournal {
                 + ",\"residentSections\":" + sections.size() + ",\"sectionCacheLimit\":" + cacheLimit
                 + ",\"sectionReads\":" + sectionReads + ",\"sectionCacheHits\":" + cacheHits
                 + ",\"sectionEvictions\":" + evictions + ",\"indexedCandidates\":" + indexedKeys.size()
+                + ",\"appendContinuationPending\":" + (pendingAppend != null)
                 + ",\"pressureScope\":\"observed-sections\"";
     }
     private Path file(long section) { return directory.resolve(section + ".dat"); }
@@ -233,64 +229,158 @@ final class FrontierV3BlockJournal implements FrontierV3PhysicalJournal {
         root.append(commit); partitioned = true;
     }
     public long append(Map<String, byte[]> changes) throws IOException {
-        checkHealthy();
-        var groups = group(changes); // Reject malformed input before touching storage.
-        byte[] declaration = changes.get("$meta");
-        if (metadata != null && declaration != null && !FrontierV3JournalNbt.same(metadata, declaration))
-            throw new IOException("block journal identity changed");
-        if (!partitioned) migrate(declaration);
-        persistIndex();
-        for (var group : groups.entrySet()) {
-            long section = group.getKey(); var store = section(section);
-            if (store == null) {
-                reserveCacheSlot();
-                store = FrontierV3JournalStore.open(file(section), SECTION, health);
-                var prior = store.image();
-                if (!prior.isEmpty() && (prior.size() != 1 || !Arrays.equals(binding(section), prior.get(BINDING))))
-                    throw new IOException("unregistered block section contains records " + section);
-                store.append(Map.of(BINDING, binding(section)));
-                root.append(Map.of(PREFIX + section, identity(section))); sections.put(section, store);
-                declaredSections.add(section);
-                addresses.put(section, new HashMap<>());
-            }
-            // Validate only changed addresses, not thousands of unchanged NBT records per block.
-            var occupied = addresses.get(section); var updates = new HashMap<Long, String>();
-            for (var row : group.getValue().entrySet()) {
-                if (row.getValue() == null) continue;
-                long cell = position(row.getKey(), null); String retained = occupied.get(cell);
-                if (retained != null && !retained.equals(row.getKey())
-                        && !(group.getValue().containsKey(retained) && group.getValue().get(retained) == null)
-                        || updates.putIfAbsent(cell, row.getKey()) != null)
-                    throw new IOException("competing block provenance " + row.getKey());
-            }
-            var additions = new TreeMap<String, byte[]>(); var removals = new TreeMap<String, byte[]>();
-            for (var row : group.getValue().entrySet()) {
-                if (indexed(row.getValue())) {
-                    if (!indexedKeys.contains(row.getKey())) additions.put(INDEX_PREFIX + row.getKey(), new byte[0]);
-                } else if (indexedKeys.contains(row.getKey())) removals.put(INDEX_PREFIX + row.getKey(), null);
-            }
-            if (!additions.isEmpty()) {
-                root.append(additions);
-                additions.keySet().forEach(key -> indexedKeys.add(key.substring(INDEX_PREFIX.length())));
-            }
-            store.append(group.getValue());
-            for (var row : group.getValue().entrySet())
-                if (row.getValue() == null) occupied.remove(position(row.getKey(), null), row.getKey());
-            occupied.putAll(updates);
-            observe(section, store);
-            if (!removals.isEmpty()) {
-                root.append(removals);
-                removals.keySet().forEach(key -> indexedKeys.remove(key.substring(INDEX_PREFIX.length())));
-            }
-        }
-        // A receipt covers this exact append; no world-wide diagnostic aggregation on writes.
-        return root.pressure().durableSequence() + observedSequence;
+        awaitWrites();
+        if (!partitioned && !root.image().isEmpty()) migrate(changes.get("$meta"));
+        var receipt = appendAsync(changes);
+        awaitWrites();
+        return receipt.join();
     }
     public void checkHealthy() throws IOException {
         health.check();
     }
     public void awaitCheckpoint() throws IOException {
+        awaitWrites();
         root.awaitCheckpoint(); for (var store : sections.values()) store.awaitCheckpoint();
+    }
+    @Override public java.util.concurrent.CompletableFuture<Long> appendAsync(Map<String, byte[]> changes) throws IOException {
+        advanceWrites();
+        if (pendingAppend != null) throw new IOException("block journal already has an admitted append");
+        var frozen = new TreeMap<String, byte[]>();
+        long bytes = 0;
+        for (var entry : changes.entrySet()) {
+            bytes += entry.getKey().length() * 2L + (entry.getValue() == null ? 0 : entry.getValue().length);
+            if (bytes > 16L * 1024 * 1024 || frozen.size() >= 131072) throw new IOException("block append capacity");
+            frozen.put(entry.getKey(), entry.getValue() == null ? null : entry.getValue().clone());
+        }
+        var groups = group(frozen);
+        byte[] declaration = frozen.get("$meta");
+        if (metadata != null && declaration != null && !FrontierV3JournalNbt.same(metadata, declaration))
+            throw new IOException("block journal identity changed");
+        // Conversion of a historical resident layout remains an explicit synchronous
+        // recovery operation, never hidden in the live asynchronous submission path.
+        if (!partitioned && !root.image().isEmpty()) throw new IOException("block layout requires explicit conversion");
+        pendingAppend = new AsyncAppend(groups, declaration);
+        var receipt = pendingAppend.receipt;
+        advanceWrites();
+        return receipt;
+    }
+    @Override public void advanceWrites() throws IOException {
+        if (pendingAppend == null) { checkHealthy(); return; }
+        try {
+            checkHealthy();
+            pendingAppend.poll();
+            if (pendingAppend.receipt.isDone()) pendingAppend = null;
+        } catch (Exception error) {
+            var failure = error instanceof IOException io ? io : new IOException("block append continuation failed", error);
+            health.failed(failure); pendingAppend.receipt.completeExceptionally(failure); throw failure;
+        }
+    }
+    @Override public void awaitWrites() throws IOException {
+        while (pendingAppend != null) {
+            advanceWrites();
+            if (pendingAppend != null && pendingAppend.waiting != null) {
+                try { pendingAppend.waiting.join(); }
+                catch (java.util.concurrent.CompletionException failure) { advanceWrites(); }
+            }
+        }
+        checkHealthy();
+    }
+    /** All index/cache publication stays on the calling owner thread. Only immutable
+     * journal bytes run on the existing bounded I/O lane. One section is pinned at a
+     * time; a partial append is recovered by the same conservative root/child order. */
+    private final class AsyncAppend {
+        private final Iterator<Map.Entry<Long, Map<String, byte[]>>> groups;
+        private final byte[] declaration;
+        private final java.util.concurrent.CompletableFuture<Long> receipt = new java.util.concurrent.CompletableFuture<>();
+        private java.util.concurrent.CompletableFuture<Long> waiting;
+        private Runnable accepted = () -> { };
+        private int phase;
+        private long section;
+        private FrontierV3JournalStore selected;
+        private Map<String, byte[]> rows;
+        private Map<Long, String> occupied, updates;
+        private final Map<String, byte[]> additions = new TreeMap<>(), removals = new TreeMap<>();
+        AsyncAppend(Map<Long, Map<String, byte[]>> groups, byte[] declaration) {
+            this.groups = groups.entrySet().iterator(); this.declaration = declaration;
+        }
+        private void write(FrontierV3JournalStore store, Map<String, byte[]> values, Runnable after) throws IOException {
+            waiting = store.appendAsync(values); accepted = after;
+        }
+        void poll() throws IOException {
+            for (int steps = 0; steps < 8 && !receipt.isDone(); steps++) {
+                if (waiting != null) {
+                    if (!waiting.isDone()) return;
+                    waiting.join(); waiting = null; accepted.run(); accepted = () -> { };
+                }
+                switch (phase) {
+                    case 0 -> {
+                        if (!partitioned) {
+                            metadata = Objects.requireNonNull(declaration, "missing block journal identity").clone();
+                            write(root, Map.of("$meta", metadata, LAYOUT, VERSION, INDEX_POLICY,
+                                    indexPolicy.id().getBytes(StandardCharsets.UTF_8)), () -> {
+                                partitioned = true; indexReady = indexPersisted = true;
+                            });
+                        } else if (!indexPersisted) {
+                            indexedKeys(); var index = new TreeMap<String, byte[]>();
+                            index.put(INDEX_POLICY, indexPolicy.id().getBytes(StandardCharsets.UTF_8));
+                            indexedKeys.forEach(key -> index.put(INDEX_PREFIX + key, new byte[0]));
+                            write(root, index, () -> indexPersisted = true);
+                        }
+                        phase = 1;
+                    }
+                    case 1 -> {
+                        if (!groups.hasNext()) { receipt.complete(root.pressure().durableSequence() + observedSequence); return; }
+                        var group = groups.next(); section = group.getKey(); rows = group.getValue();
+                        selected = section(section); additions.clear(); removals.clear(); updates = new HashMap<>();
+                        if (selected == null) {
+                            reserveCacheSlot(); selected = FrontierV3JournalStore.open(file(section), SECTION, health);
+                            var prior = selected.image();
+                            if (!prior.isEmpty() && (prior.size() != 1 || !Arrays.equals(binding(section), prior.get(BINDING))))
+                                throw new IOException("unregistered block section contains records " + section);
+                            write(selected, Map.of(BINDING, binding(section)), () -> { }); phase = 2;
+                        } else phase = 3;
+                    }
+                    case 2 -> {
+                        write(root, Map.of(PREFIX + section, identity(section)), () -> {
+                            sections.put(section, selected); declaredSections.add(section); addresses.put(section, new HashMap<>());
+                        }); phase = 3;
+                    }
+                    case 3 -> {
+                        occupied = addresses.get(section);
+                        for (var row : rows.entrySet()) {
+                            if (row.getValue() != null) {
+                                long cell = position(row.getKey(), null); String retained = occupied.get(cell);
+                                if (retained != null && !retained.equals(row.getKey())
+                                        && !(rows.containsKey(retained) && rows.get(retained) == null)
+                                        || updates.putIfAbsent(cell, row.getKey()) != null)
+                                    throw new IOException("competing block provenance " + row.getKey());
+                            }
+                            if (indexed(row.getValue())) {
+                                if (!indexedKeys.contains(row.getKey())) additions.put(INDEX_PREFIX + row.getKey(), new byte[0]);
+                            } else if (indexedKeys.contains(row.getKey())) removals.put(INDEX_PREFIX + row.getKey(), null);
+                        }
+                        if (!additions.isEmpty()) write(root, additions,
+                                () -> additions.keySet().forEach(key -> indexedKeys.add(key.substring(INDEX_PREFIX.length()))));
+                        phase = 4;
+                    }
+                    case 4 -> {
+                        write(selected, rows, () -> {
+                            rows.forEach((key, value) -> { if (value == null) {
+                                try { occupied.remove(position(key, null), key); }
+                                catch (IOException bad) { throw new UncheckedIOException(bad); }
+                            } });
+                            occupied.putAll(updates); observe(section, selected);
+                        }); phase = 5;
+                    }
+                    case 5 -> {
+                        if (!removals.isEmpty()) write(root, removals,
+                                () -> removals.keySet().forEach(key -> indexedKeys.remove(key.substring(INDEX_PREFIX.length()))));
+                        phase = 1;
+                    }
+                    default -> throw new IllegalStateException("invalid block write continuation");
+                }
+            }
+        }
     }
     public FrontierV3JournalStore.Pressure pressure() {
         sections.forEach(this::observe);

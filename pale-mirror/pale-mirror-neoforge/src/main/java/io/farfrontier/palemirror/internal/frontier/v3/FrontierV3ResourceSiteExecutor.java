@@ -67,9 +67,12 @@ final class FrontierV3ResourceSiteExecutor {
         if (FrontierV3ResourceFieldPlayerBreakExecutor.reconcileOne(level, runtime)) return;
         if (FrontierV3ResourceFieldWorldChangeExecutor.reconcileOne(level, runtime)) return;
         if (observeOneNaturallyLoadedWorldCell(level, runtime, state)) return;
-        FrontierV3ResourceSitePreparationSelection.nextLoaded(state,
-                site -> loaded(level, site) && FrontierV3GrayboxExecutor.resourceSiteProjectionDemanded(runtime, level, site)).ifPresent(intent -> execute(level, runtime, state, intent));
         reconcileOneAfterRestart(level, runtime, state);
+        if (!FrontierV3PhysicalExecutors.registry().admitPreparation(level, "resource-site-projection")) return;
+        state = runtime.decodedState().orElse(state);
+        var preparationState = state;
+        FrontierV3ResourceSitePreparationSelection.nextLoaded(state,
+                site -> loaded(level, site) && FrontierV3GrayboxExecutor.resourceSiteProjectionDemanded(runtime, level, site)).ifPresent(intent -> execute(level, runtime, preparationState, intent));
         projectOneGrowthStage(level, runtime, runtime.decodedState().orElse(state));
     }
 

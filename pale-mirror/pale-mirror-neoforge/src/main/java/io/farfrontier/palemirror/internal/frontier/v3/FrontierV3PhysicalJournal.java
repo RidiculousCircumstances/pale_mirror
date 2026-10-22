@@ -19,6 +19,10 @@ interface FrontierV3PhysicalJournal {
     default java.util.concurrent.CompletableFuture<Long> appendAsync(Map<String, byte[]> replacements) throws IOException {
         return java.util.concurrent.CompletableFuture.completedFuture(append(replacements));
     }
+    /** Advance host-owned cross-file continuations without waiting for I/O. */
+    default void advanceWrites() throws IOException { checkHealthy(); }
+    /** Explicit synchronous boundary, e.g. native save or shutdown. */
+    default void awaitWrites() throws IOException { checkHealthy(); }
     void checkHealthy() throws IOException;
     void awaitCheckpoint() throws IOException;
     FrontierV3JournalStore.Pressure pressure();

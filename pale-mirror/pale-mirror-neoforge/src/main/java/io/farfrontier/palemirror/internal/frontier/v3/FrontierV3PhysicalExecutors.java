@@ -12,9 +12,9 @@ final class FrontierV3PhysicalExecutors {
             executor("physical-observation", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of("production-station-adoption"), "physical-delta", FrontierV3PhysicalObservationExecutor::tick),
             executor("explosion-observation", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of("physical-observation"), "explosion-observation", FrontierV3ExplosionExecutor::tick),
 
-            executor("graybox-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("physical-observation"), "graybox-projection", FrontierV3AftermathOwnerComposition::projection),
-            executor("resource-site-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("graybox-projection"), "resource-site-projection", FrontierV3ResourceSiteExecutor::tick),
-            executor("worksite-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("graybox-projection"), "worksite-projection", FrontierV3WorksiteProjection::tick),
+            preparation("graybox-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("physical-observation"), "graybox-projection", FrontierV3AftermathOwnerComposition::projection),
+            preparation("resource-site-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("graybox-projection"), "resource-site-projection", FrontierV3ResourceSiteExecutor::tick),
+            preparation("worksite-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("graybox-projection"), "worksite-projection", FrontierV3WorksiteProjection::tick),
             executor("decontamination-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("resource-site-projection"), "decontamination-projection", FrontierV3DecontaminationExecutor::tick),
             executor("infection-overlay-projection", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("decontamination-projection"), "infection-overlay-projection", FrontierV3InfectionOverlayExecutor::tick),
             executor("object-boards", FrontierV3PhysicalExecutorRegistry.Stage.PROJECTION, Set.of("infection-overlay-projection"), "object-board-projection", FrontierV3ObjectBoardExecutor::tick),
@@ -92,6 +92,12 @@ final class FrontierV3PhysicalExecutors {
     private static FrontierV3PhysicalExecutorRegistry.Definition executor(String id, FrontierV3PhysicalExecutorRegistry.Stage stage,
                                                                             Set<String> dependencies, String writeKind,
                                                                             FrontierV3PhysicalExecutorRegistry.Tick tick) {
-        return new FrontierV3PhysicalExecutorRegistry.Definition(id, stage, dependencies, Set.of(writeKind), 1, tick);
+        return new FrontierV3PhysicalExecutorRegistry.Definition(id, stage, dependencies, Set.of(writeKind), 1,
+                FrontierV3PhysicalExecutorRegistry.Admission.REQUIRED, tick);
+    }
+    private static FrontierV3PhysicalExecutorRegistry.Definition preparation(String id, FrontierV3PhysicalExecutorRegistry.Stage stage,
+            Set<String> dependencies, String writeKind, FrontierV3PhysicalExecutorRegistry.Tick tick) {
+        return new FrontierV3PhysicalExecutorRegistry.Definition(id, stage, dependencies, Set.of(writeKind), 1,
+                FrontierV3PhysicalExecutorRegistry.Admission.DEFERABLE_PREPARATION, tick);
     }
 }

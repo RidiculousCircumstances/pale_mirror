@@ -43,9 +43,10 @@ final class FrontierV3PhysicalExecutorRegistry {
     }
 
     @FunctionalInterface interface Tick { void run(ServerLevel world, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime); }
+    enum Admission { REQUIRED, DEFERABLE_PREPARATION }
 
     record Definition(String id, Stage stage, Set<String> dependencies, Set<String> exclusiveWrites,
-                      int maxInvocationsPerTick, Tick tick) {
+                      int maxInvocationsPerTick, Admission admission, Tick tick) {
         Definition {
             id = requireId(id, "executor id");
             stage = Objects.requireNonNull(stage, "stage");
@@ -53,6 +54,7 @@ final class FrontierV3PhysicalExecutorRegistry {
             exclusiveWrites = normalized(exclusiveWrites, "exclusive write kind");
             if (maxInvocationsPerTick < 1) throw new IllegalArgumentException("executor budget must be positive: " + id);
             tick = Objects.requireNonNull(tick, "tick");
+            admission = Objects.requireNonNull(admission, "admission");
         }
     }
 
@@ -60,6 +62,8 @@ final class FrontierV3PhysicalExecutorRegistry {
 
     private final List<Definition> ordered;
     private final List<Diagnostic> diagnostics;
+    private final java.util.Map<ServerLevel, FrontierV3PreparationAdmission> preparation = new java.util.WeakHashMap<>();
+    private final java.util.Map<ServerLevel, FrontierV3PreparationAdmission.Turn> activePreparation = new java.util.IdentityHashMap<>();
 
     FrontierV3PhysicalExecutorRegistry(Collection<Definition> definitions) {
         List<DeterministicStagePlan.Definition<Definition>> staged = List.copyOf(definitions).stream()
@@ -73,7 +77,12 @@ final class FrontierV3PhysicalExecutorRegistry {
     }
 
     void tick(ServerLevel world, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
-        for (Definition definition : ordered) {
+        var admission = preparation.computeIfAbsent(world, ignored -> new FrontierV3PreparationAdmission(
+                ordered.stream().filter(definition -> definition.admission() == Admission.DEFERABLE_PREPARATION)
+                        .map(Definition::id).toList())).begin((long)
+                (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D), System::nanoTime);
+        activePreparation.put(world, admission);
+        try { for (Definition definition : ordered) {
             var capacity = runtime.commandAdmissionCapacity();
             // A predecessor can quarantine the runtime. Preserve that primary trace and
             // stop this turn instead of throwing a second missing-Optional exception.
@@ -84,7 +93,12 @@ final class FrontierV3PhysicalExecutorRegistry {
                     definition.id(), definition.stage().name().toLowerCase(java.util.Locale.ROOT))) {
                 definition.tick().run(world, runtime);
             }
-        }
+        } } finally { activePreparation.remove(world); }
+    }
+
+    boolean admitPreparation(ServerLevel world, String id) {
+        var turn = activePreparation.get(world);
+        return turn == null || turn.admit(id); // Direct owner/recovery entry is not a whole registry turn.
     }
 
     List<Diagnostic> diagnostics() { return diagnostics; }

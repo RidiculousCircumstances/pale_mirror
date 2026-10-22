@@ -10,7 +10,6 @@ final class FrontierV3WorksiteRegistry {
     static final List<FrontierV3WorksiteProjectionOwner> OWNERS = List.of(new FrontierV3ExtractionWorksiteOwner());
     private static final Map<CellMutationKey.OwnerFamily, FrontierV3WorksiteProjectionOwner> BY_FAMILY;
     private static FrontierBootstrap bootstrap;
-    private static Map<Long, WorksiteBlock> points = Map.of();
     private static Map<Long, List<WorksiteBlock>> chunks = Map.of();
     private static List<List<WorksiteBlock>> versions = List.of();
     private static final FrontierV3WorksiteCurrentIndex CURRENT = new FrontierV3WorksiteCurrentIndex();
@@ -28,7 +27,16 @@ final class FrontierV3WorksiteRegistry {
         return CURRENT.update(OWNERS.stream().map(owner -> owner.currentBlocks(state)).toList());
     }
     static Optional<WorksiteBlock> point(FrontierWorldState state, BlockPos position) {
-        index(state); return Optional.ofNullable(points.get(position.asLong()));
+        var address = new BlockPosition(position.getX(), position.getY(), position.getZ());
+        WorksiteBlock found = null;
+        for (var owner : OWNERS) {
+            var cell = owner.currentBlocks(state).get(address);
+            if (cell == null) continue;
+            if (cell.key().family() != owner.family()) throw new IllegalStateException("worksite provider returned a foreign declaration");
+            if (found != null) throw new IllegalStateException("overlapping worksite declarations");
+            found = cell;
+        }
+        return Optional.ofNullable(found);
     }
     private static void index(FrontierWorldState state) {
         var current = OWNERS.stream().map(owner -> owner.declarations(state)).toList();
@@ -44,6 +52,6 @@ final class FrontierV3WorksiteRegistry {
             nextChunks.computeIfAbsent(ChunkPos.asLong(position.getX() >> 4, position.getZ() >> 4), ignored -> new ArrayList<>()).add(cell);
         }
         var frozen = new LinkedHashMap<Long, List<WorksiteBlock>>(); nextChunks.forEach((key, cells) -> frozen.put(key, List.copyOf(cells)));
-        points = Map.copyOf(nextPoints); chunks = Collections.unmodifiableMap(frozen); bootstrap = state.bootstrap(); versions = current;
+        chunks = Collections.unmodifiableMap(frozen); bootstrap = state.bootstrap(); versions = current;
     }
 }

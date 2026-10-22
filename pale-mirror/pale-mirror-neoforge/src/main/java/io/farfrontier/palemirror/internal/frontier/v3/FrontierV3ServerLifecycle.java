@@ -453,7 +453,7 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3NativeBodyResidence.restore(physicalWorld);
         FrontierV3PhysicalExecutors.registry().tick(Objects.requireNonNull(physicalWorld, "physical world"),
                 Objects.requireNonNull(runtime, "runtime"));
-        FrontierV3PhysicalStores.flush(physicalWorld);
+        FrontierV3PhysicalStores.advance(physicalWorld);
     }
     static void runObservedPhysicalTurn(ServerLevel physicalWorld,
                                         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
