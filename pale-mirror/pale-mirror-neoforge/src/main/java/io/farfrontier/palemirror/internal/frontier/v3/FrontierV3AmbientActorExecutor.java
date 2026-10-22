@@ -89,7 +89,7 @@ final class FrontierV3AmbientActorExecutor {
     private static final Map<FrontierV3ServerRuntime<?, ?>, Map<SubjectId, Long>> COLD_DEMAND_SINCE = new IdentityHashMap<>();
     private FrontierV3AmbientActorExecutor() { }
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        var departures = new FrontierV3PhysicalTransitionBudget((long)
+        var probes = new FrontierV3PhysicalTransitionBudget((long)
                 (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D),
                 System::nanoTime);
         FrontierV3BodyFatalityOperation.reconcile(level, runtime);
@@ -108,14 +108,13 @@ final class FrontierV3AmbientActorExecutor {
         int admitted = 0;
         for (SubjectId actorId : FrontierV3ActorProbeSchedule.next(runtime, state, level, MAX_ACTOR_PROBES_PER_TICK,
                 FrontierV3AmbientAdmissionPolicy.MAX_ACTORS_PER_TICK)) {
-            if (admitted >= FrontierV3AmbientAdmissionPolicy.MAX_ACTORS_PER_TICK) return;
-            state = runtime.decodedState().orElse(null);
-            if (state == null) return;
-            FrontierV3ActorBodyController.cleanRetired(level, state, actorId);
-            if (FrontierV3ActorBodyController.departurePending(level, state, actorId) && !departures.tryStart()) {
+            if (admitted >= FrontierV3AmbientAdmissionPolicy.MAX_ACTORS_PER_TICK || !probes.tryStart()) {
                 FrontierV3ActorProbeSchedule.defer(runtime, actorId, level.getGameTime());
                 continue;
             }
+            state = runtime.decodedState().orElse(null);
+            if (state == null) return;
+            FrontierV3ActorBodyController.cleanRetired(level, state, actorId);
             FrontierV3ActorProbeSchedule.probed(runtime, actorId);
             FrontierV3ActorBodyController.progressDeparture(level, runtime, state, actorId);
             state = runtime.decodedState().orElse(null);

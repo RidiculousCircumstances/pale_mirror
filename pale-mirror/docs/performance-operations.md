@@ -41,6 +41,23 @@ actual block callbacks still recheck current permission. Before/after native
 storage protocol and force guarantees are unchanged. A broad NeoForge run was
 stopped in unchanged reference first-year simulation, not reported green.
 
+The second capture at3db46fe8 (`r215-final-ingress.jfr`) eliminated the ordinary
+structural-fence parks. Projection total fell from4485ms to1702ms across these
+visits; full visit latency remained6.8s/1.7s, so this is a component improvement,
+not complete ingress acceptance. Ambient actors reached347ms in one stage call.
+Thirty synchronous carrier checkpoints were reached through reserved unloaded
+ambient closure, outside the old departure-only time admission. The actor pass
+now admits complete probes under the same soft time budget and retains every
+unvisited candidate in the existing fair queue; it never interrupts a custody
+transition or removes its durable barrier.
+
+The same profile attributes90 CPU samples at startup to `Map.copyOf` constructing
+the structural column index (12:16:12.218–13.254), principally `MapN.probe`.
+Packed X/Z longs have strongly colliding boxed hashes. The index now uses a
+mixed-hash primitive-long map behind an unmodifiable Map view, preserving exact
+column keys, maximum declared heights and null for absent columns. The startup
+cost is separate from player-entry latency and must not be added to it.
+
 ## Initial chunk ingress (R214)
 
 The native sender retains Minecraft's pending membership, batch quota and actual

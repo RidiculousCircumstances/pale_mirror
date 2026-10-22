@@ -22,6 +22,10 @@ class FrontierV3InfectionOverlayStructuralCeilingTest {
         assertTrue(plan.cells().containsKey(ganglionTop), "the immutable first-visible organ plan owns its top tissue cell");
 
         Map<Long, Integer> ceilings = FrontierV3GrayboxExecutor.structuralCeilings(plan);
+        org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class,
+                () -> ceilings.put(0L, 0), "the packed-coordinate index remains immutable after publication");
+        assertEquals(null, ceilings.get(FrontierV3GrayboxExecutor.columnKey(Integer.MIN_VALUE, Integer.MAX_VALUE)),
+                "absent columns have no declared ceiling, not a primitive-map default height");
         Integer ceiling = ceilings.get(FrontierV3GrayboxExecutor.columnKey(ganglionTop.x(), ganglionTop.z()));
         assertEquals(ganglionTop.y(), ceiling, "the published index retains the full declared organ column before loaded projection catches up");
         assertEquals(ganglionTop.y() + 1, FrontierV3InfectionOverlayExecutor.surfaceY(ganglionTop.y(), ceiling),

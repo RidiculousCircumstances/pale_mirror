@@ -203,9 +203,9 @@ final class FrontierV3GrayboxExecutor {
                 ? Optional.empty() : Optional.of(cursor.structuralCeilings);
     }
     static Map<Long, Integer> structuralCeilings(FrontierGrayboxPlan plan) {
-        Map<Long, Integer> ceilings = new java.util.HashMap<>();
+        Map<Long, Integer> ceilings = new it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap();
         plan.cells().keySet().forEach(position -> ceilings.merge(columnKey(position.x(), position.z()), position.y(), Math::max));
-        return Map.copyOf(ceilings);
+        return java.util.Collections.unmodifiableMap(ceilings);
     }
     static long columnKey(int x, int z) { return ((long) x << 32) ^ (z & 0xffffffffL); }
     static Optional<FrontierV3HiveFoundryAudit.HiveExpectations> publishedHiveExpectations(FrontierV3ServerRuntime<?, ?> runtime) {
