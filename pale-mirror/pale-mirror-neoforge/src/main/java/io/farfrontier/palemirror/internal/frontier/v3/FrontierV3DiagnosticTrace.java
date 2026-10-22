@@ -166,6 +166,11 @@ final class FrontierV3DiagnosticTrace {
                     rejected.rejection().code(), rejected.rejection().detail(), context.operationId(), context.leaseId(), context.cargoId(), context.actorIds());
             return;
         }
+        if (result instanceof CommandResult.Pending pending) {
+            PaleMirrorMod.LOGGER.debug("PMV3_TRACE_PENDING correlation={} kind={} subject={} command={} revision={} reason={}",
+                    correlation, kind, subject.value(), pending.commandId().value(), pending.revision().value(), pending.reason());
+            return;
+        }
         CommandResult.Accepted accepted = (CommandResult.Accepted) result;
         Deque<Entry> entries = ENTRIES.computeIfAbsent(server, unused -> new ArrayDeque<>());
         List<String> previous = entries.stream().filter(candidate -> candidate.correlation().equals(correlation)).map(Entry::kind).toList();

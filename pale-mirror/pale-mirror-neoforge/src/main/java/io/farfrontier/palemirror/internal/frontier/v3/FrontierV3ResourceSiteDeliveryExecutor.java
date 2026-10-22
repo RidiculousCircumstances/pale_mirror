@@ -106,7 +106,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
                         var prepared = new ResourceSiteHarvestBatchPrepared(job.siteId(), job.id(), scene.id(),
                                 job.deliveredYieldQuantity(), nextSlot.orElseThrow());
                         CommandResult result = FrontierV3CommandSubmission.submit(runtime, "field-batch-capacity", job.id().value(), prepared);
-                        if (!(result instanceof CommandResult.Accepted))
+                        if (result instanceof CommandResult.Rejected)
                             FrontierV3ResourceSiteHarvestSceneExecutor.conflict(level, runtime, scene, "field-batch-next-route-unavailable");
                         return;
                     }

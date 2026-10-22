@@ -46,8 +46,7 @@ final class FrontierV3HarvestSceneStandingAdmission {
                 lease.id().value(), new ResourceSiteHarvestScenePreparationAborted(lease.id(), cause.siteId(), cause.jobId(),
                         new ActorBodyId(member.actorId(), binding.authorityEpoch())));
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "resource_site_harvest_preparation_aborted", lease, result);
-        if (result instanceof CommandResult.Accepted)
-            FrontierV3ActorBodyCustody.releaseUnstartedAbsence(level, runtime, member.actorId());
+        runtime.afterCommand(result, () -> FrontierV3ActorBodyCustody.releaseUnstartedAbsence(level, runtime, member.actorId()));
         return result instanceof CommandResult.Accepted;
     }
 

@@ -518,7 +518,7 @@ final class FrontierV3SceneExecutor {
         CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), payload))
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("scene executor transition was rejected: " + result);
+        if (result instanceof CommandResult.Rejected) throw new IllegalStateException("scene executor transition was rejected: " + result);
         return result;
     }
     private static io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState<?> checkpoint(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {

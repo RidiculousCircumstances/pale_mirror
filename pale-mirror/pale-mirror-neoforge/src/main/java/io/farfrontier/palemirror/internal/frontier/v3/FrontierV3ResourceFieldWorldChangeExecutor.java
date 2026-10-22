@@ -246,7 +246,7 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
         return true;
     }
 
-    private static CommandResult.Accepted hold(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    private static CommandResult hold(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                FrontierV3ResourceFieldWorldChangeWitness change) {
         var checkpoint = runtime.canonicalState().orElseThrow();
         CommandId id = new CommandId("executor:field-world-hold-r" + checkpoint.revision().value());
@@ -257,7 +257,7 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
         if (result instanceof CommandResult.Rejected rejected)
             throw new IllegalStateException("persisted world field change cannot install its canonical hold for "
                     + change.siteId().value() + ": " + rejected.rejection());
-        return (CommandResult.Accepted) result;
+        return result;
     }
 
     /** Confirm actual growth immediately after a successful write so consecutive bone-meal uses do not overlap holds. */

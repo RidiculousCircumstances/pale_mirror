@@ -21,7 +21,7 @@ public final class FrontierV3AutomationTransfers {
     public static Optional<Boolean> extract(Optional<Pair<IItemHandler, Object>> selected,
             Function<Pair<IItemHandler, Object>, Boolean> nativeTransfer, Level world, Hopper destination) {
         if (!(world instanceof ServerLevel level) || !FrontierV3PhysicalWorld.isPhysical(level)) return selected.map(nativeTransfer);
-        var runtime = FrontierV3ServerLifecycle.runtimeFor(level.getServer());
+        var runtime = FrontierV3ServerLifecycle.runtimeForNativeMutation(level.getServer());
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return selected.map(nativeTransfer);
         return selected.map(pair -> extract(level, runtime, pair.getKey(), pair.getValue(), destination, () -> nativeTransfer.apply(pair)));
     }
@@ -49,7 +49,7 @@ public final class FrontierV3AutomationTransfers {
     public static Optional<Boolean> insert(Optional<Pair<IItemHandler, Object>> selected,
             Function<Pair<IItemHandler, Object>, Boolean> nativeTransfer, HopperBlockEntity source) {
         if (!(source.getLevel() instanceof ServerLevel level) || !FrontierV3PhysicalWorld.isPhysical(level)) return selected.map(nativeTransfer);
-        var runtime = FrontierV3ServerLifecycle.runtimeFor(level.getServer());
+        var runtime = FrontierV3ServerLifecycle.runtimeForNativeMutation(level.getServer());
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return selected.map(nativeTransfer);
         return selected.map(pair -> {
             var state = runtime.decodedState().orElseThrow();

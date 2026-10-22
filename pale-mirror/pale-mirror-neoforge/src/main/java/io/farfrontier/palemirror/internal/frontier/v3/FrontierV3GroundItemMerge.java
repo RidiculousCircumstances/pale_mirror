@@ -13,7 +13,7 @@ public final class FrontierV3GroundItemMerge {
     public static boolean before(ItemEntity destination, ItemStack destinationStack, ItemEntity source, ItemStack sourceStack, Runnable nativeMerge) {
         if (source.getUUID().equals(NATIVE_MERGE.get())) return true;
         if (!(source.level() instanceof ServerLevel level) || !FrontierV3PhysicalWorld.isPhysical(level)) return true;
-        var runtime = FrontierV3ServerLifecycle.runtimeFor(level.getServer());
+        var runtime = FrontierV3ServerLifecycle.runtimeForNativeMutation(level.getServer());
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return true;
         return before(level, runtime, destination, destinationStack, source, sourceStack, nativeMerge);
     }

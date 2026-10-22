@@ -7,6 +7,7 @@ import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
+import net.neoforged.neoforge.event.server.ServerAboutToStartEvent;
 
 /** Test/moddev-only fixture selector. This class is deliberately excluded from the packaged mod. */
 @EventBusSubscriber(modid = PaleMirrorMod.MOD_ID)
@@ -14,6 +15,19 @@ public final class FrontierV3PilotFixtureBootstrap {
     static final String PROFILE_PROPERTY = "pale_mirror.frontier_v3.pilot.profile";
 
     private FrontierV3PilotFixtureBootstrap() { }
+
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public static void configureWorldgen(ServerAboutToStartEvent event) {
+        if (!FrontierV3ServerLifecycle.v3LaunchOwnsPhysicalWorld()) return;
+        String profileId = System.getProperty(PROFILE_PROPERTY, FrontierV3FixtureCatalog.DEFAULT_PROFILE);
+        String rulesetId = FrontierV3FixtureCatalog.ruleset(profileId).id();
+        String property = "pale_mirror.frontier_v3.ruleset";
+        String configured = System.getProperty(property);
+        if (configured != null && !configured.equals(rulesetId)) {
+            throw new IllegalStateException("pilot worldgen and simulation rulesets differ: " + configured + " / " + rulesetId);
+        }
+        System.setProperty(property, rulesetId);
+    }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void onServerStarted(ServerStartedEvent event) {

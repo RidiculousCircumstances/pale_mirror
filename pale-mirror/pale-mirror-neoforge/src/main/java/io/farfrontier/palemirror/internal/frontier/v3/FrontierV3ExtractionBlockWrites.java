@@ -11,10 +11,10 @@ import java.util.*;
 /** Durable physical capture before external writes; source policy alone acknowledges their meaning. */
 final class FrontierV3ExtractionBlockWrites implements FrontierV3ManagedBlockWrites.Owner {
     @Override public CellMutationKey.OwnerFamily family() { return CellMutationKey.OwnerFamily.EXTRACTIVE_SITE; }
-    @Override public void preparePlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    @Override public boolean preparePlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             List<FrontierV3ManagedBlockWrites.PlannedWrite> writes) {
         var state = runtime.decodedState().orElseThrow();
-        if (!state.bootstrap().ruleset().extraction().enabled()) return;
+        if (!state.bootstrap().ruleset().extraction().enabled()) return true;
         var observations = new LinkedHashMap<BlockPosition, ExtractionGeologyInvalidated.Observation>();
         for (var write : writes) {
             var position = write.position();
@@ -25,10 +25,12 @@ final class FrontierV3ExtractionBlockWrites implements FrontierV3ManagedBlockWri
             ExtractionTerrainFacts.at(state.bootstrap(), raw).ifPresent(fact -> observations.put(raw,
                     new ExtractionGeologyInvalidated.Observation(raw, fact.revision())));
         }
-        if (!observations.isEmpty()) FrontierV3CommandSubmission.submit(runtime, "extraction-geology-invalidated",
-                ExtractionGeologyInvalidated.OWNER.value(), new ExtractionGeologyInvalidated(List.copyOf(observations.values())));
+        if (!observations.isEmpty()) return FrontierV3CommandSubmission.submit(runtime, "extraction-geology-invalidated",
+                ExtractionGeologyInvalidated.OWNER.value(), new ExtractionGeologyInvalidated(List.copyOf(observations.values())))
+                instanceof CommandResult.Accepted;
         // submit accepts only after the complete bounded intent has passed validation and the
         // WAL prefix is forced. Per-block ingress below still owns indexed witnesses/effects.
+        return true;
     }
     @Override public void observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             BlockPos position, BlockState replacement, boolean committed) {
@@ -46,7 +48,7 @@ final class FrontierV3ExtractionBlockWrites implements FrontierV3ManagedBlockWri
             return;
         }
         if (FrontierV3WorksiteWrites.owns(indexed.key())) return;
-        var ledger = FrontierV3GrayboxLedger.get(level); var prior = ledger.worksite(position);
+        var ledger = FrontierV3GrayboxLedger.get(level); var prior = FrontierV3WorksiteEvidence.at(level, ledger, state, position);
         // The container owner owns this socket after creation, not the block projector.
         if (indexed.key().role() == WorksiteBlock.Role.CONTAINER_SOCKET && ledger.claim(position) != null) return;
         if (prior != null && prior.phase() == FrontierV3WorksiteBlockWitness.Phase.EFFECT_BLOCK_APPLIED) {

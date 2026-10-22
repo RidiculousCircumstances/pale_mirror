@@ -20,12 +20,13 @@ final class FirstVisibilityWork {
         this.cells = cells.size();
         this.remainingInPass = cells.size();
     }
-    void preparePending(int limit, java.util.function.Consumer<List<GrayboxCell>> beforeWrite) {
+    boolean preparePending(int limit, java.util.function.Predicate<List<GrayboxCell>> beforeWrite) {
         if (limit < 1 || current != null) throw new IllegalArgumentException("invalid planned visibility window");
-        if (preparedRemaining > 0 || pending.isEmpty()) return;
+        if (preparedRemaining > 0 || pending.isEmpty()) return true;
         var window = pending.stream().limit(limit).toList();
-        beforeWrite.accept(window);
+        if (!beforeWrite.test(window)) return false;
         preparedRemaining = window.size(); // Publish only after successful durable preparation.
+        return true;
     }
     GrayboxCell next() { return current = pending.removeFirst(); }
     void observe(ProjectionResult result) {

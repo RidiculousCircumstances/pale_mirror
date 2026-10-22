@@ -43,6 +43,11 @@ final class FrontierV3PendingProjection {
     int pending(long chunk) { var slice = slices.get(chunk); return slice == null ? 0 : slice.pending.size(); }
     /** A whole chunk gets a bounded contiguous slice; alternating preferred/fair turns prevent starvation. */
     List<WorksiteBlock> batch(LongFunction<Object> availability, LongUnaryOperator priority, int limit) {
+        return batch(availability, priority, limit, java.util.Set.of());
+    }
+    /** In-flight preparation owns its cells until completion; it does not hide chunk availability. */
+    List<WorksiteBlock> batch(LongFunction<Object> availability, LongUnaryOperator priority, int limit,
+            java.util.Set<BlockPosition> preparing) {
         if (limit < 1) throw new IllegalArgumentException("positive projection budget required");
         for (var entry : slices.entrySet()) {
             var slice = entry.getValue(); var token = availability.apply(entry.getKey());
@@ -65,7 +70,8 @@ final class FrontierV3PendingProjection {
         for (long key : keys) {
             var slice = slices.get(key);
             if (slice.availability == null || slice.pending.isEmpty()) continue;
-            var chosen = slice.pending.values().stream().limit(limit - result.size()).toList();
+            var chosen = slice.pending.values().stream().filter(block -> !preparing.contains(block.position()))
+                    .limit(limit - result.size()).toList();
             result.addAll(chosen);
             // Unresolved facts retry behind their peers, not sixty-four times in the same turn.
             for (var block : chosen) { slice.pending.remove(block.position()); slice.pending.put(block.position(), block); }

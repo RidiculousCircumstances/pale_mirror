@@ -54,6 +54,16 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
     @Override public WorksiteBlock current(FrontierWorldState state, WorksiteBlock declaration) {
         return ExtractionWorksiteBlocks.current(state.extractionSites().deposits().get(declaration.key().owner()), declaration);
     }
+    @Override public Optional<WorksiteBlock> initialGeology(FrontierWorldState state, WorksiteBlock current,
+            BlockExtraction.Block generated) {
+        var layout = state.extractionSites().deposits().get(current.key().owner()).site().layout();
+        BlockExtraction.Block initial = switch (current.key().role()) {
+            case RESOURCE -> layout.require(current.key().cell()).definition().before();
+            case NATURAL_TERRAIN -> layout.terrainSupports().get(current.position());
+            case INFRASTRUCTURE, CONTAINER_SOCKET -> null;
+        };
+        return generated.equals(initial) ? Optional.of(new WorksiteBlock(current.key(), current.position(), 1, initial)) : Optional.empty();
+    }
     @Override public Optional<WorksiteBlockTransition> reclassification(FrontierWorldState state,
             WorksiteBlock predecessor, WorksiteBlock successor) {
         return ExtractionWorksiteBlocks.reclassification(
@@ -83,7 +93,7 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
         var position = declaration.position();
         var nativePosition = FrontierV3WorksiteProjection.position(declaration);
         var actual = FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(nativePosition));
-        var witness = FrontierV3GrayboxLedger.get(level).worksite(nativePosition);
+        var witness = FrontierV3WorksiteEvidence.at(level, FrontierV3GrayboxLedger.get(level), state, nativePosition);
         // View demand may expose a stale cached source without making it tick.
         // Bring that source current under temporary custody, then release from
         // positive whole-region proof; an already-current view needs no lease.
@@ -93,7 +103,8 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
         if (lease != null && lease.live()) return lease.status() == PhysicalCustodyLeaseStatus.PREPARING
                 || lease.status() == PhysicalCustodyLeaseStatus.ACQUIRED
                     && (FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(FrontierV3WorksiteProjection.position(declaration))).equals(declaration.block())
-                        || Optional.ofNullable(FrontierV3GrayboxLedger.get(level).worksite(FrontierV3WorksiteProjection.position(declaration)))
+                        || Optional.ofNullable(FrontierV3WorksiteEvidence.at(level, FrontierV3GrayboxLedger.get(level), state,
+                                FrontierV3WorksiteProjection.position(declaration)))
                             .flatMap(retained -> committedEffect(state, retained)).isPresent());
         var replica = state.replicaCustody().replicas().get(region.objectId());
         submit(runtime, new ExtractionSourceBoundary(region, ExtractionSourceBoundary.Operation.PREPARE,
@@ -111,7 +122,7 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
             boolean complete = index.cells(region).stream().allMatch(cell -> {
                 var position = new BlockPos(cell.source().x(), cell.source().y(), cell.source().z());
                 if (!level.hasChunkAt(position)) return false;
-                var witness = ledger.worksite(position); var current = state.extractionSites().deposits().get(region.siteId()).cells().get(cell.id());
+                var witness = FrontierV3WorksiteEvidence.at(level, ledger, state, position); var current = state.extractionSites().deposits().get(region.siteId()).cells().get(cell.id());
                 return witness != null && witness.phase() == FrontierV3WorksiteBlockWitness.Phase.SETTLED
                         && witness.declaration().key().equals(new WorksiteBlock.Key(family(), region.siteId(), WorksiteBlock.Role.RESOURCE, cell.id()))
                         && witness.declaration().revision() == current.revision()
@@ -123,7 +134,7 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
                     .allMatch(cell -> {
                         var position = FrontierV3WorksiteProjection.position(cell);
                         if (!level.hasChunkAt(position)) return false;
-                        var witness = ledger.worksite(position); var current = current(state, cell);
+                        var witness = FrontierV3WorksiteEvidence.at(level, ledger, state, position); var current = current(state, cell);
                         return witness != null && witness.phase() == FrontierV3WorksiteBlockWitness.Phase.SETTLED
                                 && witness.declaration().equals(current)
                                 && FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position)).equals(current.block());

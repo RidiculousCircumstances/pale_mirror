@@ -90,6 +90,10 @@ final class FrontierV3ActorBodyController {
         var payload = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyDied(id, actor.body(),
                 actor.condition().health(), observed, FrontierV3ActorBodyDeparture.execution(state, declaration.actorId()), cause);
         var fatality = FrontierV3BodyFatalityOperation.commit(level, runtime, body, payload, resources.effects(), nativeDeath, died);
+        // The native outcome is retained by the fatality owner; canonical death may
+        // still be waiting on disk. Its ordinary recovery path completes aftermath.
+        if (runtime.decodedState().orElseThrow().actorLocations().get(declaration.actorId())
+                .condition().status() == io.farfrontier.palemirror.frontier.v3.model.ActorLifeStatus.ALIVE) return true;
         FrontierV3BodyOperationIntegration.recover(level, runtime.decodedState().orElseThrow(), ledger, declaration.actorId());
         ledger.retireDeadActor(runtime.decodedState().orElseThrow(), declaration.actorId());
         ledger.persist(level, state.bootstrap().worldId());

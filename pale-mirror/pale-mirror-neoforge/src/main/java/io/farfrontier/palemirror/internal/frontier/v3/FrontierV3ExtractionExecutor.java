@@ -75,10 +75,10 @@ final class FrontierV3ExtractionExecutor {
         try {
             var effect = apply(level, state, job, step, worker, actuation);
             if (effect == null) return false;
-            boolean committed = FrontierV3OperationConfirmation.submit(level, runtime, effect.ticket(), effect.receipt());
-            if (!committed) return false;
-            var current = runtime.decodedState().orElseThrow();
-            if (step instanceof ExtractionPhysicalStep.BlockWork block) {
+            var retainedStep = step;
+            return FrontierV3OperationConfirmation.submit(level, runtime, effect.ticket(), effect.receipt(), () -> {
+              var current = runtime.decodedState().orElseThrow();
+              if (retainedStep instanceof ExtractionPhysicalStep.BlockWork block) {
                 var target = job.target().orElseThrow();
                 var cell = current.extractionSites().deposits().get(job.siteId()).cells().get(target.key().cell());
                 var declared = new WorksiteBlock(new WorksiteBlock.Key(CellMutationKey.OwnerFamily.EXTRACTIVE_SITE, job.siteId(),
@@ -87,9 +87,9 @@ final class FrontierV3ExtractionExecutor {
                 ledger.worksite(new FrontierV3WorksiteBlockWitness(declared, block.extraction().definition().before(),
                         FrontierV3WorksiteBlockWitness.Phase.SETTLED));
                 ledger.persist(level);
-            }
-            FrontierV3ActorCarryProjection.rememberConfirmed(runtime.decodedState().orElseThrow(), actor, worker);
-            return true;
+              }
+              FrontierV3ActorCarryProjection.rememberConfirmed(runtime.decodedState().orElseThrow(), actor, worker);
+            });
         } catch (IllegalArgumentException changed) {
             // A retained ambiguous effect is never converted into a timeout unlock or replay.
             LOGGER.warn("PMV3 mining effect unresolved job={} revision={} phase={} step={} reason={}",
@@ -108,7 +108,8 @@ final class FrontierV3ExtractionExecutor {
             if (!ExtractionWorkSafety.available(state, state.extractionSites().deposits().get(site.id()), cell)) return null;
             var region = new ExtractionRegion(site.id(), Math.floorDiv(cell.source().x(), 16), Math.floorDiv(cell.source().z(), 16));
             var custody = state.replicaCustody().custodyByScope().get(region.scopeId());
-            var witness = FrontierV3GrayboxLedger.get(level).worksite(new BlockPos(cell.source().x(), cell.source().y(), cell.source().z()));
+            var witness = FrontierV3WorksiteEvidence.at(level, FrontierV3GrayboxLedger.get(level), state,
+                    new BlockPos(cell.source().x(), cell.source().y(), cell.source().z()));
             if (custody == null || custody.status() != PhysicalCustodyLeaseStatus.ACQUIRED || witness == null
                     || witness.phase() != FrontierV3WorksiteBlockWitness.Phase.SETTLED
                     || witness.declaration().revision() != target.revision()) return null;
@@ -154,7 +155,7 @@ final class FrontierV3ExtractionExecutor {
                 if (!level.hasChunkAt(source)) return null;
                 int resultCount = block.carriedBefore() + block.extraction().output().getFirst().quantity();
                 var adapter = new FrontierV3MinecraftBlockExtraction(level, worker, actuation);
-                var ledger = FrontierV3GrayboxLedger.get(level); var witness = ledger.worksite(source);
+                var ledger = FrontierV3GrayboxLedger.get(level); var witness = FrontierV3WorksiteEvidence.at(level, ledger, state, source);
                 var key = new WorksiteBlock.Key(CellMutationKey.OwnerFamily.EXTRACTIVE_SITE, job.siteId(),
                         WorksiteBlock.Role.RESOURCE, job.target().orElseThrow().key().cell());
                 if (witness == null || !witness.declaration().key().equals(key)

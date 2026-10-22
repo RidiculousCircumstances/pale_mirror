@@ -186,10 +186,10 @@ final class FrontierV3NavigationObservation {
     }
     /** Amortize durable invalidation over a bounded declared write window. This is
      * not permission to mutate: every actual write still passes blockWrite above. */
-    static void preparePlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    static boolean preparePlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             List<FrontierV3ManagedBlockWrites.PlannedWrite> writes) {
         var state = runtime.passiveOwnershipState().orElse(null);
-        if (state == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
+        if (state == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
         var changes = new LinkedHashMap<BlockPosition, NavigationObservation>();
         for (var write : writes) collectWriteFence(level, state, write.position(), write.replacement(), changes);
         window(level, state).dirty.addAll(changes.keySet());
@@ -197,11 +197,11 @@ final class FrontierV3NavigationObservation {
         for (var entry : changes.entrySet()) {
             batch.put(entry.getKey(), entry.getValue());
             if (batch.size() == NavigationGeometryState.MAX_CHANGE) {
-                if (!publish(runtime, runtime.decodedState().orElseThrow(), batch)) return;
+                if (!publish(runtime, runtime.decodedState().orElseThrow(), batch)) return false;
                 batch = new LinkedHashMap<>();
             }
         }
-        if (!batch.isEmpty()) publish(runtime, runtime.decodedState().orElseThrow(), batch);
+        return batch.isEmpty() || publish(runtime, runtime.decodedState().orElseThrow(), batch);
     }
     private static void collectWriteFence(ServerLevel level, FrontierWorldState state, BlockPos physical,
             net.minecraft.world.level.block.state.BlockState replacement, Map<BlockPosition, NavigationObservation> changes) {

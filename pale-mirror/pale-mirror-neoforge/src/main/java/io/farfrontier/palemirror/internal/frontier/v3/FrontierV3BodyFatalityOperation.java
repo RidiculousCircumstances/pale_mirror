@@ -37,9 +37,10 @@ final class FrontierV3BodyFatalityOperation {
                 () -> { nativeDeath.run(); return true; }, died);
         if (!result.complete()) throw new IllegalStateException("body fatality lacks an exact native outcome: "
                 + operation.ticket() + " " + result.status());
-        if (!FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(), consequence))
-            throw new IllegalStateException("native body fatality awaits canonical confirmation: " + operation.ticket());
-        snapshot.settle(level, runtime, operation.ticket());
+        // The native death is already witnessed. Retained explicit-owner recovery owns
+        // settlement even if this host turn cannot yet publish its canonical consequence.
+        FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(), consequence,
+                () -> snapshot.settle(level, runtime, operation.ticket()));
         return operation.ticket();
     }
 

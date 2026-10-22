@@ -24,7 +24,7 @@ public final class FrontierV3GroundItemDestruction {
         if (!(nativeEntity instanceof ItemEntity entity) || entity.isRemoved()
                 || reason != Entity.RemovalReason.KILLED && reason != Entity.RemovalReason.DISCARDED
                 || !(entity.level() instanceof ServerLevel level) || !FrontierV3PhysicalWorld.isPhysical(level)) return true;
-        var runtime = FrontierV3ServerLifecycle.runtimeFor(level.getServer());
+        var runtime = FrontierV3ServerLifecycle.runtimeForNativeMutation(level.getServer());
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return true;
         if (entity.getUUID().equals(NATIVE_REMOVAL.get())) return true;
         return before(level, entity, reason, runtime);

@@ -39,7 +39,7 @@ public final class FrontierV3FieldTurnGameTests {
             }
             FrontierV3ResourceFieldInitialWriter.reserve(level, a, new PhysicalIntentId("intent:field-turn-a"));
             FrontierV3ResourceFieldInitialWriter.reserve(level, b, new PhysicalIntentId("intent:field-turn-b"));
-            FrontierV3ResourceFieldInitialWriter.writePreparedBatch(level, a, writes -> { });
+            FrontierV3ResourceFieldInitialWriter.writePreparedBatch(level, a, writes -> true);
             var paused = (FrontierV3ResourceSiteLedger.FieldInitialization) ledger.fieldClaim(a.id());
             int prefix = paused.cursor().nextWrite();
             var sites = List.of(new ResourceSiteLifecycle(a.id(), ResourceSitePhase.GROWING, 1L, 0, Optional.empty()),
@@ -67,7 +67,7 @@ public final class FrontierV3FieldTurnGameTests {
         var ledger = FrontierV3ResourceSiteLedger.get(helper.getLevel());
         var before = ((FrontierV3ResourceSiteLedger.FieldInitialization) ledger.fieldClaim(site.id())).cursor();
         if (before.complete()) { complete.run(); return; }
-        var result = FrontierV3ResourceFieldInitialWriter.writePreparedBatch(helper.getLevel(), site, writes -> { });
+        var result = FrontierV3ResourceFieldInitialWriter.writePreparedBatch(helper.getLevel(), site, writes -> true);
         if (result == FrontierV3ResourceFieldInitialWriter.Result.FOREIGN
                 || result == FrontierV3ResourceFieldInitialWriter.Result.AMBIGUOUS)
             helper.fail("declared field projection lost its exact predecessor: " + result);

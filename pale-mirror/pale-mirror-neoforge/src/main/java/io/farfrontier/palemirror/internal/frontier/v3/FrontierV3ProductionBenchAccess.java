@@ -18,7 +18,7 @@ public final class FrontierV3ProductionBenchAccess implements ProductionBenchAcc
                            FrontierWorldState state, ContainerRecord record, ProductionStations.Machine machine) { }
     private static Optional<Current> current(ProductionBenchBlockEntity bench) {
         if (!(bench.getLevel() instanceof ServerLevel level)) return Optional.empty();
-        var runtime = FrontierV3ServerLifecycle.runtimeFor(level.getServer());
+        var runtime = FrontierV3ServerLifecycle.runtimeForNativeMutation(level.getServer());
         if (runtime == null) return Optional.empty();
         var state = runtime.decodedState().orElse(null); if (state == null) return Optional.empty();
         var declared = bench.getPersistentData().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY);

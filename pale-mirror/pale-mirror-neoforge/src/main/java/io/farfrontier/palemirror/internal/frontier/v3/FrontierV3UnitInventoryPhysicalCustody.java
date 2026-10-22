@@ -34,8 +34,9 @@ final class FrontierV3UnitInventoryPhysicalCustody {
             var receipt = new UnitInventoryBoundObserved(identity, account.id(),
                     new FungiblePhysicalObservation.Stack(FrontierV3ActorResourceSlots.address(actor.actorId(), body, placement.slot()), kind, quantity));
             var result = FrontierV3CommandSubmission.submit(runtime, "unit-inventory-bind", account.id().value(), receipt);
+            runtime.afterCommand(result, () -> FrontierV3ActorCarryProjection.rememberConfirmed(
+                    runtime.decodedState().orElseThrow(), actor.actorId(), body));
             if (result instanceof CommandResult.Accepted) {
-                FrontierV3ActorCarryProjection.rememberConfirmed(runtime.decodedState().orElseThrow(), actor.actorId(), body);
                 return true;
             }
         }

@@ -20,6 +20,19 @@ final class FrontierStoreTransactionCommitter implements TransactionCommitter {
         Objects.requireNonNull(transaction, "transaction");
         Objects.requireNonNull(durability, "durability");
         AppendReceipt receipt = store.append(transaction, durability);
+        validate(transaction, durability, receipt);
+    }
+
+    @Override public Confirmation prepare(TransactionRecord transaction, Durability durability) {
+        var submitted = store.prepareAppend(transaction, durability);
+        return () -> {
+            var receipt = submitted.poll();
+            receipt.ifPresent(value -> validate(transaction, durability, value));
+            return receipt.isPresent();
+        };
+    }
+
+    private static void validate(TransactionRecord transaction, Durability durability, AppendReceipt receipt) {
         if (!transaction.id().equals(receipt.transactionId()) || !transaction.revision().equals(receipt.revision())
                 || durability != receipt.durability()) {
             throw new IllegalStateException("Frontier v3 store returned a mismatched append receipt");

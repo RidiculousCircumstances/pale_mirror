@@ -41,9 +41,8 @@ final class FrontierV3ProductionStationFuelExecutor {
                             : plain(physical.inventory().getItem(slot), new ItemStack(item, before - 1)));
             if (!effect.complete()) continue;
             var remaining = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(physical.inventory(), state, record.id());
-            boolean accepted = FrontierV3OperationConfirmation.submit(level, runtime, effect.ticket(),
+            FrontierV3OperationConfirmation.submitRequired(level, runtime, effect.ticket(),
                     new ProductionStationFuelChanged(ProductionStationFuelChanged.Stage.HOT_CONSUMED, burn, remaining));
-            if (!accepted) throw new IllegalStateException("station fuel receipt rejected after physical effect: " + burn);
             return;
         }
     }

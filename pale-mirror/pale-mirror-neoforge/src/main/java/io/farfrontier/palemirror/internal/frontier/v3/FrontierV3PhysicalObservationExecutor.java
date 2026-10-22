@@ -61,7 +61,8 @@ final class FrontierV3PhysicalObservationExecutor {
             CommandResult result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                     FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id), new PhysicalDeltaObserved(delta)))
                     .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-            if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("v3 physical observation command was rejected: " + result);
+            if (result instanceof CommandResult.Rejected) throw new IllegalStateException("v3 physical observation command was rejected: " + result);
+            if (result instanceof CommandResult.Pending) return;
             ledger.resolve(value);
         }
     }

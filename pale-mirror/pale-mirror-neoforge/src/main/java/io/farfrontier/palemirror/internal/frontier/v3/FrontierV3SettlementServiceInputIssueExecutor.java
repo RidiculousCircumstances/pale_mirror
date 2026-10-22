@@ -221,7 +221,7 @@ final class FrontierV3SettlementServiceInputIssueExecutor {
         SettlementServiceInputIssueObservation receipt = new SettlementServiceInputIssueObservation(
                 new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')), intent.id(), target.work().id(),
                 target.work().workerId(), target.item().id(), target.sourceSlot());
-        if (!(transitionResult(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt), "confirmed") instanceof CommandResult.Accepted)) {
+        if (transitionResult(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt), "confirmed") instanceof CommandResult.Rejected) {
             throw new IllegalStateException("service input issue confirmation was rejected");
         }
     }

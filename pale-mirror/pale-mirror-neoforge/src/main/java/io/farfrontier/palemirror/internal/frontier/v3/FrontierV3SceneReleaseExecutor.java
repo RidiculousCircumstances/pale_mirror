@@ -123,7 +123,7 @@ final class FrontierV3SceneReleaseExecutor {
         CommandResult result = binding.map(action -> FrontierV3CommandSubmission.submitBound(runtime, "scene-release", lease.id().value(),
                         payload, action))
                 .orElseGet(() -> submit(runtime, "scene-release", lease.id().value(), payload));
-        if (result instanceof CommandResult.Accepted) forgetLeaseTransient(runtime, lease.id());
+        runtime.afterCommand(result, () -> forgetLeaseTransient(runtime, lease.id()));
         return result;
     }
 }

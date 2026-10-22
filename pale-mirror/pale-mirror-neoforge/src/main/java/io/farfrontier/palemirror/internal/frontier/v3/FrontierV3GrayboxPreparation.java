@@ -17,12 +17,12 @@ final class FrontierV3GrayboxPreparation {
         }
         return List.copyOf(selected);
     }
-    static void prepare(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    static boolean prepare(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             FrontierWorldState state, List<GrayboxCell> cells) {
         var writes = cells.stream().filter(cell -> !state.physicalDeltas().containsKey(cell.position()))
                 .map(cell -> new FrontierV3ManagedBlockWrites.PlannedWrite(
                         new BlockPos(cell.position().x(), cell.position().y(), cell.position().z()),
                         FrontierV3GrayboxExecutor.material(cell.material()))).toList();
-        if (!writes.isEmpty()) FrontierV3ManagedBlockWrites.preparePlannedWrites(level, runtime, writes);
+        return writes.isEmpty() || FrontierV3ManagedBlockWrites.preparePlannedWrites(level, runtime, writes);
     }
 }

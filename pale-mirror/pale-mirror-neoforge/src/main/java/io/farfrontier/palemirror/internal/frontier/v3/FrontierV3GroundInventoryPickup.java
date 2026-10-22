@@ -16,7 +16,7 @@ public final class FrontierV3GroundInventoryPickup {
     private FrontierV3GroundInventoryPickup() { }
     public static boolean add(Container destination, ItemEntity source, BooleanSupplier nativePickup) {
         if (!(source.level() instanceof ServerLevel level) || !FrontierV3PhysicalWorld.isPhysical(level)) return nativePickup.getAsBoolean();
-        var runtime = FrontierV3ServerLifecycle.runtimeFor(level.getServer());
+        var runtime = FrontierV3ServerLifecycle.runtimeForNativeMutation(level.getServer());
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return nativePickup.getAsBoolean();
         return add(level, runtime, destination, source, nativePickup);
     }

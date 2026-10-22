@@ -26,7 +26,7 @@ final class FrontierV3WorksiteHandoff {
                 if (Math.floorDiv(cell.position().x(), 16) != chunk.x || Math.floorDiv(cell.position().z(), 16) != chunk.z
                         || cell.key().role() == WorksiteBlock.Role.CONTAINER_SOCKET) continue;
                 found = true; var position = new BlockPos(cell.position().x(), cell.position().y(), cell.position().z());
-                var witness = ledger.worksite(position);
+                var witness = FrontierV3WorksiteEvidence.at(level, ledger, state, position);
                 if (witness == null || !witness.declaration().key().equals(cell.key())
                         || witness.phase() == FrontierV3WorksiteBlockWitness.Phase.PREPARED) {
                     status = WAITING; reason = "worksite_initial_projection"; break;

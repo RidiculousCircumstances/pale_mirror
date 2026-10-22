@@ -124,6 +124,11 @@ public final class FrontierV3FixtureCatalog {
     }
 
     public static List<Profile> profiles() { return List.copyOf(PROFILES.values()); }
+
+    /** Immutable composition input, available before any world chunks or runtime exist. */
+    public static FrontierRuleset ruleset(String profileId) {
+        return Objects.requireNonNull(RULESETS.get(profile(profileId).rulesetId()), "undeclared fixture ruleset");
+    }
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> goodsShipmentConfiguration(WorldId worldId, long seed) {
         var state = ShipmentFixture.initial(worldId, seed);
         return configured(worldId, state, SimInstant.ZERO, tradeSchedules(state, List.of(io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.progress(ShipmentFixture.ID, 1))));

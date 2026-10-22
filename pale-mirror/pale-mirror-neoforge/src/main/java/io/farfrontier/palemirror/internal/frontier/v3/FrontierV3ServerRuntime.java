@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.api.AdvanceResult;
 import io.farfrontier.palemirror.frontier.v3.api.CheckpointImage;
 import io.farfrontier.palemirror.frontier.v3.api.CommandResult;
+import io.farfrontier.palemirror.frontier.v3.api.CommandId;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalState;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCanonicalStateAccess;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierCommand;
@@ -42,6 +43,10 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     private SimInstant instant;
     private int ticksSinceCheckpoint;
     private long pendingOrdinaryTicks;
+    private CommandId pendingCommand;
+    enum CommandCompletion { PROTOCOL, OWNER }
+    private final java.util.EnumMap<CommandCompletion, Runnable> commandContinuations =
+            new java.util.EnumMap<>(CommandCompletion.class);
     /**
      * One immutable defensive image for the current canonical tick/revision.  Physical adapters
      * routinely inspect it several times in one server tick; rebuilding it would clone the full
@@ -207,14 +212,15 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     Optional<CommandResult> submit(FrontierCommand command) {
         Objects.requireNonNull(command, "command");
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
+        if (engine.hasPendingCommit()) return Optional.of(new CommandResult.Pending(command.id(),
+                engine.canonicalState().revision(), CommandResult.Pending.Reason.PREDECESSOR));
         if (!ensureTransactionHeadroom(1)) return Optional.empty();
         CommandResult result;
         try (DiagnosticCaptureScope ignored = DiagnosticCaptureScope.open(diagnosticRuntimeIdentity)) {
             result = engine.submit(command);
         }
-        // Even a rejected command may have quarantined the engine.  Discarding a read-only
-        // image is harmless; successful commands must never leave a stale snapshot visible to a
-        // later physical executor in the same server tick.
+        if (result instanceof CommandResult.Pending pending && pending.reason() == CommandResult.Pending.Reason.DURABILITY)
+            pendingCommand = command.id();
         cachedCheckpoint = null;
         if (engine.status().kind() == io.farfrontier.palemirror.frontier.v3.api.EngineStatus.Kind.QUARANTINED) {
             status = new FrontierV3RuntimeStatus(FrontierV3RuntimeStatus.Kind.QUARANTINED, engine.status().failureDetail());
@@ -222,6 +228,51 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
                     "PMV3_QUARANTINE primary command={} detail={}", command.id().value(), status.detail().orElse(""), error));
         }
         return Optional.of(result);
+    }
+
+    /** Non-replayable native callbacks establish their predecessor BEFORE reading
+     * state/building a command. Never rebase a payload built against an old revision.
+     * Ordinary PM turns retain cooperative semantics, including nested block hooks. */
+    void settleNativeBoundary() {
+        if (status.kind() == FrontierV3RuntimeStatus.Kind.ACTIVE && engine.hasPendingCommit()
+                && store instanceof FrontierFileStore files && !files.inTurn()) {
+            // A native/player callback cannot acknowledge an unpublished predecessor.
+            // This explicit external boundary drains; ordinary executor turns never do.
+            while (!publishDurability()) {
+                if (engine.failureCause().isPresent()) { quarantine(engine.failureCause().orElseThrow()); return; }
+                files.finishRequiredWrites();
+            }
+            cachedCheckpoint = null;
+        }
+    }
+
+    /** Ephemeral continuation of an already-retained command, never a second mutation owner.
+     * Durable recovery remains with the producer's operation/intent journal. */
+    void afterCommand(CommandResult result, Runnable continuation) {
+        afterCommand(result, CommandCompletion.OWNER, continuation);
+    }
+    void afterCommand(CommandResult result, CommandCompletion completion, Runnable continuation) {
+        if (result instanceof CommandResult.Accepted) continuation.run();
+        else if (result instanceof CommandResult.Pending pending && pending.reason() == CommandResult.Pending.Reason.DURABILITY) {
+            if (!pending.commandId().equals(pendingCommand)) throw new IllegalStateException("foreign pending command continuation");
+            commandContinuations.put(completion, Objects.requireNonNull(continuation));
+        }
+    }
+    void afterCommandReceipt(CommandId id, Runnable continuation) {
+        if (commandReceipt(id).isPresent()) continuation.run();
+        else if (id.equals(pendingCommand)) commandContinuations.put(CommandCompletion.OWNER, Objects.requireNonNull(continuation));
+    }
+    private boolean publishDurability() {
+        if (!engine.advanceDurability()) return false;
+        cachedCheckpoint = null;
+        if (pendingCommand != null) {
+            if (commandReceipt(pendingCommand).isEmpty()) throw new IllegalStateException("durable command lost its exact receipt");
+            var continuations = java.util.List.copyOf(commandContinuations.values());
+            pendingCommand = null;
+            commandContinuations.clear();
+            for (var continuation : continuations) continuation.run();
+        }
+        return !engine.hasPendingCommit();
     }
 
     Optional<P> projection(io.farfrontier.palemirror.frontier.v3.api.ProjectionQuery query) {
@@ -264,7 +315,8 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             var used = latest.consumed();
             actions += used.actions(); weight += used.weight(); classifications += used.classifications(); executions += used.executions();
             remaining = used.remaining(remaining.orElseThrow());
-            if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE || latest.deferredAction().isPresent()) break;
+            if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE || latest.deferredAction().isPresent()
+                    || engine.hasPendingCommit()) break;
         }
         if (latest == null) return Optional.empty();
         return Optional.of(new AdvanceResult(latest.revision(), latest.instant(), transactions, latest.deferredAction(),
@@ -277,7 +329,13 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         Objects.requireNonNull(turn, "persistence turn");
         if (store instanceof FrontierFileStore fileStore) {
             if (!fileStore.tryBeginTurn()) return;
-            try { turn.run(); }
+            try {
+                if (!publishDurability()) {
+                    engine.failureCause().ifPresent(this::quarantine); return;
+                }
+                cachedCheckpoint = null;
+                turn.run();
+            }
             finally { fileStore.endTurnAsync(); }
         } else turn.run();
     }
@@ -333,7 +391,9 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             AdvanceResult result;
             long before = instant.ticks();
             try (DiagnosticCaptureScope ignored = DiagnosticCaptureScope.open(diagnosticRuntimeIdentity)) {
-                result = engine.advanceTo(instant.plus(intervalTicks), retainedBudget);
+                var target = instant.plus(intervalTicks);
+                var published = engine.canonicalState().instant();
+                result = engine.advanceTo(target.compareTo(published) < 0 ? published : target, retainedBudget);
             }
             // SimInstant advances even when no due action mutates the aggregate, so each server
             // tick has a distinct immutable checkpoint image for adapter observation.
@@ -369,6 +429,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
 
     Optional<SnapshotReceipt> checkpoint() {
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
+        if (engine.hasPendingCommit()) return Optional.empty();
         try {
             CheckpointImage checkpoint = checkpointImage().orElseThrow();
             RecoveryImage durable = store instanceof FrontierFileStore fileStore
@@ -400,6 +461,12 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     void shutdown() {
         try {
             if (status.kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
+                if (store instanceof FrontierFileStore files) {
+                    while (!publishDurability()) {
+                        if (engine.failureCause().isPresent()) { quarantine(engine.failureCause().orElseThrow()); break; }
+                        files.finishRequiredWrites();
+                    }
+                }
                 checkpoint();
                 if (status.kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) status = FrontierV3RuntimeStatus.stopped();
             }

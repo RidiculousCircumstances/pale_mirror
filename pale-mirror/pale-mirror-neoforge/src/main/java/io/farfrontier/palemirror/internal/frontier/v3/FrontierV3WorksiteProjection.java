@@ -10,7 +10,8 @@ final class FrontierV3WorksiteProjection {
     private static final Map<ServerLevel, FrontierV3PendingProjection> QUEUES = new WeakHashMap<>();
     private record PreparedWindow(List<FrontierV3WorksiteBlockWitness> writes,
                                   FrontierV3JournaledSavedData.DurabilityFence fence) { }
-    private static final Map<ServerLevel, PreparedWindow> PREPARING = new WeakHashMap<>();
+    private static final int MAX_PREPARING_WINDOWS = 4;
+    private static final Map<ServerLevel, List<PreparedWindow>> PREPARING = new WeakHashMap<>();
     private static final Map<ServerLevel, Progress> PROGRESS = new WeakHashMap<>();
     private static final class Progress {
         long turns, admissionWaits, durabilityWaits, probes, prepared, applied, settled;
@@ -42,16 +43,15 @@ final class FrontierV3WorksiteProjection {
         if (state == null || !state.bootstrap().ruleset().extraction().enabled()) return;
         var progress = PROGRESS.computeIfAbsent(level, ignored -> new Progress()); progress.turns++;
         for (var owner : FrontierV3WorksiteRegistry.OWNERS) owner.beforeTurn(level, runtime);
-        var pending = PREPARING.get(level);
+        var windows = PREPARING.computeIfAbsent(level, ignored -> new ArrayList<>());
         // Shared admission limits NEW preparation, not completion of an already
         // fenced window. Its physical write ceiling still applies on every turn.
-        if (pending == null && !FrontierV3PhysicalExecutors.registry().admitPreparation(level, "worksite-projection")) {
-            progress.admissionWaits++; return;
-        }
+        boolean prepare = windows.size() < MAX_PREPARING_WINDOWS
+                && FrontierV3PhysicalExecutors.registry().admitPreparation(level, "worksite-projection");
+        if (!prepare) progress.admissionWaits++;
         state = runtime.decodedState().orElseThrow();
         var ledger = FrontierV3GrayboxLedger.get(level);
         var writes = new ArrayList<FrontierV3WorksiteBlockWitness>();
-        if (pending != null && !ledger.durable(pending.fence())) { progress.durabilityWaits++; return; }
         int budget = state.bootstrap().ruleset().extraction().projectionWritesPerTurn();
         int readBudget = io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_WEIGHT_BUDGET.get();
         var queue = queue(level, state);
@@ -61,7 +61,12 @@ final class FrontierV3WorksiteProjection {
                     new BlockPosition(position.getX(), position.getY(), position.getZ()));
         }
         var viewers = level.players().stream().map(net.minecraft.server.level.ServerPlayer::chunkPosition).toList();
-        var probes = pending == null ? queue.batch(key -> {
+        var preparing = new HashSet<BlockPosition>();
+        windows.forEach(window -> window.writes().forEach(write -> {
+            if (!preparing.add(write.declaration().position()))
+                throw new IllegalStateException("overlapping worksite preparation windows");
+        }));
+        var probes = prepare ? queue.batch(key -> {
             var chunk = new net.minecraft.world.level.ChunkPos(key);
             var loaded = level.getChunkSource().getChunkNow(chunk.x, chunk.z);
             return loaded == null ? null : new Availability(loaded, level.shouldTickBlocksAt(
@@ -73,13 +78,13 @@ final class FrontierV3WorksiteProjection {
             // prioritizes both first entry and loaded/ticking re-entry.
             return viewers.stream().mapToLong(viewer -> Math.abs((long) viewer.x - chunk.x) + Math.abs((long) viewer.z - chunk.z))
                     .min().orElse(Long.MAX_VALUE);
-        }, readBudget) : List.<WorksiteBlock>of();
+        }, readBudget, preparing) : List.<WorksiteBlock>of();
         var preparation = new FrontierV3FirstVisibilityBudget(readBudget, budget,
                 (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D),
                 System::nanoTime);
         var iterator = probes.iterator();
-        if (pending != null) writes.addAll(pending.writes());
-        while (pending == null && iterator.hasNext() && preparation.takeRead()) {
+        while (iterator.hasNext() && writes.size() < Math.min(budget, FrontierV3ManagedBlockWrites.MAX_PLANNED_WRITES)
+                && preparation.takeRead()) {
             progress.probes++;
             var declared = iterator.next();
             var owner = FrontierV3WorksiteRegistry.owner(declared.key().family());
@@ -87,6 +92,8 @@ final class FrontierV3WorksiteProjection {
             var position = position(declared);
             if (!level.hasChunkAt(position)) continue;
             var current = owner.current(state, declared); var prior = alignDeclaration(ledger, state, current);
+            boolean generationOnly = prior == null;
+            if (prior == null) prior = FrontierV3WorksiteEvidence.initial(level, state, current);
             if (prior != null && !prior.declaration().key().equals(current.key())) continue;
             if (prior != null && prior.phase() == FrontierV3WorksiteBlockWitness.Phase.EFFECT_BLOCK_APPLIED) {
                 var committed = owner.committedEffect(state, prior);
@@ -106,10 +113,16 @@ final class FrontierV3WorksiteProjection {
             if (!owner.beforeProjection(level, runtime, state, current)) {
                 state = runtime.decodedState().orElseThrow(); continue;
             }
+            var actual = FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position));
             if (prior != null && prior.phase() == FrontierV3WorksiteBlockWitness.Phase.SETTLED && prior.declaration().equals(current)) {
+                // Native mutation observation owns later facts (including a container
+                // installed in its prepared socket). Only an untouched generation
+                // baseline needs first-observation comparison here.
+                if (generationOnly && !actual.equals(current.block())) {
+                    ledger.worksite(new FrontierV3WorksiteBlockWitness(current, actual, FrontierV3WorksiteBlockWitness.Phase.EXTERNAL));
+                }
                 queue.complete(chunk(current), current); continue;
             }
-            var actual = FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position));
             if (prior != null && (prior.phase() == FrontierV3WorksiteBlockWitness.Phase.PREPARED
                     || prior.phase() == FrontierV3WorksiteBlockWitness.Phase.EFFECT_COMMITTED)) {
                 // Only a retained preimage or its exact postimage can finish that intent.
@@ -131,50 +144,64 @@ final class FrontierV3WorksiteProjection {
         // Wait for THIS immutable window, not for all other owners to stop writing.
         // The fence is only durability evidence; current authority/preimages are
         // revalidated below even when later unrelated rows remain dirty.
-        if (pending == null) {
+        if (!writes.isEmpty()) {
             progress.prepared += writes.size();
-            pending = new PreparedWindow(List.copyOf(writes), ledger.worksiteFence(writes));
-            PREPARING.put(level, pending);
-            if (!ledger.durable(pending.fence())) { progress.durabilityWaits++; return; }
+            windows.add(new PreparedWindow(List.copyOf(writes), ledger.worksiteFence(writes)));
         }
-        PREPARING.remove(level);
-        writes.removeIf(write -> !currentPreparation(level, runtime.decodedState().orElseThrow(), ledger, write)
-                || !FrontierV3WorksiteRegistry.owner(write.declaration().key().family())
-                    .beforeProjection(level, runtime, runtime.decodedState().orElseThrow(), write.declaration()));
-        var planned = writes.stream().filter(write -> level.hasChunkAt(position(write.declaration()))
-                        && !FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position(write.declaration())))
-                            .equals(write.declaration().block()))
-                .limit(Math.min(budget, FrontierV3ManagedBlockWrites.MAX_PLANNED_WRITES))
-                .map(write -> new FrontierV3ManagedBlockWrites.PlannedWrite(position(write.declaration()),
-                        FrontierV3MinecraftBlockExtraction.block(write.declaration().block()))).toList();
-        if (!planned.isEmpty()) FrontierV3ManagedBlockWrites.preparePlannedWrites(level, runtime, planned);
-        var remaining = new ArrayList<FrontierV3WorksiteBlockWitness>();
-        for (var write : writes) {
-            var position = position(write.declaration());
-            if (!level.hasChunkAt(position)) continue;
-            var actual = FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position));
-            if (!actual.equals(write.declaration().block())) {
-                if (!actual.equals(write.before())) {
-                    ledger.worksite(new FrontierV3WorksiteBlockWitness(write.declaration(), actual, FrontierV3WorksiteBlockWitness.Phase.EXTERNAL));
-                    continue;
-                }
-                // Current preimages need a durable witness, not a block-write permit.
-                // Unused prepared intents remain pending if actual mutations exhaust
-                // this turn's allowance; their owner/recovery proof is unchanged.
-                if (!preparation.takeWrite()) { remaining.add(write); continue; }
-                if (!FrontierV3WorksiteWrites.apply(write.declaration().key(), () ->
-                        level.setBlock(position, FrontierV3MinecraftBlockExtraction.block(write.declaration().block()), 3))) {
-                    remaining.add(write); continue;
-                }
-                progress.applied++;
+        // Independent immutable windows share ONE turn allowance. A pending fence
+        // withholds only its own cells, not already-durable neighbouring work.
+        windows.sort(Comparator.comparingLong(window -> window.writes().stream()
+                .mapToLong(write -> viewers.stream().mapToLong(viewer ->
+                        Math.abs((long) viewer.x - (write.declaration().position().x() >> 4))
+                        + Math.abs((long) viewer.z - (write.declaration().position().z() >> 4)))
+                        .min().orElse(Long.MAX_VALUE)).min().orElse(Long.MAX_VALUE)));
+        var retained = new ArrayList<PreparedWindow>();
+        for (var pending : windows) {
+            if (!ledger.durable(pending.fence())) {
+                progress.durabilityWaits++; retained.add(pending); continue;
             }
-            if (FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position)).equals(write.declaration().block())) {
-                ledger.worksite(new FrontierV3WorksiteBlockWitness(write.declaration(), write.before(), FrontierV3WorksiteBlockWitness.Phase.SETTLED));
-                queue.complete(chunk(write.declaration()), write.declaration());
-                progress.settled++;
+            writes.clear(); writes.addAll(pending.writes());
+            writes.removeIf(write -> !currentPreparation(level, runtime.decodedState().orElseThrow(), ledger, write)
+                    || !FrontierV3WorksiteRegistry.owner(write.declaration().key().family())
+                        .beforeProjection(level, runtime, runtime.decodedState().orElseThrow(), write.declaration()));
+            var planned = writes.stream().filter(write -> level.hasChunkAt(position(write.declaration()))
+                            && !FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position(write.declaration())))
+                                .equals(write.declaration().block()))
+                    .limit(Math.min(preparation.remainingWrites(), FrontierV3ManagedBlockWrites.MAX_PLANNED_WRITES))
+                    .map(write -> new FrontierV3ManagedBlockWrites.PlannedWrite(position(write.declaration()),
+                            FrontierV3MinecraftBlockExtraction.block(write.declaration().block()))).toList();
+            if (!planned.isEmpty() && !FrontierV3ManagedBlockWrites.preparePlannedWrites(level, runtime, planned)) {
+                retained.add(new PreparedWindow(List.copyOf(writes), pending.fence())); continue;
             }
+            var remaining = new ArrayList<FrontierV3WorksiteBlockWitness>();
+            for (var write : writes) {
+                var position = position(write.declaration());
+                if (!level.hasChunkAt(position)) continue;
+                var actual = FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position));
+                if (!actual.equals(write.declaration().block())) {
+                    if (!actual.equals(write.before())) {
+                        ledger.worksite(new FrontierV3WorksiteBlockWitness(write.declaration(), actual, FrontierV3WorksiteBlockWitness.Phase.EXTERNAL));
+                        continue;
+                    }
+                    // Current preimages need a durable witness, not a block-write permit.
+                    // Unused prepared intents remain pending if actual mutations exhaust
+                    // this turn's allowance; their owner/recovery proof is unchanged.
+                    if (!preparation.takeWrite()) { remaining.add(write); continue; }
+                    if (!FrontierV3WorksiteWrites.apply(write.declaration().key(), () ->
+                            level.setBlock(position, FrontierV3MinecraftBlockExtraction.block(write.declaration().block()), 3))) {
+                        remaining.add(write); continue;
+                    }
+                    progress.applied++;
+                }
+                if (FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position)).equals(write.declaration().block())) {
+                    ledger.worksite(new FrontierV3WorksiteBlockWitness(write.declaration(), write.before(), FrontierV3WorksiteBlockWitness.Phase.SETTLED));
+                    queue.complete(chunk(write.declaration()), write.declaration());
+                    progress.settled++;
+                }
+            }
+            if (!remaining.isEmpty()) retained.add(new PreparedWindow(List.copyOf(remaining), pending.fence()));
         }
-        if (!remaining.isEmpty()) PREPARING.put(level, new PreparedWindow(List.copyOf(remaining), pending.fence()));
+        PREPARING.put(level, retained);
         if (ledger.isDirty()) ledger.persistAsync(level);
         for (var owner : FrontierV3WorksiteRegistry.OWNERS) owner.afterProjection(level, runtime);
     }

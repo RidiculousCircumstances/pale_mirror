@@ -52,11 +52,10 @@ final class FrontierV3ContainerRemovalExecutor {
                 long revision = Math.max(runtime.canonicalState().orElseThrow().revision().value(), lease.expectedCanonicalRevision() + 1L);
                 if (!(FrontierV3CommandSubmission.submit(runtime, "container-removal-close", id.value(),
                         ReferenceContainerCustody.confirmedMutationTransition(state, id, revision)) instanceof CommandResult.Accepted))
-                    throw new IllegalStateException("witnessed container removal custody closure rejected");
+                    return; // The exact removal witness retains the continuation until durability.
             }
-            if (!FrontierV3OperationConfirmation.submit(level, runtime, retained.ticket(),
-                    new ContainerSurfaceTransition(id, ContainerSurfaceStatus.RETIRED)))
-                throw new IllegalStateException("witnessed container retirement rejected");
+            if (!FrontierV3OperationConfirmation.submitRequired(level, runtime, retained.ticket(),
+                    new ContainerSurfaceTransition(id, ContainerSurfaceStatus.RETIRED))) return;
             io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info("PMV3_CONTAINER_RETIRED container={} position={} custodyEpoch={} recoveryEpoch={}",
                     id.value(), p, witness.custodyEpoch(), witness.recoveryEpoch());
             finish(level, runtime, journal, witness, true); return;

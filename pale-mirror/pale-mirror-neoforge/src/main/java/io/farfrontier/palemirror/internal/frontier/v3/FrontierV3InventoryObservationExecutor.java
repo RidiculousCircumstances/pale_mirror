@@ -183,7 +183,7 @@ final class FrontierV3InventoryObservationExecutor {
         CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), new ExactItemCustodyChanged(itemId, from, to)))
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("exact item custody observation was rejected: " + result);
+        if (result instanceof CommandResult.Rejected) throw new IllegalStateException("exact item custody observation was rejected: " + result);
     }
     /**
      * Admits one ordinary player-provided stack as one exact canonical resource.  The marker is
@@ -202,8 +202,8 @@ final class FrontierV3InventoryObservationExecutor {
         var target = state.inventory().containers().get(container);
         if (target == null) throw new IllegalArgumentException("physical deposit targets an unknown exact container");
         ExactItemStack deposited = new ExactItemStack(itemId, target.ownerId(), kind, actual.getCount(), new InventoryCustody.ContainerSlot(container, slot));
-        FrontierV3CommandSubmission.submit(runtime, "resource-deposit", itemId.value(), new ResourceDeposited(deposited));
-        FrontierV3ExactItemPresentation.clearPendingIngress(actual);
+        runtime.afterCommand(FrontierV3CommandSubmission.submit(runtime, "resource-deposit", itemId.value(), new ResourceDeposited(deposited)),
+                () -> FrontierV3ExactItemPresentation.clearPendingIngress(actual));
     }
     private static void recordConflict(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SubjectId subject,
                                        SubjectId container, int slot, InventoryDiagnosticProducer producer) {
@@ -215,7 +215,7 @@ final class FrontierV3InventoryObservationExecutor {
         CommandResult result = runtime.submit(new FrontierCommand(1, commandId, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(commandId), new InventoryConflictObserved(conflict)))
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("inventory conflict observation was rejected: " + result);
+        if (result instanceof CommandResult.Rejected) throw new IllegalStateException("inventory conflict observation was rejected: " + result);
     }
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         return runtime.decodedState().orElse(null);

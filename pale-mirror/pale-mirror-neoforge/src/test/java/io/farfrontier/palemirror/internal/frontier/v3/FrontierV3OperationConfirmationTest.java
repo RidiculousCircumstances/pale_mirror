@@ -14,6 +14,41 @@ import static org.junit.jupiter.api.Assertions.*;
 class FrontierV3OperationConfirmationTest {
     @BeforeAll static void version() { net.minecraft.SharedConstants.tryDetectVersion(); }
     @TempDir Path directory;
+    @Test void deferredCanonicalDurabilityKeepsTheOwnerOpenAndPinnedUntilPublication() {
+        var ledger = FrontierV3OperationLedger.inMemory();
+        var participant = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.ENTITIES, UUID.randomUUID().toString(), 1);
+        var consequence = new PhysicalDeltaObserved(new PhysicalDelta(new BlockPosition(1, 64, 1), PhysicalDeltaKind.UNKNOWN_SCAR,
+                Optional.empty(), Optional.empty(), "test:deferred-owner"));
+        var operation = ledger.prepare(new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.BODY_FATALITY,
+                new SubjectId("resident:deferred"), "fatality", FrontierV3OperationConfirmation.fingerprint(consequence), Set.of(participant)));
+        ledger.saved(operation.nativeReceipt(participant));
+        var pins = new HashSet<CommandId>();
+        var receipts = new HashMap<CommandId, CommandReceipt>();
+        var completion = new java.util.concurrent.atomic.AtomicReference<Runnable>();
+        var canonical = new FrontierV3OperationConfirmation.Canonical() {
+            public void pin(CommandId id) { pins.add(id); }
+            public void release(CommandId id) { pins.remove(id); }
+            public Optional<CommandReceipt> receipt(CommandId id) { return Optional.ofNullable(receipts.get(id)); }
+            public CommandResult submit(CommandId id, SubjectId owner, FrontierPayload payload) {
+                return new CommandResult.Pending(id, new Revision(1), CommandResult.Pending.Reason.DURABILITY);
+            }
+            public void afterCommit(CommandResult result, Runnable continuation) { completion.set(continuation); }
+        };
+        assertFalse(FrontierV3OperationConfirmation.submit(ledger, () -> ledger.setDirty(false), canonical, operation.ticket(), consequence));
+        var command = ledger.ownerCommand(operation.ticket()).orElseThrow();
+        assertEquals(Set.of(command.id()), pins);
+        assertFalse(ledger.require(operation.ticket()).ownerClosed());
+        var recovered = FrontierV3OperationLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), null), null);
+        FrontierV3OperationConfirmation.recover(recovered, () -> recovered.setDirty(false), canonical);
+        assertFalse(recovered.require(operation.ticket()).ownerClosed(), "a retained submission is not a successful receipt");
+        // The runtime dispatches the retained continuation only after exact receipt publication.
+        receipts.put(command.id(), new CommandReceipt(command.id(), SimInstant.ZERO, new TransactionId("test:deferred"), new Revision(1)));
+        completion.get().run();
+        assertTrue(ledger.find(operation.ticket()).isEmpty());
+        assertTrue(pins.isEmpty());
+        FrontierV3OperationConfirmation.recover(recovered, () -> recovered.setDirty(false), canonical);
+        assertTrue(recovered.find(operation.ticket()).isEmpty(), "restart closes the same operation without a second native effect");
+    }
     @Test void explicitAftermathSurvivesAcceptanceAndRestartUntilItsOwnerClosesIt() {
         var ledger = FrontierV3OperationLedger.inMemory();
         var participant = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.ENTITIES, UUID.randomUUID().toString(), 7);

@@ -204,6 +204,47 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
         return new AppendReceipt(transaction.id(), transaction.revision(), durability, sequence);
     }
 
+    /** Ordinary host turns never join disk I/O. Bootstrap/operator/save boundaries
+     * retain explicit synchronous semantics outside this scope. One kernel-owned
+     * submission holds its immutable record through bounded lane backpressure. */
+    @Override public synchronized Submission prepareAppend(TransactionRecord transaction, Durability durability) {
+        if (turnDepth == 0) return FrontierStore.super.prepareAppend(transaction, durability);
+        Objects.requireNonNull(transaction); Objects.requireNonNull(durability);
+        byte[] encoded = FrontierPersistenceCodec.encodeWal(transaction, payloadCodecs);
+        if (encoded.length > FrontierWalSegment.MAX_RECORD_BYTES) throw new IllegalArgumentException("oversized WAL record");
+        return new Submission() {
+            private long sequence;
+            @Override public java.util.Optional<AppendReceipt> poll() {
+                synchronized (FrontierFileStore.this) {
+                    checkHealthy();
+                    if (!finishPendingFlush(false)) return java.util.Optional.empty();
+                    if (sequence == 0L) {
+                        if (pendingRecords.size() >= MAX_BATCHABLE_WAL_RECORDS
+                                || pendingBytes + encoded.length > MAX_BUFFERED_WAL_BYTES) {
+                            startPendingFlush(false); return java.util.Optional.empty();
+                        }
+                        var head = head(transaction.worldId());
+                        if (!transaction.revision().equals(head.revision().next()))
+                            throw new IllegalStateException("WAL append revision is not next");
+                        var image = Objects.requireNonNull(recoveredImages.get(transaction.worldId()));
+                        image.validateAppend(transaction);
+                        sequence = Math.addExact(head.lastSequence(), 1L);
+                        pendingRecords.add(new PendingRecord(transaction.worldId(), sequence, encoded));
+                        pendingBytes = Math.addExact(pendingBytes, encoded.length);
+                        durableHeads.put(transaction.worldId(), head.appended(sequence, transaction.revision()));
+                        image.appended(transaction);
+                    }
+                    if (durability == Durability.DURABLE_BEFORE_EFFECT && head(transaction.worldId()).flushedSequence() < sequence) {
+                        startPendingFlush(false);
+                        if (!finishPendingFlush(false) || head(transaction.worldId()).flushedSequence() < sequence)
+                            return java.util.Optional.empty();
+                    }
+                    return java.util.Optional.of(new AppendReceipt(transaction.id(), transaction.revision(), durability, sequence));
+                }
+            }
+        };
+    }
+
     @Override public synchronized SnapshotReceipt installSnapshot(SnapshotRecord snapshot) {
         flushPendingBlocking();
         WorldId worldId = snapshot.checkpoint().worldId(); DurableHead head = head(worldId);
@@ -253,6 +294,8 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
     private static String fileName(String prefix, long sequence) { return "%s-%020d.bin".formatted(prefix, sequence); }
     /** A logical turn is settled only by its prefix receipt, not by submission. */
     synchronized void beginTurn() { flushPendingBlocking(); turnDepth = Math.addExact(turnDepth, 1); }
+    synchronized boolean inTurn() { return turnDepth > 0; }
+    synchronized void finishRequiredWrites() { flushPendingBlocking(); }
     synchronized boolean tryBeginTurn() {
         checkHealthy();
         if (!finishPendingFlush(false)) return false;
@@ -269,7 +312,7 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
     }
     synchronized void endTurnAsync() {
         if (turnDepth < 1) throw new IllegalStateException("unbalanced persistence turn");
-        if (--turnDepth == 0) startPendingFlush(false);
+        if (--turnDepth == 0 && pendingFlush == null) startPendingFlush(false);
     }
 
     record Pressure(int bufferedRecords, long bufferedBytes, boolean awaitingDurability,

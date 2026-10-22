@@ -96,12 +96,10 @@ final class FrontierV3ShipmentPhysicalExecutor {
                     participants, transfer::before, transfer::apply, transfer::after);
             if (!operation.complete()) return false;
             var receipt = new ShipmentHotTransferred(shipment.id(), step, transfer.sourceLayout(), transfer.destinationLayout());
-            boolean committed = FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(), receipt);
-            if (committed) {
+            return FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(), receipt, () -> {
                 transfer.ownerConfirmed();
                 if (attached == null) FrontierV3ActorCarryProjection.rememberConfirmed(runtime.decodedState().orElseThrow(), actor, worker);
-            }
-            return committed;
+            });
         } catch (IllegalArgumentException changed) {
             return conflict(runtime, shipment, container, changed.getMessage());
         }

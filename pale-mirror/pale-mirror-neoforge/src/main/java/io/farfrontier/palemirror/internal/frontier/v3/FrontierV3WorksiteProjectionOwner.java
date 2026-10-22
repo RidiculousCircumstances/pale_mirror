@@ -11,6 +11,8 @@ interface FrontierV3WorksiteProjectionOwner {
     List<WorksiteBlock> declarations(FrontierWorldState state);
     io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockMap<WorksiteBlock> currentBlocks(FrontierWorldState state);
     WorksiteBlock current(FrontierWorldState state, WorksiteBlock declared);
+    Optional<WorksiteBlock> initialGeology(FrontierWorldState state, WorksiteBlock current,
+            io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block generated);
     Optional<WorksiteBlockTransition> reclassification(FrontierWorldState state, WorksiteBlock predecessor, WorksiteBlock successor);
     void beforeTurn(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime);
     Optional<FrontierV3WorksiteBlockWitness> committedEffect(FrontierWorldState state, FrontierV3WorksiteBlockWitness witness);

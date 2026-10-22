@@ -16,7 +16,7 @@ public final class FrontierV3ContainerBlockOperation {
     private FrontierV3ContainerBlockOperation() { }
     public static BlockState replace(LevelChunk chunk, BlockPos position, BlockState replacement, Supplier<BlockState> mutation) {
         if (!(chunk.getLevel() instanceof ServerLevel level) || !FrontierV3PhysicalWorld.isPhysical(level)) return mutation.get();
-        var runtime = FrontierV3ServerLifecycle.runtimeFor(level.getServer());
+        var runtime = FrontierV3ServerLifecycle.runtimeForNativeMutation(level.getServer());
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return mutation.get();
         return replace(level, runtime, chunk, position, replacement, mutation);
     }

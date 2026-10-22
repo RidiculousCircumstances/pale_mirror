@@ -8,6 +8,8 @@ import net.minecraft.world.level.block.state.BlockState;
 public final class GeneratedTerrainBaseline {
     private GeneratedTerrainBaseline() { }
     public static BlockState block(ServerLevel level, BlockPos position) {
+        var geology = GeneratedGeology.initialBlock(level, position);
+        if (geology.isPresent()) return geology.orElseThrow();
         return level.getChunkSource().getGenerator().getBaseColumn(position.getX(), position.getZ(), level,
                 level.getChunkSource().randomState()).getBlock(position.getY());
     }

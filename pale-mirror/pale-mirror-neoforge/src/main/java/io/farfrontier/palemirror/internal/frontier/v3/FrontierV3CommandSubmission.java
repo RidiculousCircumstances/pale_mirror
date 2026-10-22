@@ -15,7 +15,7 @@ import io.farfrontier.palemirror.frontier.v3.api.EngineScheduleBinding;
 final class FrontierV3CommandSubmission {
     private FrontierV3CommandSubmission() { }
     static CommandResult submit(FrontierV3ServerRuntime<?, ?> runtime, String phase, String id, FrontierPayload payload) {
-        return requireAccepted(submitResult(runtime, phase, id, payload));
+        return requireNotRejected(submitResult(runtime, phase, id, payload));
     }
 
     /** A witnessed non-replayable effect must retain a rejected receipt as a local ambiguity. */
@@ -36,7 +36,7 @@ final class FrontierV3CommandSubmission {
 
     static CommandResult submitBound(FrontierV3ServerRuntime<?, ?> runtime, String phase, String id, FrontierPayload payload,
                                      ScheduledAction binding) {
-        return requireAccepted(submitResultBound(runtime, phase, id, payload, binding));
+        return requireNotRejected(submitResultBound(runtime, phase, id, payload, binding));
     }
 
     static CommandResult submitResultBound(FrontierV3ServerRuntime<?, ?> runtime, String phase, String id, FrontierPayload payload,
@@ -44,8 +44,8 @@ final class FrontierV3CommandSubmission {
         return submitRaw(runtime, phase, id, payload, Optional.of(binding));
     }
 
-    private static CommandResult requireAccepted(CommandResult result) {
-        if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("Frontier v3 physical transition was rejected: " + result);
+    private static CommandResult requireNotRejected(CommandResult result) {
+        if (result instanceof CommandResult.Rejected) throw new IllegalStateException("Frontier v3 physical transition was rejected: " + result);
         return result;
     }
 

@@ -59,7 +59,7 @@ final class FrontierV3ExtractionDeathResources {
             case ExtractionPhysicalStep.BlockWork block -> {
                 var source = block.extraction().target(); var pos = new BlockPos(source.x(), source.y(), source.z());
                 if (!level.hasChunkAt(pos)) return Optional.empty();
-                var witness = FrontierV3GrayboxLedger.get(level).worksite(pos);
+                var witness = FrontierV3WorksiteEvidence.at(level, FrontierV3GrayboxLedger.get(level), state, pos);
                 var key = new WorksiteBlock.Key(CellMutationKey.OwnerFamily.EXTRACTIVE_SITE, job.siteId(),
                         WorksiteBlock.Role.RESOURCE, job.target().orElseThrow().key().cell());
                 if (witness == null || !witness.declaration().key().equals(key)) return Optional.empty();

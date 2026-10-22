@@ -1,5 +1,66 @@
 # Pale Mirror runtime performance
 
+## Cooperative durability and generated geology (R218)
+
+Ordinary canonical transactions now retain one immutable prepared transition
+until its exact WAL receipt is available. Neither revision, command receipt nor
+schedule consumption is published early. Pending predecessor admission is
+distinct from an admitted transaction awaiting durability. The server can run
+other Minecraft work; this does not parallelize the ordered canonical aggregate.
+Physical protocol closure precedes the producer's bounded completion callback.
+Existing operation journals remain the recovery owners, not those callbacks.
+Native non-replayable interaction boundaries settle predecessors before reading
+state; explicit saves, fatal diagnostics and shutdown remain synchronous.
+
+Worksite projection keeps up to four non-overlapping immutable preparation
+windows, with one shared read/write/time allowance and viewer proximity priority.
+Pending durability withholds only its own cells. Applying a ready window still
+checks the exact owner, declaration, witness and physical preimage.
+
+The graybox natural-geology provider runs as a normal biome feature, before
+chunk publication, and records its immutable seed/configuration/block baseline
+in a serializable chunk attachment. The provider owns only initial natural
+material, not built stairs, containers, economic state or mining progress.
+Later extraction and player mutations use the existing worksite operation
+protocol. A mutation witness takes precedence over generation history.
+The current provider deliberately accepts only AgriculturalFlatGenerator;
+arbitrary world-generation mods need an explicit placement/survey adapter.
+They are not silently overwritten with graybox rock. Pilot worldgen and
+simulation now select the same immutable ruleset before level generation.
+
+Native scenario `disposable-geology-baseline-recovery.json`, seed125/r22,
+actual pack agricultural-flat datapack, 20FPS private software-rendered client:
+`build/r218-geology-recovery-configured.{json,log,pmv3.jsonl}`. First visit
+7.829s; both target chunks READY after9.035s; after graceful restart the
+visit took1.218s. Generated attachments were observed in both mine chunks;
+a player-broken stone block remained air after unloading and restart, with
+exactly one external source change, ACTIVE/OWNED container and zero required,
+scene or inventory conflicts. Both frames inspected: coal/stone frontier and
+the missing block visible. This is not a mining-production or whole-view
+full-pack acceptance claim. Earlier runs without the matching worldgen ruleset
+used fallback projection and are not geology acceptance.
+
+JFR `build/profiles/r218-geology-recovery-configured.jfr` contains no ordinary
+canonical WAL append parks; one13.7ms append wait belongs to an explicit native
+boundary. Periodic checkpoint/compaction still account for9 parks/269.4ms.
+R217 captured86 ordinary WAL parks/5387.9ms; profiles and client geometry differ,
+so this establishes removed blocking call paths, not a controlled latency ratio
+or percentile. First entry is still seconds, not instantaneous.
+
+Verification: NeoForge unit suite815/815; kernel/persistence/geology/fixture
+selection174/174 (`build/r218-kernel-recovery-final-2.log`); native storage48/48.
+Full native gate395/396 initially passed: one test incorrectly required READY
+after a single bounded physical turn. Its original queued/ineligible assertions
+remain; it now advances ordinary turns until READY within its existing deadline.
+Affected physical-turn slice9/9 passed (`build/r218-physical-turn.log`), including
+that correction; unrelated395 native outcomes reused, not repeated.
+The all-module aggregate is not claimed green: its long frontier test worker
+overlapped a subsequent fixture compilation and encountered invalid classpath
+failures; it was stopped. The final scoped kernel/recovery run was isolated.
+Guardrails and packaged-JAR checks passed. Runtime source includes a first-poll
+failure guard: retain the prepared transaction before polling so a failed force
+cannot lead quarantine reporting to append a competing transaction revision.
+
 ## Hearthvale first-mine ingress (R217)
 
 Fresh seed125/r22 reproduction at (-121,76,43), mine

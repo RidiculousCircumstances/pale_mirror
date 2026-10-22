@@ -189,6 +189,7 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
                         captured.soil().getString("Name"), captured.crop().getString("Name")), "field-foreign-observed");
                 FrontierV3DiagnosticTrace.record(level.getServer(), "field-foreign-observed:" + held.siteId().value(),
                         "resource_field_foreign_cell_observed", held.siteId(), accepted);
+                if (!(accepted instanceof CommandResult.Accepted)) return true;
                 state = runtime.decodedState().orElseThrow();
                 cycle = state.resourceSites().cycle(held.siteId());
             }
@@ -202,22 +203,10 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
             if (next != owner.witness()) {
                 ledger.replaceFieldClaim(owner, owner.withWitness(next)); ledger.persist(level);
             }
-            if (!receiptAlreadyReleased)
-                submit(runtime, new ResourceFieldForeignChangeAcknowledged(held, cycle.cell(held.cellId())), "field-foreign-ack");
-            if (!captured.equals(currentBlocks)) {
-                var checkpoint = runtime.canonicalState().orElseThrow();
-                var successor = new ResourceFieldForeignChangeHeld(held.siteId(), cycle.epoch(), cycle.layout().revision(),
-                        held.cellId(), cycle.cell(held.cellId()), "world:foreign-cell-" + held.siteId().value() + "-e" + cycle.epoch()
-                        + "-c" + held.cellId().value() + "-r" + checkpoint.revision().value() + "-successor");
-                var successorWitness = new FrontierV3ResourceFieldForeignChangeWitness(successor,
-                        next.cell(held.cellId()).committed(), Optional.of(currentBlocks));
-                ledger.replaceFieldForeignChange(witness, successorWitness); ledger.persist(level);
-                submit(runtime, successor, "field-foreign-hold");
-            } else {
-                ledger.retireFieldForeignChange(witness); ledger.persist(level);
-            }
-            com.mojang.logging.LogUtils.getLogger().info("PMV3 cell_mutation_closed key={} cause={} version={} successor={}",
-                    witness.mutationKey(), held.causationId(), witness.observationVersion(), !captured.equals(currentBlocks));
+            if (receiptAlreadyReleased) finishAcknowledged(level, runtime, witness);
+            else runtime.afterCommand(submit(runtime,
+                    new ResourceFieldForeignChangeAcknowledged(held, cycle.cell(held.cellId())), "field-foreign-ack"),
+                    () -> finishAcknowledged(level, runtime, witness));
             return true;
         }
         for (var held : state.resourceSites().pendingForeignChanges().values().stream()
@@ -237,6 +226,27 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
             return true;
         }
         return false;
+    }
+
+    private static void finishAcknowledged(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            FrontierV3ResourceFieldForeignChangeWitness witness) {
+        var ledger = FrontierV3ResourceSiteLedger.get(level);
+        // A later native observation may have replaced this version while its acknowledgement
+        // was on disk. It owns its own reconciliation; never retire that successor here.
+        if (!witness.equals(ledger.fieldForeignChange(witness.siteId(), witness.cellId()))) return;
+        var state = runtime.decodedState().orElseThrow();
+        var held = witness.hold();
+        if (state.resourceSites().pendingForeignChange(held.siteId(), held.cellId()) != null)
+            throw new IllegalStateException("field acknowledgement has not released its exact hold");
+        var cycle = state.resourceSites().cycle(held.siteId());
+        var currentBlocks = readBlocks(level, cycle.layout().requireCell(held.cellId()));
+        // Capture later drift through normal observation, including after an unload. The
+        // acknowledged observation itself is finished even when its value equalled before.
+        ledger.retireFieldForeignChange(witness); ledger.persist(level);
+        if (currentBlocks != null && !witness.observed().orElseThrow().equals(currentBlocks))
+            observeOne(level, runtime, witness.siteId(), witness.cellId());
+        com.mojang.logging.LogUtils.getLogger().info("PMV3 cell_mutation_closed key={} cause={} version={}",
+                witness.mutationKey(), held.causationId(), witness.observationVersion());
     }
 
     private static FrontierV3ResourceFieldObservation.Reading classifyCaptured(ServerLevel level,
@@ -346,7 +356,7 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
                 NbtUtils.writeBlockState(level.getBlockState(crop)));
     }
 
-    private static CommandResult.Accepted submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    private static CommandResult submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                   FrontierPayload payload, String commandKind) {
         var checkpoint = runtime.canonicalState().orElseThrow();
         CommandId id = new CommandId("executor:" + commandKind + "-r" + checkpoint.revision().value());
@@ -355,7 +365,7 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
                 payload)).orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         if (result instanceof CommandResult.Rejected rejected)
             throw new IllegalStateException("persisted foreign field cause cannot advance: " + rejected.rejection());
-        return (CommandResult.Accepted) result;
+        return result;
     }
 
     private static boolean foreign(ResourceFieldCycle.CellState state) {

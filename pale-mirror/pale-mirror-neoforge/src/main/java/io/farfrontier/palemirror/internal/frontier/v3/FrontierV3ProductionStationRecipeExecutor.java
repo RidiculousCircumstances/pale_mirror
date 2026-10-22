@@ -36,9 +36,8 @@ final class FrontierV3ProductionStationRecipeExecutor {
                     () -> { effect.apply(); return true; }, effect::after);
             if (!applied.complete()) continue;
             var observed = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(physical.inventory(), state, record.id());
-            boolean accepted = FrontierV3OperationConfirmation.submit(level, runtime, applied.ticket(),
+            FrontierV3OperationConfirmation.submitRequired(level, runtime, applied.ticket(),
                     new ProductionStationRecipeChanged(ProductionStationRecipeChanged.Stage.HOT_COMPLETED, boundary, observed));
-            if (!accepted) throw new IllegalStateException("station recipe receipt rejected after effect: " + boundary);
             return;
         }
     }

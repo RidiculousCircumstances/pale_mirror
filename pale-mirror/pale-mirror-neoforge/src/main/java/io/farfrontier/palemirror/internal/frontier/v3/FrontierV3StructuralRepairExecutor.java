@@ -83,8 +83,7 @@ final class FrontierV3StructuralRepairExecutor {
                 new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')), intent.id(), target.material().id(),
                 new BlockPosition(target.position().getX(), target.position().getY(), target.position().getZ()));
         CommandResult result = transitionResult(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "confirmed");
-        if (!(result instanceof CommandResult.Accepted)) {
-            CommandResult.Rejected rejected = (CommandResult.Rejected) result;
+        if (result instanceof CommandResult.Rejected rejected) {
             throw new IllegalStateException("structural repair confirmation was rejected: " + rejected.rejection().detail());
         }
     }

@@ -746,10 +746,11 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         }
         var observed = new ResourceSiteHarvestHandProjected(job.siteId(), job.id(), job.actorAccountId(),
                 lease.id(), lease.revision(), hand.stack().orElseThrow());
-        if (!FrontierV3OperationConfirmation.submit(level, runtime, result.ticket(), observed)) return true;
         // The canonical WAL now owns this observed hand. A crash before this SavedData
         // retirement is harmless: the exact pending witness is checked on re-entry.
-        ledger.retireFieldHandProjection(expected); ledger.persist(level);
+        FrontierV3OperationConfirmation.submit(level, runtime, result.ticket(), observed, () -> {
+            ledger.retireFieldHandProjection(expected); ledger.persist(level);
+        });
         return true;
     }
 

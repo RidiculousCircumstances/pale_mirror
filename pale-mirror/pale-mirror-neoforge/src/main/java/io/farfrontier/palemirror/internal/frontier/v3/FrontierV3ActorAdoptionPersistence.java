@@ -43,7 +43,11 @@ final class FrontierV3ActorAdoptionPersistence {
             if (state == null) return;
             var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
             int acknowledged = index.batch.acknowledgeSaved(ticket, ledger, (declaration, residence) -> {
-                if (!state.actorLocations().containsKey(declaration.actorId())) return false;
+                // The saved actor can outlive this physical incarnation. A late
+                // save is evidence for its exact body, not for a retired epoch.
+                if (!state.fencedRecovery().current().containsKey(
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId
+                                .recoveryBindingId(declaration.actorId()))) return false;
                 var current = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, declaration.actorId());
                 return current.physicalEpoch() == declaration.epoch()
                         && ledger.currentBodyResidence(declaration.actorId(), residence);

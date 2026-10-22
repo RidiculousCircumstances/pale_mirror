@@ -13,6 +13,24 @@ import java.util.concurrent.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierWalDurabilityGateTest {
+    @Test void ordinaryCriticalSubmissionYieldsUntilItsExactPrefixIsForced(@TempDir Path dir) throws Exception {
+        try (var lane = new StepWriter(); var store = new FrontierFileStore(dir, KernelPayloadCodecs.scheduleEffects(), lane)) {
+            assertTrue(store.tryBeginTurn());
+            store.prepareAppend(transaction(1), Durability.BATCHABLE).poll().orElseThrow();
+            var critical = store.prepareAppend(transaction(2), Durability.DURABLE_BEFORE_EFFECT);
+            assertTrue(critical.poll().isEmpty()); assertEquals(1, lane.pending.size());
+            assertTrue(critical.poll().isEmpty()); assertEquals(0, store.flushedSequence(WORLD));
+            store.endTurnAsync(); assertFalse(store.tryBeginTurn());
+            lane.release(); assertTrue(store.tryBeginTurn());
+            assertEquals(2, critical.poll().orElseThrow().walSequence());
+            assertEquals(2, store.flushedSequence(WORLD));
+            assertEquals(2, critical.poll().orElseThrow().walSequence(), "polling cannot append twice");
+            store.endTurnAsync();
+        }
+        try (var recovered = new FrontierFileStore(dir, KernelPayloadCodecs.scheduleEffects())) {
+            assertEquals(List.of(transaction(1), transaction(2)), recovered.recover(WORLD).walTail());
+        }
+    }
     private static final WorldId WORLD = new WorldId("frontier:wal-gate");
     private static TransactionRecord transaction(long revision) {
         var id = new TransactionId("transaction:gate-" + revision);

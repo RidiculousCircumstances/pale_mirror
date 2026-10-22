@@ -91,6 +91,57 @@ class FrontierV3ServerRuntimeTest {
     private static final WorldId WORLD = new WorldId("frontier:runtime");
     private static final SubjectId SUBJECT = new SubjectId("settlement:runtime");
 
+    @Test void ordinaryTurnReturnsBeforeDiskAndPublishesEachCompletionOnce(@TempDir Path directory) {
+        var tasks = new java.util.ArrayDeque<Runnable>();
+        var delayed = new java.util.concurrent.atomic.AtomicBoolean(true);
+        java.util.concurrent.Executor lane = action -> { if (delayed.get()) tasks.add(action); else action.run(); };
+        var disk = new FrontierFileStore(directory, codecs(), lane);
+        var delegate = new FrontierStoreTransactionCommitter(disk);
+        TransactionCommitter forceEveryTestCommand = new TransactionCommitter() {
+            public void commit(io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord record,
+                    io.farfrontier.palemirror.frontier.v3.persistence.Durability durability) {
+                delegate.commit(record, io.farfrontier.palemirror.frontier.v3.persistence.Durability.DURABLE_BEFORE_EFFECT);
+            }
+            public Confirmation prepare(io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord record,
+                    io.farfrontier.palemirror.frontier.v3.persistence.Durability durability) {
+                return delegate.prepare(record, io.farfrontier.palemirror.frontier.v3.persistence.Durability.DURABLE_BEFORE_EFFECT);
+            }
+        };
+        var runtime = FrontierV3ServerRuntime.startRecovered(configuration(), disk, disk.recover(WORLD), 100,
+                io.farfrontier.palemirror.frontier.v3.model.DiagnosticRuntimeIdentity.unavailable(), forceEveryTestCommand);
+        var completions = new java.util.ArrayList<String>();
+        try {
+            var id = new CommandId("test:deferred-runtime");
+            runtime.runPersistenceTurn(() -> {
+                var result = runtime.submit(command(id.value(), Revision.ZERO, SimInstant.ZERO, 3)).orElseThrow();
+                assertInstanceOf(CommandResult.Pending.class, result);
+                runtime.afterCommand(result, FrontierV3ServerRuntime.CommandCompletion.PROTOCOL, () -> completions.add("protocol"));
+                runtime.afterCommand(result, () -> completions.add("owner"));
+                runtime.afterCommandReceipt(id, () -> completions.add("owner"));
+                assertEquals(0, runtime.decodedState().orElseThrow().value());
+                assertTrue(runtime.commandReceipt(id).isEmpty());
+                var waiting = assertInstanceOf(CommandResult.Pending.class,
+                        runtime.submit(command("test:successor", Revision.ZERO, SimInstant.ZERO, 9)).orElseThrow());
+                assertEquals(CommandResult.Pending.Reason.PREDECESSOR, waiting.reason());
+            });
+            assertEquals(1, tasks.size(), "the host returned without executing the queued force");
+            assertTrue(completions.isEmpty());
+            runtime.runPersistenceTurn(() -> { throw new AssertionError("dependent canonical turn overtook its WAL"); });
+            delayed.set(false); while (!tasks.isEmpty()) tasks.remove().run();
+            runtime.runPersistenceTurn(() -> {
+                assertEquals(3, runtime.decodedState().orElseThrow().value());
+                assertTrue(runtime.commandReceipt(id).isPresent());
+            });
+            runtime.runPersistenceTurn(() -> { });
+            assertEquals(List.of("protocol", "owner"), completions, "retry replaces an owner continuation instead of accumulating callbacks");
+            runtime.shutdown();
+            var recovered = FrontierV3ServerRuntime.start(configuration(), new FrontierFileStore(directory, codecs()), 100);
+            assertEquals(3, recovered.decodedState().orElseThrow().value()); recovered.shutdown();
+        } finally {
+            delayed.set(false); while (!tasks.isEmpty()) tasks.remove().run(); disk.close();
+        }
+    }
+
     @Test
     void skippedPersistenceTurnsRetainHostTimeWithoutAddingItToOperatorAdvances(@TempDir Path directory) {
         var definition = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:host-time-debt"), 91L);

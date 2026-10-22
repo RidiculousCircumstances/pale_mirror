@@ -60,6 +60,27 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
     private Revision revision = Revision.ZERO;
     private SimInstant instant;
     private EngineStatus status = EngineStatus.active();
+    private record PreparedCommit(TransactionRecord transaction, TransactionCommitter.Confirmation confirmation,
+                                  Runnable publish) { }
+    private PreparedCommit pendingCommit;
+
+    @Override public boolean hasPendingCommit() { requireOwnerThread(); return pendingCommit != null; }
+    @Override public boolean advanceDurability() {
+        requireOwnerThread();
+        if (pendingCommit == null) return true;
+        if (status.kind() == EngineStatus.Kind.QUARANTINED) return false;
+        var pending = pendingCommit;
+        try {
+            if (!pending.confirmation().ready()) return false;
+            pending.publish().run(); pendingCommit = null; return true;
+        } catch (RuntimeException failure) {
+            // The prepared WAL prefix may already exist; never append a competing
+            // diagnostic revision behind an unpublished or failed transaction.
+            failureCause = failure;
+            status = new EngineStatus(EngineStatus.Kind.QUARANTINED, boundedFailure(failure));
+            return false;
+        }
+    }
 
     public InMemoryFrontierEngine(
             WorldId worldId,
@@ -174,6 +195,8 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         if (status.kind() == EngineStatus.Kind.QUARANTINED) {
             return rejected(command, RejectionCode.QUARANTINED, status.failureDetail().orElse("engine quarantined"));
         }
+        if (pendingCommit != null)
+            return new CommandResult.Pending(command.id(), revision, CommandResult.Pending.Reason.PREDECESSOR);
         pruneReceipts();
         if (!command.submittedAt().equals(instant)) {
             return rejected(command, RejectionCode.COMMAND_EXPIRED, "command must enter at the current simulation instant");
@@ -207,7 +230,8 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             TransactionId transactionId = new TransactionId("transaction:revision-" + revision.next().value());
             CommandReceipt receipt = new CommandReceipt(command.id(), command.submittedAt(), transactionId, revision.next());
             commit(command.causes(), command.submittedAt(), accepted.events(), Optional.of(receipt));
-            receipts.add(receipt);
+            if (pendingCommit != null)
+                return new CommandResult.Pending(command.id(), revision, CommandResult.Pending.Reason.DURABILITY);
             return new CommandResult.Accepted(command.id(), transactionId, revision);
         } catch (RuntimeException error) {
             return quarantine(command, error);
@@ -225,6 +249,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         if (status.kind() == EngineStatus.Kind.QUARANTINED) {
             return advanceResult(List.of(), Optional.empty(), WorkConsumption.NONE);
         }
+        if (pendingCommit != null) return advanceResult(List.of(), Optional.empty(), WorkConsumption.NONE);
         admissionIndex.begin(budget);
         schedules.beginExecutionPass(target, budget.maxClassificationEvaluations());
         List<TransactionId> completed = new ArrayList<>();
@@ -281,7 +306,10 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 // the sole deadline/ordering fact, but an eventual durable disposition occurs
                 // at the current canonical instant; writing the historical dueAt here would
                 // make the WAL move backwards after an intervening physical command.
-                completed.add(commit(CauseChain.root(cause), executionAt, events, Optional.empty()));
+                var committed = commit(CauseChain.root(cause), executionAt, events, Optional.empty());
+                if (pendingCommit != null)
+                    return advanceResult(completed, Optional.of(action), consumption(budget, completed.size(), weight));
+                completed.add(committed);
                 weight = Math.addExact(weight, cost);
             } catch (RuntimeException error) {
                 quarantine(CauseChain.root(ScheduledCauseIdentity.of(action.id())),
@@ -498,20 +526,35 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         // The write-ahead adapter is deliberately outside the reducer and validation spans:
         // it can perform durable host I/O, and its tail must remain distinguishable from
         // canonical planning when bounded COLD advancement shares the server thread.
+        TransactionCommitter.Confirmation confirmation;
         try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.PERSISTENCE,
                 "write-ahead", worldId.value())) {
-            transactionCommitter.commit(transaction, durability);
+            if (failureCause != null) {
+                // Fatal diagnostics have no following active turn to poll them.
+                // This exceptional boundary remains synchronous, never an ordinary action.
+                transactionCommitter.commit(transaction, durability);
+                confirmation = () -> true;
+            } else confirmation = Objects.requireNonNull(transactionCommitter.prepare(transaction, durability));
         }
-        state = nextState;
-        encodedState = encoded;
-        revision = nextRevision;
-        instant = eventInstant;
-        nextSchedules.commit();
-        events.stream().map(FrontierEvent::payload).filter(ScheduleEffect.class::isInstance)
-                .map(ScheduleEffect.class::cast).forEach(admissionIndex::forget);
-        if (wakeAll) schedules.wakeAll(eventInstant.ticks());
-        else schedules.wake(wakeKeys, eventInstant.ticks());
-        transactions.add(transaction);
+        var publishedState = nextState;
+        boolean publishedWakeAll = wakeAll;
+        Runnable publish = () -> {
+            state = publishedState;
+            encodedState = encoded;
+            revision = nextRevision;
+            instant = eventInstant;
+            nextSchedules.commit();
+            events.stream().map(FrontierEvent::payload).filter(ScheduleEffect.class::isInstance)
+                    .map(ScheduleEffect.class::cast).forEach(admissionIndex::forget);
+            if (publishedWakeAll) schedules.wakeAll(eventInstant.ticks());
+            else schedules.wake(wakeKeys, eventInstant.ticks());
+            transactions.add(transaction);
+            acceptedCommandReceipt.ifPresent(receipts::add);
+        };
+        // Retain identity before the first poll too: it may have admitted bytes and
+        // then failed to force them. That revision must never get a second writer.
+        pendingCommit = new PreparedCommit(transaction, confirmation, publish);
+        if (confirmation.ready()) { publish.run(); pendingCommit = null; }
         return transactionId;
     }
 
@@ -559,7 +602,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         SimInstant failureInstant = transactions.isEmpty() ? instant
                 : laterOf(instant, transactions.getLast().instant());
         try {
-            kernelQuarantineReporter.report(state, worldId, causes, failureInstant, boundary, error)
+            if (pendingCommit == null) kernelQuarantineReporter.report(state, worldId, causes, failureInstant, boundary, error)
                     .ifPresent(event -> commit(causes, failureInstant, List.of(event), Optional.empty()));
         } catch (RuntimeException diagnosticFailure) {
             error.addSuppressed(diagnosticFailure);

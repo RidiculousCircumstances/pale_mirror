@@ -113,7 +113,7 @@ final class FrontierV3RouteConstructionExecutor {
         RouteConstructionObservation observation = new RouteConstructionObservation(new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')),
                 intent.id(), target.project().id(), target.material().id(), new BlockPosition(target.position().getX(), target.position().getY(), target.position().getZ()));
         CommandResult result = transitionResult(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "confirmed");
-        if (!(result instanceof CommandResult.Accepted)) {
+        if (result instanceof CommandResult.Rejected) {
             throw new IllegalStateException("route construction confirmation was rejected");
         }
         FrontierV3DiagnosticTrace.record(level.getServer(), FrontierV3DiagnosticTrace.routeConstructionCorrelation(target.project().id()),
@@ -188,8 +188,7 @@ final class FrontierV3RouteConstructionExecutor {
                 new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')), intent.id(), target.project().id(),
                 target.cargoId(), target.sourceMaterial().id(), target.cargoMaterialId(), target.sourceRemainingCount());
         CommandResult result = transitionResult(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "material-confirmed");
-        if (!(result instanceof CommandResult.Accepted)) {
-            CommandResult.Rejected rejected = (CommandResult.Rejected) result;
+        if (result instanceof CommandResult.Rejected rejected) {
             throw new IllegalStateException("route construction material loading confirmation was rejected: " + rejected.rejection().detail());
         }
         FrontierV3DiagnosticTrace.record(level.getServer(), FrontierV3DiagnosticTrace.routeConstructionCorrelation(target.project().id()),

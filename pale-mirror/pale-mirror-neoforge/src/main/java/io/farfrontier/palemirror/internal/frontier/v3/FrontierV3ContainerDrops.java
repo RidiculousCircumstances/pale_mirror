@@ -18,7 +18,7 @@ public final class FrontierV3ContainerDrops {
         if (stack.isEmpty() || !(level instanceof ServerLevel server) || !FrontierV3PhysicalWorld.isPhysical(server)) {
             Containers.dropItemStack(level, x, y, z, stack); return;
         }
-        var runtime = FrontierV3ServerLifecycle.runtimeFor(server.getServer());
+        var runtime = FrontierV3ServerLifecycle.runtimeForNativeMutation(server.getServer());
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) {
             Containers.dropItemStack(level, x, y, z, stack); return;
         }

@@ -12,7 +12,7 @@ import java.util.*;
 public final class FrontierV3GroundPlayerPickup {
     public static boolean add(ItemEntity entity, Inventory inventory, ItemStack stack) {
         if (!(entity.level() instanceof ServerLevel level) || !FrontierV3PhysicalWorld.isPhysical(level)) return inventory.add(stack);
-        var runtime = FrontierV3ServerLifecycle.runtimeFor(level.getServer());
+        var runtime = FrontierV3ServerLifecycle.runtimeForNativeMutation(level.getServer());
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return inventory.add(stack);
         return add(level, entity, inventory, stack, runtime);
     }

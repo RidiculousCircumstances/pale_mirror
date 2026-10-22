@@ -43,7 +43,7 @@ public final class FrontierV3StorageCommands {
         var chest = BlockPosArgument.getLoadedBlockPos(context, "chest");
         var support = BlockPosArgument.getLoadedBlockPos(context, "station_support");
         try {
-            var runtime = FrontierV3ServerLifecycle.runtimeFor(source.getServer());
+            var runtime = FrontierV3ServerLifecycle.runtimeForNativeMutation(source.getServer());
             if (runtime == null || !FrontierV3PhysicalWorld.isPhysical(level)) throw new IllegalArgumentException("storage requires the active physical world");
             var state = runtime.decodedState().orElseThrow();
             if (!level.hasChunkAt(chest.below()) || !level.getBlockState(chest).isAir()
@@ -72,7 +72,7 @@ public final class FrontierV3StorageCommands {
     private static int configure(CommandContext<CommandSourceStack> context) {
         var source = context.getSource();
         try {
-            var runtime = FrontierV3ServerLifecycle.runtimeFor(source.getServer());
+            var runtime = FrontierV3ServerLifecycle.runtimeForNativeMutation(source.getServer());
             if (runtime == null) throw new IllegalArgumentException("storage requires the active runtime");
             var state = runtime.decodedState().orElseThrow(); var id = new SubjectId(ResourceLocationArgument.getId(context, "container").toString());
             var record = state.inventory().containers().get(id);

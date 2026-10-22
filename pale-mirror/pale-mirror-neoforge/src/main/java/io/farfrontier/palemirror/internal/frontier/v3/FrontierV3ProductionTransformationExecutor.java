@@ -141,6 +141,7 @@ final class FrontierV3ProductionTransformationExecutor {
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(command), payload))
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         if (result instanceof CommandResult.Accepted) return true;
+        if (result instanceof CommandResult.Pending) return false;
         CommandResult.Rejected rejected = (CommandResult.Rejected) result;
         if (status == PhysicalIntentStatus.CONFIRMED) {
             // The Minecraft write is already observed at this point.  Do not reduce the

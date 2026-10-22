@@ -139,7 +139,7 @@ final class FrontierV3RouteMaintenanceExecutor {
         RouteMaintenanceObservation observation = new RouteMaintenanceObservation(observationId(intent), intent.id(), target.maintenance().id(),
                 target.material().id(), new BlockPosition(target.position().getX(), target.position().getY(), target.position().getZ()));
         CommandResult result = transitionResult(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "confirmed");
-        if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("route maintenance confirmation was rejected");
+        if (result instanceof CommandResult.Rejected) throw new IllegalStateException("route maintenance confirmation was rejected");
         FrontierV3DiagnosticTrace.record(level.getServer(), correlation(target.maintenance()), "route_maintenance_cell_repaired", target.maintenance().id(), result);
     }
 
@@ -206,8 +206,8 @@ final class FrontierV3RouteMaintenanceExecutor {
         RouteMaintenanceMaterialLoadObservation observation = new RouteMaintenanceMaterialLoadObservation(observationId(intent), intent.id(),
                 target.maintenance().id(), target.cargoId(), target.sourceMaterial().id(), target.cargoMaterialId(), target.sourceRemainingCount());
         CommandResult result = transitionResult(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "material-confirmed");
-        if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("route maintenance material confirmation was rejected: "
-                + ((CommandResult.Rejected) result).rejection().code() + " " + ((CommandResult.Rejected) result).rejection().detail());
+        if (result instanceof CommandResult.Rejected rejected) throw new IllegalStateException("route maintenance material confirmation was rejected: "
+                + rejected.rejection().code() + " " + rejected.rejection().detail());
         FrontierV3DiagnosticTrace.record(level.getServer(), correlation(target.maintenance()), "route_maintenance_material_loaded", target.maintenance().id(), result);
     }
 

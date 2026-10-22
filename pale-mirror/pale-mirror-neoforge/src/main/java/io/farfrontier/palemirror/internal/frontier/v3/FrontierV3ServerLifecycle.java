@@ -15,7 +15,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.level.storage.LevelResource;
 import java.util.IdentityHashMap;
 import java.util.ArrayList;
@@ -81,7 +80,7 @@ public final class FrontierV3ServerLifecycle {
     public static DepotClickDisposition beforeDepotMenuClick(ServerPlayer player,
             net.minecraft.world.inventory.AbstractContainerMenu menu, int slot, int button,
             net.minecraft.world.inventory.ClickType kind) {
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(player.getServer());
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtimeForNativeMutation(player.getServer());
         if (runtime == null) return v3LaunchOwnsPhysicalWorld()
                 && FrontierV3ContainerMenuTarget.supported(menu)
                 ? DepotClickDisposition.REJECTED : DepotClickDisposition.NOT_OWNED;
@@ -207,8 +206,8 @@ public final class FrontierV3ServerLifecycle {
             }
             var birthLedger = FrontierV3AmbientCarrierLedger.get(physicalWorld, configuration.worldId());
             var birthWorld = configuration.worldId();
-            var birthCommitter = new FrontierV3ActorBirthCommitter(birthWorld, birthLedger,
-                    () -> birthLedger.persist(physicalWorld, birthWorld), new FrontierStoreTransactionCommitter(store));
+            var birthCommitter = FrontierV3ActorBirthCommitter.forLevel(physicalWorld, birthWorld, birthLedger,
+                    new FrontierStoreTransactionCommitter(store));
             runtime = FrontierV3ServerRuntime.startRecovered(configuration.withExecutionMetrics(metrics), store, recovery, 200,
                     diagnosticIdentity, birthCommitter);
             if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE)
@@ -268,9 +267,7 @@ public final class FrontierV3ServerLifecycle {
     }
     static io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>
     initialConfiguration(io.farfrontier.palemirror.frontier.v3.api.WorldId worldId, long seed) {
-        var selected = System.getProperty("pale_mirror.frontier_v3.ruleset");
-        var ruleset = selected == null ? io.farfrontier.palemirror.frontier.v3.model.FrontierRulesets.production()
-                : io.farfrontier.palemirror.frontier.v3.model.FrontierRulesets.installed(selected);
+        var ruleset = FrontierV3WorldgenSettings.ruleset();
         return FrontierWorldRuntimeDefinition.configuration(worldId, seed, ruleset);
     }
     public static boolean requestFastForward(MinecraftServer server, int ticks) {
@@ -733,12 +730,10 @@ public final class FrontierV3ServerLifecycle {
     }
     public static JoinFirewallProof observeSourceJoin(ServerLevel level, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        if (!FrontierV3PhysicalWorld.isPhysical(level)) {
-            return new JoinFirewallProof(EntityJoinAdmission.NOT_MANAGED, false);
-        }
-        if (runtime == null) return passiveSourceJoin(level, entity);
-        return observeSourceJoin(level, runtime, entity);
+        if (!FrontierV3PhysicalWorld.isPhysical(level)) return new JoinFirewallProof(EntityJoinAdmission.NOT_MANAGED, false);
+        var runtime = FrontierV3ActorCarrierComposition.declaredBy(entity).isPresent()
+                ? runtimeForNativeMutation(level.getServer()) : RUNTIMES.get(level.getServer());
+        return runtime == null ? passiveSourceJoin(level, entity) : observeSourceJoin(level, runtime, entity);
     } // Both the host and isolated native runtimes use the same real join boundary.
     static JoinFirewallProof passiveSourceJoin(ServerLevel level, Entity entity) {
         return new JoinFirewallProof(EntityJoinAdmission.NOT_MANAGED,
@@ -819,7 +814,7 @@ public final class FrontierV3ServerLifecycle {
     public static boolean commitLivingDeath(ServerLevel level, Entity entity, Entity source,
             Runnable nativeDeath, java.util.function.BooleanSupplier died) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtimeForNativeMutation(level.getServer());
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
         return FrontierV3ActorBodyController.commitDeath(level, runtime, entity, source, nativeDeath, died);
     }
@@ -830,9 +825,9 @@ public final class FrontierV3ServerLifecycle {
     }
     /** Observe final geometry without asking Minecraft to reload an unloading chunk. */
     public static void observeNaturalChunkUnload(ServerLevel level, net.minecraft.world.level.chunk.LevelChunk chunk) {
-        var runtime = RUNTIMES.get(level.getServer());
-        if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null
-                || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
+        if (!FrontierV3PhysicalWorld.isPhysical(level)) return;
+        var runtime = runtimeForNativeMutation(level.getServer());
+        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
         runtime.decodedState().ifPresent(state -> FrontierV3ActorBodyController.observeTerrainDeparture(level, state, chunk));
         for (var owner : FrontierV3WorksiteRegistry.OWNERS) owner.departure(level, runtime, chunk);
     }
@@ -840,9 +835,11 @@ public final class FrontierV3ServerLifecycle {
     /** Tracking-end precedes removal for hidden chunks and cannot certify final departure. */
     public static boolean observeFinalChunkDeparture(ServerLevel level, Entity entity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(entity, "entity");
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
-        if (entity.getRemovalReason() != Entity.RemovalReason.UNLOADED_TO_CHUNK) return false;
-        return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
+        if (entity.getRemovalReason() != Entity.RemovalReason.UNLOADED_TO_CHUNK
+                || !FrontierV3PhysicalWorld.isPhysical(level)
+                || FrontierV3ActorCarrierComposition.declaredByUnloading(entity).isEmpty()) return false;
+        var runtime = runtimeForNativeMutation(level.getServer());
+        return runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE
                 && FrontierV3ActorBodyController.observeLeave(level, runtime, entity);
     }
 
@@ -943,6 +940,11 @@ public final class FrontierV3ServerLifecycle {
     }
     static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtimeFor(MinecraftServer server) {
         return RUNTIMES.get(server);
+    }
+    static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtimeForNativeMutation(MinecraftServer server) {
+        var runtime = RUNTIMES.get(server);
+        if (runtime != null) runtime.settleNativeBoundary();
+        return runtime;
     }
     public static boolean presentObjectBoard(ServerLevel level, ServerPlayer player, Entity entity) {
         return FrontierV3ServerPhysicalInteractions.presentObjectBoard(level, player, entity);

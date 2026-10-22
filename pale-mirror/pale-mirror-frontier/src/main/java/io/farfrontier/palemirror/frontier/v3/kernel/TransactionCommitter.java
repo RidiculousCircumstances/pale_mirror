@@ -15,6 +15,15 @@ import java.util.Objects;
 public interface TransactionCommitter {
     void commit(TransactionRecord transaction, Durability durability);
 
+    /** One exact, bounded in-flight transaction. False grants no publication/effect authority.
+     * The host polls on the kernel's owner thread; writer failure must propagate, not become ready. */
+    @FunctionalInterface interface Confirmation { boolean ready(); }
+
+    default Confirmation prepare(TransactionRecord transaction, Durability durability) {
+        commit(transaction, durability);
+        return () -> true;
+    }
+
     static TransactionCommitter noOp() {
         return (transaction, durability) -> {
             Objects.requireNonNull(transaction, "transaction");

@@ -13,10 +13,28 @@ final class FrontierV3OperationConfirmation {
         void release(CommandId id);
         java.util.Optional<CommandReceipt> receipt(CommandId id);
         CommandResult submit(CommandId id, SubjectId owner, FrontierPayload consequence);
+        default void afterCommit(CommandResult result, Runnable continuation) {
+            if (result instanceof CommandResult.Accepted) continuation.run();
+        }
     }
     private FrontierV3OperationConfirmation() { }
     static boolean submit(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime, UUID ticket, FrontierPayload consequence) {
         return submit(level, runtime, ticket, consequence, java.util.Optional.empty());
+    }
+    /** Owner declares that a true canonical rejection is an invariant violation;
+     * missing native evidence and queued durability remain ordinary waits. */
+    static boolean submitRequired(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime, UUID ticket, FrontierPayload consequence) {
+        var ledger = FrontierV3OperationLedger.get(level);
+        if (!FrontierV3MinecraftOperation.recoverOutcome(level, ticket)) return false;
+        return submit(ledger, () -> ledger.persist(level), canonical(level, runtime, java.util.Optional.empty(), true), ticket, consequence);
+    }
+    static boolean submit(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime, UUID ticket,
+            FrontierPayload consequence, Runnable afterCommit) {
+        boolean accepted = submit(level, runtime, ticket, consequence);
+        if (accepted) afterCommit.run();
+        else FrontierV3OperationLedger.get(level).ownerCommand(ticket)
+                .ifPresent(command -> runtime.afterCommandReceipt(command.id(), afterCommit));
+        return accepted;
     }
     static boolean submit(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime, UUID ticket, FrontierPayload consequence,
             java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> binding) {
@@ -38,9 +56,15 @@ final class FrontierV3OperationConfirmation {
         if (canonical.receipt(command.id()).isEmpty()) {
             var result = canonical.submit(command.id(), operation.declaration().owner(), consequence);
             if (!(result instanceof CommandResult.Accepted)) {
+                if (result instanceof CommandResult.Pending pending && pending.reason() == CommandResult.Pending.Reason.DURABILITY
+                        && command.closure() == FrontierV3OperationLedger.OwnerCommand.Closure.AUTOMATIC)
+                    canonical.afterCommit(result, () -> close(ledger, force, canonical, ticket, command));
                 // Synchronous rejection owns no canonical receipt. Retaining an absent
                 // command here would let unrelated waiting operations exhaust the pin pool.
-                canonical.release(command.id()); return false;
+                if (result instanceof CommandResult.Rejected
+                        || result instanceof CommandResult.Pending pending && pending.reason() == CommandResult.Pending.Reason.PREDECESSOR)
+                    canonical.release(command.id());
+                return false;
             }
         }
         if (command.closure() == FrontierV3OperationLedger.OwnerCommand.Closure.AUTOMATIC)
@@ -116,13 +140,22 @@ final class FrontierV3OperationConfirmation {
     }
     private static Canonical canonical(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime,
             java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> binding) {
+        return canonical(level, runtime, binding, false);
+    }
+    private static Canonical canonical(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime,
+            java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> binding, boolean requireAcceptance) {
         return new Canonical() {
             public void pin(CommandId id) { runtime.pinCommandReceipt(id); }
             public void release(CommandId id) { runtime.releaseCommandReceipt(id); }
             public java.util.Optional<CommandReceipt> receipt(CommandId id) { return runtime.commandReceipt(id); }
+            public void afterCommit(CommandResult result, Runnable continuation) {
+                runtime.afterCommand(result, FrontierV3ServerRuntime.CommandCompletion.PROTOCOL, continuation);
+            }
             public CommandResult submit(CommandId id, SubjectId owner, FrontierPayload consequence) {
                 var result = FrontierV3CommandSubmission.submitOperation(runtime, id, owner.value(), consequence, binding);
                 FrontierV3DiagnosticTrace.record(level.getServer(), id.value(), "owner-confirmation", owner, result);
+                if (requireAcceptance && result instanceof CommandResult.Rejected rejected)
+                    throw new IllegalStateException("required native consequence rejected: " + id + ": " + rejected.rejection());
                 return result;
             }
         };

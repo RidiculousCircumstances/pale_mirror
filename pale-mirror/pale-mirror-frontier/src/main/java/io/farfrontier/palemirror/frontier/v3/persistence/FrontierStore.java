@@ -11,6 +11,13 @@ public interface FrontierStore {
 
     AppendReceipt append(TransactionRecord transaction, Durability durability);
 
+    /** A submitted append is not a receipt. Only a present result confirms the requested boundary. */
+    @FunctionalInterface interface Submission { java.util.Optional<AppendReceipt> poll(); }
+    default Submission prepareAppend(TransactionRecord transaction, Durability durability) {
+        var receipt = append(transaction, durability);
+        return () -> java.util.Optional.of(receipt);
+    }
+
     SnapshotReceipt installSnapshot(SnapshotRecord snapshot);
 
     CompactionReceipt compact(WorldId worldId, Revision coveredRevision);

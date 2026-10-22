@@ -171,7 +171,7 @@ final class FrontierV3EquipmentReturnExecutor {
         EquipmentReturnObservation observation = new EquipmentReturnObservation(new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')),
                 intent.id(), target.ownerId(), target.residentId(), target.item().id(), target.targetSlot());
         CommandResult result = transitionResult(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "confirmed");
-        if (!(result instanceof CommandResult.Accepted)) throw new IllegalStateException("equipment return confirmation was rejected");
+        if (result instanceof CommandResult.Rejected) throw new IllegalStateException("equipment return confirmation was rejected");
         FrontierV3DiagnosticTrace.record(level.getServer(), FrontierV3DiagnosticTrace.humanEquipmentCorrelation(target.ownerId(), target.item().id()),
                 "human_equipment_returned", target.ownerId(), result);
     }

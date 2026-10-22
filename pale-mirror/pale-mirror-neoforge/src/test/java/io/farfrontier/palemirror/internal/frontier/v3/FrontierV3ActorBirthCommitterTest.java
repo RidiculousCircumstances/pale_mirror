@@ -27,6 +27,25 @@ class FrontierV3ActorBirthCommitterTest {
     private static FrontierV3AmbientCarrierLedger reload(FrontierV3AmbientCarrierLedger ledger) {
         return FrontierV3AmbientCarrierLedger.load(ledger.save(new CompoundTag(), null), null);
     }
+    @Test void deferredPermissionMustBeForcedBeforeTheCanonicalAppendIsEvenPrepared() {
+        var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
+        var permission = new java.util.concurrent.atomic.AtomicBoolean();
+        var wal = new java.util.concurrent.atomic.AtomicBoolean();
+        var appended = new java.util.concurrent.atomic.AtomicInteger();
+        TransactionCommitter canonical = new TransactionCommitter() {
+            public void commit(TransactionRecord record, Durability durability) { fail("ordinary preparation cannot use a blocking commit"); }
+            public Confirmation prepare(TransactionRecord record, Durability durability) {
+                assertTrue(permission.get()); appended.incrementAndGet(); return wal::get;
+            }
+        };
+        var committer = new FrontierV3ActorBirthCommitter(WORLD, ledger, () -> fail("no blocking permission save"),
+                () -> permission::get, canonical);
+        var pending = committer.prepare(transaction(BIRTH), Durability.DURABLE_BEFORE_EFFECT);
+        assertFalse(pending.ready()); assertFalse(pending.ready()); assertEquals(0, appended.get());
+        permission.set(true);
+        assertFalse(pending.ready()); assertFalse(pending.ready()); assertEquals(1, appended.get());
+        wal.set(true); assertTrue(pending.ready()); assertTrue(pending.ready()); assertEquals(1, appended.get());
+    }
     @Test void permissionIsPersistedBeforeCanonicalPublicationAndUnusedRetryIsSafe() {
         var ledger = FrontierV3AmbientCarrierLedger.emptyForTest();
         var sequence = new java.util.ArrayList<String>();

@@ -9,6 +9,16 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3PendingProjectionTest {
+    @Test void inFlightCellsDoNotBlockOtherWindowsOrLoseTheirPendingState() {
+        var queue = new FrontierV3PendingProjection(); var token = new Object();
+        var first = cell(1, 1); var neighbour = cell(2, 1); var remote = cell(33, 1);
+        queue.update(Map.of(1L, List.of(first, neighbour), 2L, List.of(remote)));
+        assertEquals(Set.of(neighbour, remote), new HashSet<>(queue.batch(key -> token, key -> key, 8, Set.of(first.position()))));
+        assertEquals(2, queue.pending(1), "in-flight is not completion");
+        queue.complete(1, neighbour); queue.complete(2, remote);
+        assertTrue(queue.batch(key -> token, key -> key, 8, Set.of(first.position())).isEmpty());
+        assertEquals(List.of(first), queue.batch(key -> token, key -> key, 8));
+    }
     private static WorksiteBlock cell(int x, long revision) {
         return new WorksiteBlock(new WorksiteBlock.Key(CellMutationKey.OwnerFamily.EXTRACTIVE_SITE,
                 new SubjectId("extraction:queue-test"), WorksiteBlock.Role.NATURAL_TERRAIN, x + 1),

@@ -53,12 +53,10 @@ final class FrontierV3ExpeditionReplenishmentExecutor {
         if (!operation.complete()) return false;
         var remainder = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(source.inventory(), state, source.containerId());
         var destination = List.of(new FungiblePhysicalObservation.Stack(FrontierV3ActorResourceSlots.address(transfer.actorId(), actor, transfer.slot()), transfer.itemKind(), transfer.quantity()));
-        boolean accepted = FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(),
-                new ExpeditionReplenishmentHotLoaded(mission.id(), transfer.claimId(), step, remainder, destination));
-        if (accepted) {
+        return FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(),
+                new ExpeditionReplenishmentHotLoaded(mission.id(), transfer.claimId(), step, remainder, destination), () -> {
             FrontierV3ActorCarryProjection.rememberConfirmed(runtime.decodedState().orElseThrow(), transfer.actorId(), actor);
-        }
-        return accepted;
+        });
     }
     private static boolean submit(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, TransportMission mission, FrontierPayload payload) {
         var result = FrontierV3CommandSubmission.submit(runtime, payload.type(), mission.id().value(), payload);

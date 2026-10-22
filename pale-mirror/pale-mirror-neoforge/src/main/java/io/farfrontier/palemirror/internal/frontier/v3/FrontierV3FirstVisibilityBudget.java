@@ -38,4 +38,6 @@ final class FrontierV3FirstVisibilityBudget {
         writes++;
         return true;
     }
+
+    int remainingWrites() { return writeLimit - writes; }
 }

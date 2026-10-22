@@ -215,6 +215,10 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
             return;
         }
         PhysicalCustodyLease projectionLease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(containerId));
+        if (!surface.fixed() && surface.status() == ContainerSurfaceStatus.PREPARED && projectionLease != null
+                && projectionLease.status() == PhysicalCustodyLeaseStatus.ACQUIRED) {
+            activateMobileProjection(runtime, state, containerId); return;
+        }
         if (projectionLease != null && (projectionLease.status() == PhysicalCustodyLeaseStatus.PREPARING
                 || (projectionLease.status() == PhysicalCustodyLeaseStatus.UNRESOLVED && replica.state() == PhysicalReplicaState.CONFLICT))) {
             if (!surface.fixed() && surface.status() == ContainerSurfaceStatus.PREPARED) {
@@ -429,9 +433,13 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                                                         FrontierWorldState state, PhysicalCustodyLease lease, Observed actual) {
         PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(lease.objectId());
         if (replica.fingerprint().equals(actual.fingerprint()) && replica.provenance().equals(actual.provenance())) {
-            return submit(runtime, "confirm-projection", lease.objectId(), replica.replicaRevision(),
+            var result = submitResult(runtime, "confirm-projection", lease.objectId(), replica.replicaRevision(),
                     new ProjectionCustodyConfirmed(lease.scopeId(), lease.authorityEpoch(), lease.expectedCanonicalRevision(),
                             lease.expectedReplicaRevision(), actual.fingerprint(), actual.provenance()));
+            if (result instanceof CommandResult.Rejected)
+                throw new IllegalStateException("exact reference projection observation rejected: " + result);
+            runtime.afterCommand(result, () -> activateMobileProjection(runtime, state, lease.objectId()));
+            return result instanceof CommandResult.Accepted;
         }
         if (lease.status() != PhysicalCustodyLeaseStatus.PREPARING) return false;
         return submit(runtime, "projection-conflict", lease.objectId(), replica.replicaRevision(),
@@ -439,7 +447,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                         lease.expectedReplicaRevision(), actual.fingerprint(), actual.provenance()));
     }
 
-    /** A physical write and its actual confirmation cannot depend on a later discovery turn. */
+    /** Record the actual write now; its durable confirmation may complete on a later turn. */
     private static void writeAndConfirmProjection(ServerLevel level,
                                                   FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                   FrontierWorldState prepared, SubjectId containerId,
@@ -456,8 +464,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         physical.stampPreparedProjection();
         if (!FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(physical.inventory(), prepared, containerId))
             throw new IllegalStateException("reference projection could not write its prepared slot image: " + containerId);
-        if (!reconcilePreparedProjection(runtime, prepared, lease, physical))
-            throw new IllegalStateException("reference projection could not record its actual slot observation: " + containerId);
+        if (!reconcilePreparedProjection(runtime, prepared, lease, physical)) return;
         activateMobileProjection(runtime, prepared, containerId);
         FrontierWorldState confirmed = runtime.decodedState().orElseThrow();
         PhysicalCustodyLease current = confirmed.replicaCustody().custodyByScope().get(lease.scopeId());
@@ -748,13 +755,17 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
 
     private static boolean submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, String phase, SubjectId objectId,
                                   long fence, FrontierPayload payload) {
+        return submitResult(runtime, phase, objectId, fence, payload) instanceof CommandResult.Accepted;
+    }
+    private static CommandResult submitResult(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, String phase,
+            SubjectId objectId, long fence, FrontierPayload payload) {
         var checkpoint = runtime.canonicalState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
         CommandId command = new CommandId("executor:reference-container-" + phase + "-" + objectId.value().replace(':', '-') + "-" + fence);
         CommandResult result = runtime.submit(new FrontierCommand(1, command, checkpoint.worldId(), checkpoint.revision(), checkpoint.instant(),
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(command), payload)).orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        if (!(result instanceof CommandResult.Accepted) && phase.equals("close-confirmed-mutation"))
+        if (result instanceof CommandResult.Rejected && phase.equals("close-confirmed-mutation"))
             io.farfrontier.palemirror.PaleMirrorMod.LOGGER.warn("Reference mutation closure command {} refused: {}", command, result);
-        return result instanceof CommandResult.Accepted;
+        return result;
     }
 
     private static BlockPos position(FrontierWorldState state, ContainerSurface surface) {
@@ -769,14 +780,16 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
 
     private static void activateMobileProjection(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                   FrontierWorldState prepared, SubjectId containerId) {
-        var surface = prepared.inventory().surfaces().get(containerId);
         var current = runtime.decodedState().orElseThrow();
+        var surface = current.inventory().surfaces().get(containerId);
         if (!surface.fixed() && surface.status() == ContainerSurfaceStatus.PREPARED
-                && ReferenceContainerCustody.hasOperationalCustody(current, containerId)
-                && !submit(runtime, "mobile-active", containerId,
+                && ReferenceContainerCustody.hasOperationalCustody(current, containerId)) {
+            var result = submitResult(runtime, "mobile-active", containerId,
                     current.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(containerId)).authorityEpoch(),
-                    new ContainerSurfaceTransition(containerId, ContainerSurfaceStatus.ACTIVE)))
-            throw new IllegalStateException("confirmed mobile projection could not activate its exact surface");
+                    new ContainerSurfaceTransition(containerId, ContainerSurfaceStatus.ACTIVE));
+            if (result instanceof CommandResult.Rejected)
+                throw new IllegalStateException("confirmed mobile projection could not activate its exact surface: " + result);
+        }
     }
     /** A retained full chunk cache is serialized evidence, not a normally ticking physical scope. */
     private static boolean naturallyTicking(ServerLevel level, BlockPos position) {

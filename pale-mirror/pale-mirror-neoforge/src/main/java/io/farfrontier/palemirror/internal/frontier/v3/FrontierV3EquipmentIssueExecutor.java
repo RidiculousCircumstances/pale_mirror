@@ -168,7 +168,7 @@ final class FrontierV3EquipmentIssueExecutor {
         EquipmentIssueObservation observation = new EquipmentIssueObservation(new PhysicalObservationId("observation:" + intent.id().value().replace(':', '-')),
                 intent.id(), target.ownerId(), target.residentId(), target.item().id(), target.sourceSlot());
         CommandResult result = transitionResult(runtime, intent.id(), PhysicalIntentStatus.CONFIRMED, Optional.of(observation), "confirmed");
-        if (!(result instanceof CommandResult.Accepted)) {
+        if (result instanceof CommandResult.Rejected) {
             throw new IllegalStateException("equipment issue confirmation was rejected");
         }
         FrontierV3DiagnosticTrace.record(level.getServer(), FrontierV3DiagnosticTrace.humanEquipmentCorrelation(target.ownerId(), target.item().id()),

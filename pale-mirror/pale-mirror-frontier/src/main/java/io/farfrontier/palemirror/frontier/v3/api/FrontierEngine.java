@@ -8,6 +8,10 @@ import java.util.Optional;
 public interface FrontierEngine<P extends FrontierProjection> {
     CommandResult submit(FrontierCommand command);
 
+    /** Publishes an exact prepared transaction only after its host confirms durability. */
+    boolean advanceDurability();
+    boolean hasPendingCommit();
+
     AdvanceResult advanceTo(SimInstant target, WorkBudget budget);
 
     P projection(ProjectionQuery query);

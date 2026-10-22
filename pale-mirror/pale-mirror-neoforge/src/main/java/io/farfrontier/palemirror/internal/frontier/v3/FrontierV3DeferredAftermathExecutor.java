@@ -133,8 +133,8 @@ final class FrontierV3DeferredAftermathExecutor {
                 FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id),
                 new DeferredAftermathResolved(aftermath.id(), aftermath.expectedEpoch(), checkpoint.instant().ticks(), cursor, authorityRevision, result)))
                 .orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
-        if (!(command instanceof CommandResult.Accepted)) throw new IllegalStateException("deferred aftermath resolution was rejected: " + command);
-        return true;
+        if (command instanceof CommandResult.Rejected) throw new IllegalStateException("deferred aftermath resolution was rejected: " + command);
+        return command instanceof CommandResult.Accepted;
     }
     private record Candidate(DeferredAftermath aftermath, int cursor, DeferredAftermathCell cell) { }
 }

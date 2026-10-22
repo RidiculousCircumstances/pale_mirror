@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "id": "disposable_geology_baseline_recovery",
+  "isolation": { "mode": "disposable_lite", "seed": 125 },
+  "server": { "host": "127.0.0.1", "port": 25127, "profile": "quarry-r22-world", "viewDistance": 8 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "expect": { "status": "ok", "settlement": "settlement:6" } }
+    ] },
+    { "type": "command", "command": "/gamemode creative" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -121, "y": 61, "z": 43 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "first_visibility", "id": "-8,2", "expect": { "presentationReady": true, "dynamicReady": true, "worksitePendingCells": 0, "generatedGeology": { "provider": "pale_mirror:graybox_geology_v1" } }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "first_visibility", "id": "-8,3", "expect": { "presentationReady": true, "dynamicReady": true, "worksitePendingCells": 0, "generatedGeology": { "provider": "pale_mirror:graybox_geology_v1" } }, "timeoutMs": 60000 },
+    { "type": "look", "at": { "x": -125, "y": 61, "z": 50 } },
+    { "type": "wait", "ms": 5000 },
+    { "type": "inspect", "view": "performance", "id": "" },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "expect": { "status": "ok", "surface": "ACTIVE", "physicalSocket": { "support": "READY", "chest": "OWNED" } }, "timeoutMs": 60000 },
+    { "type": "inspect", "view": "summary", "id": "" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -121, "y": 61, "z": 43 }, "settleMs": 0 },
+    { "type": "wait_until_block", "position": { "x": -120, "y": 62, "z": 46 }, "block": "minecraft:stone", "timeoutMs": 30000 },
+    { "type": "break", "position": { "x": -120, "y": 62, "z": 46 } },
+    { "type": "wait_until_block", "position": { "x": -120, "y": 62, "z": 46 }, "block": "minecraft:air", "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "expect": { "status": "ok", "result": { "external": 1 } }, "timeoutMs": 60000, "causalMilestone": "player_removal_overrides_geology" },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 8, "y": 65, "z": -5 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "expect": { "status": "ok", "result": { "liveSourceRegions": 0, "workersCold": true } }, "timeoutMs": 90000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -121, "y": 61, "z": 43 }, "settleMs": 0 },
+    { "type": "wait_until_block", "position": { "x": -120, "y": 62, "z": 46 }, "block": "minecraft:air", "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "first_visibility", "id": "-8,2", "expect": { "presentationReady": true, "dynamicReady": true, "generatedGeology": { "provider": "pale_mirror:graybox_geology_v1" } }, "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "expect": { "status": "ok", "surface": "ACTIVE", "physicalSocket": { "support": "READY", "chest": "OWNED" } }, "timeoutMs": 60000 },
+    { "type": "look", "at": { "x": -120, "y": 62, "z": 46 } },
+    { "type": "inspect", "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24" },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "restart": { "mode": "graceful", "afterAction": 15 },
+  "assertions": [
+    { "after": 21, "view": "process", "id": "extraction:quarry-1ceecae7-710b-329d-ad71-0cde62b70d24", "expect": { "status": "ok", "result": { "external": 1 } } },
+    { "after": 22, "view": "summary", "id": "", "expect": { "status": "ok", "requiredConflicts": 0, "sceneConflicts": 0, "inventoryConflicts": 0 } }
+  ],
+  "frames": [ { "after": 5, "name": "generated-mine-first-ingress" }, { "after": 20, "name": "player-removal-survives-restart" } ]
+}

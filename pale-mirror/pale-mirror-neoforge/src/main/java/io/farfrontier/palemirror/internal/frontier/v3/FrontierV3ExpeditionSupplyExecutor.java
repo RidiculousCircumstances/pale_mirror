@@ -80,12 +80,10 @@ final class FrontierV3ExpeditionSupplyExecutor {
             var destinationLayout = attached == null ? List.of(new FungiblePhysicalObservation.Stack(
                     FrontierV3ActorResourceSlots.address(a.actorId(), worker, a.slot()), load.foodKind(), a.quantity()))
                     : FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(attached.inventory(), state, attached.containerId());
-            boolean accepted = FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(),
-                    new ExpeditionSupplyHotLoaded(mission.id(), a.claimId(), step, layout, destinationLayout));
-            if (accepted) {
+            return FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(),
+                    new ExpeditionSupplyHotLoaded(mission.id(), a.claimId(), step, layout, destinationLayout), () -> {
                 if (attached == null) FrontierV3ActorCarryProjection.rememberConfirmed(runtime.decodedState().orElseThrow(), a.actorId(), worker);
-            }
-            return accepted;
+            });
         } catch (IllegalArgumentException conflict) {
             org.slf4j.LoggerFactory.getLogger(FrontierV3ExpeditionSupplyExecutor.class).warn(
                     "PMV3 supply interaction conflict: mission={} claim={} actor={} pending={} reason={}", mission.id(), a.claimId(), a.actorId(), a.pending(), conflict.getMessage());

@@ -117,7 +117,10 @@ if (frontierV3PilotCatalog.getProperty("${frontierV3PilotProfile}.runner") != 'd
     throw new GradleException("Frontier v3 pilot profile is not allowed for the disposable runner: ${frontierV3PilotProfile}")
 }
 def frontierV3PilotViewDistance = providers.gradleProperty('frontierV3PilotViewDistance').orElse('10').get()
-def frontierV3PilotGrayboxDatapackDirectory = new File(rootProject.projectDir.parentFile, 'datapacks/pale-mirror-graybox')
+def frontierV3PilotGrayboxDatapackOverride = providers.gradleProperty('frontierV3PilotGrayboxDatapackDirectory').orNull
+def frontierV3PilotGrayboxDatapackDirectory = frontierV3PilotGrayboxDatapackOverride == null
+        ? new File(rootProject.projectDir.parentFile, 'datapacks/pale-mirror-graybox')
+        : file(frontierV3PilotGrayboxDatapackOverride)
 // The graybox disabled-mod catalogue is owned by the companion pack, not by a
 // source checkout.  A release is deliberately built from a detached worktree,
 // which need not be a sibling of that pack.  Keep the normal workspace layout

@@ -352,7 +352,7 @@ public final class FrontierV3ResourceFieldObservationGameTests {
         var ledger = FrontierV3ResourceSiteLedger.get(helper.getLevel());
         var owner = (FrontierV3ResourceSiteLedger.FieldInitialization) ledger.fieldClaim(site.id());
         if (owner.cursor().complete()) { completed.run(); return; }
-        var result = FrontierV3ResourceFieldInitialWriter.writePreparedBatch(helper.getLevel(), site, writes -> { });
+        var result = FrontierV3ResourceFieldInitialWriter.writePreparedBatch(helper.getLevel(), site, writes -> true);
         if (result == FrontierV3ResourceFieldInitialWriter.Result.FOREIGN
                 || result == FrontierV3ResourceFieldInitialWriter.Result.AMBIGUOUS)
             helper.fail("initial projection rejected its actual physical predecessor: " + result);

@@ -97,7 +97,7 @@ final class FrontierV3ServerPhysicalInteractions {
     }
     public static ExactCustodyObservation observeExactItemPickup(ServerLevel level, ServerPlayer player, ItemEntity itemEntity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(itemEntity, "item entity");
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerLifecycle.runtimeFor(level.getServer());
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerLifecycle.runtimeForNativeMutation(level.getServer());
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return ExactCustodyObservation.NOT_MANAGED;
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return ExactCustodyObservation.REJECTED;
@@ -113,7 +113,7 @@ final class FrontierV3ServerPhysicalInteractions {
     }
     public static ExactCustodyObservation observeExactItemToss(ServerLevel level, ServerPlayer player, ItemEntity itemEntity) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(player, "player"); Objects.requireNonNull(itemEntity, "item entity");
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerLifecycle.runtimeFor(level.getServer());
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerLifecycle.runtimeForNativeMutation(level.getServer());
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return ExactCustodyObservation.NOT_MANAGED;
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return ExactCustodyObservation.REJECTED;
@@ -148,7 +148,7 @@ final class FrontierV3ServerPhysicalInteractions {
     }
     public static PlayerBreakDisposition observePlayerBreakPacket(ServerLevel level, BlockPos position, ServerPlayer player) {
         Objects.requireNonNull(level, "level"); Objects.requireNonNull(position, "position"); Objects.requireNonNull(player, "player");
-        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerLifecycle.runtimeFor(level.getServer());
+        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = FrontierV3ServerLifecycle.runtimeForNativeMutation(level.getServer());
         if (!FrontierV3PhysicalWorld.isPhysical(level) || runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return PlayerBreakDisposition.UNMANAGED;
         if (level.getBlockEntity(position) instanceof net.minecraft.world.Container) {
             var entity = level.getBlockEntity(position);

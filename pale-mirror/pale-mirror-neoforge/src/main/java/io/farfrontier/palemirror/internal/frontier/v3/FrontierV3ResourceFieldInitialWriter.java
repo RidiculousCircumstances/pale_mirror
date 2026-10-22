@@ -41,7 +41,7 @@ final class FrontierV3ResourceFieldInitialWriter {
 
     /** Component seam: before-write preparation is mandatory, never an implicit permissive fallback. */
     static Result writePreparedBatch(ServerLevel level, ResourceSite site,
-            java.util.function.Consumer<java.util.List<FrontierV3ManagedBlockWrites.PlannedWrite>> prepare) {
+            java.util.function.Predicate<java.util.List<FrontierV3ManagedBlockWrites.PlannedWrite>> prepare) {
         Objects.requireNonNull(prepare, "initial field before-write preparation");
         FrontierV3ResourceSiteLedger ledger = FrontierV3ResourceSiteLedger.get(Objects.requireNonNull(level));
         if (!(ledger.fieldClaim(Objects.requireNonNull(site).id()) instanceof FrontierV3ResourceSiteLedger.FieldInitialization claim)
@@ -79,7 +79,7 @@ final class FrontierV3ResourceFieldInitialWriter {
             writes.add(new FrontierV3ManagedBlockWrites.PlannedWrite(
                     new net.minecraft.core.BlockPos(step.position().x(), step.position().y(), step.position().z()), step.target()));
         }
-        prepare.accept(java.util.List.copyOf(writes));
+        if (!prepare.test(java.util.List.copyOf(writes))) return Result.RETRY;
         Result result = Result.RETRY;
         try {
             for (int written = 0; written < count && budget.take(); written++) {
