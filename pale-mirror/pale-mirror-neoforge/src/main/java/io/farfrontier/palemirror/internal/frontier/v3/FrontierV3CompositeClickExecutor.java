@@ -27,8 +27,10 @@ final class FrontierV3CompositeClickExecutor {
             ledger.retireNoEffect(transaction, FrontierV3PlayerClickOperation.operation(level, transaction).orElseThrow(), level);
             return true;
         }
-        if (!FrontierV3PlayerClickOperation.confirm(level, runtime, transaction, outcome)) {
-            FrontierV3ContainerClickExecutor.conflict(runtime, transaction.members().getFirst(), "captured canonical click outcome rejected");
+        var confirmation = FrontierV3PlayerClickOperation.confirm(level, runtime, transaction, outcome);
+        if (confirmation != FrontierV3OperationConfirmation.Outcome.CONFIRMED) {
+            if (confirmation == FrontierV3OperationConfirmation.Outcome.REJECTED)
+                FrontierV3ContainerClickExecutor.conflict(runtime, transaction.members().getFirst(), "captured canonical click outcome rejected");
             return false;
         }
         ledger.retire(transaction); ledger.persist(level); return true;

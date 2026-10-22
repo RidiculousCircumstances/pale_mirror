@@ -16,10 +16,18 @@ final class ContainerPlayerEditProcess {
         catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         var events = new ArrayList<ProposedEvent>();
         events.add(new ProposedEvent(FrontierExecutionSubjects.PHYSICAL_EXECUTOR, edit));
-        // The source accounting and its released physical fence have one WAL receipt.
-        // Later activity consequences do not own this container checkpoint.
-        try { events.addAll(ConfirmedContainerMutationPlan.close(successor,
-                edit.members().stream().map(ContainerPlayerEditObserved.Member::containerId).toList(), command.expectedRevision().value() + 1)); }
+        // The callback supplies the complete postimage. Keep its exact layout and HOT
+        // owner instead of releasing the chest and making the next click await discovery.
+        try {
+            for (var member : edit.members()) {
+                var lease = successor.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(member.containerId()));
+                var observed = new ReferenceMutationObserved(member.containerId(), member.epoch(),
+                        lease.expectedCanonicalRevision(), lease.expectedReplicaRevision(), command.expectedRevision().next().value(),
+                        ReferenceContainerCustody.canonicalFingerprint(successor, member.containerId()));
+                successor = ReferenceContainerCustody.observeMutation(successor, observed);
+                events.add(new ProposedEvent(member.containerId(), observed));
+            }
+        }
         catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         events.addAll(consequences);
         return new CommandPlan.Accepted(List.copyOf(events));

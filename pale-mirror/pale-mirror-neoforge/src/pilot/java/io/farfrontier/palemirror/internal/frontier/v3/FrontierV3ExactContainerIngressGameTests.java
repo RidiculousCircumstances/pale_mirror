@@ -111,12 +111,9 @@ public final class FrontierV3ExactContainerIngressGameTests {
         // Retry a persisted pending receipt just as restart observation does; no resource credit or replay.
         FrontierV3ContainerClickExecutor.reconcileOne(level, runtime, state(runtime));
         helper.assertTrue(FrontierV3DepotClickLedger.get(level).pending(container) == null, "the exact ingress closes its shared click fence");
-        var completed = new java.util.concurrent.atomic.AtomicBoolean();
-        helper.onEachTick(() -> {
-        if (completed.get()) return;
-        FrontierV3ReferenceContainerCustodyExecutor.tick(level, runtime);
         var lease = state(runtime).replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(container));
-        if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED) return;
+        helper.assertTrue(lease != null && lease.status() == PhysicalCustodyLeaseStatus.ACQUIRED,
+                "an observed click retains HOT custody immediately, without a discovery tick");
         player.getInventory().setItem(9, new ItemStack(Items.BREAD, 3));
         helper.assertTrue(FrontierV3ContainerClickExecutor.before(player, menu, 27, 0, net.minecraft.world.inventory.ClickType.QUICK_MOVE, runtime)
                 == FrontierV3ContainerClickExecutor.Admission.ACCEPTED, "the next bread deposit is not blocked by the tool");
@@ -126,8 +123,22 @@ public final class FrontierV3ExactContainerIngressGameTests {
         helper.assertTrue(chest.getItem(1).is(Items.BREAD) && chest.getItem(1).getCount() == 3, "ordinary bread still uses its normal physical slot");
         helper.assertTrue(FrontierV3DepotClickLedger.get(level).pending(container) == null, "the resource deposit also closes");
         helper.assertTrue(FrontierV3ExactItemPresentation.exactMatch(chest.getItem(0), tool), "tool identity survives beside fungible resources");
-        completed.set(true); player.closeContainer(); runtime.shutdown(); helper.succeed();
-        });
+        for (int index = 0; index < 3; index++) {
+            player.getInventory().setItem(9, new ItemStack(Items.COAL, 64));
+            helper.assertTrue(FrontierV3ContainerClickExecutor.before(player, menu, 27, 0,
+                    net.minecraft.world.inventory.ClickType.QUICK_MOVE, runtime) == FrontierV3ContainerClickExecutor.Admission.ACCEPTED,
+                    "every consecutive stack is admitted without waiting for a discovery or recovery turn");
+            FrontierV3PlayerClickOperation.perform(player, menu, runtime,
+                    () -> menu.clicked(27, 0, net.minecraft.world.inventory.ClickType.QUICK_MOVE, player));
+            FrontierV3ContainerClickExecutor.after(player, menu, runtime);
+            helper.assertTrue(chest.getItem(index + 2).is(Items.COAL) && chest.getItem(index + 2).getCount() == 64,
+                    "each physical coal stack is retained exactly once");
+        }
+        helper.assertTrue(state(runtime).inventory().fungibleResources().accounts().values().stream()
+                .filter(a -> a.custody().equals(new ResourceCustody.Container(container)))
+                .flatMap(a -> a.lotQuantities().values().stream()).mapToInt(Integer::intValue).sum() == 195,
+                "canonical stock includes three coal stacks and three bread");
+        player.closeContainer(); runtime.shutdown(); helper.succeed();
     }
     private static BlockPos interior(GameTestHelper helper) { return helper.absolutePos(new BlockPos(1, 8, 0)); }
     private static FrontierWorldState state(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) { return runtime.decodedState().orElseThrow(); }

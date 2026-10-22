@@ -37,6 +37,15 @@ final class FrontierV3ContainerClickExecutor {
         try { targets = FrontierV3ContainerMenuTarget.resolveAll(player, menu, state); }
         catch (IllegalArgumentException unavailable) { return Admission.REJECTED; }
         if (targets.isEmpty()) return Admission.NOT_OWNED;
+        // The native boundary has published prior commits. Retire their exact click
+        // receipts now, not on a later round-robin executor turn between UI clicks.
+        var ledger = FrontierV3DepotClickLedger.get(level);
+        for (var target : targets) {
+            var previous = ledger.transaction(target.record().id());
+            if (previous != null && FrontierV3PlayerClickOperation.confirmed(level, previous)) {
+                ledger.retire(previous); ledger.persist(level);
+            }
+        }
         UUID interaction = UUID.randomUUID();
         var members = new java.util.ArrayList<FrontierV3DepotClickWitness>();
         for (var target : targets) {

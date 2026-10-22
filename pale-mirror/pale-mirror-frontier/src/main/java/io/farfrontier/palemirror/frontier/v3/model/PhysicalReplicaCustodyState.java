@@ -248,6 +248,21 @@ public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> 
         nextDiagnostics.put(scopeId, diagnostic);
         return new PhysicalReplicaCustodyState(nextReplicas, nextLeases, nextDiagnostics);
     }
+    /** Advances complete observed evidence without relinquishing the current physical owner. */
+    public PhysicalReplicaCustodyState observeMutation(SubjectId scopeId, long epoch, long canonicalRevision,
+            long replicaRevision, long successorRevision, String fingerprint, String provenance) {
+        var lease = requireLive(scopeId, epoch);
+        requireExactEvidence(lease, canonicalRevision, replicaRevision);
+        if (lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED)
+            throw new IllegalArgumentException("observed mutation requires acquired custody");
+        var observed = requireReplica(lease.objectId()).reemit(successorRevision, fingerprint, provenance)
+                .observe(successorRevision, fingerprint, provenance, successorRevision);
+        var nextReplicas = new LinkedHashMap<>(replicas); nextReplicas.put(lease.objectId(), observed);
+        var nextLeases = new LinkedHashMap<>(custodyByScope);
+        nextLeases.put(scopeId, new PhysicalCustodyLease(scopeId, lease.objectId(), lease.providerId(), epoch,
+                successorRevision, observed.replicaRevision(), PhysicalCustodyLeaseStatus.ACQUIRED, null));
+        return new PhysicalReplicaCustodyState(nextReplicas, nextLeases, withoutDiagnostic(scopeId));
+    }
     public PhysicalReplicaCustodyState checkpoint(SubjectId scopeId, long expectedEpoch, long canonicalRevision, long replicaRevision) {
         PhysicalCustodyLease lease = requireLive(scopeId, expectedEpoch);
         requireExactEvidence(lease, canonicalRevision, replicaRevision);

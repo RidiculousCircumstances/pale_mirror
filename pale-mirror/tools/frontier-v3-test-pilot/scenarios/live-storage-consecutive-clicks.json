@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "id": "live_storage_consecutive_clicks",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      { "view": "container", "id": "container:observed--110_64_-333", "expect": {
+        "status": "ok", "position": { "x": -110, "y": 64, "z": -333 }
+      } }
+    ] },
+    { "type": "command", "command": "/gamemode creative" },
+    { "type": "command", "command": "/clear PMTestPilot" },
+    { "type": "command", "command": "/give PMTestPilot minecraft:granite 192" }
+  ],
+  "actions": [
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -112, "y": 64, "z": -331 }, "settleMs": 0 },
+    { "type": "wait_until_diagnostic", "view": "container", "id": "container:observed--110_64_-333",
+      "expect": { "surface": "ACTIVE", "custody": { "status": "ACQUIRED" } }, "timeoutMs": 60000 },
+    { "type": "open_container", "position": { "x": -110, "y": 64, "z": -333 }, "timeoutMs": 15000 },
+    { "type": "quick_move_from_inventory", "item": "minecraft:granite", "count": 64, "timeoutMs": 10000 },
+    { "type": "quick_move_from_inventory", "item": "minecraft:granite", "count": 64, "timeoutMs": 10000 },
+    { "type": "quick_move_from_inventory", "item": "minecraft:granite", "count": 64, "timeoutMs": 10000 },
+    { "type": "inspect", "view": "container", "id": "container:observed--110_64_-333" },
+    { "type": "quick_move_from_container", "item": "minecraft:granite", "count": 64, "timeoutMs": 10000 },
+    { "type": "quick_move_from_container", "item": "minecraft:granite", "count": 64, "timeoutMs": 10000 },
+    { "type": "quick_move_from_container", "item": "minecraft:granite", "count": 64, "timeoutMs": 10000 },
+    { "type": "inspect", "view": "container", "id": "container:observed--110_64_-333" },
+    { "type": "close_container" },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 7, "view": "container", "id": "container:observed--110_64_-333",
+      "expect": { "surface": "ACTIVE", "custody": { "status": "ACQUIRED" }, "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } },
+    { "after": 11, "view": "container", "id": "container:observed--110_64_-333",
+      "expect": { "surface": "ACTIVE", "custody": { "status": "ACQUIRED" }, "replica": { "state": "OBSERVED_CURRENT", "conflict": "" } } },
+    { "after": 13, "view": "summary", "id": "", "expect": { "status": "ok", "requiredConflicts": 0, "inventoryConflicts": 0 } }
+  ],
+  "frames": [
+    { "after": 6, "name": "three-consecutive-stack-deposits", "presentation": "player" },
+    { "after": 10, "name": "three-consecutive-stack-withdrawals", "presentation": "player" }
+  ]
+}

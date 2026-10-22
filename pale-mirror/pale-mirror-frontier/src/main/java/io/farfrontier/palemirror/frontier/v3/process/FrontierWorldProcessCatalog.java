@@ -41,7 +41,8 @@ public final class FrontierWorldProcessCatalog {
             "frontier.exact_item_custody_changed",
             "frontier.exact_item_destroyed", "frontier.inventory_conflict_observed", "frontier.container_surface_transition");
     private static final Set<String> REPLICA_CUSTODY = types(
-            "frontier.physical_replica_declared", "frontier.physical_replica_emitted", "frontier.physical_replica_observed", "frontier.physical_replica_conflict_observed", "frontier.reference_mutation_closed", "frontier.physical_custody_acquired",
+            "frontier.physical_replica_declared", "frontier.physical_replica_emitted", "frontier.physical_replica_observed", "frontier.physical_replica_conflict_observed",
+            "frontier.reference_mutation_closed", "frontier.reference_mutation_observed", "frontier.physical_custody_acquired",
             "frontier.projection_custody_prepared", "frontier.projection_custody_confirmed",
             "frontier.reference_projection_prepared",
             "frontier.reference_surface_verified",
@@ -777,7 +778,7 @@ public final class FrontierWorldProcessCatalog {
         return switch (processId) {
             case "kernel-schedule" -> KERNEL;
             case "physical-observation" -> union(DefenderEquipmentReturnVisitProcessModule.TYPES, types(
-                    "frontier.reference_mutation_closed",
+                    "frontier.reference_mutation_closed", "frontier.reference_mutation_observed",
                     "frontier.container_player_edit_observed", "frontier.resource_storage_adopted", "frontier.resource_storage_declared", "frontier.resource_storage_policy_changed",
                     "frontier.ground_resource_destroyed", "frontier.ground_resource_player_withdrawal",
                     "kernel.reconsideration_requested",

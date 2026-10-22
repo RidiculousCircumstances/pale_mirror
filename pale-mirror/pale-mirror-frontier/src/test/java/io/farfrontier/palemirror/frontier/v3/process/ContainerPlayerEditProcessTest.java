@@ -58,14 +58,14 @@ class ContainerPlayerEditProcessTest {
         var registry = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.processRegistry();
         var plan = assertInstanceOf(CommandPlan.Accepted.class, FrontierWorldCommandPlanner.plan(state, command(edit), registry,
                 FrontierExecutionSubjects.PHYSICAL_EXECUTOR));
-        assertEquals(1, plan.events().stream().filter(e -> e.payload().type().equals("frontier.reference_mutation_closed")).count());
+        assertEquals(1, plan.events().stream().filter(e -> e.payload() instanceof ReferenceMutationObserved).count());
         var successor = ContainerPlayerEditProcess.reduce(state, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, edit);
         assertEquals(tool.custody(), successor.inventory().items().get(tool.id()).custody());
         var invalid = new ContainerPlayerEditObserved(PLAYER, CLICK, edit.members(), Optional.empty(),
                 Optional.of(new ExactItemCustodyChanged(new SubjectId("item:missing"), new InventoryCustody.Player(PLAYER), tool.custody())));
         assertInstanceOf(CommandPlan.Rejected.class, ContainerPlayerEditProcess.plan(state, invalid, command(invalid)));
     }
-    @Test void singleAndCompositeClicksCloseTheirPhysicalFencesInTheSameRegisteredCommand() {
+    @Test void singleAndCompositeClicksRetainAuthorityAndAdmitNextEditWithoutRediscovery() {
         for (var count : List.of(1, 2)) {
             var state = fixture();
             var edit = new ContainerPlayerEditObserved(PLAYER, CLICK, gift(state).members().subList(0, count), Optional.empty());
@@ -78,11 +78,12 @@ class ContainerPlayerEditProcessTest {
             var plan = assertInstanceOf(CommandPlan.Accepted.class, FrontierWorldCommandPlanner.plan(state, command, registry,
                     FrontierExecutionSubjects.PHYSICAL_EXECUTOR));
             assertTrue(edit.requiresDurableBeforeEffect());
-            assertEquals(count.longValue(), plan.events().stream().filter(e -> e.payload().type().equals("frontier.reference_mutation_closed")).count());
+            assertEquals(count.longValue(), plan.events().stream().filter(e -> e.payload() instanceof ReferenceMutationObserved).count());
             int index = 0;
             // This check applies the declared aggregate events; queue wake effects belong
             // to the kernel and are not replayed through the domain reducer.
             for (var event : plan.events()) {
+                assertEquals(event.payload(), codecs.decode(event.payload().type(), codecs.encode(event.payload())));
                 if (registry.requireReducedEventOwner(event.payload().type()).equals("kernel-schedule")) continue;
                 state = FrontierWorldEventReducer.reduce(state, new FrontierEvent(1,
                     new EventId("test:click-event-" + index++), new TransactionId("test:click-transaction"),
@@ -90,10 +91,23 @@ class ContainerPlayerEditProcessTest {
             }
             for (var member : edit.members()) {
                 var lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(member.containerId()));
-                assertEquals(PhysicalCustodyLeaseStatus.RELEASED, lease.status());
+                assertEquals(PhysicalCustodyLeaseStatus.ACQUIRED, lease.status());
+                assertEquals(member.epoch(), lease.authorityEpoch());
                 assertEquals(ReferenceContainerCustody.canonicalFingerprint(state, member.containerId()),
                         state.replicaCustody().replicas().get(member.containerId()).fingerprint());
             }
+            var restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+            var nextEdit = new ContainerPlayerEditObserved(PLAYER, new UUID(0, 759), edit.members().stream()
+                    .map(m -> new ContainerPlayerEditObserved.Member(m.containerId(), m.accountId(), m.ownerId(), m.epoch(),
+                            m.after(), List.of(stack(m.containerId(), m.after().getFirst().quantity() + 1)))).toList(), Optional.empty());
+            var nextCommand = new FrontierCommand(1, new CommandId("test:next-click"), command.worldId(), new Revision(100),
+                    command.submittedAt(), command.actor(), command.causes(), nextEdit);
+            assertInstanceOf(CommandPlan.Accepted.class, FrontierWorldCommandPlanner.plan(restored, nextCommand, registry,
+                    FrontierExecutionSubjects.PHYSICAL_EXECUTOR));
+            var stale = (ReferenceMutationObserved) plan.events().stream().map(ProposedEvent::payload)
+                    .filter(ReferenceMutationObserved.class::isInstance).findFirst().orElseThrow();
+            assertThrows(IllegalArgumentException.class, () -> ReferenceContainerCustody.observeMutation(restored, stale),
+                    "the same owner does not authorize replay of an old observation");
         }
     }
     @Test void oneClickCreditsBothMembersWithDistinctLotsAndRoundTripsItsWholeSuccessor() {

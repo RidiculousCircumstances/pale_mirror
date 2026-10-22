@@ -7,6 +7,7 @@ import io.farfrontier.palemirror.frontier.v3.kernel.CommandPlan;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
 import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
+import io.farfrontier.palemirror.frontier.v3.model.ReferenceMutationObserved;
 import io.farfrontier.palemirror.frontier.v3.model.ReferenceSurfaceVerified;
 import io.farfrontier.palemirror.frontier.v3.model.ReferenceSurfaceRecovery;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.*;
@@ -60,6 +61,10 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
                     events.add(new ProposedEvent(released.scopeId(), released));
                     events.addAll(ProductionProcess.resumeReleasedEffects(state, after, command.submittedAt().ticks()));
                     yield new CommandPlan.Accepted(List.copyOf(events));
+                }
+                case ReferenceMutationObserved observed -> {
+                    ReferenceContainerCustody.observeMutation(state, observed);
+                    yield accepted(observed.containerId(), observed);
                 }
                 case ReferenceMutationClosed closed -> {
                     var after = ReferenceContainerCustody.closeConfirmedMutation(state, closed);
@@ -117,6 +122,10 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
                 case CustodyUnresolved unresolved -> replace(state, state.replicaCustody().unresolved(unresolved.scopeId(), unresolved.expectedEpoch(),
                         unresolved.expectedCanonicalRevision(), unresolved.expectedReplicaRevision(), unresolved.reason(), unresolved.diagnostic()));
                 case CustodyReleased released -> ReferenceContainerCustody.release(state, released);
+                case ReferenceMutationObserved observed -> {
+                    if (!event.subject().equals(observed.containerId())) throw new IllegalArgumentException("mutation observation has a foreign container");
+                    yield ReferenceContainerCustody.observeMutation(state, observed);
+                }
                 case ReferenceMutationClosed closed -> ReferenceContainerCustody.closeConfirmedMutation(state, closed);
                 case Prepared prepared -> replaceRecovery(state, state.fencedRecovery().prepare(prepared.binding()));
                 case Running running -> replaceRecovery(state, state.fencedRecovery().running(running.bindingId(), running.expectedEpoch()));

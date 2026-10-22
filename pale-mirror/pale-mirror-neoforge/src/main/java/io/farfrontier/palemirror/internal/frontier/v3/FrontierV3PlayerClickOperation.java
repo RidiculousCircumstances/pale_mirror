@@ -59,9 +59,9 @@ final class FrontierV3PlayerClickOperation {
         return transaction.operation().map(proof -> FrontierV3OperationLedger.get(level).prunable(
                 proof.nativeReceipt(proof.declaration().participants().iterator().next()))).orElse(false);
     }
-    static boolean confirm(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    static FrontierV3OperationConfirmation.Outcome confirm(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             FrontierV3ContainerClickTransaction transaction, ContainerPlayerEditObserved consequence) {
-        return confirmed(level, transaction) || FrontierV3OperationConfirmation.submit(level, runtime,
+        return confirmed(level, transaction) ? FrontierV3OperationConfirmation.Outcome.CONFIRMED : FrontierV3OperationConfirmation.submitOutcome(level, runtime,
                 operation(level, transaction).orElseThrow().ticket(), consequence);
     }
     private static List<FrontierV3MinecraftOperation.Participant> ports(ServerLevel level, FrontierWorldState state,

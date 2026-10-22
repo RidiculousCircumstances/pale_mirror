@@ -180,6 +180,20 @@ public final class ReferenceContainerCustody {
         return released.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(closed));
     }
 
+    /** Complete physical observation preserves the HOT layout and owner. No rediscovery or reprojection. */
+    public static FrontierWorldState observeMutation(FrontierWorldState state, ReferenceMutationObserved observed) {
+        var id = observed.containerId();
+        var lease = state.replicaCustody().custodyByScope().get(scopeId(id));
+        if (!isReferenceContainer(state, id) || lease == null || !lease.providerId().equals(PROVIDER_ID)
+                || !lease.objectId().equals(id) || !canonicalFingerprint(state, id).equals(observed.fingerprint())
+                || boundFungibleSlots(state, id).stream().anyMatch(b -> b.authorityEpoch() != observed.authorityEpoch()))
+            throw new IllegalArgumentException("observed mutation differs from its owned canonical successor");
+        var custody = state.replicaCustody().observeMutation(scopeId(id), observed.authorityEpoch(),
+                observed.expectedCanonicalRevision(), observed.expectedReplicaRevision(), observed.successorRevision(),
+                observed.fingerprint(), provenance(id));
+        return state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody));
+    }
+
     /** Family-owned construction of the complete legal successor disposition. */
     public static ReferenceMutationClosed confirmedMutationTransition(FrontierWorldState state, SubjectId containerId,
                                                                        long emittedCanonicalRevision) {

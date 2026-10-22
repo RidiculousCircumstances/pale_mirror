@@ -14,7 +14,7 @@ import java.util.List;
 final class PhysicalReplicaCustodyPayloadCodecs {
     private PhysicalReplicaCustodyPayloadCodecs() { }
     static List<PayloadCodec> codecs() { return List.of(new Declared(), new Emitted(), new Observed(), new ConflictObserved(), new Acquired(), new Checkpointed(), new Unresolved(), new Released(), new
-            ReferenceMutation(), new ProjectionPrepared(), new ProjectionConfirmed(), new ReferencePrepared(), new ProjectionConflict(), new ReferenceSurfaceVerifiedCodec()); }
+            ReferenceMutation(), new MutationObserved(), new ProjectionPrepared(), new ProjectionConfirmed(), new ReferencePrepared(), new ProjectionConflict(), new ReferenceSurfaceVerifiedCodec()); }
     private abstract static class Base implements PayloadCodec {
         final byte[] encodeBytes(Writer writer) { return FrontierWorldPayloadCodecs.encodeProduction(writer::write); }
         final FrontierPayload decodeBytes(byte[] bytes, Reader reader) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, reader::read); }
@@ -129,6 +129,17 @@ final class PhysicalReplicaCustodyPayloadCodecs {
         @Override public FrontierPayload decode(byte[] bytes) { return decodeBytes(bytes, input -> {
             Fence fence = readFence(input); return new CustodyReleased(fence.scope(), fence.epoch(), fence.canonical(), fence.replica());
         }); }
+    }
+    private static final class MutationObserved extends Base {
+        @Override public String type() { return "frontier.reference_mutation_observed"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeBytes(output -> {
+            var value = (ReferenceMutationObserved) payload;
+            subject(output, value.containerId()); output.writeLong(value.authorityEpoch());
+            output.writeLong(value.expectedCanonicalRevision()); output.writeLong(value.expectedReplicaRevision());
+            output.writeLong(value.successorRevision()); FrontierWorldPayloadCodecs.writeString(output, value.fingerprint());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeBytes(bytes, input -> new ReferenceMutationObserved(
+                subject(input), input.readLong(), input.readLong(), input.readLong(), input.readLong(), FrontierWorldPayloadCodecs.readString(input))); }
     }
     private static final class ReferenceMutation extends Base {
         @Override public String type() { return "frontier.reference_mutation_closed"; }
