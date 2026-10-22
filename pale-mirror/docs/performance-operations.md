@@ -103,6 +103,13 @@ support checks and guardrails pass, including detour and isolated-start cases.
 The same saved world is retained for recovery after deploying this crash fix;
 no additional hive feature is activated by this repair.
 
+Recovery receipt: d2c92041 exact deployed hash verified, same world resumed
+past5619 to8258 (revision8863), active, no new keep-up/quarantine log entries.
+The one retained diagnostic is event revision6442's kernel-quarantine incident,
+not a new route/storage conflict; it was not deleted to manufacture green.
+Inventory/scene/custody conflicts remain zero. Ready-lag0, deferred actor queue0;
+recent64-turn PM mean3.77ms/max56.33ms, host-through-post3.88ms/max56.46ms.
+
 ## Initial chunk ingress (R214)
 
 The native sender retains Minecraft's pending membership, batch quota and actual
