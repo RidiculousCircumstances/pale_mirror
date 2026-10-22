@@ -21,6 +21,8 @@ final class FrontierV3HotHandoffDiagnostic {
                 + "\",\"status\":\"" + check.status().name() + "\",\"reason\":\"" + quote(check.reason()) + "\"}")
                 .collect(Collectors.joining(","));
         return base.substring(0, base.length() - 1) + ",\"handoffRevision\":" + review.revision()
+                + ",\"staticProjectionProgress\":" + FrontierV3GrayboxExecutor.visibilityProgress(runtime, visibility.chunk())
+                + ",\"chunkLoaded\":" + (level.getChunkSource().getChunkNow(visibility.chunk().x, visibility.chunk().z) != null)
                 + ",\"worksitePendingCells\":" + FrontierV3WorksiteProjection.pending(level, runtime.decodedState().orElseThrow(), visibility.chunk())
                 + ",\"worksiteProjectionProgress\":" + FrontierV3WorksiteProjection.progressDiagnostic(level)
                 + ",\"generatedGeology\":" + (geology == null ? "null" : "{\"provider\":\"" + quote(geology.provider())

@@ -45,7 +45,7 @@ final class FrontierV3GrayboxExecutor {
     private static final int MAX_WORKSITE_STAGING_PROBES_PER_CELL = 8;
     private static final int MAX_FIRST_VISIBILITY_CHUNKS_PER_TICK = 16;
     private static final Map<FrontierV3ServerRuntime<?, ?>, Cursor> CURSORS = new IdentityHashMap<>();
-    private static final Map<FrontierV3ServerRuntime<?, ?>, ProjectionWork> WORK = new IdentityHashMap<>();
+    private static final Map<FrontierV3ServerRuntime<?, ?>, FrontierV3ProjectionWork> WORK = new IdentityHashMap<>();
     private static final Map<FrontierV3ServerRuntime<?, ?>, Map<ChunkPos, FirstVisibilityRecord>> FIRST_VISIBILITY = new IdentityHashMap<>();
     private static final Map<FrontierV3ServerRuntime<?, ?>, Map<ChunkPos, FirstVisibilityWork>> FIRST_VISIBILITY_WORK = new IdentityHashMap<>();
     private static final Map<FrontierV3ServerRuntime<?, ?>, java.util.LinkedHashSet<ChunkPos>> DYNAMIC_CATCH_UP = new IdentityHashMap<>();
@@ -88,7 +88,7 @@ final class FrontierV3GrayboxExecutor {
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
         FrontierV3GrayboxLedger ledger = FrontierV3GrayboxLedger.get(level);
-        ProjectionWork work = workFor(runtime);
+        FrontierV3ProjectionWork work = workFor(runtime);
         long started = System.nanoTime();
         Cursor cursor = cursor(runtime, state);
         work.cursorPath(System.nanoTime() - started);
@@ -107,7 +107,7 @@ final class FrontierV3GrayboxExecutor {
         if (runtime.canonicalState().isEmpty()) return;
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
-        ProjectionWork work = workFor(runtime);
+        FrontierV3ProjectionWork work = workFor(runtime);
         long started = System.nanoTime();
         Cursor cursor = cursor(runtime, state);
         work.cursorPath(System.nanoTime() - started);
@@ -117,7 +117,7 @@ final class FrontierV3GrayboxExecutor {
     }
     static void refresh(FrontierV3AftermathPhysicalWorld world, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                         FrontierWorldState state) {
-        ProjectionWork work = workFor(runtime);
+        FrontierV3ProjectionWork work = workFor(runtime);
         long started = System.nanoTime();
         Cursor cursor = cursor(runtime, Objects.requireNonNull(state, "state"));
         work.cursorPath(System.nanoTime() - started);
@@ -127,7 +127,7 @@ final class FrontierV3GrayboxExecutor {
     }
     private static Cursor cursor(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state) {
         Cursor cursor = CURSORS.get(runtime);
-        ProjectionWork work = workFor(runtime);
+        FrontierV3ProjectionWork work = workFor(runtime);
         if (cursor != null) work.compatibilityChecks++;
         if (cursor == null || !cursor.input().matches(state)) {
             work.freshnessConstructions++;
@@ -319,6 +319,8 @@ final class FrontierV3GrayboxExecutor {
                                                        FrontierWorldState state, Cursor cursor) {
         Map<ChunkPos, FirstVisibilityRecord> records = FIRST_VISIBILITY.get(runtime);
         if (records == null) return;
+        var metrics = workFor(runtime);
+        metrics.visibilityAdmissions++;
         drainHiveFences(runtime, cursor);
         drainSettlementFences(runtime, cursor);
         int operationBudget = io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_WEIGHT_BUDGET.get();
@@ -343,9 +345,14 @@ final class FrontierV3GrayboxExecutor {
             FirstVisibility result = FirstVisibility.PENDING;
             while (!work.complete() && budget.takeRead()) {
                 if (!work.preparePending(Math.min(operationBudget, FrontierV3ManagedBlockWrites.MAX_PLANNED_WRITES),
-                        cells -> FrontierV3GrayboxPreparation.prepare(level, runtime, state, cells))) break;
+                        cells -> FrontierV3GrayboxPreparation.prepare(level, runtime, state, cells))) {
+                    metrics.visibilityPreparationWaits++;
+                    break;
+                }
                 ProjectionResult projection = projectFirstVisible(FrontierV3AftermathPhysicalWorld.firstVisibility(level), ledger, state,
                         work.next(), budget::takeWrite);
+                metrics.visibilityCellProbes++;
+                if (projection == ProjectionResult.APPLIED) metrics.visibilityWrites++;
                 if (projection == ProjectionResult.CONFLICT) { result = FirstVisibility.BLOCKED; break; }
                 work.observe(projection);
                 if (projection == ProjectionResult.YIELDED) break; // Try read-only work in another chunk, not the same yielded cell.
@@ -364,6 +371,17 @@ final class FrontierV3GrayboxExecutor {
     }
     private static Map<ChunkPos, FirstVisibilityWork> firstVisibilityWork(FrontierV3ServerRuntime<?, ?> runtime) {
         return FIRST_VISIBILITY_WORK.computeIfAbsent(runtime, ignored -> new LinkedHashMap<>());
+    }
+    static String visibilityProgress(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos chunk) {
+        var cursor = CURSORS.get(runtime);
+        var pending = FIRST_VISIBILITY_WORK.getOrDefault(runtime, Map.of()).get(chunk);
+        var metrics = workFor(runtime);
+        return "{\"declaredCells\":" + (cursor == null ? -1 : cursor.cellsIn(chunk).size())
+                + ",\"remainingCells\":" + (pending == null ? -1 : pending.remaining())
+                + ",\"admissions\":" + metrics.visibilityAdmissions
+                + ",\"preparationWaits\":" + metrics.visibilityPreparationWaits
+                + ",\"cellProbes\":" + metrics.visibilityCellProbes
+                + ",\"appliedCells\":" + metrics.visibilityWrites + "}";
     }
     private static FirstVisibilityWork firstVisibilityWork(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos chunk, List<GrayboxCell> cells) {
         return firstVisibilityWork(runtime).computeIfAbsent(chunk, ignored -> new FirstVisibilityWork(cells));
@@ -497,7 +515,7 @@ final class FrontierV3GrayboxExecutor {
             FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state) {
         return FrontierGrayboxPlan.withoutStructuralDerivation(() -> {
             Cursor cursor = CURSORS.get(runtime);
-            ProjectionWork work = workFor(runtime); work.compatibilityChecks++;
+            FrontierV3ProjectionWork work = workFor(runtime); work.compatibilityChecks++;
             if (cursor == null || !cursor.input().matches(state)) return Optional.empty();
             work.providerAcquisitions++;
             return Optional.of(cursor.providerSnapshot(state, work));
@@ -799,7 +817,7 @@ final class FrontierV3GrayboxExecutor {
                     hiveVisibilityChunks(hiveCells), settlementVisibilityChunks, chunks, nextChunkIndex, stagingPositions(replacement),
                     dynamicCells, nextDynamicHiveIndex, stagingCells(replacement, structuralBaseline, dynamic), nextWorksiteStagingIndex, preferWorksiteStaging);
         }
-        FrontierSettlementAssaultBattlefield.Provider providerSnapshot(FrontierWorldState state, ProjectionWork work) {
+        FrontierSettlementAssaultBattlefield.Provider providerSnapshot(FrontierWorldState state, FrontierV3ProjectionWork work) {
             if (structuralBaseline == null) throw new IllegalStateException("test-only cursor has no structural provider baseline");
             return new ProjectionProviderSnapshot(structuralBaseline, dynamicHiveOverlay, state.physicalDeltas(), work);
         }
@@ -934,7 +952,7 @@ final class FrontierV3GrayboxExecutor {
     }
     private record ProjectionProviderSnapshot(FrontierGrayboxPlan structuralBaseline, FrontierGrayboxPlan dynamicHiveOverlay,
                                               Map<io.farfrontier.palemirror.frontier.v3.model.BlockPosition, PhysicalDelta> physicalDeltas,
-                                              ProjectionWork work)
+                                              FrontierV3ProjectionWork work)
             implements FrontierSettlementAssaultBattlefield.Provider {
         @Override public Optional<GrayboxCell> cellAt(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) {
             work.pointQueries++;
@@ -964,28 +982,8 @@ final class FrontierV3GrayboxExecutor {
         }
     }
     static ProjectionWorkSnapshot projectionWork(FrontierV3ServerRuntime<?, ?> runtime) { return workFor(runtime).snapshot(); }
-    static void resetProjectionWork(FrontierV3ServerRuntime<?, ?> runtime) { WORK.put(runtime, new ProjectionWork()); }
-    private static ProjectionWork workFor(FrontierV3ServerRuntime<?, ?> runtime) { return WORK.computeIfAbsent(runtime, ignored -> new ProjectionWork()); }
-    static final class ProjectionWork {
-        private int compatibilityChecks, freshnessConstructions, planCompilations, providerAcquisitions, pointQueries, siblingHiveFenceRetentions;
-        private String lastTrigger = "UNINITIALIZED", lastDisposition = "NONE";
-        private String lastCompileTrigger = "NONE";
-        private ProjectionCost cursorPath = ProjectionCost.empty(), firstVisibilityPath = ProjectionCost.empty();
-        private ProjectionCost stagingRetirementPath = ProjectionCost.empty(), deferredProjectionPath = ProjectionCost.empty();
-        void lastRefresh(String trigger, String disposition) {
-            lastTrigger = trigger; lastDisposition = disposition;
-            if ("COMPILE_STABLE_BASELINE".equals(disposition)) lastCompileTrigger = trigger;
-        }
-        void cursorPath(long elapsedNanos) { cursorPath = cursorPath.observe(elapsedNanos); }
-        void firstVisibilityPath(long elapsedNanos) { firstVisibilityPath = firstVisibilityPath.observe(elapsedNanos); }
-        void stagingRetirementPath(long elapsedNanos) { stagingRetirementPath = stagingRetirementPath.observe(elapsedNanos); }
-        void deferredProjectionPath(long elapsedNanos) { deferredProjectionPath = deferredProjectionPath.observe(elapsedNanos); }
-        ProjectionWorkSnapshot snapshot() {
-            return new ProjectionWorkSnapshot(compatibilityChecks, freshnessConstructions, planCompilations,
-                    providerAcquisitions, pointQueries, siblingHiveFenceRetentions, lastTrigger, lastDisposition,
-                    lastCompileTrigger, cursorPath, firstVisibilityPath, stagingRetirementPath, deferredProjectionPath);
-        }
-    }
+    static void resetProjectionWork(FrontierV3ServerRuntime<?, ?> runtime) { WORK.put(runtime, new FrontierV3ProjectionWork()); }
+    private static FrontierV3ProjectionWork workFor(FrontierV3ServerRuntime<?, ?> runtime) { return WORK.computeIfAbsent(runtime, ignored -> new FrontierV3ProjectionWork()); }
     record ProjectionCost(long calls, long totalNanos, long maxNanos) {
         static ProjectionCost empty() { return new ProjectionCost(0, 0, 0); }
         ProjectionCost observe(long elapsedNanos) {

@@ -48,4 +48,5 @@ final class FirstVisibilityWork {
     boolean complete() { return pending.isEmpty(); }
     boolean blocked() { return blocked; }
     int cells() { return cells; }
+    int remaining() { return pending.size(); }
 }
