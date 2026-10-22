@@ -1,5 +1,32 @@
 # Pale Mirror runtime performance
 
+## Initial chunk ingress (R214)
+
+The native sender retains Minecraft's pending membership, batch quota and actual
+sent-count acknowledgements. Its per-connection discovery index is populated by
+native enqueue/drop events; new candidates are distance-ordered, held candidates
+rotate fairly, and a collection probes at most64 candidates. It does not scan and
+sort the entire pending queue again after a held nearest chunk. Native readiness
+and presentation admission are checked before sending; no old ready verdict is
+retained in that index. Disconnect discards it, drop removes its exact key, and
+vanilla sends outside the v3 dimension remove their keys too.
+
+Initial dynamic handoff is assessed by the existing bounded preparation owner,
+not independently by every sender retry. It publishes READY only after current
+owner checks; a classified dynamic conflict may become PRESENTABLE_CONFLICT but
+cannot admit work. Such conflicts remain in reconciliation and may later become
+READY; later pending effects cannot hide already admitted terrain. Natural load
+reopens admission. Nearest/FIFO preparation is shared with fixed-container
+discovery. A deferred socket no longer monopolizes the first-ID selection;
+the materializer examines a bounded window and executes at most one lifecycle.
+
+The client loading observer retains transition records for every visit, coalescing
+position/mesh changes instead of stopping after64 startup records. Visit duration
+includes target resolution, teleport/received terrain and the vanilla loading
+screen, not only server chunk sending. R213 measured19.3s/11.1s fresh and1.4s/0.1s
+after restart; those are different cold/warm cases, not a before/after speed ratio.
+R214 native timing verification is pending; bounded work is not a latency claim.
+
 ## Regional extraction geometry (2026-10-21)
 
 Extraction supplies immutable block facts to `RegionalNavigationProjection`,

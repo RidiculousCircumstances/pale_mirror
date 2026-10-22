@@ -9,19 +9,15 @@ class FrontierV3HotHandoffTest {
     @Test void admittedTerrainDoesNotWaitForLaterEffectsButFreshWorkStillDoes() {
         var waiting = new FrontierV3HotHandoff.Review(31L, List.of(new FrontierV3HotHandoff.Check(
                 new SubjectId("container:7-depot"), FrontierV3HotHandoff.Status.WAITING, "container_effect_recovery")));
-        assertTrue(FrontierV3GrayboxExecutor.FirstVisibility.READY.presentable(() -> {
-            fail("already admitted terrain must not poll later resource effects"); return waiting;
-        }));
+        assertTrue(FrontierV3GrayboxExecutor.FirstVisibility.READY.presentable());
         assertFalse(waiting.ready(), "terrain admission does not grant a new physical interaction");
-        assertFalse(FrontierV3GrayboxExecutor.FirstVisibility.STATIC_CURRENT.presentable(() -> waiting),
+        assertFalse(FrontierV3GrayboxExecutor.FirstVisibility.STATIC_CURRENT.presentable(),
                 "a new native load still needs initial dynamic reconciliation");
-        assertFalse(FrontierV3GrayboxExecutor.FirstVisibility.PENDING.presentable(() -> {
-            fail("unfinished static geometry has no dynamic proof to query"); return waiting;
-        }));
+        assertFalse(FrontierV3GrayboxExecutor.FirstVisibility.PENDING.presentable());
         var conflict = new FrontierV3HotHandoff.Review(32L, List.of(new FrontierV3HotHandoff.Check(
                 new SubjectId("site:7-wheat-field"), FrontierV3HotHandoff.Status.CONFLICT, "field_foreign_change")));
-        assertTrue(FrontierV3GrayboxExecutor.FirstVisibility.STATIC_CURRENT.presentable(() -> conflict));
-        assertTrue(FrontierV3GrayboxExecutor.FirstVisibility.BLOCKED.presentable(() -> conflict),
+        assertTrue(FrontierV3GrayboxExecutor.FirstVisibility.PRESENTABLE_CONFLICT.presentable());
+        assertTrue(FrontierV3GrayboxExecutor.FirstVisibility.BLOCKED.presentable(),
                 "a classified structural conflict must not permanently hide the whole chunk");
         assertFalse(conflict.ready(), "conflict visibility is not HOT work permission");
     }

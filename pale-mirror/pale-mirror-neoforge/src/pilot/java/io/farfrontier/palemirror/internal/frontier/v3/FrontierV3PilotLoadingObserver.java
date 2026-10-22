@@ -11,14 +11,13 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 /** Development-only read-only distinction between terrain receipt, renderer readiness and loading UI. */
 @EventBusSubscriber(modid = PaleMirrorMod.MOD_ID, value = Dist.CLIENT)
 public final class FrontierV3PilotLoadingObserver {
-    private static final int MAX_RECORDS = 64;
     private static View previous;
-    private static int records;
+    private static long lastReport;
     private record View(String dimension, String screen, BlockPos feet, BlockPos camera,
             boolean chunkReceived, boolean sectionCompiled, int receivedNeighbours, int compiledNeighbours) { }
     private FrontierV3PilotLoadingObserver() { }
     @SubscribeEvent public static void tick(ClientTickEvent.Post event) {
-        if (System.getProperty("pale_mirror.frontier_v3.test_pilot.scenario", "").isBlank() || records >= MAX_RECORDS) return;
+        if (System.getProperty("pale_mirror.frontier_v3.test_pilot.scenario", "").isBlank()) return;
         var minecraft = Minecraft.getInstance();
         if (minecraft.player == null || minecraft.level == null) return;
         var feet = minecraft.player.blockPosition();
@@ -33,8 +32,14 @@ public final class FrontierV3PilotLoadingObserver {
                 minecraft.gameRenderer.getMainCamera().getBlockPosition().immutable(),
                 minecraft.level.getChunkSource().hasChunk(feet.getX() >> 4, feet.getZ() >> 4),
                 minecraft.levelRenderer.isSectionCompiled(feet), receivedNeighbours, compiledNeighbours);
-        if (view.equals(previous)) return;
-        previous = view; records++;
+        long now = System.nanoTime();
+        boolean boundary = previous == null || !view.dimension().equals(previous.dimension())
+                || !view.screen().equals(previous.screen()) || view.chunkReceived() != previous.chunkReceived()
+                || view.sectionCompiled() != previous.sectionCompiled();
+        // Preserve every loading boundary across visits; coalesce changing positions/meshes,
+        // not a global first64 cutoff that loses the decisive completion observation.
+        if (!boundary && (view.equals(previous) || now - lastReport < 1_000_000_000L)) return;
+        previous = view; lastReport = now;
         PaleMirrorMod.LOGGER.info("PMV3_PILOT_LOADING dimension={} screen={} feet={} camera={} chunkReceived={} sectionCompiled={} receivedNeighbours={} compiledNeighbours={}",
                 view.dimension(), view.screen(), view.feet(), view.camera(), view.chunkReceived(), view.sectionCompiled(),
                 view.receivedNeighbours(), view.compiledNeighbours());

@@ -54,6 +54,7 @@ import java.util.Optional;
  * reconstructs a missing or altered surface.</p>
  */
 final class FrontierV3ContainerSurfaceExecutor {
+    private static final Map<ServerLevel, FrontierV3PreparationWindow<io.farfrontier.palemirror.frontier.v3.api.SubjectId>> PREPARATION = new java.util.WeakHashMap<>();
     enum SocketReadiness { DEFERRED, READY, CONFLICT }
 
     /**
@@ -69,7 +70,7 @@ final class FrontierV3ContainerSurfaceExecutor {
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierWorldState state = state(runtime);
         if (state == null) return;
-        state.inventory().surfaces().values().stream()
+        var candidates = state.inventory().surfaces().values().stream()
                 .filter(ContainerSurface::fixed)
                 .filter(surface -> surface.status() == ContainerSurfaceStatus.UNMATERIALIZED
                         || surface.status() == ContainerSurfaceStatus.PREPARED)
@@ -78,8 +79,28 @@ final class FrontierV3ContainerSurfaceExecutor {
                         && (!ReferenceContainerCustody.isReferenceContainer(state, surface.containerId())
                             || level.shouldTickBlocksAt(position(surface))
                             || FrontierV3PhysicalDemand.presentationRequested(level, position(surface))))
-                .findFirst().ifPresent(surface -> executeLifecycle(level, runtime, state, surface));
-        auditOneActiveSurface(level, runtime, state);
+                .map(ContainerSurface::containerId).toList();
+        var observers = level.players().stream().filter(player -> !player.isSpectator())
+                .map(net.minecraft.server.level.ServerPlayer::blockPosition).toList();
+        var selected = PREPARATION.computeIfAbsent(level, ignored -> new FrontierV3PreparationWindow<>())
+                .next(candidates, id -> {
+                    var target = position(state.inventory().surfaces().get(id));
+                    return observers.stream().mapToLong(observer -> (long) observer.distSqr(target)).min().orElse(Long.MAX_VALUE);
+                }, 8);
+        for (var id : selected) {
+            var surface = state.inventory().surfaces().get(id);
+            if (!ReferenceContainerCustody.isReferenceContainer(state, id)
+                    && ContainerSurfaceActivationStateSupport.blockedByColdProduction(state, id)) continue;
+            var support = FrontierContainerSocketPlan.declaredSupport(state, surface).orElse(null);
+            var ledger = FrontierV3GrayboxLedger.get(level);
+            var readiness = surface.status() == ContainerSurfaceStatus.UNMATERIALIZED
+                    ? socketReadiness(level, ledger, position(surface), support)
+                    : supportReadiness(level, ledger, position(surface), support);
+            if (readiness == SocketReadiness.DEFERRED) continue;
+            executeLifecycle(level, runtime, state, surface);
+            break;
+        }
+        auditOneActiveSurface(level, runtime, state(runtime));
     }
 
     private static void executeLifecycle(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

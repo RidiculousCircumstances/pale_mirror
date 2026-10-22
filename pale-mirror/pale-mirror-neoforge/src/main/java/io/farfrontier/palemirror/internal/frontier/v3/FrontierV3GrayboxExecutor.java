@@ -61,14 +61,13 @@ final class FrontierV3GrayboxExecutor {
     enum ProjectionResult { APPLIED, CURRENT, CONFLICT, DEFERRED, YIELDED }
     enum BlockBreakObservation { UNMANAGED, ACCEPTED, REJECTED }
     enum FirstVisibility {
-        PENDING, STATIC_CURRENT, READY, BLOCKED;
+        PENDING, STATIC_CURRENT, READY, BLOCKED, PRESENTABLE_CONFLICT;
 
         /** A loaded image is admitted once; later operations cannot hide its terrain. */
-        boolean presentable(java.util.function.Supplier<FrontierV3HotHandoff.Review> initialHandoff) {
+        boolean presentable() {
             return switch (this) {
-                case PENDING -> false;
-                case STATIC_CURRENT -> initialHandoff.get().presentable();
-                case READY, BLOCKED -> true; // A classified conflict must be visible, never executable.
+                case PENDING, STATIC_CURRENT -> false;
+                case READY, BLOCKED, PRESENTABLE_CONFLICT -> true; // Visibility is not execution authority.
             };
         }
     }
@@ -235,7 +234,7 @@ final class FrontierV3GrayboxExecutor {
         if (naturalFirstVisibilityCandidate(cursor, chunk)) retainFirstVisibility(runtime, chunk, false);
         FirstVisibilityRecord record = FIRST_VISIBILITY.getOrDefault(runtime, Map.of()).get(chunk);
         if (record != null && record.status() == FirstVisibility.PENDING) firstVisibilityQueue(runtime, true).add(chunk);
-        if (record != null && record.status() == FirstVisibility.READY) {
+        if (record != null && (record.status() == FirstVisibility.READY || record.status() == FirstVisibility.PRESENTABLE_CONFLICT)) {
             FIRST_VISIBILITY.get(runtime).put(chunk, new FirstVisibilityRecord(
                     FirstVisibility.STATIC_CURRENT, record.revision(), record.cells()));
             DYNAMIC_CATCH_UP.computeIfAbsent(runtime, ignored -> new java.util.LinkedHashSet<>()).add(chunk);
@@ -396,15 +395,7 @@ final class FrontierV3GrayboxExecutor {
     }
     /** Alternate nearest-player admission and FIFO; distant work must not starve. */
     static ChunkPos pollVisibility(java.util.LinkedHashSet<ChunkPos> queue, List<ChunkPos> origins, boolean nearest) {
-        if (queue == null || queue.isEmpty()) return null;
-        if (!nearest || origins.isEmpty()) return poll(queue);
-        ChunkPos next = queue.stream().min(java.util.Comparator.comparingLong(candidate -> origins.stream()
-                .mapToLong(origin -> {
-                    long dx = (long) candidate.x - origin.x, dz = (long) candidate.z - origin.z;
-                    return dx * dx + dz * dz;
-                }).min().orElseThrow())).orElseThrow();
-        queue.remove(next);
-        return next;
+        return FrontierV3PreparationWindow.pollChunk(queue, origins, nearest);
     }
     private static void drainHiveFences(FrontierV3ServerRuntime<?, ?> runtime, Cursor cursor) {
         for (int drained = 0; drained < MAX_FIRST_VISIBILITY_CHUNKS_PER_TICK; drained++) {
@@ -438,16 +429,28 @@ final class FrontierV3GrayboxExecutor {
         // Allocation safety ceiling: bound discovery as well as mutation. Requeued owners
         // retain FIFO fairness; a stalled chunk cannot multiply this turn's proof work.
         int attempts = pending == null ? 0 : Math.min(pending.size(), 32);
-        while (attempts-- > 0 && (chunk = poll(pending)) != null) {
+        var origins = level.players().stream().filter(player -> !player.isSpectator())
+                .map(net.minecraft.server.level.ServerPlayer::chunkPosition).toList();
+        var deferred = new java.util.LinkedHashSet<ChunkPos>();
+        var budget = FrontierV3PreparationWindow.handoffBudget();
+        while (attempts-- > 0 && budget.takeRead() && (chunk = pollVisibility(pending, origins, attempts % 2 == 0)) != null) {
             FirstVisibilityRecord record = records.get(chunk);
-            if (record != null && record.status() == FirstVisibility.STATIC_CURRENT) {
-                if (!FrontierV3HotHandoff.inspect(level, runtime, chunk).ready()) {
-                    pending.add(chunk);
+            if (record != null && (record.status() == FirstVisibility.STATIC_CURRENT
+                    || record.status() == FirstVisibility.PRESENTABLE_CONFLICT)) {
+                if (level.getChunkSource().getChunkNow(chunk.x, chunk.z) == null) {
+                    deferred.add(chunk);
                     continue;
                 }
-                records.replace(chunk, record, new FirstVisibilityRecord(FirstVisibility.READY, revision, record.cells()));
+                var review = FrontierV3HotHandoff.inspect(level, runtime, chunk);
+                if (review.ready()) records.replace(chunk, record, new FirstVisibilityRecord(FirstVisibility.READY, revision, record.cells()));
+                else {
+                    if (review.presentable()) records.replace(chunk, record,
+                            new FirstVisibilityRecord(FirstVisibility.PRESENTABLE_CONFLICT, revision, record.cells()));
+                    deferred.add(chunk);
+                }
             }
         }
+        if (pending != null) pending.addAll(deferred);
     }
     static boolean sceneEligible(FrontierV3ServerRuntime<?, ?> runtime, BlockPosition position) {
         FirstVisibilityRecord visibility = FIRST_VISIBILITY.getOrDefault(runtime, Map.of()).get(new ChunkPos(position.x() >> 4, position.z() >> 4));
@@ -455,12 +458,12 @@ final class FrontierV3GrayboxExecutor {
     }
     static boolean staticVisibilityComplete(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos chunk) {
         FirstVisibilityRecord visibility = FIRST_VISIBILITY.getOrDefault(runtime, Map.of()).get(chunk);
-        return visibility == null || visibility.status() == FirstVisibility.STATIC_CURRENT || visibility.status() == FirstVisibility.READY;
+        return visibility == null || visibility.status() == FirstVisibility.STATIC_CURRENT || visibility.status() == FirstVisibility.READY
+                || visibility.status() == FirstVisibility.PRESENTABLE_CONFLICT;
     }
-    static boolean presentationReady(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos chunk,
-                                     java.util.function.Supplier<FrontierV3HotHandoff.Review> initialHandoff) {
+    static boolean presentationReady(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos chunk) {
         var visibility = FIRST_VISIBILITY.getOrDefault(runtime, Map.of()).get(chunk);
-        return visibility != null && visibility.status().presentable(initialHandoff);
+        return visibility != null && visibility.status().presentable();
     }
     static FirstVisibilitySnapshot firstVisibility(FrontierV3ServerRuntime<?, ?> runtime, String id) {
         String[] parts = Objects.requireNonNull(id, "first visibility id").split(",", -1);

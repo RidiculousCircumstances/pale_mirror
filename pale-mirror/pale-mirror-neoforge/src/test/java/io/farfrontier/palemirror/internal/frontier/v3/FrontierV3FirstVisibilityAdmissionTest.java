@@ -159,15 +159,9 @@ class FrontierV3FirstVisibilityAdmissionTest {
     }
 
     @Test void admittedPresentationDoesNotReplayInitialStaticOrDynamicChecks() {
-        assertTrue(FrontierV3GrayboxExecutor.FirstVisibility.READY.presentable(() -> {
-            throw new AssertionError("already admitted presentation must not replay the initial handoff");
-        }));
-        assertFalse(FrontierV3GrayboxExecutor.FirstVisibility.PENDING.presentable(() -> {
-            throw new AssertionError("static admission has not completed");
-        }));
-        assertFalse(FrontierV3GrayboxExecutor.FirstVisibility.STATIC_CURRENT.presentable(() ->
-                new FrontierV3HotHandoff.Review(1, List.of(new FrontierV3HotHandoff.Check(
-                        new SubjectId("site:waiting"), FrontierV3HotHandoff.Status.WAITING, "initialization")))));
+        assertTrue(FrontierV3GrayboxExecutor.FirstVisibility.READY.presentable());
+        assertFalse(FrontierV3GrayboxExecutor.FirstVisibility.PENDING.presentable());
+        assertFalse(FrontierV3GrayboxExecutor.FirstVisibility.STATIC_CURRENT.presentable());
     }
 
     private static List<GrayboxCell> cells(int count) {
