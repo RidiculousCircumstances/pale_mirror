@@ -54,6 +54,9 @@ public final class GrayboxQuarryPlan {
                     Math.abs(position.z() - home.anchor().z()))).max().orElseThrow();
             for (int installationIndex = 0; installationIndex <= rules.additionalPockets().size(); installationIndex++) {
                 var siteRules = rules.installation(installationIndex);
+                // Optional installations describe real deposits, not empty stone
+                // quarries in towns where that material was never distributed.
+                if (installationIndex > 0 && producerIndex % siteRules.pocket().orElseThrow().producerPeriod() != 0) continue;
                 ExtractionSite selected = null;
                 for (FacilityFacing facing : List.of(FacilityFacing.EAST, FacilityFacing.SOUTH, FacilityFacing.WEST, FacilityFacing.NORTH)) {
                     int distance = extent + rules.width() + rules.exteriorClearance();

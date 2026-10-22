@@ -95,6 +95,15 @@ public final class FrontierV3BlockExtractionGameTests {
         helper.assertTrue(cap.quantity("minecraft:dirt") == 1 && cap.quantity("minecraft:cobblestone") == 0
                         && port.apply(cap) == BlockExtractionPort.Result.APPLIED && level.getBlockState(crop).isAir(),
                 "ordinary surface preparation uses native grass loot, not free air projection or invented stone");
+        var iron = FrontierRulesets.mineralDepositsGraybox().extraction().definitionFor(
+                new BlockExtraction.Block("minecraft:iron_ore", Map.of())).orElseThrow();
+        level.setBlock(crop, Blocks.IRON_ORE.defaultBlockState(), 3);
+        var ore = port.prepare("native:iron", execution, target, iron);
+        var savedOre = FrontierV3BlockExtractionCodec.read(FrontierV3BlockExtractionCodec.write(ore));
+        helper.assertTrue(savedOre.output().equals(iron.coldOutput()) && savedOre.quantity("minecraft:raw_iron") == 1
+                        && port.apply(savedOre) == BlockExtractionPort.Result.APPLIED && level.getBlockState(crop).isAir()
+                        && port.apply(savedOre) == BlockExtractionPort.Result.POSTCONDITION_PRESENT,
+                "the existing stone pick and native iron loot agree with COLD and survive receipt recovery without duplicate extraction");
         worker.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_PICKAXE));
         level.setBlock(crop, Blocks.CHEST.defaultBlockState(), 3);
         var chest = (net.minecraft.world.level.block.entity.ChestBlockEntity) level.getBlockEntity(crop);

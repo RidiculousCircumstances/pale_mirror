@@ -54,6 +54,7 @@ public final class FrontierRulesets {
     private static final FrontierRuleset MARKET_QUARRY_GRAYBOX = coherentEconomy(PREVIOUS_PRODUCTIVE_QUARRY_GRAYBOX);
     private static final FrontierRuleset PREVIOUS_DYNAMIC_FARMING_GRAYBOX = dynamicFarming(MARKET_QUARRY_GRAYBOX);
     private static final FrontierRuleset DYNAMIC_FARMING_GRAYBOX = higherFuelDemand(PREVIOUS_DYNAMIC_FARMING_GRAYBOX);
+    private static final FrontierRuleset MINERAL_DEPOSITS_GRAYBOX = ironDeposits(DYNAMIC_FARMING_GRAYBOX);
     /** Existing worlds retain their exact selector and timing; they are never silently retuned. */
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R6 = ruleset("frontier-v3-production-r6", 8, 1L, 20L, 1L);
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R4 = ruleset("frontier-v3-production-r4", 6, 1L, 20L, 1L);
@@ -67,6 +68,7 @@ public final class FrontierRulesets {
      */
     private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L, 200L);
     private static final Map<String, FrontierRuleset> INSTALLED = Map.ofEntries(
+            Map.entry(MINERAL_DEPOSITS_GRAYBOX.id(), MINERAL_DEPOSITS_GRAYBOX),
             Map.entry(DYNAMIC_FARMING_GRAYBOX.id(), DYNAMIC_FARMING_GRAYBOX),
             Map.entry(PREVIOUS_DYNAMIC_FARMING_GRAYBOX.id(), PREVIOUS_DYNAMIC_FARMING_GRAYBOX),
             Map.entry(MARKET_QUARRY_GRAYBOX.id(), MARKET_QUARRY_GRAYBOX),
@@ -106,6 +108,39 @@ public final class FrontierRulesets {
     public static FrontierRuleset supplyQuarryGraybox() { return SUPPLY_QUARRY_GRAYBOX; }
     public static FrontierRuleset marketQuarryGraybox() { return MARKET_QUARRY_GRAYBOX; }
     public static FrontierRuleset dynamicFarmingGraybox() { return DYNAMIC_FARMING_GRAYBOX; }
+    public static FrontierRuleset mineralDepositsGraybox() { return MINERAL_DEPOSITS_GRAYBOX; }
+
+    /** Finite iron sources, not a stock grant or a reason to manufacture demand.
+     * Existing coal installations remain unchanged; every second mining town
+     * also knows a separate iron-bearing installation. */
+    private static FrontierRuleset ironDeposits(FrontierRuleset base) {
+        var iron = new io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Definition(
+                "pale_mirror:iron_extraction",
+                new io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block("minecraft:iron_ore", Map.of()),
+                new io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block("minecraft:air", Map.of()),
+                base.extraction().source().toolKind(), "minecraft:blocks/iron_ore",
+                java.util.List.of(new io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Output("minecraft:raw_iron", 1)));
+        var pockets = new java.util.ArrayList<>(base.extraction().additionalPockets());
+        pockets.add(new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionPocketProfile(2, 2, 16, 1, 6, iron));
+        var policies = new java.util.EnumMap<GoodsPolicyKind, java.util.List<GoodsTradeRules.Commodity>>(GoodsPolicyKind.class);
+        policies.putAll(base.goodsTrade().policies());
+        var commodities = new java.util.ArrayList<>(policies.get(GoodsPolicyKind.PUBLIC_SETTLEMENT));
+        commodities.add(new GoodsTradeRules.Commodity("minecraft:raw_iron", 0, 0, FixedScalar.whole(2), FixedScalar.whole(3)));
+        policies.put(GoodsPolicyKind.PUBLIC_SETTLEMENT, java.util.List.copyOf(commodities));
+        var prior = base.goodsTrade().supplyPlanning();
+        var supplies = new java.util.HashMap<>(prior.commodities());
+        supplies.put("minecraft:raw_iron", new io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPolicy(500, 64, 64, 12000, 12000, false));
+        var planning = new io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanningRules(supplies,
+                prior.maximumOrderItems(), prior.workCargoSlots(), prior.personalFoodItems(), prior.maximumTripCargoStacks(),
+                prior.reserves(), prior.sourcing(), prior.economics());
+        var trade = new GoodsTradeRules(base.goodsTrade().reviewInterval(), base.goodsTrade().orderLifetime(),
+                base.goodsTrade().maximumBatch(), base.goodsTrade().maximumPairReviews(), policies, planning, base.goodsTrade().pricing());
+        return new FrontierRuleset("frontier-v3-quarry-graybox-r23", base.schemaVersion(), base.cadence(), base.spatial(), base.rates(),
+                base.facilityCapacity(), base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
+                base.workCatalog().withDefinition(new WorkCatalog.Definition("minecraft:iron_ore", WorkOperation.EXTRACT,
+                        HumanCapability.EXTRACTION, 210)), trade, base.initialSettlementStocks(), base.labour(), base.expedition(),
+                base.extraction().withAdditionalPockets(pockets), base.execution(), base.production(), base.fields());
+    }
 
     /** Explicit balance trial: eightfold baking heat and fourfold finite ore volume.
      * Prices, fuel energy, loot, population and initial warehouse stocks stay unchanged. */

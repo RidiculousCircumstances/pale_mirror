@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "id": "live_field_explosion_recovery",
+  "server": { "host": "127.0.0.1", "port": 25565 },
+  "pilot": { "username": "PMTestPilot" },
+  "setup": [
+    { "type": "command", "command": "/gamemode creative" },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -354, "y": 70, "z": -12 }, "settleMs": 0 },
+    { "type": "assert_fixture", "timeoutMs": 60000, "checks": [
+      { "view": "field_physical", "id": "site:5-wheat-field", "expect": { "status": "ACTIVE", "layoutCurrent": true, "worldChangePending": false, "foreignChangePending": false } }
+    ] }
+  ],
+  "actions": [
+    { "type": "command", "command": "/execute in pale_mirror:frontier_graybox run fill -361 64 -18 -348 64 -5 minecraft:wheat[age=3] replace minecraft:wheat" },
+    { "type": "command", "command": "/execute in pale_mirror:frontier_graybox run summon minecraft:tnt -354 64 -12 {Fuse:1s}" },
+    { "type": "wait_until_block", "position": { "x": -354, "y": 63, "z": -12 }, "block": "minecraft:air", "timeoutMs": 30000 },
+    { "type": "wait_until_diagnostic", "view": "field_physical", "id": "site:5-wheat-field", "expect": { "status": "ACTIVE", "worldChangePending": false, "foreignChangePending": false }, "timeoutMs": 120000, "causalMilestone": "blast_cell_obligations_closed" },
+    { "type": "look", "at": { "x": -354, "y": 62, "z": -12 } },
+    { "type": "inspect", "view": "summary", "id": "" },
+    { "type": "visit", "dimension": "minecraft:overworld", "position": { "x": 0, "y": 70, "z": 0 }, "settleMs": 5000 },
+    { "type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": { "x": -354, "y": 70, "z": -12 }, "settleMs": 0 },
+    { "type": "wait_until_block", "position": { "x": -354, "y": 63, "z": -12 }, "block": "minecraft:air", "timeoutMs": 60000 },
+    { "type": "wait_until_diagnostic", "view": "field_physical", "id": "site:5-wheat-field", "expect": { "status": "ACTIVE", "worldChangePending": false, "foreignChangePending": false }, "timeoutMs": 60000 },
+    { "type": "inspect", "view": "summary", "id": "" }
+  ],
+  "assertions": [
+    { "after": 11, "view": "summary", "id": "", "expect": { "status": "ok", "requiredConflicts": 0, "sceneConflicts": 0, "inventoryConflicts": 0 } }
+  ],
+  "frames": [ { "after": 5, "name": "blast-damage-preserved" } ]
+}

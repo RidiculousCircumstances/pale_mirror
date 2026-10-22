@@ -200,7 +200,8 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
             var cell = owner.witness().cell(held.cellId());
             if (cell.pending().isPresent() || cell.foreign().isPresent()
                     || !cell.committed().equals(canonical)) continue;
-            if (acknowledge(runtime, held, canonical)) return true;
+            acknowledge(runtime, held, canonical);
+            return true;
         }
         return false;
     }
@@ -323,24 +324,16 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
                         new FrontierV3ResourceFieldObservation.Owned(change.after()));
                 if (next != owner.witness()) { ledger.replaceFieldClaim(owner, owner.withWitness(next)); ledger.persist(level); }
             }
-            if (held != null && !acknowledge(runtime, held, canonical))
-                throw new IllegalStateException("world cell receipt could not release its exact cause");
-            ledger.retireFieldWorldChange(change); ledger.persist(level);
-            // The physical blocks themselves plus the retained old claim are the restart
-            // predecessor. Ordinary observation admits the new fact, never a replacement write.
-            observeOne(level, runtime, change.siteId(), change.cellId());
-            com.mojang.logging.LogUtils.getLogger().info("PMV3 cell_mutation_closed key={} cause={} result={} successor=true",
-                    change.mutationKey(), change.observation().causationId(), resolution);
+            // Pending durability is not a rejection. Keep the exact witness until
+            // release commits, then observe any later explosion/player change.
+            finishAfterAcknowledgement(level, runtime, ledger, change, held, canonical);
             return true;
         }
         var owned = (FrontierV3ResourceFieldObservation.Owned) reading;
         if (canonical.equals(change.before())) {
             if (!change.observation().equals(held)) return false;
             if (owned.condition().equals(change.before())) {
-                // The exact physical predecessor returned before WAL admission. Retire the
-                // saved witness first; a crash before release leaves the canonical hold.
-                ledger.retireFieldWorldChange(change); ledger.persist(level);
-                acknowledge(runtime, change.observation(), change.before());
+                finishAfterAcknowledgement(level, runtime, ledger, change, held, change.before());
                 return true;
             }
             if (!owned.condition().equals(change.after())) return false;
@@ -364,12 +357,28 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
         if (next != owner.witness()) {
             ledger.replaceFieldClaim(owner, owner.withWitness(next)); ledger.persist(level);
         }
-        ledger.retireFieldWorldChange(change); ledger.persist(level);
-        if (held != null) acknowledge(runtime, held, change.after());
+        finishAfterAcknowledgement(level, runtime, ledger, change, held, change.after());
         return true;
     }
 
-    private static boolean acknowledge(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    private static void finishAfterAcknowledgement(ServerLevel level,
+            FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierV3ResourceSiteLedger ledger,
+            FrontierV3ResourceFieldWorldChangeWitness change, ResourceFieldCellObserved held,
+            ResourceFieldPhysicalSurface.Condition canonical) {
+        Runnable finish = () -> {
+            if (!change.equals(ledger.fieldWorldChange(change.siteId(), change.cellId()))) return;
+            if (runtime.decodedState().orElseThrow().resourceSites().pendingWorldChange(change.siteId(), change.cellId()) != null)
+                throw new IllegalStateException("world field acknowledgement has not released its exact hold: " + change.mutationKey());
+            ledger.retireFieldWorldChange(change); ledger.persist(level);
+            observeOne(level, runtime, change.siteId(), change.cellId());
+            com.mojang.logging.LogUtils.getLogger().info("PMV3 cell_mutation_closed key={} cause={} successor_observed=true",
+                    change.mutationKey(), change.observation().causationId());
+        };
+        if (held == null) finish.run();
+        else runtime.afterCommand(acknowledge(runtime, held, canonical), finish);
+    }
+
+    private static CommandResult acknowledge(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                        ResourceFieldCellObserved held,
                                        ResourceFieldPhysicalSurface.Condition physical) {
         var checkpoint = runtime.canonicalState().orElseThrow();
@@ -378,7 +387,10 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
                 checkpoint.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id),
                 new ResourceFieldWorldChangeAcknowledged(held, physical))).orElseThrow(
                         () -> new IllegalStateException("v3 runtime is inactive"));
-        return result instanceof CommandResult.Accepted;
+        if (result instanceof CommandResult.Rejected rejected)
+            throw new IllegalStateException("world field acknowledgement rejected for " + held.mutationKey()
+                    + " cause=" + held.causationId() + ": " + rejected.rejection());
+        return result;
     }
 
     private static BlockPos minecraft(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) {
