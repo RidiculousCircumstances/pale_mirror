@@ -56,3 +56,11 @@ Checked-in `live-storage-handoff-recovery.json` visits the retained live chest,
 checks its ACTIVE recovery, visits Ironmeadow and checks unloaded storage reaches
 RELEASED. This is a scoped existing-world diagnostic, not whole-economy acceptance.
 Clean-ref packaging, deployment and live recovery remain pending.
+
+First same-world client check exposed one additional legacy call: surface
+recovery requested only graybox support, so an adopted RESOURCE_STORAGE on
+ordinary terrain returned DEFERRED despite its actual provider/slots being
+current. Recovery now consumes `declaredSupport`, like initial admission and
+normal readiness (terrain, worksite and graybox remain separately owned).
+The live scenario is the regression: before correction the exact retained
+double trapped chest stayed CONFLICT with READY support/CURRENT slots.

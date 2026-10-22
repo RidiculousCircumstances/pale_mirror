@@ -17,7 +17,7 @@ final class FrontierV3ReferenceSurfaceRecovery {
         var position = new BlockPos(surface.position().x(), surface.position().y(), surface.position().z());
         if (!level.hasChunkAt(position) || !level.shouldTickBlocksAt(position)
                 || FrontierV3ContainerSurfaceExecutor.supportReadiness(level, FrontierV3GrayboxLedger.get(level), position,
-                    FrontierContainerSocketPlan.support(state, surface).orElse(null))
+                    FrontierContainerSocketPlan.declaredSupport(state, surface).orElse(null))
                     != FrontierV3ContainerSurfaceExecutor.SocketReadiness.READY) return false;
         var physical = FrontierV3PhysicalContainer.loaded(level, state, id).orElse(null);
         if (physical == null) return false;
