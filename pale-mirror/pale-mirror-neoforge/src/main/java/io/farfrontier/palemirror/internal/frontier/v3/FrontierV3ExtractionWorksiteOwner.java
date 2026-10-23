@@ -153,12 +153,25 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
     private void withdrawProjection(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ExtractionRegion region) {
         var state = runtime.decodedState().orElseThrow();
         var lease = state.replicaCustody().custodyByScope().get(region.scopeId());
-        if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.PREPARING) return;
+        if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.PREPARING
+                && lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED) return;
         if (state.extractionSites().work().values().stream().anyMatch(job -> job.siteId().equals(region.siteId())
                 && job.pending().isPresent() && job.target().filter(target -> region.contains(
                     state.extractionSites().deposits().get(region.siteId()).site().layout().require(target.key().cell()).source())).isPresent())) return;
         var ledger = FrontierV3GrayboxLedger.get(level);
         var chunk = level.getChunkSource().getChunkNow(region.chunkX(), region.chunkZ());
+        if (lease.status() == PhysicalCustodyLeaseStatus.ACQUIRED) {
+            // A retained exact whole-region departure image, not missing chunks,
+            // discharges custody after its last pending operation is cancelled.
+            for (var declaration : regionBlocks(state, region)) {
+                var witness = ledger.worksite(FrontierV3WorksiteProjection.position(declaration));
+                if (witness == null || !witness.settledCurrent(declaration, declaration.block())) return;
+            }
+            if (!ledger.prepareDurable(level)) return;
+            submit(runtime, new ExtractionSourceBoundary(region, ExtractionSourceBoundary.Operation.RELEASE,
+                    lease.authorityEpoch(), lease.expectedReplicaRevision(), ExtractionSourceCustody.fingerprint(state.extractionSites(), region)));
+            return;
+        }
         for (var cell : geometry(state).cells(region)) {
             var declaration = ExtractionWorksiteBlocks.current(state.extractionSites().deposits().get(region.siteId()),
                     new WorksiteBlock(new WorksiteBlock.Key(family(), region.siteId(), WorksiteBlock.Role.RESOURCE, cell.id()),
@@ -191,6 +204,16 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
             }
             if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED) continue;
             var currentState = state;
+            // Preserve generated block facts before the chunk disappears. Pending
+            // work may delay canonical release, but may not erase departure evidence.
+            var ledger = FrontierV3GrayboxLedger.get(level);
+            for (var declaration : regionBlocks(state, region)) {
+                var position = FrontierV3WorksiteProjection.position(declaration);
+                var witness = FrontierV3WorksiteEvidence.at(level, ledger, state, position);
+                if (witness != null && witness.settledCurrent(declaration,
+                        FrontierV3MinecraftBlockExtraction.describe(chunk.getBlockState(position)))) ledger.worksite(witness);
+            }
+            ledger.persist(level);
             if (currentState.extractionSites().work().values().stream().anyMatch(job -> job.siteId().equals(region.siteId())
                     && job.pending().isPresent() && job.target().filter(target ->
                     region.contains(currentState.extractionSites().deposits().get(region.siteId()).site().layout().require(target.key().cell()).source())).isPresent())) continue;
@@ -201,6 +224,12 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
                     lease.authorityEpoch(), lease.expectedReplicaRevision(), ExtractionSourceCustody.fingerprint(state.extractionSites(), region)));
             state = runtime.decodedState().orElseThrow();
         }
+    }
+    private List<WorksiteBlock> regionBlocks(FrontierWorldState state, ExtractionRegion region) {
+        return currentBlocks(state).in(new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region(
+                region.chunkX(), region.chunkZ())).values().stream().filter(cell -> cell.key().owner().equals(region.siteId())
+                && (cell.key().role() == WorksiteBlock.Role.RESOURCE || cell.key().role() == WorksiteBlock.Role.NATURAL_TERRAIN))
+                .toList();
     }
     @Override public void shutdown(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         var state = runtime.decodedState().orElse(null);

@@ -122,6 +122,9 @@ final class ExtractionPayloadCodecs {
         codec("frontier.extraction_hot_prepared", (out, payload) -> {
             var value = (ExtractionHotPrepared) payload; out.writeUTF(value.jobId().value()); ExtractionWorkCodec.writeStep(out, value.step());
         }, in -> new ExtractionHotPrepared(new SubjectId(in.readUTF()), ExtractionWorkCodec.readStep(in))),
+        codec("frontier.extraction_hot_cancelled", (out, payload) -> {
+            var value = (ExtractionHotCancelled) payload; out.writeUTF(value.jobId().value()); ExtractionWorkCodec.writeStep(out, value.step());
+        }, in -> new ExtractionHotCancelled(new SubjectId(in.readUTF()), ExtractionWorkCodec.readStep(in))),
         codec("frontier.extraction_hot_observed", (out, payload) -> writeEffect(out, (ExtractionHotObserved) payload), ExtractionPayloadCodecs::readEffect),
         codec("frontier.extraction_retired_effect_observed", (out, payload) -> {
             var value = (ExtractionRetiredEffectObserved) payload; writeEffect(out, value.effect()); out.writeBoolean(value.applied());

@@ -8,10 +8,10 @@ import java.util.*;
 /** Registered owner, not a manual server tick branch. */
 final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
     static final Set<String> COMMANDS = Set.of("frontier.extraction_geology_invalidated.v2", "frontier.extraction_geometry_changed", "frontier.extraction_source_changed", "frontier.extraction_source_boundary", "frontier.extraction_hot_prepared",
-            "frontier.extraction_hot_observed", "frontier.extraction_hand_custody_observed", "frontier.extraction_retired_effect_observed", "frontier.extraction_death_settled");
+            "frontier.extraction_hot_observed", "frontier.extraction_hot_cancelled", "frontier.extraction_hand_custody_observed", "frontier.extraction_retired_effect_observed", "frontier.extraction_death_settled");
     static final Set<String> TYPES = Set.of("frontier.extraction_geology_invalidated.v2", "frontier.extraction_area_extended.v3", "frontier.extraction_frontier_opened", "frontier.extraction_work_started", "frontier.extraction_work_progressed",
             "frontier.extraction_geometry_changed", "frontier.extraction_source_changed", "frontier.extraction_source_boundary", "frontier.extraction_hot_prepared",
-            "frontier.extraction_hot_observed", "frontier.extraction_hand_custody_observed", "frontier.extraction_retired_effect_observed", "frontier.extraction_death_settled");
+            "frontier.extraction_hot_observed", "frontier.extraction_hot_cancelled", "frontier.extraction_hand_custody_observed", "frontier.extraction_retired_effect_observed", "frontier.extraction_death_settled");
     static final DeterministicProcessDescriptor DESCRIPTOR = new DeterministicProcessDescriptor("extraction",
             COMMANDS, Set.of(ExtractionContinuation.PROGRESS, ExtractionContinuation.REVIEW), TYPES,
             java.util.stream.Stream.concat(TYPES.stream(), Set.of("frontier.actor_movement_interrupted", "frontier.actor_movement_started", "kernel.schedule_created",
@@ -36,6 +36,7 @@ final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
                     ExtractionSourceCustody.apply(state, event.subject(), boundary, event.revision().value())));
             case ExtractionSourceChanged changed -> ExtractionExternalChanges.apply(state, event.subject(), changed, event.revision().value(), event.instant().ticks());
             case ExtractionHotPrepared prepared -> ExtractionPhysicalStateSupport.prepare(state, event.subject(), prepared, event.instant().ticks());
+            case ExtractionHotCancelled cancelled -> ExtractionPhysicalStateSupport.cancelled(state, event.subject(), cancelled);
             case ExtractionHotObserved observed -> ResidentActivityProcess.retargetHotResident(
                     ExtractionPhysicalStateSupport.observed(state, event.subject(), observed, event.revision().value(), event.instant().ticks()),
                     observed.step().observation().actuation().execution().actorId(), event.instant().ticks());
@@ -76,6 +77,11 @@ final class ExtractionWorkProcessModule implements FrontierWorldProcessModule {
                 }
                 case ExtractionHotPrepared prepared -> {
                     id = prepared.jobId(); ExtractionPhysicalStateSupport.prepare(state, id, prepared, command.submittedAt().ticks());
+                }
+                case ExtractionHotCancelled cancelled -> {
+                    id = cancelled.jobId(); ExtractionPhysicalStateSupport.cancelled(state, id, cancelled);
+                    events.add(ExtractionContinuation.wake(id, command.submittedAt().ticks()));
+                    events.add(ResidentActivityProcess.wakeAfterActivity(cancelled.step().observation().actuation().execution().actorId(), command.submittedAt().ticks()));
                 }
                 case ExtractionHotObserved observed -> {
                     id = observed.jobId();

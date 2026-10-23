@@ -109,6 +109,32 @@ class ExtractionDeathResourcesTest {
         assertFalse(released.extractionSites().work().containsKey(job.id()));
         assertEquals(released, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(released)));
     }
+    @Test void unusedLivingPreparationCancelsWithoutResourceEffectsAndCannotBeReused() {
+        var fixture = ExtractionExternalChangesTest.admitted(); var state = fixture.state();
+        var job = state.extractionSites().work().values().stream().min(Comparator.comparing(ExtractionWork::id)).orElseThrow();
+        state = ModeledActorBodyFacts.present(state, job.execution().actorId());
+        var id = new ActorActuationId(ActorBodyAuthority.current(state, job.execution().actorId()), job.execution());
+        var step = new ExtractionPhysicalStep.Equipment(new ActorHotObservation(id, job.revision()),
+                (InventoryCustody.ContainerSlot) state.inventory().items().get(job.toolId()).custody(), 1);
+        var pending = job.prepare(step);
+        state = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replaceWork(job, pending)));
+        var cancelled = new ExtractionHotCancelled(job.id(), step);
+        var engine = engine(state, fixture.tick(), pending);
+        submit(engine, roundtrip(cancelled));
+        var next = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertFalse(next.extractionSites().work().get(job.id()).pending().isPresent());
+        assertEquals(job.revision() + 1, next.extractionSites().work().get(job.id()).revision());
+        assertEquals(state.inventory(), next.inventory(), "cancellation cannot award cargo or consume tool durability");
+        assertEquals(state.extractionSites().deposits(), next.extractionSites().deposits());
+        assertFalse(ActorInventoryInteractionFences.pending(next, id.body().actorId()));
+        assertThrows(IllegalArgumentException.class, () -> ExtractionPhysicalStateSupport.cancelled(next, job.id(), cancelled));
+        var wrongBody = new ActorActuationId(new ActorBodyId(id.body().actorId(), id.body().physicalEpoch() + 1), id.execution());
+        var foreign = new ExtractionHotCancelled(job.id(), new ExtractionPhysicalStep.Equipment(
+                new ActorHotObservation(wrongBody, job.revision()), step.slot(), step.containerEpoch()));
+        var before = state;
+        assertThrows(IllegalArgumentException.class, () -> ExtractionPhysicalStateSupport.cancelled(before, job.id(), foreign));
+        assertEquals(next, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(next)));
+    }
     private static FrontierWorldState died(FrontierWorldState state, ExtractionWork job, long tick) {
         return ActorBodyAuthority.died(state, ModeledActorBodyFacts.death(state, job.execution().actorId(),
                 state.actorLocations().get(job.execution().actorId()).body(), "test:miner-fatality"), FrontierActorDeathConsequences.INSTANCE, tick);
@@ -118,7 +144,8 @@ class ExtractionDeathResourcesTest {
         var base = FrontierWorldRuntimeDefinition.configuration(initial.bootstrap().worldId(), 20260918065L, initial.bootstrap().ruleset());
         return io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.create(new io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngineConfiguration<>(
                 base.worldId(), initial, new io.farfrontier.palemirror.frontier.v3.api.SimInstant(tick), base.commandPlanner(), base.scheduledPlanner(),
-                base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(), List.of(ExtractionContinuation.at(job.id(), tick + 1)),
+                base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(), List.of(ExtractionContinuation.at(job.id(), tick + 1),
+                        ResidentActivityProcess.review(job.execution().actorId(), tick + 1)),
                 base.transactionCommitter(), base.stateValidator(), base.executionMetrics(), base.kernelQuarantineReporter()));
     }
     private static void submit(io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine,

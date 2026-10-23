@@ -72,3 +72,27 @@ native `hand-evidence` slice1/1PASS. The native test serializes a worn exact pic
 using vanilla ItemStack.save and compares it with live evidence, then rejects
 changed wear and unsupported components. build/r232-hand-tests.log and
 build/r232-native-hand.log. Live return/unload validation follows deployment.
+
+## Preparation crossing ordinary unload
+
+The37ea87484 live run d6cb9c44-a014-446c-aa54-38bb33e47417 confirmed
+recorded=true body departures (Rosa epoch3/residence5); Rosa ate at98086,
+then delivered batch4 and resumed mining. At client logout99894 a new canonical
+BlockWork preparation preceded its native journal entry. The body unloaded and
+was saved, but ExtractionExecutor rejected every departure with pending work.
+Neither COLD progression nor safe nutrition could release that intent.
+
+The native operation boundary now supports withdrawal of an exact still-pending
+canonical preparation. An absent exact journal entry proves native preparation
+never happened: entries cannot retire before owner closure. Existing entries
+need positive unattempted/cancelled evidence; recovered ambiguous attempts stay
+fenced. Canonical durability blocks execution while withdrawal commits; direct
+mining continuations observe that same barrier. The typed family consequence
+validates exact body/execution/work revision and clears no resources or wear.
+It wakes work and activity arbitration. No timeout or matching block is a proof.
+
+Extraction departure also retains exact settled generated block witnesses before
+the chunk leaves. After the pending effect is discharged, an unloaded ACQUIRED
+source can release only against that complete, current, durable region image.
+Missing/stale/pending witnesses cannot release custody. This closes the source
+boundary as well as the actor boundary; a missing entity alone cannot unlock it.

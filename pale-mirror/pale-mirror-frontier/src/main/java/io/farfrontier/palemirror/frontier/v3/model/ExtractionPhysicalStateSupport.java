@@ -57,6 +57,19 @@ public final class ExtractionPhysicalStateSupport {
         }
         return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replaceWork(job, job.prepare(event.step()))));
     }
+    public static FrontierWorldState cancelled(FrontierWorldState state, SubjectId subject, ExtractionHotCancelled event) {
+        var job = Objects.requireNonNull(state.extractionSites().work().get(event.jobId()), "exact extraction cancellation owner");
+        var identity = event.step().observation().actuation();
+        state.actorExecutions().requireRetained(identity.execution());
+        ActorBodyAuthority.require(state, identity.body());
+        if (!subject.equals(job.id()) || !job.execution().equals(identity.execution())
+                || !identity.body().equals(ActorBodyAuthority.current(state, job.execution().actorId()))
+                || !job.pending().equals(Optional.of(event.step()))
+                || job.revision() != event.step().observation().scopeRevision())
+            throw new IllegalArgumentException("unused extraction cancellation has stale work, body or effect");
+        return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(
+                state.extractionSites().replaceWork(job, job.withoutUnappliedEffect())));
+    }
     public static String operation(ExtractionWork job) { return "extraction:" + job.id().value() + ":" + job.revision(); }
     public static FrontierWorldState observed(FrontierWorldState state, SubjectId subject, ExtractionHotObserved event, long canonicalRevision, long atTick) {
         var job = require(state, subject, event.jobId(), event.step());

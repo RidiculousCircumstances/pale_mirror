@@ -28,6 +28,7 @@ final class FrontierV3ExtractionExecutor {
     }
     private static boolean progress(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             FrontierWorldState state, ExtractionWork job) {
+        if (runtime.awaitingCanonicalDurability()) return false;
         var actor = job.execution().actorId();
         var entity = level.getEntity(ActorBodyId.entityId(state.bootstrap().worldId(), actor));
         if (entity == null) return savedDeparture(level, runtime, state, job);
@@ -254,7 +255,21 @@ final class FrontierV3ExtractionExecutor {
     }
     private static boolean savedDeparture(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             FrontierWorldState state, ExtractionWork job) {
-        if (job.pending().isPresent() || !ExtractionWorkAuthority.physicalCargo(state, job)) return false;
+        if (job.pending().isPresent()) {
+            var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+            var departure = ledger.bodyDeparture(job.execution().actorId()).orElse(null);
+            if (departure == null || !departure.current(state) || !ledger.savedBodyDeparture(departure)
+                    || !departure.executionAtCapture().equals(Optional.of(job.execution()))) return false;
+            var step = job.pending().orElseThrow();
+            var protocol = switch (step) {
+                case ExtractionPhysicalStep.BlockWork ignored -> FrontierV3OperationReceipt.Protocol.EXTRACTION_BLOCK;
+                case ExtractionPhysicalStep.Equipment ignored -> FrontierV3OperationReceipt.Protocol.EXTRACTION_EQUIPMENT;
+                case ExtractionPhysicalStep.Cargo ignored -> FrontierV3OperationReceipt.Protocol.EXTRACTION_CARGO;
+            };
+            return FrontierV3PreparedOperationWithdrawal.submit(level, runtime, protocol, job.id(),
+                    new ExtractionHotPrepared(job.id(), step), new ExtractionHotCancelled(job.id(), step));
+        }
+        if (!ExtractionWorkAuthority.physicalCargo(state, job)) return false;
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
         var departure = ledger.bodyDeparture(job.execution().actorId()).orElse(null);
         int carried = ExtractionWorkAuthority.carried(state, job);
