@@ -17,7 +17,7 @@ public record GeneratedGeology(String provider, String configuration, long seed,
             Codec.STRING.fieldOf("provider").forGetter(GeneratedGeology::provider),
             Codec.STRING.fieldOf("configuration").forGetter(GeneratedGeology::configuration),
             Codec.LONG.fieldOf("seed").forGetter(GeneratedGeology::seed),
-            Codec.unboundedMap(Codec.STRING.comapFlatMap(GeneratedGeology::position,
+            io.farfrontier.palemirror.internal.codec.LinearMapCodec.of(Codec.STRING.comapFlatMap(GeneratedGeology::position,
                     value -> Long.toString(value.asLong())), BlockState.CODEC)
                     .fieldOf("blocks").forGetter(GeneratedGeology::blocks)
     ).apply(instance, GeneratedGeology::new));

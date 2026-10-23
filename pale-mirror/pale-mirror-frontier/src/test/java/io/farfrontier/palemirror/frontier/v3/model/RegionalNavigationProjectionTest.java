@@ -32,6 +32,29 @@ class RegionalNavigationProjectionTest {
             return other instanceof CountedValue value && text.equals(value.text);
         }
     }
+    @Test void catalogInvalidationTouchesOnlyRegionsUsingAChangedClassification() {
+        var stone = new NavigationBlockState("minecraft:stone", Map.of());
+        var dirt = new NavigationBlockState("minecraft:dirt", Map.of());
+        var torch = new NavigationBlockState("minecraft:torch", Map.of());
+        var left = new BlockPosition(1, 60, 1); var right = new BlockPosition(32, 60, 1);
+        var facts = RegionalBlockMap.copyOf(Map.of(left, Optional.of(stone), right, Optional.of(dirt)));
+        var projector = new RegionalNavigationProjection();
+        var empty = NavigationGeometryState.empty();
+        var original = projector.read(facts, empty);
+        var unknown = NavigationObservation.unavailable(NavigationObservation.Kind.POSITION_REQUIRED);
+        var unrelated = empty.observe(0, Map.of(), Map.of(torch, unknown));
+        assertSame(original, projector.read(facts, unrelated));
+        var affected = unrelated.observe(1, Map.of(), Map.of(stone, unknown));
+        var changed = projector.read(facts, affected);
+        assertTrue(changed.geometry().unknown().contains(left));
+        assertFalse(changed.geometry().unknown().contains(right));
+        assertSame(original.blocks().in(Region.at(right)), changed.blocks().in(Region.at(right)));
+        assertEquals(original, projector.read(facts, empty), "catalog rollback restores exact contacts");
+        var removed = facts.replace(Map.of(Region.at(left), Map.of()));
+        var afterRemoval = projector.read(removed, empty);
+        assertSame(afterRemoval, projector.read(removed, affected), "retired type cannot invalidate unrelated regions");
+    }
+
     @Test void layeredContactsRegionRemovalUnknownAndCatalogChangesUseOneProjectionContract() {
         var stone = new NavigationBlockState("minecraft:stone", Map.of());
         var air = new NavigationBlockState("minecraft:air", Map.of());

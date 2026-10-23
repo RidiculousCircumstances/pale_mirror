@@ -272,3 +272,23 @@ collisions still require comparison, new regional contents have no inherited
 proof, and weak references cannot retain a chain of obsolete world snapshots.
 The focused regression checks these properties without an elapsed-time budget.
 Runtime improvement and the overall 80ms target still require measurement.
+
+The 1eddca26e repeat removed the multi-second map comparison pattern (one
+regional-equality CPU sample in the initial partial recording), but retained
+363ms startup allocation and 229ms first login. Source/profile tracing found
+that RegionalNavigationProjection treated every definition-map replacement as
+an instruction to reproject every region. The projection now owns an inverse
+block-type-to-region index and compares actual coarse classifications. New or
+changed unrelated definitions do no spatial work; removed types leave the index.
+Detailed native collision-shape revisions remain separately owned by geometry
+lineage. Catalog rollback and unavailable facts retain exact invalidation.
+
+The same JFR attributes first-login chunk decode samples to
+`BaseMapCodec.decode -> Object2ObjectArrayMap.put/findKey`, reached by native
+player collision while ChunkSerializer restores GeneratedGeology's attachment.
+The retained geology uses large coordinate maps. Inspection of pinned DFU8.0.16
+bytecode confirms CompoundListCodec decodes entries with a linear list builder;
+LinearMapCodec establishes uniqueness with a hash index and preserves the native
+compound wire representation. GeneratedGeology now uses this adapter codec.
+Focused NBT format round-trip, malformed value and colliding decoded-key cases
+pass; actual chunk-loading timing is measured on the same retained world.

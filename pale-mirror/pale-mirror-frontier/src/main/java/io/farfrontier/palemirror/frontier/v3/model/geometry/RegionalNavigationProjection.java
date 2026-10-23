@@ -10,12 +10,22 @@ public final class RegionalNavigationProjection {
     public record View(KnownBlockNavigationProjection.View geometry, RegionalBlockMap<NavigationBlockState> blocks) { }
     private RegionalBlockMap<Optional<NavigationBlockState>> previous = RegionalBlockMap.copyOf(Map.of());
     private Object definitions;
+    private final Map<Region, Set<NavigationBlockState>> regionalTypes = new HashMap<>();
+    private final Map<NavigationBlockState, Set<Region>> typeRegions = new HashMap<>();
+    private final Map<NavigationBlockState, Optional<KnownBlockNavigationProjection.Cell>> classifications = new HashMap<>();
     private View view = new View(new KnownBlockNavigationProjection.View(Map.of(), Set.of(), Set.of(), Set.of()),
             RegionalBlockMap.copyOf(Map.of()));
 
     public View read(RegionalBlockMap<Optional<NavigationBlockState>> facts, NavigationGeometryState knowledge) {
         var changed = new HashSet<>(facts.changesFrom(previous));
-        if (definitions != knowledge.definitions()) changed.addAll(facts.regions());
+        // A catalog update matters here only where a used type changes its
+        // coarse contact classification. Detailed shape invalidation is owned
+        // by the navigation observation lineage, not this spatial projection.
+        if (definitions != knowledge.definitions()) typeRegions.forEach((block, regions) -> {
+            var classification = KnownBlockCollision.coarse(knowledge, block);
+            if (!classification.equals(classifications.get(block))) changed.addAll(regions);
+            classifications.put(block, classification);
+        });
         if (changed.isEmpty()) { previous = facts; definitions = knowledge.definitions(); return view; }
         var supports = new HashMap<Region, Map<TerrainColumn, List<SurfaceAnchor>>>();
         var volumes = new HashMap<Region, Set<BlockPosition>>();
@@ -24,6 +34,7 @@ public final class RegionalNavigationProjection {
         var blocks = new HashMap<Region, Map<BlockPosition, NavigationBlockState>>();
         for (var region : changed) {
             var local = facts.in(region);
+            indexTypes(region, local, knowledge);
             var projected = KnownBlockNavigationProjection.project(local.keySet(), position ->
                     local.get(position).flatMap(block -> KnownBlockCollision.coarse(knowledge, block)));
             supports.put(region, projected.supports()); volumes.put(region, projected.volumes());
@@ -44,4 +55,21 @@ public final class RegionalNavigationProjection {
         previous = facts; definitions = knowledge.definitions();
         return view;
     }
+    private void indexTypes(Region region, Map<BlockPosition, Optional<NavigationBlockState>> local,
+                            NavigationGeometryState knowledge) {
+        var types = new HashSet<NavigationBlockState>();
+        local.values().forEach(block -> block.ifPresent(types::add));
+        var prior = regionalTypes.getOrDefault(region, Set.of());
+        for (var block : prior) if (!types.contains(block)) {
+            var regions = typeRegions.get(block);
+            regions.remove(region);
+            if (regions.isEmpty()) { typeRegions.remove(block); classifications.remove(block); }
+        }
+        for (var block : types) if (!prior.contains(block)) {
+            typeRegions.computeIfAbsent(block, ignored -> new HashSet<>()).add(region);
+            classifications.put(block, KnownBlockCollision.coarse(knowledge, block));
+        }
+        if (types.isEmpty()) regionalTypes.remove(region); else regionalTypes.put(region, Set.copyOf(types));
+    }
+
 }
