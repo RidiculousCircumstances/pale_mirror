@@ -57,7 +57,7 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
         if (state == null) return;
         var owners = owners(runtime, state);
         List<CellOwner> column = owners.get(ChunkPos.asLong(position.getX() >> 4, position.getZ() >> 4));
-        if (column == null || !level.hasChunkAt(position)) return;
+        if (column == null || !FrontierV3LoadedWorld.ready(level, position)) return;
         for (CellOwner owner : column) {
             ResourceFieldLayout.Cell cell = owner.cell();
             var cycle = state.resourceSites().cycle(owner.siteId());
@@ -177,7 +177,7 @@ final class FrontierV3ResourceFieldWorldChangeExecutor {
             }
             if (!held.equals(change.observation())) continue;
             var cell = cycle.layout().requireCell(change.cellId());
-            if (!level.hasChunkAt(minecraft(cell.crop())) || !level.hasChunkAt(minecraft(cell.soil().support())))
+            if (!FrontierV3LoadedWorld.ready(level, minecraft(cell.crop())) || !FrontierV3LoadedWorld.ready(level, minecraft(cell.soil().support())))
                 continue;
             if (reconcile(level, runtime, ledger, change)) return true;
         }

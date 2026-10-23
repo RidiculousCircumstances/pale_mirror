@@ -60,7 +60,7 @@ final class FrontierV3BodyPlacement {
         for (SurfaceAnchor surface : surfaces) {
             BlockPos support = new BlockPos(surface.x(), surface.y(), surface.z());
             if (!scope.permits(surface.support())) { rejected.add(new Rejection(surface, Reason.OUTSIDE_SCOPE)); continue; }
-            if (!level.hasChunkAt(support)) { rejected.add(new Rejection(surface, Reason.CHUNK_UNLOADED)); continue; }
+            if (!FrontierV3LoadedWorld.ready(level, support)) { rejected.add(new Rejection(surface, Reason.CHUNK_UNLOADED)); continue; }
             if (!level.areEntitiesLoaded(ChunkPos.asLong(support))) { rejected.add(new Rejection(surface, Reason.ENTITY_STORAGE_PENDING)); continue; }
             BlockPos feet = standing.apply(level, support);
             if (feet == null || !feet.equals(support.above())) { rejected.add(new Rejection(surface, Reason.NO_EXACT_SUPPORT)); continue; }
@@ -69,7 +69,7 @@ final class FrontierV3BodyPlacement {
             if (!available(level, candidate, candidate.getBoundingBox())) { rejected.add(new Rejection(surface, Reason.SPACE_OCCUPIED)); continue; }
             if (!surface.equals(origin)) {
                 BlockPos target = new BlockPos(origin.x(), origin.y() + 1, origin.z());
-                if (!level.hasChunkAt(target)) { rejected.add(new Rejection(surface, Reason.CHUNK_UNLOADED)); continue; }
+                if (!FrontierV3LoadedWorld.ready(level, target)) { rejected.add(new Rejection(surface, Reason.CHUNK_UNLOADED)); continue; }
                 FrontierV3BodyObservation.refreshGroundContact(level, candidate);
                 var path = candidate.getNavigation().createPath(target, 0);
                 if (FrontierV3PhysicalPathPolicy.reject(level, path, scope).isPresent()) { rejected.add(new Rejection(surface, Reason.NO_CONNECTED_PATH)); continue; }

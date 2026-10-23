@@ -249,7 +249,7 @@ final class FrontierV3AmbientActorExecutor {
                     // body from which to drain it.  Close only the exact reserved hand-off
                     // after its chunk is genuinely unloaded; a loaded missing/foreign body is
                     // deliberately not treated as a release observation.
-                    else if (body == null && !level.hasChunkAt(lease.handoffBody().supportingSurface().support().x(),
+                    else if (body == null && !FrontierV3LoadedWorld.readyAtBlockColumn(level, lease.handoffBody().supportingSurface().support().x(),
                             lease.handoffBody().supportingSurface().support().z())
                             && releaseUnloadedReservedColdContinuation(level, runtime, state, actorId, lease)) admitted++;
                 } else if (lease != null && lease.status() == AmbientLeaseStatus.PREPARED
@@ -438,7 +438,7 @@ final class FrontierV3AmbientActorExecutor {
         return location != null && location.condition().status() == ActorLifeStatus.ALIVE
                 && lease.status() == AmbientLeaseStatus.UNKNOWN_AFTER_RESTART
                 && location.body().equals(lease.handoffBody())
-                && level.hasChunkAt(minecraftBody(lease.handoffBody()))
+                && FrontierV3LoadedWorld.ready(level, minecraftBody(lease.handoffBody()))
                 && level.areEntitiesLoaded(ChunkPos.asLong(minecraftBody(lease.handoffBody())))
                 && restartCustodyIsRetained(state, actorId, lease,
                     FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()))
@@ -530,7 +530,7 @@ final class FrontierV3AmbientActorExecutor {
                 new BlockPosition(pending.getBlockX(), pending.getBlockY(), pending.getBlockZ()),
                 new ObservedPosition(pending.getX(), pending.getY(), pending.getZ()));
         BlockPos anchor = minecraftBody(location.body());
-        if (!level.hasChunkAt(anchor)) return FrontierV3AmbientAdmissionDiagnostic.unloaded(expectedId);
+        if (!FrontierV3LoadedWorld.ready(level, anchor)) return FrontierV3AmbientAdmissionDiagnostic.unloaded(expectedId);
         if (!level.areEntitiesLoaded(ChunkPos.asLong(anchor))) return FrontierV3AmbientAdmissionDiagnostic.entityStoragePending(expectedId,
                 new BlockPosition(location.body().x(), location.body().y(), location.body().z()));
         var contact = location.supportingSurface();

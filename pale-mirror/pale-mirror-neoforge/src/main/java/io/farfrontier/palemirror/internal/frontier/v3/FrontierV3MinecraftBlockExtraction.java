@@ -42,7 +42,7 @@ final class FrontierV3MinecraftBlockExtraction implements BlockExtractionPort {
         if (!authority.current(worker) || !authority.id().execution().equals(execution))
             throw new IllegalArgumentException("stale extraction execution/body authority");
         BlockPos position = position(target);
-        if (!level.hasChunkAt(position)) throw new IllegalArgumentException("extraction source is unloaded");
+        if (!FrontierV3LoadedWorld.ready(level, position)) throw new IllegalArgumentException("extraction source is unloaded");
         if (!withinReach(position)) throw new IllegalArgumentException("extraction source is beyond the actual worker's physical reach");
         BlockState source = level.getBlockState(position);
         if (!describe(source).equals(definition.before())) throw new IllegalArgumentException("extraction source changed");
@@ -80,7 +80,7 @@ final class FrontierV3MinecraftBlockExtraction implements BlockExtractionPort {
     @Override public Result apply(BlockExtraction prepared) {
         if (!authority.current(worker) || !authority.id().execution().equals(prepared.execution())) return Result.UNAVAILABLE;
         BlockPos position = position(prepared.target());
-        if (!level.hasChunkAt(position)) return Result.UNAVAILABLE;
+        if (!FrontierV3LoadedWorld.ready(level, position)) return Result.UNAVAILABLE;
         var current = describe(level.getBlockState(position));
         if (current.equals(prepared.definition().after())) return Result.POSTCONDITION_PRESENT;
         if (!current.equals(prepared.definition().before())) return Result.SOURCE_CHANGED;

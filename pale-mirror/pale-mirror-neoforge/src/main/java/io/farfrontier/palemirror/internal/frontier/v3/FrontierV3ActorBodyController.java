@@ -441,7 +441,7 @@ final class FrontierV3ActorBodyController {
         if (phase != FencedRecoveryPhase.RUNNING && phase != FencedRecoveryPhase.AMBIGUOUS)
             return inspectionDeferred(body, "BODY_PHASE:" + phase);
         var observed = FrontierV3SupportedBodyCapture.observe(level, body);
-        if (observed.isEmpty()) return inspectionDeferred(body, "SUPPORTED_CONTACT:chunk=" + level.hasChunkAt(body.getOnPos()));
+        if (observed.isEmpty()) return inspectionDeferred(body, "SUPPORTED_CONTACT:chunk=" + FrontierV3LoadedWorld.ready(level, body.getOnPos()));
         var actor = state.actorLocations().get(declaration.actorId());
         var health = new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(Math.round(body.getHealth()
                 * (double) io.farfrontier.palemirror.frontier.v3.api.FixedScalar.SCALE));

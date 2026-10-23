@@ -25,7 +25,7 @@ final class FrontierV3ResourceFieldWorkAccessExecutor {
     static Optional<Reading> read(ServerLevel level, ResourceFieldLayout.Cell cell) {
         var headroom = cell.workstation().support().offset(0, 2, 0);
         var physical = new BlockPos(headroom.x(), headroom.y(), headroom.z());
-        if (!level.hasChunkAt(physical)) return Optional.empty();
+        if (!FrontierV3LoadedWorld.ready(level, physical)) return Optional.empty();
         var block = level.getBlockState(physical);
         return Optional.of(new Reading(!block.getCollisionShape(level, physical).isEmpty(),
                 BuiltInRegistries.BLOCK.getKey(block.getBlock()).toString()));

@@ -52,7 +52,7 @@ final class FrontierV3ProductionTransformationExecutor {
         try { target = ProductionTransformationStateSupport.target(state, intent); }
         catch (IllegalArgumentException conflict) { unknown(runtime, intent.id(), "canonical-precondition-conflict"); return; }
         BlockPos position = new BlockPos(target.chestPosition().x(), target.chestPosition().y(), target.chestPosition().z());
-        if (!level.hasChunkAt(position)) return;
+        if (!FrontierV3LoadedWorld.ready(level, position)) return;
         if (ReferenceContainerCustody.isReferenceContainer(state, target.slot().containerId())
                 && !ReferenceContainerCustody.hasOperationalCustody(state, target.slot().containerId())) return;
         ChestBlockEntity chest = FrontierV3ExactItemPresentation.activeChest(level,

@@ -139,7 +139,7 @@ final class FrontierV3ResidentMealNavigation {
     private static boolean available(ServerLevel level, Mob body, SurfaceAnchor station) {
         // An unloaded destination is a known intent, not a physical clearance observation.
         // The shared provider checks each naturally loaded local leg; never force-load the endpoint.
-        return !level.hasChunkAt(new net.minecraft.core.BlockPos(station.x(), station.y(), station.z()))
+        return !FrontierV3LoadedWorld.ready(level, new net.minecraft.core.BlockPos(station.x(), station.y(), station.z()))
                 || FrontierV3SemanticMovement.targetIsNavigable(level, body, station);
     }
 

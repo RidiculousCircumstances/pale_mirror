@@ -54,7 +54,7 @@ final class FrontierV3NativeStationAlignment {
         for (int x = (int) Math.floor(swept.minX); x <= (int) Math.floor(swept.maxX); x++)
             for (int z = (int) Math.floor(swept.minZ); z <= (int) Math.floor(swept.maxZ); z++) {
                 var support = new BlockPos(x, supportY, z);
-                if (!level.hasChunkAt(support) || !level.getFluidState(support.above()).isEmpty())
+                if (!FrontierV3LoadedWorld.ready(level, support) || !level.getFluidState(support.above()).isEmpty())
                     return java.util.Optional.of(Rejection.UNKNOWN_OR_WET_FOOTPRINT);
             }
         // Vanilla may stop a wide body overhanging the apron. Each interpolated

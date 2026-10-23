@@ -120,7 +120,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         // observer to see that exact worker at the current station.
         if (job.navigationBlock().isPresent() || job.progress().complete()
                 || job.returningForBatch())
-            return level.hasChunkAt(new BlockPos(candidate.cropSlot().x(),
+            return FrontierV3LoadedWorld.ready(level, new BlockPos(candidate.cropSlot().x(),
                 candidate.cropSlot().y(), candidate.cropSlot().z()));
         var cycle = state.resourceSites().cycle(site.id());
         var siteClaim = FrontierV3ResourceSiteLedger.get(level).siteClaim(site.id());
@@ -771,13 +771,13 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         for (var id : ids) {
             var cell = cycle.layout().requireCell(id);
             if (cycle.pendingPlayerBreaks().containsKey(id)) return false;
-            if (!level.hasChunkAt(new BlockPos(cell.crop().x(), cell.crop().y(), cell.crop().z()))) return false;
+            if (!FrontierV3LoadedWorld.ready(level, new BlockPos(cell.crop().x(), cell.crop().y(), cell.crop().z()))) return false;
             var retained = owner.witness().cell(id);
             if (retained.pending().isPresent()) return false;
             if (cycle.cell(id).workAccessBlocked()) {
                 var head = cell.workstation().support().offset(0, 2, 0);
                 BlockPos physicalHead = new BlockPos(head.x(), head.y(), head.z());
-                if (!level.hasChunkAt(physicalHead)
+                if (!FrontierV3LoadedWorld.ready(level, physicalHead)
                         || level.getBlockState(physicalHead).getCollisionShape(level, physicalHead).isEmpty()) return false;
                 if (retained.foreign().isEmpty()) {
                     var reading = FrontierV3ResourceFieldObservation.read(level, cell, "harvest-scene-work-access");

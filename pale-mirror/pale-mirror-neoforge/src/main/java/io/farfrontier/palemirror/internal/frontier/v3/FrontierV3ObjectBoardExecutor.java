@@ -178,7 +178,7 @@ final class FrontierV3ObjectBoardExecutor {
      * canonical board.  A custom-named lookalike must never become a presentation authority.
      */
     static boolean isCurrentOwnedBoard(ServerLevel level, Entity entity, FrontierObjectBoard board) {
-        if (!(entity instanceof Display.TextDisplay display) || !level.hasChunkAt(display.blockPosition())) return false;
+        if (!(entity instanceof Display.TextDisplay display) || !FrontierV3LoadedWorld.ready(level, display.blockPosition())) return false;
         String owner = board.ownerId().value();
         FrontierV3ObjectBoardLedger.Claim claim = FrontierV3ObjectBoardLedger.get(level).claim(owner);
         return claim != null && !claim.conflicted() && claim.position() == position(board).asLong()

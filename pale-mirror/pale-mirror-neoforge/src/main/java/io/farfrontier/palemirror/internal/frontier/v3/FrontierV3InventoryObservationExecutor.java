@@ -49,7 +49,7 @@ final class FrontierV3InventoryObservationExecutor {
         if (state == null) return;
         FrontierV3HopperCarrierLedger hopperCarriers = FrontierV3HopperCarrierLedger.get(level);
         for (StoreChest store : stores(state)) {
-            if (!level.hasChunkAt(store.position())) continue;
+            if (!FrontierV3LoadedWorld.ready(level, store.position())) continue;
             if (!(level.getBlockEntity(store.position()) instanceof ChestBlockEntity chest)
                     || !store.containerId().value().equals(chest.getPersistentData().getString(FrontierV3ExactItemPresentation.CONTAINER_ID_KEY))) continue;
             if (observeOne(level, runtime, state, hopperCarriers, store, chest)) return;

@@ -36,7 +36,7 @@ final class FrontierV3StandingPosition {
 
     @Deprecated(forRemoval = true)
     static BlockPos aboveFloor(ServerLevel level, BlockPos anchor) {
-        if (!level.hasChunkAt(anchor)) return null;
+        if (!FrontierV3LoadedWorld.ready(level, anchor)) return null;
         BlockPos direct = aboveExactFloor(level, anchor);
         if (direct != null) return direct;
         return firstLegacyStandingPosition(level, anchor,
@@ -49,9 +49,9 @@ final class FrontierV3StandingPosition {
     }
 
     static BlockPos aboveExactFloor(ServerLevel level, BlockPos anchor) {
-        if (!level.hasChunkAt(anchor)) return null;
+        if (!FrontierV3LoadedWorld.ready(level, anchor)) return null;
         BlockPos feet = anchor.above();
-        if (!level.hasChunkAt(feet)) return null;
+        if (!FrontierV3LoadedWorld.ready(level, feet)) return null;
         // A thin route or infection surface is physical geometry.  The retained support is
         // therefore the only legal floor: never climb a player obstruction or consult a
         // heightmap to invent a different world datum for the same canonical cursor.
@@ -62,7 +62,7 @@ final class FrontierV3StandingPosition {
     private static BlockPos firstLegacyStandingPosition(ServerLevel level, BlockPos anchor, int startY) {
         for (int y = startY; y <= startY + MAX_LEGACY_VERTICAL_SEARCH; y++) {
             BlockPos candidate = new BlockPos(anchor.getX(), y, anchor.getZ());
-            if (!level.hasChunkAt(candidate)) return null;
+            if (!FrontierV3LoadedWorld.ready(level, candidate)) return null;
             if (level.getBlockState(candidate).isAir() && level.getBlockState(candidate.above()).isAir()
                     && !level.getBlockState(candidate.below()).isAir()) return candidate;
         }
@@ -72,13 +72,13 @@ final class FrontierV3StandingPosition {
     /** The exact canonical body column, without accepting a new floor on top of an obstruction. */
     static boolean hasExactHeadroom(ServerLevel level, BlockPosition anchor) {
         BlockPos floor = new BlockPos(anchor.x(), anchor.y(), anchor.z());
-        return level.hasChunkAt(floor) && clearExactBodyCell(level, floor.above()) && clearExactBodyCell(level, floor.above(2));
+        return FrontierV3LoadedWorld.ready(level, floor) && clearExactBodyCell(level, floor.above()) && clearExactBodyCell(level, floor.above(2));
     }
 
     /** A retained movement cursor needs its exact physical support as well as two clear body cells. */
     static boolean hasExactStandingColumn(ServerLevel level, BlockPosition anchor) {
         BlockPos floor = new BlockPos(anchor.x(), anchor.y(), anchor.z());
-        return level.hasChunkAt(floor) && hasPhysicalSupport(level, floor)
+        return FrontierV3LoadedWorld.ready(level, floor) && hasPhysicalSupport(level, floor)
                 && clearExactBodyCell(level, floor.above()) && clearExactBodyCell(level, floor.above(2));
     }
 

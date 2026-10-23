@@ -39,7 +39,7 @@ final class FrontierV3StationWorkPhysicalEffect {
                 : !ReferenceContainerCustody.hasLiveCustody(state, containerId)
                 || ReferenceContainerCustody.blocksCanonicalUse(state, containerId)) return;
         ContainerSurface surface = state.inventory().surfaces().get(containerId);
-        if (surface == null || !level.hasChunkAt(new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()))) return;
+        if (surface == null || !FrontierV3LoadedWorld.ready(level, new BlockPos(surface.position().x(), surface.position().y(), surface.position().z()))) return;
         var physical = FrontierV3PhysicalContainer.loaded(level, state, containerId).orElse(null);
         if (physical == null) return;
         var chest = physical.inventory();

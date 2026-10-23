@@ -83,7 +83,7 @@ final class FrontierV3ResidentMealPhysicalEffect {
         ContainerSurface surface = state.inventory().surfaces().get(meal.depotId());
         if (surface == null) return false;
         BlockPos position = new BlockPos(surface.position().x(), surface.position().y(), surface.position().z());
-        if (!level.hasChunkAt(position)) return false;
+        if (!FrontierV3LoadedWorld.ready(level, position)) return false;
         ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, position, meal.depotId());
         if (chest == null) return false;
         if (meal.pendingPhysicalStep().isEmpty()

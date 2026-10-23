@@ -15,7 +15,7 @@ final class FrontierV3ReferenceSurfaceRecovery {
         if (surface.status() != ContainerSurfaceStatus.CONFLICT || replica == null || container == null
                 || replica.state() == PhysicalReplicaState.CONFLICT || FrontierV3ContainerEffectFence.pending(level, state, id)) return false;
         var position = new BlockPos(surface.position().x(), surface.position().y(), surface.position().z());
-        if (!level.hasChunkAt(position) || !level.shouldTickBlocksAt(position)
+        if (!FrontierV3LoadedWorld.ready(level, position) || !level.shouldTickBlocksAt(position)
                 || FrontierV3ContainerSurfaceExecutor.supportReadiness(level, FrontierV3GrayboxLedger.get(level), position,
                     FrontierContainerSocketPlan.declaredSupport(state, surface).orElse(null))
                     != FrontierV3ContainerSurfaceExecutor.SocketReadiness.READY) return false;

@@ -75,7 +75,7 @@ final class FrontierV3ContainerSurfaceExecutor {
                 .filter(surface -> surface.status() == ContainerSurfaceStatus.UNMATERIALIZED
                         || surface.status() == ContainerSurfaceStatus.PREPARED)
                 .sorted(Comparator.comparing(ContainerSurface::containerId))
-                .filter(surface -> level.hasChunkAt(position(surface))
+                .filter(surface -> FrontierV3LoadedWorld.ready(level, position(surface))
                         && (!ReferenceContainerCustody.isReferenceContainer(state, surface.containerId())
                             || level.shouldTickBlocksAt(position(surface))
                             || FrontierV3PhysicalDemand.presentationRequested(level, position(surface))))
@@ -165,7 +165,7 @@ final class FrontierV3ContainerSurfaceExecutor {
     private static void resumePrepared(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SubjectId id) {
         var current = state(runtime); if (current == null) return;
         var surface = current.inventory().surfaces().get(id);
-        if (surface == null || surface.status() != ContainerSurfaceStatus.PREPARED || !level.hasChunkAt(position(surface))) return;
+        if (surface == null || surface.status() != ContainerSurfaceStatus.PREPARED || !FrontierV3LoadedWorld.ready(level, position(surface))) return;
         executeLifecycle(level, runtime, current, surface);
     }
 
@@ -209,7 +209,7 @@ final class FrontierV3ContainerSurfaceExecutor {
                 .sorted(Comparator.comparing(ContainerSurface::containerId)).toList();
         if (active.isEmpty()) return;
         ContainerSurface surface = active.get((int) Math.floorMod(level.getGameTime(), active.size()));
-        if (!level.hasChunkAt(position(surface))) return;
+        if (!FrontierV3LoadedWorld.ready(level, position(surface))) return;
         if (!hasReadySocket(level, FrontierV3GrayboxLedger.get(level), position(surface),
                 FrontierContainerSocketPlan.declaredSupport(state, surface).orElse(null))) {
             reportConflict(runtime, surface.containerId());
@@ -450,7 +450,7 @@ final class FrontierV3ContainerSurfaceExecutor {
         // serialization cache is prior replica evidence, not a physical custody candidate.
         // Keep the generic materializer's loaded-socket diagnostic unchanged for every other
         // family while reporting the same eligibility boundary used by the custody adapter.
-        if (!level.hasChunkAt(target) || (ReferenceContainerCustody.isReferenceContainer(state, containerId) && !level.shouldTickBlocksAt(target))) {
+        if (!FrontierV3LoadedWorld.ready(level, target) || (ReferenceContainerCustody.isReferenceContainer(state, containerId) && !level.shouldTickBlocksAt(target))) {
             return new Readiness("UNLOADED", "", "", "", "", "", "", false, false, 0, 0);
         }
         io.farfrontier.palemirror.frontier.v3.model.ContainerSocketSupport support = FrontierContainerSocketPlan.declaredSupport(state, surface).orElse(null);

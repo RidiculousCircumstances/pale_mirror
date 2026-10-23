@@ -29,7 +29,7 @@ final class FrontierV3SceneDemand {
         Objects.requireNonNull(level, "scene demand level");
         Objects.requireNonNull(anchor, "scene demand anchor");
         BlockPos position = new BlockPos(anchor.x(), anchor.y(), anchor.z());
-        if (!level.hasChunkAt(position)) return Snapshot.unloaded();
+        if (!FrontierV3LoadedWorld.ready(level, position)) return Snapshot.unloaded();
         LinkedHashSet<UUID> observers = level.players().stream()
                 .filter(player -> !player.isSpectator())
                 .filter(player -> player.blockPosition().closerThan(position, RADIUS_BLOCKS))

@@ -46,7 +46,7 @@ public final class FrontierV3StorageCommands {
             var runtime = FrontierV3ServerLifecycle.runtimeForNativeMutation(source.getServer());
             if (runtime == null || !FrontierV3PhysicalWorld.isPhysical(level)) throw new IllegalArgumentException("storage requires the active physical world");
             var state = runtime.decodedState().orElseThrow();
-            if (!level.hasChunkAt(chest.below()) || !level.getBlockState(chest).isAir()
+            if (!FrontierV3LoadedWorld.ready(level, chest.below()) || !level.getBlockState(chest).isAir()
                     || !level.getBlockState(chest.below()).isFaceSturdy(level, chest.below(), Direction.UP))
                 throw new IllegalArgumentException("new warehouse needs empty loaded space on sturdy ground; existing stock is not adopted");
             var station = new SurfaceAnchor(position(support));

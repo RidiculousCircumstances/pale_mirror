@@ -75,7 +75,7 @@ final class FrontierV3ExplosionExecutor {
 
     private static void execute(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent) {
         BlockPos origin = origin(intent); if (origin == null) { unknown(runtime, intent.id(), "non-block-origin"); return; }
-        if (!level.hasChunkAt(origin)) return;
+        if (!FrontierV3LoadedWorld.ready(level, origin)) return;
         FrontierV3ManagedExplosionLedger ledger = FrontierV3ManagedExplosionLedger.get(level);
         FrontierWorldState state = state(runtime); if (state == null) return;
         if (intent.status() == PhysicalIntentStatus.RUNNING) {
@@ -132,7 +132,7 @@ final class FrontierV3ExplosionExecutor {
             Optional<FrontierV3ManagedExplosionLedger.BlockReady> ready = ledger.nextBlock(intentId, level.getGameTime());
             if (ready.isEmpty()) return true;
             FrontierV3ManagedExplosionLedger.BlockReady value = ready.orElseThrow(); BlockPos position = value.candidate().blockPos();
-            if (!level.hasChunkAt(position)) return false;
+            if (!FrontierV3LoadedWorld.ready(level, position)) return false;
             boolean changed = !level.getBlockState(position).equals(value.candidate().baseline(level.registryAccess()));
             if (changed) {
                 FrontierV3PhysicalObservationExecutor.recordManagedExplosionDelta(level, runtime, intentId, value.candidate());
@@ -148,7 +148,7 @@ final class FrontierV3ExplosionExecutor {
         Entity actual = level.getEntity(ready.candidate().entityId());
         if (actual != null && !actual.isRemoved()) { ledger.resolveEntity(ready, false); return; }
         if (knownDead(runtime, ready.candidate().actorId())) { ledger.resolveEntity(ready, true); return; }
-        if (level.hasChunkAt(ready.candidate().blockPos())) ledger.resolveEntity(ready, true);
+        if (FrontierV3LoadedWorld.ready(level, ready.candidate().blockPos())) ledger.resolveEntity(ready, true);
     }
 
     private static boolean knownDead(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> actorId) {
@@ -159,7 +159,7 @@ final class FrontierV3ExplosionExecutor {
     private static void reconcileItem(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierV3ManagedExplosionLedger ledger,
                                       FrontierV3ManagedExplosionLedger.ItemReady ready) {
         FrontierV3ManagedExplosionLedger.ItemCandidate candidate = ready.candidate(); BlockPos position = candidate.blockPos();
-        if (!level.hasChunkAt(position)) return;
+        if (!FrontierV3LoadedWorld.ready(level, position)) return;
         FrontierWorldState state = state(runtime); if (state == null) return;
         var item = state.inventory().items().get(candidate.itemId()); InventoryCustody source = candidate.source();
         if (item == null) { ledger.resolveItem(ready, ExplosionItemImpact.Outcome.DESTROYED); return; }

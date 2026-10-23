@@ -19,8 +19,12 @@ public final class KnownPedestrianGround {
 
     public static BoundedPedestrianApproach.SurveyedSurface forSettlement(FrontierWorldState state,
                                                                        SubjectId settlementId) {
+        return forSettlement(state, settlementId, KnownSiteGeometry.forState(state));
+    }
+    static BoundedPedestrianApproach.SurveyedSurface forSettlement(FrontierWorldState state,
+            SubjectId settlementId, KnownSiteGeometry.View sites) {
         return restricted(state, RetainedNavigationGeometry.overlay(layered(state.bootstrap(), roads(state.bootstrap(), state.routeTopology()),
-                local(state.bootstrap(), settlementId), KnownSiteGeometry.forState(state)), state.navigationGeometry(), KnownSiteGeometry.forState(state).retainedBlocks()));
+                local(state.bootstrap(), settlementId), sites), state.navigationGeometry(), sites.retainedBlocks()));
     }
 
     /** Immutable admission/hydration datum, using the same authored-ground policy. */
@@ -35,8 +39,11 @@ public final class KnownPedestrianGround {
 
     /** Cross-settlement movement uses all authored local floors, not one origin's datum. */
     public static BoundedPedestrianApproach.SurveyedSurface forFrontier(FrontierWorldState state) {
+        return forFrontier(state, KnownSiteGeometry.forState(state));
+    }
+    static BoundedPedestrianApproach.SurveyedSurface forFrontier(FrontierWorldState state, KnownSiteGeometry.View sites) {
         return restricted(state, RetainedNavigationGeometry.overlay(layered(state.bootstrap(), roads(state.bootstrap(), state.routeTopology()),
-                frontierLocal(state.bootstrap()), KnownSiteGeometry.forState(state)), state.navigationGeometry(), KnownSiteGeometry.forState(state).retainedBlocks()));
+                frontierLocal(state.bootstrap()), sites), state.navigationGeometry(), sites.retainedBlocks()));
     }
 
     private static BoundedPedestrianApproach.SurveyedSurface restricted(FrontierWorldState state,

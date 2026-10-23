@@ -46,7 +46,7 @@ final class FrontierV3ContainerSocketProvenance {
     private static FrontierV3ContainerSurfaceExecutor.SocketReadiness terrain(ServerLevel level, FrontierV3GrayboxLedger ledger,
             BlockPos position, ContainerSocketSupport support) {
         if (!(support instanceof ContainerSocketSupport.Terrain)) throw new IllegalArgumentException("forged terrain support schema");
-        if (!level.hasChunkAt(position)) return FrontierV3ContainerSurfaceExecutor.SocketReadiness.DEFERRED;
+        if (!FrontierV3LoadedWorld.ready(level, position)) return FrontierV3ContainerSurfaceExecutor.SocketReadiness.DEFERRED;
         return level.getBlockState(position).isFaceSturdy(level, position, net.minecraft.core.Direction.UP)
                 ? FrontierV3ContainerSurfaceExecutor.SocketReadiness.READY : FrontierV3ContainerSurfaceExecutor.SocketReadiness.CONFLICT;
     }

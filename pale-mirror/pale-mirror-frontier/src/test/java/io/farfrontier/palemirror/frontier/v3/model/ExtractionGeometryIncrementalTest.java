@@ -44,6 +44,24 @@ class ExtractionGeometryIncrementalTest {
         assertEquals(result, provider.project(after));
         assertEquals(state.inventory(), after.inventory(), "the geometry view owns no yield or custody");
     }
+    @Test void preparationAndOwnerShareOnlyCompletedImmutableViewsAcrossBranches() throws Exception {
+        var state = initial(); var original = deposit(state); var cell = original.site().layout().cells().getFirst();
+        var changed = replace(state, original.extracted(cell.id(), 1, "effect:parallel-geometry"));
+        var provider = new ExtractionKnownGeometry();
+        try (var workers = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var start = new java.util.concurrent.CountDownLatch(1);
+            var old = workers.submit(() -> { start.await(); return provider.project(state); });
+            var next = workers.submit(() -> { start.await(); return provider.project(changed); });
+            start.countDown();
+            var before = old.get(); var after = next.get();
+            assertTrue(before.obstacles().contains(cell.source()));
+            assertFalse(after.obstacles().contains(cell.source()));
+            assertTrue(after.withdrawnSupports().contains(cell.source()));
+            assertSame(before, provider.project(state), "owner must reuse the exact completed predecessor");
+            assertSame(after, provider.project(changed), "rollback cannot evict or mutate the competing branch");
+            assertEquals(new ExtractionKnownGeometry().project(changed), after);
+        }
+    }
     @Test void localUnknownKnowledgeAndObservedReplacementAreNotHiddenByRegionalReuse() {
         var state = initial(); var original = deposit(state);
         var sources = new HashSet<BlockPosition>(); original.site().layout().cells().forEach(c -> sources.add(c.source()));

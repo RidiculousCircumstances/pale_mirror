@@ -49,7 +49,7 @@ final class FrontierV3ServiceApproachNavigation {
             int first = candidates.isEmpty() ? 0 : Math.floorMod(cursor, candidates.size());
             for (int offset = 0; offset < Math.min(candidates.size(), MAX_CANDIDATE_PROBES); offset++) {
                 var candidate = candidates.get((first + offset) % candidates.size());
-                if (!level.hasChunkAt(new net.minecraft.core.BlockPos(candidate.x(), candidate.y(), candidate.z()))
+                if (!FrontierV3LoadedWorld.ready(level, new net.minecraft.core.BlockPos(candidate.x(), candidate.y(), candidate.z()))
                         || !FrontierV3SemanticMovement.targetGeometryIsNavigable(level, body, candidate)) continue;
                 prior = new Waiting(actuation, pointId, phase, generation, candidate);
                 WAITING.put(body, prior);

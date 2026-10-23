@@ -138,7 +138,7 @@ final class FrontierV3ResourceFieldPlayerBreakExecutor {
         for (var witness : ledger.pendingFieldPlayerBreaks()) {
             ResourceFieldCycle cycle = state.resourceSites().cycle(witness.siteId());
             ResourceFieldLayout.Cell cell = cell(cycle, witness);
-            if (!level.hasChunkAt(minecraft(cell.crop()))) continue;
+            if (!FrontierV3LoadedWorld.ready(level, minecraft(cell.crop()))) continue;
             if (FrontierV3PlayerBreakDisposition.active(level.getServer(), witness.playerId(), minecraft(cell.crop()))) continue;
             return reconcile(level, runtime, state, ledger, witness);
         }
@@ -151,7 +151,7 @@ final class FrontierV3ResourceFieldPlayerBreakExecutor {
             for (var entry : cycle.pendingPlayerBreaks().entrySet()) {
                 if (ledger.fieldPlayerBreak(lifecycle.siteId(), entry.getKey()) != null) continue;
                 ResourceFieldLayout.Cell cell = cycle.layout().requireCell(entry.getKey());
-                if (!level.hasChunkAt(minecraft(cell.crop()))) continue;
+                if (!FrontierV3LoadedWorld.ready(level, minecraft(cell.crop()))) continue;
                 if (!(ledger.fieldClaim(lifecycle.siteId()) instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
                         || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE) continue;
                 var reading = FrontierV3ResourceFieldObservation.read(level, cell, entry.getValue().actionId());

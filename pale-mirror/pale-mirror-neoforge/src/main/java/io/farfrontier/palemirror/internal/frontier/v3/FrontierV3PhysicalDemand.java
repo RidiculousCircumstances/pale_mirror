@@ -19,7 +19,7 @@ final class FrontierV3PhysicalDemand {
 
     /** Current network tracking includes chunks waiting for presentation, unlike sent-chunk queries. */
     static boolean presentationRequested(ServerLevel level, BlockPos position) {
-        return level.hasChunkAt(position) && ordinaryPlayers(level)
+        return FrontierV3LoadedWorld.ready(level, position) && ordinaryPlayers(level)
                 .anyMatch(player -> player.getChunkTrackingView().contains(position.getX() >> 4, position.getZ() >> 4));
     }
 
@@ -45,7 +45,7 @@ final class FrontierV3PhysicalDemand {
      * operator sees; the diagnostic cannot load a chunk or turn demand on.
      */
     static Readiness readiness(ServerLevel level, BlockPos position) {
-        boolean loaded = level.hasChunkAt(position);
+        boolean loaded = FrontierV3LoadedWorld.ready(level, position);
         List<net.minecraft.server.level.ServerPlayer> ordinaryPlayers = ordinaryPlayers(level).toList();
         int eligibleObservers = (int) ordinaryPlayers.stream()
                 .filter(player -> player.blockPosition().closerThan(position, EFFECT_RADIUS_BLOCKS)).count();

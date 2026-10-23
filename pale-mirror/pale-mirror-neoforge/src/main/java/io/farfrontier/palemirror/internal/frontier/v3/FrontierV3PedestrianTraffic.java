@@ -181,7 +181,7 @@ final class FrontierV3PedestrianTraffic {
             }
             @Override public PathType getPathTypeOfMob(PathfindingContext context, int x, int y, int z, Mob mob) {
                 BlockPos feet = new BlockPos(x, y, z);
-                if (!level.hasChunkAt(feet) || !scope.permits(new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(x, y - 1, z)))
+                if (!FrontierV3LoadedWorld.ready(level, feet) || !scope.permits(new io.farfrontier.palemirror.frontier.v3.model.BlockPosition(x, y - 1, z)))
                     return PathType.BLOCKED;
                 if (!feet.equals(origin) && bodies.stream().anyMatch(body -> body.intersects(nativeNodeBodyAt(mob, feet))))
                     return PathType.BLOCKED;

@@ -18,7 +18,7 @@ final class FrontierV3ExtractionBlockWrites implements FrontierV3ManagedBlockWri
         var observations = new LinkedHashMap<BlockPosition, ExtractionGeologyInvalidated.Observation>();
         for (var write : writes) {
             var position = write.position();
-            if (!level.hasChunkAt(position) || FrontierV3WorksiteRegistry.point(state, position).isPresent()
+            if (!FrontierV3LoadedWorld.ready(level, position) || FrontierV3WorksiteRegistry.point(state, position).isPresent()
                     || level.getBlockState(position).equals(write.replacement())) continue;
             var raw = new BlockPosition(position.getX(), position.getY(), position.getZ());
             if (state.extractionSites().geologicalExclusions().positions().contains(raw)) continue;
@@ -35,7 +35,7 @@ final class FrontierV3ExtractionBlockWrites implements FrontierV3ManagedBlockWri
     @Override public void observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             BlockPos position, BlockState replacement, boolean committed) {
         var state = runtime.passiveOwnershipState().orElse(null);
-        if (state == null || !state.bootstrap().ruleset().extraction().enabled() || !level.hasChunkAt(position)) return;
+        if (state == null || !state.bootstrap().ruleset().extraction().enabled() || !FrontierV3LoadedWorld.ready(level, position)) return;
         var indexed = FrontierV3WorksiteRegistry.point(state, position).orElse(null);
         if (indexed == null) {
             var raw = new BlockPosition(position.getX(), position.getY(), position.getZ());
@@ -89,7 +89,7 @@ final class FrontierV3ExtractionBlockWrites implements FrontierV3ManagedBlockWri
     static void reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         var state = runtime.decodedState().orElseThrow(); var ledger = FrontierV3GrayboxLedger.get(level);
         for (var position : ledger.externalWorksites()) {
-            if (!level.hasChunkAt(position)) continue;
+            if (!FrontierV3LoadedWorld.ready(level, position)) continue;
             var indexed = FrontierV3WorksiteRegistry.point(state, position).orElseThrow(
                     () -> new IllegalStateException("external worksite witness lost its declared geometry"));
             var witness = ledger.worksite(position);

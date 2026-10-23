@@ -15,7 +15,7 @@ final class FrontierV3PathClearance {
 
     static Vec3 point(ServerLevel level, Mob actor, BlockPos node) {
         double offset = (int) (actor.getBbWidth() + 1.0F) * 0.5;
-        return new Vec3(node.getX() + offset, level.hasChunkAt(node) ? WalkNodeEvaluator.getFloorLevel(level, node) : node.getY(), node.getZ() + offset);
+        return new Vec3(node.getX() + offset, FrontierV3LoadedWorld.ready(level, node) ? WalkNodeEvaluator.getFloorLevel(level, node) : node.getY(), node.getZ() + offset);
     }
     static boolean path(ServerLevel level, Mob actor, Path path) {
         if (path == null || path.getNodeCount() > FrontierV3PhysicalPathPolicy.MAX_PATH_NODES) return false;
@@ -80,7 +80,7 @@ final class FrontierV3PathClearance {
             var box = body.move(p.subtract(origin)).deflate(1.0e-6);
             for (int x = net.minecraft.util.Mth.floor(box.minX); x <= net.minecraft.util.Mth.floor(box.maxX); x++)
                 for (int z = net.minecraft.util.Mth.floor(box.minZ); z <= net.minecraft.util.Mth.floor(box.maxZ); z++)
-                    if (!level.hasChunkAt(new BlockPos(x, net.minecraft.util.Mth.floor(box.minY), z))) return false;
+                    if (!FrontierV3LoadedWorld.ready(level, new BlockPos(x, net.minecraft.util.Mth.floor(box.minY), z))) return false;
             return !level.getBlockCollisions(actor, box).iterator().hasNext();
         }
     }

@@ -121,7 +121,7 @@ final class FrontierV3FastForwardSafety {
         int radius = intent.radiusBlocks();
         for (int currentX = x - radius; currentX <= x + radius; currentX = nextChunkEdge(currentX)) {
             for (int currentZ = z - radius; currentZ <= z + radius; currentZ = nextChunkEdge(currentZ)) {
-                if (level.hasChunkAt(new BlockPos(currentX, y, currentZ))) return true;
+                if (FrontierV3LoadedWorld.ready(level, new BlockPos(currentX, y, currentZ))) return true;
             }
         }
         return false;

@@ -132,7 +132,7 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
             if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.PREPARING) continue;
             boolean complete = index.cells(region).stream().allMatch(cell -> {
                 var position = new BlockPos(cell.source().x(), cell.source().y(), cell.source().z());
-                if (!level.hasChunkAt(position)) return false;
+                if (!FrontierV3LoadedWorld.ready(level, position)) return false;
                 var witness = FrontierV3WorksiteEvidence.at(level, ledger, state, position); var current = state.extractionSites().deposits().get(region.siteId()).cells().get(cell.id());
                 return witness != null && witness.phase() == FrontierV3WorksiteBlockWitness.Phase.SETTLED
                         && witness.declaration().key().equals(new WorksiteBlock.Key(family(), region.siteId(), WorksiteBlock.Role.RESOURCE, cell.id()))
@@ -144,7 +144,7 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
                     && cell.key().role() == WorksiteBlock.Role.NATURAL_TERRAIN && region.contains(cell.position()))
                     .allMatch(cell -> {
                         var position = FrontierV3WorksiteProjection.position(cell);
-                        if (!level.hasChunkAt(position)) return false;
+                        if (!FrontierV3LoadedWorld.ready(level, position)) return false;
                         var witness = FrontierV3WorksiteEvidence.at(level, ledger, state, position); var current = current(state, cell);
                         return witness != null && witness.phase() == FrontierV3WorksiteBlockWitness.Phase.SETTLED
                                 && witness.declaration().equals(current)

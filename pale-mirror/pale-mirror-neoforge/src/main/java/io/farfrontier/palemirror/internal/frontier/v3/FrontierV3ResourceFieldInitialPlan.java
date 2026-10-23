@@ -109,8 +109,9 @@ final class FrontierV3ResourceFieldInitialPlan {
     static Review observe(ServerLevel level, ResourceSite site, Step step) {
         Objects.requireNonNull(level, "initial field world");
         BlockPos position = new BlockPos(step.position().x(), step.position().y(), step.position().z());
-        if (!level.hasChunkAt(position)) return new Review(step, Disposition.UNLOADED, Optional.empty(), false);
-        BlockState current = level.getBlockState(position);
+        var chunk = FrontierV3LoadedWorld.chunk(level, position);
+        if (chunk == null) return new Review(step, Disposition.UNLOADED, Optional.empty(), false);
+        BlockState current = chunk.getBlockState(position);
         int water = site.layout().irrigationSlots().size();
         boolean cropStep = step.index() >= water && ((step.index() - water) & 1) == 1;
         boolean baseline = cropStep ? current.isAir()
@@ -118,7 +119,7 @@ final class FrontierV3ResourceFieldInitialPlan {
                         || current.is(Blocks.LIGHT_GRAY_CONCRETE)
                         || current.isSolidRender(level, position)
                             && io.farfrontier.palemirror.internal.world.GeneratedTerrainBaseline.matches(level, position, current))
-                        && !level.getBlockState(position.below()).isAir();
+                        && !chunk.getBlockState(position.below()).isAir();
         if (step.index() >= water) {
             var id = site.layout().cells().get((step.index() - water) >>> 1).id();
             var admitted = site.layout().extensions().stream().filter(extension -> extension.ground().containsKey(id))
@@ -173,7 +174,7 @@ final class FrontierV3ResourceFieldInitialPlan {
             throw new IllegalArgumentException("initial field physical completion has a foreign owner or layout");
         for (BlockPosition position : site.layout().irrigationSlots()) {
             BlockPos water = new BlockPos(position.x(), position.y(), position.z());
-            if (!level.hasChunkAt(water) || !level.getBlockState(water).is(Blocks.WATER))
+            if (!FrontierV3LoadedWorld.ready(level, water) || !level.getBlockState(water).is(Blocks.WATER))
                 throw new IllegalStateException("initial field irrigation is unloaded or no longer present");
         }
         for (ResourceFieldLayout.Cell cell : site.layout().cells()) {

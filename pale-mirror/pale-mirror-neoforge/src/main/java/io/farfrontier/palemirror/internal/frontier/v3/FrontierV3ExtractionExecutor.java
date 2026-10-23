@@ -167,7 +167,7 @@ final class FrontierV3ExtractionExecutor {
         switch (step) {
             case ExtractionPhysicalStep.BlockWork block -> {
                 var source = new BlockPos(block.extraction().target().x(), block.extraction().target().y(), block.extraction().target().z());
-                if (!level.hasChunkAt(source)) return null;
+                if (!FrontierV3LoadedWorld.ready(level, source)) return null;
                 int resultCount = block.carriedBefore() + block.extraction().output().getFirst().quantity();
                 var adapter = new FrontierV3MinecraftBlockExtraction(level, worker, actuation, state.bootstrap().ruleset().tools());
                 var ledger = FrontierV3GrayboxLedger.get(level); var witness = FrontierV3WorksiteEvidence.at(level, ledger, state, source);

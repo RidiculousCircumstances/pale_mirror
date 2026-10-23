@@ -82,7 +82,7 @@ final class FrontierV3ResidentMealDeathResources {
         if (surface == null || !ReferenceContainerCustody.hasLiveCustody(state, meal.depotId())
                 || ReferenceContainerCustody.blocksCanonicalUse(state, meal.depotId())) return Optional.empty();
         var position = new BlockPos(surface.position().x(), surface.position().y(), surface.position().z());
-        if (!level.hasChunkAt(position)) return Optional.empty();
+        if (!FrontierV3LoadedWorld.ready(level, position)) return Optional.empty();
         var chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, position, meal.depotId());
         if (chest == null) return Optional.empty();
         var order = ResidentMealProcess.takeOrder(state, meal);

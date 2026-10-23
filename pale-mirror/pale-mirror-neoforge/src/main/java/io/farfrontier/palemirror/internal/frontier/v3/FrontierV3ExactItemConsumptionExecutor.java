@@ -73,7 +73,7 @@ final class FrontierV3ExactItemConsumptionExecutor {
         }
         Target target = target(state, intent);
         if (target == null) { if (intent.status() == PhysicalIntentStatus.RUNNING) unknown(runtime, intent.id(), "target-conflict"); return; }
-        if (!level.hasChunkAt(target.chestPosition())) return;
+        if (!FrontierV3LoadedWorld.ready(level, target.chestPosition())) return;
         if (ReferenceContainerCustody.isReferenceContainer(state, target.containerId())
                 && !ReferenceContainerCustody.hasOperationalCustody(state, target.containerId())) return;
         ChestBlockEntity chest = FrontierV3ExactItemPresentation.activeChest(level, new FrontierV3ExactItemPresentation.StoreTarget(target.chestPosition(), target.containerId()));
@@ -114,7 +114,7 @@ final class FrontierV3ExactItemConsumptionExecutor {
 
     private static void executeFungible(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                         FrontierWorldState state, PhysicalIntent intent, FungibleTarget target) {
-        if (!level.hasChunkAt(target.chestPosition())) return;
+        if (!FrontierV3LoadedWorld.ready(level, target.chestPosition())) return;
         if (ReferenceContainerCustody.isReferenceContainer(state, target.containerId())
                 && !ReferenceContainerCustody.hasOperationalCustody(state, target.containerId())) return;
         ChestBlockEntity chest = FrontierV3ExactItemPresentation.activeChest(level,

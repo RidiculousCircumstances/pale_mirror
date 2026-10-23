@@ -37,7 +37,7 @@ interface FrontierV3AftermathPhysicalWorld {
                     java.util.List<io.farfrontier.palemirror.frontier.v3.model.GrayboxCell> cells) {
                 FrontierV3GrayboxPreparation.prepare(level, runtime, runtime.decodedState().orElseThrow(), cells);
             }
-            @Override public boolean naturallyLoaded(BlockPosition position) { return level.hasChunkAt(block(position)); }
+            @Override public boolean naturallyLoaded(BlockPosition position) { return FrontierV3LoadedWorld.ready(level, block(position)); }
             @Override public boolean isAir(BlockPosition position) { return level.getBlockState(block(position)).isAir(); }
             @Override public boolean hasMaterial(BlockPosition position, GrayboxMaterial material) {
                 return level.getBlockState(block(position)).equals(FrontierV3GrayboxExecutor.material(material));

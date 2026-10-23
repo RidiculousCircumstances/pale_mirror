@@ -23,7 +23,7 @@ final class FrontierV3PhysicalPathPolicy {
             return Optional.of(new Rejection(FrontierV3GoalNavigation.BlockReason.SEARCH_BUDGET_EXHAUSTED, "node-bound"));
         for (int index = path.getNextNodeIndex(); index < path.getNodeCount(); index++) {
             var feet = path.getNode(index).asBlockPos();
-            if (!level.hasChunkAt(feet))
+            if (!FrontierV3LoadedWorld.ready(level, feet))
                 return Optional.of(new Rejection(FrontierV3GoalNavigation.BlockReason.TARGET_CHUNK_UNLOADED,
                         "unloaded-node:" + index));
             var support = feet.below();

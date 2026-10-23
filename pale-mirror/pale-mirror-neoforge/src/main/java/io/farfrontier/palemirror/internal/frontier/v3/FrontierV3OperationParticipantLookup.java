@@ -33,7 +33,7 @@ final class FrontierV3OperationParticipantLookup {
             case ENTITY_COLUMN -> FrontierV3OperationEntityColumns.current(level, new ChunkPos(Long.parseLong(identity.identity()))).orElse(null);
             case TERRAIN -> {
                 var position = BlockPos.of(Long.parseLong(identity.identity()));
-                var block = level.hasChunkAt(position) ? level.getBlockEntity(position) : null;
+                var block = FrontierV3LoadedWorld.ready(level, position) ? level.getBlockEntity(position) : null;
                 yield block == null || block.isRemoved() ? null : FrontierV3OperationBlockEntityParticipant.current(block);
             }
             case CHUNK_BLOCKS -> {

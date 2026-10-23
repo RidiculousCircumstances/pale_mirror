@@ -130,7 +130,7 @@ final class FrontierV3ActorResourceTransfer {
     private static Optional<Session> ground(ServerLevel level, FrontierWorldState state, Request request) {
         if (!(request.order() instanceof ActorGroundItemOrder order)) throw new IllegalArgumentException("foreign ground physical schema");
         var position = ((ResourceCustody.Ground) order.portion().sourceCustody()).position();
-        if (!level.hasChunkAt(new net.minecraft.core.BlockPos(position.x(), position.y(), position.z()))) return Optional.empty();
+        if (!FrontierV3LoadedWorld.ready(level, new net.minecraft.core.BlockPos(position.x(), position.y(), position.z()))) return Optional.empty();
         var nativeEntity = level.getEntity(order.entityId());
         if (nativeEntity != null && !(nativeEntity instanceof ItemEntity))
             throw new IllegalArgumentException("ground source UUID denotes a non-item native entity");

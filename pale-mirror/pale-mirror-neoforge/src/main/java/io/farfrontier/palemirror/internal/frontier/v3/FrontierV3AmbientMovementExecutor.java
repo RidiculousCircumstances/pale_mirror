@@ -143,7 +143,7 @@ final class FrontierV3AmbientMovementExecutor {
         }
         if (lease.goal() == AmbientGoalKind.SCOUT_PATROL && !lease.goalBody().equals(state.actorLocations().get(actorId).body())) {
             BlockPos physicalTarget = minecraftBody(lease.goalBody());
-            if (!level.hasChunkAt(physicalTarget) || !FrontierV3StandingPosition.hasExactStandingColumn(level, lease.goalBody().supportingSurface().support())) {
+            if (!FrontierV3LoadedWorld.ready(level, physicalTarget) || !FrontierV3StandingPosition.hasExactStandingColumn(level, lease.goalBody().supportingSurface().support())) {
                 FrontierV3GoalNavigation.stop(body, actuation);
                 return false;
             }
@@ -165,7 +165,7 @@ final class FrontierV3AmbientMovementExecutor {
                 return false;
             }
             BlockPos physicalTarget = minecraftBody(lease.goalBody());
-            if (!level.hasChunkAt(physicalTarget)) {
+            if (!FrontierV3LoadedWorld.ready(level, physicalTarget)) {
                 FrontierV3GoalNavigation.stop(body, actuation);
                 return false;
             }
@@ -196,7 +196,7 @@ final class FrontierV3AmbientMovementExecutor {
                 return false;
             }
             BlockPos physicalTarget = minecraftBody(lease.goalBody());
-            if (!level.hasChunkAt(physicalTarget) || !FrontierV3StandingPosition.hasExactStandingColumn(level, lease.goalBody().supportingSurface().support())) {
+            if (!FrontierV3LoadedWorld.ready(level, physicalTarget) || !FrontierV3StandingPosition.hasExactStandingColumn(level, lease.goalBody().supportingSurface().support())) {
                 FrontierV3GoalNavigation.stop(body, actuation);
                 return false;
             }

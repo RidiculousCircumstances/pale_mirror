@@ -824,7 +824,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
     }
     /** A retained full chunk cache is serialized evidence, not a normally ticking physical scope. */
     private static boolean naturallyTicking(ServerLevel level, BlockPos position) {
-        return level.hasChunkAt(position) && level.shouldTickBlocksAt(position);
+        return FrontierV3LoadedWorld.ready(level, position) && level.shouldTickBlocksAt(position);
     }
     record Observed(String fingerprint, String provenance) { }
 }

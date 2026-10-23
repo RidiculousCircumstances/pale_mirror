@@ -288,7 +288,7 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
     static boolean matchesWritablePredecessor(ServerLevel level, ResourceFieldLayout.Cell cell,
                                               BlockPos position, ResourceFieldCycle.CellState canonical,
                                               FrontierV3ResourceFieldWitness.Cell claim) {
-        if (!level.hasChunkAt(position) || claim.pending().isPresent()) return false;
+        if (!FrontierV3LoadedWorld.ready(level, position) || claim.pending().isPresent()) return false;
         boolean soilSlot = minecraft(cell.soil().support()).equals(position);
         boolean cropSlot = minecraft(cell.crop()).equals(position);
         if (!soilSlot && !cropSlot) return false;
@@ -350,10 +350,12 @@ final class FrontierV3ResourceFieldForeignChangeExecutor {
     private static FrontierV3ResourceFieldForeignChangeWitness.Blocks readBlocks(ServerLevel level,
                                                                                    ResourceFieldLayout.Cell cell) {
         BlockPos soil = minecraft(cell.soil().support()), crop = minecraft(cell.crop());
-        if (!level.hasChunkAt(soil) || !level.hasChunkAt(crop)) return null;
+        var soilChunk = FrontierV3LoadedWorld.chunk(level, soil);
+        var cropChunk = FrontierV3LoadedWorld.chunk(level, crop);
+        if (soilChunk == null || cropChunk == null) return null;
         return new FrontierV3ResourceFieldForeignChangeWitness.Blocks(
-                NbtUtils.writeBlockState(level.getBlockState(soil)),
-                NbtUtils.writeBlockState(level.getBlockState(crop)));
+                NbtUtils.writeBlockState(soilChunk.getBlockState(soil)),
+                NbtUtils.writeBlockState(cropChunk.getBlockState(crop)));
     }
 
     private static CommandResult submit(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,

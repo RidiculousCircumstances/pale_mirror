@@ -202,7 +202,7 @@ final class FrontierV3SceneExecutor {
     private static boolean allRestartRecoveryColumnsLoaded(ServerLevel level, FrontierWorldState state, SceneLease lease) {
         for (SceneMember member : lease.members()) {
             BodyPosition position = lease.memberBody(state.actorLocations(), member.actorId());
-            if (!level.hasChunkAt(new BlockPos(position.x(), position.y() - 1, position.z()))) return false;
+            if (!FrontierV3LoadedWorld.ready(level, new BlockPos(position.x(), position.y() - 1, position.z()))) return false;
         }
         return true;
     }
@@ -258,7 +258,7 @@ final class FrontierV3SceneExecutor {
         return materializeBodiesInReadyColumns(level, state, lease, FrontierV3StandingPosition::aboveExactFloor, fixtureBodies);
     }
     static boolean entityStorageReady(ServerLevel level, BlockPos position) {
-        return entityStorageReady(level.hasChunkAt(position), level.areEntitiesLoaded(ChunkPos.asLong(position)));
+        return entityStorageReady(FrontierV3LoadedWorld.ready(level, position), level.areEntitiesLoaded(ChunkPos.asLong(position)));
     }
     /** Pure admission gate retained for the storage-restoration negative regression. */
     static boolean entityStorageReady(boolean chunkLoaded, boolean entitiesLoaded) {

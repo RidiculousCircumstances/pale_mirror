@@ -20,7 +20,11 @@ public final class ResourceSiteHarvestKnownGeometry {
 
     /** The real terrain support, except for declared settlement ground and field farmland. */
     public static BoundedPedestrianApproach.SurveyedSurface surveyedSupports(FrontierWorldState state, ResourceSite site) {
-        BoundedPedestrianApproach.SurveyedSurface ground = KnownPedestrianGround.forSettlement(state, site.settlementId());
+        return surveyedSupports(state, site, KnownSiteGeometry.forState(state));
+    }
+    static BoundedPedestrianApproach.SurveyedSurface surveyedSupports(FrontierWorldState state, ResourceSite site,
+            KnownSiteGeometry.View sites) {
+        BoundedPedestrianApproach.SurveyedSurface ground = KnownPedestrianGround.forSettlement(state, site.settlementId(), sites);
         Map<Long, SurfaceAnchor> field = new HashMap<>();
         for (BlockPosition crop : site.cropSlots())
             field.put(column(crop.x(), crop.z()), new SurfaceAnchor(crop.offset(0, -1, 0)));

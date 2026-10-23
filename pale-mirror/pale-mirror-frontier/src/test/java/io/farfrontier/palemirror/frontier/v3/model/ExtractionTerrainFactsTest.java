@@ -160,11 +160,11 @@ class ExtractionTerrainFactsTest {
     @Test void remoteChangesDoNotRebuildSitesButLocalInvalidationsStillReachTheirProviderAndRecovery() {
         var before = FrontierWorldState.initial(bootstrap("frontier-v3-quarry-graybox-r7"));
         var sites = KnownSiteGeometry.forState(before);
-        var provider = new ExtractionKnownGeometry(); var priorVersion = provider.version(before);
+        var provider = new ExtractionKnownGeometry(); var priorVersion = provider.project(before);
         var remote = new ExtractionGeologyInvalidated(new BlockPosition(0, 65, 0), 1)
                 .apply(before, ExtractionGeologyInvalidated.OWNER);
         assertSame(sites, KnownSiteGeometry.forState(remote));
-        assertSame(priorVersion, provider.version(remote));
+        assertSame(priorVersion, provider.project(remote));
         var local = before.extractionSites().deposits().values().stream()
                 .flatMap(deposit -> deposit.site().layout().terrainSupports().keySet().stream())
                 .filter(position -> before.extractionSites().deposits().values().stream().noneMatch(deposit ->
@@ -172,7 +172,7 @@ class ExtractionTerrainFactsTest {
                         || deposit.site().layout().cells().stream().anyMatch(cell -> cell.source().equals(position))))
                 .findFirst().orElseThrow();
         var changed = new ExtractionGeologyInvalidated(local, 1).apply(remote, ExtractionGeologyInvalidated.OWNER);
-        assertNotSame(priorVersion, provider.version(changed), "local natural geometry changes must still reach the site owner");
+        assertNotSame(priorVersion, provider.project(changed), "local natural geometry changes must still reach the site owner");
         assertTrue(ExtractionGroundKnowledge.forState(changed).at(local).isEmpty());
         var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
         var recovered = codec.decode(codec.encode(changed));

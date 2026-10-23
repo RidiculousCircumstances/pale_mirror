@@ -65,7 +65,7 @@ final class FrontierV3ServerPhysicalInteractions {
                 || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE
                 || player.level() != level || !player.getMainHandItem().isEmpty()
                 || player.distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(position)) > 64.0
-                || !level.hasChunkAt(position)) return false;
+                || !FrontierV3LoadedWorld.ready(level, position)) return false;
         var state = runtime.decodedState().orElse(null);
         if (state == null) return false;
         var claim = FrontierV3GrayboxLedger.get(level).claim(position);

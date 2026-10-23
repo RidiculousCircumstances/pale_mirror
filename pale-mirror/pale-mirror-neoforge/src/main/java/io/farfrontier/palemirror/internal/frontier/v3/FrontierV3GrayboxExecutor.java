@@ -659,7 +659,7 @@ final class FrontierV3GrayboxExecutor {
     private static void retireStaleWorksiteStaging(ServerLevel level, FrontierV3GrayboxLedger ledger, Cursor cursor) {
         for (FrontierV3GrayboxLedger.ClaimAt staged : ledger.claimsWithSemanticPart(GrayboxSemanticPart.WORKSITE_STAGING.name())) {
             BlockPos position = staged.position();
-            if (cursor.retainsWorksiteStaging(position) || !level.hasChunkAt(position)) continue;
+            if (cursor.retainsWorksiteStaging(position) || !FrontierV3LoadedWorld.ready(level, position)) continue;
             FrontierV3GrayboxLedger.Claim claim = staged.claim();
             GrayboxMaterial stagedMaterial;
             try {

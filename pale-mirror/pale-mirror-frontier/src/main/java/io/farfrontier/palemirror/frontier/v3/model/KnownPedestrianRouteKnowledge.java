@@ -87,11 +87,16 @@ public final class KnownPedestrianRouteKnowledge {
     }
 
     /** Cross-settlement tasks declare their authorized ports, not their own obstacle rules. */
-    public static synchronized KnownPedestrianRouteKnowledge forJourney(FrontierWorldState state, List<SettlementPassage> passages) {
+    public static KnownPedestrianRouteKnowledge forJourney(FrontierWorldState state, List<SettlementPassage> passages) {
+        var sites = KnownSiteGeometry.forState(state);
+        return forJourneyPrepared(state, passages, sites);
+    }
+    private static synchronized KnownPedestrianRouteKnowledge forJourneyPrepared(FrontierWorldState state, List<SettlementPassage> passages,
+            KnownSiteGeometry.View sites) {
         passages = List.copyOf(passages);
         if (passages.isEmpty() || passages.size() > 8)
             throw new IllegalArgumentException("journey needs bounded declared facility passages");
-        refresh(state);
+        refresh(state, sites);
         JourneyKey key = new JourneyKey(passages);
         var cached = JOURNEYS.get(key);
         if (cached != null) return cached;
@@ -102,7 +107,7 @@ public final class KnownPedestrianRouteKnowledge {
         }
         var hard = obstacleIndex.withPassages(cleared);
         var result = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard,
-                accessSurvey(state, KnownPedestrianGround.forFrontier(state), cleared), key,
+                accessSurvey(state, KnownPedestrianGround.forFrontier(state, sites), cleared), key,
                 java.util.Map.of(), raisedDepartureSupports(state));
         if (JOURNEYS.size() >= 32) JOURNEYS.clear();
         JOURNEYS.put(key, result); return result;
@@ -167,18 +172,22 @@ public final class KnownPedestrianRouteKnowledge {
     }
 
     /** Reuse one immutable view while trying several legal destinations in one planning turn. */
-    public static synchronized KnownPedestrianRouteKnowledge forSettlement(FrontierWorldState state,
-                                                               SubjectId settlementId, List<Passage> passages) {
+    public static KnownPedestrianRouteKnowledge forSettlement(FrontierWorldState state, SubjectId settlementId, List<Passage> passages) {
+        var sites = KnownSiteGeometry.forState(state);
+        return forSettlementPrepared(state, settlementId, passages, sites);
+    }
+    private static synchronized KnownPedestrianRouteKnowledge forSettlementPrepared(FrontierWorldState state, SubjectId settlementId, List<Passage> passages,
+            KnownSiteGeometry.View sites) {
         Objects.requireNonNull(state, "pedestrian route state");
         passages = List.copyOf(Objects.requireNonNull(passages, "pedestrian route passages"));
-        refresh(state);
+        refresh(state, sites);
         ViewKey key = new ViewKey(settlementId, passages);
         KnownPedestrianRouteKnowledge prior = VIEWS.get(key);
         if (prior != null) return prior;
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), settlementId);
         Set<BlockPosition> hard = occupied(state, settlement, passages);
         KnownPedestrianRouteKnowledge result = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard,
-                accessSurvey(state, KnownPedestrianGround.forFrontier(state), passageClearance(settlement, passages)),
+                accessSurvey(state, KnownPedestrianGround.forFrontier(state, sites), passageClearance(settlement, passages)),
                 key, java.util.Map.of(), raisedDepartureSupports(state));
         if (VIEWS.size() >= 64) VIEWS.clear();
         VIEWS.put(key, result);
@@ -186,20 +195,24 @@ public final class KnownPedestrianRouteKnowledge {
     }
 
     /** Same obstacle policy for cross-settlement approaches; no actor is a hard wall. */
-    public static synchronized KnownPedestrianRouteKnowledge forFrontier(FrontierWorldState state) {
+    public static KnownPedestrianRouteKnowledge forFrontier(FrontierWorldState state) {
+        var sites = KnownSiteGeometry.forState(state);
+        return forFrontierPrepared(state, sites);
+    }
+    private static synchronized KnownPedestrianRouteKnowledge forFrontierPrepared(FrontierWorldState state,
+            KnownSiteGeometry.View sites) {
         Objects.requireNonNull(state, "frontier pedestrian route state");
-        refresh(state);
+        refresh(state, sites);
         if (frontierView == null) {
             var hard = obstacleIndex.complete();
             frontierView = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard,
-                    accessSurvey(state, KnownPedestrianGround.forFrontier(state), Set.of()),
+                    accessSurvey(state, KnownPedestrianGround.forFrontier(state, sites), Set.of()),
                     FrontierViewKey.FRONTIER, java.util.Map.of(), raisedDepartureSupports(state));
         }
         return frontierView;
     }
 
-    private static void refresh(FrontierWorldState state) {
-        var sites = KnownSiteGeometry.forState(state);
+    private static void refresh(FrontierWorldState state, KnownSiteGeometry.View sites) {
         var storage = KnownStorageGeometry.forState(state);
         var departures = KnownStorageGeometry.fixedSupports(state);
         if (viewBootstrap != state.bootstrap() || viewOrgans != state.hiveColony().addedOrgans()
@@ -493,15 +506,18 @@ public final class KnownPedestrianRouteKnowledge {
     }
 
     /** Typed field overlay on the same structural/physical knowledge and route operation. */
-    public static synchronized KnownPedestrianRouteKnowledge forField(FrontierWorldState state, ResourceSite site,
-                                                         ResourceFieldCycle cycle, ResourceStorageAccess port,
-                                                         SurfaceAnchor witnessedStart) {
+    public static KnownPedestrianRouteKnowledge forField(FrontierWorldState state, ResourceSite site, ResourceFieldCycle cycle, ResourceStorageAccess port, SurfaceAnchor witnessedStart) {
+        var sites = KnownSiteGeometry.forState(state);
+        return forFieldPrepared(state, site, cycle, port, witnessedStart, sites);
+    }
+    private static synchronized KnownPedestrianRouteKnowledge forFieldPrepared(FrontierWorldState state, ResourceSite site, ResourceFieldCycle cycle, ResourceStorageAccess port, SurfaceAnchor witnessedStart,
+            KnownSiteGeometry.View sites) {
         Objects.requireNonNull(state, "field route state");
         Objects.requireNonNull(site, "field route site");
         Objects.requireNonNull(cycle, "field route cycle");
         Objects.requireNonNull(port, "field route depot");
         Objects.requireNonNull(witnessedStart, "field route start");
-        refresh(state);
+        refresh(state, sites);
         if (!site.equals(state.resourceSite(site.id())) || cycle != state.resourceSites().cycle(site.id()))
             throw new IllegalArgumentException("field route overlay is not the current canonical field");
         if (!port.settlementId().equals(site.settlementId()))
@@ -522,7 +538,7 @@ public final class KnownPedestrianRouteKnowledge {
                         .overlay(Set.of(), obstructions);
                 var knowledge = new KnownPedestrianRouteKnowledge(state.bootstrap(), hard,
                         BoundedPedestrianApproach.excluding(BoundedPedestrianApproach.excluding(
-                                accessSurvey(state, ResourceSiteHarvestKnownGeometry.surveyedSupports(state, site),
+                                accessSurvey(state, ResourceSiteHarvestKnownGeometry.surveyedSupports(state, site, sites),
                                         passageClearance(settlement, passages)), Set.copyOf(site.irrigationSlots())),
                                 obstructions), new FieldScope(site.id(), port.endpoint()),
                         site.cropSlots().stream().collect(java.util.stream.Collectors.toMap(

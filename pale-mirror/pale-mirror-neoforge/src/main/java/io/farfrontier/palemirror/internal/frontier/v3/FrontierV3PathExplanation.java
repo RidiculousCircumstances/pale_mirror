@@ -21,7 +21,7 @@ final class FrontierV3PathExplanation {
         if (path.getNodeCount() > 0) result += ";end=" + path.getEndNode().asBlockPos().toShortString();
         for (int index = path.getNextNodeIndex(); index < path.getNodeCount(); index++) {
             var feet = path.getNode(index).asBlockPos();
-            if (!level.hasChunkAt(feet)) return result + ";rejectedNode=" + index + ";unloaded=" + feet.toShortString();
+            if (!FrontierV3LoadedWorld.ready(level, feet)) return result + ";rejectedNode=" + index + ";unloaded=" + feet.toShortString();
             var nodeSupport = feet.below();
             boolean contained = scope.permits(new BlockPosition(nodeSupport.getX(), nodeSupport.getY(), nodeSupport.getZ()));
             boolean dry = level.getFluidState(feet).isEmpty();

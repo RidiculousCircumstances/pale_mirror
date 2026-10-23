@@ -90,7 +90,7 @@ final class FrontierV3WorksiteProjection {
             var owner = FrontierV3WorksiteRegistry.owner(declared.key().family());
             if (declared.key().family() != owner.family()) throw new IllegalStateException("worksite owner returned foreign declaration");
             var position = position(declared);
-            if (!level.hasChunkAt(position)) continue;
+            if (!FrontierV3LoadedWorld.ready(level, position)) continue;
             var current = owner.current(state, declared); var prior = alignDeclaration(ledger, state, current);
             boolean generationOnly = prior == null;
             if (prior == null) prior = FrontierV3WorksiteEvidence.initial(level, state, current);
@@ -177,7 +177,7 @@ final class FrontierV3WorksiteProjection {
             writes.removeIf(write -> !currentPreparation(level, runtime.decodedState().orElseThrow(), ledger, write)
                     || !FrontierV3WorksiteRegistry.owner(write.declaration().key().family())
                         .beforeProjection(level, runtime, runtime.decodedState().orElseThrow(), write.declaration()));
-            var planned = writes.stream().filter(write -> level.hasChunkAt(position(write.declaration()))
+            var planned = writes.stream().filter(write -> FrontierV3LoadedWorld.ready(level, position(write.declaration()))
                             && !FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position(write.declaration())))
                                 .equals(write.declaration().block()))
                     .limit(Math.min(effects.remaining(), FrontierV3ManagedBlockWrites.MAX_PLANNED_WRITES))
@@ -192,7 +192,7 @@ final class FrontierV3WorksiteProjection {
             var remaining = new ArrayList<FrontierV3WorksiteBlockWitness>();
             for (var write : writes) {
                 var position = position(write.declaration());
-                if (!level.hasChunkAt(position)) continue;
+                if (!FrontierV3LoadedWorld.ready(level, position)) continue;
                 var actual = FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position));
                 if (!actual.equals(write.declaration().block())) {
                     if (!actual.equals(write.before())) {
@@ -223,7 +223,7 @@ final class FrontierV3WorksiteProjection {
     private static boolean currentPreparation(ServerLevel level, FrontierWorldState state,
             FrontierV3GrayboxLedger ledger, FrontierV3WorksiteBlockWitness write) {
         var position = position(write.declaration());
-        return level.hasChunkAt(position) && ledger.claim(position) == null
+        return FrontierV3LoadedWorld.ready(level, position) && ledger.claim(position) == null
                 && write.equals(ledger.worksite(position))
                 && FrontierV3WorksiteRegistry.point(state, position).filter(write.declaration()::equals).isPresent();
     }

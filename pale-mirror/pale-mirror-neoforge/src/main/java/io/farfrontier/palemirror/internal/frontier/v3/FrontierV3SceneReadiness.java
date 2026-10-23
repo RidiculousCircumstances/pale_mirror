@@ -53,7 +53,7 @@ final class FrontierV3SceneReadiness {
             if (lease.ambientHandoffActorIds().contains(member.actorId())) return "AWAITING_AMBIENT_HANDOFF";
             BodyPosition canonical = lease.memberBody(state.actorLocations(), member.actorId());
             BlockPos candidate = new BlockPos(canonical.x(), canonical.y() - 1, canonical.z());
-            if (!level.hasChunkAt(candidate)) return "UNLOADED";
+            if (!FrontierV3LoadedWorld.ready(level, candidate)) return "UNLOADED";
             if (FrontierV3SceneBehaviorRegistry.standingPositionProvider(lease).resolve(level, candidate) == null) {
                 // The closed behavior registry, rather than generic lifecycle code, names a
                 // real pass-through-station obstruction intelligibly for its owning process.
@@ -77,7 +77,7 @@ final class FrontierV3SceneReadiness {
         if (work == null) return "WORK_MISSING";
         var surface = FrontierSettlementServiceWorkSceneSupport.currentSurface(work).support();
         BlockPos position = new BlockPos(surface.x(), surface.y(), surface.z());
-        if (!level.hasChunkAt(position)) return "UNLOADED";
+        if (!FrontierV3LoadedWorld.ready(level, position)) return "UNLOADED";
         return level.players().stream().filter(player -> !player.isSpectator()).anyMatch(player -> player.blockPosition().closerThan(position, 96)) ? "CURRENT" : "NO_PLAYER";
     }
 

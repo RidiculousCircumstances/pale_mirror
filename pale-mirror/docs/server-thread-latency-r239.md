@@ -216,3 +216,45 @@ identity assertion. Two native block-extraction tests passed (r239g-extraction-g
 These do not establish live performance or complete end-to-end mine acceptance.
 Saved-body causal fences, native canonical WAL waits, global navigation geometry
 monitor contention and GC remain separately measured leads. The80ms target is open.
+
+
+## Completed geometry publication and nonblocking native reads
+
+33c8bf0f4 deployed/restarted02:30:39+05, same world; package/preflight/verifyPASS
+(r239g-*). Pilot a682f504-5eed-4609-8dc8-d1ff7b354104 completed both visits with
+zero retained conflicts. HOT debt532then320,166 after exit; no hidden debt claim.
+JFR r239g-startup-hot retained startup125.8ms, login222.6ms and transitions160.6ms.
+The former100ms eager worksite composition did not recur in that profile.
+GC pauses reached78.3ms; native WAL and field/actor physical journals still wait.
+
+KnownSiteGeometry previously invoked expensive projection while holding its
+world-wide monitor, inside the route-knowledge monitor. Extraction also shared
+mutable incremental builders across owner/worker snapshots. Completed results
+now cross threads through the existing exact-input bounded memo; each computing
+thread owns its mutable builder. The navigation lock receives an already-captured
+site view, and ground/field views consume that same capture. Atomic ground lineage
+and scope capture remain intact; no independent per-thread revision epoch.
+Fifty focused geometry/architecture checks passed, including concurrent old/new
+snapshot preparation, rollback, source invalidation and exact region reuse.
+
+The same live JFR proved forced chunk loading from ResourceFieldObservation.read
+via Level.getBlockState -> ServerChunkCache.getChunkBlocking/managedBlock and
+ChunkSerializer.read. hasChunkAt is ticket/holder availability, not completed
+chunk availability. ModLens compile snapshot ac5901effb63c8add2e7c49e51ec16803ded5b4fa4ce09c982f62b9aa90c1075:
+ServerChunkCache.hasChunk lines250-259 checks the holder's ticket level;
+getChunk lines140-169 may managedBlock; getChunkNow lines174-207 returns only
+an immediately available native chunk. Runtime stack confirms the affected mixin
+path rather than assuming compiled source alone describes runtime behavior.
+
+FrontierV3LoadedWorld centralizes nonloading readiness for active field, storage,
+scene, body and navigation callers. Field condition/foreign evidence reads capture
+the chunk and read it directly; no default AIR or force-load fallback. Existing
+unloaded-cell and ownership-negative native tests remain acceptance for the changed
+field boundary. Inactive hive/combat-specific callers are outside this cut.
+The80ms objective remains open; no quiet rolling window establishes completion.
+
+Candidate gates:50focused geometry/architecture tests,20nativefield-turns,43native
+local-navigation testsPASS (r239h-geometry-gates, r239h-field-gates, r239h-nav-gates).
+The expected unavailable-writer quarantine in the navigation negative fixture is
+not a live-server fault. Common readiness uses block coordinates explicitly;
+the former two-int hasChunkAt call was migrated to readyAtBlockColumn.

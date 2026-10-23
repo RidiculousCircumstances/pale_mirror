@@ -50,13 +50,13 @@ final class FrontierV3ServiceClearanceNavigation {
         var knownStations = KnownServiceExitNavigation.supportedExitStations(state, settlementId, depotId,
                 FrontierV3SurfaceObservation.observedBody(body).supportingSurface());
         var stations = knownStations.stream().filter(station ->
-                level.hasChunkAt(new net.minecraft.core.BlockPos(station.x(), station.y(), station.z()))
+                FrontierV3LoadedWorld.ready(level, new net.minecraft.core.BlockPos(station.x(), station.y(), station.z()))
                         && FrontierV3SemanticMovement.targetGeometryIsNavigable(level, body, station)).toList();
         if (stations.isEmpty()) {
             FrontierV3GoalNavigation.stop(body, actuation);
             return new FrontierV3GoalNavigation.Result(FrontierV3GoalNavigation.Status.BLOCKED,
                     "service_exit:no-available-supported-exit candidates=" + knownStations.stream()
-                    .map(station -> station.support() + ":" + (level.hasChunkAt(new net.minecraft.core.BlockPos(
+                    .map(station -> station.support() + ":" + (FrontierV3LoadedWorld.ready(level, new net.minecraft.core.BlockPos(
                             station.x(), station.y(), station.z()))
                             ? FrontierV3SemanticMovement.detail(FrontierV3SemanticMovement.target(level, body, station))
                             : "unloaded")).toList(),

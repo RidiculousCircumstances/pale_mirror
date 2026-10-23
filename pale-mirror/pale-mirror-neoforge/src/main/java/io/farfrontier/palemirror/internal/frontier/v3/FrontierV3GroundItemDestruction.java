@@ -91,7 +91,7 @@ public final class FrontierV3GroundItemDestruction {
                 continue;
             }
             var position = loss.source().position();
-            if (!level.hasChunkAt(new BlockPos(position.x(), position.y(), position.z()))) continue;
+            if (!FrontierV3LoadedWorld.ready(level, new BlockPos(position.x(), position.y(), position.z()))) continue;
             if (reconcile(level, runtime, loss)) return true;
         }
         return false;

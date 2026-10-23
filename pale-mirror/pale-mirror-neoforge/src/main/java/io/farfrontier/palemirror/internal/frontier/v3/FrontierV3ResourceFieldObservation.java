@@ -84,8 +84,10 @@ final class FrontierV3ResourceFieldObservation {
         Objects.requireNonNull(cell, "observed field cell");
         BlockPos soil = minecraft(cell.soil().support());
         BlockPos crop = minecraft(cell.crop());
-        if (!level.hasChunkAt(soil) || !level.hasChunkAt(crop)) return Unloaded.INSTANCE;
-        return classify(level.getBlockState(soil), level.getBlockState(crop), causationId);
+        var soilChunk = FrontierV3LoadedWorld.chunk(level, soil);
+        var cropChunk = FrontierV3LoadedWorld.chunk(level, crop);
+        if (soilChunk == null || cropChunk == null) return Unloaded.INSTANCE;
+        return classify(soilChunk.getBlockState(soil), cropChunk.getBlockState(crop), causationId);
     }
 
     static Reading classify(BlockState soil, BlockState crop, String causationId) {

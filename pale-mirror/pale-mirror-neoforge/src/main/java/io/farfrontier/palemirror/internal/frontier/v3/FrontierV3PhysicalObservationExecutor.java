@@ -46,7 +46,7 @@ final class FrontierV3PhysicalObservationExecutor {
             Optional<FrontierV3PhysicalObservationLedger.Ready> ready = ledger.nextReady(level.getGameTime());
             if (ready.isEmpty()) return;
             FrontierV3PhysicalObservationLedger.Ready value = ready.orElseThrow(); BlockPos position = value.candidate().blockPos();
-            if (!level.hasChunkAt(position)) return; // retained for an ordinary later loaded-chunk inspection
+            if (!FrontierV3LoadedWorld.ready(level, position)) return; // retained for an ordinary later loaded-chunk inspection
             if (level.getBlockState(position).equals(value.candidate().baseline(level.registryAccess()))) {
                 ledger.resolve(value); continue;
             }

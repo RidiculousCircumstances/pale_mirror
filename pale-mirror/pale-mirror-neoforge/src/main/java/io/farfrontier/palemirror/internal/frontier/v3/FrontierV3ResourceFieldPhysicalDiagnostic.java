@@ -89,8 +89,8 @@ final class FrontierV3ResourceFieldPhysicalDiagnostic {
         for (var witness : ledger.pendingFieldForeignChanges()) {
             if (!witness.siteId().equals(site)) continue;
             var cell = state.resourceSites().cycle(site).layout().requireCell(witness.cellId());
-            boolean loaded = level.hasChunkAt(new net.minecraft.core.BlockPos(cell.crop().x(), cell.crop().y(), cell.crop().z()))
-                    && level.hasChunkAt(new net.minecraft.core.BlockPos(cell.soil().support().x(), cell.soil().support().y(), cell.soil().support().z()));
+            boolean loaded = FrontierV3LoadedWorld.ready(level, new net.minecraft.core.BlockPos(cell.crop().x(), cell.crop().y(), cell.crop().z()))
+                    && FrontierV3LoadedWorld.ready(level, new net.minecraft.core.BlockPos(cell.soil().support().x(), cell.soil().support().y(), cell.soil().support().z()));
             rows.add("{\"family\":\"" + witness.mutationKey().family().name() + "\",\"cell\":" + witness.cellId().value()
                     + ",\"cause\":\"" + FrontierV3DiagnosticJson.quote(witness.hold().causationId())
                     + "\",\"observationVersion\":" + witness.observationVersion()

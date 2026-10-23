@@ -69,7 +69,7 @@ final class FrontierV3EquipmentIssueExecutor {
     static Readiness readinessDetail(ServerLevel level, FrontierWorldState state, PhysicalIntent intent) {
         Target target = target(state, intent);
         if (target == null) return new Readiness(FrontierV3PhysicalIntentScheduling.Readiness.INVALID, "CANONICAL_TARGET_INVALID");
-        if (!level.hasChunkAt(target.chestPosition())) return new Readiness(FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED, "STORAGE_CHUNK_UNLOADED");
+        if (!FrontierV3LoadedWorld.ready(level, target.chestPosition())) return new Readiness(FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED, "STORAGE_CHUNK_UNLOADED");
         Container chest = FrontierV3PhysicalContainer.loaded(level, state, target.sourceSlot().containerId())
                 .map(FrontierV3PhysicalContainer::inventory).orElse(null);
         if (chest == null) return new Readiness(FrontierV3PhysicalIntentScheduling.Readiness.DEFERRED, "OWNED_STORAGE_UNAVAILABLE");
@@ -91,7 +91,7 @@ final class FrontierV3EquipmentIssueExecutor {
                                 FrontierWorldState state, PhysicalIntent intent) {
         Target target = target(state, intent);
         if (target == null) { unknown(runtime, intent.id(), "canonical-conflict"); return; }
-        if (!level.hasChunkAt(target.chestPosition())) return;
+        if (!FrontierV3LoadedWorld.ready(level, target.chestPosition())) return;
         Container chest = FrontierV3PhysicalContainer.loaded(level, state, target.sourceSlot().containerId())
                 .map(FrontierV3PhysicalContainer::inventory).orElse(null);
         Villager resident = resident(level, state, target.residentId());

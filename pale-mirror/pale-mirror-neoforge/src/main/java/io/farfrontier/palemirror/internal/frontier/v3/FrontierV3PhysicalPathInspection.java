@@ -49,9 +49,10 @@ final class FrontierV3PhysicalPathInspection {
         return currentNode(level, proof.nodes()[proof.nodes().length - 1], proof.nodes().length - 1);
     }
     private static Optional<FrontierV3PhysicalPathPolicy.Rejection> currentNode(ServerLevel level, BlockPos feet, int index) {
-        if (!level.hasChunkAt(feet)) return Optional.of(new FrontierV3PhysicalPathPolicy.Rejection(
+        var chunk = FrontierV3LoadedWorld.chunk(level, feet);
+        if (chunk == null) return Optional.of(new FrontierV3PhysicalPathPolicy.Rejection(
                 FrontierV3GoalNavigation.BlockReason.TARGET_CHUNK_UNLOADED, "unloaded-node:" + index));
-        if (!level.getFluidState(feet).isEmpty()) return Optional.of(new FrontierV3PhysicalPathPolicy.Rejection(
+        if (!chunk.getFluidState(feet).isEmpty()) return Optional.of(new FrontierV3PhysicalPathPolicy.Rejection(
                 FrontierV3GoalNavigation.BlockReason.UNSUPPORTED_MEDIUM, "fluid-node:" + index));
         return Optional.empty();
     }

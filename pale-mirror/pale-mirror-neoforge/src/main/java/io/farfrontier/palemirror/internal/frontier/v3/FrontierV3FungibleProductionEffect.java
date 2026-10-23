@@ -30,7 +30,7 @@ final class FrontierV3FungibleProductionEffect {
         ContainerSurface surface = state.inventory().surfaces().get(layout.containerId());
         if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE) return;
         BlockPosition p = surface.position(); BlockPos position = new BlockPos(p.x(), p.y(), p.z());
-        if (!level.hasChunkAt(position)) return;
+        if (!FrontierV3LoadedWorld.ready(level, position)) return;
         ChestBlockEntity chest = FrontierV3ContainerSurfaceExecutor.activeChest(level, position, layout.containerId());
         if (chest == null) {
             if (intent.status() != PhysicalIntentStatus.UNKNOWN_AFTER_RESTART) {

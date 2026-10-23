@@ -7,7 +7,7 @@ final class FrontierV3OperationBlockEntityParticipant {
     private FrontierV3OperationBlockEntityParticipant() { }
     static FrontierV3MinecraftOperation.Participant current(BlockEntity entity) {
         if (entity.isRemoved() || !(entity.getLevel() instanceof net.minecraft.server.level.ServerLevel level)
-                || !level.hasChunkAt(entity.getBlockPos()) || level.getBlockEntity(entity.getBlockPos()) != entity)
+                || !FrontierV3LoadedWorld.ready(level, entity.getBlockPos()) || level.getBlockEntity(entity.getBlockPos()) != entity)
             throw new IllegalArgumentException("native operation requires the current naturally loaded block entity");
         var data = entity.getPersistentData();
         var identity = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.TERRAIN,

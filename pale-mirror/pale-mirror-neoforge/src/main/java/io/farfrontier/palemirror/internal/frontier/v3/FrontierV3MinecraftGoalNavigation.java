@@ -173,7 +173,7 @@ final class FrontierV3MinecraftGoalNavigation {
         // another work item or change the canonical task.
         for (SurfaceAnchor station : legalStations) {
             BlockPos feet = new BlockPos(station.x(), station.y() + 1, station.z());
-            if (!level.hasChunkAt(feet)) { unloaded = true; continue; }
+            if (!FrontierV3LoadedWorld.ready(level, feet)) { unloaded = true; continue; }
             var query = FrontierV3PedestrianTraffic.query(level, actor, feet, scope, permission.navigationProfile());
             Path candidate = query.path();
             var refused = FrontierV3PhysicalPathPolicy.reject(level, candidate, scope);
@@ -384,7 +384,7 @@ final class FrontierV3MinecraftGoalNavigation {
             return new Observation("WAITING_FOR_CROSSING", "bounded-native-crossing-wait", control.legalStations(), List.of());
         if (control != null && control.permission().current(actor)) {
             String alignment = "";
-            if (actor.level() instanceof ServerLevel level && level.hasChunkAt(new BlockPos(control.target().x(), control.target().y(), control.target().z()))
+            if (actor.level() instanceof ServerLevel level && FrontierV3LoadedWorld.ready(level, new BlockPos(control.target().x(), control.target().y(), control.target().z()))
                     && actor.position().distanceToSqr(FrontierV3SemanticMovement.point(level, control.target())) <= 9.0D)
                 alignment = ";endpoint-alignment=" + FrontierV3NativeStationAlignment.rejection(level, actor, control.target(),
                         control.progressPath(), control.scope()).map(Enum::name).orElse("CLEAR");
@@ -406,7 +406,7 @@ final class FrontierV3MinecraftGoalNavigation {
         if (actor.level() != level || !actor.isAlive() || actor.isRemoved()) return false;
         for (SurfaceAnchor station : stations) {
             BlockPos feet = new BlockPos(station.x(), station.y() + 1, station.z());
-            if (!scope.permits(station.support()) || !level.hasChunkAt(feet)) continue;
+            if (!scope.permits(station.support()) || !FrontierV3LoadedWorld.ready(level, feet)) continue;
             var path = FrontierV3PedestrianTraffic.query(level, actor, feet, scope, profile).path();
             if (FrontierV3PhysicalPathPolicy.reject(level, path, scope).isEmpty()
                     && FrontierV3PathClearance.path(level, actor, path)
@@ -485,7 +485,7 @@ final class FrontierV3MinecraftGoalNavigation {
         for (int index = path.getNextNodeIndex(); index < path.getNodeCount(); index++) {
             BlockPos feet = path.getNode(index).asBlockPos();
             BlockPos support = feet.below();
-            if (!level.hasChunkAt(feet) || !envelope.contains(new BlockPosition(
+            if (!FrontierV3LoadedWorld.ready(level, feet) || !envelope.contains(new BlockPosition(
                     support.getX(), support.getY(), support.getZ()))
                     || !level.getFluidState(feet).isEmpty()) return false;
         }

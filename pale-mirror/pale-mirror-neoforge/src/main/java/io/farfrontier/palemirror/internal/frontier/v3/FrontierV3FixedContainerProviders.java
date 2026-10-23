@@ -57,7 +57,7 @@ final class FrontierV3FixedContainerProviders {
         return require(record).accepts().test(state.getBlock());
     }
     static Optional<FrontierV3PhysicalContainer> inspect(ServerLevel level, BlockPos pos, ContainerRecord record) {
-        if (!level.hasChunkAt(pos)) return Optional.empty();
+        if (!FrontierV3LoadedWorld.ready(level, pos)) return Optional.empty();
         if (!acceptsBlock(record, level.getBlockState(pos))) return Optional.empty();
         var entity = level.getBlockEntity(pos);
         if (entity == null) return Optional.empty();
