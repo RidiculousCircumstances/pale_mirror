@@ -361,7 +361,6 @@ final class FrontierV3AmbientActorExecutor {
                         standingPositionProvider::resolve,
                         surface -> placementPermitted(state, lease, canonicalBody, surface), body -> {
                             if (body instanceof Zombie zombie) configureBioform(zombie, bioformProfile(state, actorId));
-                            hydrateExactHeldEquipment(body, state, actorId);
                             if (!FrontierV3StationWorkHandProjection.prepareAmbientNew(state, actorId, body)
                                     || !FrontierV3ResidentMealHandProjection.prepareAmbientNew(state, actorId, body)) return false;
                             FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, actorId, bioform);
@@ -390,12 +389,6 @@ final class FrontierV3AmbientActorExecutor {
                 return false;
             throw unavailable;
         }
-    }
-    private static void hydrateExactHeldEquipment(Mob body, FrontierWorldState state, SubjectId actorId) {
-        if (!body.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty()) return;
-        state.inventory().actorItems(actorId).stream()
-                .sorted(Comparator.comparing(io.farfrontier.palemirror.frontier.v3.model.ExactItemStack::id)).findFirst()
-                .ifPresent(item -> body.setItemSlot(EquipmentSlot.MAINHAND, FrontierV3ExactItemPresentation.materializedStack(item)));
     }
     static Result materialize(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                               FrontierWorldState state, SubjectId actorId, BodyPosition canonicalBody) {

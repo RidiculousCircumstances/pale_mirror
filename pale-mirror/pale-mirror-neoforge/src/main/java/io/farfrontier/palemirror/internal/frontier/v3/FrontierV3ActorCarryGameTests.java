@@ -26,6 +26,34 @@ public final class FrontierV3ActorCarryGameTests {
     private FrontierV3ActorCarryGameTests() { }
 
     @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
+    public static void commonBirthRetainsExactWornEquipmentAndRejectsForeignHand(GameTestHelper helper) {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:exact-admission"), 126L));
+        var resident = state.humanPopulation().residents().values().stream().findFirst().orElseThrow();
+        var depot = FrontierWorldState.depotId(resident.settlementId());
+        var stored = new ExactItemStack(new SubjectId("item:worn-field-tool"), resident.settlementId(),
+                "minecraft:stone_hoe", 1, new InventoryCustody.ContainerSlot(depot, state.inventory().firstFreeSlot(depot).orElseThrow()), new ItemCondition(131, 26));
+        state = state.withInventory(state.inventory().store(stored)
+                .moveObservedItem(stored.id(), stored.custody(), new InventoryCustody.Actor(resident.id())));
+        var item = state.inventory().items().get(stored.id());
+        var body = EntityType.VILLAGER.create(helper.getLevel());
+        if (body == null) throw new IllegalStateException("missing fixture body");
+        helper.assertTrue(FrontierV3ActorExactItemProjection.prepareNew(state, resident.id(), body)
+                        && FrontierV3ExactItemPresentation.exactMatch(body.getMainHandItem(), item),
+                "common private-body admission restores exact identity and condition without an ambient initializer");
+        helper.assertTrue(FrontierV3ActorExactItemProjection.prepareNew(state, resident.id(), body),
+                "a family-prepared matching exact item is accepted without replacement");
+        var saved = new CompoundTag(); body.saveWithoutId(saved);
+        var restored = EntityType.VILLAGER.create(helper.getLevel()); restored.load(saved);
+        helper.assertTrue(FrontierV3ExactItemPresentation.exactMatch(restored.getMainHandItem(), item),
+                "native save/reload retains the same worn item");
+        body.setItemSlot(EquipmentSlot.MAINHAND, Items.STICK.getDefaultInstance());
+        helper.assertTrue(!FrontierV3ActorExactItemProjection.prepareNew(state, resident.id(), body)
+                        && body.getMainHandItem().is(Items.STICK), "foreign contents are never overwritten");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-field-turns", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
     public static void pocketInteractionAndEntitySavePreserveBothEquipmentHands(GameTestHelper helper) {
         var position = helper.absolutePos(new BlockPos(2, 2, 2));
         helper.getLevel().setBlockAndUpdate(position, Blocks.CHEST.defaultBlockState());

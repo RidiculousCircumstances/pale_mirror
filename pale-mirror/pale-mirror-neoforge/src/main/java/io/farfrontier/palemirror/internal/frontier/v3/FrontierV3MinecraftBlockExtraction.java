@@ -49,7 +49,10 @@ final class FrontierV3MinecraftBlockExtraction implements BlockExtractionPort {
         requireStateless(source, block(definition.after()));
         ItemStack tool = worker.getMainHandItem();
         if (!suitable(tool, definition))
-            throw new IllegalArgumentException("extraction tool changed");
+            throw new IllegalArgumentException("extraction tool changed: operation=" + operationId
+                    + "; execution=" + execution + "; entity=" + worker.getUUID()
+                    + "; target=" + target + "; required=" + definition.toolRequirement()
+                    + "; actual=" + tool + "; damage=" + tool.getDamageValue() + "/" + tool.getMaxDamage());
         if (source.requiresCorrectToolForDrops() && !tool.isCorrectToolForDrops(source))
             throw new IllegalArgumentException("extraction tool cannot obtain this block's drops");
         var table = level.getServer().reloadableRegistries().getLootTable(ResourceKey.create(
