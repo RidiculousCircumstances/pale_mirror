@@ -17,7 +17,7 @@ class ResidentActivityCoordinatorTest {
         var job = fixture.job();
         var state = fixture.state();
         var goal = ResourceSiteHarvestGoal.current(state, job);
-        state = ResourceSiteHarvestProcessTest.inspectGoal(state, fixture.site(), job, fixture.lease().id());
+        state = HarvestObservationFixture.inspectGoal(state, fixture.site(), job, fixture.lease().id());
         state = ResourceSiteHarvestProcessTest.completeLabourHot(state, fixture.site(), fixture.lease().id());
         long hungryAt = 27_000;
         assertTrue(state.humanPopulation().nutrition(job.workerId()).accrueThrough(hungryAt,

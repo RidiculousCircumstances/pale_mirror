@@ -12,7 +12,7 @@ public record BakeryRetiredEffectObserved(ActorActuationId identity, BakeryHotEf
         Objects.requireNonNull(identity); Objects.requireNonNull(effect);
         if (identity.execution().activityKind() != ActorActivityKind.PRODUCTION
                 || !identity.execution().activityOwnerId().equals(effect.jobId())
-                || effect.phase() == BakeryWorkState.Phase.DELIVERED
+                || effect.phase() == StationWorkState.Phase.DELIVERED
                 || !applied && (!effect.remainingSource().isEmpty() || !effect.destination().isEmpty()))
             throw new IllegalArgumentException("retired bakery effect has foreign authority or an invalid outcome");
     }

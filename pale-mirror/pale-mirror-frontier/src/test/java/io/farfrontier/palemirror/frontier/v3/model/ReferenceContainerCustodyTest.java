@@ -36,9 +36,10 @@ class ReferenceContainerCustodyTest {
         SubjectId depot = FrontierWorldState.depotId(new SubjectId("settlement:1"));
         SubjectId account = new SubjectId("custody:container-1-depot");
         SubjectId wheat = new SubjectId("lot:bootstrap-1-wheat");
+        int wheatSlot = state.inventory().availableSlots(depot).getFirst();
         FungibleResourceLedger resources = state.inventory().fungibleResources().rebind(account, 1L, java.util.List.of(
                 new PhysicalStackBinding(new SubjectId("binding:reference-fingerprint-wheat"), account,
-                        new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, 0)), 1L,
+                        new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, wheatSlot)), 1L,
                         "minecraft:wheat", java.util.Map.of(wheat, 64), java.util.Map.of())));
         state = state.withInventory(state.inventory().withFungibleResources(resources));
         String expected = ReferenceContainerCustody.canonicalFingerprint(state, depot);
@@ -54,7 +55,7 @@ class ReferenceContainerCustodyTest {
                     : ReferenceContainerCustody.ObservedSlot.fungible(slot, binding.itemKind(), binding.quantity()));
         }
         assertEquals(expected, ReferenceContainerCustody.observedFingerprint(state, depot, matching));
-        matching.set(0, ReferenceContainerCustody.ObservedSlot.fungible(0, "minecraft:wheat", 63));
+        matching.set(wheatSlot, ReferenceContainerCustody.ObservedSlot.fungible(wheatSlot, "minecraft:wheat", 63));
         assertNotEquals(expected, ReferenceContainerCustody.observedFingerprint(state, depot, matching));
         FrontierWorldState fingerprintState = state;
         assertThrows(IllegalArgumentException.class, () -> ReferenceContainerCustody.observedFingerprint(fingerprintState, depot, matching.subList(1, matching.size())));
@@ -64,8 +65,9 @@ class ReferenceContainerCustodyTest {
     void coldFungibleLotUsesTheSameProjectedSlotsForFirstPhysicalWriteAndReferenceObservation() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:reference-cold-fungible"), 91L));
         SubjectId depot = FrontierWorldState.depotId(new SubjectId("settlement:1"));
+        int wheatSlot = state.inventory().availableSlots(depot).getFirst();
         assertEquals(new ReferenceContainerCustody.ProjectedFungibleSlot("minecraft:wheat", 64),
-                ReferenceContainerCustody.expectedFungibleSlot(state, depot, 0).orElseThrow());
+                ReferenceContainerCustody.expectedFungibleSlot(state, depot, wheatSlot).orElseThrow());
         ArrayList<ReferenceContainerCustody.ObservedSlot> matching = new ArrayList<>();
         for (int slot = 0; slot < state.inventory().containers().get(depot).slotCount(); slot++) {
             ExactItemStack item = state.inventory().itemAt(depot, slot).orElse(null);
@@ -75,7 +77,7 @@ class ReferenceContainerCustodyTest {
                     : ReferenceContainerCustody.ObservedSlot.fungible(slot, fungible.itemKind(), fungible.quantity()));
         }
         assertEquals(ReferenceContainerCustody.canonicalFingerprint(state, depot), ReferenceContainerCustody.observedFingerprint(state, depot, matching));
-        matching.set(0, ReferenceContainerCustody.ObservedSlot.fungible(0, "minecraft:wheat", 63));
+        matching.set(wheatSlot, ReferenceContainerCustody.ObservedSlot.fungible(wheatSlot, "minecraft:wheat", 63));
         assertNotEquals(ReferenceContainerCustody.canonicalFingerprint(state, depot), ReferenceContainerCustody.observedFingerprint(state, depot, matching));
     }
 
@@ -85,24 +87,25 @@ class ReferenceContainerCustodyTest {
         SubjectId depot = FrontierWorldState.depotId(new SubjectId("settlement:1"));
         SubjectId lotId = new SubjectId("lot:reference-fungible");
         SubjectId accountId = new SubjectId("custody:reference-fungible");
+        int breadSlot = baseline.inventory().availableSlots(depot).get(1);
         FungibleResourceLedger resources = FungibleResourceLedger.empty().issue(
                 new ResourceLot(lotId, new SubjectId("settlement:1"), "minecraft:bread", 10, "test", java.util.List.of()),
                 new CustodyAccount(accountId, new ResourceCustody.Container(depot), java.util.Map.of(lotId, 10), java.util.Map.of()))
                 .rebind(accountId, 1L, java.util.List.of(new PhysicalStackBinding(new SubjectId("binding:reference-fungible"), accountId,
-                        new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, 1)), 1L,
+                        new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, breadSlot)), 1L,
                         "minecraft:bread", java.util.Map.of(lotId, 10), java.util.Map.of())));
         FrontierWorldState state = baseline.withInventory(baseline.inventory().withFungibleResources(resources));
         ArrayList<ReferenceContainerCustody.ObservedSlot> matching = new ArrayList<>();
         for (int slot = 0; slot < state.inventory().containers().get(depot).slotCount(); slot++) {
             ExactItemStack item = state.inventory().itemAt(depot, slot).orElse(null);
             matching.add(item != null ? new ReferenceContainerCustody.ObservedSlot(slot, item.id().value(), item.itemKind(), item.count())
-                    : slot == 1 ? ReferenceContainerCustody.ObservedSlot.fungible(slot, "minecraft:bread", 10)
+                    : slot == breadSlot ? ReferenceContainerCustody.ObservedSlot.fungible(slot, "minecraft:bread", 10)
                     : ReferenceContainerCustody.ObservedSlot.empty(slot));
         }
 
         String expected = ReferenceContainerCustody.canonicalFingerprint(state, depot);
         assertEquals(expected, ReferenceContainerCustody.observedFingerprint(state, depot, matching));
-        matching.set(1, new ReferenceContainerCustody.ObservedSlot(1, "foreign:minecraft:bread", "minecraft:bread", 10));
+        matching.set(breadSlot, new ReferenceContainerCustody.ObservedSlot(breadSlot, "foreign:minecraft:bread", "minecraft:bread", 10));
         assertNotEquals(expected, ReferenceContainerCustody.observedFingerprint(state, depot, matching));
 
         var released = ProductionResourceCustody.release(state, accountId, 1L);
@@ -111,7 +114,7 @@ class ReferenceContainerCustodyTest {
                 "closing physical authority preserves the confirmed sparse slot layout");
         assertTrue(ReferenceContainerCustody.expectedFungibleSlot(released, depot, 0).isEmpty());
         assertEquals(new ReferenceContainerCustody.ProjectedFungibleSlot("minecraft:bread", 10),
-                ReferenceContainerCustody.expectedFungibleSlot(released, depot, 1).orElseThrow());
+                ReferenceContainerCustody.expectedFungibleSlot(released, depot, breadSlot).orElseThrow());
         var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
         var restored = codec.decode(codec.encode(released));
         assertEquals(expected, ReferenceContainerCustody.canonicalFingerprint(restored, depot),

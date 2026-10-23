@@ -15,15 +15,20 @@ public final class ProductionBenchMenu extends AbstractContainerMenu {
     private final Container inventory;
     private final Player player;
     private final ContainerData data;
+    private int recipeChoice;
     public ProductionBenchMenu(int id, Inventory player) {
-        this(id, player, new SimpleContainer(ProductionBenchBlockEntity.SLOT_COUNT), new SimpleContainerData(4));
+        this(id, player, new SimpleContainer(ProductionBenchBlockEntity.SLOT_COUNT), new SimpleContainerData(6), PaleMirrorProductionStations.Layout.STANDARD);
+    }
+    public static ProductionBenchMenu forgeClient(int id, Inventory player) {
+        return new ProductionBenchMenu(id, player, new SimpleContainer(4), new SimpleContainerData(6), PaleMirrorProductionStations.Layout.MAINTENANCE);
     }
     public ProductionBenchMenu(int id, Inventory player, Container inventory) {
-        this(id, player, inventory, new SimpleContainerData(4));
+        this(id, player, inventory, new SimpleContainerData(6), inventory instanceof ProductionBenchBlockEntity bench
+                ? bench.layout() : PaleMirrorProductionStations.Layout.STANDARD);
     }
-    private ProductionBenchMenu(int id, Inventory player, Container inventory, ContainerData data) {
-        super(PaleMirrorProductionStations.BENCH_MENU.get(), id);
-        checkContainerSize(inventory, ProductionBenchBlockEntity.SLOT_COUNT);
+    private ProductionBenchMenu(int id, Inventory player, Container inventory, ContainerData data, PaleMirrorProductionStations.Layout layout) {
+        super(layout.menu(), id);
+        checkContainerSize(inventory, layout.slots());
         this.inventory = inventory;
         this.player = player.player; this.data = data; addDataSlots(data);
         addSlot(new Slot(inventory, ProductionBenchBlockEntity.INPUT, 56, 17) {
@@ -35,11 +40,19 @@ public final class ProductionBenchMenu extends AbstractContainerMenu {
         addSlot(new Slot(inventory, ProductionBenchBlockEntity.FUEL, 56, 53) {
             @Override public boolean mayPlace(ItemStack stack) { return accepts(ProductionBenchBlockEntity.FUEL, stack); }
         });
+        if (layout == PaleMirrorProductionStations.Layout.MAINTENANCE)
+            addSlot(new Slot(inventory, ProductionBenchBlockEntity.MAINTENANCE_TARGET, 30, 53) {
+                @Override public boolean mayPlace(ItemStack stack) { return accepts(ProductionBenchBlockEntity.MAINTENANCE_TARGET, stack); }
+            });
         for (int row = 0; row < 3; row++) for (int col = 0; col < 9; col++)
             addSlot(new Slot(player, 9 + row * 9 + col, 8 + col * 18, 84 + row * 18));
         for (int col = 0; col < 9; col++) addSlot(new Slot(player, col, 8 + col * 18, 142));
     }
     public Container inventory() { return inventory; }
+    public boolean hasMaintenancePort() { return inventory.getContainerSize() > ProductionBenchBlockEntity.MAINTENANCE_TARGET; }
+    public int recipeChoice() { return recipeChoice; }
+    public int productRegistryId() { return data.get(4); }
+    public boolean repairRecipe() { return data.get(5) != 0; }
     public long storedHeat() { return (data.get(0) & 0xffffL) | ((data.get(1) & 0xffffL) << 16); }
     public int progressPermille() { return data.get(2); }
     public int status() { return data.get(3); }
@@ -53,10 +66,14 @@ public final class ProductionBenchMenu extends AbstractContainerMenu {
             var view = ProductionBenchInteraction.access().view(bench, player);
             data.set(0, (int) view.storedHeat() & 0xffff); data.set(1, (int)(view.storedHeat() >>> 16) & 0xffff);
             data.set(2, view.progressPermille()); data.set(3, view.status());
+            data.set(4, view.productRegistryId()); data.set(5, view.repair() ? 1 : 0);
         }
         super.broadcastChanges();
     }
     @Override public boolean clickMenuButton(Player player, int button) {
+        if (button == 1 && stillValid(player) && inventory instanceof ProductionBenchBlockEntity) {
+            recipeChoice = Math.addExact(recipeChoice, 1); broadcastChanges(); return true;
+        }
         return button == 0 && inventory instanceof ProductionBenchBlockEntity bench && stillValid(player)
                 && ProductionBenchInteraction.access().startOrResume(bench, player);
     }
@@ -71,12 +88,13 @@ public final class ProductionBenchMenu extends AbstractContainerMenu {
         Slot slot = slots.get(index);
         if (!slot.hasItem()) return ItemStack.EMPTY;
         ItemStack stack = slot.getItem(), before = stack.copy();
-        if (index < ProductionBenchBlockEntity.SLOT_COUNT) {
-            if (!moveItemStackTo(stack, ProductionBenchBlockEntity.SLOT_COUNT, slots.size(), true)) return ItemStack.EMPTY;
+        if (index < inventory.getContainerSize()) {
+            if (!moveItemStackTo(stack, inventory.getContainerSize(), slots.size(), true)) return ItemStack.EMPTY;
         } else {
-            boolean input = accepts(ProductionBenchBlockEntity.INPUT, stack), fuel = accepts(ProductionBenchBlockEntity.FUEL, stack);
-            if (input == fuel) return ItemStack.EMPTY;
-            int port = input ? ProductionBenchBlockEntity.INPUT : ProductionBenchBlockEntity.FUEL;
+            var ports = java.util.stream.IntStream.range(0, inventory.getContainerSize())
+                    .filter(port -> port != ProductionBenchBlockEntity.OUTPUT && accepts(port, stack)).toArray();
+            if (ports.length != 1) return ItemStack.EMPTY;
+            int port = ports[0];
             if (!moveItemStackTo(stack, port, port + 1, false)) return ItemStack.EMPTY;
         }
         if (stack.isEmpty()) slot.setByPlayer(ItemStack.EMPTY); else slot.setChanged();

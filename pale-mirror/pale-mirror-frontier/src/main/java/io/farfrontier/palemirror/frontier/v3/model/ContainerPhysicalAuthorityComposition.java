@@ -8,8 +8,9 @@ import java.util.function.BiPredicate;
 public final class ContainerPhysicalAuthorityComposition {
     private static final List<BiPredicate<FrontierWorldState, SubjectId>> OWNERS = List.of(
             ProductionStationEnergy::pendingForContainer, ProductionStationTransformation::pendingForContainer,
-            BakeryPhysicalAuthority::pendingForContainer, ResidentMealPhysicalAuthority::pendingForContainer,
+            StationWorkPhysicalAuthority::pendingForContainer, ResidentMealPhysicalAuthority::pendingForContainer,
             ShipmentPhysicalAuthority::pendingForContainer, ExtractionPhysicalAuthority::pendingForContainer,
+            FieldEquipment::pendingForContainer,
             MedicalPhysicalAuthority::pendingForContainer,
             EquipmentPhysicalAuthority::pendingForContainer,
             io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority::pendingForContainer);

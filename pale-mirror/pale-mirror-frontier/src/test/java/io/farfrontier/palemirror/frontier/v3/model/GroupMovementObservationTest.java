@@ -14,7 +14,19 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class GroupMovementObservationTest {
     private static FrontierWorldState travelling() {
-        var config = FrontierV3FixtureCatalog.autonomousGoodsConfiguration(new WorldId("frontier:mixed-group-position"), 41);
+        var world = new WorldId("frontier:mixed-group-position");
+        var initial = ConsolidatedTradeFixture.initial(world, 20260918065L, true);
+        var seller = initial.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
+        var buyer = seller.known().getFirst().party().id();
+        var base = FrontierWorldRuntimeDefinition.configuration(world, 20260918065L);
+        var schedules = new ArrayList<ScheduledAction>();
+        schedules.add(io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(seller.party().id(), 400));
+        schedules.add(io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(buyer, 401));
+        for (var person : initial.humanPopulation().residents().values()) schedules.add(
+                io.farfrontier.palemirror.frontier.v3.process.ResidentActivityProcess.review(person.id(), 48000));
+        var config = new FrontierEngineConfiguration<>(world, initial, SimInstant.ZERO, base.commandPlanner(),
+                base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(initial.bootstrap()), base.projectionMapper(), base.limits(),
+                schedules, base.transactionCommitter());
         var engine = FrontierEngines.createCanonicalStateAccess(config);
         for (int boundary = 0; boundary < 1000; boundary++) {
             var state = engine.canonicalState().state();
@@ -59,7 +71,7 @@ class GroupMovementObservationTest {
         // a direct reducer call: the retained progress action moves to leg arrival.
         var base = FrontierWorldRuntimeDefinition.configuration(before.bootstrap().worldId(), 41);
         var configured = new FrontierEngineConfiguration<>(before.bootstrap().worldId(), before, new SimInstant(tick),
-                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(),
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(before.bootstrap()), base.projectionMapper(),
                 base.limits(), List.of(ActorMovementProcess.progress(movement, tick + 20)), base.transactionCommitter());
         var engine = FrontierEngines.createCanonicalStateAccess(configured);
         var commandId = new CommandId("command:mixed-provider-route-start");

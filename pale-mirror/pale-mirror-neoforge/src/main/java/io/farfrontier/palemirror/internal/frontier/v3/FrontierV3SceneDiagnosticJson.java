@@ -88,15 +88,15 @@ final class FrontierV3SceneDiagnosticJson {
 
     private static String productionTraversal(FrontierWorldState state, ProductionJob job) {
         if (job == null) return ",\"productionStage\":\"\",\"productionCursor\":-1,\"productionCurrent\":null,\"productionNext\":null,\"productionNextBody\":null,\"productionFutureBody\":null";
-        if (job.bakeryWork().isPresent()) {
-            var work = job.bakeryWork().orElseThrow();
-            var goal = io.farfrontier.palemirror.frontier.v3.model.BakeryWorkGoal.current(state, job);
+        if (job.stationWork().isPresent()) {
+            var work = job.stationWork().orElseThrow();
+            var goal = io.farfrontier.palemirror.frontier.v3.model.StationWorkGoal.current(state, job);
             return ",\"productionStage\":\"" + work.phase() + "\",\"productionCursor\":-1"
                     + ",\"productionCurrent\":" + FrontierV3DiagnosticJson.position(goal.station().support())
                     + ",\"productionNext\":null,\"productionNextBody\":"
-                    + (work.phase() == io.farfrontier.palemirror.frontier.v3.model.BakeryWorkState.Phase.DELIVERED
+                    + (work.phase() == io.farfrontier.palemirror.frontier.v3.model.StationWorkState.Phase.DELIVERED
                         ? "null" : FrontierV3DiagnosticJson.position(goal.station().standingBody()))
-                    + ",\"productionFutureBody\":null,\"bakeryLabourPermille\":" + io.farfrontier.palemirror.frontier.v3.model.BakeryLabour.permille(state, job)
+                    + ",\"productionFutureBody\":null,\"bakeryLabourPermille\":" + io.farfrontier.palemirror.frontier.v3.model.StationWorkLabour.permille(state, job)
                     + ",\"bakeryPendingPhysicalEffect\":" + work.pendingPhysicalStep().isPresent();
         }
         var corridor = job.workTraversal().linearCorridorSurfaces();

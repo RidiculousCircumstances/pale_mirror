@@ -594,7 +594,9 @@ final class FrontierV3DiagnosticJson {
         SubjectId subject = subject(id).orElse(null); ExactItemStack item = subject == null ? null : state.inventory().items().get(subject);
         if (item == null) return unavailable("item", id, checkpoint, "not_found");
         return base("item", id, checkpoint) + ",\"status\":\"ok\",\"owner\":\"" + quote(item.economicOwnerId().value())
-                + "\",\"itemKind\":\"" + quote(item.itemKind()) + "\",\"count\":" + item.count() + ",\"custody\":" + custody(item.custody()) + "}";
+                + "\",\"itemKind\":\"" + quote(item.itemKind()) + "\",\"count\":" + item.count()
+                + ",\"condition\":{\"maxDamage\":" + item.condition().maximumDamage() + ",\"damage\":" + item.condition().damage()
+                + "},\"custody\":" + custody(item.custody()) + "}";
     }
 
     /**
@@ -731,7 +733,7 @@ final class FrontierV3DiagnosticJson {
         SubjectId settlement = new SubjectId("settlement:1");
         SubjectId hive = state.bootstrap().hive().id();
         java.util.List<StrategicTask> tasks = state.strategicPlans().tasks().values().stream()
-                .filter(task -> (task.kind() == StrategicTaskKind.PRODUCE_BREAD && task.ownerId().equals(settlement))
+                .filter(task -> (task.kind() == StrategicTaskKind.PRODUCE_AT_STATION && task.ownerId().equals(settlement))
                         || (task.kind() == StrategicTaskKind.GROW_HIVE_ORGANISM && task.ownerId().equals(hive)))
                 .sorted(java.util.Comparator.comparing(StrategicTask::id)).toList();
         java.util.Set<SubjectId> taskIds = tasks.stream().map(StrategicTask::id).collect(java.util.stream.Collectors.toSet());

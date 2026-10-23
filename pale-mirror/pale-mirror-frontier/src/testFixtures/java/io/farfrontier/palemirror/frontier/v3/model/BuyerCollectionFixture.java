@@ -26,9 +26,9 @@ public final class BuyerCollectionFixture {
         var export = new SubjectId("lot:collection-export-stone");
         var exportStage = new SubjectId("custody:collection-export-stone");
         var source = FungibleResourceCustodySupport.accountAtContainer(state, FrontierWorldState.depotId(seller.settlementId())).orElseThrow();
-        // Keep the real 27-slot chest capacity: replace four surplus bread stacks
-        // with eight stone stacks, not an over-capacity or special test container.
-        ledger = ledger.destroy(source.id(), Map.of(new SubjectId("lot:trip-test/minecraft-bread"), 256), Map.of());
+        // Keep the real 27-slot chest capacity: replace six surplus bread stacks
+        // with eight stone stacks while retaining the initial individual equipment, not an over-capacity or special test container.
+        ledger = ledger.destroy(source.id(), Map.of(new SubjectId("lot:trip-test/minecraft-bread"), 384), Map.of());
         ledger = ledger.issue(new ResourceLot(export, seller.party().id(), "minecraft:cobblestone", 512,
                 "fixture:finite-export-stock", List.of()), new CustodyAccount(exportStage, new ResourceCustody.Container(FrontierWorldState.depotId(seller.settlementId())), Map.of(export, 512), Map.of()));
         ledger = ledger.transfer(exportStage, source.id(), Map.of(export, 512), Map.of());

@@ -13,7 +13,7 @@ final class GoodsDeliveryPricing {
      * same reservation then covers partial acceptance, loss and cancellation. */
     static Optional<Reserved> reserve(FrontierWorldState initial, List<ProposedEvent> reservations,
                                       List<GoodsTripAssembly.Parcel> parcels, DeliveryCost cost, long now) {
-        var total = new FixedScalar(parcels.stream().mapToLong(p -> p.contract().goodsUnitPrice().multiply(p.claim().quantity()).raw())
+        var total = new FixedScalar(parcels.stream().mapToLong(p -> p.contract().goodsUnitPrice().multiply(p.quantity()).raw())
                 .reduce(0, Math::addExact));
         var events = new ArrayList<ProposedEvent>(); var priced = new ArrayList<GoodsTripAssembly.Parcel>();
         var state = initial;
@@ -36,7 +36,7 @@ final class GoodsDeliveryPricing {
             var event = new GoodsTradeReserved(contract, originalEvent.allocations());
             state = GoodsTradeStateSupport.reserve(state, contract.seller().id(), contract, event.allocations(), now);
             events.add(new ProposedEvent(contract.seller().id(), event));
-            priced.add(new GoodsTripAssembly.Parcel(contract, parcel.claim(), parcel.sourceAccount()));
+            priced.add(new GoodsTripAssembly.Parcel(contract, parcel.stock()));
         }
         return Optional.of(new Reserved(state, List.copyOf(events), List.copyOf(priced)));
     }

@@ -36,7 +36,7 @@ final class FrontierV3ProductionStationAdoption {
             var containerId = new SubjectId("container:installed-" + UUID.randomUUID());
             var spec = new ProductionStationSpec(new SubjectId("station:installed-" + UUID.randomUUID()), facility.id(), containerId,
                     placement.equipmentType(), placement.capability(), placement.workerStation(), placement.socketSurface(),
-                    ProductionBenchBlockEntity.INPUT, ProductionBenchBlockEntity.OUTPUT, ProductionBenchBlockEntity.FUEL);
+                    ProductionBenchBlockEntity.INPUT, ProductionBenchBlockEntity.OUTPUT, ProductionBenchBlockEntity.FUEL, placement.maintenanceSlot());
             var slots = new HashMap<Integer, FungibleContainerLayout.Stack>(); var lots = new ArrayList<ResourceLot>(); boolean admissible = true;
             for (int slot = 0; slot < bench.getContainerSize(); slot++) {
                 var item = bench.getItem(slot); if (item.isEmpty()) continue;
@@ -52,7 +52,7 @@ final class FrontierV3ProductionStationAdoption {
                 lots.add(new ResourceLot(new SubjectId("lot:installed-" + UUID.randomUUID()), home.id(), kind, item.getCount(), "observed-installed-equipment", List.of()));
             }
             if (!admissible) continue;
-            var record = new ContainerRecord(containerId, home.id(), 3, ContainerPurpose.PRODUCTION_STATION, Optional.of(spec), Optional.empty(),
+            var record = new ContainerRecord(containerId, home.id(), spec.inventorySize(), ContainerPurpose.PRODUCTION_STATION, Optional.of(spec), Optional.empty(),
                     new FungibleContainerLayout(slots));
             if (FrontierV3CommandSubmission.submit(runtime, "station-install", spec.id().value(), new ProductionStationInstalled(record, p, lots))
                     instanceof CommandResult.Accepted) {

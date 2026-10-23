@@ -39,7 +39,7 @@ final class ShipmentExecutionCapability implements ActorActivityCapability {
         validateReference(state, execution);
         var shipment = state.shipments().shipments().get(execution.activityOwnerId());
         if (shipment.pendingPhysicalStep().isPresent()
-                || state.inventory().fungibleResources().bindings().values().stream()
+                || shipment.cargo() instanceof ShipmentCargo.Fungible && state.inventory().fungibleResources().bindings().values().stream()
                     .anyMatch(binding -> binding.accountId().equals(shipment.carriedAccountId())))
             throw new IllegalArgumentException("shipment presentation retains an unsettled hand/effect");
     }

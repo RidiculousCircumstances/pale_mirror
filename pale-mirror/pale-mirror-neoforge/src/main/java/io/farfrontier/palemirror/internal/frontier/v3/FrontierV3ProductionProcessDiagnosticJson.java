@@ -4,14 +4,14 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView;
 import io.farfrontier.palemirror.frontier.v3.api.PhysicalIntent;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.ActorLocation;
-import io.farfrontier.palemirror.frontier.v3.model.BakeryWorkGoal;
+import io.farfrontier.palemirror.frontier.v3.model.StationWorkGoal;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierSceneLabels;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.ProductionJob;
 import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus;
-import io.farfrontier.palemirror.frontier.v3.process.BakeryProcess;
+import io.farfrontier.palemirror.frontier.v3.process.StationWorkProcess;
 
 /** Read-only bounded production-process diagnostic; canonical ownership remains in Frontier state. */
 final class FrontierV3ProductionProcessDiagnosticJson {
@@ -32,30 +32,30 @@ final class FrontierV3ProductionProcessDiagnosticJson {
                 + "\",\"revision\":" + lease.revision() + ",\"members\":" + lease.members().size() + ",\"body\":"
                 + (lease.memberBody(state.actorLocations(), job.workerId()) == null ? "null" : FrontierV3DiagnosticJson.position(lease.memberBody(state.actorLocations(), job.workerId()))) + "}";
         int cursorLength = job.workTraversal().linearCorridorSurfaces().size();
-        String progress = job.bakeryWork().map(work -> {
-            BakeryWorkGoal goal = BakeryWorkGoal.current(state, job);
+        String progress = job.stationWork().map(work -> {
+            StationWorkGoal goal = StationWorkGoal.current(state, job);
             var station = state.inventory().containers().values().stream().flatMap(container -> container.productionStation().stream())
                     .filter(value -> value.id().equals(work.stationId())).findFirst().orElseThrow();
             var stationScope = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(station.containerId()));
             var stationReplica = state.replicaCustody().replicas().get(station.containerId());
-            var storageId = io.farfrontier.palemirror.frontier.v3.model.BakeryStorage.current(job);
+            var storageId = io.farfrontier.palemirror.frontier.v3.model.StationWorkStorage.current(job);
             var storageScope = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(storageId));
             long stationBindings = state.inventory().fungibleResources().bindings().values().stream()
                     .filter(value -> value.accountId().equals(work.stationAccountId())).count();
             return ",\"cursor\":null,\"goal\":{\"kind\":\"" + work.phase()
-                    + "\",\"station\":" + (work.phase() == io.farfrontier.palemirror.frontier.v3.model.BakeryWorkState.Phase.DELIVERED
+                    + "\",\"station\":" + (work.phase() == io.farfrontier.palemirror.frontier.v3.model.StationWorkState.Phase.DELIVERED
                         ? "null" : FrontierV3DiagnosticJson.position(goal.station().standingBody()))
-                    + ",\"clearServiceAccess\":" + (work.phase() == io.farfrontier.palemirror.frontier.v3.model.BakeryWorkState.Phase.DELIVERED)
+                    + ",\"clearServiceAccess\":" + (work.phase() == io.farfrontier.palemirror.frontier.v3.model.StationWorkState.Phase.DELIVERED)
                     + "},\"result\":{\"workStage\":\"" + work.phase()
-                    + "\",\"labourPermille\":" + io.farfrontier.palemirror.frontier.v3.model.BakeryLabour.permille(state, job)
-                    + ",\"labour\":" + io.farfrontier.palemirror.frontier.v3.model.BakeryLabour.progress(state, job).map(progressValue ->
+                    + "\",\"labourPermille\":" + io.farfrontier.palemirror.frontier.v3.model.StationWorkLabour.permille(state, job)
+                    + ",\"labour\":" + io.farfrontier.palemirror.frontier.v3.model.StationWorkLabour.progress(state, job).map(progressValue ->
                         "{\"requiredMilliWork\":" + progressValue.requiredMilliWork()
                         + ",\"completedMilliWork\":" + progressValue.completedMilliWork()
                         + ",\"elapsedCompletedMilliWork\":" + progressValue.completedAt(checkpoint.instant().ticks())
                         + ",\"evaluatedAtTick\":" + progressValue.evaluatedAtTick()
                         + ",\"ratePermille\":" + progressValue.ratePermille()
                         + ",\"activeUntilTick\":" + progressValue.activeUntilTick() + "}").orElse("null")
-                    + ",\"terminalEffectEligible\":" + (work.phase() == io.farfrontier.palemirror.frontier.v3.model.BakeryWorkState.Phase.DELIVERED)
+                    + ",\"terminalEffectEligible\":" + (work.phase() == io.farfrontier.palemirror.frontier.v3.model.StationWorkState.Phase.DELIVERED)
                     + ",\"pendingPhysicalEffect\":" + work.pendingPhysicalStep().isPresent()
                     + ",\"localBlock\":" + work.block().map(block -> "{\"reason\":\"" + block.reason()
                     + "\",\"scope\":\"" + FrontierV3DiagnosticJson.quote(block.scopeId().value())
@@ -70,11 +70,11 @@ final class FrontierV3ProductionProcessDiagnosticJson {
                     + ",\"sourceStorageId\":\"" + FrontierV3DiagnosticJson.quote(work.sourceContainerId().value()) + "\""
                     + ",\"destinationStorageId\":\"" + FrontierV3DiagnosticJson.quote(job.rights().destinationContainerId().value()) + "\""
                     + ",\"storageCustodyStatus\":\"" + (storageScope == null ? "NONE" : storageScope.status()) + "\""
-                    + ",\"coldBlocker\":\"" + BakeryProcess.coldBlocker(state, job).orElse("NONE") + "\""
+                    + ",\"coldBlocker\":\"" + StationWorkProcess.coldBlocker(state, job).orElse("NONE") + "\""
                     + ",\"resumeBlocker\":\"" + io.farfrontier.palemirror.frontier.v3.model.ProductionServiceAccess.resumeBlocker(state, job)
                         .map(io.farfrontier.palemirror.frontier.v3.model.ProductionServiceAccess.ResumeWait::label).orElse("NONE") + "\""
                     + ",\"coldRouteBlocker\":\"" + FrontierV3DiagnosticJson.quote(
-                    BakeryProcess.coldRouteBlocker(state, job).orElse("NONE")) + "\""
+                    StationWorkProcess.coldRouteBlocker(state, job).orElse("NONE")) + "\""
                     + ",\"actorBody\":" + (actor == null ? "null" : FrontierV3DiagnosticJson.position(actor.body()));
         }).orElseGet(() -> ",\"cursor\":{\"index\":" + job.traversalCursor() + ",\"length\":" + cursorLength + ",\"retainedBody\":"
                 + FrontierV3DiagnosticJson.position(job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody())

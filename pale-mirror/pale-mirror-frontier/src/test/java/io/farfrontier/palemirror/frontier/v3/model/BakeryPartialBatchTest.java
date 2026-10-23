@@ -34,16 +34,16 @@ class BakeryPartialBatchTest {
         var excluded = new ResourceStoragePolicy(original.endpoint(), new ResourceStorageFilter(false, Set.of(), Map.of()), 0, original.role());
         state = new ResourceStoragePolicyChanged(depot, original, excluded).apply(state, home.id());
         var task = state.strategicPlans().tasks().values().iterator().next(); var started = start(state, task); var job = started.job();
-        assertEquals(source, BakeryStorage.source(job)); assertEquals(destination, BakeryStorage.destination(job));
+        assertEquals(source, StationWorkStorage.source(job)); assertEquals(destination, StationWorkStorage.destination(job));
         state = StrategicObjectiveProcess.reduceTaskTransition(state, home.id(), new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
         state = ProductionProcess.reduceStarted(state, home.id(), started);
-        assertEquals(24L, state.pendingContainerInbound(destination).get("minecraft:bread"), "remote output capacity is retained before pickup");
+        assertEquals(24L, state.pendingContainerInbound(destination).quantities().get("minecraft:bread"), "remote output capacity is retained before pickup");
         var codec = new FrontierWorldStateCodec(); var seen = EnumSet.noneOf(BakeryColdStep.Action.class);
         var expectedDestination = destination; boolean replaced = false;
         for (long due = 300, steps = 0; state.productionJobs().containsKey(job.id()) && steps < 700; due += 20, steps++) {
             due = BakeryTestClock.due(state, job, due);
             var current = state.productionJobs().get(job.id());
-            if (replaceOutput && !replaced && current.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DEPOT_DELIVERY) {
+            if (replaceOutput && !replaced && current.stationWork().orElseThrow().phase() == StationWorkState.Phase.DEPOT_DELIVERY) {
                 var horizontal = depotPort.facing().step(station, 10);
                 var point = KnownPedestrianGround.forFrontier(state).at(horizontal.x(), horizontal.z());
                 var alternate = new SubjectId("container:bakery-output-replacement");
@@ -58,7 +58,7 @@ class BakeryPartialBatchTest {
                 var conflict = ReplicaCustodyDiagnosticProducer.conflict(destination, 1, 2, "missing", record.provenance());
                 state = state.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody.conflict(destination, 1, 2,
                         conflict.fingerprint(), conflict.provenance(), conflict.diagnostic())));
-                var retarget = io.farfrontier.palemirror.frontier.v3.process.BakeryStorageReplacement.select(state, current).orElseThrow();
+                var retarget = io.farfrontier.palemirror.frontier.v3.process.StationWorkStorageReplacement.select(state, current).orElseThrow();
                 assertEquals(alternate, retarget.destinationContainer());
                 var payloads = io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldPayloadCodecs.create();
                 assertEquals(retarget, payloads.decode(retarget.type(), payloads.encode(retarget)));
@@ -68,19 +68,19 @@ class BakeryPartialBatchTest {
                     try (var binding = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind((geometry, start, target) -> {
                         throw new AssertionError("replaying output storage replacement must not search for a route");
                     })) {
-                        return io.farfrontier.palemirror.frontier.v3.process.BakeryStorageReplacement.apply(predecessor, home.id(), retarget);
+                        return io.farfrontier.palemirror.frontier.v3.process.StationWorkStorageReplacement.apply(predecessor, home.id(), retarget);
                     }
                 });
                 assertEquals(before, state.inventory().fungibleResources(), "endpoint replacement is not stock transfer");
                 var redirected = state;
-                assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.BakeryStorageReplacement.apply(redirected, home.id(), retarget));
+                assertThrows(IllegalArgumentException.class, () -> io.farfrontier.palemirror.frontier.v3.process.StationWorkStorageReplacement.apply(redirected, home.id(), retarget));
                 state = codec.decode(codec.encode(state)); current = state.productionJobs().get(job.id());
                 expectedDestination = alternate; replaced = true;
             }
             var planned = ProductionProcess.planCompletion(state, ProductionProcess.complete(current, due));
             var next = planned.stream().map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance).map(BakeryColdStep.class::cast).findFirst();
-            assertTrue(next.isPresent(), "phase=" + current.bakeryWork().orElseThrow() + ";body=" + state.actorLocations().get(current.workerId()).body()
-                    + ";cause=" + io.farfrontier.palemirror.frontier.v3.process.BakeryProcess.coldRouteBlocker(state, current) + ";planned=" + planned);
+            assertTrue(next.isPresent(), "phase=" + current.stationWork().orElseThrow() + ";body=" + state.actorLocations().get(current.workerId()).body()
+                    + ";cause=" + io.farfrontier.palemirror.frontier.v3.process.StationWorkProcess.coldRouteBlocker(state, current) + ";planned=" + planned);
             var step = next.orElseThrow();
             state = ProductionProcess.reduceBakeryColdStep(state, home.id(), step);
             if (seen.add(step.action())) state = codec.decode(codec.encode(state));
@@ -104,7 +104,7 @@ class BakeryPartialBatchTest {
                 new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
         state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
         assertEquals(stock - quantity, state.inventory().fungibleResources().unclaimedQuantity(
-                job.bakeryWork().orElseThrow().sourceAccountId(), task.ownerId(), "minecraft:wheat"));
+                job.stationWork().orElseThrow().sourceAccountId(), task.ownerId(), "minecraft:wheat"));
         var codec = new FrontierWorldStateCodec();
         EnumSet<BakeryColdStep.Action> seen = EnumSet.noneOf(BakeryColdStep.Action.class);
         for (long due = 300L, steps = 0; state.productionJobs().containsKey(job.id()) && steps < 700; due += 20L, steps++) {
@@ -148,10 +148,10 @@ class BakeryPartialBatchTest {
         var hold = (ProductionInputHold.FungibleBound) job.inputHold();
         var order = new ActorContainerItemOrder(job.id(), job.workerId(), ActorContainerItemOrder.Direction.TAKE,
                 new ActorContainerItemOrder.Portion.Fungible(account, new ResourceCustody.Container(depot),
-                        job.bakeryWork().orElseThrow().actorAccountId(), new ResourceCustody.Actor(job.workerId()),
+                        job.stationWork().orElseThrow().actorAccountId(), new ResourceCustody.Actor(job.workerId()),
                         Optional.of(hold.claimId()), "minecraft:wheat", job.inputQuantities()),
                 new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(depot),
-                BakeryWorkGoal.current(state, job).station(), ActorContainerItemOrder.Hand.MAIN, 1L, 1L);
+                StationWorkGoal.current(state, job).station(), ActorContainerItemOrder.Hand.MAIN, 1L, 1L);
         var handAddress = new PhysicalStackAddress.ActorHand(job.workerId(), UUID.fromString(
                 "00000000-0000-0000-0000-000000000111"), ActorContainerItemOrder.Hand.MAIN);
         var before = state.inventory().fungibleResources();
@@ -159,7 +159,7 @@ class BakeryPartialBatchTest {
                 List.of(), List.of(new FungiblePhysicalObservation.Stack(handAddress, "minecraft:wheat", 59))));
         var taken = before.transferActorOrderObservedStacks(order, 1L, 1L, List.of(),
                 List.of(new FungiblePhysicalObservation.Stack(handAddress, "minecraft:wheat", 60)));
-        assertEquals(job.inputQuantities(), taken.accounts().get(job.bakeryWork().orElseThrow().actorAccountId()).lotQuantities());
+        assertEquals(job.inputQuantities(), taken.accounts().get(job.stationWork().orElseThrow().actorAccountId()).lotQuantities());
         assertFalse(taken.accounts().containsKey(account));
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }

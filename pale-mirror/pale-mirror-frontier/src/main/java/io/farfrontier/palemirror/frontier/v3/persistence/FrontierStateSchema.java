@@ -10,7 +10,8 @@ final class FrontierStateSchema {
     // Population event grammar includes exact displaced-pickup reapproach.
     // Every expedition provision allocation retains its independently selected
     // source port; replay must never substitute the cargo warehouse.
-    static final int VERSION = 300;
+    // Individual durable items retain condition through every custody boundary.
+    static final int VERSION = 301;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

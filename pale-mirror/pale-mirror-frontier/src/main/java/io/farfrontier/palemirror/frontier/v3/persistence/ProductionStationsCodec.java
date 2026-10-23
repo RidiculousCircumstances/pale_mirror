@@ -28,6 +28,12 @@ final class ProductionStationsCodec {
                     out.writeByte(2); writeString(out, fungible.accountId().value());
                     ShipmentStateCodec.lots(out, fungible.lots()); ShipmentStateCodec.lots(out, fungible.claims());
                 }
+                case ProductionOperation.RepairInput repair -> {
+                    out.writeByte(3); var fungible = repair.materialsInput();
+                    writeString(out, fungible.accountId().value());
+                    ShipmentStateCodec.lots(out, fungible.lots()); ShipmentStateCodec.lots(out, fungible.claims());
+                    ExactItemStateCodec.write(out, repair.target());
+                }
             }
             writeString(out, operation.outputId().value()); out.writeInt(operation.inputQuantity()); out.writeInt(operation.outputQuantity());
             out.writeLong(operation.committedHeat()); WorkStateCodec.writeProgress(out, operation.progress()); out.writeBoolean(operation.transformed());
@@ -63,6 +69,8 @@ final class ProductionStationsCodec {
         return switch (in.readUnsignedByte()) {
             case 1 -> new ProductionOperation.ExactInput(new SubjectId(readString(in)));
             case 2 -> new ProductionOperation.FungibleInput(new SubjectId(readString(in)), ShipmentStateCodec.lots(in), ShipmentStateCodec.lots(in));
+            case 3 -> new ProductionOperation.RepairInput(new ProductionOperation.FungibleInput(new SubjectId(readString(in)),
+                    ShipmentStateCodec.lots(in), ShipmentStateCodec.lots(in)), ExactItemStateCodec.read(in));
             default -> throw new IllegalArgumentException("unknown station input custody representation");
         };
     }

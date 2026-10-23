@@ -20,8 +20,8 @@ public record ShipmentDeathSettled(SubjectId shipmentId, long expectedRevision, 
                 || !shipment.execution().equals(identity.execution()) || shipment.status() != Shipment.Status.AWAITING_LOAD
                 || shipment.pendingPhysicalStep().isPresent() || shipment.reception().isPresent())
             throw new IllegalArgumentException("dead courier still owns a physical effect or collected cargo");
-        var inventory = state.inventory().withFungibleResources(state.inventory().fungibleResources()
-                .releaseClaims(java.util.Set.of(shipment.authorization().claimId())));
+        var inventory = shipment.cargo() instanceof ShipmentCargo.Individual ? state.inventory()
+                : state.inventory().withFungibleResources(state.inventory().fungibleResources().releaseClaims(java.util.Set.of(shipment.authorization().claimId())));
         var changes = ShipmentAuthorizationComposition.allocationDisposed(state, shipment, inventory)
                 .shipments(state.shipments().replace(shipment, shipment.withStatus(Shipment.Status.ALLOCATION_WITHDRAWN)))
                 .actorExecutions(TransportCargoExecution.afterParcelClosed(state, shipment));

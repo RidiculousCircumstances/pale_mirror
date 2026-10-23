@@ -14,29 +14,41 @@ import java.util.function.BiPredicate;
 
 /** Registered exact-source commitments supply disruption policy; the observation owner knows no jobs. */
 final class ExactItemDepartureComposition {
+    /** Commitment ownership is independent of the older physical-intent protocol. */
+    enum Owner { FIELD_EQUIPMENT, PRODUCTION_WORK, MEDICAL_TREATMENT, ENGINEERING_WORKSITE, SETTLEMENT_ASSAULT, STATION_OPERATION, STATION_WORK_ITEM, GOODS_INDIVIDUAL }
     private static final ExactItemDepartureComposition CURRENT = new ExactItemDepartureComposition(List.of(
-            new Policy(PhysicalIntentLifecycleOwner.PRODUCTION_WORK, ProductionProcess::hasMaterializedInput,
+            new Policy(Owner.FIELD_EQUIPMENT, FieldEquipmentDeparture::committed,
+                    (state, command, item, observation) -> List.of(observation), FieldEquipmentDeparture::observe),
+            new Policy(Owner.PRODUCTION_WORK, ProductionProcess::hasMaterializedInput,
                     (state, command, item, observation) -> ProductionProcess.planMaterializedInputDeparture(state, item, observation),
                     ProductionProcess::observeMaterializedInputDeparture),
-            new Policy(PhysicalIntentLifecycleOwner.MEDICAL_TREATMENT, MedicalTreatmentProcess::hasSupplyCommitment,
+            new Policy(Owner.MEDICAL_TREATMENT, MedicalTreatmentProcess::hasSupplyCommitment,
                     MedicalTreatmentProcess::planSupplyDeparture, MedicalTreatmentProcess::observeSupplyDeparture),
-            equipmentPolicy(PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE),
-            new Policy(PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT, DefenderEquipmentSourceDeparture::committed,
-                    DefenderEquipmentSourceDeparture::plan, DefenderEquipmentSourceDeparture::observe)));
+            equipmentPolicy(Owner.ENGINEERING_WORKSITE, PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE),
+            new Policy(Owner.SETTLEMENT_ASSAULT, DefenderEquipmentSourceDeparture::committed,
+                    DefenderEquipmentSourceDeparture::plan, DefenderEquipmentSourceDeparture::observe),
+            new Policy(Owner.STATION_OPERATION, io.farfrontier.palemirror.frontier.v3.model.StationExactItemDeparture::committed,
+                    (state, command, item, observation) -> List.of(observation),
+                    io.farfrontier.palemirror.frontier.v3.model.StationExactItemDeparture::observe),
+            new Policy(Owner.STATION_WORK_ITEM, io.farfrontier.palemirror.frontier.v3.model.StationWorkItemDeparture::committed,
+                    (state, command, item, observation) -> List.of(observation),
+                    io.farfrontier.palemirror.frontier.v3.model.StationWorkItemDeparture::observe),
+            new Policy(Owner.GOODS_INDIVIDUAL, io.farfrontier.palemirror.frontier.v3.model.GoodsIndividualDeparture::committed,
+                    (state, command, item, observation) -> List.of(observation),
+                    io.farfrontier.palemirror.frontier.v3.model.GoodsIndividualDeparture::observe)));
     private final List<Policy> policies;
 
     ExactItemDepartureComposition(List<Policy> policies) {
-        var supplied = EnumSet.noneOf(PhysicalIntentLifecycleOwner.class);
+        var supplied = EnumSet.noneOf(Owner.class);
         for (var policy : policies) if (!supplied.add(policy.owner()))
             throw new IllegalArgumentException("duplicate exact-source departure owner");
-        if (!supplied.equals(EnumSet.of(PhysicalIntentLifecycleOwner.PRODUCTION_WORK, PhysicalIntentLifecycleOwner.MEDICAL_TREATMENT,
-                PhysicalIntentLifecycleOwner.ENGINEERING_WORKSITE, PhysicalIntentLifecycleOwner.SETTLEMENT_ASSAULT)))
+        if (!supplied.equals(EnumSet.allOf(Owner.class)))
             throw new IllegalArgumentException("missing or foreign exact-source departure owner");
         this.policies = List.copyOf(policies);
     }
 
-    private static Policy equipmentPolicy(PhysicalIntentLifecycleOwner owner) {
-        return new Policy(owner, (state, item) -> EquipmentItemDeparture.committed(state, item, owner),
+    private static Policy equipmentPolicy(Owner key, PhysicalIntentLifecycleOwner owner) {
+        return new Policy(key, (state, item) -> EquipmentItemDeparture.committed(state, item, owner),
                 (state, command, item, observation) -> EquipmentItemDeparture.plan(state, command, item, observation, owner),
                 (state, item, source, inventory) -> EquipmentItemDeparture.observe(state, item, source, inventory, owner));
     }
@@ -70,7 +82,7 @@ final class ExactItemDepartureComposition {
     @FunctionalInterface interface Observer {
         FrontierWorldState observe(FrontierWorldState state, SubjectId item, InventoryCustody source, ExactInventory inventory);
     }
-    record Policy(PhysicalIntentLifecycleOwner owner, BiPredicate<FrontierWorldState, SubjectId> committed,
+    record Policy(Owner owner, BiPredicate<FrontierWorldState, SubjectId> committed,
                   Planner planner, Observer reducer) {
         Policy {
             Objects.requireNonNull(owner, "declared departure owner"); Objects.requireNonNull(committed, "source commitment");

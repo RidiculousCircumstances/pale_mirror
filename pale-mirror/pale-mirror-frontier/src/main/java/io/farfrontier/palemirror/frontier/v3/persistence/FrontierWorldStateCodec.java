@@ -581,7 +581,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         writeCount(output, inventory.items().size());
         for (ExactItemStack value : inventory.items().values().stream().sorted(java.util.Comparator.comparing(ExactItemStack::id)).toList()) {
-            writeString(output, value.id().value()); writeString(output, value.economicOwnerId().value()); writeString(output, value.itemKind()); output.writeByte(value.count()); writeCustody(output, value.custody());
+            ExactItemStateCodec.write(output, value);
         }
         writeCount(output, inventory.cargo().size());
         for (CargoBatch value : inventory.cargo().values().stream().sorted(java.util.Comparator.comparing(CargoBatch::id)).toList()) {
@@ -623,8 +623,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
         }
         Map<SubjectId, ExactItemStack> items = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {
-            SubjectId id = new SubjectId(readString(input));
-            if (items.put(id, new ExactItemStack(id, new SubjectId(readString(input)), readString(input), input.readUnsignedByte(), readCustody(input))) != null) throw new IllegalArgumentException("duplicate item stack id");
+            ExactItemStack item = ExactItemStateCodec.read(input);
+            if (items.put(item.id(), item) != null) throw new IllegalArgumentException("duplicate item stack id");
         }
         Map<SubjectId, CargoBatch> cargo = new LinkedHashMap<>();
         for (int index = 0, count = readCount(input); index < count; index++) {

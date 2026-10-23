@@ -44,12 +44,12 @@ public final class FrontierV3FungibleProductionGameTests {
                 var exact = remote.state().inventory().itemAt(local.depot(), slot).orElse(null);
                 if (exact != null) chest.setItem(slot, FrontierV3ExactItemPresentation.materializedStack(exact));
             }
-            chest.setItem(0, new ItemStack(Items.WHEAT, 64));
+            chest.setItem(local.slot(), new ItemStack(Items.WHEAT, 64));
             FrontierV3ProductionTransformationExecutor.tick(helper.getLevel(), runtime);
-            helper.assertTrue(chest.getItem(0).is(Items.WHEAT), "first bounded turn only attempts unavailable A");
+            helper.assertTrue(chest.getItem(local.slot()).is(Items.WHEAT), "first bounded turn only attempts unavailable A");
             FrontierV3ProductionTransformationExecutor.tick(helper.getLevel(), runtime);
             var after = runtime.decodedState().orElseThrow();
-            helper.assertTrue(chest.getItem(0).is(Items.BREAD) && chest.getItem(0).getCount() == 64,
+            helper.assertTrue(chest.getItem(local.slot()).is(Items.BREAD) && chest.getItem(local.slot()).getCount() == 64,
                     "second real adapter turn must transform B's actual chest");
             helper.assertFalse(after.productionJobs().containsKey(local.job().id()), "B's registered confirmation closes its job");
             helper.assertTrue(after.inventory().fungibleResources().lots().get(local.job().outputItemId()).quantity() == 64,
@@ -57,7 +57,7 @@ public final class FrontierV3FungibleProductionGameTests {
             helper.assertValueEqual(after.productionJobs().get(remote.job().id()), remote.job(), "A retains its exact work");
             helper.assertValueEqual(after.physicalIntents().get(remote.intent().id()), remote.intent(), "A is not replayed or fabricated");
             FrontierV3ProductionTransformationExecutor.tick(helper.getLevel(), runtime);
-            helper.assertValueEqual(chest.getItem(0).getCount(), 64, "returning to waiting A does not duplicate B");
+            helper.assertValueEqual(chest.getItem(local.slot()).getCount(), 64, "returning to waiting A does not duplicate B");
             helper.assertFalse(helper.getLevel().hasChunkAt(remote.position()), "service fairness never force-loads A");
         } finally {
             FrontierV3ProductionTransformationExecutor.forget(runtime);
@@ -75,13 +75,13 @@ public final class FrontierV3FungibleProductionGameTests {
             var exact = f.state().inventory().itemAt(f.depot(), slot).orElse(null);
             if (exact != null) chest.setItem(slot, FrontierV3ExactItemPresentation.materializedStack(exact));
         }
-        chest.setItem(0, new ItemStack(Items.WHEAT, 64));
+        chest.setItem(f.slot(), new ItemStack(Items.WHEAT, 64));
         var layout = FungibleProductionLayout.plan(f.state(), f.job());
         helper.assertTrue(FrontierV3FungibleProductionEffect.matches(chest, f.state(), layout, layout.before()),
                 "fixture must provide the whole retained input chest, including unrelated exact items");
         FrontierV3FungibleProductionEffect.execute(helper.getLevel(), runtime, f.state(), f.intent());
         var after = runtime.canonicalState().orElseThrow().state();
-        helper.assertTrue(chest.getItem(0).is(Items.BREAD) && chest.getItem(0).getCount() == 64, "actual chest must contain the recipe output");
+        helper.assertTrue(chest.getItem(f.slot()).is(Items.BREAD) && chest.getItem(f.slot()).getCount() == 64, "actual chest must contain the recipe output");
         helper.assertTrue(!after.productionJobs().containsKey(f.job().id()), "registered confirmation retires the exact job");
         helper.assertTrue(after.inventory().fungibleResources().lots().get(f.job().outputItemId()).quantity() == 64,
                 "actual observed bread must be accounted as the declared lot");
@@ -99,7 +99,7 @@ public final class FrontierV3FungibleProductionGameTests {
         Fixture f = fixture(helper, "foreign");
         var runtime = FrontierV3ReferenceContainerCustodyGameTests.runtime(f.state().bootstrap().worldId(), f.state());
         var chest = FrontierV3ReferenceContainerCustodyGameTests.chest(helper, f.position(), f.depot());
-        chest.setItem(0, new ItemStack(Items.WHEAT, 63));
+        chest.setItem(f.slot(), new ItemStack(Items.WHEAT, 63));
         chest.setItem(1, new ItemStack(Items.DIAMOND, 1));
         FrontierV3FungibleProductionEffect.execute(helper.getLevel(), runtime, f.state(), f.intent());
         var after = runtime.canonicalState().orElseThrow().state();
@@ -107,9 +107,9 @@ public final class FrontierV3FungibleProductionGameTests {
                 "mismatching actual contents must retain a registered uncertain effect");
         helper.assertTrue(after.inventory().fungibleResources().equals(f.state().inventory().fungibleResources())
                 && after.productionJobs().get(f.job().id()).equals(f.job()), "uncertainty retains stock, claim and work");
-        helper.assertTrue(chest.getItem(0).getCount() == 63 && chest.getItem(1).is(Items.DIAMOND), "foreign contents must not be repaired or overwritten");
+        helper.assertTrue(chest.getItem(f.slot()).getCount() == 63 && chest.getItem(1).is(Items.DIAMOND), "foreign contents must not be repaired or overwritten");
         FrontierV3FungibleProductionEffect.execute(helper.getLevel(), runtime, after, after.physicalIntents().get(f.intent().id()));
-        helper.assertTrue(chest.getItem(0).getCount() == 63 && chest.getItem(1).is(Items.DIAMOND), "uncertain retry must not replay input mutation");
+        helper.assertTrue(chest.getItem(f.slot()).getCount() == 63 && chest.getItem(1).is(Items.DIAMOND), "uncertain retry must not replay input mutation");
         helper.succeed();
     }
 
@@ -130,10 +130,10 @@ public final class FrontierV3FungibleProductionGameTests {
         BlockPos position = new BlockPos(anchor.x(), anchor.y(), anchor.z());
         var objective = new StrategicObjective(new SubjectId("objective:lot-effect-" + suffix), settlement,
                 StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
-        var task = new StrategicTask(new SubjectId("task:lot-effect-" + suffix), objective.id(), settlement, StrategicTaskKind.PRODUCE_BREAD,
-                Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT), List.of(), StrategicTaskStatus.ACTIVE);
+        var task = new StrategicTask(new SubjectId("task:lot-effect-" + suffix), objective.id(), settlement, StrategicTaskKind.PRODUCE_AT_STATION,
+                Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_PRODUCTION_FACILITY, StrategicTaskRequirement.AVAILABLE_PRODUCTION_INPUT), List.of(), StrategicTaskStatus.ACTIVE);
         state = state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
-        var worker = SettlementWorkPolicy.permissions(state, settlement).workers(ResidentWorkKind.BAKING)
+        var worker = SettlementWorkPolicy.permissions(state, settlement).workers(ResidentWorkKind.PRODUCTION)
                 .stream().sorted().findFirst().orElseThrow();
         SubjectId account = new SubjectId("custody:container-" + settlementIndex + "-depot"), claim = new SubjectId("claim:lot-effect-" + suffix);
         SubjectId input = new SubjectId("lot:bootstrap-" + settlementIndex + "-wheat");
@@ -141,7 +141,8 @@ public final class FrontierV3FungibleProductionGameTests {
                 input, new ProductionInputHold.FungibleCold(input, account, claim),
                 new SubjectId("lot:effect-bread-" + suffix), "minecraft:bread", 64).withWorkProgress(ProductionWorkProgress.outputReady());
         state = ProductionCommercialProcess.reserve(state.startFungibleProductionJob(job), job);
-        var stacks = List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:wheat", 64));
+        int slot = state.inventory().availableSlots(depot).getFirst();
+        var stacks = List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, slot)), "minecraft:wheat", 64));
         state = ProductionResourceCustody.bind(state, account, 1L, FungiblePhysicalObservation.bind(state.inventory().fungibleResources(), account, 1L, stacks));
         state = state.withInventory(state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE));
         state = ReferenceContainerCustodyFixtures.observedAndHeld(state, depot);
@@ -151,8 +152,8 @@ public final class FrontierV3FungibleProductionGameTests {
                 new FixedPosition(FixedScalar.whole(position.getX()), FixedScalar.whole(position.getY()), FixedScalar.whole(position.getZ())), 0,
                 PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED, PhysicalIntentLifecycleOwner.PRODUCTION_WORK);
         state = PhysicalIntentLifecycleFixture.prepare(state, settlement, intent);
-        return new Fixture(state, job, intent, depot, position);
+        return new Fixture(state, job, intent, depot, position, slot);
     }
 
-    private record Fixture(FrontierWorldState state, ProductionJob job, PhysicalIntent intent, SubjectId depot, BlockPos position) { }
+    private record Fixture(FrontierWorldState state, ProductionJob job, PhysicalIntent intent, SubjectId depot, BlockPos position, int slot) { }
 }

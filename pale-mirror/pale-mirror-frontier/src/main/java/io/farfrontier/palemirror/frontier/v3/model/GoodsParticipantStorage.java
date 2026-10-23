@@ -30,8 +30,19 @@ public final class GoodsParticipantStorage {
         return containers(state, participant, kind).contains(container);
     }
     public static int unclaimed(FrontierWorldState state, GoodsParticipant participant, SubjectId container, String kind) {
+        if (GoodsStockSpecification.forKind(state.bootstrap().ruleset().goodsTrade(), kind).representation()
+                == GoodsStockSpecification.Representation.INDIVIDUAL)
+            return individualStock(state, participant, container, kind).size();
         return FungibleResourceCustodySupport.accountAtContainer(state, container).map(account ->
                 state.inventory().fungibleResources().unclaimedQuantity(account.id(), participant.party().id(), kind)).orElse(0);
+    }
+    public static List<ExactItemStack> individualStock(FrontierWorldState state, GoodsParticipant participant, SubjectId container, String kind) {
+        var specification = GoodsStockSpecification.forKind(state.bootstrap().ruleset().goodsTrade(), kind);
+        var claimed = WorkEquipmentClaimComposition.reserved(state);
+        return state.inventory().items().values().stream().filter(item -> item.economicOwnerId().equals(participant.party().id())
+                && item.itemKind().equals(kind) && item.custody() instanceof InventoryCustody.ContainerSlot slot
+                && slot.containerId().equals(container) && specification.accepts(item) && !claimed.contains(item.id()))
+                .sorted(Comparator.comparingInt((ExactItemStack item) -> item.condition().damage()).thenComparing(ExactItemStack::id)).toList();
     }
     public static int unclaimed(FrontierWorldState state, GoodsParticipant participant, String kind) {
         return containers(state, participant, kind).stream().mapToInt(container -> unclaimed(state, participant, container, kind))

@@ -1,0 +1,753 @@
+package io.farfrontier.palemirror.frontier.v3.process;
+
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
+import io.farfrontier.palemirror.frontier.v3.model.*;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+/** The bakery job owns each COLD movement, custody and station-work transition. */
+public final class StationWorkProcess {
+    private StationWorkProcess() { }
+
+    /** Exposes the current typed transfer order to the physical executor, never recipe policy. */
+    public static ActorContainerItemOrder currentItemOrder(FrontierWorldState state, ProductionJob job) {
+        BakeryColdStep.Action action = switch (job.stationWork().orElseThrow().phase()) {
+            case TARGET_PICKUP, DEPOT_PICKUP -> BakeryColdStep.Action.PICKUP;
+            case TARGET_LOAD, STATION_LOAD -> BakeryColdStep.Action.LOAD;
+            case STATION_UNLOAD -> BakeryColdStep.Action.UNLOAD;
+            case DEPOT_DELIVERY -> BakeryColdStep.Action.DELIVER;
+            case PROCESSING -> throw new IllegalArgumentException("station recipe is not an actor item transfer");
+            case DELIVERED -> throw new IllegalArgumentException("delivered bakery output has no actor transfer");
+        };
+        return itemOrder(state, job, action);
+    }
+
+    static FrontierWorldState start(FrontierWorldState state, ProductionJob job, SubjectId assertedInput) {
+        StationWorkState work = job.stationWork().orElseThrow();
+        if (!work.phase().sourcePickup() || !job.consumedItemId().equals(assertedInput)
+                || state.productionJobs().containsKey(job.id()))
+            throw new IllegalArgumentException("bakery start must retain one fresh depot pickup");
+        station(state, job);
+        if (work.maintenanceTarget().isPresent()) {
+            var target = work.maintenanceTarget().orElseThrow();
+            var item = state.inventory().items().get(target.itemId());
+            if (item == null || !item.economicOwnerId().equals(job.rights().resourceOwner().id())
+                    || !item.itemKind().equals(target.itemKind()) || item.condition().damage() == 0
+                    || !(item.custody() instanceof InventoryCustody.ContainerSlot slot)
+                    || !slot.containerId().equals(target.sourceContainerId())
+                    || WorkEquipmentClaimComposition.reserved(state).contains(item.id()))
+                throw new IllegalArgumentException("repair start lacks an available owned maintenance target");
+        }
+        if (job.inputHold() instanceof ProductionInputHold.Materialized) {
+            ExactItemStack wheat = state.inventory().items().get(assertedInput);
+            if (wheat == null || !work.inputItemKind().equals(wheat.itemKind()) || wheat.count() != job.inputCount()
+                    || !wheat.economicOwnerId().equals(job.rights().resourceOwner().id())
+                    || !(wheat.custody() instanceof InventoryCustody.ContainerSlot slot)
+                    || !slot.containerId().equals(StationWorkStorage.current(job)))
+                throw new IllegalArgumentException("bakery exact start has no owned depot wheat");
+            return ProductionCommercialProcess.reserve(state.withProductionJob(job), job);
+        }
+        if (!(job.inputHold() instanceof ProductionInputHold.FungibleCold
+                || job.inputHold() instanceof ProductionInputHold.FungibleBound))
+            throw new IllegalArgumentException("bakery job has no supported input custody");
+        return ProductionCommercialProcess.reserve(state.startFungibleProductionJob(job), job);
+    }
+
+    /** A witnessed source loss does not retire the accepted order; choose only currently unclaimed depot wheat. */
+    static Optional<BakeryInputReallocated> planInputReallocation(FrontierWorldState state, ProductionJob job) {
+        if (!inputReallocationReady(state, job)) return Optional.empty();
+        var origin = state.actorLocations().get(job.workerId()).supportingSurface();
+        for (var storage : ResourceStorageSelection.candidates(state, job.settlementId(), job.stationWork().orElseThrow().inputItemKind(), origin,
+                java.util.Set.of(ResourceStorageRole.WAREHOUSE))) {
+            var candidate = replacementAt(state, job, storage.containerId());
+            if (candidate.isEmpty()) continue;
+            var hold = candidate.orElseThrow();
+            var updated = job.reallocateStationInput(hold, storage.containerId());
+            try {
+                var route = StationWorkNavigation.plannedPath(state, updated);
+                var execution = state.actorExecutions().current(
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION).get(job.workerId());
+                return Optional.of(new BakeryInputReallocated(job.id(), storage.containerId(), hold, execution,
+                        route.size() < 2 ? Optional.empty() : Optional.of(
+                            new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(route))));
+            } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                if (unavailable.status() != io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.NO_PATH)
+                    return Optional.empty(); // One bounded candidate calculation at a time, not a NO_PATH refusal.
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static boolean inputReallocationReady(FrontierWorldState state, ProductionJob job) {
+        StationWorkState work = job.stationWork().orElseThrow();
+        if (!work.phase().inputAtSource() || work.pendingPhysicalStep().isPresent()
+                || work.block().map(value -> value.reason() != BakeryWorkBlock.Reason.SOURCE_CHANGED).orElse(true))
+            return false;
+        if (!ActorExecutionCoordinator.coldAvailable(state, job.workerId())
+                || ActorExecutionCoordinator.sceneOwns(state, job.workerId())
+                || state.actorMovements().containsKey(job.workerId())) return false;
+        return state.actorExecutions().owns(job.workerId(),
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION, job.id());
+    }
+
+    private static Optional<ProductionInputHold> replacementAt(FrontierWorldState state, ProductionJob job, SubjectId depot) {
+        if (job.inputHold() instanceof ProductionInputHold.Materialized) {
+            return state.inventory().items().values().stream().sorted(java.util.Comparator.comparing(ExactItemStack::id))
+                    .filter(item -> item.economicOwnerId().equals(job.rights().resourceOwner().id())
+                            && item.itemKind().equals(job.stationWork().orElseThrow().inputItemKind()) && item.count() == job.inputCount()
+                            && item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot)
+                            && !ResourceSiteHarvestLineage.hasPendingOutputReceipt(state.resourceSites().sites().values(), item.id())
+                            && state.productionJobs().values().stream().noneMatch(other -> !other.id().equals(job.id())
+                                && other.inputHold() instanceof ProductionInputHold.Materialized
+                                && other.consumedItemId().equals(item.id())))
+                    .findFirst().map(item -> new ProductionInputHold.Materialized(item.id()));
+        }
+        SubjectId claim = claimId(job);
+        if (state.inventory().fungibleResources().claims().containsKey(claim)) return Optional.empty();
+        return FungibleResourceCustodySupport.selectAtContainer(state, depot, job.rights().resourceOwner().id(),
+                job.stationWork().orElseThrow().inputItemKind(), job.inputCount()).filter(selection ->
+                ProductionResourceCustody.canStart(state, selection, job.inputCount())).map(selection ->
+                ProductionResourceCustody.holdForStart(state, selection, claim, job.inputCount()));
+    }
+
+    static FrontierWorldState reduceInputReallocated(FrontierWorldState state, SubjectId subject,
+                                                     BakeryInputReallocated reallocated) {
+        ProductionJob job = state.productionJobs().get(reallocated.jobId());
+        if (job == null || !job.settlementId().equals(subject)
+                || !inputReallocationReady(state, job)
+                || !reallocated.executionId().actorId().equals(job.workerId())
+                || !ResourceStorageSelection.containers(state, job.settlementId(), job.stationWork().orElseThrow().inputItemKind(),
+                    java.util.Set.of(ResourceStorageRole.WAREHOUSE)).contains(reallocated.sourceContainerId())
+                || !replacementAt(state, job, reallocated.sourceContainerId()).equals(Optional.of(reallocated.replacement())))
+            throw new IllegalArgumentException("bakery replacement is not the current unclaimed owned depot input");
+        state.actorExecutions().requireCurrent(reallocated.executionId());
+        ProductionInputHold replacement = reallocated.replacement();
+        ProductionJob updated = job.reallocateStationInput(replacement, reallocated.sourceContainerId());
+        StationWorkNavigation.requireAcceptedDestination(state, updated, reallocated.plannedRoute());
+        Map<SubjectId, ProductionJob> jobs = new LinkedHashMap<>(state.productionJobs());
+        jobs.put(job.id(), updated);
+        if (replacement instanceof ProductionInputHold.Materialized)
+            return state.withChanges(FrontierWorldStateUpdate.begin().productionJobs(jobs));
+        SubjectId accountId = replacement instanceof ProductionInputHold.FungibleCold cold
+                ? cold.accountId() : ((ProductionInputHold.FungibleBound) replacement).accountId();
+        SubjectId claimId = replacement instanceof ProductionInputHold.FungibleCold cold
+                ? cold.claimId() : ((ProductionInputHold.FungibleBound) replacement).claimId();
+        Map<SubjectId, Integer> lots = replacement instanceof ProductionInputHold.FungibleCold cold
+                ? cold.inputLots() : ((ProductionInputHold.FungibleBound) replacement).inputLots();
+        ClaimAllocation allocation = new ClaimAllocation(claimId, job.id(), job.rights().resourceOwner().id(),
+                job.stationWork().orElseThrow().inputItemKind(), job.inputCount(), lots, ClaimPurpose.PRODUCTION_WORK);
+        FungibleResourceLedger ledger = replacement instanceof ProductionInputHold.FungibleBound bound
+                ? state.inventory().fungibleResources().reserveBound(allocation, accountId, bound.authorityEpoch())
+                : state.inventory().fungibleResources().reserve(allocation, accountId);
+        return state.withChanges(FrontierWorldStateUpdate.begin()
+                .inventory(state.inventory().withFungibleResources(ledger)).productionJobs(jobs));
+    }
+
+    /** Read-only reason for a retained bakery job not receiving its next COLD turn. */
+    public static Optional<String> coldBlocker(FrontierWorldState state, ProductionJob job) {
+        return coldBlocker(state, job, true);
+    }
+
+    static Optional<String> coldBlocker(FrontierWorldState state, ProductionJob job, boolean checkOutputCapacity) {
+        if (job.stationWork().orElseThrow().block().filter(BakeryWorkBlock::requiresPhysicalReconciliation).isPresent())
+            return Optional.of("BAKERY_" + job.stationWork().orElseThrow().block().orElseThrow().reason());
+        if (job.stationWork().orElseThrow().pendingPhysicalStep().isPresent()) return Optional.of("PENDING_PHYSICAL_EFFECT");
+        if (job.inputHold() instanceof ProductionInputHold.FungibleBound
+                && job.stationWork().orElseThrow().phase() == StationWorkState.Phase.DEPOT_PICKUP)
+            return Optional.of("SOURCE_PHYSICAL_BINDING");
+        if (!ActorExecutionCoordinator.ambientAvailable(state, List.of(job.workerId()))) return Optional.of("AMBIENT_ACTOR_AUTHORITY");
+        if (ActorExecutionCoordinator.sceneOwns(state, job.workerId()))
+            return Optional.of("SCENE_ACTOR_AUTHORITY");
+        if (!ActorExecutionCoordinator.coldAvailable(state, job.workerId()))
+            return Optional.of("ACTOR_BODY_CUSTODY");
+        ProductionStationSpec station = station(state, job);
+        SubjectId depot = StationWorkStorage.current(job);
+        StationWorkState.Phase phase = job.stationWork().orElseThrow().phase();
+        if (ReferenceContainerCustody.blocksCanonicalUse(state, station.containerId()))
+            return Optional.of("STATION_UNAVAILABLE");
+        if (phase == StationWorkState.Phase.STATION_LOAD
+                && state.actorLocations().get(job.workerId()).supportingSurface().equals(station.workerStation())
+                && StationWorkOperation.loadReadiness(state, job) != ProductionStationProcessing.StartReadiness.READY)
+            return Optional.of("STATION_ENERGY_OR_OPERATION_WAIT");
+        if (phase != StationWorkState.Phase.PROCESSING && phase != StationWorkState.Phase.DELIVERED
+                && StationWorkGoal.current(state, job).station().equals(state.actorLocations().get(job.workerId()).supportingSurface())
+                && !ProductionServiceAccess.available(state, job))
+            return Optional.of("DEPOT_SERVICE_WAIT");
+        if (phase.sourcePickup() || phase == StationWorkState.Phase.DEPOT_DELIVERY) {
+            if (ReferenceContainerCustody.hasLiveCustody(state, depot)) return Optional.of("DEPOT_PHYSICAL_AUTHORITY");
+            if (ReferenceContainerCustody.blocksCanonicalUse(state, depot)) return Optional.of("DEPOT_CONFLICT");
+        }
+        if (ReferenceContainerCustody.hasLiveCustody(state, station.containerId()))
+            return Optional.of("STATION_PHYSICAL_AUTHORITY");
+        if (checkOutputCapacity && ProductionOutputCapacity.depotDeliveryUnavailable(state, job))
+            return Optional.of("DEPOT_STORAGE_FULL");
+        return Optional.empty();
+    }
+
+    /** A read-only route diagnostic; no planner state or physical world is changed. */
+    public static Optional<String> coldRouteBlocker(FrontierWorldState state, ProductionJob job) {
+        Optional<String> eligibility = coldBlocker(state, job);
+        if (eligibility.isPresent()) return Optional.of("NOT_EVALUATED:" + eligibility.orElseThrow());
+        try {
+            var route = StationWorkNavigation.retainedPath(state, job);
+            var phase = job.stationWork().orElseThrow().phase();
+            if (route.size() > 1
+                    && !ProductionServiceAccess.mayAdvance(state, job, route.get(1)))
+                return Optional.of("DEPOT_SERVICE_WAIT");
+            return Optional.empty();
+        } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+            return Optional.of(unavailable.getMessage());
+        }
+    }
+
+    static Optional<BakeryColdStep> planColdStep(FrontierWorldState state, ProductionJob job, long tick) {
+        boolean checkOutputCapacity = true;
+        StationWorkState work = job.stationWork().orElseThrow();
+        if (work.phase() == StationWorkState.Phase.DELIVERED) {
+            boolean openScene = state.sceneLeases().values().stream().anyMatch(lease ->
+                    lease.status() != SceneLeaseStatus.CLOSED && FrontierSceneBehaviors.isProductionWork(lease)
+                    && FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id()));
+            if (openScene) return Optional.empty();
+            ActorLocation worker = state.actorLocations().get(job.workerId());
+            if (worker == null || worker.condition().status() != ActorLifeStatus.ALIVE) return Optional.empty();
+            if (StationWorkGoal.deliveryAccessCleared(state, job, worker.body()))
+                return Optional.of(coldStep(state, job, BakeryColdStep.Action.FINALIZE,
+                        worker.supportingSurface(), List.of()));
+            // Finalization changes job ownership, not pose. Every movement, including
+            // post-delivery clearance, still excludes retained physical authority.
+            if (!ActorExecutionCoordinator.coldAvailable(state, job.workerId())) return Optional.empty();
+            try {
+                List<SurfaceAnchor> clearingRoute = StationWorkNavigation.plannedPath(state, job);
+                if (clearingRoute.size() > 1) return Optional.of(coldStep(state, job,
+                        BakeryColdStep.Action.MOVE, clearingRoute.get(1), clearingRoute));
+                return Optional.empty();
+            } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }
+        }
+        if (coldBlocker(state, job, checkOutputCapacity).isPresent()) {
+            if (StationWorkLabour.attended(state, job) && StationWorkLabour.progress(state, job).filter(WorkProgress::running).isPresent()
+                    && work.pendingPhysicalStep().isEmpty()
+                    && ActorExecutionCoordinator.ambientAvailable(state, List.of(job.workerId()))
+                    && !ActorExecutionCoordinator.sceneOwns(state, job.workerId())
+                    && ActorExecutionCoordinator.coldAvailable(state, job.workerId()))
+                return Optional.of(labourStep(state, job, tick, false));
+            return Optional.empty();
+        }
+        List<SurfaceAnchor> route;
+        try { route = StationWorkNavigation.plannedPath(state, job); }
+        catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { return Optional.empty(); }
+        if (route.size() > 1) {
+            if (!ProductionServiceAccess.mayAdvance(state, job, route.get(1))) return Optional.empty();
+            return Optional.of(coldStep(state, job, BakeryColdStep.Action.MOVE, route.get(1), route));
+        }
+        SurfaceAnchor current = state.actorLocations().get(job.workerId()).supportingSurface();
+        var action = StationWorkColdStepAdmission.stationAction(state, job);
+        if (action == BakeryColdStep.Action.LABOUR) {
+            if (!StationWorkLabour.attended(state, job)) return Optional.empty();
+            if (StationWorkLabour.progress(state, job).filter(progress -> progress.running() && tick < progress.activeUntilTick()).isPresent())
+                return Optional.empty();
+            var prior = StationWorkLabour.progress(state, job);
+            boolean run = prior.isEmpty() || prior.orElseThrow().completedAt(tick) < prior.orElseThrow().requiredMilliWork();
+            return Optional.of(labourStep(state, job, tick, run));
+        }
+        return Optional.of(coldStep(state, job, action, current, List.of()));
+    }
+
+    private static BakeryColdStep labourStep(FrontierWorldState state, ProductionJob job, long tick, boolean run) {
+        var work = job.stationWork().orElseThrow();
+        var execution = state.actorExecutions().current(
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION).get(job.workerId());
+        return new BakeryColdStep(job.id(), work.phase(), BakeryColdStep.Action.LABOUR,
+                state.actorLocations().get(job.workerId()).supportingSurface(), execution, Optional.empty(),
+                Optional.of(new BakeryLabourChange(StationWorkLabour.progress(state, job), StationWorkLabour.next(state, job, tick, run))));
+    }
+
+    private static BakeryColdStep coldStep(FrontierWorldState state, ProductionJob job, BakeryColdStep.Action action,
+            SurfaceAnchor surface, List<SurfaceAnchor> route) {
+        var execution = state.actorExecutions().current(
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION).get(job.workerId());
+        return new BakeryColdStep(job.id(), job.stationWork().orElseThrow().phase(), action, surface, execution,
+                route.isEmpty() ? Optional.empty() : Optional.of(
+                        new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt(route)));
+    }
+
+    static FrontierWorldState reduceColdStep(FrontierWorldState state, SubjectId subject, BakeryColdStep step) {
+        ProductionJob job = state.productionJobs().get(step.jobId());
+        if (job == null || !job.settlementId().equals(subject)
+                || job.stationWork().isEmpty() || job.stationWork().orElseThrow().phase() != step.expectedPhase())
+            throw new IllegalArgumentException("bakery COLD step is not the current exclusive planned successor");
+        StationWorkColdStepAdmission.require(state, job, step);
+        if (step.action() == BakeryColdStep.Action.DELIVER
+                && ProductionOutputCapacity.depotDeliveryUnavailable(state, job))
+            throw new IllegalArgumentException("bakery output cannot enter a full depot");
+        StationWorkState work = job.stationWork().orElseThrow();
+        // Only an exact current COLD successor, checked above against navigation and
+        // exclusive authority, can retire a physical route failure. Other blocks stay held.
+        if (work.block().filter(block -> !block.requiresPhysicalReconciliation()).isPresent()
+                && (step.action() != BakeryColdStep.Action.LABOUR
+                    || step.labourChange().orElseThrow().next().running())) {
+            work = work.withBlock(Optional.empty());
+            job = job.withStationWork(work);
+            state = FrontierProductionWorkSceneSupport.replaceJob(state, job);
+        }
+        if (step.action() == BakeryColdStep.Action.FINALIZE) return finish(state, job, state.inventory());
+        if (step.action() == BakeryColdStep.Action.MOVE) {
+            Map<SubjectId, ActorLocation> actors = new LinkedHashMap<>(state.actorLocations());
+            actors.put(job.workerId(), actors.get(job.workerId()).withBody(BodyPosition.above(step.nextSurface())));
+            return state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
+        }
+        if (step.action() == BakeryColdStep.Action.LABOUR) {
+            var change = step.labourChange().orElseThrow();
+            StationWorkLabour.require(state, job, change);
+            return StationWorkLabour.change(state, job, change.next());
+        }
+        ExactInventory inventory;
+        if (step.action() == BakeryColdStep.Action.RECIPE) {
+            if (StationWorkOperation.require(state, job).inputCustody().materials().isPresent()) {
+                var boundary = ProductionStationTransformation.next(state, work.stationId()).orElseThrow(
+                        () -> new IllegalArgumentException("bakery completion is waiting for its shared station boundary"));
+                return ProductionStationTransformation.apply(state, work.stationId(), new ProductionStationRecipeChanged(
+                        ProductionStationRecipeChanged.Stage.COLD_COMPLETED, boundary, List.of()), ProductionOperationCompletionComposition::completed);
+            }
+            ProductionStationSpec station = station(state, job);
+            if (job.inputHold() instanceof ProductionInputHold.Materialized) {
+                ExactItemStack input = state.inventory().items().get(job.consumedItemId());
+                ExactItemStack output = new ExactItemStack(job.outputItemId(), job.rights().resourceOwner().id(), job.outputItemKind(),
+                        job.outputCount(), new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot()));
+                inventory = ProductionStationRecipe.transformExactCold(state, station, work.recipeId(), input, output);
+            } else {
+                FungibleResourceLedger ledger = state.inventory().fungibleResources();
+                ResourceLot output = new ResourceLot(job.outputItemId(), job.rights().resourceOwner().id(), job.outputItemKind(), job.outputCount(),
+                        "recipe:bread", job.inputQuantities().keySet().stream().sorted().toList());
+                inventory = ProductionStationRecipe.transformCold(state, station, work.recipeId(), work.stationAccountId(), job.inputQuantities(),
+                        Map.of(claimId(job), job.inputCount()), output);
+            }
+            return replace(state, job.withStationWork(work.advance(StationWorkState.Phase.STATION_UNLOAD)), inventory,
+                    ProductionStationProcessing.transformed(state, StationWorkOperation.require(state, job)));
+        }
+        ActorContainerItemOrder order = itemOrder(state, job, step.action());
+        inventory = ActorItemCustody.transferCold(state, order);
+        if (work.phase() == StationWorkState.Phase.TARGET_LOAD)
+            return replace(state, job.withStationWork(work.advance(StationWorkState.Phase.DEPOT_PICKUP)), inventory);
+        if (step.action() == BakeryColdStep.Action.LOAD) {
+            var loaded = StationWorkOperation.settleLoad(state, job, inventory, 0);
+            return replace(state, loaded.job(), loaded.inventory(), loaded.machines());
+        }
+        if (step.action() == BakeryColdStep.Action.DELIVER)
+            return replace(state, job.withStationWork(work.advance(StationWorkState.Phase.DELIVERED)), inventory);
+        StationWorkState.Phase next = switch (step.action()) {
+            case PICKUP -> work.phase() == StationWorkState.Phase.TARGET_PICKUP ? StationWorkState.Phase.TARGET_LOAD : StationWorkState.Phase.STATION_LOAD;
+            case UNLOAD -> StationWorkState.Phase.DEPOT_DELIVERY;
+            default -> throw new IllegalArgumentException("bakery transfer has no next custody phase");
+        };
+        ProductionStations machines = switch (step.action()) {
+            case UNLOAD -> ProductionStationProcessing.unloaded(state, StationWorkOperation.require(state, job));
+            default -> state.productionStations();
+        };
+        if (step.action() == BakeryColdStep.Action.UNLOAD && !StationWorkProduct.individual(state, job))
+            inventory = ProductionStationProcessing.collectedOutput(inventory, StationWorkOperation.require(state, job), work.actorAccountId(), 0);
+        return replace(state, job.withStationWork(work.advance(next)), inventory, machines);
+    }
+
+    static FrontierWorldState hotBlockChanged(FrontierWorldState state, SubjectId subject, BakeryHotBlockChanged changed) {
+        ProductionJob job = state.productionJobs().get(changed.jobId());
+        if (job == null || !job.settlementId().equals(subject) || job.stationWork().isEmpty()
+                || job.stationWork().orElseThrow().phase() != changed.phase())
+            throw new IllegalArgumentException("bakery block has no current owner phase");
+        SceneLease lease = state.sceneLeases().get(changed.leaseId());
+        if (lease == null || (lease.status() != SceneLeaseStatus.HOT && lease.status() != SceneLeaseStatus.DRAINING)
+                || !FrontierSceneBehaviors.isProductionWork(lease)
+                || !FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id())
+                || lease.members().size() != 1 || !lease.members().getFirst().actorId().equals(job.workerId()))
+            throw new IllegalArgumentException("bakery block lacks the exact live worker scene");
+        StationWorkState work = job.stationWork().orElseThrow();
+        if (changed.block().isPresent()) {
+            BakeryWorkBlock block = changed.block().orElseThrow();
+            SubjectId scope = block.reason() == BakeryWorkBlock.Reason.ROUTE_BLOCKED
+                    ? job.facilityId() : changed.phase() == StationWorkState.Phase.DEPOT_PICKUP
+                    || changed.phase() == StationWorkState.Phase.DEPOT_DELIVERY
+                    ? StationWorkStorage.current(job) : station(state, job).containerId();
+            if (!block.scopeId().equals(scope) || work.pendingPhysicalStep().isPresent()
+                    && block.reason() != BakeryWorkBlock.Reason.AMBIGUOUS_EFFECT)
+                throw new IllegalArgumentException("bakery block has foreign physical scope or effect phase");
+        } else if (work.block().isEmpty() || work.block().orElseThrow().reason() == BakeryWorkBlock.Reason.AMBIGUOUS_EFFECT
+                || work.block().orElseThrow().reason() == BakeryWorkBlock.Reason.SOURCE_CHANGED
+                && !hasCurrentInputClaim(state, job))
+            throw new IllegalArgumentException("bakery block clearance lacks a reversible current obstruction");
+        return FrontierProductionWorkSceneSupport.replaceJob(state, job.withStationWork(work.withBlock(changed.block())));
+    }
+
+    private static boolean hasCurrentInputClaim(FrontierWorldState state, ProductionJob job) {
+        if (job.inputHold() instanceof ProductionInputHold.Materialized) {
+            ExactItemStack input = state.inventory().items().get(job.consumedItemId());
+            return input != null && input.custody() instanceof InventoryCustody.ContainerSlot slot
+                    && slot.containerId().equals(StationWorkStorage.current(job));
+        }
+        SubjectId claimId = switch (job.inputHold()) {
+            case ProductionInputHold.FungibleCold cold -> cold.claimId();
+            case ProductionInputHold.FungibleBound bound -> bound.claimId();
+            default -> null;
+        };
+        return claimId == null || state.inventory().fungibleResources().claims().containsKey(claimId);
+    }
+
+    static FrontierWorldState prepareHotEffect(FrontierWorldState state, SubjectId subject,
+                                               BakeryHotEffectPrepared prepared) {
+        ProductionJob job = state.productionJobs().get(prepared.jobId());
+        if (job == null || !job.settlementId().equals(subject) || job.stationWork().isEmpty())
+            throw new IllegalArgumentException("bakery HOT effect has no exact owner job");
+        StationWorkState work = job.stationWork().orElseThrow();
+        SceneLease lease = FrontierProductionWorkSceneSupport.requireHotLease(state, job, prepared.leaseId());
+        ProductionStationSpec station = station(state, job);
+        if (prepared.phase() == StationWorkState.Phase.PROCESSING
+                && !(job.inputHold() instanceof ProductionInputHold.Materialized))
+            throw new IllegalArgumentException("fungible recipe preparation belongs exclusively to the station owner");
+        if (work.phase() != prepared.phase() || work.pendingPhysicalStep().isPresent()
+                || !lease.memberBody(state.actorLocations(), job.workerId()).equals(StationWorkGoal.current(state, job).station().standingBody())
+                || prepared.phase() == StationWorkState.Phase.PROCESSING
+                && !StationWorkLabour.complete(state, job)
+                || prepared.phase() == StationWorkState.Phase.STATION_LOAD
+                && StationWorkOperation.loadReadiness(state, job) != ProductionStationProcessing.StartReadiness.READY
+                || prepared.phase() != StationWorkState.Phase.PROCESSING && !ProductionServiceAccess.available(state, job))
+            throw new IllegalArgumentException("bakery HOT effect is not at a ready current station");
+        int requiredSlot = switch (prepared.phase()) {
+            case TARGET_PICKUP, DEPOT_PICKUP, STATION_UNLOAD -> -1;
+            case TARGET_LOAD -> station.maintenanceSlot().orElseThrow();
+            case STATION_LOAD -> station.inputSlot();
+            case PROCESSING -> station.outputSlot();
+            case DEPOT_DELIVERY -> prepared.destinationSlot();
+            case DELIVERED -> throw new IllegalArgumentException("delivered bakery output has no physical effect");
+        };
+        if (prepared.destinationSlot() != requiredSlot
+                || prepared.phase() == StationWorkState.Phase.DEPOT_DELIVERY
+                && !state.containerSlotAvailableForOutput(new InventoryCustody.ContainerSlot(
+                StationWorkStorage.current(job), prepared.destinationSlot()), job.id()))
+            throw new IllegalArgumentException("bakery HOT effect has no reserved current target port");
+        StationWorkPhysicalStep step = new StationWorkPhysicalStep(prepared.phase(), prepared.leaseId(), prepared.destinationSlot());
+        return FrontierProductionWorkSceneSupport.replaceJob(state, job.withStationWork(work.preparePhysical(step)));
+    }
+
+    static FrontierWorldState abortHotDelivery(FrontierWorldState state, SubjectId subject, BakeryHotDeliveryAborted aborted) {
+        var job = state.productionJobs().get(aborted.jobId());
+        if (job == null || !job.settlementId().equals(subject) || job.stationWork().isEmpty())
+            throw new IllegalArgumentException("delivery cancellation has no exact owner");
+        var work = job.stationWork().orElseThrow();
+        var pending = work.pendingPhysicalStep().orElseThrow(() -> new IllegalArgumentException("delivery was not prepared"));
+        var lease = state.sceneLeases().get(aborted.leaseId());
+        if (work.phase() != StationWorkState.Phase.DEPOT_DELIVERY || pending.phase() != work.phase()
+                || !pending.leaseId().equals(aborted.leaseId()) || pending.destinationSlot() != aborted.destinationSlot()
+                || work.block().isPresent() || lease == null
+                || lease.status() != SceneLeaseStatus.HOT && lease.status() != SceneLeaseStatus.DRAINING
+                || !FrontierSceneBehaviors.isProductionWork(lease)
+                || !FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id())
+                || lease.members().size() != 1 || !lease.members().getFirst().actorId().equals(job.workerId())
+                || !aborted.occupiedDestination().scopeId().equals(StationWorkStorage.current(job)))
+            throw new IllegalArgumentException("delivery cancellation has a foreign, ambiguous or stale prepared step");
+        var hand = (PhysicalStackAddress.ActorHand) aborted.unchangedHand().address();
+        if (!hand.actorId().equals(job.workerId()) || !hand.entityId().equals(lease.members().getFirst().entityId())
+                || hand.hand() != ActorContainerItemOrder.Hand.MAIN
+                || !aborted.unchangedHand().itemKind().equals(job.outputItemKind())
+                || aborted.unchangedHand().quantity() != job.outputCount())
+            throw new IllegalArgumentException("delivery cancellation lacks its unchanged complete source");
+        if (StationWorkProduct.exact(state, job)) {
+            var item = state.inventory().items().get(job.outputItemId());
+            if (!aborted.exactItemId().equals(Optional.of(job.outputItemId())) || aborted.sourceEpoch() != 0L
+                    || item == null || !item.custody().equals(new InventoryCustody.Actor(job.workerId())))
+                throw new IllegalArgumentException("delivery cancellation has foreign exact source custody");
+        } else {
+            if (aborted.exactItemId().isPresent()) throw new IllegalArgumentException("fungible delivery cannot cancel an exact item");
+            var binding = ActorCarriedResources.requireBinding(state.inventory().fungibleResources(), job.workerId(),
+                    work.actorAccountId(), aborted.unchangedHand());
+            if (binding.authorityEpoch() != aborted.sourceEpoch())
+                throw new IllegalArgumentException("delivery cancellation has a stale source epoch");
+        }
+        // Stock, claims, phase and worker are unchanged. Releasing the fence allows the
+        // ordinary container observer to classify the player change before a new preparation.
+        return FrontierProductionWorkSceneSupport.replaceJob(state,
+                job.withStationWork(work.withoutPhysical().withBlock(Optional.of(aborted.occupiedDestination()))));
+    }
+
+    static FrontierWorldState workChanged(FrontierWorldState state, SubjectId subject, BakeryWorkChanged changed) {
+        ProductionJob job = state.productionJobs().get(changed.jobId());
+        if (job == null || !job.settlementId().equals(subject) || job.stationWork().isEmpty())
+            throw new IllegalArgumentException("bakery labour has no exact job");
+        state.actorExecutions().requireCurrent(changed.executionId());
+        SceneLease lease = FrontierProductionWorkSceneSupport.requireHotLease(state, job, changed.leaseId());
+        if (!changed.executionId().actorId().equals(job.workerId())
+                || !lease.memberBody(state.actorLocations(), job.workerId()).equals(changed.observedWorker()))
+            throw new IllegalArgumentException("bakery labour lost its observed exact worker");
+        StationWorkLabour.require(state, job, changed.change());
+        return StationWorkLabour.change(state, job, changed.change().next());
+    }
+
+    static FrontierWorldState releaseHotHand(FrontierWorldState state, SubjectId subject, BakeryHotHandRelease released) {
+        ProductionJob job = state.productionJobs().get(released.jobId());
+        if (job == null || !job.settlementId().equals(subject) || job.stationWork().isEmpty()
+                || job.inputHold() instanceof ProductionInputHold.Materialized)
+            throw new IllegalArgumentException("bakery hand release has no fungible owner job");
+        StationWorkState work = job.stationWork().orElseThrow();
+        SceneLease lease = state.sceneLeases().get(released.sceneRelease().leaseId());
+        if ((work.phase() != StationWorkState.Phase.STATION_LOAD
+                && work.phase() != StationWorkState.Phase.DEPOT_DELIVERY)
+                || work.pendingPhysicalStep().isPresent() || !work.actorAccountId().equals(released.actorAccountId())
+                || lease == null || lease.status() != SceneLeaseStatus.DRAINING
+                || !FrontierSceneBehaviors.isProductionWork(lease)
+                || !FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id())
+                || lease.members().size() != 1 || !lease.members().getFirst().actorId().equals(job.workerId())
+                || released.sceneRelease().members().size() != 1
+                || !released.sceneRelease().members().getFirst().actorId().equals(job.workerId()))
+            throw new IllegalArgumentException("bakery hand release has no draining exact baker scene");
+        PhysicalStackAddress.ActorHand address = (PhysicalStackAddress.ActorHand) released.observedHand().address();
+        FungibleResourceLedger ledger = state.inventory().fungibleResources();
+        CustodyAccount account = ledger.accounts().get(work.actorAccountId());
+        List<PhysicalStackBinding> bindings = ledger.bindings().values().stream()
+                .filter(binding -> binding.accountId().equals(work.actorAccountId())).toList();
+        String kind = StationWorkCargo.kind(job);
+        if (!address.actorId().equals(job.workerId()) || !address.entityId().equals(lease.members().getFirst().entityId())
+                || address.hand() != ActorContainerItemOrder.Hand.MAIN
+                || account == null || !account.custody().equals(new ResourceCustody.Actor(job.workerId()))
+                || bindings.size() != 1 || !bindings.getFirst().address().equals(address)
+                || bindings.getFirst().authorityEpoch() != released.actorEpoch()
+                || !bindings.getFirst().lotQuantities().equals(account.lotQuantities())
+                || !bindings.getFirst().claimQuantities().equals(account.claimQuantities())
+                || !kind.equals(released.observedHand().itemKind())
+                || released.observedHand().quantity() != StationWorkCargo.quantity(job))
+            throw new IllegalArgumentException("bakery hand release does not match its current physical cargo");
+        FrontierWorldState unbound = state.withInventory(state.inventory().withFungibleResources(
+                ledger.releaseBindings(account.id(), released.actorEpoch())));
+        return unbound.releaseSceneLease(lease.id(), released.sceneRelease().members());
+    }
+
+    static FrontierWorldState materializeHotHand(FrontierWorldState state, SubjectId subject,
+                                                  BakeryHotHandMaterialized observed) {
+        ProductionJob job = state.productionJobs().get(observed.jobId());
+        if (job == null || !job.settlementId().equals(subject) || job.stationWork().isEmpty()
+                || job.inputHold() instanceof ProductionInputHold.Materialized)
+            throw new IllegalArgumentException("materialized bakery hand has no fungible owner job");
+        StationWorkState work = job.stationWork().orElseThrow();
+        SceneLease lease = FrontierProductionWorkSceneSupport.requireHotLease(state, job, observed.leaseId());
+        PhysicalStackAddress.ActorHand address = (PhysicalStackAddress.ActorHand) observed.observedHand().address();
+        String kind = StationWorkCargo.kind(job);
+        CustodyAccount account = state.inventory().fungibleResources().accounts().get(work.actorAccountId());
+        if ((work.phase() != StationWorkState.Phase.STATION_LOAD
+                && work.phase() != StationWorkState.Phase.DEPOT_DELIVERY)
+                || work.pendingPhysicalStep().isPresent() || !work.actorAccountId().equals(observed.actorAccountId())
+                || !address.actorId().equals(job.workerId())
+                || address.hand() != ActorContainerItemOrder.Hand.MAIN
+                || !address.entityId().equals(lease.members().getFirst().entityId())
+                || observed.actorEpoch() != Math.max(1L, lease.revision())
+                || !kind.equals(observed.observedHand().itemKind())
+                || observed.observedHand().quantity() != StationWorkCargo.quantity(job)
+                || account == null || !account.custody().equals(new ResourceCustody.Actor(job.workerId()))
+                || state.inventory().fungibleResources().bindings().values().stream()
+                    .anyMatch(binding -> binding.accountId().equals(account.id())))
+            throw new IllegalArgumentException("materialized bakery hand differs from its retained cold batch or body");
+        FungibleResourceLedger ledger = state.inventory().fungibleResources();
+        return state.withInventory(state.inventory().withFungibleResources(ledger.rebind(account.id(),
+                observed.actorEpoch(), FungiblePhysicalObservation.bind(ledger, account.id(),
+                        observed.actorEpoch(), List.of(observed.observedHand())))));
+    }
+
+    static FrontierWorldState observeHotEffect(FrontierWorldState state, SubjectId subject,
+                                               BakeryHotEffectObserved observed) {
+        return observeEffect(state, subject, observed, Optional.empty(), true);
+    }
+
+    static FrontierWorldState observeRetiredEffect(FrontierWorldState state, SubjectId subject,
+                                                   BakeryRetiredEffectObserved retired) {
+        ActorBodyAuthority.requireRetiredDeath(state, retired.identity().body());
+        state.actorExecutions().requireRetained(retired.identity().execution());
+        return observeEffect(state, subject, retired.effect(), Optional.of(retired.identity()), retired.applied());
+    }
+
+    private static FrontierWorldState observeEffect(FrontierWorldState state, SubjectId subject,
+            BakeryHotEffectObserved observed, Optional<io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId> retired,
+            boolean applied) {
+        ProductionJob job = state.productionJobs().get(observed.jobId());
+        if (job == null || !job.settlementId().equals(subject) || job.stationWork().isEmpty())
+            throw new IllegalArgumentException("observed bakery effect has no retained owner job");
+        StationWorkState work = job.stationWork().orElseThrow();
+        if (retired.filter(id -> !id.body().actorId().equals(job.workerId())).isPresent())
+            throw new IllegalArgumentException("retired bakery effect names a different worker");
+        StationWorkPhysicalStep pending = work.pendingPhysicalStep().orElseThrow(
+                () -> new IllegalArgumentException("observed bakery effect was not durably prepared"));
+        SceneLease lease = state.sceneLeases().get(observed.leaseId());
+        if (lease == null || (lease.status() != SceneLeaseStatus.HOT && lease.status() != SceneLeaseStatus.DRAINING)
+                || !FrontierSceneBehaviors.isProductionWork(lease)
+                || !FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id())
+                || lease.members().size() != 1 || !lease.members().getFirst().actorId().equals(job.workerId()))
+            throw new IllegalArgumentException("bakery physical receipt has no current retained worker scene");
+        if (pending.phase() != observed.phase() || !pending.leaseId().equals(observed.leaseId())
+                || !observed.observedWorker().equals(StationWorkGoal.current(state, job).station().standingBody())
+                || retired.isEmpty() && !lease.memberBody(state.actorLocations(), job.workerId()).equals(observed.observedWorker())
+                || retired.isPresent() && !lease.members().getFirst().entityId().equals(
+                    io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(state.bootstrap().worldId(), job.workerId())))
+            throw new IllegalArgumentException("observed bakery effect has a foreign phase, body or lease");
+        if (!applied) return replace(state, job.withStationWork(work.withoutPhysical()), state.inventory());
+        if (observed.phase() == StationWorkState.Phase.DEPOT_DELIVERY
+                && !StationWorkProduct.exact(state, job)
+                && observed.destination().stream().filter(stack -> stack.address().equals(
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(
+                        StationWorkStorage.current(job), pending.destinationSlot()))))
+                .filter(stack -> stack.itemKind().equals(job.outputItemKind()) && stack.quantity() == job.outputCount())
+                .count() != 1)
+            throw new IllegalArgumentException("observed bakery delivery differs from its prepared depot slot");
+        StationWorkState ready = work.withBlock(Optional.empty()).withoutPhysical();
+        ExactInventory inventory;
+        if (observed.phase() == StationWorkState.Phase.PROCESSING) {
+            ProductionStationSpec station = station(state, job);
+            if (job.inputHold() instanceof ProductionInputHold.Materialized) {
+                if (!observed.remainingSource().isEmpty() || !observed.destination().isEmpty())
+                    throw new IllegalArgumentException("exact recipe cannot carry fungible witness layouts");
+                ExactItemStack input = state.inventory().items().get(job.consumedItemId());
+                ExactItemStack output = new ExactItemStack(job.outputItemId(), job.rights().resourceOwner().id(), job.outputItemKind(),
+                        job.outputCount(), new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot()));
+                inventory = ProductionStationRecipe.transformExactObserved(state, station, work.recipeId(), input, output);
+            } else {
+                throw new IllegalArgumentException("fungible recipe observation belongs exclusively to the station owner");
+            }
+            return replace(state, job.withStationWork(ready.advance(StationWorkState.Phase.STATION_UNLOAD)), inventory,
+                    ProductionStationProcessing.transformed(state, StationWorkOperation.require(state, job)));
+        }
+        BakeryColdStep.Action action = switch (observed.phase()) {
+            case TARGET_PICKUP, DEPOT_PICKUP -> BakeryColdStep.Action.PICKUP;
+            case TARGET_LOAD, STATION_LOAD -> BakeryColdStep.Action.LOAD;
+            case STATION_UNLOAD -> BakeryColdStep.Action.UNLOAD;
+            case DEPOT_DELIVERY -> BakeryColdStep.Action.DELIVER;
+            case PROCESSING -> throw new IllegalStateException("recipe handled above");
+            case DELIVERED -> throw new IllegalArgumentException("delivered bakery job has no physical transfer");
+        };
+        ActorContainerItemOrder order = itemOrder(state, job, action);
+        inventory = retired.isEmpty() ? ActorItemCustody.transferObserved(state, order, observed.sourceEpoch(), observed.destinationEpoch(),
+                observed.remainingSource(), observed.destination())
+                : ActorItemCustody.transferRetiredObserved(state, order, retired.orElseThrow(), observed.sourceEpoch(),
+                    observed.destinationEpoch(), observed.remainingSource(), observed.destination());
+        if (work.phase() == StationWorkState.Phase.TARGET_LOAD)
+            return replace(state, job.withStationWork(ready.advance(StationWorkState.Phase.DEPOT_PICKUP)), inventory);
+        if (action == BakeryColdStep.Action.LOAD) {
+            var loaded = StationWorkOperation.settleLoad(state, job.withStationWork(ready), inventory, observed.destinationEpoch());
+            return replace(state, loaded.job(), loaded.inventory(), loaded.machines());
+        }
+        if (action == BakeryColdStep.Action.DELIVER)
+            return replace(state, job.withStationWork(ready.advance(StationWorkState.Phase.DELIVERED)), inventory);
+        StationWorkState.Phase next = switch (action) {
+            case PICKUP -> work.phase() == StationWorkState.Phase.TARGET_PICKUP ? StationWorkState.Phase.TARGET_LOAD : StationWorkState.Phase.STATION_LOAD;
+            case UNLOAD -> StationWorkState.Phase.DEPOT_DELIVERY;
+            default -> throw new IllegalStateException("observed bakery transfer has no successor");
+        };
+        ProductionStations machines = switch (action) {
+            case UNLOAD -> ProductionStationProcessing.unloaded(state, StationWorkOperation.require(state, job));
+            default -> state.productionStations();
+        };
+        if (action == BakeryColdStep.Action.UNLOAD && !StationWorkProduct.individual(state, job))
+            inventory = ProductionStationProcessing.collectedOutput(inventory, StationWorkOperation.require(state, job), work.actorAccountId(), observed.destinationEpoch());
+        return replace(state, job.withStationWork(ready.advance(next)), inventory, machines);
+    }
+
+    private static FrontierWorldState replace(FrontierWorldState state, ProductionJob job, ExactInventory inventory) {
+        return replace(state, job, inventory, state.productionStations());
+    }
+
+    private static FrontierWorldState replace(FrontierWorldState state, ProductionJob job, ExactInventory inventory,
+                                              ProductionStations machines) {
+        Map<SubjectId, ProductionJob> jobs = new LinkedHashMap<>(state.productionJobs()); jobs.put(job.id(), job);
+        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).productionJobs(jobs).productionStations(machines));
+    }
+
+    private static FrontierWorldState finish(FrontierWorldState state, ProductionJob job, ExactInventory delivered) {
+        StrategicTask task = state.strategicPlans().tasks().get(job.taskId());
+        if (task == null || task.status() != StrategicTaskStatus.ACTIVE || !task.ownerId().equals(job.settlementId()))
+            throw new IllegalArgumentException("delivered bakery output has no active owner task");
+        FrontierWorldState paid = ProductionCommercialProcess.settle(state, job);
+        Optional<MarketWorkOrder> order = paid.companies().market().acceptedForJob(job.id());
+        CompanyRegistry companies = order.map(value -> paid.companies().withMarket(paid.companies().market().complete(value.id(), job)))
+                .orElse(paid.companies());
+        Map<SubjectId, ProductionJob> jobs = new LinkedHashMap<>(state.productionJobs()); jobs.remove(job.id());
+        return state.withChanges(FrontierWorldStateUpdate.begin()
+                .inventory(delivered.withEconomics(paid.inventory().economics())).productionJobs(jobs)
+                .companies(companies).strategicPlans(state.strategicPlans().transitionTask(task.id(), StrategicTaskStatus.COMPLETED))
+                .actorExecutions(ActorExecutionComposition.LIFECYCLE.retire(state, job.workerId(),
+                        io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.PRODUCTION, job.id())));
+    }
+
+    static ActorContainerItemOrder itemOrder(FrontierWorldState state, ProductionJob job, BakeryColdStep.Action action) {
+        StationWorkState work = job.stationWork().orElseThrow();
+        ProductionStationSpec station = station(state, job);
+        SubjectId depotId = StationWorkStorage.current(job);
+        SurfaceAnchor surface = StationWorkGoal.current(state, job).station();
+        ActorContainerItemOrder.Direction direction = action == BakeryColdStep.Action.PICKUP || action == BakeryColdStep.Action.UNLOAD
+                ? ActorContainerItemOrder.Direction.TAKE : ActorContainerItemOrder.Direction.PLACE;
+        boolean output = action == BakeryColdStep.Action.UNLOAD || action == BakeryColdStep.Action.DELIVER;
+        ActorContainerItemOrder.ContainerEndpoint endpoint;
+        ActorContainerItemOrder.Portion portion;
+        if (StationWorkCargo.exact(state, job)) {
+            ExactItemStack item = state.inventory().items().get(StationWorkCargo.exactId(job));
+            if (item == null) throw new IllegalArgumentException("bakery exact transfer lacks its current item");
+            endpoint = switch (action) {
+                case PICKUP -> new ActorContainerItemOrder.ContainerEndpoint.ExactSlot((InventoryCustody.ContainerSlot) item.custody());
+                case LOAD -> work.phase() == StationWorkState.Phase.TARGET_LOAD
+                        ? new ActorContainerItemOrder.ContainerEndpoint.ExactStationSlot(station, ActorContainerItemOrder.StationPort.MAINTENANCE_TARGET,
+                            new InventoryCustody.ContainerSlot(station.containerId(), station.maintenanceSlot().orElseThrow()))
+                        : new ActorContainerItemOrder.ContainerEndpoint.ExactStationSlot(station, ActorContainerItemOrder.StationPort.INPUT,
+                            new InventoryCustody.ContainerSlot(station.containerId(), station.inputSlot()));
+                case UNLOAD -> new ActorContainerItemOrder.ContainerEndpoint.ExactStationSlot(station, ActorContainerItemOrder.StationPort.OUTPUT,
+                        new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot()));
+                case DELIVER -> new ActorContainerItemOrder.ContainerEndpoint.ExactSlot(new InventoryCustody.ContainerSlot(depotId,
+                        work.pendingPhysicalStep().map(StationWorkPhysicalStep::destinationSlot)
+                                .orElseGet(() -> ProductionOutputCapacity.deliverySlot(state, job).orElseThrow())));
+                default -> throw new IllegalArgumentException("not an exact transfer step");
+            };
+            portion = new ActorContainerItemOrder.Portion.Exact(item);
+        } else {
+            SubjectId source = switch (action) {
+                case PICKUP -> work.sourceAccountId();
+                case LOAD, DELIVER -> work.actorAccountId();
+                case UNLOAD -> work.stationAccountId();
+                default -> throw new IllegalArgumentException("not a resource transfer step");
+            };
+            SubjectId destination = switch (action) {
+                case PICKUP, UNLOAD -> work.actorAccountId();
+                case LOAD -> work.stationAccountId();
+                case DELIVER -> work.destinationAccountId();
+                default -> throw new IllegalArgumentException("not a resource transfer step");
+            };
+            ResourceCustody from = state.inventory().fungibleResources().accounts().get(source).custody();
+            ResourceCustody to = direction == ActorContainerItemOrder.Direction.TAKE
+                    ? new ResourceCustody.Actor(job.workerId())
+                    : new ResourceCustody.Container(action == BakeryColdStep.Action.LOAD ? station.containerId() : depotId);
+            portion = new ActorContainerItemOrder.Portion.Fungible(source, from, destination, to,
+                    action == BakeryColdStep.Action.UNLOAD ? Optional.of(StationWorkOperation.require(state, job).outputClaimId())
+                        : output ? Optional.empty() : Optional.of(claimId(job)), output ? job.outputItemKind() : work.inputItemKind(),
+                    output ? Map.of(job.outputItemId(), job.outputCount()) : job.inputQuantities());
+            endpoint = switch (action) {
+                case PICKUP -> ProductionInputAccess.at(state, depotId).endpoint().receivingPort();
+                case DELIVER -> new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(depotId);
+                case LOAD -> new ActorContainerItemOrder.ContainerEndpoint.FungibleStation(station, ActorContainerItemOrder.StationPort.INPUT);
+                case UNLOAD -> new ActorContainerItemOrder.ContainerEndpoint.FungibleStation(station, ActorContainerItemOrder.StationPort.OUTPUT);
+                default -> throw new IllegalArgumentException("not a station transfer step");
+            };
+        }
+        return new ActorContainerItemOrder(job.id(), job.workerId(), direction, portion, endpoint, surface,
+                ActorContainerItemOrder.Hand.MAIN, work.phase().wireTag(), 1);
+    }
+
+    private static SubjectId claimId(ProductionJob job) {
+        return switch (job.inputHold()) {
+            case ProductionInputHold.FungibleCold cold -> cold.claimId();
+            case ProductionInputHold.FungibleBound bound -> bound.claimId();
+            default -> throw new IllegalArgumentException("exact bakery input has no fungible claim");
+        };
+    }
+
+    private static ProductionStationSpec station(FrontierWorldState state, ProductionJob job) {
+        SubjectId id = job.stationWork().orElseThrow().stationId();
+        return state.inventory().containers().values().stream().flatMap(container -> container.productionStation().stream())
+                .filter(candidate -> candidate.id().equals(id) && candidate.facilityId().equals(job.facilityId()))
+                .reduce((left, right) -> { throw new IllegalArgumentException("bakery station identity is ambiguous"); })
+                .orElseThrow(() -> new IllegalArgumentException("bakery job has no current machine"));
+    }
+}

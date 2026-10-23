@@ -22,7 +22,7 @@ final class BakeryStationSceneReconciledCodec implements PayloadCodec {
         return FrontierWorldPayloadCodecs.decodeProduction(bytes, in -> new BakeryStationSceneReconciled(
                 FrontierWorldPayloadCodecs.readSubject(in).value(), new SceneLeaseId(FrontierWorldPayloadCodecs.readString(in)),
                 in.readLong(), in.readLong(), java.util.UUID.fromString(FrontierWorldPayloadCodecs.readString(in)),
-                new BodyPosition(in.readInt(), in.readInt(), in.readInt()), BakeryWorkState.Phase.fromWireTag(in.readInt()),
+                new BodyPosition(in.readInt(), in.readInt(), in.readInt()), StationWorkState.Phase.fromWireTag(in.readInt()),
                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.Source.fromWireTag(in.readInt())));
     }
 }

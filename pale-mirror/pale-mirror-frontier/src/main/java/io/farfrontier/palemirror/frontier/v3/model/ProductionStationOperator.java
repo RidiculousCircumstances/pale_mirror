@@ -42,8 +42,16 @@ public final class ProductionStationOperator {
             var outputId = new SubjectId("lot:station-output-" + UUID.nameUUIDFromBytes(id.value().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
             var claim = new ClaimAllocation(claimId, id, record.ownerId(), binding.itemKind(), inputQuantity, selected.lotQuantities(), ClaimPurpose.STATION_PROCESSING);
             ledger = ledger.reserveBound(claim, account.id(), binding.authorityEpoch());
-            operation = new ProductionOperation(new ProductionOperation.Id(id), subject, id, recipe.id(),
-                    new ProductionOperation.FungibleInput(account.id(), selected.lotQuantities(), Map.of(claimId, inputQuantity)), outputId,
+            ProductionOperation.InputCustody inputs = new ProductionOperation.FungibleInput(account.id(), selected.lotQuantities(), Map.of(claimId, inputQuantity));
+            if (recipe.outcome() instanceof ProductionRecipeOutcome.Repair) {
+                var target = state.inventory().itemAt(record.id(), station.slot(ActorContainerItemOrder.StationPort.MAINTENANCE_TARGET))
+                        .orElseThrow(() -> new IllegalArgumentException("repair requires its target in the maintenance port"));
+                outputId = target.id();
+                ProductionIndividualResult.resolve(recipe, state.bootstrap().ruleset().tools(), outputId, record.ownerId(),
+                        new InventoryCustody.ContainerSlot(record.id(), station.outputSlot()), Optional.of(target));
+                inputs = new ProductionOperation.RepairInput((ProductionOperation.FungibleInput) inputs, target);
+            }
+            operation = new ProductionOperation(new ProductionOperation.Id(id), subject, id, recipe.id(), inputs, outputId,
                     inputQuantity, recipe.outputForInput(inputQuantity), recipe.heatPerBatch() * batches, Optional.empty(), false,
                     new ProductionOperation.PlayerInitiator(event.playerId(), ProductionOperation.PlayerAttendanceIntent.RUN_REQUESTED));
             machines = ProductionStationProcessing.start(state, station, operation);
@@ -56,8 +64,9 @@ public final class ProductionStationOperator {
                     && player.attendanceIntent() != ProductionOperation.PlayerAttendanceIntent.RUN_REQUESTED)
                 throw new IllegalArgumentException("ordinary attendance cannot resume explicitly paused work");
             if (event.stage() != ProductionStationOperatorChanged.Stage.PAUSE
-                    && operation.inputCustody() instanceof ProductionOperation.FungibleInput input
-                    && !FungibleResourceCustodySupport.hasCurrentPhysicalPortion(state, input.accountId(), input.lots()))
+                    && operation.inputCustody().materials().isPresent()
+                    && !FungibleResourceCustodySupport.hasCurrentPhysicalPortion(state,
+                        operation.inputCustody().materials().orElseThrow().accountId(), operation.inputCustody().materials().orElseThrow().lots()))
                 throw new IllegalArgumentException("station attendance awaits its current physical inputs");
         }
         if (recipe.processingMode() == ProductionRecipe.ProcessingMode.ATTENDED) {

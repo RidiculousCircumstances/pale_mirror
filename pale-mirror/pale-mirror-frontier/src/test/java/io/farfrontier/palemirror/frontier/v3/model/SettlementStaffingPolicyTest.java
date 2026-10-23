@@ -60,10 +60,10 @@ class SettlementStaffingPolicyTest {
         var state = initial(); var home = state.bootstrap().settlements().getFirst().id();
         var policy = fixedPolicy(3, 2).propose(state, home, 200L);
         assertEquals(3, policy.workers(ResidentWorkKind.AGRICULTURE).size());
-        assertEquals(2, policy.workers(ResidentWorkKind.BAKING).size());
-        assertTrue(Collections.disjoint(policy.workers(ResidentWorkKind.AGRICULTURE), policy.workers(ResidentWorkKind.BAKING)));
+        assertEquals(2, policy.workers(ResidentWorkKind.PRODUCTION).size());
+        assertTrue(Collections.disjoint(policy.workers(ResidentWorkKind.AGRICULTURE), policy.workers(ResidentWorkKind.PRODUCTION)));
         assertTrue(policy.workers(ResidentWorkKind.LOGISTICS).containsAll(policy.workers(ResidentWorkKind.AGRICULTURE)));
-        assertTrue(policy.workers(ResidentWorkKind.LOGISTICS).containsAll(policy.workers(ResidentWorkKind.BAKING)));
+        assertTrue(policy.workers(ResidentWorkKind.LOGISTICS).containsAll(policy.workers(ResidentWorkKind.PRODUCTION)));
         var changed = state.withStrategicPlans(state.strategicPlans().withWorkPermissions(home, policy));
         assertEquals(policy, fixedPolicy(3, 2).propose(changed, home, 200L), "reassessment does not reshuffle a sufficient roster");
     }
@@ -72,10 +72,10 @@ class SettlementStaffingPolicyTest {
         state = state.withStrategicPlans(state.strategicPlans().withWorkPermissions(home, ResidentWorkPermissions.none()));
         var policy = fixedPolicy(3, 2).propose(state, home, 200L);
         assertEquals(3, policy.workers(ResidentWorkKind.AGRICULTURE).size());
-        assertEquals(2, policy.workers(ResidentWorkKind.BAKING).size());
+        assertEquals(2, policy.workers(ResidentWorkKind.PRODUCTION).size());
         for (var actor : policy.workers(ResidentWorkKind.AGRICULTURE))
             assertTrue(state.humanPopulation().resident(actor).capability(HumanCapability.AGRICULTURE) > 0);
-        for (var actor : policy.workers(ResidentWorkKind.BAKING))
+        for (var actor : policy.workers(ResidentWorkKind.PRODUCTION))
             assertTrue(state.humanPopulation().resident(actor).capability(HumanCapability.INDUSTRY) > 0);
     }
     @Test void demandReductionReleasesPermissionsWithoutCreatingAnAssignment() {
@@ -84,7 +84,7 @@ class SettlementStaffingPolicyTest {
         var projected = state.withStrategicPlans(state.strategicPlans().withWorkPermissions(home, old));
         var next = fixedPolicy(1, 1).propose(projected, home, 200L);
         assertEquals(1, next.workers(ResidentWorkKind.AGRICULTURE).size());
-        assertEquals(1, next.workers(ResidentWorkKind.BAKING).size());
+        assertEquals(1, next.workers(ResidentWorkKind.PRODUCTION).size());
         assertEquals(1, next.localReserve(ResidentWorkKind.AGRICULTURE));
         assertTrue(HumanAssignmentProjection.compile(projected).assignments().values().stream().noneMatch(HumanAssignment::active));
     }
@@ -119,7 +119,7 @@ class SettlementStaffingPolicyTest {
             }
         };
         var policy = new SettlementStaffingPolicy(List.of(forged,
-                port(ResidentWorkKind.BAKING, HumanCapability.INDUSTRY, 2, 1),
+                port(ResidentWorkKind.PRODUCTION, HumanCapability.INDUSTRY, 2, 1),
                 port(ResidentWorkKind.EXTRACTION, HumanCapability.EXTRACTION, 0, 0),
                 port(ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS, 64, 0)));
         var state = initial();
@@ -139,7 +139,7 @@ class SettlementStaffingPolicyTest {
     private static SettlementStaffingPolicy fixedPolicy(int farmers, int bakers) {
         return new SettlementStaffingPolicy(List.of(
                 port(ResidentWorkKind.AGRICULTURE, HumanCapability.AGRICULTURE, farmers, 1),
-                port(ResidentWorkKind.BAKING, HumanCapability.INDUSTRY, bakers, 1),
+                port(ResidentWorkKind.PRODUCTION, HumanCapability.INDUSTRY, bakers, 1),
                 port(ResidentWorkKind.EXTRACTION, HumanCapability.EXTRACTION, 0, 0),
                 port(ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS, 64, 0)));
     }

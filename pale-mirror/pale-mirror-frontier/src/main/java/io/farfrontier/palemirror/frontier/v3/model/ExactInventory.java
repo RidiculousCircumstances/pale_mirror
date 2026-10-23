@@ -69,7 +69,6 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
             case InventoryCustody.ContainerSlot slot -> {
                 ContainerRecord container = containers.get(slot.containerId());
                 if (container == null || slot.slot() >= container.slotCount() || slots.put(slot, item.id()) != null) throw new IllegalArgumentException("invalid or duplicate container slot custody");
-                if (!container.ownerId().equals(item.economicOwnerId())) throw new IllegalArgumentException("container-held item claim must belong to its container owner");
             }
             case InventoryCustody.Cargo batch -> {
                 CargoBatch value = cargo.get(batch.cargoId());
@@ -164,16 +163,16 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
 
     /** Capacity and physical addresses are both fenced by outstanding work reservations. */
     public List<Integer> availableSlots(SubjectId containerId, Set<Integer> reservedSlots) {
-        return availableSlots(containerId, reservedSlots, Map.of());
+        return availableSlots(containerId, reservedSlots, ContainerIncomingStock.empty());
     }
 
     /** Future inbound stock consumes capacity, not physical slot addresses. */
-    public List<Integer> availableSlots(SubjectId containerId, Set<Integer> reservedSlots, Map<String, Long> inbound) {
+    public List<Integer> availableSlots(SubjectId containerId, Set<Integer> reservedSlots, ContainerIncomingStock inbound) {
         ContainerRecord container = containers.get(Objects.requireNonNull(containerId, "container id"));
         if (container == null) throw new IllegalArgumentException("unknown container: " + containerId.value());
         ContainerSlotBudget budget = slotBudget(containerId);
         if (!validReservations(container, budget, reservedSlots)
-                || budget.withIncoming(inbound).requiredSlots() + reservedSlots.size() >= container.slotCount()) return List.of();
+                || budget.withIncoming(inbound.fungible()).requiredSlots() + inbound.individualSlots() + reservedSlots.size() >= container.slotCount()) return List.of();
         var available = new java.util.ArrayList<Integer>();
         for (int slot = 0; slot < container.slotCount(); slot++) {
             if (!budget.occupied().contains(slot) && !budget.bound().contains(slot)
@@ -183,15 +182,15 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
     }
 
     public boolean canReserveSlots(SubjectId containerId, Set<Integer> reservedSlots) {
-        return canReserveSlots(containerId, reservedSlots, Map.of());
+        return canReserveSlots(containerId, reservedSlots, ContainerIncomingStock.empty());
     }
 
-    public boolean canReserveSlots(SubjectId containerId, Set<Integer> reservedSlots, Map<String, Long> inbound) {
+    public boolean canReserveSlots(SubjectId containerId, Set<Integer> reservedSlots, ContainerIncomingStock inbound) {
         ContainerRecord container = containers.get(Objects.requireNonNull(containerId, "container id"));
         if (container == null) throw new IllegalArgumentException("unknown container: " + containerId.value());
         ContainerSlotBudget budget = slotBudget(containerId);
         return validReservations(container, budget, reservedSlots)
-                && budget.withIncoming(inbound).requiredSlots() + reservedSlots.size() <= container.slotCount();
+                && budget.withIncoming(inbound.fungible()).requiredSlots() + inbound.individualSlots() + reservedSlots.size() <= container.slotCount();
     }
 
     private static boolean validReservations(ContainerRecord container, ContainerSlotBudget budget, Set<Integer> reservedSlots) {
@@ -222,18 +221,18 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
     /** A recipe replaces stored input; a full container alone does not forbid equal-size conversion. */
     public boolean canTransformFungible(SubjectId containerId, String inputKind, int inputCount,
                                         String outputKind, int outputCount, Set<Integer> reserved,
-                                        Map<String, Long> inbound) {
+                                        ContainerIncomingStock inbound) {
         Objects.requireNonNull(inputKind); Objects.requireNonNull(outputKind); Objects.requireNonNull(inbound);
         if (inputCount <= 0 || outputCount <= 0) throw new IllegalArgumentException("invalid storage conversion");
         ContainerRecord container = Objects.requireNonNull(containers.get(containerId), "unknown container");
         long available = slotBudget(containerId).stockByKind().getOrDefault(inputKind, 0L);
         if (available < inputCount) return false;
-        var changes = new HashMap<>(inbound);
+        var changes = new HashMap<>(inbound.fungible());
         changes.merge(inputKind, -(long) inputCount, Math::addExact);
         changes.merge(outputKind, (long) outputCount, Math::addExact);
         var budget = slotBudget(containerId);
         return validReservations(container, budget, reserved)
-                && budget.withIncoming(changes).requiredSlots() + reserved.size() <= container.slotCount();
+                && budget.withIncoming(changes).requiredSlots() + inbound.individualSlots() + reserved.size() <= container.slotCount();
     }
 
     /** Capacity admission for an arrived fungible shipment, including partially filled stacks. */
@@ -242,10 +241,10 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
     }
 
     public boolean canReceiveFungibleCargo(SubjectId cargoId, SubjectId targetContainerId, Set<Integer> reservedSlots) {
-        return canReceiveFungibleCargo(cargoId, targetContainerId, reservedSlots, Map.of());
+        return canReceiveFungibleCargo(cargoId, targetContainerId, reservedSlots, ContainerIncomingStock.empty());
     }
     public boolean canReceiveFungibleCargo(SubjectId cargoId, SubjectId targetContainerId, Set<Integer> reservedSlots,
-                                           Map<String, Long> inbound) {
+                                           ContainerIncomingStock inbound) {
         CargoBatch batch = cargo.get(Objects.requireNonNull(cargoId, "fungible cargo id"));
         ContainerRecord target = containers.get(Objects.requireNonNull(targetContainerId, "target container id"));
         if (batch == null || !batch.fungibleContents() || target == null) {
@@ -254,12 +253,12 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         CustodyAccount source = fungibleResources.accounts().values().stream()
                 .filter(account -> account.custody() instanceof ResourceCustody.Cargo custody && custody.cargoId().equals(cargoId))
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("fungible cargo account is absent"));
-        Map<String, Long> incomingByKind = new HashMap<>(inbound);
+        Map<String, Long> incomingByKind = new HashMap<>(inbound.fungible());
         source.lotQuantities().forEach((lotId, quantity) -> incomingByKind.merge(
                 fungibleResources.lots().get(lotId).itemKind(), quantity.longValue(), Math::addExact));
         var budget = slotBudget(targetContainerId);
         long before = budget.requiredSlots();
-        long after = budget.withIncoming(incomingByKind).requiredSlots();
+        long after = budget.withIncoming(incomingByKind).requiredSlots() + inbound.individualSlots();
         return validReservations(target, budget, reservedSlots)
                 && after + reservedSlots.size() <= Math.max(target.slotCount(), before + reservedSlots.size());
     }
@@ -270,17 +269,17 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
     }
 
     public boolean canReceiveFungible(SubjectId targetContainerId, String itemKind, int quantity, Set<Integer> reservedSlots) {
-        return canReceiveFungible(targetContainerId, itemKind, quantity, reservedSlots, Map.of());
+        return canReceiveFungible(targetContainerId, itemKind, quantity, reservedSlots, ContainerIncomingStock.empty());
     }
     public boolean canReceiveFungible(SubjectId targetContainerId, String itemKind, int quantity,
-                                      Set<Integer> reservedSlots, Map<String, Long> inbound) {
+                                      Set<Integer> reservedSlots, ContainerIncomingStock inbound) {
         ContainerRecord target = containers.get(Objects.requireNonNull(targetContainerId, "target container id"));
         Objects.requireNonNull(itemKind, "item kind");
         if (target == null || quantity <= 0) throw new IllegalArgumentException("invalid fungible container admission");
         var budget = slotBudget(targetContainerId);
         long before = budget.requiredSlots();
-        var incoming = new HashMap<>(inbound); incoming.merge(itemKind, (long) quantity, Math::addExact);
-        long after = budget.withIncoming(incoming).requiredSlots();
+        var incoming = new HashMap<>(inbound.fungible()); incoming.merge(itemKind, (long) quantity, Math::addExact);
+        long after = budget.withIncoming(incoming).requiredSlots() + inbound.individualSlots();
         return validReservations(target, budget, reservedSlots)
                 && after + reservedSlots.size() <= Math.max(target.slotCount(), before + reservedSlots.size());
     }
@@ -337,6 +336,15 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, fungibleResources);
     }
 
+    /** A work/repair owner commits condition only against its complete retained item predecessor. */
+    public ExactInventory changeCondition(ExactItemStack expected, ItemCondition nextCondition) {
+        if (!Objects.equals(items.get(expected.id()), expected)
+                || !expected.condition().durable() || expected.condition().maximumDamage() != nextCondition.maximumDamage())
+            throw new IllegalArgumentException("item condition update lost its exact predecessor or changes equipment lifetime");
+        var nextItems = new HashMap<>(items); nextItems.put(expected.id(), expected.withCondition(nextCondition));
+        return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, fungibleResources);
+    }
+
     /** Removes one exact stack only when its surviving canonical custody still matches physical evidence. */
     public ExactInventory destroyObservedItem(SubjectId itemId, InventoryCustody source) {
         Objects.requireNonNull(itemId, "item id"); Objects.requireNonNull(source, "item source");
@@ -358,7 +366,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         }
         Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
         if (current.count() == 1) nextItems.remove(itemId);
-        else nextItems.put(itemId, new ExactItemStack(current.id(), current.economicOwnerId(), current.itemKind(), current.count() - 1, current.custody()));
+        else nextItems.put(itemId, current.withCount(current.count() - 1));
         return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, fungibleResources);
     }
 
@@ -368,7 +376,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         if (current == null || count < 1 || count > current.count()) throw new IllegalArgumentException("exact consumption count does not match current stack");
         Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
         if (count == current.count()) nextItems.remove(itemId);
-        else nextItems.put(itemId, new ExactItemStack(current.id(), current.economicOwnerId(), current.itemKind(), current.count() - count, current.custody()));
+        else nextItems.put(itemId, current.withCount(current.count() - count));
         return new ExactInventory(containers, nextItems, cargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, fungibleResources);
     }
 
@@ -382,7 +390,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         }
         Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items); Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo);
         if (current.count() == 1) { nextItems.remove(itemId); nextCargo.remove(cargoId); }
-        else nextItems.put(itemId, new ExactItemStack(current.id(), current.economicOwnerId(), current.itemKind(), current.count() - 1, current.custody()));
+        else nextItems.put(itemId, current.withCount(current.count() - 1));
         return new ExactInventory(containers, nextItems, nextCargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, fungibleResources);
     }
 
@@ -400,8 +408,9 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         }
         Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
         if (source.count() == 1) nextItems.remove(sourceItemId);
-        else nextItems.put(sourceItemId, new ExactItemStack(source.id(), source.economicOwnerId(), source.itemKind(), source.count() - 1, source.custody()));
-        nextItems.put(cargoItemId, new ExactItemStack(cargoItemId, source.economicOwnerId(), source.itemKind(), 1, new InventoryCustody.Cargo(batch.id())));
+        else nextItems.put(sourceItemId, source.withCount(source.count() - 1));
+        if (source.condition().durable()) throw new IllegalArgumentException("individual durable equipment must move without splitting its identity");
+        nextItems.put(cargoItemId, new ExactItemStack(cargoItemId, source.economicOwnerId(), source.itemKind(), 1, new InventoryCustody.Cargo(batch.id()), source.condition()));
         Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo); nextCargo.put(batch.id(), batch);
         return new ExactInventory(containers, nextItems, nextCargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, fungibleResources);
     }
@@ -438,7 +447,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
                 throw new IllegalArgumentException("cargo item is not owned by the cargo sender: " + itemId.value());
             }
             if (!item.economicOwnerId().equals(batch.ownerId())) throw new IllegalArgumentException("cargo item claim does not belong to its sender");
-            nextItems.put(itemId, new ExactItemStack(item.id(), item.economicOwnerId(), item.itemKind(), item.count(), new InventoryCustody.Cargo(batch.id())));
+            nextItems.put(itemId, item.withCustody(new InventoryCustody.Cargo(batch.id())));
         }
         Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo);
         nextCargo.put(batch.id(), batch);
@@ -571,7 +580,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
             if (item == null || !item.custody().equals(new InventoryCustody.Cargo(cargoId))) {
                 throw new IllegalArgumentException("released item is not in its exact cargo batch: " + itemId.value());
             }
-            nextItems.put(item.id(), new ExactItemStack(item.id(), item.economicOwnerId(), item.itemKind(), item.count(), new InventoryCustody.WorldCarrier(carrierId)));
+            nextItems.put(item.id(), item.withCustody(new InventoryCustody.WorldCarrier(carrierId)));
         }
         Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo); nextCargo.remove(cargoId);
         Map<UUID, List<SubjectId>> nextCarriers = mutableCustody(worldCarrierItems);
@@ -612,8 +621,18 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         return new ExactInventory(containers, items, nextCargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, transferred);
     }
 
-    /** Applies one observed trusted-surface transfer only when its exact source still agrees. */
+    /** External ingress retains the existing contribution policy. Internal movement must use custody-only transfer. */
     public ExactInventory moveObservedItem(SubjectId itemId, InventoryCustody from, InventoryCustody to) {
+        var moved = moveItemCustody(itemId, from, to);
+        if (!(to instanceof InventoryCustody.ContainerSlot target)
+                || from instanceof InventoryCustody.ContainerSlot previous && previous.containerId().equals(target.containerId())) return moved;
+        var item = moved.items().get(itemId);
+        var recipient = moved.containers().get(target.containerId()).ownerId();
+        return item.economicOwnerId().equals(recipient) ? moved : moved.transferItemTitle(item, recipient);
+    }
+
+    /** Physical custody and economic title are independent, including foreign goods awaiting acceptance. */
+    public ExactInventory moveItemCustody(SubjectId itemId, InventoryCustody from, InventoryCustody to) {
         Objects.requireNonNull(itemId, "item id"); Objects.requireNonNull(from, "source custody"); Objects.requireNonNull(to, "target custody");
         ExactItemStack current = items.get(itemId);
         if (current == null || !current.custody().equals(from)) throw new IllegalArgumentException("observed item source does not match canonical custody");
@@ -630,8 +649,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         removeCarrierCustody(nextCarriers, from, itemId);
         addCarrierCustody(nextCarriers, to, itemId);
         Map<SubjectId, ExactItemStack> nextItems = new HashMap<>(items);
-        SubjectId nextOwner = to instanceof InventoryCustody.ContainerSlot target ? containers.get(target.containerId()).ownerId() : current.economicOwnerId();
-        nextItems.put(itemId, new ExactItemStack(current.id(), nextOwner, current.itemKind(), current.count(), to));
+        nextItems.put(itemId, current.withCustody(to));
         return admitNoNewContainerOvercommit(new ExactInventory(containers, nextItems, cargo, nextPlayers,
                 nextCarriers, conflicts, surfaces, economics, fungibleResources));
     }
@@ -652,19 +670,26 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
         if (current == null || !current.equals(exact.item())) {
             throw new IllegalArgumentException("actor item order no longer matches its exact canonical stack");
         }
-        InventoryCustody.Actor actor = new InventoryCustody.Actor(order.actorId());
+        InventoryCustody actor = exact.attachedSlot().<InventoryCustody>map(value -> value)
+                .orElseGet(() -> new InventoryCustody.Actor(order.actorId()));
         InventoryCustody.ContainerSlot slot = order.exactSlot();
         if (order.direction() == ActorContainerItemOrder.Direction.TAKE) {
             if (items.values().stream().anyMatch(item -> item.custody().equals(actor))) {
                 throw new IllegalArgumentException("actor already carries a stack");
             }
-            return moveObservedItem(current.id(), slot, actor);
+            return moveItemCustody(current.id(), slot, actor);
         }
-        ContainerRecord destination = containers.get(slot.containerId());
-        if (destination == null || !destination.ownerId().equals(current.economicOwnerId())) {
-            throw new IllegalArgumentException("actor may not silently transfer economic ownership on deposit");
-        }
-        return moveObservedItem(current.id(), actor, slot);
+        return moveItemCustody(current.id(), actor, slot);
+    }
+
+    /** Only an explicit accepted economic operation may call this; no movement or item condition change. */
+    public ExactInventory transferItemTitle(ExactItemStack expected, SubjectId owner) {
+        if (!expected.equals(items.get(expected.id())) || expected.economicOwnerId().equals(owner))
+            throw new IllegalArgumentException("individual title transfer has a stale item or unchanged owner");
+        economics.require(owner);
+        var next = new HashMap<>(items);
+        next.put(expected.id(), expected.withOwnerAndCustody(owner, expected.custody()));
+        return new ExactInventory(containers, next, cargo, playerItems, worldCarrierItems, conflicts, surfaces, economics, fungibleResources);
     }
 
     public ExactInventory recordConflict(InventoryConflict conflict) {
@@ -763,8 +788,8 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
     private void requireContainerClaim(ExactItemStack item) {
         InventoryCustody.ContainerSlot slot = (InventoryCustody.ContainerSlot) item.custody();
         ContainerRecord container = containers.get(slot.containerId());
-        if (container == null || slot.slot() >= container.slotCount() || !container.ownerId().equals(item.economicOwnerId())) {
-            throw new IllegalArgumentException("stored item claim must belong to its target container owner");
+        if (container == null || slot.slot() >= container.slotCount()) {
+            throw new IllegalArgumentException("stored item requires an existing physical container slot");
         }
     }
 
@@ -830,7 +855,7 @@ public record ExactInventory(Map<SubjectId, ContainerRecord> containers, Map<Sub
             }
             ContainerRecord receiver = containers.get(placement.receiverSlot().containerId());
             if (receiver == null) throw new IllegalArgumentException("handoff receiver container is unknown");
-            nextItems.put(item.id(), new ExactItemStack(item.id(), receiver.ownerId(), item.itemKind(), item.count(), placement.receiverSlot()));
+            nextItems.put(item.id(), item.withOwnerAndCustody(receiver.ownerId(), placement.receiverSlot()));
         }
         Map<SubjectId, CargoBatch> nextCargo = new HashMap<>(cargo);
         nextCargo.remove(cargoId);

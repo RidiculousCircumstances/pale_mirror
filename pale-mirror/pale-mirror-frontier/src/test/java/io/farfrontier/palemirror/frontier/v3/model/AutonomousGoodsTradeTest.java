@@ -288,7 +288,7 @@ class AutonomousGoodsTradeTest {
             assertTrue(events.stream().anyMatch(event -> event.payload() instanceof BakeryColdStep), "bakery stalled: " + events);
             state = apply(state, events, tick, "economy");
             if (!recoveredAtStation && state.productionJobs().containsKey(job.id())
-                    && state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.PROCESSING) {
+                    && state.productionJobs().get(job.id()).stationWork().orElseThrow().phase() == StationWorkState.Phase.PROCESSING) {
                 state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
                 recoveredAtStation = true;
             }

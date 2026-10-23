@@ -79,7 +79,7 @@ class FungiblePhysicalObservationProcessTest {
                 Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of(),
                 new ResourceLot(lotId, owner, "minecraft:bread", 64, "test", List.of()));
         var stack = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:bread", 64);
+                new InventoryCustody.ContainerSlot(depot, initial.inventory().availableSlots(depot).getFirst())), "minecraft:bread", 64);
         FungibleResourceLedger hot = cold.rebind(account, 1L,
                 FungiblePhysicalObservation.bind(cold, account, 1L, List.of(stack)));
         FrontierWorldState state = initial.withChanges(FrontierWorldStateUpdate.begin()
@@ -127,7 +127,7 @@ class FungiblePhysicalObservationProcessTest {
         SubjectId depot = FrontierWorldState.depotId(owner);
         SubjectId account = ReferenceContainerCustody.scopeId(depot);
         var wheat = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:wheat", 64);
+                new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).getFirst())), "minecraft:wheat", 64);
         FungibleResourceLedger cold = state.inventory().fungibleResources();
         FungibleResourceLedger hot = cold.rebind(account, 1L,
                 FungiblePhysicalObservation.bind(cold, account, 1L, List.of(wheat)));
@@ -138,7 +138,7 @@ class FungiblePhysicalObservationProcessTest {
         ResourceLot gift = new ResourceLot(new SubjectId("lot:player-gift-test"), owner,
                 "minecraft:bread", 16, "player-gift", List.of());
         var bread = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                new InventoryCustody.ContainerSlot(depot, 1)), "minecraft:bread", 16);
+                new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).getFirst())), "minecraft:bread", 16);
         FungibleStockContributionObserved observed = new FungibleStockContributionObserved(account, depot, 1L,
                 UUID.fromString("00000000-0000-0000-0000-000000000193"),
                 UUID.fromString("00000000-0000-0000-0000-000000000194"), gift, List.of(wheat, bread));
@@ -172,7 +172,7 @@ class FungiblePhysicalObservationProcessTest {
         SubjectId wheat = new SubjectId("lot:bootstrap-1-wheat");
         FungibleResourceLedger cold = state.inventory().fungibleResources();
         var before = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:wheat", 64);
+                new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).getFirst())), "minecraft:wheat", 64);
         FungibleResourceLedger hot = cold.rebind(account, 1L,
                 FungiblePhysicalObservation.bind(cold, account, 1L, List.of(before)));
         state = state.withInventory(state.inventory().withFungibleResources(hot)
@@ -222,7 +222,7 @@ class FungiblePhysicalObservationProcessTest {
         SubjectId depot = FrontierWorldState.depotId(settlement);
         resources = resources.rebind(account, 7L, FungiblePhysicalObservation.bind(resources, account, 7L, List.of(
                 new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                        new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:bread", 64))));
+                        new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).getFirst())), "minecraft:bread", 64))));
         FrontierWorldState bound = state.withInventory(state.inventory().withFungibleResources(resources));
         UUID player = UUID.fromString("00000000-0000-0000-0000-000000000189");
         SubjectId playerAccount = new SubjectId("custody:multi-ration-player");
@@ -244,7 +244,8 @@ class FungiblePhysicalObservationProcessTest {
         FungibleResourceLedger resources = FungibleResourceLedger.empty().issue(new ResourceLot(lotId, owner, "minecraft:bread", 10, "test", List.of()),
                 new CustodyAccount(accountId, new ResourceCustody.Container(container), Map.of(lotId, 10), Map.of()));
         FrontierWorldState state = base.initialState().withInventory(base.initialState().inventory().withFungibleResources(resources));
-        FungibleStackLayoutObserved split = observation(accountId, 4L, "minecraft:bread", 6, 4);
+        var slots = state.inventory().availableSlots(container);
+        FungibleStackLayoutObserved split = observation(slots, accountId, 4L, "minecraft:bread", 6, 4);
         assertInstanceOf(CommandPlan.Rejected.class, FrontierWorldPhysicalObservationProcess.planFungibleLayout(state, split));
         FrontierWorldState withoutCustody = state;
         assertThrows(IllegalArgumentException.class, () -> FrontierWorldPhysicalObservationProcess.reduceFungibleLayout(withoutCustody, owner, split));
@@ -265,12 +266,12 @@ class FungiblePhysicalObservationProcessTest {
         assertInstanceOf(CommandResult.Accepted.class, engine.submit(command(engine, world, "split", split)));
         FrontierWorldState afterSplit = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
         assertEquals(2, afterSplit.inventory().fungibleResources().bindings().size());
-        assertInstanceOf(CommandResult.Rejected.class, engine.submit(command(engine, world, "stale", observation(accountId, 3L, "minecraft:bread", 6, 4))));
-        assertInstanceOf(CommandResult.Rejected.class, engine.submit(command(engine, world, "mixed", observation(accountId, 4L, "minecraft:carrot", 6, 4))));
+        assertInstanceOf(CommandResult.Rejected.class, engine.submit(command(engine, world, "stale", observation(slots, accountId, 3L, "minecraft:bread", 6, 4))));
+        assertInstanceOf(CommandResult.Rejected.class, engine.submit(command(engine, world, "mixed", observation(slots, accountId, 4L, "minecraft:carrot", 6, 4))));
         SubjectId playerAccount = new SubjectId("custody:physical-player"); UUID player = UUID.fromString("00000000-0000-0000-0000-000000000099");
         CustodyAccount destination = new CustodyAccount(playerAccount, new ResourceCustody.Player(player), Map.of(lotId, 4), Map.of());
         PhysicalStackBinding remaining = new PhysicalStackBinding(new SubjectId("binding:physical-remainder"), accountId,
-                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(container, 1)), 4L, "minecraft:bread", Map.of(lotId, 6), Map.of());
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(container, slots.getFirst())), 4L, "minecraft:bread", Map.of(lotId, 6), Map.of());
         PhysicalStackBinding playerBinding = new PhysicalStackBinding(new SubjectId("binding:physical-player"), playerAccount,
                 new PhysicalStackAddress.PlayerSlot(player, 0), 5L, "minecraft:bread", Map.of(lotId, 4), Map.of());
         FungibleResourceHandoffObserved handoff = new FungibleResourceHandoffObserved(accountId, destination, 4L, 5L, Map.of(lotId, 4), Map.of(),
@@ -285,7 +286,7 @@ class FungiblePhysicalObservationProcessTest {
 
         CustodyAccount forgedDestination = new CustodyAccount(accountId, new ResourceCustody.Container(container), Map.of(lotId, 6), Map.of());
         PhysicalStackBinding restored = new PhysicalStackBinding(new SubjectId("binding:physical-restored"), accountId,
-                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(container, 3)), 4L, "minecraft:bread", Map.of(lotId, 10), Map.of());
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(container, slots.get(2))), 4L, "minecraft:bread", Map.of(lotId, 10), Map.of());
         FungibleResourceHandoffObserved forged = new FungibleResourceHandoffObserved(playerAccount, forgedDestination, 5L, 4L,
                 Map.of(lotId, 4), Map.of(), List.of(), List.of(restored));
         assertInstanceOf(CommandResult.Rejected.class, engine.submit(command(engine, world, "forged-existing", forged)));
@@ -403,10 +404,10 @@ class FungiblePhysicalObservationProcessTest {
         return state.withStrategicPlans(StrategicPlanState.empty().addObjective(objective).addTask(task));
     }
 
-    private static FungibleStackLayoutObserved observation(SubjectId account, long epoch, String kind, int first, int second) {
+    private static FungibleStackLayoutObserved observation(List<Integer> slots, SubjectId account, long epoch, String kind, int first, int second) {
         return new FungibleStackLayoutObserved(account, epoch, List.of(
-                new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 1)), kind, first),
-                new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 2)), kind, second)));
+                new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), slots.getFirst())), kind, first),
+                new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), slots.get(1))), kind, second)));
     }
 
     private static FrontierCommand command(io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<?> engine, WorldId world, String id,

@@ -23,7 +23,7 @@ final class ProductionJobStateCodec {
             writeString(output, job.workerId().value()); writeString(output, job.consumedItemId().value()); writeHold(output, job.inputHold()); writeString(output, job.outputItemId().value());
             writeString(output, job.outputItemKind()); output.writeByte(job.outputCount()); ProductionWorkProgressStateCodec.write(output, job.workProgress());
             TraversalTopologyStateCodec.write(output, job.workTraversal()); output.writeShort(job.traversalCursor());
-            BakeryWorkStateCodec.write(output, job.bakeryWork()); StationApproachStateCodec.write(output, job.spatial());
+            BakeryWorkStateCodec.write(output, job.stationWork()); StationApproachStateCodec.write(output, job.spatial());
             writeRights(output, job.rights());
         }
     }
@@ -47,7 +47,7 @@ final class ProductionJobStateCodec {
     static void writeHold(DataOutputStream output, ProductionInputHold hold) throws IOException {
         if (hold instanceof ProductionInputHold.Materialized) { output.writeByte(0); return; }
         if (hold instanceof ProductionInputHold.Cold cold) {
-            ExactItemStack item = cold.item(); output.writeByte(1); writeString(output, item.economicOwnerId().value()); writeString(output, item.itemKind()); output.writeByte(item.count()); writeCustody(output, item.custody());
+            output.writeByte(1); ExactItemStateCodec.write(output, cold.item());
         } else if (hold instanceof ProductionInputHold.FungibleCold cold) {
             output.writeByte(4); writeString(output, cold.accountId().value()); writeString(output, cold.claimId().value());
             writeInputLots(output, cold.inputLots());
@@ -70,7 +70,11 @@ final class ProductionJobStateCodec {
     static ProductionInputHold readHold(DataInputStream input, SubjectId itemId) throws IOException {
         return switch (input.readUnsignedByte()) {
             case 0 -> new ProductionInputHold.Materialized(itemId);
-            case 1 -> new ProductionInputHold.Cold(new ExactItemStack(itemId, new SubjectId(readString(input)), readString(input), input.readUnsignedByte(), readCustody(input)));
+            case 1 -> {
+                var item = ExactItemStateCodec.read(input);
+                if (!item.id().equals(itemId)) throw new IllegalArgumentException("production hold lost its exact item identity");
+                yield new ProductionInputHold.Cold(item);
+            }
             case 2 -> new ProductionInputHold.FungibleCold(itemId, new SubjectId(readString(input)), new SubjectId(readString(input)));
             case 3 -> new ProductionInputHold.FungibleBound(itemId, new SubjectId(readString(input)), new SubjectId(readString(input)), input.readLong());
             case 4 -> new ProductionInputHold.FungibleCold(itemId, new SubjectId(readString(input)), new SubjectId(readString(input)), readInputLots(input));

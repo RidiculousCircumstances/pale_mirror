@@ -27,10 +27,10 @@ class FrontierV3ActorBirthRuntimeTest {
         var food = new SubjectId("item:birth-runtime-bread");
         var stocked = initial.withInventory(initial.inventory()
                 .store(new ExactItemStack(food, settlement, PopulationBirthProcess.BREAD, 64,
-                        new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(settlement), 1)))
+                        new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(settlement), initial.inventory().availableSlots(FrontierWorldState.depotId(settlement)).get(0))))
                 .store(new ExactItemStack(new SubjectId("item:birth-runtime-reserve"), settlement,
                         PopulationBirthProcess.BREAD, 64,
-                        new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(settlement), 2))));
+                        new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(settlement), initial.inventory().availableSlots(FrontierWorldState.depotId(settlement)).get(1)))));
         var configuration = new FrontierEngineConfiguration<>(WORLD, stocked, base.initialInstant(),
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(),
                 base.limits(), List.of(PopulationBirthProcess.review(settlement, 1, 100L)), base.transactionCommitter(),
@@ -153,10 +153,10 @@ class FrontierV3ActorBirthRuntimeTest {
         var stocked = initial.withInventory(initial.inventory()
                 .store(new ExactItemStack(new SubjectId("item:interrupted-birth"), settlement,
                         PopulationBirthProcess.BREAD, 64,
-                        new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(settlement), 1)))
+                        new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(settlement), initial.inventory().availableSlots(FrontierWorldState.depotId(settlement)).get(0))))
                 .store(new ExactItemStack(new SubjectId("item:interrupted-birth-reserve"), settlement,
                         PopulationBirthProcess.BREAD, 64,
-                        new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(settlement), 2))));
+                        new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(settlement), initial.inventory().availableSlots(FrontierWorldState.depotId(settlement)).get(1)))));
         var configuration = new FrontierEngineConfiguration<>(WORLD, stocked, base.initialInstant(),
                 base.commandPlanner(), base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(),
                 base.limits(), List.of(PopulationBirthProcess.review(settlement, 1, 100L)), base.transactionCommitter(),

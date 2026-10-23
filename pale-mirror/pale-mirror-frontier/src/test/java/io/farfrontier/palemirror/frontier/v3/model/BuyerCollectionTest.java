@@ -51,7 +51,7 @@ class BuyerCollectionTest {
         var baker = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(sellerId)).findFirst().orElseThrow();
         state = state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans()
-                .withWorkPermissions(sellerId, new ResidentWorkPermissions(Map.of(ResidentWorkKind.BAKING, Set.of(baker.id()))))));
+                .withWorkPermissions(sellerId, new ResidentWorkPermissions(Map.of(ResidentWorkKind.PRODUCTION, Set.of(baker.id()))))));
         long now = engine.checkpoint().instant().ticks();
         assertTrue(TransportPreparationRecovery.needed(state, mission, now));
         var before = state;

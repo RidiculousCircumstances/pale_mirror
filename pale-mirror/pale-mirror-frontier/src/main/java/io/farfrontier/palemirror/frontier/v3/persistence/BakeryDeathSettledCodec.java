@@ -19,7 +19,7 @@ final class BakeryDeathSettledCodec implements PayloadCodec {
         return FrontierWorldPayloadCodecs.decodeProduction(bytes, in -> {
             var body = new ActorBodyId(new SubjectId(in.readUTF()), in.readLong());
             return new BakeryDeathSettled(new ActorActuationId(body, ActorExecutionStateCodec.readId(in)),
-                    BakeryWorkState.Phase.fromWireTag(in.readUnsignedByte()), in.readLong(), GroundDispositionCodec.read(in));
+                    StationWorkState.Phase.fromWireTag(in.readUnsignedByte()), in.readLong(), GroundDispositionCodec.read(in));
         });
     }
 }

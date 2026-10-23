@@ -38,6 +38,7 @@ final class FrontierV3FieldWorkOperation {
         java.util.function.BooleanSupplier appliedImage = () -> condition(level, cell, pending)
                 .equals(new FrontierV3ResourceFieldObservation.Owned(pending.transition().after()))
                 && hand.get().matchesQuantity(afterCount)
+                && toolMatches(worker, job, true)
                 && pending.handEffect().map(hand.get()::matches).orElse(true);
         boolean applied = appliedImage.getAsBoolean();
         var effect = new ResourceSiteHarvestProgressed(job.siteId(), cycle.epoch(), job.id(),
@@ -50,6 +51,7 @@ final class FrontierV3FieldWorkOperation {
                 () -> applied ? appliedImage.getAsBoolean()
                         : condition(level, cell, pending).equals(new FrontierV3ResourceFieldObservation.Owned(pending.transition().before()))
                             && hand.get().matchesQuantity(beforeCount)
+                            && toolMatches(worker, job, false)
                             && pending.handEffect().map(hand.get()::matches).orElse(true));
         if (applied && retained.isPresent()) confirmWitness(level, state, job, cell.id(), hand.get());
         return retained;
@@ -77,15 +79,17 @@ final class FrontierV3FieldWorkOperation {
         var binding = binding(level, state, job, worker, cell, pending);
         return FrontierV3MinecraftOperation.apply(level, binding.declaration(), binding.participants(),
                 () -> condition(level, cell, pending).equals(new FrontierV3ResourceFieldObservation.Owned(pending.transition().before()))
+                        && toolMatches(worker, job, false)
                         && pending.handEffect().map(effect -> FrontierV3ActorHandObservation.observe(level, state, lease, job).matchesBefore(effect)).orElse(true),
-                () -> mutate(level, worker, cell, pending, extraction),
-                () -> after(level, state, lease, job, cell, pending));
+                () -> mutate(level, worker, cell, pending, extraction)
+                        && job.equipment().lastUse().map(use -> FrontierV3ToolUse.apply(worker.getMainHandItem(), use)).orElse(true),
+                () -> toolMatches(worker, job, true) && after(level, state, lease, job, cell, pending));
     }
     static Optional<FrontierV3MinecraftOperation.Result> observe(ServerLevel level, FrontierWorldState state, SceneLease lease,
             ResourceSiteHarvestJob job, Mob worker, ResourceFieldLayout.Cell cell, FrontierV3ResourceFieldWitness.Pending pending) {
         var binding = binding(level, state, job, worker, cell, pending);
         return FrontierV3MinecraftOperation.observe(level, binding.declaration(), binding.participants(),
-                () -> after(level, state, lease, job, cell, pending));
+                () -> toolMatches(worker, job, true) && after(level, state, lease, job, cell, pending));
     }
     private static boolean after(ServerLevel level, FrontierWorldState state, SceneLease lease, ResourceSiteHarvestJob job,
             ResourceFieldLayout.Cell cell, FrontierV3ResourceFieldWitness.Pending pending) {
@@ -99,12 +103,25 @@ final class FrontierV3FieldWorkOperation {
             ResourceFieldLayout.Cell cell, FrontierV3ResourceFieldWitness.Pending pending) {
         var participants = new ArrayList<FrontierV3MinecraftOperation.Participant>();
         for (var step : pending.transition().steps()) participants.add(FrontierV3OperationChunks.current(level, position(cell, step.part())));
-        if (pending.handEffect().isPresent()) participants.add(FrontierV3OperationEntityParticipant.current(worker,
+        if (pending.handEffect().isPresent() || job.equipment().lastUse().isPresent()) participants.add(FrontierV3OperationEntityParticipant.current(worker,
                 ActorBodyAuthority.current(state, job.workerId()).physicalEpoch()));
+        var intent = FrontierV3ResourceFieldWitness.workIntent(pending);
+        job.equipment().lastUse().ifPresent(use -> {
+            intent.putString("toolId", use.before().id().value());
+            intent.putString("toolKind", use.before().itemKind());
+            intent.putInt("toolMaximumDamage", use.before().condition().maximumDamage());
+            intent.putInt("toolDamageBefore", use.before().condition().damage());
+            intent.putInt("toolWear", use.wear());
+        });
         var declaration = new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.FIELD_WORK,
-                job.id(), pending.causationId(), FrontierV3OperationFingerprint.of(FrontierV3ResourceFieldWitness.workIntent(pending)),
+                job.id(), pending.causationId(), FrontierV3OperationFingerprint.of(intent),
                 participants.stream().map(FrontierV3MinecraftOperation.Participant::identity).collect(java.util.stream.Collectors.toSet()));
         return new Binding(declaration, List.copyOf(participants));
+    }
+    private static boolean toolMatches(Mob worker, ResourceSiteHarvestJob job, boolean after) {
+        return job.equipment().lastUse().map(use -> after
+                ? FrontierV3ToolUse.after(worker.getMainHandItem(), use)
+                : FrontierV3ToolUse.before(worker.getMainHandItem(), use)).orElse(true);
     }
     private static FrontierV3ResourceFieldObservation.Reading condition(ServerLevel level, ResourceFieldLayout.Cell cell,
             FrontierV3ResourceFieldWitness.Pending pending) {

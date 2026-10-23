@@ -19,7 +19,9 @@ public record ExactItemCustodyChanged(SubjectId itemId, InventoryCustody from, I
     @Override public boolean requiresDurableBeforeEffect() { return true; }
 
     private static boolean involvesObservedSurfaces(InventoryCustody first, InventoryCustody second) {
-        return first instanceof InventoryCustody.ContainerSlot && observable(second)
+        return first instanceof InventoryCustody.ContainerSlot source && second instanceof InventoryCustody.ContainerSlot target
+                && source.containerId().equals(target.containerId())
+                || first instanceof InventoryCustody.ContainerSlot && observable(second)
                 || second instanceof InventoryCustody.ContainerSlot && observable(first)
                 // Player-to-player is not a valid direct observation. An actor is a retained
                 // physical entity surface, so an observed hand-off to/from it is attributable.

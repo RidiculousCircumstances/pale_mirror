@@ -46,7 +46,8 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
         }
         for (ResourceSiteHarvestJob job : state.resourceSites().sites().values().stream()
                 .flatMap(site -> site.harvestJobs().values().stream()).sorted(Comparator.comparing(ResourceSiteHarvestJob::id)).toList()) {
-            if (!ResourceSiteHarvestGoal.actorAtDepot(state, job)) continue;
+            if (!ResourceSiteHarvestGoal.actorAtDepot(state, job)
+                    || job.progress().complete() && !job.deliveryDue() && !job.equipment().settled()) continue;
             // New hand/chest effects require the same service turn as navigation.
             // Already prepared deliveries above settle their retained witness,
             // independently of subsequent admission decisions.
@@ -64,7 +65,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
             if (scene == null || scene.members().size() != 1) continue;
             if (!workerAtDepot(level, state, job, scene)) continue;
             ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
-            boolean intermediate = job.returningForBatch();
+            boolean intermediate = job.deliveryDue();
             if ((!intermediate && !job.progress().complete()) || !cycle.pendingPlayerBreaks().isEmpty()) continue;
             // Delivery is fenced by the actor lot, scene, depot replica and
             // intent; the remote field's block-projection claim is not cargo
@@ -204,7 +205,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
         var lifecycle = state.resourceSites().sites().get(witness.siteId());
         ResourceSiteHarvestJob job = lifecycle == null ? null : lifecycle.harvestJob(witness.jobId()).orElse(null);
         if (job == null || !ResourceSiteHarvestGoal.actorAtDepot(state, job)
-                || job.returningForBatch() != witness.intermediate()
+                || job.deliveryDue() != witness.intermediate()
                 || job.deliveredYieldQuantity() != witness.deliveredYieldBefore()
                 || witness.intermediate() && job.batchSuccessorSlot().map(InventoryCustody.ContainerSlot::slot)
                 .orElse(-1) != witness.successorSlot()
@@ -316,13 +317,13 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
                                 List<FungiblePhysicalObservation.Stack> stacks, String fingerprint, String witnessId) {
         if (quantity != 0) throw new IllegalArgumentException("physical field delivery requires its operation ticket");
         long revision = runtime.canonicalState().orElseThrow().revision().value();
-        var receipt = new ResourceSiteHarvestDeliveryObservation(job.returningForBatch()
+        var receipt = new ResourceSiteHarvestDeliveryObservation(job.deliveryDue()
                 ? batchObservationId(job.id(), job.deliveredYieldQuantity()) : new PhysicalObservationId(
                 "observation:field-delivery-" + job.id().value().substring("job:".length())),
                 job.intentId(), job.siteId(), job.id(), job.workerId(), job.actorAccountId(), job.depotAccountId(),
                 scene.id(), scene.members().getFirst().entityId(), resourceEpoch, quantity, depotEpoch,
                 stacks, fingerprint, revision, witnessId);
-        io.farfrontier.palemirror.frontier.v3.api.FrontierPayload consequence = job.returningForBatch()
+        io.farfrontier.palemirror.frontier.v3.api.FrontierPayload consequence = job.deliveryDue()
                 ? new ResourceSiteHarvestBatchDelivered(receipt, job.deliveredYieldQuantity())
                 : new PhysicalIntentTransition(job.intentId(), PhysicalIntentStatus.CONFIRMED, Optional.of(receipt));
         FrontierV3CommandSubmission.submit(runtime, "field-delivery", job.id().value(), consequence);

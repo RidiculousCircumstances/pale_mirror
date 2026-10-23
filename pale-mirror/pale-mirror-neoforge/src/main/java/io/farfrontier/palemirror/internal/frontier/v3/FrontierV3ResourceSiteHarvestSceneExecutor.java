@@ -280,6 +280,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         }
         var physicalClaim = FrontierV3ResourceSiteLedger.get(level).siteClaim(site.id());
         if (projectColdCarriedHand(level, runtime, state, lease, job)) return;
+        if (entity instanceof net.minecraft.world.entity.npc.Villager equippedWorker
+                && FrontierV3FieldEquipmentExecutor.progress(level, runtime, state, job, equippedWorker)) return;
         if (job.navigationBlock().isEmpty()
                 && ResourceSiteHarvestGoal.actorAtDepot(state, job)
                 && (HarvestServiceAccess.available(state, job) && HarvestStorageReplacement.retainedAvailable(state, job)
@@ -316,7 +318,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
         var actuation = workActuation(state, runtime, lease, job, worker);
         if (!actuation.current(worker)) return;
         var supportedExit = FrontierV3SupportedBodyCapture.observe(level, worker);
-        if (supportedExit.isPresent() && !job.progress().hasPendingPhysicalWork()
+        if (supportedExit.isPresent() && !job.hasPendingPhysicalWork()
                 && !state.resourceSites().harvestMutationPending(job)
                 && !HarvestStorageReplacement.retainedAvailable(state, job)) {
             FrontierV3GoalNavigation.stop(worker, actuation);
@@ -340,11 +342,12 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             return;
         }
         ResourceSiteHarvestGoal serviceGoal = ResourceSiteHarvestGoal.current(state, job);
-        if (serviceGoal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
+        if (serviceGoal.kind() != ResourceSiteHarvestGoal.Kind.WORK_CELL
                 && !HarvestServiceAccess.available(state, job)) {
-            var settlementId = ResourceSiteHarvestGoal.depotPort(state, job).settlementId();
+            var servicePort = ResourceSiteHarvestGoal.servicePort(state, job);
+            var settlementId = servicePort.settlementId();
             var waiting = FrontierV3ServiceClearanceNavigation.waitForAccess(level, runtime, worker, state,
-                    settlementId, job.outputSlot().containerId(),
+                    settlementId, servicePort.containerId(),
                     job.id(), job.workerId(), serviceGoal.kind().wireTag(), serviceGoal.goalRevision(), actuation);
             if (waiting.status() == FrontierV3GoalNavigation.Status.BLOCKED)
                 FrontierV3PhysicalWaitTrace.actor(worker, state, job.workerId(), "service-wait-clearance:" + waiting.reason());
@@ -434,7 +437,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             }
             return;
         }
-        if (semanticGoal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE) return;
+        if (semanticGoal.kind() != ResourceSiteHarvestGoal.Kind.WORK_CELL) return;
         var station = semanticGoal.representative();
         var stationState = FrontierV3SemanticMovement.at(level, worker, station);
         if (!ResourceSiteHarvestGoal.actorAtWorkCell(state, job)

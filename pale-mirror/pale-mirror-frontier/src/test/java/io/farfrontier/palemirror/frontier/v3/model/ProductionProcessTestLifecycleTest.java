@@ -75,7 +75,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         var codec = new FrontierWorldStateCodec();
         var state = codec.decode(engine.checkpoint().canonicalState());
         int budget = state.productionJobs().values().stream().mapToInt(job ->
-                job.bakeryWork().isPresent() ? ProductionWorkProgress.REQUIRED_PROCESSING_TICKS + 512
+                job.stationWork().isPresent() ? ProductionWorkProgress.REQUIRED_PROCESSING_TICKS + 512
                         : job.workTraversal().linearCorridorSurfaces().size() + ProductionWorkProgress.REQUIRED_PROCESSING_TICKS + 4).sum();
         for (int step = 0; !state.productionJobs().isEmpty() && step < budget; step++) {
             var jobs = state.productionJobs().keySet();
@@ -162,7 +162,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         List<PhysicalStackBinding> bindings = FungiblePhysicalObservation.bind(
                 reserved.inventory().fungibleResources(), accountId, 3L,
                 List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                        new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:wheat", 64)));
+                        new InventoryCustody.ContainerSlot(depot, reserved.inventory().availableSlots(depot).getFirst())), "minecraft:wheat", 64)));
         FrontierWorldState bound = ProductionResourceCustody.bind(reserved, accountId, 3L, bindings);
         ProductionJob boundJob = bound.productionJobs().get(started.job().id());
         assertInstanceOf(ProductionInputHold.FungibleBound.class, boundJob.inputHold());
@@ -253,7 +253,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         assertTrue(completed.productionJobs().isEmpty());
         assertEquals(64, completed.inventory().fungibleResources().totalQuantity(new SubjectId("settlement:1"), "minecraft:bread"));
         assertEquals(StrategicTaskStatus.COMPLETED, completed.strategicPlans().tasks().values().stream()
-                .filter(task -> task.kind() == StrategicTaskKind.PRODUCE_BREAD).findFirst().orElseThrow().status());
+                .filter(task -> task.kind() == StrategicTaskKind.PRODUCE_AT_STATION).findFirst().orElseThrow().status());
         assertTrue(completed.companies().companies().isEmpty());
         assertTrue(completed.companies().market().workOrders().isEmpty(), "direct production must not fabricate a commercial order");
         var home = new SubjectId("settlement:1");
@@ -796,8 +796,8 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         hot = hot.withChanges(FrontierWorldStateUpdate.begin().productionJobs(java.util.Map.of(outputReady.id(), outputReady))
                 .actorLocations(withBody(hot, outputReady.workerId(), completedBody)));
         StrategicTask unrelatedBlockedBread = new StrategicTask(new SubjectId("task:unrelated-blocked-bread"), prepared.state().strategicPlans()
-                .tasks().get(prepared.taskId()).objectiveId(), prepared.settlementId(), StrategicTaskKind.PRODUCE_BREAD, Optional.empty(),
-                List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT), List.of(), StrategicTaskStatus.BLOCKED);
+                .tasks().get(prepared.taskId()).objectiveId(), prepared.settlementId(), StrategicTaskKind.PRODUCE_AT_STATION, Optional.empty(),
+                List.of(StrategicTaskRequirement.ACTIVE_PRODUCTION_FACILITY, StrategicTaskRequirement.AVAILABLE_PRODUCTION_INPUT), List.of(), StrategicTaskStatus.BLOCKED);
         hot = hot.withStrategicPlans(hot.strategicPlans().addTask(unrelatedBlockedBread));
         // The orderless compatibility lane remains a valid retained job state. It must not
         // infer this job's disposition from the unrelated blocked task above.
@@ -842,8 +842,8 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
                 prepared.state().bootstrap().worldId(), new ProductionWorkSceneCause(job.id()), worker.supportingSurface().support(), new SimInstant(100L), 1L,
                 SceneLeaseStatus.DRAINING, List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(prepared.state().bootstrap().worldId(), job.workerId()))), java.util.Set.of(), Optional.empty());
         StrategicTask unrelated = new StrategicTask(new SubjectId("task:unrelated-blocked-bread-release"), prepared.state().strategicPlans().tasks()
-                .get(prepared.taskId()).objectiveId(), prepared.settlementId(), StrategicTaskKind.PRODUCE_BREAD, Optional.empty(),
-                List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT), List.of(), StrategicTaskStatus.BLOCKED);
+                .get(prepared.taskId()).objectiveId(), prepared.settlementId(), StrategicTaskKind.PRODUCE_AT_STATION, Optional.empty(),
+                List.of(StrategicTaskRequirement.ACTIVE_PRODUCTION_FACILITY, StrategicTaskRequirement.AVAILABLE_PRODUCTION_INPUT), List.of(), StrategicTaskStatus.BLOCKED);
         StrategicPlanState mixed = prepared.state().strategicPlans().addTask(unrelated);
 
         assertFalse(FrontierProductionWorkSceneSupport.awaitingBlockedRelease(java.util.Map.of(lease.id(), lease), mixed,
@@ -867,7 +867,7 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
         assertEquals(state.actorLocations().get(job.workerId()).supportingSurface(), corridor.getFirst());
         ProductionStationSpec station = state.inventory().containers().values().stream()
                 .flatMap(container -> container.productionStation().stream())
-                .filter(value -> value.id().equals(job.bakeryWork().orElseThrow().stationId()))
+                .filter(value -> value.id().equals(job.stationWork().orElseThrow().stationId()))
                 .findFirst().orElseThrow();
         assertEquals(workshop.id(), station.facilityId());
         assertEquals(ProductionStationSpec.Capability.BAKING, station.capability());
@@ -875,8 +875,8 @@ class ProductionProcessLifecycleTest extends ProductionProcessTest {
                 .filter(settlement -> settlement.id().equals(job.settlementId())).findFirst().orElseThrow()
                 .structures().stream().filter(structure -> structure.kind() == StructureKind.DEPOT)
                 .findFirst().orElseThrow();
-        assertEquals(SettlementDepotServicePort.forDepot(depot).serviceSurface(), BakeryWorkGoal.current(state, job).station());
-        assertEquals(job.workerId(), BakeryWorkGoal.current(state, job).movementOrder().actorId());
+        assertEquals(SettlementDepotServicePort.forDepot(depot).serviceSurface(), StationWorkGoal.current(state, job).station());
+        assertEquals(job.workerId(), StationWorkGoal.current(state, job).movementOrder().actorId());
         assertEquals(0, job.traversalCursor());
     }
 

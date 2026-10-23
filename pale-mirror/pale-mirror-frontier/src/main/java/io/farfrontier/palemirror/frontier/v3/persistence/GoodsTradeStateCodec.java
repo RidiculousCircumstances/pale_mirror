@@ -39,7 +39,7 @@ final class GoodsTradeStateCodec {
                 id(in), in.readUTF(), in.readInt(), in.readInt(), new FixedScalar(in.readLong()), in.readLong());
     }
     static void writeContract(DataOutputStream out, GoodsTradeContract contract) throws IOException {
-        out.writeInt(0x47544332); // Explicit separate goods/freight grammar, including WAL payloads.
+        out.writeInt(0x47544333); // Explicit separate goods/freight grammar, including WAL payloads.
         id(out, contract.id()); id(out, contract.sellOrderId()); id(out, contract.buyOrderId());
         party(out, contract.seller()); party(out, contract.buyer());
         out.writeByte(switch (contract.fulfillment().mode()) { case SELLER_DELIVERY -> 1; case BUYER_COLLECTION -> 2; });
@@ -47,6 +47,11 @@ final class GoodsTradeStateCodec {
         out.writeUTF(contract.itemKind()); out.writeInt(contract.quantity()); out.writeLong(contract.goodsUnitPrice().raw());
         out.writeLong(contract.deliveryUnitPrice().raw());
         id(out, contract.financialReservationId()); out.writeLong(contract.revision()); quantities(out, contract.outstandingClaims());
+        out.writeInt(contract.individualAllocations().size());
+        for (var entry : contract.individualAllocations().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            var value = entry.getValue(); id(out, value.id()); id(out, value.claimantId()); id(out, value.economicOwnerId());
+            id(out, value.itemId()); out.writeUTF(value.itemKind()); out.writeInt(value.condition().maximumDamage()); out.writeInt(value.condition().damage());
+        }
         out.writeInt(contract.acceptedQuantity()); out.writeInt(contract.disposedQuantity());
         out.writeInt(contract.acceptances().size());
         for (var entry : contract.acceptances().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) acceptance(out, entry.getValue());
@@ -54,7 +59,7 @@ final class GoodsTradeStateCodec {
         for (var entry : contract.dispositions().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) disposition(out, entry.getValue());
     }
     static GoodsTradeContract readContract(DataInputStream in) throws IOException {
-        if (in.readInt() != 0x47544332) throw new IllegalArgumentException("unsupported goods/freight contract grammar");
+        if (in.readInt() != 0x47544333) throw new IllegalArgumentException("unsupported goods/freight contract grammar");
         SubjectId id = id(in), sell = id(in), buy = id(in); GoodsTradeParty seller = party(in), buyer = party(in);
         var mode = switch (in.readUnsignedByte()) { case 1 -> GoodsTradeFulfillment.Mode.SELLER_DELIVERY; case 2 -> GoodsTradeFulfillment.Mode.BUYER_COLLECTION;
             default -> throw new IllegalArgumentException("unknown goods fulfillment mode"); };
@@ -62,13 +67,19 @@ final class GoodsTradeStateCodec {
         SubjectId source = id(in), receiver = id(in); String kind = in.readUTF(); int quantity = in.readInt();
         FixedScalar price = new FixedScalar(in.readLong()), delivery = new FixedScalar(in.readLong());
         SubjectId reservation = id(in); long revision = in.readLong();
-        Map<SubjectId, Integer> claims = quantities(in); int accepted = in.readInt(), disposed = in.readInt();
+        Map<SubjectId, Integer> claims = quantities(in);
+        var individuals = new HashMap<SubjectId, IndividualResourceAllocation>();
+        for (int n = count(in, 64); n > 0; n--) {
+            var value = new IndividualResourceAllocation(id(in), id(in), id(in), id(in), in.readUTF(), new ItemCondition(in.readInt(), in.readInt()));
+            put(individuals, value.id(), value);
+        }
+        int accepted = in.readInt(), disposed = in.readInt();
         Map<SubjectId, GoodsTradeAcceptance> receipts = new HashMap<>();
         for (int n = count(in, GoodsTradeContract.MAX_RECEIPTS); n > 0; n--) { var receipt = acceptance(in); put(receipts, receipt.id(), receipt); }
         Map<SubjectId, GoodsTradeDisposition> dispositions = new HashMap<>();
         for (int n = count(in, GoodsTradeContract.MAX_RECEIPTS); n > 0; n--) { var disposition = disposition(in); put(dispositions, disposition.id(), disposition); }
         return new GoodsTradeContract(id, sell, buy, seller, buyer, fulfillment, source, receiver, kind, quantity, price, reservation, revision, claims,
-                receipts, dispositions, accepted, disposed, delivery);
+                receipts, dispositions, accepted, disposed, delivery, individuals);
     }
     static void disposition(DataOutputStream out, GoodsTradeDisposition disposition) throws IOException {
         id(out, disposition.id()); id(out, disposition.contractId()); out.writeLong(disposition.expectedContractRevision());
@@ -80,17 +91,31 @@ final class GoodsTradeStateCodec {
     }
     static void acceptance(DataOutputStream out, GoodsTradeAcceptance receipt) throws IOException {
         id(out, receipt.id()); id(out, receipt.contractId()); out.writeLong(receipt.expectedContractRevision());
-        ResourceTitleTransfer title = receipt.title(); id(out, title.accountId()); id(out, title.claimId());
-        id(out, title.sourceOwnerId()); id(out, title.destinationOwnerId()); quantities(out, title.portions());
-        out.writeInt(title.splitLotIds().size());
-        for (var entry : title.splitLotIds().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) { id(out, entry.getKey()); id(out, entry.getValue()); }
+        switch (receipt.title()) {
+            case ResourceTitleTransfer title -> {
+                out.writeByte(1); id(out, title.accountId()); id(out, title.claimId());
+                id(out, title.sourceOwnerId()); id(out, title.destinationOwnerId()); quantities(out, title.portions());
+                out.writeInt(title.splitLotIds().size());
+                for (var entry : title.splitLotIds().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) { id(out, entry.getKey()); id(out, entry.getValue()); }
+            }
+            case IndividualTitleTransfer title -> {
+                out.writeByte(2); id(out, title.claimId()); ExactItemStateCodec.write(out, title.before()); id(out, title.destinationOwnerId());
+            }
+        }
     }
     static GoodsTradeAcceptance acceptance(DataInputStream in) throws IOException {
         SubjectId receipt = id(in), contract = id(in); long revision = in.readLong();
-        SubjectId account = id(in), claim = id(in), seller = id(in), buyer = id(in); var portions = quantities(in);
-        Map<SubjectId, SubjectId> splits = new HashMap<>();
-        for (int n = count(in, 64); n > 0; n--) put(splits, id(in), id(in));
-        return new GoodsTradeAcceptance(receipt, contract, revision, new ResourceTitleTransfer(account, claim, seller, buyer, portions, splits));
+        GoodsTitleTransfer title = switch (in.readUnsignedByte()) {
+            case 1 -> {
+                SubjectId account = id(in), claim = id(in), seller = id(in), buyer = id(in); var portions = quantities(in);
+                Map<SubjectId, SubjectId> splits = new HashMap<>();
+                for (int n = count(in, 64); n > 0; n--) put(splits, id(in), id(in));
+                yield new ResourceTitleTransfer(account, claim, seller, buyer, portions, splits);
+            }
+            case 2 -> new IndividualTitleTransfer(id(in), ExactItemStateCodec.read(in), id(in));
+            default -> throw new IllegalArgumentException("unknown commercial title representation");
+        };
+        return new GoodsTradeAcceptance(receipt, contract, revision, title);
     }
     static void allocation(DataOutputStream out, GoodsTradeStockAllocation allocation) throws IOException {
         id(out, allocation.accountId()); ClaimAllocation claim = allocation.claim();

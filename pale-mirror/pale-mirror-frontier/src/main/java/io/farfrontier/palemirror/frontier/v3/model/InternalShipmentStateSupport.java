@@ -35,6 +35,18 @@ public final class InternalShipmentStateSupport {
         var shipment = Objects.requireNonNull(state.shipments().shipments().get(event.shipmentId()), "received internal shipment");
         var receipt = shipment.reception().orElseThrow(() -> new IllegalArgumentException("internal receipt lacks actual unloading"));
         var grant = shipment.authorization(); var ledger = state.inventory().fungibleResources();
+        if (shipment.cargo() instanceof ShipmentCargo.Individual cargo) {
+            var item = state.inventory().items().get(cargo.itemId());
+            if (!subject.equals(shipment.id()) || shipment.revision() != event.expectedRevision()
+                    || grant.kind() != ResourceClaimDelegation.Kind.OWNED_GOODS_SHIPMENT
+                    || !receipt.id().equals(event.receiptId()) || !receipt.claimId().equals(grant.claimId())
+                    || !cargo.matches(item) || !cargo.ownerId().equals(grant.claimantId())
+                    || !(item.custody() instanceof InventoryCustody.ContainerSlot slot)
+                    || !slot.containerId().equals(shipment.receiver().containerId())
+                    || !receipt.lotQuantities().equals(Map.of(cargo.itemId(), 1)))
+                throw new IllegalArgumentException("individual owned receipt lost its exact item or destination");
+            return state.withChanges(FrontierWorldStateUpdate.begin().shipments(state.shipments().replace(shipment, shipment.acknowledged(receipt.id()))));
+        }
         var claim = ledger.claims().get(receipt.claimId()); var account = ledger.accounts().get(shipment.receivingAccountId());
         if (!subject.equals(shipment.id()) || shipment.revision() != event.expectedRevision()
                 || (grant.kind() != ResourceClaimDelegation.Kind.INTERNAL_SHIPMENT && grant.kind() != ResourceClaimDelegation.Kind.OWNED_GOODS_SHIPMENT) || !receipt.id().equals(event.receiptId())

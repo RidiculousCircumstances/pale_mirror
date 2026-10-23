@@ -15,7 +15,7 @@ public final class SettlementWorkPolicy {
     }
     public static ResidentWorkPermissions initial(Settlement settlement, SettlementLabourRules rules, boolean extractionSite) {
         var agriculture = rules.entries().get(ResidentWorkKind.AGRICULTURE);
-        var baking = rules.entries().get(ResidentWorkKind.BAKING);
+        var baking = rules.entries().get(ResidentWorkKind.PRODUCTION);
         var hauling = rules.entries().get(ResidentWorkKind.LOGISTICS);
         var farmers = new LinkedHashSet<io.farfrontier.palemirror.frontier.v3.api.SubjectId>();
         var bakers = new LinkedHashSet<io.farfrontier.palemirror.frontier.v3.api.SubjectId>();
@@ -30,11 +30,11 @@ public final class SettlementWorkPolicy {
         var priorities = new java.util.EnumMap<ResidentWorkKind, Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, Integer>>(ResidentWorkKind.class);
         priorities.putAll(Map.of(
                 ResidentWorkKind.AGRICULTURE, farmers.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(id -> id, id -> agriculture.priority())),
-                ResidentWorkKind.BAKING, bakers.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(id -> id, id -> baking.priority())),
+                ResidentWorkKind.PRODUCTION, bakers.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(id -> id, id -> baking.priority())),
                 ResidentWorkKind.LOGISTICS, logistics));
         var reserves = new java.util.EnumMap<ResidentWorkKind, Integer>(ResidentWorkKind.class);
         reserves.put(ResidentWorkKind.AGRICULTURE, agriculture.minimumLocalStaff());
-        reserves.put(ResidentWorkKind.BAKING, baking.minimumLocalStaff());
+        reserves.put(ResidentWorkKind.PRODUCTION, baking.minimumLocalStaff());
         var extraction = rules.entries().get(ResidentWorkKind.EXTRACTION);
         if (extractionSite) {
             if (extraction == null) throw new IllegalArgumentException("extraction staffing has no declared content rules");

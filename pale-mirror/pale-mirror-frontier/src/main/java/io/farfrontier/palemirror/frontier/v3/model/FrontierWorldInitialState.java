@@ -39,7 +39,7 @@ final class FrontierWorldInitialState {
                 new ContainerRecord(installation.initialContainers().get(deposit.site().id()), deposit.site().settlementId(), 27, ContainerPurpose.EXTRACTIVE_STORAGE)
                         .withStorage(new ResourceStoragePolicy(new ShipmentEndpoint.ExtractiveSite(deposit.site().settlementId(),
                                 deposit.site().id(), installation.initialContainers().get(deposit.site().id()), deposit.site().layout().storagePort()),
-                                new ResourceStorageFilter(false, java.util.Set.of(bootstrap.ruleset().extraction().source().toolKind()),
+                                new ResourceStorageFilter(false, bootstrap.ruleset().tools().definitions().keySet(),
                                         Map.of("pale_mirror:extracted_materials", bootstrap.ruleset().extraction().definitions().stream().flatMap(definition -> definition.coldOutput().stream())
                                                 .map(output -> output.itemKind()).collect(java.util.stream.Collectors.toSet()))), 0, ResourceStorageRole.LOCAL_BUFFER))));
         bootstrap.settlements().forEach(settlement -> {
@@ -50,7 +50,7 @@ final class FrontierWorldInitialState {
         bootstrap.settlements().forEach(settlement -> settlement.structures().stream()
                 .filter(structure -> ProductionFacilityLayout.supports(structure.kind())).forEach(workshop -> {
                     ProductionStationSpec station = ProductionFacilityLayout.station(workshop);
-                    containers.put(station.containerId(), new ContainerRecord(station.containerId(), settlement.id(), 3, ContainerPurpose.PRODUCTION_STATION,
+                    containers.put(station.containerId(), new ContainerRecord(station.containerId(), settlement.id(), station.inventorySize(), ContainerPurpose.PRODUCTION_STATION,
                             java.util.Optional.of(station)));
                     if (workshop.kind() == StructureKind.SMELTERY) {
                         var storage = ProductionFacilityLayout.metalStorage(workshop); containers.put(storage.id(), storage);
@@ -69,11 +69,15 @@ final class FrontierWorldInitialState {
         SubjectId firstDepot = FrontierWorldState.depotId(bootstrap.settlements().getFirst().id()); Map<SubjectId, ExactItemStack> items = new LinkedHashMap<>();
         for (var deposit : extraction.deposits().values()) {
             var site = deposit.site();
-            for (int slot = 0; slot < bootstrap.ruleset().extraction().minersPerSite(); slot++) {
+            int slot = 0;
+            var equipment = GrayboxToolCatalog.initialFor(bootstrap.ruleset().tools(),
+                    site.layout().cells().stream().map(cell -> cell.definition().toolRequirement()).toList());
+            for (var definition : equipment) for (int worker = 0; worker < bootstrap.ruleset().extraction().minersPerSite(); worker++) {
                 SubjectId tool = new SubjectId("item:quarry-tool-" + java.util.UUID.nameUUIDFromBytes(
                         (site.id().value() + "|" + slot).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-                items.put(tool, new ExactItemStack(tool, site.settlementId(), bootstrap.ruleset().extraction().source().toolKind(), 1,
-                        new InventoryCustody.ContainerSlot(installation.initialContainers().get(site.id()), slot)));
+                items.put(tool, new ExactItemStack(tool, site.settlementId(), definition.itemKind(), 1,
+                        new InventoryCustody.ContainerSlot(installation.initialContainers().get(site.id()), slot), definition.pristine()));
+                slot++;
             }
         }
         SubjectId wheat = new SubjectId("lot:bootstrap-1-wheat");
@@ -94,6 +98,14 @@ final class FrontierWorldInitialState {
         }
         bootstrap.settlements().forEach(settlement -> {
             SubjectId depot = FrontierWorldState.depotId(settlement.id());
+            var equipment = GrayboxToolCatalog.initialFor(bootstrap.ruleset().tools(), List.of(FieldHarvestExtraction.DEFINITION.toolRequirement()));
+            int nextSlot = 0;
+            for (var definition : equipment) for (int worker = 0;
+                    worker < bootstrap.ruleset().labour().entries().get(ResidentWorkKind.AGRICULTURE).targetWorkers() && nextSlot < 20; worker++) {
+                var id = new SubjectId("item:bootstrap-field-tool-" + settlement.id().value().replace(':', '-') + "-" + nextSlot);
+                items.put(id, new ExactItemStack(id, settlement.id(), definition.itemKind(), 1,
+                        new InventoryCustody.ContainerSlot(depot, nextSlot++), definition.pristine()));
+            }
             for (int index = 0; index < EngineeringRecoveryTeam.MAX_MEMBERS; index++) {
                 SubjectId tool = new SubjectId("item:bootstrap-" + settlement.id().value().substring("settlement:".length()) + "-engineering-tool-" + (index + 1));
                 items.put(tool, new ExactItemStack(tool, settlement.id(), EngineeringToolCustody.FIRST_GRAYBOX_TOOL, 1,

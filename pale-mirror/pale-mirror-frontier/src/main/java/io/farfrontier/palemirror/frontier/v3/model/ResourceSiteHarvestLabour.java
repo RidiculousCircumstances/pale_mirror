@@ -27,8 +27,15 @@ public final class ResourceSiteHarvestLabour {
             throw new IllegalArgumentException("labour start needs a working farmer at the selected cell");
         var resident = state.humanPopulation().resident(job.workerId());
         long until = ResidentWorkIntervals.permittedUntil(state, resident.id(), tick);
-        return prior.resume(tick, ResidentWorkStatistics.speedPermille(resident, definition,
-                state.bootstrap().ruleset().workCatalog()), until);
+        int speed = ResidentWorkStatistics.speedPermille(resident, definition, state.bootstrap().ruleset().workCatalog());
+        var required = FieldEquipment.requirement(cycleOutcome(state, job));
+        if (required.isPresent()) speed = io.farfrontier.palemirror.frontier.v3.model.tooling.ToolWorkRate.speedPermille(
+                speed, state.bootstrap().ruleset().tools(), FieldEquipment.held(state, job), required.orElseThrow());
+        return prior.resume(tick, speed, until);
+    }
+    private static ResourceFieldCycle.WorkOutcome cycleOutcome(FrontierWorldState state, ResourceSiteHarvestJob job) {
+        var cycle = state.resourceSites().cycle(job.siteId());
+        return cycle.expectedWorkOutcome(cycle.layout().cells().get(job.progress().nextCropSlotIndex()).id());
     }
     public static FrontierWorldState pause(FrontierWorldState state, HumanAssignment assignment, long tick) {
         return pauseJob(state, assignedJob(state, assignment), tick);

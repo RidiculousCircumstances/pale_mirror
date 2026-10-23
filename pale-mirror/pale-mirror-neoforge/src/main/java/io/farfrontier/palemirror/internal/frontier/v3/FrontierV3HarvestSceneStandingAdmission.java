@@ -35,7 +35,7 @@ final class FrontierV3HarvestSceneStandingAdmission {
             var job = state.resourceSites().site(cause.siteId()).harvestJob(cause.jobId()).orElse(null);
             var field = FrontierV3ResourceSiteLedger.get(level);
             var position = lease.memberBody(state.actorLocations(), member.actorId());
-            if (job == null || job.progress().hasPendingPhysicalWork()
+            if (job == null || job.hasPendingPhysicalWork()
                     || state.resourceSites().harvestMutationPending(job)
                     || field.fieldDelivery(cause.siteId()) != null || field.fieldHandProjection(cause.siteId()) != null
                     || FrontierSceneLeaseStateSupport.hasBoundSceneHand(state, lease)

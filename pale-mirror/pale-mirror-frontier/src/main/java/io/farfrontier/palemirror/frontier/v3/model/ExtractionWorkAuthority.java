@@ -53,8 +53,11 @@ public final class ExtractionWorkAuthority {
                 || state.actorMovements().containsKey(job.execution().actorId())
                 || !job.movementOrder(site).arrivedAt(state.actorLocations().get(job.execution().actorId()).supportingSurface()))
             throw new IllegalArgumentException("extraction labour needs the exact worker at its admitted source station");
-        return prior.resume(tick, ResidentWorkStatistics.speedPermille(state.humanPopulation().resident(job.execution().actorId()), definition,
-                state.bootstrap().ruleset().workCatalog()), ResidentWorkIntervals.permittedUntil(state, job.execution().actorId(), tick));
+        int workerRate = ResidentWorkStatistics.speedPermille(state.humanPopulation().resident(job.execution().actorId()), definition,
+                state.bootstrap().ruleset().workCatalog());
+        int rate = io.farfrontier.palemirror.frontier.v3.model.tooling.ToolWorkRate.speedPermille(workerRate,
+                state.bootstrap().ruleset().tools(), state.inventory().items().get(job.toolId()), cell.definition().toolRequirement());
+        return prior.resume(tick, rate, ResidentWorkIntervals.permittedUntil(state, job.execution().actorId(), tick));
     }
     public static FrontierWorldState pauseLabour(FrontierWorldState state, ExtractionWork job, long tick) {
         if (job.labour().isEmpty() || !job.labour().orElseThrow().running()) return state;

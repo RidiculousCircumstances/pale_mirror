@@ -30,7 +30,9 @@ class ExtractionDeathResourcesTest {
                         prepared.authorityEpoch(), prepared.expectedReplicaRevision(), fingerprint), 0)));
         var block = BlockExtraction.prepareKnown(ExtractionPhysicalStateSupport.operation(job), job.execution(), cell.source(),
                 cell.definition(), cell.definition().before());
-        var step = new ExtractionPhysicalStep.BlockWork(new ActorHotObservation(id, job.revision()), block, 0, prepared.authorityEpoch());
+        var step = new ExtractionPhysicalStep.BlockWork(new ActorHotObservation(id, job.revision()), block, 0, prepared.authorityEpoch(),
+                io.farfrontier.palemirror.frontier.v3.model.tooling.ToolUse.prepare(state.inventory().items().get(job.toolId()),
+                        state.bootstrap().ruleset().tools(), cell.definition().toolRequirement()));
         var pending = job.prepare(step);
         state = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replaceWork(job, pending)));
         var engine = engine(state, fixture.tick(), pending);
@@ -49,6 +51,7 @@ class ExtractionDeathResourcesTest {
         var retired = next.extractionSites().work().get(job.id());
         assertEquals(ExtractionWork.Phase.STORE, retired.phase()); assertTrue(retired.target().isEmpty());
         assertEquals(count, ExtractionWorkAuthority.carried(next, retired));
+        assertEquals(step.toolUse().after(), next.inventory().items().get(job.toolId()), "settled work retains exactly one equipment wear result even after actor death");
         assertFalse(ExtractionDeathResources.resourcesSettled(next, retired));
         assertEquals(next, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(next)));
         assertThrows(IllegalArgumentException.class, () -> ExtractionPhysicalStateSupport.retired(next, current.id(), effect, 200003, fixture.tick()));

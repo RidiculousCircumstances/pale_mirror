@@ -13,6 +13,7 @@ public final class ResourceSiteHarvestCargo {
 
     /** A reserved successor is a retained commitment; otherwise admit another part only on real demand. */
     public static Optional<InventoryCustody.ContainerSlot> nextBatchSlot(FrontierWorldState state, ResourceSiteHarvestJob job, long atTick) {
+        if (job.progress().complete()) return Optional.empty();
         if (job.batchSuccessorSlot().isPresent()) return job.batchSuccessorSlot();
         if (!ProductionStockDemand.read(state, state.resourceSite(job.siteId()).settlementId(),
                 "minecraft:wheat", Optional.of(job.id()), atTick).requested()) return Optional.empty();

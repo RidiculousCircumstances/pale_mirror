@@ -17,6 +17,7 @@ import java.util.Set;
 /** Exact reducer and physical-observation admission owner for resource sites. */
 final class FrontierResourceSiteProcessModule implements FrontierWorldProcessModule {
     static Set<String> commands() { return ProcessTypeSets.types(
+            "frontier.field_equipment_changed",
             "frontier.resource_site_conflict_observed",
             "frontier.resource_field_cell_observed", "frontier.resource_field_work_access_observed",
             "frontier.resource_field_world_change_held", "frontier.resource_field_world_change_acknowledged",
@@ -224,6 +225,14 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
         }
     }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
+        if (command.payload() instanceof FieldEquipmentChanged changed) {
+            if (changed.action() == FieldEquipmentChanged.Action.COLD_TRANSFER)
+                return FrontierWorldCommandPlanner.rejected("physical adapter cannot impersonate cold equipment work");
+            try {
+                FieldEquipmentProcess.reduce(state, changed.siteId(), changed, command.submittedAt().ticks());
+                return new CommandPlan.Accepted(List.of(new ProposedEvent(changed.siteId(), changed)));
+            } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
+        }
         if (command.payload() instanceof ResourceSiteHarvestScenePreparationAborted aborted) {
             ResourceSite site = state.resourceSite(aborted.siteId());
             if (site == null) return FrontierWorldCommandPlanner.rejected("field scene preparation abort has no declared site");
@@ -576,6 +585,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
             case ResourceSiteHarvestSegmentRenewed renewed -> ResourceSiteHarvestProcess.reduceSegmentRenewed(state, event.subject(), renewed);
             case ResourceSiteHarvestBlockedCellSkipped skipped -> ResourceSiteHarvestProcess.reduceBlockedCellSkipped(state, event.subject(), skipped);
             case ResourceSiteHarvestWorkChanged changed -> ResourceSiteHarvestWorkProcess.reduce(state, event.subject(), changed);
+            case FieldEquipmentChanged changed -> FieldEquipmentProcess.reduce(state, event.subject(), changed, event.instant().ticks());
             case ResourceSiteHarvestWorkSuspended changed -> ResourceSiteHarvestWorkProcess.reduce(state, event.subject(), changed);
             case ResourceSiteHarvestImmatureCellSkipped skipped -> ResourceSiteHarvestProcess.reduceCellSkipped(state, event.subject(), skipped);
             case ResourceSiteHarvestTargetRetargeted retargeted -> ResourceSiteHarvestRetargeting.reduceTargetRetargeted(state, event.subject(), retargeted);
@@ -655,7 +665,7 @@ final class FrontierResourceSiteProcessModule implements FrontierWorldProcessMod
                 || lease.members().size() != 1
                 || state.resourceSites().site(aborted.siteId()).harvestJob(aborted.jobId())
                         .filter(job -> job.id().equals(aborted.jobId())
-                                && !job.progress().hasPendingPhysicalWork()
+                                && !job.hasPendingPhysicalWork()
                                 && !state.resourceSites().harvestMutationPending(job)
                                 && lease.members().getFirst().actorId().equals(job.workerId())).isEmpty()) {
             throw new IllegalArgumentException("field preparation abort lacks one exact body-free job scene");

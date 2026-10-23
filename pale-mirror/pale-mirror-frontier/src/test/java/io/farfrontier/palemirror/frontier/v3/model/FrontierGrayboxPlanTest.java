@@ -10,6 +10,29 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierGrayboxPlanTest {
+    @Test void resourceWarehousesWaitForTheirDeclaredAuthoredSupport() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:storage-support"), 41L,
+                FrontierRulesets.toolGraybox()));
+        var plan = FrontierGrayboxPlan.compileStableStructuralBaseline(state);
+        for (var container : state.inventory().containers().values()) {
+            if (container.purpose() != ContainerPurpose.RESOURCE_STORAGE) continue;
+            var surface = state.inventory().surfaces().get(container.id());
+            var support = FrontierContainerSocketPlan.declaredSupport(state, surface).orElseThrow();
+            assertTrue(support instanceof ContainerSocketSupport.Graybox);
+            assertEquals(plan.cells().get(support.position()), ((ContainerSocketSupport.Graybox) support).cell());
+        }
+    }
+
+    @Test void toolProfileKeepsEveryForgeOffTheSharedRoadAndOtherBuildings() {
+        var bootstrap = FrontierBootstrapper.create(new WorldId("frontier:tool-graybox-layout"), 41L, FrontierRulesets.toolGraybox());
+        var state = FrontierWorldState.initial(bootstrap);
+        var plan = FrontierGrayboxPlan.compileStableStructuralBaseline(state);
+        for (var settlement : bootstrap.settlements()) {
+            var forge = settlement.structures().stream().filter(s -> s.kind() == StructureKind.FORGE).findFirst().orElseThrow();
+            for (var support : SettlementStructureFootprint.supportSurfaces(forge))
+                assertEquals(forge.id(), plan.cells().get(support.support()).semanticTarget().subjectId());
+        }
+    }
     @Test void generationUsesTheSameInitialSettlementCellsButNoRuntimeWorkOrHiveOverlay() {
         var state = initial();
         var generated = FrontierGrayboxPlan.compileInitialSettlementFabric(state.bootstrap()).cells();

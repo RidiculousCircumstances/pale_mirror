@@ -13,7 +13,7 @@ final class ContainerStorageDemandSources {
 
     static List<ContainerInboundCapacity.Demand> demands(FrontierWorldState state) {
         return VIEW.get(List.of(state.productionJobs(), state.companies().goodsTrade().contracts(),
-                        state.inventory().fungibleResources().accounts(), state.shipments()),
+                        state.inventory().fungibleResources().accounts(), state.inventory().items(), state.shipments()),
                 () -> SOURCES.stream().flatMap(source -> source.apply(state).stream()).toList());
     }
 }

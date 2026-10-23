@@ -719,7 +719,7 @@ class FungibleResourceLedgerTest {
         ResourceLot lot = new ResourceLot(lotId, owner, "minecraft:bread", 10, "snapshot", List.of());
         CustodyAccount account = new CustodyAccount(accountId, new ResourceCustody.Container(containerId), Map.of(lotId, 10), Map.of());
         PhysicalStackBinding binding = new PhysicalStackBinding(new SubjectId("binding:snapshot"), accountId,
-                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(containerId, 1)), 3L, "minecraft:bread",
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(containerId, baseline.inventory().availableSlots(containerId).getFirst())), 3L, "minecraft:bread",
                 Map.of(lotId, 10), Map.of(new SubjectId("claim:snapshot"), 4));
         FungibleResourceLedger resources = FungibleResourceLedger.empty().issue(lot, account)
                 .reserve(new ClaimAllocation(new SubjectId("claim:snapshot"), new SubjectId("process:snapshot"), owner, "minecraft:bread", 4,

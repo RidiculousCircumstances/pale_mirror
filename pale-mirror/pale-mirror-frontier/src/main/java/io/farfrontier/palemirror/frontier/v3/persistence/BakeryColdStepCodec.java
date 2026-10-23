@@ -3,7 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.persistence;
 import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodec;
 import io.farfrontier.palemirror.frontier.v3.model.BakeryColdStep;
-import io.farfrontier.palemirror.frontier.v3.model.BakeryWorkState;
+import io.farfrontier.palemirror.frontier.v3.model.StationWorkState;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 
@@ -30,7 +30,7 @@ final class BakeryColdStepCodec implements PayloadCodec {
     @Override public FrontierPayload decode(byte[] bytes) {
         return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new BakeryColdStep(
                 FrontierWorldPayloadCodecs.readSubject(input).value(),
-                BakeryWorkState.Phase.fromWireTag(input.readUnsignedByte()),
+                StationWorkState.Phase.fromWireTag(input.readUnsignedByte()),
                 BakeryColdStep.Action.fromWireTag(input.readUnsignedByte()),
                 new SurfaceAnchor(new BlockPosition(input.readInt(), input.readInt(), input.readInt())),
                 ActorExecutionStateCodec.readId(input), PedestrianRouteReceiptCodec.read(input),

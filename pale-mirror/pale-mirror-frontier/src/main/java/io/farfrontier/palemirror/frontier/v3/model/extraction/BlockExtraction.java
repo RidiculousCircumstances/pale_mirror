@@ -34,10 +34,10 @@ public record BlockExtraction(String operationId,
     }
 
     /** Family-issued policy. Loot owns output; this declaration bounds its COLD equivalent. */
-    public record Definition(String id, Block before, Block after, String toolKind,
+    public record Definition(String id, Block before, Block after, io.farfrontier.palemirror.frontier.v3.model.tooling.ToolRequirement toolRequirement,
                              String lootTable, List<Output> coldOutput) {
         public Definition {
-            requireKey(id); requireKey(toolKind); requireKey(lootTable);
+            requireKey(id); Objects.requireNonNull(toolRequirement); requireKey(lootTable);
             Objects.requireNonNull(before); Objects.requireNonNull(after);
             coldOutput = outputs(coldOutput);
             if (before.equals(after)) throw new IllegalArgumentException("extraction cannot leave its source unchanged");

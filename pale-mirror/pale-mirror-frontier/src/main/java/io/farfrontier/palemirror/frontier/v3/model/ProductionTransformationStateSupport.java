@@ -153,7 +153,7 @@ public final class ProductionTransformationStateSupport {
 
     private static StrategicTask taskFor(FrontierWorldState state, ProductionJob job, StrategicTaskStatus status) {
         StrategicTask task = state.strategicPlans().tasks().get(job.taskId());
-        if (task == null || !task.ownerId().equals(job.settlementId()) || task.kind() != StrategicTaskKind.PRODUCE_BREAD
+        if (task == null || !task.ownerId().equals(job.settlementId()) || task.kind() != StrategicTaskKind.PRODUCE_AT_STATION
                 || task.status() != status) throw new IllegalArgumentException("production has no exact active strategic task");
         return task;
     }

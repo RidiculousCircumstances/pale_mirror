@@ -307,7 +307,9 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         helper.assertTrue(!FrontierV3ReferenceContainerCustodyExecutor.checkpointConfirmedMutation(runtime, depot, chest)
                         && runtime.canonicalState().orElseThrow().revision().equals(pendingRevision),
                 "an effect checkpoint cannot reclassify pending projection as provider loss");
-        chest.getItem(0).shrink(1); chest.setChanged();
+        int changedSlot = java.util.stream.IntStream.range(0, chest.getContainerSize())
+                .filter(slot -> chest.getItem(slot).is(net.minecraft.world.item.Items.WHEAT)).findFirst().orElseThrow();
+        chest.getItem(changedSlot).shrink(1); chest.setChanged();
         helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.reconcilePreparedProjection(helper.getLevel(), runtime, prepared, lease, chest),
                 "actual mismatching chest must produce a retained local conflict");
         var checkpoint = runtime.checkpointImage().orElseThrow();
@@ -323,7 +325,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
                         List.of(conflicted.inventory().surfaces().get(depot))).size() == 1,
                 "pending-write conflict remains eligible for later exact observation");
         helper.assertTrue(!FrontierV3ReferenceContainerCustodyExecutor.reconcilePreparedProjection(helper.getLevel(), recovered, conflicted, retained, chest)
-                        && chest.getItem(0).getCount() == 63 && recovered.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE,
+                        && chest.getItem(changedSlot).getCount() == 63 && recovered.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE,
                 "a repeated observation neither overwrites loss nor quarantines the instance");
         recovered.shutdown(); helper.succeed();
     }
@@ -496,7 +498,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
         ChestBlockEntity chest = chest(helper, local, depot);
         FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, state, depot);
         helper.assertTrue(chest.getItem(3).is(net.minecraft.world.item.Items.BREAD)
-                        && chest.getItem(7).is(net.minecraft.world.item.Items.WHEAT) && chest.getItem(0).isEmpty(),
+                        && chest.getItem(7).is(net.minecraft.world.item.Items.WHEAT) && chest.getItem(6).isEmpty(),
                 "writer consumes the same current binding image without its own packing policy");
         chest.setChanged();
         helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.observed(state, depot, chest).fingerprint()
@@ -527,7 +529,7 @@ public final class FrontierV3ReferenceContainerCustodyGameTests {
                         && ReferenceContainerCustody.hasOperationalCustody(confirmed, depot),
                 "the fenced catch-up write confirms its actual image in the same loaded turn, before unload");
         helper.assertTrue(chest.getItem(3).is(net.minecraft.world.item.Items.BREAD)
-                        && chest.getItem(7).is(net.minecraft.world.item.Items.WHEAT) && chest.getItem(0).isEmpty(),
+                        && chest.getItem(7).is(net.minecraft.world.item.Items.WHEAT) && chest.getItem(6).isEmpty(),
                 "custody catch-up preserves positions and holes rather than sorting resources");
         helper.assertTrue(!FrontierV3ReferenceContainerCustodyExecutor.retainsUnobservedRestartFungibleHot(
                         Map.of(fence.scopeId(), fence.authorityEpoch()), confirmed.inventory().fungibleResources(), fence),

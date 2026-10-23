@@ -10,10 +10,13 @@ public final class ProductionStationTransformation {
         var record = ProductionStationEnergy.record(state, stationId); var spec = record.productionStation().orElseThrow();
         var operation = machine.operation().orElse(null);
         if (operation == null || !operation.complete() || operation.transformed() || machine.pendingFuel().isPresent()
-                || machine.pendingRecipe().isPresent() || !(operation.inputCustody() instanceof ProductionOperation.FungibleInput input)
+                || machine.pendingRecipe().isPresent() || operation.inputCustody().materials().isEmpty()
                 || ContainerPhysicalAuthorityComposition.pending(state, record.id())
                 || ReferenceContainerCustody.blocksCanonicalUse(state, record.id())) return Optional.empty();
         if (!ProductionStationRecipe.portVacant(state, spec, ActorContainerItemOrder.StationPort.OUTPUT)) return Optional.empty();
+        var input = operation.inputCustody().materials().orElseThrow();
+        var recipe = state.bootstrap().ruleset().production().require(operation.recipeId());
+        ProductionOperationInputs.validate(state.inventory(), spec, operation, recipe);
         var ledger = state.inventory().fungibleResources();
         boolean hot = ReferenceContainerCustody.hasLiveCustody(state, record.id());
         if (hot && !ReferenceContainerCustody.hasOperationalCustody(state, record.id())) return Optional.empty();
@@ -35,11 +38,16 @@ public final class ProductionStationTransformation {
                 if (remaining < 0) throw new IllegalArgumentException("completed station operation lost its input quantity");
                 if (remaining > 0) after.add(new FungiblePhysicalObservation.Stack(binding.address(), binding.itemKind(), remaining));
             }
-            var recipe = state.bootstrap().ruleset().production().require(operation.recipeId());
-            after.add(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                    new InventoryCustody.ContainerSlot(record.id(), spec.outputSlot())), recipe.product().itemKind(), operation.outputQuantity()));
+            if (recipe.outcome() instanceof ProductionRecipeOutcome.Fungible)
+                after.add(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
+                        new InventoryCustody.ContainerSlot(record.id(), spec.outputSlot())), recipe.product().itemKind(), operation.outputQuantity()));
         }
-        return Optional.of(new ProductionStationRecipeBoundary(stationId, record.id(), operation.id(), machine.revision(), epoch, before, after));
+        var owner = ledger.lots().get(input.lots().keySet().iterator().next()).economicOwnerId();
+        var exact = recipe.outcome() instanceof ProductionRecipeOutcome.Fungible ? Optional.<ExactItemStack>empty()
+                : Optional.of(ProductionIndividualResult.resolve(recipe, state.bootstrap().ruleset().tools(), operation.outputId(), owner,
+                    new InventoryCustody.ContainerSlot(record.id(), spec.outputSlot()), operation.inputCustody().maintenanceTarget()));
+        return Optional.of(new ProductionStationRecipeBoundary(stationId, record.id(), operation.id(), machine.revision(), epoch,
+                before, after, operation.inputCustody().maintenanceTarget(), exact));
     }
     public static boolean pendingForContainer(FrontierWorldState state, SubjectId container) {
         return state.productionStations().machines().values().stream().flatMap(machine -> machine.pendingRecipe().stream())
@@ -57,25 +65,35 @@ public final class ProductionStationTransformation {
             return state.withChanges(FrontierWorldStateUpdate.begin().productionStations(state.productionStations().with(machine.prepareRecipe(boundary))));
         }
         var operation = machine.operation().orElseThrow();
-        var input = (ProductionOperation.FungibleInput) operation.inputCustody();
+        var input = operation.inputCustody().materials().orElseThrow();
         var recipe = state.bootstrap().ruleset().production().require(operation.recipeId());
         var ledger = state.inventory().fungibleResources();
         var owner = ledger.lots().get(input.lots().keySet().iterator().next()).economicOwnerId();
-        var output = new ResourceLot(operation.outputId(), owner, recipe.product().itemKind(), operation.outputQuantity(),
-                "recipe:" + recipe.id().value(), input.lots().keySet().stream().sorted().toList());
         var station = ProductionStationEnergy.record(state, subject).productionStation().orElseThrow();
         ExactInventory inventory;
-        if (event.stage() == ProductionStationRecipeChanged.Stage.COLD_COMPLETED) {
+        boolean cold = event.stage() == ProductionStationRecipeChanged.Stage.COLD_COMPLETED;
+        if (cold) {
             if (!next(state, subject).equals(Optional.of(boundary))) throw new IllegalArgumentException("station COLD recipe lost exclusive current input");
-            inventory = ProductionStationRecipe.transformCold(state, station, operation.recipeId(), input.accountId(), input.lots(), input.claims(), output);
         } else {
             if (!machine.pendingRecipe().equals(Optional.of(boundary)) || event.observed().size() != boundary.after().size()
-                    || !new HashSet<>(event.observed()).equals(new HashSet<>(boundary.after())))
+                    || !new HashSet<>(event.observed()).equals(new HashSet<>(boundary.after()))
+                    || !event.observedExact().equals(boundary.exactAfter()))
                 throw new IllegalArgumentException("station physical recipe lacks its exact retained postimage");
+            boundary.validate(state.inventory(), station, operation, state.bootstrap().ruleset().production(), state.bootstrap().ruleset().tools());
+        }
+        if (!(recipe.outcome() instanceof ProductionRecipeOutcome.Fungible)) {
+            inventory = ProductionIndividualTransformation.apply(state, station, operation, boundary, cold);
+        } else {
+        var output = new ResourceLot(operation.outputId(), owner, recipe.product().itemKind(), operation.outputQuantity(),
+                "recipe:" + recipe.id().value(), input.lots().keySet().stream().sorted().toList());
+        if (event.stage() == ProductionStationRecipeChanged.Stage.COLD_COMPLETED) {
+            inventory = ProductionStationRecipe.transformCold(state, station, operation.recipeId(), input.accountId(), input.lots(), input.claims(), output);
+        } else {
             inventory = ProductionStationRecipe.transformObserved(state, station, operation.recipeId(), input.accountId(), boundary.authorityEpoch(),
                     input.lots(), input.claims(), output, event.observed());
         }
-        inventory = ProductionStationProcessing.reserveOutput(inventory, operation, boundary.authorityEpoch());
+        }
+        inventory = ProductionStationProcessing.reserveOutput(inventory, operation, recipe.outcome(), boundary.authorityEpoch());
         var finished = machine.completeRecipe(operation);
         if (!(operation.initiator() instanceof ProductionOperation.OrderInitiator)) finished = finished.release(operation.id());
         return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory)

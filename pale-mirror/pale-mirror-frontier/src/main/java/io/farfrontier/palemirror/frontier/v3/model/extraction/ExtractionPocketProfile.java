@@ -18,7 +18,7 @@ public record ExtractionPocketProfile(int producerPeriod, int firstDepth, int de
     public String canonicalText() {
         return producerPeriod + "," + firstDepth + "," + depthCells + "," + firstRow + "," + rowCells
                 + ":" + material.id() + ":" + ExtractionRules.blockText(material.before()) + ":"
-                + ExtractionRules.blockText(material.after()) + ":" + material.toolKind() + ":" + material.lootTable()
+                + ExtractionRules.blockText(material.after()) + ":" + material.toolRequirement() + ":" + material.lootTable()
                 + ":" + material.coldOutput();
     }
 }

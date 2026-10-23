@@ -152,6 +152,7 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
         return replace(job.withConfirmedCrop(job.progress().confirmPreparedCrop(nextSlot), outcome, extractedQuantity).bindTarget(cycle));
     }
     public ResourceSiteLifecycle returnFullHarvestBatch(ResourceSiteHarvestJob job) { return replace(require(job).withFullBatchReturn()); }
+    public ResourceSiteLifecycle endHarvestOffer(ResourceSiteHarvestJob job) { return replace(require(job).endWorkOffer()); }
     /** Settle only the retained cell. Do not choose work for a retired execution.
      * The same slot remains held until acceptance/owner retirement; binding its
      * successor generation satisfies the cell ledger, not new execution authority. */
@@ -169,6 +170,9 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
     }
     public ResourceSiteLifecycle skipBlockedHarvestCell(ResourceSiteHarvestJob job, int count) { return replace(require(job).withBlockedCellsSkipped(count)); }
     public ResourceSiteLifecycle withHarvestLabour(ResourceSiteHarvestJob job, WorkProgress work) { return replace(require(job).withWork(work)); }
+    public ResourceSiteLifecycle withHarvestEquipment(ResourceSiteHarvestJob job, WorkToolAssignment equipment) {
+        return replace(require(job).withEquipment(equipment));
+    }
     public ResourceSiteLifecycle withHarvestProgress(ResourceSiteHarvestJob job, ResourceSiteHarvestProgress progress) {
         return replace(require(job).withProgress(progress));
     }
@@ -265,7 +269,7 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
     public ResourceSiteLifecycle harvestedDeferred(ResourceSiteHarvestJob job, boolean resolved, ResourceSiteHarvestCausality causality,
                                                     BodyPosition body, java.util.Set<PhysicalIntentId> reclaimable) {
         require(job);
-        if (!job.progress().complete() || job.progress().hasPendingPhysicalWork())
+        if (!job.progress().complete() || job.hasPendingPhysicalWork())
             throw new IllegalArgumentException("field execution is incomplete or retains physical work acceptance");
         var jobs = new LinkedHashMap<>(harvestJobs); jobs.remove(job.id());
         var histories = new LinkedHashMap<>(harvestLineages);
@@ -283,7 +287,7 @@ public record ResourceSiteLifecycle(SubjectId siteId, ResourceSitePhase phase, l
     /** Explicit interrupted owner removal; not a successful delivery or completed field lineage. */
     public ResourceSiteLifecycle abandonHarvest(ResourceSiteHarvestJob job) {
         require(job);
-        if (job.progress().hasPendingPhysicalWork()) throw new IllegalArgumentException("field owner still retains a physical cell");
+        if (job.hasPendingPhysicalWork()) throw new IllegalArgumentException("field owner still retains a physical cell");
         var jobs = new LinkedHashMap<>(harvestJobs); jobs.remove(job.id());
         var next = jobs.isEmpty() ? growthStage == MATURE_STAGE ? ResourceSitePhase.READY : ResourceSitePhase.GROWING : ResourceSitePhase.HARVESTING;
         return copy(next, growthEpoch, growthStage, preparationWork, Optional.empty(), jobs, harvestLineages, harvestSequence);

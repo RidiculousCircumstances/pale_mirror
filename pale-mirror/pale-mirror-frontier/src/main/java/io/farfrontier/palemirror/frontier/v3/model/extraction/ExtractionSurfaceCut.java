@@ -12,7 +12,7 @@ public record ExtractionSurfaceCut(int topY, long revision, BlockExtraction.Defi
     }
     public String canonicalText() {
         return topY + ":" + revision + ":" + cover.id() + ":" + ExtractionRules.blockText(cover.before())
-                + ":" + ExtractionRules.blockText(cover.after()) + ":" + cover.toolKind() + ":" + cover.lootTable()
+                + ":" + ExtractionRules.blockText(cover.after()) + ":" + cover.toolRequirement() + ":" + cover.lootTable()
                 + ":" + cover.coldOutput().stream().map(output -> output.itemKind() + ":" + output.quantity())
                     .collect(java.util.stream.Collectors.joining(";"));
     }

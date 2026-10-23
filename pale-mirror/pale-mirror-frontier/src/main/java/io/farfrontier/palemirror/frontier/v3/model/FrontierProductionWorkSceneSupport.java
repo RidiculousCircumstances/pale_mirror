@@ -24,10 +24,10 @@ public final class FrontierProductionWorkSceneSupport {
     static Optional<ActorCarriedResources.Presentation> carriedResources(FrontierWorldState state, HumanAssignment assignment) {
         executionCheckpoint(state, assignment);
         ProductionJob job = state.productionJobs().get(assignment.ownerId().orElseThrow());
-        if (job.bakeryWork().isEmpty() || !state.inventory().fungibleResources().accounts()
-                .containsKey(job.bakeryWork().orElseThrow().actorAccountId())) return Optional.empty();
+        if (job.stationWork().isEmpty() || !state.inventory().fungibleResources().accounts()
+                .containsKey(job.stationWork().orElseThrow().actorAccountId())) return Optional.empty();
         var carried = new ActorCarriedResources.Presentation(job.workerId(),
-                job.bakeryWork().orElseThrow().actorAccountId(), new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN));
+                job.stationWork().orElseThrow().actorAccountId(), new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN));
         carried.requireAccount(state.inventory().fungibleResources());
         return Optional.of(carried);
     }
@@ -41,15 +41,15 @@ public final class FrontierProductionWorkSceneSupport {
         if (!ownsCurrentWorker(state, job) || hasScene(state, job.id()) || !hasPhysicalInput(state, job)
                 || state.humanPopulation().meals().containsKey(job.workerId())
                 || state.actorMovements().containsKey(job.workerId())
-                || job.bakeryWork().isEmpty() && job.workProgress().terminalEffectEligible()) return Optional.empty();
-        if (job.bakeryWork().isPresent()) {
-            var phase = job.bakeryWork().orElseThrow().phase();
-            if ((phase == BakeryWorkState.Phase.STATION_LOAD || phase == BakeryWorkState.Phase.PROCESSING
-                    || phase == BakeryWorkState.Phase.STATION_UNLOAD)
+                || job.stationWork().isEmpty() && job.workProgress().terminalEffectEligible()) return Optional.empty();
+        if (job.stationWork().isPresent()) {
+            var phase = job.stationWork().orElseThrow().phase();
+            if ((phase == StationWorkState.Phase.TARGET_LOAD || phase == StationWorkState.Phase.STATION_LOAD || phase == StationWorkState.Phase.PROCESSING
+                    || phase == StationWorkState.Phase.STATION_UNLOAD)
                     && ReferenceContainerCustody.blocksCanonicalUse(state,
-                        ProductionStationEnergy.record(state, job.bakeryWork().orElseThrow().stationId()).id())) return Optional.empty();
-            if (phase == BakeryWorkState.Phase.DEPOT_PICKUP || phase == BakeryWorkState.Phase.DEPOT_DELIVERY) {
-                var container = BakeryStorage.current(job);
+                        ProductionStationEnergy.record(state, job.stationWork().orElseThrow().stationId()).id())) return Optional.empty();
+            if (phase.sourcePickup() || phase == StationWorkState.Phase.DEPOT_DELIVERY) {
+                var container = StationWorkStorage.current(job);
                 if (ReferenceContainerCustody.hasLiveCustody(state, container) && !ReferenceContainerCustody.hasOperationalCustody(state, container)) return Optional.empty();
             }
         } else {
@@ -59,13 +59,13 @@ public final class FrontierProductionWorkSceneSupport {
         Settlement settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), job.settlementId());
         SettlementStructure workshop = settlement.structures().stream().filter(value -> value.id().equals(job.facilityId())).findFirst().orElse(null);
         ActorLocation worker = state.actorLocations().get(job.workerId());
-        if (workshop == null || workshop.kind() != StructureKind.WORKSHOP || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT
+        if (workshop == null || job.stationWork().isEmpty() && workshop.kind() != StructureKind.WORKSHOP || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT
                 || worker == null || worker.condition().status() != ActorLifeStatus.ALIVE) return Optional.empty();
-        if (job.bakeryWork().isPresent() && BakeryWorkGoal.deliveryAccessCleared(state, job, worker.body()))
+        if (job.stationWork().isPresent() && StationWorkGoal.deliveryAccessCleared(state, job, worker.body()))
             return Optional.empty();
-        if (job.bakeryWork().isPresent()) {
+        if (job.stationWork().isPresent()) {
             SurfaceAnchor retained = worker.supportingSurface();
-            BlockPosition demand = BakeryWorkGoal.current(state, job).station().support();
+            BlockPosition demand = StationWorkGoal.current(state, job).station().support();
             return Optional.of(new Candidate(job.id(), job.settlementId(), job.workerId(), workshop.id(), demand,
                     retained.support(), Map.of(job.workerId(), retained.support())));
         }
@@ -149,7 +149,7 @@ public final class FrontierProductionWorkSceneSupport {
     }
     /** The worker may not continue a visual cycle after its named player-observable input departed. */
     public static boolean hasPhysicalInput(FrontierWorldState state, ProductionJob job) {
-        if (job.bakeryWork().isPresent()) return state.productionJobs().containsKey(job.id());
+        if (job.stationWork().isPresent()) return state.productionJobs().containsKey(job.id());
         if (job.inputHold() instanceof ProductionInputHold.FungibleBound bound) {
             SubjectId depot = FrontierWorldState.depotId(job.settlementId());
             if (!ReferenceContainerCustody.hasOperationalCustody(state, depot)) return false;
@@ -170,7 +170,7 @@ public final class FrontierProductionWorkSceneSupport {
     public static void validatePrepared(FrontierWorldState state, SceneLease lease) {
         ProductionWorkSceneCause cause = FrontierSceneBehaviors.productionWork(lease); ProductionJob job = require(state, cause);
         Candidate candidate = candidate(state, job).orElseThrow(() -> new IllegalArgumentException("production-work scene has no exact ready worker"));
-        if ((job.bakeryWork().isEmpty() && !state.actorLocations().get(job.workerId()).supportingSurface()
+        if ((job.stationWork().isEmpty() && !state.actorLocations().get(job.workerId()).supportingSurface()
                 .equals(job.spatial().current(job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()))))
                 || !lease.handoffPosition().equals(candidate.handoffPosition()) || !lease.memberBodies(state.actorLocations()).equals(SceneLease.bodiesAboveSupportCells(candidate.memberPositions()))
                 || !lease.members().stream().map(SceneMember::actorId).collect(java.util.stream.Collectors.toSet()).equals(Set.of(job.workerId()))) {

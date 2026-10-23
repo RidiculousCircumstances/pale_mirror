@@ -82,7 +82,7 @@ class HumanRoleAssignmentTest {
                 .addTask(task));
         var permissionKinds = new java.util.EnumMap<ResidentWorkKind, java.util.Set<SubjectId>>(ResidentWorkKind.class);
         permissionKinds.putAll(SettlementWorkPolicy.permissions(state, settlement.id()).workers());
-        permissionKinds.put(ResidentWorkKind.BAKING, java.util.Set.of(born.id()));
+        permissionKinds.put(ResidentWorkKind.PRODUCTION, java.util.Set.of(born.id()));
         state = state.withStrategicPlans(state.strategicPlans().withWorkPermissions(settlement.id(),
                 new ResidentWorkPermissions(permissionKinds)));
 
@@ -151,8 +151,8 @@ class HumanRoleAssignmentTest {
 
     private static StrategicTask productionTask(SubjectId settlement) {
         return new StrategicTask(new SubjectId("task:human-crafter"), new SubjectId("objective:human-crafter"), settlement,
-                StrategicTaskKind.PRODUCE_BREAD, Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP,
-                StrategicTaskRequirement.EXACT_WHEAT_INPUT), List.of(), StrategicTaskStatus.PENDING);
+                StrategicTaskKind.PRODUCE_AT_STATION, Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_PRODUCTION_FACILITY,
+                StrategicTaskRequirement.AVAILABLE_PRODUCTION_INPUT), List.of(), StrategicTaskStatus.PENDING);
     }
 
 

@@ -35,8 +35,11 @@ final class FrontierV3FixedContainerProviders {
     private static final Provider SMELTER = new Provider(PaleMirrorProductionStations.SMELTER,
             block -> block == PaleMirrorProductionStations.SMELTER.get(),
             entity -> entity instanceof ProductionBenchBlockEntity bench ? bench : null);
+    private static final Provider FORGE = new Provider(PaleMirrorProductionStations.FORGE,
+            block -> block == PaleMirrorProductionStations.FORGE.get(),
+            entity -> entity instanceof ProductionBenchBlockEntity bench ? bench : null);
     private static final Map<ProductionEquipment.Id, Provider> EQUIPMENT = Map.of(
-            ProductionEquipment.BENCH, BENCH, ProductionEquipment.SMELTER, SMELTER);
+            ProductionEquipment.BENCH, BENCH, ProductionEquipment.SMELTER, SMELTER, ProductionEquipment.FORGE, FORGE);
     private FrontierV3FixedContainerProviders() { }
     private static Provider require(ContainerRecord record) {
         var provider = record.purpose() == ContainerPurpose.PRODUCTION_STATION
@@ -70,7 +73,8 @@ final class FrontierV3FixedContainerProviders {
         if (record.productionStation().isPresent()) {
             var spec = record.productionStation().orElseThrow();
             if (spec.inputSlot() != ProductionBenchBlockEntity.INPUT || spec.outputSlot() != ProductionBenchBlockEntity.OUTPUT
-                    || spec.fuelSlot() != ProductionBenchBlockEntity.FUEL)
+                    || spec.fuelSlot() != ProductionBenchBlockEntity.FUEL
+                    || spec.maintenanceSlot().isPresent() && spec.maintenanceSlot().getAsInt() != ProductionBenchBlockEntity.MAINTENANCE_TARGET)
                 throw new IllegalArgumentException("station port layout differs from registered equipment adapter");
         }
         return Optional.of(new FrontierV3PhysicalContainer(record.id(), inventory, entity.getPersistentData(), entity.getBlockPos(),

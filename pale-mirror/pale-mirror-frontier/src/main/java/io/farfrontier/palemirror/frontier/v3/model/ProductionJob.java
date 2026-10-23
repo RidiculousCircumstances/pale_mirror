@@ -22,7 +22,7 @@ public record ProductionJob(
         ProductionWorkProgress workProgress,
         TraversalTopology workTraversal,
         int traversalCursor,
-        java.util.Optional<BakeryWorkState> bakeryWork,
+        java.util.Optional<StationWorkState> stationWork,
         StationApproachState spatial,
         ProductionRights rights
 ) {
@@ -30,10 +30,10 @@ public record ProductionJob(
     public ProductionJob(SubjectId id, SubjectId taskId, SubjectId settlementId, SubjectId facilityId, SubjectId workerId,
                          SubjectId consumedItemId, ProductionInputHold inputHold, SubjectId outputItemId,
                          String outputItemKind, int outputCount, ProductionWorkProgress workProgress,
-                         TraversalTopology workTraversal, int traversalCursor, java.util.Optional<BakeryWorkState> bakeryWork,
+                         TraversalTopology workTraversal, int traversalCursor, java.util.Optional<StationWorkState> stationWork,
                          StationApproachState spatial) {
         this(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId, outputItemKind,
-                outputCount, workProgress, workTraversal, traversalCursor, bakeryWork, spatial, ProductionRights.publicService(settlementId));
+                outputCount, workProgress, workTraversal, traversalCursor, stationWork, spatial, ProductionRights.publicService(settlementId));
     }
     public ProductionJob {
         Objects.requireNonNull(id, "production job id");
@@ -45,12 +45,12 @@ public record ProductionJob(
         Objects.requireNonNull(inputHold, "production input hold");
         Objects.requireNonNull(outputItemId, "output item id");
         Objects.requireNonNull(workProgress, "production work progress"); workTraversal = Objects.requireNonNull(workTraversal, "production work traversal");
-        bakeryWork = Objects.requireNonNull(bakeryWork, "bakery work state");
+        stationWork = Objects.requireNonNull(stationWork, "bakery work state");
         Objects.requireNonNull(spatial, "production spatial continuation");
         Objects.requireNonNull(rights, "production rights");
-        if (rights.mode() == ProductionRights.Mode.COMPANY_OWN_ACCOUNT && bakeryWork.isEmpty())
+        if (rights.mode() == ProductionRights.Mode.COMPANY_OWN_ACCOUNT && stationWork.isEmpty())
             throw new IllegalArgumentException("own-account production requires the shared station workflow");
-        if (bakeryWork.isPresent() && spatial.pending())
+        if (stationWork.isPresent() && spatial.pending())
             throw new IllegalArgumentException("bakery goals cannot carry a legacy station approach");
         if (!taskId.value().startsWith("task:")) throw new IllegalArgumentException("production job needs its declared strategic task");
         if (!consumedItemId.equals(inputHold.itemId())) throw new IllegalArgumentException("production input hold must retain its exact item id");
@@ -62,9 +62,9 @@ public record ProductionJob(
             case ProductionInputHold.FungibleCold cold -> cold.inputLots().values().stream().mapToInt(Integer::intValue).sum();
             case ProductionInputHold.FungibleBound bound -> bound.inputLots().values().stream().mapToInt(Integer::intValue).sum();
             case ProductionInputHold.Cold cold -> cold.item().count();
-            case ProductionInputHold.Materialized ignored -> bakeryWork.map(BakeryWorkState::inputQuantity).orElse(outputCount);
+            case ProductionInputHold.Materialized ignored -> stationWork.map(StationWorkState::inputQuantity).orElse(outputCount);
         };
-        if (bakeryWork.isEmpty() ? outputCount != retainedInput : bakeryWork.orElseThrow().inputQuantity() != retainedInput)
+        if (stationWork.isEmpty() ? outputCount != retainedInput : stationWork.orElseThrow().inputQuantity() != retainedInput)
             throw new IllegalArgumentException("production job differs from its retained input allocation");
         if (!workTraversal.provenance().equals(facilityId) || workTraversal.edges().stream().anyMatch(edge -> edge.kind() != TraversalKind.PEDESTRIAN
                 || !edge.traversableBy(TraversalCapability.PEDESTRIAN)) || traversalCursor < 0
@@ -80,9 +80,9 @@ public record ProductionJob(
     public ProductionJob(SubjectId id, SubjectId taskId, SubjectId settlementId, SubjectId facilityId, SubjectId workerId,
                          SubjectId consumedItemId, ProductionInputHold inputHold, SubjectId outputItemId,
                          String outputItemKind, int outputCount, ProductionWorkProgress workProgress,
-                         TraversalTopology workTraversal, int traversalCursor, java.util.Optional<BakeryWorkState> bakeryWork) {
+                         TraversalTopology workTraversal, int traversalCursor, java.util.Optional<StationWorkState> stationWork) {
         this(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId,
-                outputItemKind, outputCount, workProgress, workTraversal, traversalCursor, bakeryWork, StationApproachState.initial());
+                outputItemKind, outputCount, workProgress, workTraversal, traversalCursor, stationWork, StationApproachState.initial());
     }
 
     /** Existing test fixtures and the retiring route constructor have no bakery phase. */
@@ -107,16 +107,19 @@ public record ProductionJob(
                 ProductionWorkProgress.notStarted(), fixtureTraversal(id, facilityId), 0);
     }
 
+    public FrontierDomainRelationships.EntityKind outputEntityKind() {
+        return stationWork.map(work -> work.outputRepresentation().entityKind()).orElseGet(inputHold::resourceEntityKind);
+    }
     public ProductionJob withInputHold(ProductionInputHold next) {
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, next, outputItemId, outputItemKind, outputCount,
-                workProgress, workTraversal, traversalCursor, bakeryWork, spatial, rights);
+                workProgress, workTraversal, traversalCursor, stationWork, spatial, rights);
     }
 
     /** The bakery owner selects a recipe-consistent part only after deposit;
      * resource reservation changes must be committed with this value. */
     public ProductionJob withLoadedPortion(ProductionInputHold next, ProductionRecipe recipe) {
-        if (rights.mode() != ProductionRights.Mode.PUBLIC_PRODUCTION || bakeryWork.isEmpty()
-                || !bakeryWork.orElseThrow().recipeId().equals(recipe.id()))
+        if (rights.mode() != ProductionRights.Mode.PUBLIC_PRODUCTION || stationWork.isEmpty()
+                || !stationWork.orElseThrow().recipeId().equals(recipe.id()))
             throw new IllegalArgumentException("partial public order cannot rewrite a commercial promise");
         int quantity = switch (next) {
             case ProductionInputHold.FungibleCold value -> value.inputLots().values().stream().mapToInt(Integer::intValue).sum();
@@ -125,11 +128,11 @@ public record ProductionJob(
         };
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, next.itemId(), next,
                 outputItemId, outputItemKind, recipe.outputForInput(quantity), workProgress, workTraversal, traversalCursor,
-                java.util.Optional.of(bakeryWork.orElseThrow().withLoadedQuantity(quantity)), spatial, rights);
+                java.util.Optional.of(stationWork.orElseThrow().withLoadedQuantity(quantity)), spatial, rights);
     }
 
-    public ProductionJob retargetBakeryOutput(SubjectId container) {
-        var work = bakeryWork.orElseThrow().withDestination(ReferenceContainerCustody.scopeId(container));
+    public ProductionJob retargetStationOutput(SubjectId container) {
+        var work = stationWork.orElseThrow().withDestination(ReferenceContainerCustody.scopeId(container));
         var nextRights = new ProductionRights(rights.mode(), rights.resourceOwner(), container, rights.employer());
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold,
                 outputItemId, outputItemKind, outputCount, workProgress, workTraversal, traversalCursor,
@@ -138,19 +141,19 @@ public record ProductionJob(
 
     /** Family-owned reservation view; cargo/return ownership can survive releasing the machine. */
     public boolean reservesFacility() {
-        return bakeryWork.map(BakeryWorkState::reservesStation).orElse(true);
+        return stationWork.map(StationWorkState::reservesStation).orElse(true);
     }
     /** Replaces only an unconsumed bakery input allocation; the job, worker and output identity remain stable. */
-    public ProductionJob reallocateBakeryInput(ProductionInputHold next, SubjectId sourceContainerId) {
-        if (bakeryWork.isEmpty() || bakeryWork.orElseThrow().phase() != BakeryWorkState.Phase.DEPOT_PICKUP
-                || bakeryWork.orElseThrow().pendingPhysicalStep().isPresent()
-                || bakeryWork.orElseThrow().block().map(value -> value.reason() != BakeryWorkBlock.Reason.SOURCE_CHANGED).orElse(true)
+    public ProductionJob reallocateStationInput(ProductionInputHold next, SubjectId sourceContainerId) {
+        if (stationWork.isEmpty() || !stationWork.orElseThrow().phase().inputAtSource()
+                || stationWork.orElseThrow().pendingPhysicalStep().isPresent()
+                || stationWork.orElseThrow().block().map(value -> value.reason() != BakeryWorkBlock.Reason.SOURCE_CHANGED).orElse(true)
                 || !(next instanceof ProductionInputHold.FungibleCold || next instanceof ProductionInputHold.FungibleBound
                         || next instanceof ProductionInputHold.Materialized))
             throw new IllegalArgumentException("only an unconsumed bakery input can be reallocated");
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, next.itemId(), next,
                 outputItemId, outputItemKind, outputCount, workProgress, workTraversal, traversalCursor,
-                java.util.Optional.of(bakeryWork.orElseThrow().withReallocatedDepotAccount(
+                java.util.Optional.of(stationWork.orElseThrow().withReallocatedDepotAccount(
                         next instanceof ProductionInputHold.FungibleCold cold ? cold.accountId()
                                 : next instanceof ProductionInputHold.FungibleBound bound ? bound.accountId()
                         : ReferenceContainerCustody.scopeId(sourceContainerId), sourceContainerId)), spatial, rights);
@@ -162,7 +165,7 @@ public record ProductionJob(
             case ProductionInputHold.FungibleBound bound -> bound.inputLots();
             case ProductionInputHold.Cold cold -> java.util.Map.of(consumedItemId, cold.item().count());
             case ProductionInputHold.Materialized ignored -> java.util.Map.of(consumedItemId,
-                    bakeryWork.map(BakeryWorkState::inputQuantity).orElse(outputCount));
+                    stationWork.map(StationWorkState::inputQuantity).orElse(outputCount));
         };
     }
     public int inputCount() { return inputQuantities().values().stream().mapToInt(Integer::intValue).sum(); }
@@ -181,16 +184,16 @@ public record ProductionJob(
 
     public ProductionJob withWorkProgress(ProductionWorkProgress next) {
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId, outputItemKind, outputCount,
-                next, workTraversal, traversalCursor, bakeryWork, spatial.cleared(), rights);
+                next, workTraversal, traversalCursor, stationWork, spatial.cleared(), rights);
     }
 
     public ProductionJob withWorkTraversal(TraversalTopology next, int nextCursor) {
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId, outputItemKind, outputCount,
-                workProgress, next, nextCursor, bakeryWork, spatial.cleared(), rights);
+                workProgress, next, nextCursor, stationWork, spatial.cleared(), rights);
     }
 
-    public ProductionJob withBakeryWork(BakeryWorkState next) {
-        if (bakeryWork.isEmpty()) throw new IllegalArgumentException("only an admitted bakery job may advance bakery work");
+    public ProductionJob withStationWork(StationWorkState next) {
+        if (stationWork.isEmpty()) throw new IllegalArgumentException("only an admitted bakery job may advance bakery work");
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId,
                 outputItemKind, outputCount, workProgress, workTraversal, traversalCursor, java.util.Optional.of(next), spatial, rights);
     }
@@ -206,16 +209,16 @@ public record ProductionJob(
             throw new IllegalArgumentException("only an unstarted production worker may rebase its traversal at HOT hand-off");
         }
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold, outputItemId, outputItemKind, outputCount,
-                workProgress, Objects.requireNonNull(next, "rebased production-work traversal"), 0, bakeryWork, spatial.cleared(), rights);
+                workProgress, Objects.requireNonNull(next, "rebased production-work traversal"), 0, stationWork, spatial.cleared(), rights);
     }
 
     public ProductionJob withSpatial(StationApproachState next) {
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold,
-                outputItemId, outputItemKind, outputCount, workProgress, workTraversal, traversalCursor, bakeryWork, next, rights);
+                outputItemId, outputItemKind, outputCount, workProgress, workTraversal, traversalCursor, stationWork, next, rights);
     }
     public ProductionJob withRights(ProductionRights declaration) {
         return new ProductionJob(id, taskId, settlementId, facilityId, workerId, consumedItemId, inputHold,
-                outputItemId, outputItemKind, outputCount, workProgress, workTraversal, traversalCursor, bakeryWork, spatial, declaration);
+                outputItemId, outputItemKind, outputCount, workProgress, workTraversal, traversalCursor, stationWork, spatial, declaration);
     }
 
     private static TraversalTopology fixtureTraversal(SubjectId jobId, SubjectId facilityId) {

@@ -45,7 +45,7 @@ public final class ProductionJourneyKnowledge {
     /** Scope is presentation only: its return may occur while the same physical body is still held. */
     public static FrontierWorldState atScopeAdmission(FrontierWorldState state, ProductionJob job) {
         FrontierProductionWorkSceneSupport.requireCurrentWorker(state, job);
-        if (job.bakeryWork().isPresent()) return state;
+        if (job.stationWork().isPresent()) return state;
         var actor = state.actorLocations().get(job.workerId());
         if (actor == null || actor.condition().status() != ActorLifeStatus.ALIVE)
             throw new IllegalArgumentException("production scope admission lost its living worker");
@@ -63,7 +63,7 @@ public final class ProductionJourneyKnowledge {
                 || !job.workerId().equals(request.execution().actorId()))
             throw new IllegalArgumentException("production departure lost its exact declared worker/job");
         var update = FrontierWorldStateUpdate.begin();
-        if (job.bakeryWork().isPresent() || job.workProgress().terminalEffectEligible())
+        if (job.stationWork().isPresent() || job.workProgress().terminalEffectEligible())
             return new ActorActivityBodyCheckpoint.Acknowledgement(request, update);
         var current = job.spatial().current(job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()));
         if (current.equals(request.observedPosition().supportingSurface()))

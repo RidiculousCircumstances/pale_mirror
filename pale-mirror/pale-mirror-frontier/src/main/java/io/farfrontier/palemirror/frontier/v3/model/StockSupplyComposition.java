@@ -5,7 +5,7 @@ import java.util.*;
 /** Closed composition names owners; the stock policy does not inspect their job types or stages. */
 public final class StockSupplyComposition {
     private static final Map<StockSupplyPort.Key, StockSupplyPort> PORTS = register(List.of(
-            new BakeryStockSupply(), new HarvestStockSupply(), new ExtractionStockSupply(), new TradeStockSupply(), new AutomaticStationStockSupply()));
+            new StationWorkStockSupply(), new HarvestStockSupply(), new ExtractionStockSupply(), new TradeStockSupply(), new AutomaticStationStockSupply()));
     private static final ImmutableInputView<List<StockSupplyPort.Commitment>> VIEW = new ImmutableInputView<>();
     private StockSupplyComposition() { }
     /** Read one producer's promises without re-entering commercial consent/reserve calculations. */

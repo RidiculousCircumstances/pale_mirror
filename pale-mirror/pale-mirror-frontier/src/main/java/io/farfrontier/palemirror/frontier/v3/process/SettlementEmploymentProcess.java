@@ -16,7 +16,7 @@ public final class SettlementEmploymentProcess {
         var actor = state.actorLocations().get(contract.residentId());
         if (!subject.equals(employer.settlementId()) || resident == null
                 || !resident.settlementId().equals(employer.settlementId())
-                || !SettlementWorkPolicy.permissions(state, employer.settlementId()).permits(ResidentWorkKind.BAKING, resident.id())
+                || !SettlementWorkPolicy.permissions(state, employer.settlementId()).permits(ResidentWorkKind.PRODUCTION, resident.id())
                 || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
                 || !agreement(state, employer, resident.id(), contract.openedAtTick()).equals(contract))
             throw new IllegalArgumentException("production employment needs a living authorized worker and exact declared terms");

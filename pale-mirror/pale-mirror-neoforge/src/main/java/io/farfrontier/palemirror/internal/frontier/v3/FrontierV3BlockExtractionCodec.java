@@ -12,7 +12,7 @@ import java.util.TreeMap;
 final class FrontierV3BlockExtractionCodec {
     private FrontierV3BlockExtractionCodec() { }
     static CompoundTag write(BlockExtraction value) {
-        var tag = new CompoundTag(); tag.putInt("format", 1);
+        var tag = new CompoundTag(); tag.putInt("format", 2);
         tag.putString("operation", value.operationId());
         tag.putString("actor", value.execution().actorId().value());
         tag.putString("owner", value.execution().activityOwnerId().value());
@@ -20,22 +20,26 @@ final class FrontierV3BlockExtractionCodec {
         tag.putLong("generation", value.execution().generation());
         tag.putInt("x", value.target().x()); tag.putInt("y", value.target().y()); tag.putInt("z", value.target().z());
         tag.putString("definition", value.definition().id());
-        tag.putString("tool", value.definition().toolKind()); tag.putString("loot", value.definition().lootTable());
+        tag.putString("ability", value.definition().toolRequirement().ability());
+        tag.putInt("grade", value.definition().toolRequirement().minimumGrade());
+        tag.putInt("wear", value.definition().toolRequirement().wear()); tag.putString("loot", value.definition().lootTable());
         tag.put("before", block(value.definition().before())); tag.put("after", block(value.definition().after()));
         tag.put("coldOutput", outputs(value.definition().coldOutput())); tag.put("output", outputs(value.output()));
         return tag;
     }
     static BlockExtraction read(CompoundTag tag) {
         require(tag, "format", Tag.TAG_INT);
-        if (tag.getInt("format") != 1) throw new IllegalStateException("unsupported extraction preparation format");
-        for (String key : new String[]{"operation", "actor", "owner", "definition", "tool", "loot"}) require(tag, key, Tag.TAG_STRING);
+        if (tag.getInt("format") != 2) throw new IllegalStateException("unsupported extraction preparation format");
+        for (String key : new String[]{"operation", "actor", "owner", "definition", "ability", "loot"}) require(tag, key, Tag.TAG_STRING);
+        require(tag, "grade", Tag.TAG_INT); require(tag, "wear", Tag.TAG_INT);
         require(tag, "activity", Tag.TAG_INT); require(tag, "generation", Tag.TAG_LONG);
         for (String key : new String[]{"x", "y", "z"}) require(tag, key, Tag.TAG_INT);
         for (String key : new String[]{"before", "after"}) require(tag, key, Tag.TAG_COMPOUND);
         for (String key : new String[]{"coldOutput", "output"}) require(tag, key, Tag.TAG_LIST);
         try {
             var definition = new BlockExtraction.Definition(tag.getString("definition"), readBlock(tag.getCompound("before")),
-                    readBlock(tag.getCompound("after")), tag.getString("tool"), tag.getString("loot"), readOutputs(tag, "coldOutput"));
+                    readBlock(tag.getCompound("after")), new io.farfrontier.palemirror.frontier.v3.model.tooling.ToolRequirement(
+                            tag.getString("ability"), tag.getInt("grade"), tag.getInt("wear")), tag.getString("loot"), readOutputs(tag, "coldOutput"));
             var execution = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(
                     new io.farfrontier.palemirror.frontier.v3.api.SubjectId(tag.getString("actor")),
                     io.farfrontier.palemirror.frontier.v3.model.FrontierWireTags.require(

@@ -48,7 +48,7 @@ final class CompanyBakeryPlanning implements SettlementOperationPlanner {
                 || ReferenceContainerCustody.blocksCanonicalUse(state, batch.sourceContainer(state))
                 || batch.fungibleInput().filter(input -> !FungibleResourceCustodySupport.canReserve(state, input)).isPresent())
             return retry(state, task, action, atTick);
-        var job = ResidentWorkComposition.SELECTION.eligible(state, settlement.id(), ResidentWorkKind.BAKING, HumanCapability.INDUSTRY,
+        var job = ResidentWorkComposition.SELECTION.eligible(state, settlement.id(), ResidentWorkKind.PRODUCTION, HumanCapability.INDUSTRY,
                 atTick).stream().filter(worker -> state.companies().activeEmployment(
                         WorkEmployer.company(company.orElseThrow()), worker.id()).isPresent())
                 .map(worker -> batch.exactInput().isPresent()
@@ -59,7 +59,7 @@ final class CompanyBakeryPlanning implements SettlementOperationPlanner {
         ProductionJob selected = job.orElseThrow();
         return List.of(new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE)),
                 new ProposedEvent(task.ownerId(), new ProductionStarted(selected, selected.consumedItemId(),
-                        Optional.of(BakeryAdmissionNavigation.propose(state, selected)))),
+                        Optional.of(StationWorkAdmissionNavigation.propose(state, selected)))),
                 new ProposedEvent(selected.id(), new ScheduleEffect.Created(ProductionProcess.complete(selected, atTick + 100L))));
     }
 

@@ -39,7 +39,7 @@ public final class SettlementFacilityCapability {
         return new Capability(kind, condition, 0, factor < 0 ? 0 : factor == 0 ? capacity.damagedWorkCapacity() : switch (kind) {
             case HALL -> capacity.intactHallWorkCapacity();
             case FARM -> capacity.intactFarmWorkCapacity();
-            case WORKSHOP, SMELTERY -> capacity.intactWorkshopWorkCapacity();
+            case WORKSHOP, SMELTERY, FORGE -> capacity.intactWorkshopWorkCapacity();
             case DEPOT -> capacity.intactDepotWorkCapacity();
             case INFIRMARY -> capacity.intactInfirmaryWorkCapacity();
             case HOUSING -> throw new IllegalStateException("housing handled above");

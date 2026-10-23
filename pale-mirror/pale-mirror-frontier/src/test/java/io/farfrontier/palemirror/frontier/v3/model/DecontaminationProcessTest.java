@@ -33,9 +33,10 @@ class DecontaminationProcessTest {
         Settlement settlement = settlement(bootstrap, "settlement:9");
         SubjectId depot = FrontierWorldState.depotId(settlement.id()), item = new SubjectId("item:decontamination-reagent");
         InfectionCell cell = InfectionCell.at(infirmary(settlement).anchor());
-        FrontierWorldState state = stateWithTask(bootstrap, settlement, cell).withInventory(FrontierWorldState.initial(bootstrap).inventory()
+        FrontierWorldState state = stateWithTask(bootstrap, settlement, cell);
+        state = state.withInventory(state.inventory()
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
-                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 2, new InventoryCustody.ContainerSlot(depot, 1))));
+                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 2, new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).getFirst()))));
         state = activateAndPrepare(state, settlement);
         PhysicalIntent intent = onlyIntent(state);
         state = transitionThroughRuntime(state, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
@@ -78,9 +79,10 @@ class DecontaminationProcessTest {
         Settlement settlement = settlement(bootstrap, "settlement:9");
         SubjectId depot = FrontierWorldState.depotId(settlement.id()), item = new SubjectId("item:unknown-decontamination-reagent");
         InfectionCell cell = InfectionCell.at(infirmary(settlement).anchor());
-        FrontierWorldState state = stateWithTask(bootstrap, settlement, cell).withInventory(FrontierWorldState.initial(bootstrap).inventory()
+        FrontierWorldState state = stateWithTask(bootstrap, settlement, cell);
+        state = state.withInventory(state.inventory()
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
-                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, 1))));
+                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).getFirst()))));
         state = activateAndPrepare(state, settlement);
         PhysicalIntent intent = onlyIntent(state);
         state = transitionThroughRuntime(state, intent.id(), PhysicalIntentStatus.RUNNING, Optional.empty());
@@ -101,9 +103,10 @@ class DecontaminationProcessTest {
         Settlement settlement = settlement(bootstrap, "settlement:9");
         SubjectId depot = FrontierWorldState.depotId(settlement.id()), item = new SubjectId("item:final-decontamination-reagent");
         InfectionCell cell = InfectionCell.at(infirmary(settlement).anchor());
-        FrontierWorldState state = stateWithTask(bootstrap, settlement, cell).withInventory(FrontierWorldState.initial(bootstrap).inventory()
+        FrontierWorldState state = stateWithTask(bootstrap, settlement, cell);
+        state = state.withInventory(state.inventory()
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
-                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, 1))));
+                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).getFirst()))));
         state = state.withInfection(cell, new FixedRatio(new FixedScalar(bootstrap.ruleset().rates().decontaminationReduction().raw())));
         state = activateAndPrepare(state, settlement);
         PhysicalIntent intent = onlyIntent(state);
@@ -124,9 +127,10 @@ class DecontaminationProcessTest {
         Settlement settlement = settlement(bootstrap, "settlement:9");
         SubjectId depot = FrontierWorldState.depotId(settlement.id()), item = new SubjectId("item:reinfection-reagent");
         InfectionCell cell = InfectionCell.at(infirmary(settlement).anchor());
-        FrontierWorldState state = stateWithTask(bootstrap, settlement, cell).withInventory(FrontierWorldState.initial(bootstrap).inventory()
+        FrontierWorldState state = stateWithTask(bootstrap, settlement, cell);
+        state = state.withInventory(state.inventory()
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
-                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, 1))));
+                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).getFirst()))));
         state = state.withInfection(cell, new FixedRatio(new FixedScalar(bootstrap.ruleset().rates().decontaminationReduction().raw())));
         state = activateAndPrepare(state, settlement);
         PhysicalIntent intent = onlyIntent(state);

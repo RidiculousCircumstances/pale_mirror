@@ -6,10 +6,10 @@ import java.util.UUID;
 
 /** Physical inspection of an empty-handed baker whose batch remains in source storage or its station. */
 public record BakeryStationSceneReconciled(SubjectId jobId, SceneLeaseId leaseId, long leaseRevision,
-        long recoveryEpoch, UUID entityId, BodyPosition observedBody, BakeryWorkState.Phase phase,
+        long recoveryEpoch, UUID entityId, BodyPosition observedBody, StationWorkState.Phase phase,
         io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.Source source) implements FrontierPayload {
     public BakeryStationSceneReconciled(SubjectId jobId, SceneLeaseId leaseId, long leaseRevision,
-            long recoveryEpoch, UUID entityId, BodyPosition observedBody, BakeryWorkState.Phase phase) {
+            long recoveryEpoch, UUID entityId, BodyPosition observedBody, StationWorkState.Phase phase) {
         this(jobId, leaseId, leaseRevision, recoveryEpoch, entityId, observedBody, phase,
                 io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.Source.INDEXED_LIVING);
     }
@@ -23,9 +23,9 @@ public record BakeryStationSceneReconciled(SubjectId jobId, SceneLeaseId leaseId
                 || !emptyHandPhase(phase))
             throw new IllegalArgumentException("station reconciliation requires exact empty-hand station phase");
     }
-    public static boolean emptyHandPhase(BakeryWorkState.Phase phase) {
-        return phase == BakeryWorkState.Phase.DEPOT_PICKUP || phase == BakeryWorkState.Phase.PROCESSING
-                || phase == BakeryWorkState.Phase.STATION_UNLOAD;
+    public static boolean emptyHandPhase(StationWorkState.Phase phase) {
+        return phase == StationWorkState.Phase.DEPOT_PICKUP || phase == StationWorkState.Phase.PROCESSING
+                || phase == StationWorkState.Phase.STATION_UNLOAD;
     }
     @Override public String type() { return "frontier.bakery_station_scene_reconciled"; }
 }

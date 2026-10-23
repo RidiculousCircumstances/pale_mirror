@@ -53,7 +53,7 @@ class ContainerPlayerEditProcessTest {
         state = state.withInventory(state.inventory().store(tool).moveObservedItem(tool.id(), tool.custody(), new InventoryCustody.Player(PLAYER)));
         var edit = new ContainerPlayerEditObserved(PLAYER, CLICK,
                 List.of(member(state, LEFT, List.of(), List.of())), Optional.empty(),
-                Optional.of(new ExactItemCustodyChanged(tool.id(), new InventoryCustody.Player(PLAYER), tool.custody())));
+                Optional.of(new ExactItemIngress.Returned(tool.withCustody(new InventoryCustody.Player(PLAYER)), tool)));
         var codec = FrontierWorldPayloadCodecs.create(); assertEquals(edit, codec.decode(edit.type(), codec.encode(edit)));
         var registry = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.processRegistry();
         var plan = assertInstanceOf(CommandPlan.Accepted.class, FrontierWorldCommandPlanner.plan(state, command(edit), registry,
@@ -62,7 +62,9 @@ class ContainerPlayerEditProcessTest {
         var successor = ContainerPlayerEditProcess.reduce(state, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, edit);
         assertEquals(tool.custody(), successor.inventory().items().get(tool.id()).custody());
         var invalid = new ContainerPlayerEditObserved(PLAYER, CLICK, edit.members(), Optional.empty(),
-                Optional.of(new ExactItemCustodyChanged(new SubjectId("item:missing"), new InventoryCustody.Player(PLAYER), tool.custody())));
+                Optional.of(new ExactItemIngress.Returned(new ExactItemStack(new SubjectId("item:missing"), owner,
+                        tool.itemKind(), 1, new InventoryCustody.Player(PLAYER)), new ExactItemStack(new SubjectId("item:missing"),
+                        owner, tool.itemKind(), 1, tool.custody()))));
         assertInstanceOf(CommandPlan.Rejected.class, ContainerPlayerEditProcess.plan(state, invalid, command(invalid)));
     }
     @Test void singleAndCompositeClicksRetainAuthorityAndAdmitNextEditWithoutRediscovery() {

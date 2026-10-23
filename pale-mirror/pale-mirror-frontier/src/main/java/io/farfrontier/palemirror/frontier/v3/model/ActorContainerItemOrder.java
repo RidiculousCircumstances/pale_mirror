@@ -20,7 +20,7 @@ public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Dire
         implements ActorResourceItemOrder {
     public enum Direction { TAKE, PLACE }
     public enum Hand { MAIN, OFF }
-    public enum StationPort { INPUT, OUTPUT, FUEL }
+    public enum StationPort { INPUT, OUTPUT, FUEL, MAINTENANCE_TARGET }
     @Override public EndpointKind endpointKind() { return EndpointKind.CONTAINER; }
 
     public ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Direction direction,
@@ -69,8 +69,10 @@ public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Dire
         String itemKind();
         int quantity();
 
-        record Exact(ExactItemStack item) implements Portion {
-            public Exact { Objects.requireNonNull(item, "exact item portion"); }
+        record Exact(ExactItemStack item, Optional<InventoryCustody.ContainerSlot> attachedSlot,
+                     Optional<ResourceClaimDelegation> delegation) implements Portion {
+            public Exact(ExactItemStack item) { this(item, Optional.empty(), Optional.empty()); }
+            public Exact { Objects.requireNonNull(item, "exact item portion"); Objects.requireNonNull(attachedSlot); Objects.requireNonNull(delegation); }
             @Override public String itemKind() { return item.itemKind(); }
             @Override public int quantity() { return item.count(); }
         }
@@ -134,8 +136,11 @@ public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Dire
                 || direction == Direction.PLACE && stationPort(containerEndpoint) == StationPort.OUTPUT))
             throw new IllegalArgumentException("actor order uses the wrong declared station surface or port");
         if (portion instanceof Portion.Exact exact) {
-            if (!(actorSlot instanceof ActorItemSlot.Hand))
-                throw new IllegalArgumentException("exact equipment requires a declared hand");
+            if (actorSlot instanceof ActorItemSlot.AttachedStorage attached) {
+                if (exact.attachedSlot().filter(slot -> slot.containerId().equals(attached.containerId())).isEmpty())
+                    throw new IllegalArgumentException("individual cargo requires its exact attached slot");
+            } else if (!(actorSlot instanceof ActorItemSlot.Hand) || exact.attachedSlot().isPresent())
+                throw new IllegalArgumentException("individual item requires a declared hand or attached slot");
             if (!(containerEndpoint instanceof ContainerEndpoint.ExactSlot)
                     && !(containerEndpoint instanceof ContainerEndpoint.ExactStationSlot))
                 throw new IllegalArgumentException("exact item order requires its exact source or destination slot");
@@ -146,7 +151,7 @@ public record ActorContainerItemOrder(SubjectId ownerId, SubjectId actorId, Dire
             };
             InventoryCustody custody = exact.item().custody();
             if (direction == Direction.TAKE && !declaredSlot.equals(custody)
-                    || direction == Direction.PLACE && !new InventoryCustody.Actor(actorId).equals(custody)) {
+                    || direction == Direction.PLACE && !exact.attachedSlot().<InventoryCustody>map(slot -> slot).orElseGet(() -> new InventoryCustody.Actor(actorId)).equals(custody)) {
                 throw new IllegalArgumentException("exact item order source disagrees with canonical custody");
             }
         } else if (portion instanceof Portion.Fungible fungible) {

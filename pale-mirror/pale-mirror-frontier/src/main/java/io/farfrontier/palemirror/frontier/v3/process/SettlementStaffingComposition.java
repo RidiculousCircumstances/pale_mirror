@@ -15,10 +15,10 @@ public final class SettlementStaffingComposition {
                     return ResourceSiteHarvestPlanning.staffingDemand(state, home, rules, atTick);
                 }
             }, new SettlementStaffingPort() {
-                public ResidentWorkKind kind() { return ResidentWorkKind.BAKING; }
+                public ResidentWorkKind kind() { return ResidentWorkKind.PRODUCTION; }
                 public HumanCapability capability() { return HumanCapability.INDUSTRY; }
                 public Demand assess(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules, long atTick) {
-                    return BakeryJobAdmission.staffingDemand(state, home, rules, atTick);
+                    return ProductionStaffingDemand.assess(state, home, rules, atTick);
                 }
             }, new SettlementStaffingPort() {
                 public ResidentWorkKind kind() { return ResidentWorkKind.LOGISTICS; }

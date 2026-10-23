@@ -46,15 +46,15 @@ final class FrontierV3ShipmentPhysicalExecutor {
         if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, worker) || !actuation.current(worker)) return false;
         state = runtime.decodedState().orElseThrow();
         if (!shipment.equals(state.shipments().shipments().get(shipment.id()))) return false;
-        var bindings = state.inventory().fungibleResources().bindings().values().stream()
-                .filter(binding -> binding.accountId().equals(shipment.carriedAccountId())).toList();
-        if (shipment.mobileContainerId().isEmpty() && shipment.carrying() && bindings.isEmpty() && shipment.pendingPhysicalStep().isEmpty()) {
+        var bindings = shipment.cargo() instanceof ShipmentCargo.Fungible cargo ? state.inventory().fungibleResources().bindings().values().stream()
+                .filter(binding -> binding.accountId().equals(cargo.carriedAccountId())).toList() : List.<PhysicalStackBinding>of();
+        if (shipment.cargo() instanceof ShipmentCargo.Fungible && shipment.mobileContainerId().isEmpty() && shipment.carrying() && bindings.isEmpty() && shipment.pendingPhysicalStep().isEmpty()) {
             if (!FrontierV3ActorCarryProjection.witnessed(state, actor, worker)) return false;
             return accepted(level, runtime, shipment, "shipment-hand-materialized", new ShipmentHandCustodyObserved(
                     shipment.id(), actuation.id(), ShipmentHandCustodyObserved.Boundary.MATERIALIZED, hand(shipment, worker.getUUID())));
         }
         if (!TransportCargoExecution.selected(state, shipment) || shipment.reception().isPresent() || state.actorMovements().containsKey(actor)
-                || !FrontierV3SurfaceObservation.at(worker, shipment.itemOrder().station())) return false;
+                || !FrontierV3SurfaceObservation.at(worker, shipment.movementOrder().legalStations().getFirst())) return false;
         var container = ShipmentServiceAccess.point(shipment).orElse(null);
         var attached = shipment.mobileContainerId().isPresent()
                 ? FrontierV3PhysicalContainer.loaded(level, state, shipment.mobileContainerId().orElseThrow()).orElse(null) : null;
@@ -72,16 +72,20 @@ final class FrontierV3ShipmentPhysicalExecutor {
             var destination = pending == null && containerDestination
                     ? ShipmentPhysicalStateSupport.destination(state, shipment).orElse(null) : null;
             if (containerDestination && pending == null && destination == null) return false;
-            var lots = pending != null ? pending.lotQuantities() : destination != null ? destination.lots() : shipment.lotQuantities();
-            var order = shipment.itemOrder(lots);
-            var source = pending == null ? MaterialSourcePreparation.review(state, order).requireReady() : pending.source();
+            var lots = pending != null ? pending.lotQuantities() : destination != null ? destination.lots() : shipment.portions();
+            var order = shipment.itemOrder(state, lots);
+            var source = pending != null ? pending.source() : order.portion() instanceof ActorContainerItemOrder.Portion.Exact
+                    ? List.<MaterialSourceSelection.Slice>of() : MaterialSourcePreparation.review(state, order).requireReady();
             int destinationSlot = !containerDestination ? -1
                     : pending == null ? destination.slot() : pending.destinationSlot();
             if (shipment.carrying() && destinationSlot < 0) return false;
             long destinationEpoch = ShipmentPhysicalStateSupport.destinationEpoch(state, shipment, actuation.id().body().physicalEpoch());
             step = pending == null ? new ShipmentPhysicalStep(shipment.status(), shipment.revision(),
                     new ActorHotObservation(actuation.id(), lease.revision()), source, destinationSlot, destinationEpoch,
-                    lots, destination == null ? 0 : destination.before()) : pending;
+                    lots, destination == null ? 0 : destination.before(),
+                    order.portion() instanceof ActorContainerItemOrder.Portion.Exact
+                            ? java.util.Optional.of(IndividualItemTransferWitness.capture(state, (ActorContainerItemOrder) order, actuation.id().body().physicalEpoch()))
+                            : java.util.Optional.empty()) : pending;
             var transfer = FrontierV3ActorResourceTransfer.open(level, state, order, worker, source, destinationSlot, step.destinationBefore()).orElse(null);
             if (transfer == null) return false;
             if (pending == null) {
@@ -114,7 +118,7 @@ final class FrontierV3ShipmentPhysicalExecutor {
 
     private static boolean savedDeparture(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             FrontierWorldState state, Shipment shipment) {
-        if (shipment.mobileContainerId().isPresent() || !shipment.carrying() || shipment.pendingPhysicalStep().isPresent()
+        if (!(shipment.cargo() instanceof ShipmentCargo.Fungible) || shipment.mobileContainerId().isPresent() || !shipment.carrying() || shipment.pendingPhysicalStep().isPresent()
                 || state.inventory().fungibleResources().bindings().values().stream()
                     .noneMatch(binding -> binding.accountId().equals(shipment.carriedAccountId()))) return false;
         var actor = shipment.execution().actorId();

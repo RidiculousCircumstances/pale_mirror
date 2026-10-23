@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static io.farfrontier.palemirror.frontier.v3.model.HarvestObservationFixture.inspectGoal;
 
 /** Goal-navigation regression and shared fixture; obsolete route-cursor tests are archived. */
 class ResourceSiteHarvestProcessTest {
@@ -126,9 +127,17 @@ class ResourceSiteHarvestProcessTest {
         for (int turns = 0; state.resourceSites().site(job.siteId()).harvestJob(job.id()).isPresent() && turns < stepBound; turns++) {
             var next = stepCold(state, job.siteId(), due); state = next.state(); due = next.next();
         }
-        assertTrue(state.resourceSites().site(job.siteId()).harvestJob(job.id()).isEmpty(), "replacement must deliver the harvest, not merely change its address: "
-                + state.resourceSites().site(job.siteId()).harvestJob(job.id()) + " body=" + state.actorLocations().get(job.workerId()).body() + " due=" + due);
         assertTrue(state.inventory().fungibleResources().unclaimedQuantity(ReferenceContainerCustody.scopeId(target), home, "minecraft:wheat") > 0);
+        var waiting = state.resourceSites().site(job.siteId()).harvestJob(job.id()).orElseThrow();
+        assertEquals(0, waiting.undeliveredYieldQuantity(), "grain delivery cannot wait for tool storage");
+        assertEquals(new InventoryCustody.Actor(job.workerId()), state.inventory().items().get(job.equipment().itemId()).custody());
+        state = new ResourceStoragePolicyChanged(target, policy, new ResourceStoragePolicy(endpoint,
+                ResourceStorageFilter.all(), 100, ResourceStorageRole.WAREHOUSE)).apply(state, home);
+        for (int turns = 0; state.resourceSites().site(job.siteId()).harvestJob(job.id()).isPresent() && turns < stepBound; turns++) {
+            var next = stepCold(state, job.siteId(), due); state = next.state(); due = next.next();
+        }
+        assertTrue(state.resourceSites().site(job.siteId()).harvestJob(job.id()).isEmpty());
+        assertInstanceOf(InventoryCustody.ContainerSlot.class, state.inventory().items().get(job.equipment().itemId()).custody());
     }
     @Test void personalPocketFoodSurvivesHarvestAdmissionAndRecovery() throws Exception {
         FrontierWorldState state = ready(initial(126L));
@@ -195,7 +204,6 @@ class ResourceSiteHarvestProcessTest {
         assertEquals(state, codec.decode(codec.encode(state)));
         assertEquals(resources.lots().get(lot), state.inventory().fungibleResources().lots().get(lot));
     }
-
     @Test void exhaustedPersonalCarryCapacityDefersHarvestWithoutQuarantiningOrDiscardingStock() {
         FrontierWorldState state = ready(initial(126L));
         SubjectId settlement = new SubjectId("settlement:1"), site = new SubjectId("site:1-wheat-field");
@@ -232,7 +240,6 @@ class ResourceSiteHarvestProcessTest {
                 (StrategicObjectiveSelected) opportunity.getFirst().payload());
         return StrategicObjectiveProcess.reduceTask(state, settlement, (StrategicTaskPlanned) opportunity.get(1).payload());
     }
-
     @Test void hungryFarmerStartsReadyHarvestWithRetiredDepotAndAReplacementWarehouseWithoutBread() {
         FrontierWorldState state = ready(initial(126L));
         SubjectId site = new SubjectId("site:1-wheat-field");
@@ -250,6 +257,10 @@ class ResourceSiteHarvestProcessTest {
                     0, ResourceStorageRole.WAREHOUSE))), socket).apply(state, settlement);
         state = state.withInventory(state.inventory().withSurfaceStatus(replacement, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(replacement, ContainerSurfaceStatus.ACTIVE));
+        for (var item : List.copyOf(state.inventory().items().values()))
+            if (item.custody() instanceof InventoryCustody.ContainerSlot slot && slot.containerId().equals(depot))
+                state = state.withInventory(state.inventory().moveItemCustody(item.id(), item.custody(),
+                        new InventoryCustody.ContainerSlot(replacement, state.inventory().availableSlots(replacement).getFirst())));
         ResidentProfile farmer = FrontierWorldStateSupport.availableWorkResident(state, settlement,
                 ResidentWorkKind.AGRICULTURE, HumanCapability.AGRICULTURE).orElseThrow();
         assertTrue(ResidentMealOpportunity.find(state, farmer.id()).isEmpty());
@@ -270,7 +281,6 @@ class ResourceSiteHarvestProcessTest {
                 .map(ResourceSiteHarvestStarted.class::cast).findFirst().orElseThrow();
         assertEquals(replacement, started.job().outputSlot().containerId());
     }
-
     @Test void travellingMealDoesNotHideAvailableBreadFromAnotherHungryFarmer() {
         FrontierWorldState state = ready(initial());
         SubjectId site = new SubjectId("site:1-wheat-field");
@@ -327,6 +337,10 @@ class ResourceSiteHarvestProcessTest {
         return coldHarvestAfterSteps(seed, coldSteps, true);
     }
     private static ColdHarvest coldHarvestAfterSteps(long seed, int coldSteps, boolean small) {
+        return coldHarvestAfterSteps(seed, coldSteps, small, true);
+    }
+    static ColdHarvest awaitingEquipment(long seed) { return coldHarvestAfterSteps(seed, 0, true, false); }
+    private static ColdHarvest coldHarvestAfterSteps(long seed, int coldSteps, boolean small, boolean equipped) {
         // Single-batch helpers keep an explicit 64-cell fixture; live bootstrap size is independent.
         WorldId world = new WorldId("frontier:resource-site-harvest-" + seed);
         FrontierWorldState state = ready(FrontierWorldState.initial(small
@@ -352,6 +366,13 @@ class ResourceSiteHarvestProcessTest {
                 (StrategicTaskTransition) start.getFirst().payload());
         state = ResourceSiteHarvestProcess.reduceStarted(state, site, (ResourceSiteHarvestStarted) start.get(1).payload());
         state = ResourceSiteHarvestProcess.reducePrepared(state, site, ((PhysicalIntentPrepared) start.get(2).payload()).intent());
+        if (equipped) {
+            var admitted = ((ResourceSiteHarvestStarted) start.get(1).payload()).job();
+            state = state.withActorBody(admitted.workerId(), admitted.equipment().source().station().standingBody());
+            state = io.farfrontier.palemirror.frontier.v3.process.FieldEquipmentProcess.reduce(state, site,
+                    new FieldEquipmentChanged(site, admitted.id(), WorkToolAssignment.Stage.ACQUIRING,
+                            FieldEquipmentChanged.Action.COLD_TRANSFER, Optional.empty()), 22_100L);
+        }
         ScheduledAction due = start.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Created.class::isInstance)
                 .map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action).findFirst().orElseThrow();
         for (int index = 0; index < coldSteps; index++) {
@@ -389,7 +410,6 @@ class ResourceSiteHarvestProcessTest {
         assertTrue(state.firstFreeContainerSlot(depot).isEmpty());
         return new ColdHarvest(state, start.site(), job);
     }
-
     @Test void currentBatchDeliveryDoesNotRequireFutureCapacityOrCreditUnworkedCells() {
         var fixture = fullBatchAtDepotWithoutFutureCapacity();
         var state = fixture.state();
@@ -421,9 +441,9 @@ class ResourceSiteHarvestProcessTest {
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.reduceReturned(after, job.siteId(),
                 new ResourceSiteHarvestReturned(job.id(), new SubjectId("resident:1-999"), due.id(), due.dueAt().ticks()),
                 due.dueAt().ticks()));
-        var retired = ResourceSiteHarvestProcess.reduceReturned(after, job.siteId(), returned, due.dueAt().ticks());
-        assertTrue(retired.resourceSites().site(job.siteId()).harvestJob(job.id()).isEmpty());
-        assertEquals(field, retired.resourceSites().cycle(job.siteId()));
+        assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.reduceReturned(after,
+                job.siteId(), returned, due.dueAt().ticks()), "crop delivery cannot discard the retained tool-return obligation");
+        assertEquals(new InventoryCustody.Actor(job.workerId()), after.inventory().items().get(job.equipment().itemId()).custody());
     }
     static HotHarvest hotHarvestAfterColdSteps(int coldSteps) { return hotHarvestAfterColdSteps(125L, coldSteps); }
     static ColdHarvest coldHarvestWithCargo(long seed) {
@@ -514,10 +534,12 @@ class ResourceSiteHarvestProcessTest {
         assertTrue(job.progress().work().orElseThrow().complete());
         return state;
     }
-    private static Step stepCold(FrontierWorldState state, SubjectId site, ScheduledAction due) {
+    static Step stepCold(FrontierWorldState state, SubjectId site, ScheduledAction due) {
         ScheduledAction next = null;
         for (ProposedEvent event : ResourceSiteHarvestProcess.planColdProgress(state, due)) {
             switch (event.payload()) {
+                case FieldEquipmentChanged changed -> state = io.farfrontier.palemirror.frontier.v3.process.FieldEquipmentProcess.reduce(
+                        state, site, changed, due.dueAt().ticks());
                 case ResourceSiteHarvestColdGoalAdvanced advanced -> state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, site, advanced);
                 case ResourceSiteHarvestLabourChange changed -> state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
                 case ResourceSiteHarvestImmatureCellSkipped skipped -> state = ResourceSiteHarvestProcess.reduceCellSkipped(state, site, skipped);
@@ -566,7 +588,6 @@ class ResourceSiteHarvestProcessTest {
                 .map(ScheduleEffect.Rescheduled.class::cast).findFirst().orElseThrow().replacement();
         assertEquals(releasedAt + 20L, next.dueAt().ticks());
     }
-
     @Test void bodyFreeObstructedPreparationRetiresWithoutLosingTheExactFarmerOrColdContinuation() {
         ColdHarvest start = coldHarvestAfterSteps(125L, 0);
         FrontierWorldState state = start.state();
@@ -788,7 +809,6 @@ class ResourceSiteHarvestProcessTest {
         assertEquals(state.inventory(), skipped.inventory());
         assertEquals(ResourceFieldCycle.Crop.GROWING, skipped.resourceSites().cycle(fixture.siteId()).cell(last).crop());
     }
-
     @Test void hotImmatureExclusionDoesNotRequireArrivalAtExcludedCell() {
         HotHarvest hot = hotHarvestAfterColdSteps(0);
         var cycle = hot.state().resourceSites().cycle(hot.site());
@@ -806,7 +826,6 @@ class ResourceSiteHarvestProcessTest {
         assertEquals(1, skipped.resourceSites().cycle(hot.site()).accountedCount());
         assertEquals(0, skipped.resourceSites().cycle(hot.site()).harvestedCount());
     }
-
     @Test void unreachableHotTargetCanBeDeferredWithoutCreditingOrLosingItsCell() {
         HotHarvest hot = hotHarvestAfterColdSteps(0);
         ResourceSiteHarvestJob job = hot.job();
@@ -908,7 +927,6 @@ class ResourceSiteHarvestProcessTest {
         assertEquals(resumed.actorLocations(), finished.actorLocations());
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.reduceProgressed(finished, hot.site(), receipt));
     }
-
     @Test void hotFieldReceiptsCoverEveryCellWithoutMovingTheWorkGoalByWaypoints() {
         HotHarvest hot = hotHarvestAfterColdSteps(0);
         ResourceSiteHarvestJob start = hot.job();
@@ -973,21 +991,7 @@ class ResourceSiteHarvestProcessTest {
         assertEquals(next.supportingSurface(), ResourceSiteHarvestKnownNavigation.plannedPath(released, job).getFirst());
         assertEquals(released, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(released)));
     }
-    /** Independent modeled physical fact; the field receipt only clears its own blocked goal. */
-    static FrontierWorldState inspectGoal(FrontierWorldState state, SubjectId site, ResourceSiteHarvestJob job,
-                                          SceneLeaseId leaseId) {
-        ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
-        var execution = state.actorExecutions().current(
-                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST).get(job.workerId());
-        var witness = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorHotObservation(
-                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(
-                        ActorBodyAuthority.current(state, job.workerId()), execution), state.sceneLeases().get(leaseId).revision());
-        state = ModeledActorBodyFacts.inspected(state, job.workerId(), goal.representative().standingBody());
-        return job.navigationBlock().isEmpty() ? state : ResourceSiteHarvestProcess.reduceHotGoalArrived(state, site,
-                new ResourceSiteHarvestHotGoalArrived(job.id(), leaseId, job.workerId(), goal.layoutRevision(),
-                        goal.nextWorkSlot(), goal.kind(), goal.representative().standingBody(), job.target().generation(), witness));
-    }
     record HotHarvest(FrontierWorldState state, SubjectId site, ResourceSiteHarvestJob job, SceneLease lease) { }
     record ColdHarvest(FrontierWorldState state, SubjectId site, ResourceSiteHarvestJob job) { }
-    private record Step(FrontierWorldState state, ScheduledAction next) { }
+    record Step(FrontierWorldState state, ScheduledAction next) { }
 }

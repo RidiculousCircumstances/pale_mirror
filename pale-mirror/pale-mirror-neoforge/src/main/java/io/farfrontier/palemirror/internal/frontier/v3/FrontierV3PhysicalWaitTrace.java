@@ -48,7 +48,7 @@ final class FrontierV3PhysicalWaitTrace {
                     + boundary.occupied(state.actorLocations().get(meal.residentId()).body())
                     + ":ambient=" + state.ambientLeases().get(meal.residentId()))
                 .collect(java.util.stream.Collectors.joining("|"));
-        emit(body, job.id().value(), "gate=" + gate + ";phase=" + job.bakeryWork().orElseThrow().phase()
+        emit(body, job.id().value(), "gate=" + gate + ";phase=" + job.stationWork().orElseThrow().phase()
                 + ";servicePoint=" + depot.value() + ";meals=" + meals);
     }
 

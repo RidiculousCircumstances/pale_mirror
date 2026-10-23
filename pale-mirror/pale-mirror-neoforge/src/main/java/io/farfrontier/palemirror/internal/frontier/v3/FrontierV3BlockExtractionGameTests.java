@@ -50,7 +50,7 @@ public final class FrontierV3BlockExtractionGameTests {
         helper.assertTrue(level.addFreshEntity(worker), "the fixture must admit its actual declared worker body");
         var source = new java.util.concurrent.atomic.AtomicReference<>(Optional.of(state));
         var port = new FrontierV3MinecraftBlockExtraction(level, worker,
-                FrontierV3ActorActuation.capture(state, worker, execution, source::get));
+                FrontierV3ActorActuation.capture(state, worker, execution, source::get), state.bootstrap().ruleset().tools());
         BlockPos soil = helper.absolutePos(new BlockPos(4, 0, 4));
         BlockPos crop = soil.above();
         level.setBlock(soil, Blocks.FARMLAND.defaultBlockState(), 3);
@@ -59,6 +59,7 @@ public final class FrontierV3BlockExtractionGameTests {
         helper.assertTrue(rejects(() -> port.prepare("native:immature", execution, target, FieldHarvestExtraction.DEFINITION)),
                 "an immature physical crop cannot mint mature grain");
         level.setBlock(crop, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 7), 3);
+        worker.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_HOE));
         var grain = port.prepare("native:grain", execution, target, FieldHarvestExtraction.DEFINITION);
         helper.assertTrue(level.getBlockState(crop).getValue(CropBlock.AGE) == 7 && grain.quantity("minecraft:wheat") == 1,
                 "actual standard loot-table evaluation prepares one grain without mutating the world");
@@ -71,7 +72,9 @@ public final class FrontierV3BlockExtractionGameTests {
 
         var stone = new BlockExtraction.Definition("pale_mirror:test_stone_v1",
                 new BlockExtraction.Block("minecraft:stone", Map.of()),
-                new BlockExtraction.Block("minecraft:air", Map.of()), "minecraft:iron_pickaxe", "minecraft:blocks/stone",
+                new BlockExtraction.Block("minecraft:air", Map.of()),
+                new io.farfrontier.palemirror.frontier.v3.model.tooling.ToolRequirement(
+                        io.farfrontier.palemirror.frontier.v3.model.tooling.ToolAbilities.MINE, 0, 1), "minecraft:blocks/stone",
                 List.of(new BlockExtraction.Output("minecraft:cobblestone", 1)));
         level.setBlock(crop, Blocks.STONE.defaultBlockState(), 3);
         helper.assertTrue(rejects(() -> port.prepare("native:no-tool", execution, target, stone)),
@@ -90,7 +93,7 @@ public final class FrontierV3BlockExtractionGameTests {
                 "the same adapter resolves Minecraft's actual stone loot with a correct tool");
         var cover = ExtractionRules.terracedGraybox().surfaceCut().orElseThrow().cover();
         level.setBlock(crop, Blocks.GRASS_BLOCK.defaultBlockState(), 3);
-        worker.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.STONE_PICKAXE));
+        worker.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.STONE_SHOVEL));
         var cap = port.prepare("native:surface-cap", execution, target, cover);
         helper.assertTrue(cap.quantity("minecraft:dirt") == 1 && cap.quantity("minecraft:cobblestone") == 0
                         && port.apply(cap) == BlockExtractionPort.Result.APPLIED && level.getBlockState(crop).isAir(),
@@ -98,6 +101,7 @@ public final class FrontierV3BlockExtractionGameTests {
         var iron = FrontierRulesets.mineralDepositsGraybox().extraction().definitionFor(
                 new BlockExtraction.Block("minecraft:iron_ore", Map.of())).orElseThrow();
         level.setBlock(crop, Blocks.IRON_ORE.defaultBlockState(), 3);
+        worker.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.STONE_PICKAXE));
         var ore = port.prepare("native:iron", execution, target, iron);
         var savedOre = FrontierV3BlockExtractionCodec.read(FrontierV3BlockExtractionCodec.write(ore));
         helper.assertTrue(savedOre.output().equals(iron.coldOutput()) && savedOre.quantity("minecraft:raw_iron") == 1
@@ -111,7 +115,9 @@ public final class FrontierV3BlockExtractionGameTests {
         chest.setItem(0, new ItemStack(Items.DIAMOND, 3));
         var chestDefinition = new BlockExtraction.Definition("pale_mirror:test_chest_v1",
                 FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(crop)),
-                new BlockExtraction.Block("minecraft:air", Map.of()), "minecraft:iron_pickaxe", "minecraft:blocks/chest",
+                new BlockExtraction.Block("minecraft:air", Map.of()),
+                new io.farfrontier.palemirror.frontier.v3.model.tooling.ToolRequirement(
+                        io.farfrontier.palemirror.frontier.v3.model.tooling.ToolAbilities.MINE, 0, 1), "minecraft:blocks/chest",
                 List.of(new BlockExtraction.Output("minecraft:chest", 1)));
         helper.assertTrue(rejects(() -> port.prepare("native:chest", execution, target, chestDefinition))
                         && rejects(() -> port.apply(BlockExtraction.prepareKnown("native:chest", execution, target,

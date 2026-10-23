@@ -238,7 +238,7 @@ class ConsolidatedGoodsTradeTest {
         var stacks = new ArrayList<FungiblePhysicalObservation.Stack>();
         for (var entry : amounts.entrySet()) for (int remaining = entry.getValue(); remaining > 0; remaining -= 64)
             stacks.add(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                    new InventoryCustody.ContainerSlot(mission.sender().containerId(), stacks.size())), entry.getKey(), Math.min(64, remaining)));
+                    new InventoryCustody.ContainerSlot(mission.sender().containerId(), state.inventory().availableSlots(mission.sender().containerId()).get(stacks.size()))), entry.getKey(), Math.min(64, remaining)));
         ledger = ledger.rebind(account.id(), 1, FungiblePhysicalObservation.bind(ledger, account.id(), 1, stacks));
         state = ReferenceContainerCustodyFixtures.observedAndHeld(state.withInventory(state.inventory().withFungibleResources(ledger)
                 .withSurfaceStatus(mission.sender().containerId(), ContainerSurfaceStatus.PREPARED)

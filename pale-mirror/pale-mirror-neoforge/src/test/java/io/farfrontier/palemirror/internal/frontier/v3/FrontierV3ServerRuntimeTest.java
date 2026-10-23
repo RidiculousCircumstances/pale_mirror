@@ -204,7 +204,7 @@ class FrontierV3ServerRuntimeTest {
                 new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 200);
         var foreign = new io.farfrontier.palemirror.frontier.v3.model.BakeryHotEffectPrepared(
                 new SubjectId("job:foreign-bakery"), new SceneLeaseId("lease:foreign-bakery"),
-                io.farfrontier.palemirror.frontier.v3.model.BakeryWorkState.Phase.DEPOT_DELIVERY, 0);
+                io.farfrontier.palemirror.frontier.v3.model.StationWorkState.Phase.DEPOT_DELIVERY, 0);
         assertInstanceOf(CommandResult.Rejected.class, FrontierV3CommandSubmission.submitResult(
                 runtime, "bakery-effect-prepare", "lease:foreign-bakery", foreign));
         assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind());
@@ -338,7 +338,7 @@ class FrontierV3ServerRuntimeTest {
         FungibleResourceLedger cold = FungibleResourceLedger.empty().issue(new ResourceLot(lotId, settlement, "minecraft:wheat", 64,
                 "test", List.of()), new CustodyAccount(sourceId, new ResourceCustody.Container(depot), Map.of(lotId, 64), Map.of()));
         List<FungiblePhysicalObservation.Stack> layout = List.of(new FungiblePhysicalObservation.Stack(
-                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:wheat", 64));
+                new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, base.initialState().inventory().availableSlots(depot).getFirst())), "minecraft:wheat", 64));
         FungibleResourceLedger hot = cold.rebind(sourceId, 3L, FungiblePhysicalObservation.bind(cold, sourceId, 3L, layout));
         FrontierWorldState initial = base.initialState().withInventory(base.initialState().inventory().withFungibleResources(hot));
         FrontierEngineConfiguration<FrontierWorldState, ?> configuration = new FrontierEngineConfiguration<>(base.worldId(), initial,

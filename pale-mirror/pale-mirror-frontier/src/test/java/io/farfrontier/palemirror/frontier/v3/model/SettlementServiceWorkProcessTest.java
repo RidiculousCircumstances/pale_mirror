@@ -76,7 +76,7 @@ class SettlementServiceWorkProcessTest {
         var changed = state.withInventory(state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
                 .store(new ExactItemStack(new SubjectId("item:service-better-ranked"), home.id(), DecontaminationPolicy.REAGENT, 1,
-                        new InventoryCustody.ContainerSlot(depot, 1))));
+                        new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).getFirst()))));
         var preferred = SettlementServiceWorkProcess.planDecontamination(changed, action).stream().map(ProposedEvent::payload)
                 .filter(SettlementServiceWorkStarted.class::isInstance).map(SettlementServiceWorkStarted.class::cast).findFirst().orElseThrow();
         assertEquals(depot, preferred.work().inputSource().containerId());
@@ -101,9 +101,10 @@ class SettlementServiceWorkProcessTest {
         InfectionCell cell = treatmentCell(bootstrap, settlement);
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         SubjectId item = new SubjectId("item:service-work-reagent");
-        FrontierWorldState state = taskState(bootstrap, settlement, cell).withInventory(FrontierWorldState.initial(bootstrap).inventory()
+        FrontierWorldState state = taskState(bootstrap, settlement, cell);
+        state = state.withInventory(state.inventory()
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
-                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, 1))));
+                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).getFirst()))));
 
         List<ProposedEvent> planned = SettlementServiceWorkProcess.planDecontamination(state, SettlementServiceWorkProcess.scan(1, 1_000L));
         StrategicTaskTransition activation = planned.stream().map(ProposedEvent::payload).filter(StrategicTaskTransition.class::isInstance)
@@ -162,9 +163,10 @@ class SettlementServiceWorkProcessTest {
         InfectionCell cell = treatmentCell(bootstrap, settlement);
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         SubjectId item = new SubjectId("item:service-work-forgery-reagent");
-        FrontierWorldState state = taskState(bootstrap, settlement, cell).withInventory(FrontierWorldState.initial(bootstrap).inventory()
+        FrontierWorldState state = taskState(bootstrap, settlement, cell);
+        state = state.withInventory(state.inventory()
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
-                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, 1))));
+                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).getFirst()))));
         SettlementServiceWorkStarted planned = SettlementServiceWorkProcess.planDecontamination(state, SettlementServiceWorkProcess.scan(1, 1_000L)).stream()
                 .map(ProposedEvent::payload).filter(SettlementServiceWorkStarted.class::isInstance).map(SettlementServiceWorkStarted.class::cast)
                 .findFirst().orElseThrow();
@@ -185,9 +187,10 @@ class SettlementServiceWorkProcessTest {
         InfectionCell cell = treatmentCell(bootstrap, settlement);
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         SubjectId item = new SubjectId("item:service-work-hot-reagent");
-        FrontierWorldState source = taskState(bootstrap, settlement, cell).withInventory(FrontierWorldState.initial(bootstrap).inventory()
+        FrontierWorldState source = taskState(bootstrap, settlement, cell);
+        source = source.withInventory(source.inventory()
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
-                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, 1))));
+                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, source.inventory().availableSlots(depot).getFirst()))));
         SettlementServiceWorkStarted started = SettlementServiceWorkProcess.planDecontamination(source, SettlementServiceWorkProcess.scan(1, 1_000L)).stream()
                 .map(ProposedEvent::payload).filter(SettlementServiceWorkStarted.class::isInstance).map(SettlementServiceWorkStarted.class::cast).findFirst().orElseThrow();
         FrontierWorldState active = source.withStrategicPlans(source.strategicPlans().transitionTask(started.taskId(), StrategicTaskStatus.ACTIVE));
@@ -558,9 +561,10 @@ class SettlementServiceWorkProcessTest {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:service-ready-" + seed), seed);
         Settlement settlement = settlement(bootstrap, "settlement:9"); InfectionCell cell = treatmentCell(bootstrap, settlement);
         SubjectId depot = FrontierWorldState.depotId(settlement.id()), item = new SubjectId("item:service-ready-" + seed);
-        FrontierWorldState source = taskState(bootstrap, settlement, cell).withInventory(FrontierWorldState.initial(bootstrap).inventory()
+        FrontierWorldState source = taskState(bootstrap, settlement, cell);
+        source = source.withInventory(source.inventory()
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
-                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, 1))));
+                .store(new ExactItemStack(item, settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, source.inventory().availableSlots(depot).getFirst()))));
         SettlementServiceWorkStarted started = SettlementServiceWorkProcess.planDecontamination(source, SettlementServiceWorkProcess.scan(1, 1_000L)).stream()
                 .map(ProposedEvent::payload).filter(SettlementServiceWorkStarted.class::isInstance).map(SettlementServiceWorkStarted.class::cast).findFirst().orElseThrow();
         FrontierWorldState admitted = SettlementServiceWorkProcess.reduceStarted(

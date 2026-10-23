@@ -30,6 +30,7 @@ final class HarvestContainerReservations {
             var owner = new ContainerSlotClaim.Owner(ContainerSlotClaim.Family.HARVEST, job.id());
             if (job.reservesOutputCapacity()) result.add(new ContainerSlotClaim(owner, job.outputSlot()));
             job.batchSuccessorSlot().ifPresent(slot -> result.add(new ContainerSlotClaim(owner, slot)));
+            job.equipment().pending().ifPresent(step -> result.add(new ContainerSlotClaim(owner, step.slot())));
         }
         return java.util.List.copyOf(result);
     }

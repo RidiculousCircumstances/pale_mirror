@@ -91,6 +91,9 @@ class ServiceApproachProgressTest {
         FrontierWorldState state = fixture.state().withChanges(FrontierWorldStateUpdate.begin()
                 .resourceSites(fixture.state().resourceSites().replace(site)));
         job = site.harvestJob(job.id()).orElseThrow();
+        state = io.farfrontier.palemirror.frontier.v3.process.FieldEquipmentProcess.reduce(state, job.siteId(),
+                FieldEquipment.selectReturn(state, job).orElseThrow(), 27_000L);
+        job = state.resourceSites().site(job.siteId()).harvestJob(job.id()).orElseThrow();
         SubjectId worker = job.workerId();
         SubjectId visitor = state.bootstrap().settlements().getFirst().residents().stream().map(Resident::id)
                 .filter(id -> !id.equals(worker)).findFirst().orElseThrow();

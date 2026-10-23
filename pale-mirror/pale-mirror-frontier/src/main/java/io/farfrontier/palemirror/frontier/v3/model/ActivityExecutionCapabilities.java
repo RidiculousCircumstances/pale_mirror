@@ -15,7 +15,7 @@ public final class ActivityExecutionCapabilities {
             registration(HumanAssignmentKind.IDLE, (state, assignment) -> new ActivityExecutionCheckpoint(
                     state, assignment, ResidentWorkYield.Status.READY)),
             registration(HumanAssignmentKind.PRODUCTION, FrontierProductionWorkSceneSupport::executionCheckpoint,
-                    BakeryLabour::pause, BakeryLabour::workStatsChanged, ProductionServiceAccess::waitingForServiceResource,
+                    StationWorkLabour::pause, StationWorkLabour::workStatsChanged, ProductionServiceAccess::waitingForServiceResource,
                     ProductionServiceAccess::mayResumeWork, ProductionServiceAccess::resumeWakeKeys),
             registration(HumanAssignmentKind.FIELD_HARVEST, FrontierResourceSiteHarvestSceneSupport::executionCheckpoint,
                     ResourceSiteHarvestLabour::pause, ResourceSiteHarvestLabour::workStatsChanged,

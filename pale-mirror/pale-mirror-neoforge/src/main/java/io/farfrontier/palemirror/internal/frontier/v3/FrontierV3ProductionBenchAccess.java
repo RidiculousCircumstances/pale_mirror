@@ -32,6 +32,8 @@ public final class FrontierV3ProductionBenchAccess implements ProductionBenchAcc
     @Override public View view(ProductionBenchBlockEntity bench, Player player) {
         var found = current(bench); if (found.isEmpty()) return new View(0, 0, 0);
         var value = found.orElseThrow(); var operation = value.machine().operation();
+        var selectedRecipe = operation.map(op -> value.state().bootstrap().ruleset().production().require(op.recipeId()))
+                .or(() -> recipe(value, bench, player));
         long tick = value.runtime().canonicalState().orElseThrow().instant().ticks();
         int progress = operation.flatMap(ProductionOperation::progress).map(clock ->
                 (int)(clock.completedAt(Math.max(tick, clock.evaluatedAtTick())) * 1_000L / clock.requiredMilliWork())).orElse(0);
@@ -49,11 +51,13 @@ public final class FrontierV3ProductionBenchAccess implements ProductionBenchAcc
         else if (!bench.getItem(ProductionBenchBlockEntity.OUTPUT).isEmpty()) status = 3;
         else if (bench.getItem(ProductionBenchBlockEntity.INPUT).isEmpty()) status = 5;
         else {
-            var recipe = recipe(value, bench.getItem(ProductionBenchBlockEntity.INPUT));
+            var recipe = selectedRecipe;
             status = recipe.isEmpty() || bench.getItem(ProductionBenchBlockEntity.INPUT).getCount() < recipe.orElseThrow().ingredient().quantity()
                     ? 5 : value.machine().storedHeat() < recipe.orElseThrow().heatPerBatch() ? 4 : 1;
         }
-        return new View(value.machine().storedHeat(), progress, status);
+        return new View(value.machine().storedHeat(), progress, status, selectedRecipe.map(recipe -> BuiltInRegistries.ITEM.getId(
+                BuiltInRegistries.ITEM.get(net.minecraft.resources.ResourceLocation.parse(recipe.product().itemKind())))).orElse(0),
+                selectedRecipe.filter(recipe -> recipe.outcome() instanceof ProductionRecipeOutcome.Repair).isPresent());
     }
     /** Presentation reads the bounded processing clock, not mere operation existence. */
     static int processingStatus(ProductionOperation operation, long tick) {
@@ -63,20 +67,34 @@ public final class FrontierV3ProductionBenchAccess implements ProductionBenchAcc
             return clock.running() && tick < clock.activeUntilTick() ? 2 : 7;
         }).orElse(7);
     }
-    private static Optional<ProductionRecipe> recipe(Current value, ItemStack input) {
+    private static Optional<ProductionRecipe> recipe(Current value, ProductionBenchBlockEntity bench, Player player) {
+        var input = bench.getItem(ProductionBenchBlockEntity.INPUT);
         var kind = BuiltInRegistries.ITEM.getKey(input.getItem()).toString();
         var station = value.record().productionStation().orElseThrow();
-        return value.state().bootstrap().ruleset().production().recipes().stream().filter(recipe -> recipe.capability() == station.capability()
-                && recipe.ingredient().accepts(kind)).sorted(Comparator.comparing(recipe -> recipe.id().value())).findFirst();
+        var target = station.maintenanceSlot().isPresent() ? bench.getItem(station.maintenanceSlot().getAsInt()) : ItemStack.EMPTY;
+        var choices = value.state().bootstrap().ruleset().production().recipes().stream().filter(recipe -> recipe.capability() == station.capability()
+                && recipe.ingredient().accepts(kind)).filter(recipe -> target.isEmpty()
+                    ? !(recipe.outcome() instanceof ProductionRecipeOutcome.Repair)
+                    : recipe.outcome() instanceof ProductionRecipeOutcome.Repair && recipe.product().itemKind()
+                        .equals(BuiltInRegistries.ITEM.getKey(target.getItem()).toString()))
+                .sorted(Comparator.comparing(recipe -> recipe.id().value())).toList();
+        if (choices.isEmpty() || !(player.containerMenu instanceof ProductionBenchMenu menu) || menu.inventory() != bench) return Optional.empty();
+        return Optional.of(choices.get(Math.floorMod(menu.recipeChoice(), choices.size())));
     }
     @Override public boolean accepts(ProductionBenchBlockEntity bench, int port, ItemStack stack) {
         if (bench.getLevel() != null && bench.getLevel().isClientSide()) return port != ProductionBenchBlockEntity.OUTPUT;
         var found = current(bench); if (found.isEmpty()) return false;
         var value = found.orElseThrow(); var kind = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
         return switch (port) {
-            case ProductionBenchBlockEntity.INPUT -> recipe(value, stack).isPresent();
+            case ProductionBenchBlockEntity.INPUT -> value.state().bootstrap().ruleset().production().recipes().stream().anyMatch(recipe ->
+                    recipe.capability() == value.record().productionStation().orElseThrow().capability() && recipe.ingredient().accepts(kind));
             case ProductionBenchBlockEntity.FUEL -> value.state().bootstrap().ruleset().production().fuels().stream()
                     .anyMatch(fuel -> fuel.itemKind().equals(kind));
+            case ProductionBenchBlockEntity.MAINTENANCE_TARGET -> value.record().productionStation().orElseThrow().maintenanceSlot().isPresent()
+                    && stack.isDamageableItem() && stack.getDamageValue() > 0
+                    && value.state().bootstrap().ruleset().production().recipes().stream().anyMatch(recipe ->
+                        recipe.capability() == value.record().productionStation().orElseThrow().capability()
+                        && recipe.outcome() instanceof ProductionRecipeOutcome.Repair && recipe.product().itemKind().equals(kind));
             default -> false;
         };
     }
@@ -86,7 +104,7 @@ public final class FrontierV3ProductionBenchAccess implements ProductionBenchAcc
         if (found.isEmpty()) { rejected(player, "This bench is not registered at a production place."); return false; }
         var value = found.orElseThrow();
         var recipe = value.machine().operation().map(operation -> value.state().bootstrap().ruleset().production().require(operation.recipeId()))
-                .or(() -> recipe(value, bench.getItem(ProductionBenchBlockEntity.INPUT)));
+                .or(() -> recipe(value, bench, player));
         if (recipe.isEmpty()) { rejected(player, "No compatible recipe input."); return false; }
         var result = submit(value, player, recipe.orElseThrow().id(), value.machine().operation().isEmpty()
                 ? ProductionStationOperatorChanged.Stage.START : ProductionStationOperatorChanged.Stage.RESUME);

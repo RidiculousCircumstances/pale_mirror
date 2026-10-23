@@ -90,7 +90,8 @@ public record ProductionStations(Map<SubjectId, Machine> machines) {
     public ProductionStations with(Machine machine) {
         var next = new LinkedHashMap<>(machines); next.put(machine.stationId(), machine); return new ProductionStations(next);
     }
-    public void validate(ExactInventory inventory, ProductionCatalog catalog) {
+    public void validate(ExactInventory inventory, ProductionCatalog catalog,
+                         io.farfrontier.palemirror.frontier.v3.model.tooling.ToolCatalog tools) {
         for (var machine : machines.values()) {
             var station = inventory.containers().values().stream().flatMap(value -> value.productionStation().stream())
                     .filter(value -> value.id().equals(machine.stationId())).findFirst()
@@ -111,27 +112,9 @@ public record ProductionStations(Map<SubjectId, Machine> machines) {
                         || Math.multiplyExact(recipe.heatPerBatch(), operation.inputQuantity() / recipe.ingredient().quantity()) != operation.committedHeat())
                     throw new IllegalArgumentException("machine operation differs from its declared recipe");
                 if (!operation.transformed()) {
-                    switch (operation.inputCustody()) {
-                        case ProductionOperation.ExactInput exact -> {
-                            var item = inventory.items().get(exact.itemId());
-                            if (item == null || item.count() != operation.inputQuantity() || !recipe.ingredient().accepts(item.itemKind())
-                                    || !item.custody().equals(new InventoryCustody.ContainerSlot(station.containerId(), station.inputSlot())))
-                                throw new IllegalArgumentException("station operation lost its exact reserved input");
-                        }
-                        case ProductionOperation.FungibleInput fungible -> {
-                            var ledger = inventory.fungibleResources(); var account = ledger.accounts().get(fungible.accountId());
-                            if (account == null || !account.custody().equals(new ResourceCustody.Container(station.containerId()))
-                                    || fungible.lots().entrySet().stream().anyMatch(entry ->
-                                        account.lotQuantities().getOrDefault(entry.getKey(), 0) < entry.getValue()
-                                        || !recipe.ingredient().accepts(ledger.lots().get(entry.getKey()).itemKind()))
-                                    || fungible.claims().entrySet().stream().anyMatch(entry ->
-                                        account.claimQuantities().getOrDefault(entry.getKey(), 0) != entry.getValue()
-                                        || ledger.claims().get(entry.getKey()).purpose() != ClaimPurpose.STATION_PROCESSING
-                                        || !ledger.claims().get(entry.getKey()).claimantId().equals(operation.id().value())))
-                                throw new IllegalArgumentException("station operation lost its exact lot/claim allocation");
-                        }
-                    }
+                    ProductionOperationInputs.validate(inventory, station, operation, recipe);
                 } else if (operation.initiator() instanceof ProductionOperation.OrderInitiator order
+                        && recipe.outcome() instanceof ProductionRecipeOutcome.Fungible
                         && operation.inputCustody() instanceof ProductionOperation.FungibleInput input) {
                     var ledger = inventory.fungibleResources(); var claim = ledger.claims().get(operation.outputClaimId());
                     var account = ledger.accounts().get(input.accountId());
@@ -141,7 +124,7 @@ public record ProductionStations(Map<SubjectId, Machine> machines) {
                         throw new IllegalArgumentException("transformed station operation lost its reserved collection output");
                 }
             });
-            machine.pendingRecipe().ifPresent(boundary -> boundary.validate(inventory, station, machine.operation().orElseThrow(), catalog));
+            machine.pendingRecipe().ifPresent(boundary -> boundary.validate(inventory, station, machine.operation().orElseThrow(), catalog, tools));
             machine.pendingFuel().ifPresent(burn -> {
                 if (!burn.containerId().equals(station.containerId()) || burn.authorityEpoch() < 1
                         || burn.heat() != catalog.requireFuel(burn.itemKind()).heatUnits()

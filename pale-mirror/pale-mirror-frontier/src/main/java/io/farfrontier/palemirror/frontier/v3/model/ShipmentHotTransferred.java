@@ -6,7 +6,7 @@ public record ShipmentHotTransferred(SubjectId shipmentId, ShipmentPhysicalStep 
     public ShipmentHotTransferred {
         Objects.requireNonNull(shipmentId); Objects.requireNonNull(step);
         remainingSource = List.copyOf(remainingSource); destination = List.copyOf(destination);
-        if (remainingSource.size() > 27 || destination.size() > 27)
+        if (remainingSource.size() > 54 || destination.size() > 54)
             throw new IllegalArgumentException("shipment transfer witness exceeds its bounded endpoints");
     }
     @Override public String type() { return "frontier.shipment_hot_transferred"; }

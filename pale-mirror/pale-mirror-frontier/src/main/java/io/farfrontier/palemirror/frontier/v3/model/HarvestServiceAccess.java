@@ -11,7 +11,9 @@ public final class HarvestServiceAccess implements ServiceAccessCapability {
     @Override public ServiceAccessDemand.Priority priority() { return ServiceAccessDemand.Priority.WORK; }
     @Override public java.util.Set<SubjectId> wakePoints(FrontierWorldState previous, FrontierWorldState next) {
         return ServiceAccessWakeDependencies.changed(previous.resourceSites().sites(), next.resourceSites().sites(),
-                site -> site.harvestJobs().values().stream().map(job -> job.outputSlot().containerId()));
+                site -> site.harvestJobs().values().stream().flatMap(job -> java.util.stream.Stream.concat(java.util.stream.Stream.of(
+                        job.outputSlot().containerId(), job.equipment().source().containerId()),
+                        job.equipment().returnTarget().stream().map(ShipmentEndpoint::containerId))));
     }
 
     @Override public List<ServiceAccessDemand> demands(FrontierWorldState state, SubjectId pointId) {
@@ -21,9 +23,9 @@ public final class HarvestServiceAccess implements ServiceAccessCapability {
             for (var job : site.harvestJobs().values()) {
                 if (state.humanPopulation().meals().containsKey(job.workerId())
                         || state.actorMovements().containsKey(job.workerId())
-                        || !job.outputSlot().containerId().equals(pointId)) continue;
+                        || !ResourceSiteHarvestGoal.servicePort(state, job).containerId().equals(pointId)) continue;
                 boolean occupied = ServiceAccessCoordinator.occupies(state, boundary, job.workerId());
-                if (ResourceSiteHarvestGoal.current(state, job).kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE || occupied)
+                if (ResourceSiteHarvestGoal.current(state, job).kind() != ResourceSiteHarvestGoal.Kind.WORK_CELL || occupied)
                     result.add(new ServiceAccessDemand(identity(job, pointId), priority(), occupied
                             ? ServiceAccessDemand.Presence.OCCUPIED : ServiceAccessDemand.Presence.APPROACH, 0L, false));
             }
@@ -36,21 +38,26 @@ public final class HarvestServiceAccess implements ServiceAccessCapability {
     }
 
     public static boolean available(FrontierWorldState state, ResourceSiteHarvestJob job) {
-        var port = ResourceSiteHarvestGoal.depotPort(state, job);
+        var port = ResourceSiteHarvestGoal.servicePort(state, job);
         return ServiceAccessCoordinator.available(state, identity(job, port.containerId()));
     }
 
     public static boolean mayAdvance(FrontierWorldState state, ResourceSiteHarvestJob job, SurfaceAnchor destination) {
-        var port = ResourceSiteHarvestGoal.depotPort(state, job);
+        var port = ResourceSiteHarvestGoal.servicePort(state, job);
         return ServiceAccessCoordinator.mayAdvance(state,
                 identity(job, port.containerId()), destination);
     }
 
     public static boolean witnessedExit(FrontierWorldState state, ResourceSiteHarvestJob job,
                                         SceneLeaseId leaseId, BodyPosition observedBody) {
-        if (ResourceSiteHarvestGoal.current(state, job).kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE) return false;
         SceneLease lease = FrontierResourceSiteHarvestSceneSupport.requireHotLease(state, job, leaseId);
-        return ServiceAccessCoordinator.witnessedExit(ResourceSiteHarvestGoal.depotPort(state, job).accessBoundary(),
-                lease.memberBody(state.actorLocations(), job.workerId()), observedBody);
+        var goal = ResourceSiteHarvestGoal.current(state, job);
+        var ports = new java.util.HashSet<SubjectId>();
+        ports.add(job.outputSlot().containerId()); ports.add(job.equipment().source().containerId());
+        job.equipment().returnTarget().ifPresent(target -> ports.add(target.containerId()));
+        if (goal.kind() != ResourceSiteHarvestGoal.Kind.WORK_CELL) ports.remove(ResourceSiteHarvestGoal.servicePort(state, job).containerId());
+        return ports.stream().filter(state.inventory().containers()::containsKey).anyMatch(point ->
+                ServiceAccessCoordinator.witnessedExit(ResourceStorageAccess.at(state, point).accessBoundary(),
+                        lease.memberBody(state.actorLocations(), job.workerId()), observedBody));
     }
 }

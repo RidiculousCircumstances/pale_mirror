@@ -20,7 +20,7 @@ class BakerySourceRecoveryTest {
                 new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
         state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
         var job = started.job(); var actor = state.actorLocations().get(job.workerId());
-        var point = BakeryStorage.source(job);
+        var point = StationWorkStorage.source(job);
         var leaseId = new SceneLeaseId("lease:bakery-source-recovery");
         var lease = SceneLease.forCause(leaseId, state.bootstrap().worldId(), new ProductionWorkSceneCause(job.id()),
                 actor.supportingSurface().support(), new SimInstant(300L), 1L, SceneLeaseStatus.PREPARED,
@@ -39,7 +39,7 @@ class BakerySourceRecoveryTest {
                 "conflict does not make an actual occupant disappear");
         var fence = ActorBodyAuthority.require(conflicted, ActorBodyAuthority.current(conflicted, job.workerId()));
         var receipt = new BakeryStationSceneReconciled(job.id(), leaseId, lease.revision(), fence.authorityEpoch(),
-                lease.members().getFirst().entityId(), actor.body(), BakeryWorkState.Phase.DEPOT_PICKUP);
+                lease.members().getFirst().entityId(), actor.body(), StationWorkState.Phase.DEPOT_PICKUP);
         var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
         assertEquals(receipt, codecs.decode(receipt.type(), codecs.encode(receipt)));
         var draining = BakerySceneReconciliation.reduce(conflicted, job.settlementId(), receipt);
@@ -54,9 +54,9 @@ class BakerySourceRecoveryTest {
         assertThrows(IllegalArgumentException.class, () -> BakerySceneReconciliation.reduce(conflicted, job.settlementId(),
                 new BakeryStationSceneReconciled(job.id(), leaseId, lease.revision(), fence.authorityEpoch() + 1,
                         receipt.entityId(), actor.body(), receipt.phase())));
-        var atStorage = state.withActorBody(job.workerId(), BakeryWorkGoal.current(state, job).station().standingBody());
+        var atStorage = state.withActorBody(job.workerId(), StationWorkGoal.current(state, job).station().standingBody());
         var pending = ProductionProcess.reduceBakeryHotEffectPrepared(atStorage, job.settlementId(),
-                new BakeryHotEffectPrepared(job.id(), leaseId, BakeryWorkState.Phase.DEPOT_PICKUP, -1));
+                new BakeryHotEffectPrepared(job.id(), leaseId, StationWorkState.Phase.DEPOT_PICKUP, -1));
         var pendingConflict = pending.transitionSceneLease(leaseId, SceneLeaseStatus.CONFLICT);
         var pendingReceipt = new BakeryStationSceneReconciled(job.id(), leaseId, lease.revision(), fence.authorityEpoch(),
                 receipt.entityId(), atStorage.actorLocations().get(job.workerId()).body(), receipt.phase());

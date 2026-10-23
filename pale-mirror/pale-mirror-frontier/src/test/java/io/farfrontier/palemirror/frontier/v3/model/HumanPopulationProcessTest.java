@@ -29,7 +29,7 @@ class HumanPopulationProcessTest {
         assertEquals(state.bootstrap().residentCount(), state.humanPopulation().residents().size());
         assertEquals(state.actorLocations().keySet().stream().filter(id -> id.value().startsWith("resident:")).count(), state.humanPopulation().residents().size());
         for (Settlement settlement : state.bootstrap().settlements()) {
-            var authorized = SettlementWorkPolicy.permissions(state, settlement.id()).workers(ResidentWorkKind.BAKING);
+            var authorized = SettlementWorkPolicy.permissions(state, settlement.id()).workers(ResidentWorkKind.PRODUCTION);
             assertEquals(2, authorized.size());
             assertTrue(state.humanPopulation().residents().values().stream()
                     .anyMatch(resident -> resident.settlementId().equals(settlement.id())
@@ -284,9 +284,9 @@ class HumanPopulationProcessTest {
     private static FrontierWorldState stateWithBread(FrontierWorldState state, SubjectId settlementId) {
         SubjectId depot = FrontierWorldState.depotId(settlementId); SubjectId bread = new SubjectId("item:birth-test-bread");
         ExactInventory inventory = state.inventory().store(new ExactItemStack(bread, settlementId, PopulationBirthProcess.BREAD, 64,
-                new InventoryCustody.ContainerSlot(depot, 1)))
+                new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).getFirst())))
                 .store(new ExactItemStack(new SubjectId("item:birth-zreserve-bread"), settlementId,
-                        PopulationBirthProcess.BREAD, 64, new InventoryCustody.ContainerSlot(depot, 2)));
+                        PopulationBirthProcess.BREAD, 64, new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).get(1))));
         return state.withInventory(inventory);
     }
     private static FrontierCommand command(WorldId world, io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine,

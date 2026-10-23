@@ -37,9 +37,8 @@ final class PhysicalEffectObservationPayloadCodec {
 
         else if (observation instanceof ResourceSiteHarvestObservation harvest) {
             output.writeByte(10); ids(output, harvest); FrontierWorldPayloadCodecs.writeSubject(output, harvest.siteId());
-            FrontierWorldPayloadCodecs.writeSubject(output, harvest.workerId()); FrontierWorldPayloadCodecs.writeSubject(output, harvest.output().id());
-            FrontierWorldPayloadCodecs.writeSubject(output, harvest.output().economicOwnerId()); FrontierWorldPayloadCodecs.writeString(output, harvest.output().itemKind());
-            output.writeByte(harvest.output().count()); FrontierWorldStateCodec.writeCustody(output, harvest.output().custody()); output.writeByte(harvest.harvestedCropSlots());
+            FrontierWorldPayloadCodecs.writeSubject(output, harvest.workerId()); ExactItemStateCodec.write(output, harvest.output());
+            output.writeByte(harvest.harvestedCropSlots());
         }
         else if (observation instanceof RouteConstructionMaterialLoadObservation loading) {
             output.writeByte(12); ids(output, loading); FrontierWorldPayloadCodecs.writeSubject(output, loading.projectId());
@@ -231,10 +230,8 @@ final class PhysicalEffectObservationPayloadCodec {
     }
     private static ResourceSiteHarvestObservation harvest(DataInputStream input) throws IOException {
         PhysicalObservationId id = id(input); PhysicalIntentId intent = intent(input); var site = FrontierWorldPayloadCodecs.readSubject(input).value();
-        var worker = FrontierWorldPayloadCodecs.readSubject(input).value(); var item = FrontierWorldPayloadCodecs.readSubject(input).value();
-        var owner = FrontierWorldPayloadCodecs.readSubject(input).value(); String kind = FrontierWorldPayloadCodecs.readString(input);
-        int count = input.readUnsignedByte(); InventoryCustody custody = FrontierWorldStateCodec.readCustody(input);
-        return new ResourceSiteHarvestObservation(id, intent, site, worker, new ExactItemStack(item, owner, kind, count, custody), input.readUnsignedByte());
+        var worker = FrontierWorldPayloadCodecs.readSubject(input).value();
+        return new ResourceSiteHarvestObservation(id, intent, site, worker, ExactItemStateCodec.read(input), input.readUnsignedByte());
     }
     private static ExplosionObservation explosion(DataInputStream input) throws IOException {
         PhysicalObservationId id = id(input); PhysicalIntentId intent = intent(input);

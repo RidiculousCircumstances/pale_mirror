@@ -98,7 +98,10 @@ public final class ServiceAccessCoordinator {
                         .thenComparingLong(ServiceAccessDemand::requestedAtTick)
                         .thenComparing(demand -> demand.identity().ownerId()));
         if (departing) return false;
-        if (incumbent.isPresent()) return incumbent.orElseThrow().identity().equals(requested);
+        // Access belongs to the physical visitor. A successor activity of that same
+        // actor does not compete with its own body. UAE/checkpoint admission still
+        // owns permission to interrupt the old activity or begin a physical effect.
+        if (incumbent.isPresent()) return incumbent.orElseThrow().identity().actorId().equals(requested.actorId());
         if (requestingSelfCare)
             return entering.map(demand -> demand.identity().equals(requested)).orElse(true);
         return entering.isEmpty() && workers.stream().findFirst()

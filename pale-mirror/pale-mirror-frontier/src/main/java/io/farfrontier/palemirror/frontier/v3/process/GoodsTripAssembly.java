@@ -10,7 +10,28 @@ import java.util.*;
 
 /** Logistics preflight. It receives exact commercial obligations; it cannot reserve a sale or invent an asset. */
 final class GoodsTripAssembly {
-    record Parcel(GoodsTradeContract contract, ClaimAllocation claim, SubjectId sourceAccount) { }
+    sealed interface Stock permits Stock.Fungible, Stock.Individual {
+        SubjectId claimId();
+        int quantity();
+        ShipmentCargo cargo(SubjectId carried, SubjectId receiving);
+        record Fungible(ClaimAllocation claim, SubjectId sourceAccount) implements Stock {
+            public SubjectId claimId() { return claim.id(); }
+            public int quantity() { return claim.quantity(); }
+            public ShipmentCargo cargo(SubjectId carried, SubjectId receiving) {
+                return new ShipmentCargo.Fungible(sourceAccount, carried, receiving, claim.itemKind(), claim.lotQuantities());
+            }
+        }
+        record Individual(IndividualResourceAllocation allocation) implements Stock {
+            public SubjectId claimId() { return allocation.id(); }
+            public int quantity() { return 1; }
+            public ShipmentCargo cargo(SubjectId carried, SubjectId receiving) { return new ShipmentCargo.Individual(allocation); }
+        }
+    }
+    record Parcel(GoodsTradeContract contract, Stock stock) {
+        Parcel(GoodsTradeContract contract, ClaimAllocation claim, SubjectId sourceAccount) { this(contract, new Stock.Fungible(claim, sourceAccount)); }
+        SubjectId claimId() { return stock.claimId(); }
+        int quantity() { return stock.quantity(); }
+    }
     static Optional<TransportMissionStarted> prepare(FrontierWorldState state, GoodsParticipant seller,
                                                     GoodsParticipant buyer, List<Parcel> parcels, GoodsTradeFulfillment.Mode mode, long now) {
         var organizer = switch (mode) { case SELLER_DELIVERY -> seller; case BUYER_COLLECTION -> buyer; };
@@ -19,7 +40,7 @@ final class GoodsTripAssembly {
                 || parcel.contract().fulfillment().mode() != mode || !parcel.contract().fulfillment().organizer().equals(organizer.party())
                 || !parcel.contract().sourceContainerId().equals(parcels.getFirst().contract().sourceContainerId())
                 || !parcel.contract().receiverContainerId().equals(parcels.getFirst().contract().receiverContainerId())
-                || parcel.claim().quantity() > 64 || !parcel.contract().outstandingClaims().containsKey(parcel.claim().id()))
+                || parcel.quantity() > 64 || !parcel.contract().outstandingClaims().containsKey(parcel.claimId()))
             throw new IllegalArgumentException("manifest mixes recipients or loses an exact accepted allocation");
         for (var parcel : parcels) if (!GoodsParticipantStorage.eligible(state, seller, parcel.contract().sourceContainerId(), parcel.contract().itemKind())
                 || !GoodsParticipantStorage.eligible(state, buyer, parcel.contract().receiverContainerId(), parcel.contract().itemKind()))
@@ -48,7 +69,7 @@ final class GoodsTripAssembly {
     }
     private static Optional<TransportMissionStarted> declaration(FrontierWorldState state, GoodsParticipant seller,
             GoodsParticipant buyer, List<Parcel> parcels, GoodsTradeFulfillment.Mode mode, List<ResidentProfile> people, Optional<TransportAsset> animal, long now) {
-        String stem = mode.name().toLowerCase(java.util.Locale.ROOT) + "/" + WorkOpportunityIdentity.digest(parcels.stream().map(p -> p.claim().id().value()).collect(java.util.stream.Collectors.joining("|")));
+        String stem = mode.name().toLowerCase(java.util.Locale.ROOT) + "/" + WorkOpportunityIdentity.digest(parcels.stream().map(p -> p.claimId().value()).collect(java.util.stream.Collectors.joining("|")));
         var missionId = new SubjectId("transport-mission:goods-trip/" + stem);
         var groupId = new SubjectId("unit-group:goods-trip/" + stem);
         var approachActor = animal.map(TransportAsset::actorId).orElse(people.getFirst().id());
@@ -68,14 +89,13 @@ final class GoodsTripAssembly {
             var parcel = parcels.get(index);
             var actor = animal.map(TransportAsset::actorId).orElse(people.get(Math.min(index, people.size() - 1)).id());
             var execution = state.actorExecutions().next(actor, ActorActivityKind.GROUP_MEMBER, groupId);
-            var id = new SubjectId("shipment:goods/" + parcel.claim().id().value().replace(':', '-'));
+            var id = new SubjectId("shipment:goods/" + parcel.claimId().value().replace(':', '-'));
             var carried = animal.map(a -> FungibleResourceCustodySupport.accountAtContainer(state, a.containerId()).map(CustodyAccount::id)
                     .orElseGet(() -> ReferenceContainerCustody.scopeId(a.containerId())))
                     .orElseGet(() -> new SubjectId("custody:" + id.value().replace(':', '-')));
             shipments.add(new Shipment(id, new ResourceClaimDelegation(ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT,
-                    parcel.claim().id(), parcel.contract().id(), id, parcel.contract().revision()), execution,
-                    senderEndpoint, receiverEndpoint, parcel.sourceAccount(), carried, receiving, parcel.contract().itemKind(),
-                    parcel.claim().lotQuantities(), Shipment.Status.AWAITING_LOAD, 1, Optional.empty(), Optional.empty(),
+                    parcel.claimId(), parcel.contract().id(), id, parcel.contract().revision()), execution,
+                    senderEndpoint, receiverEndpoint, parcel.stock().cargo(carried, receiving), Shipment.Status.AWAITING_LOAD, 1, Optional.empty(), Optional.empty(),
                     Optional.of(missionId), animal.map(TransportAsset::containerId)));
             if (animal.isEmpty() || index == 0) members.add(new UnitGroup.Member(actor, UnitGroup.Role.CARRIER,
                     ActorActivityKind.GROUP_MEMBER, groupId));

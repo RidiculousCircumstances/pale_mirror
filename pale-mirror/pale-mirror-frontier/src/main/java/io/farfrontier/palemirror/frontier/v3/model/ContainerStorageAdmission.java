@@ -8,7 +8,7 @@ import java.util.function.Predicate;
 final class ContainerStorageAdmission {
     private ContainerStorageAdmission() { }
 
-    static Map<String, Long> inbound(FrontierWorldState state, SubjectId container, Optional<SubjectId> completing) {
+    static ContainerIncomingStock inbound(FrontierWorldState state, SubjectId container, Optional<SubjectId> completing) {
         // Prove the completion's declared owner even when its entire demand is now slot-backed.
         ContainerInboundCapacity.incoming(ContainerStorageDemandSources.demands(state), container, completing);
         var uncovered = ContainerPhysicalReservations.uncoveredDemands(state).stream()
@@ -23,6 +23,14 @@ final class ContainerStorageAdmission {
                 record.productionStation().orElseThrow(), kind, quantity, inbound(state, container, completing));
         return state.inventory().canReceiveFungible(container, kind, quantity, ContainerPhysicalReservations.slots(state, container, completing),
                 inbound(state, container, completing));
+    }
+    static boolean receiveIndividuals(FrontierWorldState state, SubjectId container, String kind, int quantity, Optional<SubjectId> completing) {
+        var record = state.inventory().containers().get(container);
+        if (quantity < 1 || record == null || ReferenceContainerCustody.blocksCanonicalUse(state, container)
+                || record.storage().filter(policy -> !policy.filter().accepts(kind)).isPresent()) return false;
+        return state.inventory().availableSlots(container, ContainerPhysicalReservations.slots(state, container, completing),
+                inbound(state, container, completing)).stream()
+                .filter(slot -> ReferenceContainerCustody.expectedFungibleSlot(state, container, slot).isEmpty()).count() >= quantity;
     }
     static boolean receiveCargo(FrontierWorldState state, SubjectId cargo, SubjectId container) {
         var record = state.inventory().containers().get(container);

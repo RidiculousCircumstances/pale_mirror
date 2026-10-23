@@ -5,7 +5,7 @@ import java.util.*;
 
 /** Owners declare future supply and demand, never a second inventory balance or trade consent. */
 public interface StockSupplyPort {
-    enum Key { BAKERY, FIELD, EXTRACTION, TRADE, AUTOMATIC_STATIONS }
+    enum Key { STATION_WORK, FIELD, EXTRACTION, TRADE, AUTOMATIC_STATIONS }
     record Commitment(SubjectId subject, SubjectId economicOwner, String itemKind, long incoming, long outgoing) {
         public Commitment {
             Objects.requireNonNull(subject); Objects.requireNonNull(economicOwner); Objects.requireNonNull(itemKind);

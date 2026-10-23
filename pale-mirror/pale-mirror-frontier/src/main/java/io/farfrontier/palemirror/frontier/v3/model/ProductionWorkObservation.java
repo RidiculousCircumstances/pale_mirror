@@ -24,7 +24,7 @@ public record ProductionWorkObservation(ActorHotObservation authority, Traversal
         if (!authority.actuation().execution().actorId().equals(job.workerId())
                 || !topologyId.equals(job.workTraversal().id()) || topologyRevision != job.workTraversal().revision()
                 || cursor != job.traversalCursor() || !progress.equals(job.workProgress())
-                || spatialRevision != job.spatial().revision() || job.bakeryWork().isPresent())
+                || spatialRevision != job.spatial().revision() || job.stationWork().isPresent())
             throw new IllegalArgumentException("production observation has stale worker, route, cursor or stage");
         authority.require(state, authority.actuation().execution(), lease.revision(), observed);
     }

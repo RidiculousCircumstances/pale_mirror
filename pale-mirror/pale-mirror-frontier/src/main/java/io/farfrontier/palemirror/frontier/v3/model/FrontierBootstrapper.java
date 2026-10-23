@@ -116,11 +116,14 @@ public final class FrontierBootstrapper {
         for (StructureKind kind : StructureKind.values()) {
             if (kind == StructureKind.SMELTERY && ruleset.production().recipes().stream()
                     .noneMatch(recipe -> recipe.capability() == ProductionStationSpec.Capability.SMELTING)) continue;
+            if (kind == StructureKind.FORGE && ruleset.production().recipes().stream()
+                    .noneMatch(recipe -> recipe.capability() == ProductionStationSpec.Capability.FABRICATION)) continue;
             int[] offset = switch (kind) {
                 case HALL -> new int[]{0, 0}; case HOUSING -> new int[]{-20, -12};
                 case FARM -> new int[]{20, -12}; case WORKSHOP -> new int[]{-20, 14};
                 case DEPOT -> new int[]{20, 14}; case INFIRMARY -> new int[]{0, 22};
                 case SMELTERY -> new int[]{-8, -20};
+                case FORGE -> new int[]{-20, -26};
             };
             structures.add(new SettlementStructure(new SubjectId("structure:" + (index + 1) + "-" + kind.name().toLowerCase(Locale.ROOT)),
                     settlementId, kind, horizontalAnchor.offset(offset[0], 0, offset[1]), FacilityFacing.WEST));

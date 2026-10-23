@@ -14,7 +14,7 @@ final class BakeryDeathEffectsFixture {
     private BakeryDeathEffectsFixture() { }
     static void exactRecipe(FrontierWorldState state, SubjectId owner, SubjectId jobId, long tick) {
         var job = state.productionJobs().get(jobId);
-        var station = ProductionStationEnergy.record(state, job.bakeryWork().orElseThrow().stationId()).productionStation().orElseThrow();
+        var station = ProductionStationEnergy.record(state, job.stationWork().orElseThrow().stationId()).productionStation().orElseThrow();
         var actor = state.actorLocations().get(job.workerId());
         var lease = SceneLease.forCause(new SceneLeaseId("lease:exact-recipe-fatality"), state.bootstrap().worldId(),
                 new ProductionWorkSceneCause(job.id()), actor.supportingSurface().support(), new SimInstant(tick), 1,
@@ -24,14 +24,14 @@ final class BakeryDeathEffectsFixture {
                 .transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
         state = ReferenceContainerCustodyFixtures.observedAndHeld(state, station.containerId());
         state = ProductionProcess.reduceBakeryHotEffectPrepared(state, owner,
-                new BakeryHotEffectPrepared(job.id(), lease.id(), BakeryWorkState.Phase.PROCESSING, station.outputSlot()));
-        observe(state, owner, new BakeryHotEffectObserved(job.id(), lease.id(), BakeryWorkState.Phase.PROCESSING,
-                BakeryWorkGoal.current(state, job).station().standingBody(), 0, 0, List.of(), List.of()));
+                new BakeryHotEffectPrepared(job.id(), lease.id(), StationWorkState.Phase.PROCESSING, station.outputSlot()));
+        observe(state, owner, new BakeryHotEffectObserved(job.id(), lease.id(), StationWorkState.Phase.PROCESSING,
+                StationWorkGoal.current(state, job).station().standingBody(), 0, 0, List.of(), List.of()));
     }
     static FrontierWorldState observe(FrontierWorldState prepared, SubjectId subject, BakeryHotEffectObserved effect) {
         var job = prepared.productionJobs().get(effect.jobId()); var actor = job.workerId();
         var identity = new ActorActuationId(ActorBodyAuthority.current(prepared, actor),
-                BakeryDeathResources.execution(prepared, actor).orElseThrow());
+                StationWorkDeathResources.execution(prepared, actor).orElseThrow());
         var normal = ProductionProcess.reduceBakeryHotEffectObserved(prepared, subject, effect);
         var dead = ActorBodyAuthority.died(prepared, ModeledActorBodyFacts.death(prepared, actor,
                 prepared.actorLocations().get(actor).body(), "fixture:bakery-prepared-death"), FrontierActorDeathConsequences.INSTANCE, 1000);
@@ -43,9 +43,9 @@ final class BakeryDeathEffectsFixture {
             assertEquals(outcome, codecs.decode(outcome.type(), codecs.encode(outcome)));
             assertThrows(IllegalArgumentException.class, () -> apply(prepared, outcome));
             var next = apply(dead, outcome);
-            assertEquals(applied ? normal.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase() : effect.phase(),
-                    next.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase());
-            assertTrue(next.productionJobs().get(job.id()).bakeryWork().orElseThrow().pendingPhysicalStep().isEmpty());
+            assertEquals(applied ? normal.productionJobs().get(job.id()).stationWork().orElseThrow().phase() : effect.phase(),
+                    next.productionJobs().get(job.id()).stationWork().orElseThrow().phase());
+            assertTrue(next.productionJobs().get(job.id()).stationWork().orElseThrow().pendingPhysicalStep().isEmpty());
             var expectedResources = applied ? normal.inventory().fungibleResources() : dead.inventory().fungibleResources();
             // The full command may release a drained stationary endpoint's native bindings.
             // That is not stock disposal: quantities, ownership and allocations must be identical.
@@ -58,15 +58,15 @@ final class BakeryDeathEffectsFixture {
             assertThrows(IllegalArgumentException.class, () -> apply(next, outcome));
             var codec = new FrontierWorldStateCodec();
             assertEquals(next, codec.decode(codec.encode(next)));
-            if (next.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DEPOT_DELIVERY)
+            if (next.productionJobs().get(job.id()).stationWork().orElseThrow().phase() == StationWorkState.Phase.DEPOT_DELIVERY)
                 assertTrue(ActorInventoryInteractionFences.pending(next, actor), "free bread still belongs to the retained job until its explicit retirement");
             checkRetirement(next, identity);
         }
         return normal;
     }
     private static void checkRetirement(FrontierWorldState state, ActorActuationId identity) {
-        var job = state.productionJobs().get(identity.execution().activityOwnerId()); var work = job.bakeryWork().orElseThrow();
-        boolean carried = work.phase() == BakeryWorkState.Phase.STATION_LOAD || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY;
+        var job = state.productionJobs().get(identity.execution().activityOwnerId()); var work = job.stationWork().orElseThrow();
+        boolean carried = work.phase() == StationWorkState.Phase.STATION_LOAD || work.phase() == StationWorkState.Phase.DEPOT_DELIVERY;
         var source = state.inventory().fungibleResources();
         long epoch = carried ? source.bindings().values().stream().filter(binding -> binding.accountId().equals(work.actorAccountId()))
                 .findFirst().orElseThrow().authorityEpoch() : 0;
@@ -78,14 +78,14 @@ final class BakeryDeathEffectsFixture {
         assertEquals(receipt, codecs.decode(receipt.type(), codecs.encode(receipt)));
         var next = apply(state, receipt);
         assertFalse(next.productionJobs().containsKey(job.id()));
-        assertTrue(BakeryDeathResources.execution(next, job.workerId()).isEmpty());
+        assertTrue(StationWorkDeathResources.execution(next, job.workerId()).isEmpty());
         assertEquals(source.lots(), next.inventory().fungibleResources().lots());
         if (!carried) assertEquals(state.inventory().items(), next.inventory().items(), "station stock outlives its worker's reservation");
         assertEquals(state.inventory().economics().accounts(), next.inventory().economics().accounts());
         assertTrue(next.inventory().fungibleResources().claims().values().stream().noneMatch(claim -> claim.claimantId().equals(job.id())));
-        assertEquals(work.phase() == BakeryWorkState.Phase.DELIVERED ? StrategicTaskStatus.COMPLETED : StrategicTaskStatus.BLOCKED,
+        assertEquals(work.phase() == StationWorkState.Phase.DELIVERED ? StrategicTaskStatus.COMPLETED : StrategicTaskStatus.BLOCKED,
                 next.strategicPlans().tasks().get(job.taskId()).status());
-        if (carried) assertEquals(BakeryCargo.quantity(job), next.inventory().fungibleResources().accounts().values().stream()
+        if (carried) assertEquals(StationWorkCargo.quantity(job), next.inventory().fungibleResources().accounts().values().stream()
                 .filter(account -> ground.orElseThrow().equals(account.custody())).flatMap(account -> account.lotQuantities().values().stream())
                 .mapToInt(Integer::intValue).sum());
         var codec = new FrontierWorldStateCodec(); assertEquals(next, codec.decode(codec.encode(next)));

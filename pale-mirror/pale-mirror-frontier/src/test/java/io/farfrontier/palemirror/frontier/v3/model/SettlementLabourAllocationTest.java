@@ -11,13 +11,13 @@ class SettlementLabourAllocationTest {
     @Test void missionCannotTakeEveryAuthorizedLocalWorkerRegardlessOfProfession() {
         var state = initial(); var home = state.bootstrap().settlements().getFirst().id();
         var policy = SettlementWorkPolicy.permissions(state, home);
-        var bakers = policy.workers(ResidentWorkKind.BAKING).stream().sorted().toList();
+        var bakers = policy.workers(ResidentWorkKind.PRODUCTION).stream().sorted().toList();
         assertTrue(SettlementLabourAllocation.canCommitToMission(state, home, ResidentWorkKind.LOGISTICS, List.of(bakers.getFirst())));
         assertFalse(SettlementLabourAllocation.canCommitToMission(state, home, ResidentWorkKind.LOGISTICS, bakers));
         assertThrows(IllegalArgumentException.class, () -> SettlementLabourAllocation.requireMissionCommitment(
                 state, home, ResidentWorkKind.LOGISTICS, bakers));
         assertFalse(SettlementLabourAllocation.canCommitToMission(state, home, ResidentWorkKind.LOGISTICS, List.of(bakers.getFirst(), bakers.getFirst())));
-        assertFalse(SettlementLabourAllocation.canCommitToMission(state, home, ResidentWorkKind.BAKING,
+        assertFalse(SettlementLabourAllocation.canCommitToMission(state, home, ResidentWorkKind.PRODUCTION,
                 policy.workers(ResidentWorkKind.AGRICULTURE).stream().sorted().limit(1).toList()));
     }
     @Test void explicitPriorityPrecedesSkillAndSurvivesSnapshot() {
@@ -34,7 +34,7 @@ class SettlementLabourAllocationTest {
         var decoded = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(changed));
         assertEquals(changed, decoded);
         assertEquals(1, SettlementWorkPolicy.permissions(decoded, home).priority(ResidentWorkKind.LOGISTICS, preferred));
-        assertEquals(1, SettlementWorkPolicy.permissions(decoded, home).localReserve(ResidentWorkKind.BAKING));
+        assertEquals(1, SettlementWorkPolicy.permissions(decoded, home).localReserve(ResidentWorkKind.PRODUCTION));
     }
     @Test void malformedPolicyCannotCreateAnUnboundedOrUnfulfillableReserve() {
         var state = initial(); var home = state.bootstrap().settlements().getFirst().id();
@@ -46,9 +46,9 @@ class SettlementLabourAllocationTest {
     }
     @Test void unavailableHigherPriorityWorkDoesNotPreventAnExecutableAlternative() {
         var state = initial(); var home = state.bootstrap().settlements().getFirst().id();
-        var actor = SettlementWorkPolicy.permissions(state, home).workers(ResidentWorkKind.BAKING)
+        var actor = SettlementWorkPolicy.permissions(state, home).workers(ResidentWorkKind.PRODUCTION)
                 .stream().sorted().findFirst().orElseThrow();
-        var policy = new ResidentWorkPermissions(Map.of(ResidentWorkKind.BAKING, Map.of(actor, 2),
+        var policy = new ResidentWorkPermissions(Map.of(ResidentWorkKind.PRODUCTION, Map.of(actor, 2),
                 ResidentWorkKind.LOGISTICS, Map.of(actor, 1)), Map.of());
         var changed = state.withStrategicPlans(state.strategicPlans().withWorkPermissions(home, policy));
         var ready = new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -57,10 +57,10 @@ class SettlementLabourAllocationTest {
             public HumanCapability capability() { return HumanCapability.LOGISTICS; }
             public boolean available(FrontierWorldState current, ResidentProfile resident, long tick) { return ready.get(); }
         }));
-        assertEquals(List.of(actor), selector.eligible(changed, home, ResidentWorkKind.BAKING,
+        assertEquals(List.of(actor), selector.eligible(changed, home, ResidentWorkKind.PRODUCTION,
                 HumanCapability.INDUSTRY, 200).stream().map(ResidentProfile::id).toList());
         ready.set(true);
-        assertTrue(selector.eligible(changed, home, ResidentWorkKind.BAKING, HumanCapability.INDUSTRY, 200).isEmpty());
+        assertTrue(selector.eligible(changed, home, ResidentWorkKind.PRODUCTION, HumanCapability.INDUSTRY, 200).isEmpty());
         assertTrue(HumanAssignmentProjection.compile(changed).idle(actor), "a preference probe never acquires an assignment");
     }
     private static FrontierWorldState initial() {

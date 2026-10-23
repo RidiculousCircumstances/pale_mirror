@@ -14,7 +14,9 @@ class FrontierV3BlockExtractionCodecTest {
     @Test void retainedGenericPreparationPreservesExecutionSourceAndOutputAndRejectsIncompleteOrAlteredEvidence() {
         var definition = new BlockExtraction.Definition("pale_mirror:test_rock_v1",
                 new BlockExtraction.Block("minecraft:stone", Map.of()),
-                new BlockExtraction.Block("minecraft:air", Map.of()), "minecraft:iron_pickaxe", "minecraft:blocks/stone",
+                new BlockExtraction.Block("minecraft:air", Map.of()),
+                new io.farfrontier.palemirror.frontier.v3.model.tooling.ToolRequirement(
+                        io.farfrontier.palemirror.frontier.v3.model.tooling.ToolAbilities.MINE, 0, 1), "minecraft:blocks/stone",
                 List.of(new BlockExtraction.Output("minecraft:cobblestone", 1)));
         var execution = new ActorExecutionId(new SubjectId("resident:rock-worker"), ActorActivityKind.PRESENCE,
                 new SubjectId("task:rock"), 9);

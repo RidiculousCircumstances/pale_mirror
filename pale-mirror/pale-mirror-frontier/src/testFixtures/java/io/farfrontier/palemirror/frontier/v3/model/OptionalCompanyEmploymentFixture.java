@@ -10,11 +10,11 @@ public final class OptionalCompanyEmploymentFixture {
     private OptionalCompanyEmploymentFixture() { }
     public static List<ProposedEvent> foundation(FrontierWorldState state, SubjectId home, long tick) {
         var events = new ArrayList<ProposedEvent>();
-        var worker = SettlementWorkPolicy.permissions(state, home).workers(ResidentWorkKind.BAKING)
+        var worker = SettlementWorkPolicy.permissions(state, home).workers(ResidentWorkKind.PRODUCTION)
                 .stream().sorted().findFirst().orElseThrow();
         var company = new Company(CompanyFoundationProcess.companyId(home), home, worker, CompanyPurpose.WORKS, CompanyStatus.ACTIVE, tick);
         events.addAll(CompanyFoundationProcess.planRegistration(state, company, tick));
-        for (var baker : SettlementWorkPolicy.permissions(state, home).workers(ResidentWorkKind.BAKING).stream().sorted().toList())
+        for (var baker : SettlementWorkPolicy.permissions(state, home).workers(ResidentWorkKind.PRODUCTION).stream().sorted().toList())
             events.add(new ProposedEvent(home, new EmploymentContractOpened(
                     SettlementEmploymentProcess.agreement(state, WorkEmployer.company(company), baker, tick))));
         return List.copyOf(events);
@@ -42,7 +42,7 @@ public final class OptionalCompanyEmploymentFixture {
             state = codec.decode(engine.checkpoint().canonicalState());
         }
         int remaining = state.productionJobs().values().stream().mapToInt(job ->
-                job.bakeryWork().isPresent() ? ProductionWorkProgress.REQUIRED_PROCESSING_TICKS + 512
+                job.stationWork().isPresent() ? ProductionWorkProgress.REQUIRED_PROCESSING_TICKS + 512
                         : ProductionWorkProgress.REQUIRED_PROCESSING_TICKS + job.workTraversal().linearCorridorSurfaces().size() + 4).sum();
         for (int step = 0; !state.productionJobs().isEmpty() && step < remaining; step++) {
             var jobs = state.productionJobs().keySet();
@@ -73,8 +73,8 @@ public final class OptionalCompanyEmploymentFixture {
         var objective = new StrategicObjective(new SubjectId("objective:optional-company-service"), home,
                 StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, java.util.Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         var task = new StrategicTask(new SubjectId("task:optional-company-service"), objective.id(), home,
-                StrategicTaskKind.PRODUCE_BREAD, java.util.Optional.empty(),
-                List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT),
+                StrategicTaskKind.PRODUCE_AT_STATION, java.util.Optional.empty(),
+                List.of(StrategicTaskRequirement.ACTIVE_PRODUCTION_FACILITY, StrategicTaskRequirement.AVAILABLE_PRODUCTION_INPUT),
                 List.of(), StrategicTaskStatus.PENDING);
         state = state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
         var demand = MarketClearingProcess.foodDemand(state, task, 100);

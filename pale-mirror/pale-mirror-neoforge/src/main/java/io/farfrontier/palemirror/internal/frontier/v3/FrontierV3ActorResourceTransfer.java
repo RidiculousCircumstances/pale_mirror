@@ -51,6 +51,8 @@ final class FrontierV3ActorResourceTransfer {
         if (order.actorSlot() instanceof ActorItemSlot.AttachedStorage && (attached == null
                 || !ReferenceContainerCustody.hasLiveCustody(state, attached.containerId())
                 || ReferenceContainerCustody.blocksCanonicalUse(state, attached.containerId()))) return Optional.empty();
+        if (order.portion() instanceof ActorContainerItemOrder.Portion.Exact exact)
+            return Optional.of(individual(state, request, order, exact, physical, attached));
         var step = new FrontierV3ActorItemTransfer.FungibleStep(order, physical, attached, request.actor(), request.actor().getUUID(),
                 request.source(), request.destinationSlot(), request.destinationBefore());
         return Optional.of(new Session() {
@@ -79,6 +81,45 @@ final class FrontierV3ActorResourceTransfer {
                 // The owning transfer command closes every declared container atomically.
             }
         });
+    }
+    private static Session individual(FrontierWorldState state, Request request, ActorContainerItemOrder order,
+            ActorContainerItemOrder.Portion.Exact exact, FrontierV3PhysicalContainer endpoint, FrontierV3PhysicalContainer attached) {
+        int slot = order.exactSlot().slot();
+        if (!request.source().isEmpty() || request.destinationBefore() != 0 || slot >= endpoint.inventory().getContainerSize()
+                || attached != null && exact.attachedSlot().orElseThrow().slot() >= attached.inventory().getContainerSize())
+            throw new IllegalArgumentException("individual transfer has foreign physical addresses");
+        return new Session() {
+            private ItemStack endpointItem() { return endpoint.inventory().getItem(slot); }
+            private ItemStack carriedItem() { return attached == null ? FrontierV3ActorResourceSlots.get(request.actor(), order.actorSlot())
+                    : attached.inventory().getItem(exact.attachedSlot().orElseThrow().slot()); }
+            private void endpointItem(ItemStack item) { endpoint.inventory().setItem(slot, item); endpoint.inventory().setChanged(); }
+            private void carriedItem(ItemStack item) {
+                if (attached == null) FrontierV3ActorResourceSlots.set(request.actor(), order.actorSlot(), item);
+                else { attached.inventory().setItem(exact.attachedSlot().orElseThrow().slot(), item); attached.inventory().setChanged(); }
+            }
+            private boolean taking() { return order.direction() == ActorContainerItemOrder.Direction.TAKE; }
+            @Override public boolean before() { return taking()
+                    ? carriedItem().isEmpty() && FrontierV3ExactItemPresentation.exactMatch(endpointItem(), exact.item())
+                    : endpointItem().isEmpty() && FrontierV3ExactItemPresentation.exactMatch(carriedItem(), exact.item()); }
+            @Override public boolean after() { return taking()
+                    ? endpointItem().isEmpty() && FrontierV3ExactItemPresentation.exactMatch(carriedItem(), exact.item())
+                    : carriedItem().isEmpty() && FrontierV3ExactItemPresentation.exactMatch(endpointItem(), exact.item()); }
+            @Override public boolean apply() {
+                if (!before()) return false;
+                var item = taking() ? endpointItem().copy() : carriedItem().copy();
+                if (taking()) { endpointItem(ItemStack.EMPTY); carriedItem(item); }
+                else { carriedItem(ItemStack.EMPTY); endpointItem(item); }
+                return after();
+            }
+            @Override public List<FrontierV3MinecraftOperation.Participant> participants() {
+                return List.of(endpoint.persistence().get(), attached == null
+                        ? FrontierV3OperationEntityParticipant.current(request.actor(), ActorBodyAuthority.current(state, order.actorId()).physicalEpoch())
+                        : attached.persistence().get());
+            }
+            @Override public List<FungiblePhysicalObservation.Stack> sourceLayout() { return List.of(); }
+            @Override public List<FungiblePhysicalObservation.Stack> destinationLayout() { return List.of(); }
+            @Override public void ownerConfirmed() { }
+        };
     }
     private static List<FungiblePhysicalObservation.Stack> actorLayout(Request request) {
         var actual = FrontierV3ActorResourceSlots.get(request.actor(), request.order().actorSlot());

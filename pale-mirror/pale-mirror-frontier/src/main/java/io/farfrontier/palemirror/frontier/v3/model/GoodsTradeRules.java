@@ -20,9 +20,12 @@ public record GoodsTradeRules(long reviewInterval, long orderLifetime, int maxim
                 io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanningRules.disabled());
     }
     public record Commodity(String itemKind, int targetPerResident, int targetFixed,
-                            FixedScalar minimumSellPrice, FixedScalar maximumBuyPrice) {
+                            FixedScalar minimumSellPrice, FixedScalar maximumBuyPrice, GoodsStockSpecification stock) {
+        public Commodity(String kind, int perResident, int fixed, FixedScalar ask, FixedScalar bid) {
+            this(kind, perResident, fixed, ask, bid, GoodsStockSpecification.FUNGIBLE);
+        }
         public Commodity {
-            Objects.requireNonNull(minimumSellPrice); Objects.requireNonNull(maximumBuyPrice);
+            Objects.requireNonNull(minimumSellPrice); Objects.requireNonNull(maximumBuyPrice); Objects.requireNonNull(stock);
             if (itemKind == null || !itemKind.matches("[a-z][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9_./-]{0,127}")
                     || targetPerResident < 0 || targetPerResident > 64 || targetFixed < 0 || targetFixed > 4096
                     || minimumSellPrice.raw() <= 0 || maximumBuyPrice.raw() <= 0)
@@ -42,6 +45,12 @@ public record GoodsTradeRules(long reviewInterval, long orderLifetime, int maxim
             copy.put(Objects.requireNonNull(kind), values);
         });
         policies = Map.copyOf(copy);
+        var specifications = new HashMap<String, GoodsStockSpecification>();
+        for (var commodities : policies.values()) for (var commodity : commodities) {
+            var existing = specifications.putIfAbsent(commodity.itemKind(), commodity.stock());
+            if (existing != null && !existing.equals(commodity.stock()))
+                throw new IllegalArgumentException("participants disagree on commodity stock/quality specification");
+        }
         if (reviewInterval < 1 || orderLifetime < reviewInterval || maximumBatch < 1 || maximumBatch > 64
                 || maximumPairReviews < 1 || maximumPairReviews > 2048
                 || policies.size() != GoodsPolicyKind.values().length)
@@ -85,7 +94,7 @@ public record GoodsTradeRules(long reviewInterval, long orderLifetime, int maxim
         if (values.stream().noneMatch(value -> value.itemKind().equals(item)))
             throw new IllegalArgumentException("price calibration cannot invent a commodity");
         next.put(policy, values.stream().map(value -> value.itemKind().equals(item)
-                ? new Commodity(item, value.targetPerResident(), value.targetFixed(), ask, bid) : value).toList());
+                ? new Commodity(item, value.targetPerResident(), value.targetFixed(), ask, bid, value.stock()) : value).toList());
         return new GoodsTradeRules(reviewInterval, orderLifetime, maximumBatch, maximumPairReviews, next, supplyPlanning, pricing);
     }
     public String canonicalText() {
@@ -95,7 +104,8 @@ public record GoodsTradeRules(long reviewInterval, long orderLifetime, int maxim
             entry.getValue().stream().sorted(Comparator.comparing(Commodity::itemKind)).forEach(value ->
                     result.append(';').append(value.itemKind()).append(',').append(value.targetPerResident())
                             .append(',').append(value.targetFixed()).append(',').append(value.minimumSellPrice().raw())
-                            .append(',').append(value.maximumBuyPrice().raw()));
+                            .append(',').append(value.maximumBuyPrice().raw())
+                            .append(value.stock().equals(GoodsStockSpecification.FUNGIBLE) ? "" : ",individual:" + value.stock().minimumRemainingPermille()));
         });
         if (supplyPlanning.enabled()) result.append("|supply:").append(supplyPlanning.canonicalText());
         if (pricing.enabled()) result.append("|pricing:").append(pricing.canonicalText());

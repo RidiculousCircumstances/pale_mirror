@@ -21,8 +21,8 @@ import java.util.Set;
 final class FrontierV3ProductionWorkSceneExecutor {
     static boolean releaseReady(ServerLevel level, FrontierWorldState state, SceneLease lease) {
         ProductionJob job = state.productionJobs().get(FrontierSceneBehaviors.productionWork(lease).jobId());
-        return job == null || job.bakeryWork().isEmpty()
-                || job.bakeryWork().orElseThrow().pendingPhysicalStep().isEmpty();
+        return job == null || job.stationWork().isEmpty()
+                || job.stationWork().orElseThrow().pendingPhysicalStep().isEmpty();
     }
     private static final double READY_DISTANCE_SQUARED = 2.25D;
     private FrontierV3ProductionWorkSceneExecutor() { }
@@ -64,9 +64,9 @@ final class FrontierV3ProductionWorkSceneExecutor {
             case HOT -> work(level, runtime, state, lease);
             case DRAINING -> {
                 ProductionJob job = state.productionJobs().get(FrontierSceneBehaviors.productionWork(lease).jobId());
-                if (job != null && job.bakeryWork().isPresent()
-                        && job.bakeryWork().orElseThrow().pendingPhysicalStep().isPresent())
-                    FrontierV3BakeryWorkSceneExecutor.drainPending(level, runtime, state, lease, job);
+                if (job != null && job.stationWork().isPresent()
+                        && job.stationWork().orElseThrow().pendingPhysicalStep().isPresent())
+                    FrontierV3StationWorkExecutor.drainPending(level, runtime, state, lease, job);
                 else FrontierV3SceneExecutor.release(level, runtime, lease);
             }
             case UNKNOWN_AFTER_RESTART -> FrontierV3SceneExecutor.reclaim(level, runtime, state, lease);
@@ -122,7 +122,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
     }
     private static void work(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
         ProductionJob job = FrontierProductionWorkSceneSupport.require(state, FrontierSceneBehaviors.productionWork(lease));
-        if (job.bakeryWork().isPresent()) {
+        if (job.stationWork().isPresent()) {
             SettlementStructure bakery = state.bootstrap().settlements().stream()
                     .filter(settlement -> settlement.id().equals(job.settlementId())).findFirst().orElseThrow()
                     .structures().stream().filter(structure -> structure.id().equals(job.facilityId()))
@@ -135,7 +135,7 @@ final class FrontierV3ProductionWorkSceneExecutor {
             // A loaded container retains physical inventory authority, not permission to keep
             // driving a worker through chunks after all observers have left the scene.
             if (!demand.active()) return;
-            FrontierV3BakeryWorkSceneExecutor.work(level, runtime, state, lease, job);
+            FrontierV3StationWorkExecutor.work(level, runtime, state, lease, job);
             return;
         }
         if (ReferenceContainerCustody.blocksCanonicalUse(state, FrontierWorldState.depotId(job.settlementId()))) {

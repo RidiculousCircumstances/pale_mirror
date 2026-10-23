@@ -15,6 +15,8 @@ public final class ShipmentPhysicalStateSupport {
                     !ReferenceContainerCustody.hasOperationalCustody(state, attached)).isPresent())
             return PreparationAdmission.WAITING_FOR_CUSTODY;
         if (!ShipmentServiceAccess.available(state, shipment)) return PreparationAdmission.WAITING_FOR_SERVICE;
+        if (shipment.cargo() instanceof ShipmentCargo.Individual)
+            return IndividualShipmentCustody.fits(state, shipment) ? PreparationAdmission.READY : PreparationAdmission.WAITING_FOR_RESOURCE_LAYOUT;
         return switch (MaterialSourcePreparation.review(state, shipment.itemOrder()).status()) {
             case READY -> PreparationAdmission.READY;
             case WAITING_FOR_CUSTODY -> PreparationAdmission.WAITING_FOR_CUSTODY;
@@ -24,7 +26,7 @@ public final class ShipmentPhysicalStateSupport {
 
     public static FrontierWorldState handCustody(FrontierWorldState state, SubjectId subject, ShipmentHandCustodyObserved observed) {
         Shipment shipment = state.shipments().shipments().get(observed.shipmentId());
-        if (shipment == null || !subject.equals(shipment.id()) || !shipment.carrying()
+        if (shipment == null || !(shipment.cargo() instanceof ShipmentCargo.Fungible) || !subject.equals(shipment.id()) || !shipment.carrying()
                 || shipment.mobileContainerId().isPresent()
                 || shipment.pendingPhysicalStep().isPresent() || !shipment.execution().equals(observed.identity().execution()))
             throw new IllegalArgumentException("shipment hand boundary has no exact carrying obligation");
@@ -69,6 +71,14 @@ public final class ShipmentPhysicalStateSupport {
     public record Destination(int slot, int before, Map<SubjectId, Integer> lots) { }
     public static Optional<Destination> destination(FrontierWorldState state, Shipment shipment) {
         if (shipment.reception().isPresent() || shipment.terminal()) return Optional.empty();
+        if (shipment.cargo() instanceof ShipmentCargo.Individual) {
+            if (!IndividualShipmentCustody.fits(state, shipment)) return Optional.empty();
+            var order = (ActorContainerItemOrder) shipment.itemOrder(state);
+            int slot = shipment.status() == Shipment.Status.AWAITING_LOAD
+                    ? ((ActorContainerItemOrder.Portion.Exact) order.portion()).attachedSlot().map(InventoryCustody.ContainerSlot::slot).orElse(-1)
+                    : order.exactSlot().slot();
+            return Optional.of(new Destination(slot, 0, shipment.portions()));
+        }
         if (shipment.status() == Shipment.Status.AWAITING_LOAD) return shipment.mobileContainerId().flatMap(container ->
                 ContainerMaterialDestination.selectWhole(state, container, shipment.itemKind(), shipment.lotQuantities(), Optional.empty()))
                 .map(d -> new Destination(d.slot(), d.before(), d.lots()));
@@ -81,16 +91,21 @@ public final class ShipmentPhysicalStateSupport {
     public static FrontierWorldState prepare(FrontierWorldState state, SubjectId subject, ShipmentHotPrepared prepared) {
         Shipment shipment = require(state, subject, prepared.shipmentId(), prepared.step());
         if (shipment.pendingPhysicalStep().isPresent()) throw new IllegalArgumentException("shipment already retains a physical effect");
-        var order = shipment.itemOrder(prepared.step().lotQuantities());
+        var order = shipment.itemOrder(state, prepared.step().lotQuantities());
         requireStorage(state, shipment);
         var admission = preparationAdmission(state, shipment);
         if (admission != PreparationAdmission.READY)
             throw new IllegalArgumentException("shipment cannot prepare: " + admission + " shipment="
                     + shipment.id().value() + " actor=" + shipment.execution().actorId().value()
                     + " source=" + shipment.sender() + " receiver=" + shipment.receiver());
-        if (!MaterialSourcePreparation.review(state, order).requireReady().equals(prepared.step().source()))
+        if (shipment.cargo() instanceof ShipmentCargo.Individual) {
+            var expected = IndividualItemTransferWitness.capture(state, (ActorContainerItemOrder) order,
+                    prepared.step().observation().actuation().body().physicalEpoch());
+            if (!prepared.step().individual().equals(Optional.of(expected)))
+                throw new IllegalArgumentException("individual shipment preimage differs from canonical item order");
+        } else if (prepared.step().individual().isPresent() || !MaterialSourcePreparation.review(state, order).requireReady().equals(prepared.step().source()))
             throw new IllegalArgumentException("shipment effect source differs from current resource bindings");
-        if (shipment.carrying() && shipment.mobileContainerId().isEmpty() && (prepared.step().source().size() != 1
+        if (shipment.cargo() instanceof ShipmentCargo.Fungible && shipment.carrying() && shipment.mobileContainerId().isEmpty() && (prepared.step().source().size() != 1
                 || !prepared.step().source().getFirst().address().equals(new PhysicalStackAddress.ActorHand(shipment.execution().actorId(),
                     io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(state.bootstrap().worldId(), shipment.execution().actorId()),
                     ActorContainerItemOrder.Hand.MAIN))))
@@ -118,14 +133,22 @@ public final class ShipmentPhysicalStateSupport {
                 || shipment.status() != receipt.step().status() || shipment.revision() != receipt.step().shipmentRevision()
                 || !shipment.pendingPhysicalStep().equals(Optional.of(receipt.step())))
             throw new IllegalArgumentException("retired shipment effect lacks its exact retained obligation");
-        ShipmentStateSupport.validateOrder(state, shipment.itemOrder(receipt.step().lotQuantities()));
+        ShipmentStateSupport.validateOrder(state, shipment.itemOrder(state, receipt.step().lotQuantities()));
         return outcome.applied() ? settle(state, shipment, receipt, true)
                 : state.withChanges(FrontierWorldStateUpdate.begin().shipments(state.shipments().cancelUnusedEffect(shipment)));
     }
     private static FrontierWorldState settle(FrontierWorldState state, Shipment shipment, ShipmentHotTransferred receipt, boolean retired) {
         if (!shipment.pendingPhysicalStep().equals(Optional.of(receipt.step())))
             throw new IllegalArgumentException("shipment physical receipt lacks its exact durable pre-effect declaration");
-        var order = shipment.itemOrder(receipt.step().lotQuantities());
+        var order = shipment.itemOrder(state, receipt.step().lotQuantities());
+        if (shipment.cargo() instanceof ShipmentCargo.Individual) {
+            if (receipt.step().individual().isEmpty() || !receipt.remainingSource().isEmpty() || !receipt.destination().isEmpty())
+                throw new IllegalArgumentException("individual receipt cannot claim fungible source/destination layouts");
+            var changes = retired ? ActorResourceTransferComposition.retiredObserved(state, order, receipt.step().observation().actuation(),
+                    receipt.step().sourceEpoch(), receipt.step().destinationEpoch(), List.of(), List.of())
+                    : ActorResourceTransferComposition.observed(state, order, receipt.step().sourceEpoch(), receipt.step().destinationEpoch(), List.of(), List.of());
+            return ShipmentStateSupport.transferred(state, shipment, receipt.step().lotQuantities(), changes);
+        }
         // Generic custody validates full stock layouts; the owner also requires this exact body/port.
         if (shipment.status() == Shipment.Status.AWAITING_LOAD && shipment.mobileContainerId().isEmpty()) {
             var hand = new PhysicalStackAddress.ActorHand(shipment.execution().actorId(),
@@ -168,12 +191,12 @@ public final class ShipmentPhysicalStateSupport {
         if (shipment == null || shipment.terminal() || !subject.equals(id) || shipment.status() != step.status()
                 || shipment.revision() != step.shipmentRevision() || state.actorMovements().containsKey(shipment.execution().actorId()))
             throw new IllegalArgumentException("shipment physical effect has stale identity or an unfinished journey");
-        ShipmentStateSupport.validateOrder(state, shipment.itemOrder(step.lotQuantities()));
+        ShipmentStateSupport.validateOrder(state, shipment.itemOrder(state, step.lotQuantities()));
         var actor = shipment.execution().actorId(); var lease = state.ambientLeases().get(actor);
         if (lease == null || lease.status() != AmbientLeaseStatus.HOT || lease.revision() != step.observation().scopeRevision()
                 || ActorExecutionCoordinator.sceneOwns(state, actor))
             throw new IllegalArgumentException("shipment effect lacks its exact loaded presentation scope");
-        step.observation().require(state, shipment.execution(), lease.revision(), shipment.itemOrder().station().standingBody());
+        step.observation().require(state, shipment.execution(), lease.revision(), shipment.movementOrder().legalStations().getFirst().standingBody());
         return shipment;
     }
     private ShipmentPhysicalStateSupport() { }

@@ -62,6 +62,15 @@ final class FrontierV3ShipmentDeathResources {
                     .stream().filter(s -> !s.terminal() && s.carrying()).findFirst().orElse(null);
         if (shipment == null || shipment.mobileContainerId().isPresent() || !shipment.carrying() || shipment.pendingPhysicalStep().isPresent()
                 || shipment.reception().isPresent()) return () -> { }; // Possibly applied endpoint effects retain their exact owner.
+        if (shipment.cargo() instanceof ShipmentCargo.Individual cargo) {
+            var item = state.inventory().items().get(cargo.itemId());
+            if (!cargo.matches(item)) throw new IllegalArgumentException("dead courier lost its individual preimage");
+            return () -> {
+                var current = runtime.decodedState().orElseThrow();
+                if (shipment.equals(current.shipments().shipments().get(shipment.id())) && ItemStack.matches(witness, body.getMainHandItem()))
+                    FrontierV3ExactHeldItemDeath.resolve(level, runtime, body, item, "shipment:" + shipment.id().value(), "shipment_item");
+            };
+        }
         if (!witness.isEmpty() && !matches(witness, shipment)) return () -> { }; // Unclassified substitution is not fictional loss.
         var identity = new ActorActuationId(id, execution.orElseThrow());
         return () -> {

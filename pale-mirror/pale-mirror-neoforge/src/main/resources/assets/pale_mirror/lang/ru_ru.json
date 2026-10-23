@@ -1,4 +1,7 @@
 {
+  "block.pale_mirror.forge": "Кузница",
+  "container.pale_mirror.production_bench.repair": "Ремонт: %s",
+  "container.pale_mirror.production_bench.make": "Изготовление: %s",
   "block.pale_mirror.smelter": "Плавильная печь",
   "block.pale_mirror.production_bench": "Производственная станция",
   "container.pale_mirror.production_bench": "Производственная станция",

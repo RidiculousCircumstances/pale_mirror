@@ -103,7 +103,8 @@ public final class ResourceSiteHarvestKnownNavigation {
                 throw new KnowledgeUnavailable("known field work goal awaits exact obstruction resolution");
         }
         SurfaceAnchor start = actor.supportingSurface();
-        ResourceStorageAccess port = ResourceSiteHarvestGoal.depotPort(state, routingJob);
+        ResourceStorageAccess port = depotGoal ? ResourceSiteHarvestGoal.depotPort(state, routingJob)
+                : ResourceSiteHarvestGoal.servicePort(state, routingJob);
         return new Context(start, goal, KnownPedestrianRouteKnowledge.forField(state, site, cycle, port, start).forActor(state, job.workerId()));
     }
 }

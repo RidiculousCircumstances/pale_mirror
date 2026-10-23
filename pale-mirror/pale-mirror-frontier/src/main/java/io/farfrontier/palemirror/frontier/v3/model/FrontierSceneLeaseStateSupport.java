@@ -107,8 +107,8 @@ public final class FrontierSceneLeaseStateSupport {
         if (current == null || current.status() != SceneLeaseStatus.DRAINING) throw new IllegalArgumentException("only a draining scene lease can be released");
         if (FrontierSceneBehaviors.isProductionWork(current)) {
             ProductionJob job = state.productionJobs().get(FrontierSceneBehaviors.productionWork(current).jobId());
-            if (job != null && job.bakeryWork().isPresent()
-                    && job.bakeryWork().orElseThrow().pendingPhysicalStep().isPresent())
+            if (job != null && job.stationWork().isPresent()
+                    && job.stationWork().orElseThrow().pendingPhysicalStep().isPresent())
                 throw new IllegalArgumentException("bakery scene cannot release a possibly applied physical effect");
         }
         requireNoBoundSceneHand(state, current);

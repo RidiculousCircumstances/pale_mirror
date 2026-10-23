@@ -117,9 +117,11 @@ final class FrontierV3ExtractionExecutor {
             if (tool == null || !FrontierV3ExactItemPresentation.exactMatch(worker.getMainHandItem(), tool)) return null;
             int carried = ExtractionWorkAuthority.carried(state, job);
             if (!plain(worker.getOffhandItem(), job.outputKind(), carried)) return null;
-            var extraction = new FrontierV3MinecraftBlockExtraction(level, worker, actuation).prepare(
+            var extraction = new FrontierV3MinecraftBlockExtraction(level, worker, actuation, state.bootstrap().ruleset().tools()).prepare(
                     ExtractionPhysicalStateSupport.operation(job), job.execution(), cell.source(), cell.definition());
-            return new ExtractionPhysicalStep.BlockWork(observation, extraction, carried, custody.authorityEpoch());
+            return new ExtractionPhysicalStep.BlockWork(observation, extraction, carried, custody.authorityEpoch(),
+                    io.farfrontier.palemirror.frontier.v3.model.tooling.ToolUse.prepare(tool,
+                            state.bootstrap().ruleset().tools(), cell.definition().toolRequirement()));
         }
         var container = ExtractionServiceAccess.identity(state, job).pointId();
         var physical = FrontierV3PhysicalContainer.loaded(level, state, container).orElse(null);
@@ -154,7 +156,7 @@ final class FrontierV3ExtractionExecutor {
                 var source = new BlockPos(block.extraction().target().x(), block.extraction().target().y(), block.extraction().target().z());
                 if (!level.hasChunkAt(source)) return null;
                 int resultCount = block.carriedBefore() + block.extraction().output().getFirst().quantity();
-                var adapter = new FrontierV3MinecraftBlockExtraction(level, worker, actuation);
+                var adapter = new FrontierV3MinecraftBlockExtraction(level, worker, actuation, state.bootstrap().ruleset().tools());
                 var ledger = FrontierV3GrayboxLedger.get(level); var witness = FrontierV3WorksiteEvidence.at(level, ledger, state, source);
                 var key = new WorksiteBlock.Key(CellMutationKey.OwnerFamily.EXTRACTIVE_SITE, job.siteId(),
                         WorksiteBlock.Role.RESOURCE, job.target().orElseThrow().key().cell());
@@ -184,6 +186,7 @@ final class FrontierV3ExtractionExecutor {
                 var declaration = FrontierV3MinecraftOperation.declaration(FrontierV3OperationReceipt.Protocol.EXTRACTION_BLOCK, job.id(), new ExtractionHotPrepared(job.id(), step), participants);
                 var operation = FrontierV3MinecraftOperation.apply(level, declaration, participants,
                     () -> FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(source)).equals(block.extraction().definition().before())
+                            && FrontierV3ToolUse.before(worker.getMainHandItem(), block.toolUse())
                             && plain(worker.getOffhandItem(), job.outputKind(), block.carriedBefore()),
                     () -> {
                         var result = new BlockExtractionPort.Result[1];
@@ -197,8 +200,9 @@ final class FrontierV3ExtractionExecutor {
                                 FrontierV3WorksiteBlockWitness.Phase.EFFECT_BLOCK_APPLIED, Optional.of(block.extraction().operationId())));
                         ledger.persist(level);
                         worker.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(job.outputKind())), resultCount));
-                        return true;
+                        return FrontierV3ToolUse.apply(worker.getMainHandItem(), block.toolUse());
                     }, () -> FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(source)).equals(external.orElse(block.extraction().definition().after()))
+                            && FrontierV3ToolUse.after(worker.getMainHandItem(), block.toolUse())
                             && plain(worker.getOffhandItem(), job.outputKind(), resultCount));
                 if (!operation.complete()) return null;
                 worker.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
@@ -211,13 +215,9 @@ final class FrontierV3ExtractionExecutor {
                 var expected = state.inventory().items().get(job.toolId()); boolean take = job.phase() == ExtractionWork.Phase.TAKE_TOOL;
                 var participants = List.of(physical.persistence().get(), FrontierV3OperationEntityParticipant.current(worker, actuation.id().body().physicalEpoch()));
                 var declaration = FrontierV3MinecraftOperation.declaration(FrontierV3OperationReceipt.Protocol.EXTRACTION_EQUIPMENT, job.id(), new ExtractionHotPrepared(job.id(), step), participants);
-                var operation = FrontierV3MinecraftOperation.apply(level, declaration, participants,
-                        () -> take ? worker.getMainHandItem().isEmpty() && FrontierV3ExactItemPresentation.exactMatch(chest.getItem(equipment.slot().slot()), expected)
-                                : chest.getItem(equipment.slot().slot()).isEmpty() && FrontierV3ExactItemPresentation.exactMatch(worker.getMainHandItem(), expected),
-                        () -> take ? FrontierV3ActorItemTransfer.take(chest, worker, expected, equipment.slot(), EquipmentSlot.MAINHAND)
-                                : FrontierV3ActorItemTransfer.place(chest, worker, expected, equipment.slot(), EquipmentSlot.MAINHAND),
-                        () -> take ? chest.getItem(equipment.slot().slot()).isEmpty() && FrontierV3ExactItemPresentation.exactMatch(worker.getMainHandItem(), expected)
-                                : worker.getMainHandItem().isEmpty() && FrontierV3ExactItemPresentation.exactMatch(chest.getItem(equipment.slot().slot()), expected));
+                var adapter = new FrontierV3EquipmentItemTransfer(chest, worker, expected, equipment.slot(), take
+                        ? ActorContainerItemOrder.Direction.TAKE : ActorContainerItemOrder.Direction.PLACE);
+                var operation = FrontierV3MinecraftOperation.apply(level, declaration, participants, adapter::before, adapter::apply, adapter::after);
                 return operation.complete() ? new Applied(operation.ticket(), new ExtractionHotObserved(job.id(), step, List.of(), List.of())) : null;
             }
             case ExtractionPhysicalStep.Cargo cargo -> {

@@ -28,19 +28,26 @@ final class FrontierV3ExactItemPresentation {
         Item minecraftItem = BuiltInRegistries.ITEM.get(ResourceLocation.parse(item.itemKind()));
         if (minecraftItem == Items.AIR) throw new IllegalStateException("unknown Minecraft item for exact hand-off: " + item.itemKind());
         ItemStack stack = new ItemStack(minecraftItem, item.count());
+        if (item.condition().durable()) {
+            stack.set(DataComponents.MAX_STACK_SIZE, 1);
+            stack.set(DataComponents.MAX_DAMAGE, item.condition().maximumDamage());
+            stack.setDamageValue(item.condition().damage());
+        }
         CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.putString(ITEM_ID_KEY, item.id().value()));
         return stack;
     }
 
     static boolean exactMatch(ItemStack actual, ExactItemStack expected) {
         if (actual.getCount() != expected.count() || !BuiltInRegistries.ITEM.getKey(actual.getItem()).toString().equals(expected.itemKind())) return false;
+        if (expected.condition().durable() && (actual.getMaxDamage() != expected.condition().maximumDamage()
+                || actual.getDamageValue() != expected.condition().damage())) return false;
         CustomData data = actual.get(DataComponents.CUSTOM_DATA);
         return data != null && expected.id().value().equals(data.copyTag().getString(ITEM_ID_KEY));
     }
 
     static boolean exactOneUnitDecrement(ItemStack actual, ExactItemStack source) {
         if (source.count() == 1) return actual.isEmpty();
-        return exactMatch(actual, new ExactItemStack(source.id(), source.economicOwnerId(), source.itemKind(), source.count() - 1, source.custody()));
+        return exactMatch(actual, source.withCount(source.count() - 1));
     }
 
     static Optional<SubjectId> itemId(ItemStack actual) {

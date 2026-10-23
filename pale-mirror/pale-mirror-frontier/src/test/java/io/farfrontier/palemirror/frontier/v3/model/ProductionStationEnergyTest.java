@@ -54,16 +54,16 @@ class ProductionStationEnergyTest {
         state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(), new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
         state = ProductionProcess.reduceStarted(state, task.ownerId(), start);
         var job = start.job();
-        for (long due = 300, turns = 0; state.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase()
-                == BakeryWorkState.Phase.DEPOT_PICKUP && turns < 400; due += 20, turns++) {
+        for (long due = 300, turns = 0; state.productionJobs().get(job.id()).stationWork().orElseThrow().phase()
+                == StationWorkState.Phase.DEPOT_PICKUP && turns < 400; due += 20, turns++) {
             var current = state.productionJobs().get(job.id());
             var step = ProductionProcess.planCompletion(state, ProductionProcess.complete(current, due)).stream()
                     .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance).map(BakeryColdStep.class::cast).findFirst().orElseThrow();
             state = ProductionProcess.reduceBakeryColdStep(state, task.ownerId(), step);
         }
         var current = state.productionJobs().get(job.id());
-        assertEquals(BakeryWorkState.Phase.STATION_LOAD, current.bakeryWork().orElseThrow().phase());
-        var station = ProductionStationEnergy.record(state, current.bakeryWork().orElseThrow().stationId()).productionStation().orElseThrow();
+        assertEquals(StationWorkState.Phase.STATION_LOAD, current.stationWork().orElseThrow().phase());
+        var station = ProductionStationEnergy.record(state, current.stationWork().orElseThrow().stationId()).productionStation().orElseThrow();
         assertEquals(station.containerId(), ProductionServiceAccess.point(state, current));
         var assignment = HumanAssignmentProjection.compile(state).assignment(job.workerId());
         assertFalse(ActivityExecutionCapabilities.waitingForServiceResource(state, assignment),
@@ -218,7 +218,7 @@ class ProductionStationEnergyTest {
         for (long due = 300, turns = 0; state.productionJobs().containsKey(job.id()) && turns < 700; due += 20, turns++) {
             due = BakeryTestClock.due(state, job, due);
             var current = state.productionJobs().get(job.id());
-            if (current.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.STATION_UNLOAD)
+            if (current.stationWork().orElseThrow().phase() == StationWorkState.Phase.STATION_UNLOAD)
                 assertPlayerOutputLossClosesOnlyThisOrder(state, job, station);
             var step = ProductionProcess.planCompletion(state, ProductionProcess.complete(current, due)).stream()
                     .map(ProposedEvent::payload).filter(BakeryColdStep.class::isInstance).map(BakeryColdStep.class::cast).findFirst().orElseThrow();
@@ -239,7 +239,7 @@ class ProductionStationEnergyTest {
                 new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot())), "minecraft:bread", 21);
         var physical = ReferenceContainerCustodyFixtures.observedAndHeld(before.withInventory(before.inventory().withFungibleResources(
                 ledger.rebind(account, 1, FungiblePhysicalObservation.bind(ledger, account, 1, List.of(fuel, product))))), station.containerId());
-        var operation = BakeryStationOperation.require(physical, job);
+        var operation = StationWorkOperation.require(physical, job);
         assertTrue(SourceStockClaimLoss.canDepart(physical, account, "minecraft:bread", 3));
         var remaining = List.of(fuel, new FungiblePhysicalObservation.Stack(product.address(), product.itemKind(), 18));
         var loss = new FungibleStockDepartureObserved(account, station.containerId(), job.settlementId(), 1,

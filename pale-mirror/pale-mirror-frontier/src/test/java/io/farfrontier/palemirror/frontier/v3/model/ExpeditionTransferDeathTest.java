@@ -45,7 +45,7 @@ class ExpeditionTransferDeathTest {
         var source = new ArrayList<FungiblePhysicalObservation.Stack>(); int slot = 0;
         for (var entry : quantities.entrySet()) for (int q = entry.getValue(); q > 0; q -= Math.min(q, 64))
             source.add(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(
-                    mission.sender().containerId(), slot++)), entry.getKey(), Math.min(q, 64)));
+                    mission.sender().containerId(), state.inventory().availableSlots(mission.sender().containerId()).get(slot++))), entry.getKey(), Math.min(q, 64)));
         resources = resources.rebind(allocation.sourceAccountId(), 1, FungiblePhysicalObservation.bind(resources, allocation.sourceAccountId(), 1, source));
         state = state.withInventory(state.inventory().withFungibleResources(resources));
         var execution = ExpeditionSupplyAuthority.execution(state, mission, allocation).orElseThrow();

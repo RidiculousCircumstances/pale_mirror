@@ -17,7 +17,7 @@ class CompanyFoundationProcessTest {
         accounts.put(home.id(), new EconomicAccount(home.id(), EconomicOwnerKind.SETTLEMENT_TREASURY,
                 EconomicAccountStatus.ACTIVE, FixedScalar.ZERO, FixedScalar.ZERO));
         state = state.withInventory(state.inventory().withEconomics(new EconomicLedger(accounts)));
-        var worker = SettlementWorkPolicy.permissions(state, home.id()).workers(ResidentWorkKind.BAKING).stream().sorted().findFirst().orElseThrow();
+        var worker = SettlementWorkPolicy.permissions(state, home.id()).workers(ResidentWorkKind.PRODUCTION).stream().sorted().findFirst().orElseThrow();
         var job = job(state, home.id(), worker);
         assertEquals(ProductionRights.Mode.PUBLIC_PRODUCTION, job.rights().mode());
         assertTrue(ProductionCommercialProcess.canReserve(state, job));
@@ -33,7 +33,7 @@ class CompanyFoundationProcessTest {
     }
     @Test void optionalCompanyServicePaysOnlyItsDeclaredCompany() {
         var state = initial(); var home = state.bootstrap().settlements().getFirst();
-        var worker = SettlementWorkPolicy.permissions(state, home.id()).workers(ResidentWorkKind.BAKING).stream().sorted().findFirst().orElseThrow();
+        var worker = SettlementWorkPolicy.permissions(state, home.id()).workers(ResidentWorkKind.PRODUCTION).stream().sorted().findFirst().orElseThrow();
         var company = new Company(CompanyFoundationProcess.companyId(home.id()), home.id(), worker, CompanyPurpose.WORKS, CompanyStatus.ACTIVE, 1);
         state = CompanyFoundationProcess.reduce(state, home.id(), new CompanyRegistered(company));
         var contract = SettlementEmploymentProcess.agreement(state, WorkEmployer.company(company), worker, 1);

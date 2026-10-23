@@ -112,7 +112,10 @@ class FrontierDomainRelationshipsTest {
                 new SubjectId("item:site-harvest-1-wheat-field-2"), new InventoryCustody.ContainerSlot(new SubjectId("container:settlement-1-depot"), 0),
                 new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId("intent:site-harvest-1-wheat-field-2"),
                 ResourceSiteHarvestProgress.notStarted(ResourceSiteHarvestProgress.TOTAL_CROP_SLOTS),
-                new ResourceFieldWorkTarget(new SubjectId("site:1-wheat-field"), 1L, new ResourceFieldLayout.CellId(1L), 0L));
+                new ResourceFieldWorkTarget(new SubjectId("site:1-wheat-field"), 1L, new ResourceFieldLayout.CellId(1L), 0L),
+                new WorkToolAssignment(new SubjectId("item:field-hoe"), new ShipmentEndpoint.Storage(new SubjectId("settlement:1"),
+                        new SubjectId("container:settlement-1-depot"), new SurfaceAnchor(new BlockPosition(0, 64, 0)),
+                        Optional.empty(), new SurfaceAnchor(new BlockPosition(0, 64, 0))), WorkToolAssignment.Stage.ACQUIRING));
 
         var bound = lineage.bindSuccessor(replacement);
         assertEquals(lineage.workerId(), bound.workerId(), "new admission cannot rewrite the historical owner");

@@ -17,7 +17,7 @@ public final class HarvestStorageReplacement {
     }
     private static boolean safe(FrontierWorldState state, ResourceSiteHarvestJob job) {
         var intent = state.physicalIntents().get(job.intentId());
-        return !job.progress().hasPendingPhysicalWork() && job.batchSuccessorSlot().isEmpty()
+        return !job.hasPendingPhysicalWork() && job.batchSuccessorSlot().isEmpty()
                 && !state.resourceSites().harvestMutationPending(job)
                 && !FrontierResourceSiteHarvestSceneSupport.hasNonClosedScene(state, job)
                 && ActorExecutionCoordinator.coldAvailable(state, job.workerId())

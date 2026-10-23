@@ -33,6 +33,14 @@ public final class ShipmentStateSupport {
                 ResidentWorkKind.LOGISTICS, java.util.List.of(shipment.execution().actorId()));
         ShipmentAuthorizationComposition.validate(state, shipment, true);
         ResourceSourceComposition.admit(state, shipment.sender()); ShipmentEndpointComposition.validate(state, shipment.receiver());
+        if (shipment.cargo() instanceof ShipmentCargo.Individual cargo) {
+            IndividualShipmentCustody.validateCustody(state, shipment, cargo);
+            if (!subject.equals(cargo.ownerId()) || !(shipment.mobileContainerId().isPresent()
+                    ? ActorExecutionCoordinator.declaredActorWorkAdmission(state, shipment.execution().actorId())
+                    : ActorExecutionCoordinator.ordinaryWorkAdmission(state, shipment.execution().actorId())).permitted())
+                throw new IllegalArgumentException("individual shipment lacks source owner or available courier");
+            return;
+        }
         ClaimAllocation claim = state.inventory().fungibleResources().claims().get(shipment.authorization().claimId());
         CustodyAccount source = state.inventory().fungibleResources().accounts().get(shipment.sourceAccountId());
         if (!subject.equals(claim.economicOwnerId()) || source == null
@@ -52,8 +60,9 @@ public final class ShipmentStateSupport {
     }
     public static void validateOrder(FrontierWorldState state, ActorResourceItemOrder order) {
         Shipment shipment = state.shipments().shipments().get(order.ownerId());
-        if (shipment == null || shipment.terminal() || !(order.portion() instanceof ActorContainerItemOrder.Portion.Fungible portion)
-                || !shipment.itemOrder(portion.lotQuantities()).equals(order))
+        if (shipment == null || shipment.terminal()
+                || !shipment.itemOrder(state, order.portion() instanceof ActorContainerItemOrder.Portion.Fungible portion
+                        ? portion.lotQuantities() : shipment.portions()).equals(order))
             throw new IllegalArgumentException("delegated item order does not equal its current shipment declaration");
         state.actorExecutions().requireCurrent(shipment.execution());
         if (!TransportCargoExecution.selected(state, shipment)) throw new IllegalArgumentException("parcel is not the asset's current declared handling turn");
@@ -62,8 +71,9 @@ public final class ShipmentStateSupport {
     static ActorItemTransferPreparation prepareTransfer(FrontierWorldState state, ActorResourceItemOrder order) {
         validateOrder(state, order);
         Shipment shipment = state.shipments().shipments().get(order.ownerId());
+        if (order.portion() instanceof ActorContainerItemOrder.Portion.Exact) return ActorItemTransferPreparation.unchanged(state, order);
         var portion = (ActorContainerItemOrder.Portion.Fungible) order.portion();
-        if (portion.lotQuantities().equals(shipment.lotQuantities())) return ActorItemTransferPreparation.unchanged(state, order);
+        if (portion.lotQuantities().equals(shipment.portions())) return ActorItemTransferPreparation.unchanged(state, order);
         var receipt = ShipmentReception.unloaded(shipment, portion.lotQuantities());
         var partition = new ResourceClaimPartition(shipment.carriedAccountId(), shipment.authorization().claimId(), receipt.claimId(), portion.lotQuantities());
         var ownerChanges = ShipmentAuthorizationComposition.allocationPartitioned(state, shipment, partition);
@@ -83,11 +93,11 @@ public final class ShipmentStateSupport {
                 || !ActorExecutionCoordinator.coldAvailable(state, shipment.execution().actorId()))
             throw new IllegalArgumentException("shipment handoff has stale identity, phase or competing physical custody");
         var lots = coldTransferLots(state, shipment);
-        var order = shipment.itemOrder(lots);
+        var order = shipment.itemOrder(state, lots);
         validateOrder(state, order);
         if (!ShipmentServiceAccess.available(state, shipment))
             throw new IllegalArgumentException("shipment has not acquired its shared endpoint access turn");
-        if (shipment.carrying() && !ContainerStorageAdmission.receive(state,
+        if (shipment.cargo() instanceof ShipmentCargo.Fungible && shipment.carrying() && !ContainerStorageAdmission.receive(state,
                 shipment.unloadingEndpoint().containerId(), shipment.itemKind(), order.portion().quantity(), ShipmentAuthorizationComposition.capacityCompletionOwner(shipment)))
             throw new IllegalArgumentException("shipment receiver cannot fit its retained cargo");
         var transfer = ActorResourceTransferComposition.cold(state, order);
@@ -123,13 +133,15 @@ public final class ShipmentStateSupport {
         return !coldTransferLots(state, shipment).isEmpty();
     }
     public static java.util.Map<SubjectId, Integer> coldTransferLots(FrontierWorldState state, Shipment shipment) {
+        if (shipment.cargo() instanceof ShipmentCargo.Individual)
+            return IndividualShipmentCustody.fits(state, shipment) ? shipment.portions() : java.util.Map.of();
         if (shipment.status() == Shipment.Status.AWAITING_LOAD) return shipment.mobileContainerId().filter(container ->
                 !ContainerStorageAdmission.receive(state, container, shipment.itemKind(), shipment.quantity(), java.util.Optional.empty())).isPresent()
-                ? java.util.Map.of() : shipment.lotQuantities();
+                ? java.util.Map.of() : shipment.portions();
         int quantity = shipment.quantity();
         while (quantity > 0 && !ContainerStorageAdmission.receive(state, shipment.unloadingEndpoint().containerId(),
                 shipment.itemKind(), quantity, ShipmentAuthorizationComposition.capacityCompletionOwner(shipment))) quantity--;
-        return portion(shipment.lotQuantities(), quantity);
+        return portion(shipment.portions(), quantity);
     }
     static java.util.Map<SubjectId, Integer> portion(java.util.Map<SubjectId, Integer> lots, int quantity) {
         var result = new java.util.LinkedHashMap<SubjectId, Integer>();
@@ -178,6 +190,10 @@ public final class ShipmentStateSupport {
             });
             if (shipment.terminal()) continue; // Cargo declaration is historical after unload, not a live claim/account reference.
             ShipmentAuthorizationComposition.validate(state, shipment, false);
+            if (shipment.cargo() instanceof ShipmentCargo.Individual cargo) {
+                IndividualShipmentCustody.validateCustody(state, shipment, cargo);
+                continue;
+            }
             SubjectId accountId = shipment.status() == Shipment.Status.AWAITING_LOAD ? shipment.sourceAccountId() : shipment.carriedAccountId();
             CustodyAccount account = state.inventory().fungibleResources().accounts().get(accountId);
             ResourceCustody expected = shipment.status() == Shipment.Status.AWAITING_LOAD
@@ -212,7 +228,7 @@ public final class ShipmentStateSupport {
         if (assignment.kind() != HumanAssignmentKind.COURIER || shipment == null || shipment.terminal()
                 || !shipment.execution().actorId().equals(assignment.residentId()))
             throw new IllegalArgumentException("courier carried view lacks its exact assignment");
-        return shipment.carrying() && shipment.mobileContainerId().isEmpty() ? java.util.Optional.of(new ActorCarriedResources.Presentation(
+        return shipment.cargo() instanceof ShipmentCargo.Fungible && shipment.carrying() && shipment.mobileContainerId().isEmpty() ? java.util.Optional.of(new ActorCarriedResources.Presentation(
                 shipment.execution().actorId(), shipment.carriedAccountId(), new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN))) : java.util.Optional.empty();
     }
     static FrontierWorldStateUpdate withdrawSourceClaim(FrontierWorldState state, SubjectId claim) {

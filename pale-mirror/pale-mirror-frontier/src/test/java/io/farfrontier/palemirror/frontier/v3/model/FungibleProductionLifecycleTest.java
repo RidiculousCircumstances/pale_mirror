@@ -99,10 +99,10 @@ class FungibleProductionLifecycleTest {
     void physicalRecipeLayoutPreservesUnconsumedStockAcrossSplitStacksAndRecovery() {
         Fixture f = fixture(96);
         var layout = FungibleProductionLayout.plan(f.state(), f.job());
-        assertEquals(Map.of(0, new ReferenceContainerCustody.ProjectedFungibleSlot("minecraft:wheat", 32),
-                1, new ReferenceContainerCustody.ProjectedFungibleSlot("minecraft:wheat", 64)), layout.before());
-        assertEquals(Map.of(0, new ReferenceContainerCustody.ProjectedFungibleSlot("minecraft:bread", 64),
-                1, new ReferenceContainerCustody.ProjectedFungibleSlot("minecraft:wheat", 32)), layout.after());
+        assertEquals(Map.of(f.outputSlot(), new ReferenceContainerCustody.ProjectedFungibleSlot("minecraft:wheat", 32),
+                f.outputSlot() + 1, new ReferenceContainerCustody.ProjectedFungibleSlot("minecraft:wheat", 64)), layout.before());
+        assertEquals(Map.of(f.outputSlot(), new ReferenceContainerCustody.ProjectedFungibleSlot("minecraft:bread", 64),
+                f.outputSlot() + 1, new ReferenceContainerCustody.ProjectedFungibleSlot("minecraft:wheat", 32)), layout.after());
         var codec = new FrontierWorldStateCodec();
         var recovered = codec.decode(codec.encode(f.state()));
         assertEquals(layout, FungibleProductionLayout.plan(recovered, recovered.productionJobs().get(f.job().id())));
@@ -206,23 +206,23 @@ class FungibleProductionLifecycleTest {
                 portions, Map.of(original.claim(), 64)));
         var cold = new FungibleResourceLedger(lots, claims, accounts, old.bindings());
         var stacks = List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                        new InventoryCustody.ContainerSlot(original.depot(), 0)), "minecraft:wheat", 32),
+                        new InventoryCustody.ContainerSlot(original.depot(), original.outputSlot())), "minecraft:wheat", 32),
                 new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                        new InventoryCustody.ContainerSlot(original.depot(), 1)), "minecraft:wheat", 32));
+                        new InventoryCustody.ContainerSlot(original.depot(), original.outputSlot() + 1)), "minecraft:wheat", 32));
         var bound = cold.rebind(original.account(), 1L, FungiblePhysicalObservation.bind(cold, original.account(), 1L, stacks));
         var job = original.job().withInputHold(new ProductionInputHold.FungibleBound(first, original.account(), original.claim(), 1L, portions));
         var state = original.state().withChanges(FrontierWorldStateUpdate.begin()
                 .inventory(original.state().inventory().withFungibleResources(bound)).productionJobs(Map.of(job.id(), job)));
         var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         assertEquals(portions, recovered.productionJobs().get(job.id()).inputQuantities());
-        assertEquals(Map.of(0, new ReferenceContainerCustody.ProjectedFungibleSlot("minecraft:bread", 64)),
+        assertEquals(Map.of(original.outputSlot(), new ReferenceContainerCustody.ProjectedFungibleSlot("minecraft:bread", 64)),
                 FungibleProductionLayout.plan(recovered, job).after());
         var prepared = PhysicalIntentLifecycleFixture.prepare(recovered, job.settlementId(), original.intent());
         var running = PhysicalIntentLifecycleFixture.transition(prepared, job.settlementId(), original.intent(), PhysicalIntentStatus.RUNNING, Optional.empty());
         var receipt = new FungibleProductionObservation(new PhysicalObservationId("observation:two-lot-production"), original.intent().id(),
                 original.account(), original.depot(), first, portions, original.claim(), job.outputItemId(), 64, 1L,
                 List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                        new InventoryCustody.ContainerSlot(original.depot(), 0)), "minecraft:bread", 64)));
+                        new InventoryCustody.ContainerSlot(original.depot(), original.outputSlot())), "minecraft:bread", 64)));
         var completed = PhysicalIntentLifecycleFixture.transition(running, job.settlementId(), original.intent(), PhysicalIntentStatus.CONFIRMED,
                 Optional.of(receipt));
         assertFalse(completed.productionJobs().containsKey(job.id()));
@@ -285,10 +285,11 @@ class FungibleProductionLifecycleTest {
                 new CustodyAccount(account, new ResourceCustody.Container(depot), Map.of(input.id(), inputQuantity), Map.of()))
                 .reserve(new ClaimAllocation(claim, base.job().id(), base.job().settlementId(), "minecraft:wheat", 64,
                         Map.of(input.id(), 64), ClaimPurpose.PRODUCTION_WORK), account);
+        var slots = base.state().inventory().withoutItem(input.id()).availableSlots(depot);
         var stacks = inputQuantity == 64
-                ? List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:wheat", 64))
-                : List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:wheat", inputQuantity - 64),
-                        new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, 1)), "minecraft:wheat", 64));
+                ? List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, slots.getFirst())), "minecraft:wheat", 64))
+                : List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, slots.getFirst())), "minecraft:wheat", inputQuantity - 64),
+                        new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, slots.get(1))), "minecraft:wheat", 64));
         resources = resources.rebind(account, 1L, FungiblePhysicalObservation.bind(resources, account, 1L, stacks));
         var job = base.job().withWorkProgress(ProductionWorkProgress.outputReady())
                 .withInputHold(new ProductionInputHold.FungibleBound(input.id(), account, claim, 1L));
@@ -299,15 +300,15 @@ class FungibleProductionLifecycleTest {
                 PhysicalIntentStatus.PREPARED, job.id(), PhysicalIntentRoleBinding.productionResources(job.id(), input.id(), job.outputItemId(), claim, account, depot),
                 new FixedPosition(FixedScalar.ZERO, FixedScalar.ZERO, FixedScalar.ZERO), 0,
                 PhysicalPostcondition.PRODUCTION_TRANSFORMED_OBSERVED, PhysicalIntentLifecycleOwner.PRODUCTION_WORK);
-        return new Fixture(state, job, intent, account, claim, depot, base.order().id());
+        return new Fixture(state, job, intent, account, claim, depot, base.order().id(), slots.getFirst());
     }
 
     private record Fixture(FrontierWorldState state, ProductionJob job, PhysicalIntent intent, SubjectId account,
-                           SubjectId claim, SubjectId depot, SubjectId order) {
+                           SubjectId claim, SubjectId depot, SubjectId order, int outputSlot) {
         FungibleProductionObservation receipt(long epoch, String kind) {
             return new FungibleProductionObservation(new PhysicalObservationId("observation:production-lot"), intent.id(), account, depot,
                     job.consumedItemId(), claim, job.outputItemId(), 64, epoch, List.of(new FungiblePhysicalObservation.Stack(
-                    new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, 0)), kind, 64)));
+                    new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, outputSlot)), kind, 64)));
         }
     }
 }

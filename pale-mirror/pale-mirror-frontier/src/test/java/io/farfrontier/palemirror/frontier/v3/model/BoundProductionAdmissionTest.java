@@ -15,9 +15,9 @@ class BoundProductionAdmissionTest {
     void exactPermissionsSurviveSnapshotAndDoNotCancelAnAlreadyAdmittedExecution() {
         var state = twoBakerFixture();
         var owner = new SubjectId("settlement:1");
-        var bakers = SettlementWorkforce.candidates(state, owner, ResidentWorkKind.BAKING, HumanCapability.INDUSTRY);
+        var bakers = SettlementWorkforce.candidates(state, owner, ResidentWorkKind.PRODUCTION, HumanCapability.INDUSTRY);
         var selected = bakers.get(1).id();
-        var permissions = new ResidentWorkPermissions(Map.of(ResidentWorkKind.BAKING, java.util.Set.of(selected)));
+        var permissions = new ResidentWorkPermissions(Map.of(ResidentWorkKind.PRODUCTION, java.util.Set.of(selected)));
         state = state.withStrategicPlans(state.strategicPlans().withWorkPermissions(owner, permissions));
         var codec = new FrontierWorldStateCodec();
         state = codec.decode(codec.encode(state));
@@ -36,7 +36,7 @@ class BoundProductionAdmissionTest {
         state = state.withStrategicPlans(state.strategicPlans().withWorkPermissions(owner, ResidentWorkPermissions.none()));
         var restored = codec.decode(codec.encode(state));
         assertEquals(started.job(), restored.productionJobs().get(started.job().id()));
-        assertTrue(ResidentWorkComposition.SELECTION.eligible(restored, owner, ResidentWorkKind.BAKING,
+        assertTrue(ResidentWorkComposition.SELECTION.eligible(restored, owner, ResidentWorkKind.PRODUCTION,
                 HumanCapability.INDUSTRY, 201L).isEmpty());
         assertFalse(HumanAssignmentProjection.compile(restored).idle(selected));
     }
@@ -48,7 +48,7 @@ class BoundProductionAdmissionTest {
         var foreign = state.humanPopulation().residents().values().stream()
                 .filter(resident -> !resident.settlementId().equals(owner)).findFirst().orElseThrow().id();
         var plans = state.strategicPlans().withWorkPermissions(owner,
-                new ResidentWorkPermissions(Map.of(ResidentWorkKind.BAKING, java.util.Set.of(foreign))));
+                new ResidentWorkPermissions(Map.of(ResidentWorkKind.PRODUCTION, java.util.Set.of(foreign))));
         assertThrows(IllegalArgumentException.class, () -> state.withStrategicPlans(plans));
     }
 
@@ -56,15 +56,15 @@ class BoundProductionAdmissionTest {
     void unavailablePreferredBakerDoesNotPreventAnotherBakerTakingTheWork() {
         var state = twoBakerFixture();
         var settlement = new SubjectId("settlement:1");
-        var companyWorker = SettlementWorkPolicy.permissions(state, settlement).workers(ResidentWorkKind.BAKING)
+        var companyWorker = SettlementWorkPolicy.permissions(state, settlement).workers(ResidentWorkKind.PRODUCTION)
                 .stream().sorted().findFirst().orElseThrow();
         var company = new Company(CompanyFoundationProcess.companyId(settlement), settlement, companyWorker,
                 CompanyPurpose.WORKS, CompanyStatus.ACTIVE, 0);
         state = CompanyFoundationProcess.reduce(state, settlement, new CompanyRegistered(company));
-        for (var worker : SettlementWorkPolicy.permissions(state, settlement).workers(ResidentWorkKind.BAKING))
+        for (var worker : SettlementWorkPolicy.permissions(state, settlement).workers(ResidentWorkKind.PRODUCTION))
             state = SettlementEmploymentProcess.reduceEmployment(state, settlement, new EmploymentContractOpened(
                     SettlementEmploymentProcess.agreement(state, WorkEmployer.company(company), worker, 0)));
-        var candidates = SettlementWorkforce.candidates(state, settlement, ResidentWorkKind.BAKING, HumanCapability.INDUSTRY);
+        var candidates = SettlementWorkforce.candidates(state, settlement, ResidentWorkKind.PRODUCTION, HumanCapability.INDUSTRY);
         assertEquals(2, candidates.size());
         var preferred = candidates.getFirst();
         var body = state.actorLocations().get(preferred.id()).body();
@@ -122,7 +122,7 @@ class BoundProductionAdmissionTest {
         assertSame(stock, state.inventory());
         assertEquals(1, state.productionJobs().size());
         var assignments = HumanAssignmentProjection.compile(state);
-        var authorizedBakers = SettlementWorkPolicy.permissions(state, task.ownerId()).workers(ResidentWorkKind.BAKING);
+        var authorizedBakers = SettlementWorkPolicy.permissions(state, task.ownerId()).workers(ResidentWorkKind.PRODUCTION);
         assertEquals(1, state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(task.ownerId())
                         && authorizedBakers.contains(resident.id()))
@@ -132,7 +132,7 @@ class BoundProductionAdmissionTest {
     private static FrontierWorldState twoBakerFixture() {
         var state = coldFixture();
         var settlement = new SubjectId("settlement:1");
-        assertEquals(2, SettlementWorkPolicy.permissions(state, settlement).workers(ResidentWorkKind.BAKING).size());
+        assertEquals(2, SettlementWorkPolicy.permissions(state, settlement).workers(ResidentWorkKind.PRODUCTION).size());
         return state;
     }
 
@@ -266,9 +266,9 @@ class BoundProductionAdmissionTest {
         resources = new FungibleResourceLedger(lots, resources.claims(), accounts, resources.bindings());
         if (bound) {
             var stacks = List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                            new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:wheat", 32),
+                            new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).get(0))), "minecraft:wheat", 32),
                     new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                            new InventoryCustody.ContainerSlot(depot, 1)), "minecraft:wheat", 32));
+                            new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).get(1))), "minecraft:wheat", 32));
             resources = resources.rebind(accountId, 1L, FungiblePhysicalObservation.bind(resources, accountId, 1L, stacks));
         }
         return state.withInventory(state.inventory().withFungibleResources(resources));
@@ -280,7 +280,7 @@ class BoundProductionAdmissionTest {
         var depot = FrontierWorldState.depotId(settlement);
         var account = new SubjectId("custody:container-1-depot");
         var resources = state.inventory().fungibleResources();
-        var stacks = List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:wheat", 64));
+        var stacks = List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).get(0))), "minecraft:wheat", 64));
         resources = resources.rebind(account, 1L, FungiblePhysicalObservation.bind(resources, account, 1L, stacks));
         state = state.withInventory(state.inventory().withFungibleResources(resources).withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE));

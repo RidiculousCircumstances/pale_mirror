@@ -4,7 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.FrontierPayload;
 import io.farfrontier.palemirror.frontier.v3.api.SceneLeaseId;
 import io.farfrontier.palemirror.frontier.v3.kernel.PayloadCodec;
 import io.farfrontier.palemirror.frontier.v3.model.BakeryHotEffectPrepared;
-import io.farfrontier.palemirror.frontier.v3.model.BakeryWorkState;
+import io.farfrontier.palemirror.frontier.v3.model.StationWorkState;
 
 final class BakeryHotEffectPreparedCodec implements PayloadCodec {
     @Override public String type() { return "frontier.bakery_hot_effect_prepared"; }
@@ -21,6 +21,6 @@ final class BakeryHotEffectPreparedCodec implements PayloadCodec {
         return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new BakeryHotEffectPrepared(
                 FrontierWorldPayloadCodecs.readSubject(input).value(),
                 new SceneLeaseId(FrontierWorldStateCodec.readString(input)),
-                BakeryWorkState.Phase.fromWireTag(input.readUnsignedByte()), input.readByte()));
+                StationWorkState.Phase.fromWireTag(input.readUnsignedByte()), input.readByte()));
     }
 }

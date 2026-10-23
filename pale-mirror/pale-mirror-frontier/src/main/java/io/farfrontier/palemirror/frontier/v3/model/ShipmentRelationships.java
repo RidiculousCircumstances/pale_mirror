@@ -17,9 +17,13 @@ final class ShipmentRelationships {
             shipment.sender().container().ifPresent(id -> add(edges, Kind.SHIPMENT_SOURCE, owner, EntityKind.CONTAINER, id, life));
             add(edges, Kind.SHIPMENT_RECEIVER, owner, EntityKind.CONTAINER, shipment.receiver().containerId(), life);
             if (!shipment.terminal()) {
+                if (shipment.cargo() instanceof ShipmentCargo.Individual cargo) {
+                    add(edges, Kind.SHIPMENT_ITEM, owner, EntityKind.EXACT_ITEM, cargo.itemId(), life);
+                } else {
                 add(edges, Kind.SHIPMENT_CLAIM, owner, EntityKind.RESOURCE_CLAIM, shipment.authorization().claimId(), life);
                 add(edges, Kind.SHIPMENT_ACCOUNT, owner, EntityKind.RESOURCE_ACCOUNT,
                         shipment.status() == Shipment.Status.AWAITING_LOAD ? shipment.sourceAccountId() : shipment.carriedAccountId(), life);
+                }
                 ShipmentAuthorizationComposition.collect(shipment, edges);
             }
         }

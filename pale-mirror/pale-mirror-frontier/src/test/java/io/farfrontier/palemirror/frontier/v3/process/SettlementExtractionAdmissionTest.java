@@ -106,7 +106,7 @@ class SettlementExtractionAdmissionTest {
                     items.values().stream().noneMatch(held -> held.custody().equals(new InventoryCustody.ContainerSlot(depot, candidate))))
                     .findFirst().orElseThrow();
             items.put(item.id(), new ExactItemStack(item.id(), item.economicOwnerId(), item.itemKind(), item.count(),
-                    new InventoryCustody.ContainerSlot(depot, free)));
+                    new InventoryCustody.ContainerSlot(depot, free), item.condition()));
         }
         state = state.withInventory(new ExactInventory(containers, items, inventory.cargo(), inventory.playerItems(),
                 inventory.worldCarrierItems(), inventory.conflicts(), surfaces, inventory.economics(), inventory.fungibleResources()));

@@ -16,7 +16,7 @@ final class FrontierV3ShipmentDeathEffects {
             if (step == null || !step.observation().actuation().body().equals(id)) continue;
             if (!step.observation().actuation().execution().equals(shipment.execution()))
                 throw new IllegalArgumentException("shipment fatality effect names a foreign execution");
-            var transfer = FrontierV3ActorResourceTransfer.open(level, state, shipment.itemOrder(step.lotQuantities()),
+            var transfer = FrontierV3ActorResourceTransfer.open(level, state, shipment.itemOrder(state, step.lotQuantities()),
                     body, step.source(), step.destinationSlot(), step.destinationBefore()).orElse(null);
             if (transfer == null) continue;
             boolean applied = transfer.after();

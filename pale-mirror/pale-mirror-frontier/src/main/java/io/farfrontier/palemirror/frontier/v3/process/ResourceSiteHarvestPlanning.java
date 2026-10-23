@@ -110,7 +110,8 @@ final class ResourceSiteHarvestPlanning {
                     FrontierWorldState state, ResidentProfile resident, long atTick) {
                 return offer(state, task, site, resident, atTick).map(started -> new ResidentWorkOffer<>(
                         kind(), resident.id(), started, List.of(new WorkReservationClaim.Cell(started.job().target()),
-                                new WorkReservationClaim.ContainerCapacity(started.job().outputSlot()))));
+                                new WorkReservationClaim.ContainerCapacity(started.job().outputSlot()),
+                                new WorkReservationClaim.ExactResource(started.job().equipment().itemId(), 1))));
             }
         };
     }
@@ -158,6 +159,13 @@ final class ResourceSiteHarvestPlanning {
             return java.util.Optional.empty();
         ActorLocation worker = state.actorLocations().get(farmer.id());
         if (worker == null) throw new IllegalArgumentException("resource-site harvest worker has no canonical body");
+        java.util.Optional<WorkEquipmentSelection.Selection> equipment;
+        try { equipment = WorkEquipmentSelection.select(state, farmer.settlementId(), worker.supportingSurface(),
+                FieldEquipment.requirements(), WorkEquipmentClaimComposition.reserved(state)); }
+        catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable waiting) {
+            return java.util.Optional.empty();
+        }
+        if (equipment.isEmpty()) return java.util.Optional.empty();
         ShipmentEndpoint storage = null;
         java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt> storageRoute = java.util.Optional.empty();
         for (var candidate : ResourceStorageSelection.newStackCandidates(state, site.settlementId(), "minecraft:wheat", 64,
@@ -179,7 +187,8 @@ final class ResourceSiteHarvestPlanning {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(site.id());
         var field = state.resourceSites().cycle(site.id());
         ResourceSiteHarvestJob job = job(site, lifecycle, task, farmer,
-                new InventoryCustody.ContainerSlot(depot, slot.getAsInt()), field);
+                new InventoryCustody.ContainerSlot(depot, slot.getAsInt()), field,
+                new WorkToolAssignment(equipment.orElseThrow().item().id(), equipment.orElseThrow().source(), WorkToolAssignment.Stage.ACQUIRING));
         if (!ActorCarriedResources.canAddAccount(state.inventory().fungibleResources(),
                 farmer.id(), job.actorAccountId())) return java.util.Optional.empty();
         boolean harvestDemand = ProductionStockDemand.read(state, site.settlementId(), FieldHarvestExtraction.ITEM, tick).requested();
@@ -332,7 +341,7 @@ final class ResourceSiteHarvestPlanning {
             // resume this same continuation; never park it on the old service queue.
             var paused = new java.util.ArrayList<ProposedEvent>();
             if (job.progress().work().filter(WorkProgress::running).isPresent()
-                    && !job.progress().hasPendingPhysicalWork())
+                    && !job.hasPendingPhysicalWork())
                 paused.add(new ProposedEvent(job.siteId(), ResourceSiteHarvestWorkProcess.change(
                         state, job, now, false, action, java.util.Optional.empty())));
             paused.add(reschedule(action, coldProgress(job, nextDue)));
@@ -371,14 +380,33 @@ final class ResourceSiteHarvestPlanning {
         // one across unload/restart intervals, so elapsed zero-player time had no truthful
         // continuation.  Each step below advances one retained pedestrian edge or one exact
         // crop receipt; it still never touches an unloaded block or manufactures final output.
+        if (FieldEquipment.needsReturnStorage(state, job)) {
+            try {
+                var selected = FieldEquipment.selectReturn(state, job);
+                if (selected.isPresent()) return List.of(new ProposedEvent(job.siteId(), selected.orElseThrow()),
+                        reschedule(action, coldProgress(job, nextDue)));
+            } catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable pending) { }
+            return List.of(reschedule(action, coldProgress(job, nextDue)));
+        }
+        if (FieldEquipment.transferring(job)
+                && state.actorLocations().get(job.workerId()).supportingSurface().equals(FieldEquipment.endpoint(state, job).station())) {
+            if (!HarvestServiceAccess.available(state, job)
+                    || !FieldEquipment.transferAvailable(state, job)
+                    || ReferenceContainerCustody.hasLiveCustody(state, FieldEquipment.endpoint(state, job).containerId()))
+                return List.of(reschedule(action, coldProgress(job, nextDue)));
+            var event = new FieldEquipmentChanged(job.siteId(), job.id(), job.equipment().stage(),
+                    FieldEquipmentChanged.Action.COLD_TRANSFER, java.util.Optional.empty());
+            FieldEquipmentProcess.reduce(state, job.siteId(), event, now);
+            return List.of(new ProposedEvent(job.siteId(), event), reschedule(action, coldProgress(job, nextDue)));
+        }
         if (job.navigationBlock().isEmpty() && ResourceSiteHarvestGoal.actorAtDepot(state, job)) {
             if (!HarvestServiceAccess.available(state, job))
                 return List.of(reschedule(action, coldProgress(job, nextDue)));
-            if (job.returningForBatch() && !batchDeliveryCapacityAvailable(state, job))
+            if (job.deliveryDue() && !batchDeliveryCapacityAvailable(state, job))
                 return List.of(reschedule(action, coldProgress(job, nextDue)));
             ProposedEvent returned = new ProposedEvent(job.siteId(), new ResourceSiteHarvestReturned(job.id(), job.workerId(),
                     action.id(), action.dueAt().ticks()));
-            return job.returningForBatch()
+            return job.deliveryDue()
                     ? List.of(returned, stockWake(state, job, job.deliveredYieldQuantity(), now),
                             reschedule(action, coldProgress(job, nextDue)))
                     : coldTerminal(state, action, job, returned, now);
@@ -435,7 +463,7 @@ final class ResourceSiteHarvestPlanning {
                     unavailable);
         }
         BodyPosition next = path.get(Math.min(1, path.size() - 1)).standingBody();
-        if (goal.kind() == ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
+        if (goal.kind() != ResourceSiteHarvestGoal.Kind.WORK_CELL
                 && !HarvestServiceAccess.mayAdvance(state, job, next.supportingSurface()))
             return List.of(reschedule(action, coldProgress(job, nextDue)));
         ResourceSiteHarvestColdGoalAdvanced advanced = new ResourceSiteHarvestColdGoalAdvanced(
@@ -504,6 +532,7 @@ final class ResourceSiteHarvestPlanning {
         return job != null && action.equals(coldProgress(job, action.dueAt().ticks()))
                 && state.resourceSites().site(job.siteId()).phase() == ResourceSitePhase.HARVESTING
                 && (job.progress().acceptance().isPresent()
+                    || job.equipment().pending().isPresent()
                     || state.resourceSites().harvestMutationPending(job)
                     || state.humanPopulation().meals().containsKey(job.workerId())
                     || state.actorMovements().containsKey(job.workerId())
@@ -512,15 +541,15 @@ final class ResourceSiteHarvestPlanning {
                     || HarvestStorageReplacement.retainedAvailable(state, job)
                         && (loadedDepotCustodyBlocksDelivery(state, job)
                             || serviceEntryHeld(state, job)
-                            || (ResourceSiteHarvestGoal.actorAtDepot(state, job) && job.returningForBatch()
+                            || (ResourceSiteHarvestGoal.actorAtDepot(state, job) && job.deliveryDue()
                                 && !batchDeliveryCapacityAvailable(state, job))
                             || job.navigationBlock().filter(block -> !block.reroutable()).isPresent()));
     }
 
     private static boolean serviceEntryHeld(FrontierWorldState state, ResourceSiteHarvestJob job) {
-        if (ResourceSiteHarvestGoal.current(state, job).kind() != ResourceSiteHarvestGoal.Kind.DEPOT_SERVICE
+        if (ResourceSiteHarvestGoal.current(state, job).kind() == ResourceSiteHarvestGoal.Kind.WORK_CELL
                 || HarvestServiceAccess.available(state, job)) return false;
-        if (ResourceSiteHarvestGoal.actorAtDepot(state, job)) return true;
+        if (ResourceSiteHarvestGoal.current(state, job).arrivedAt(state.actorLocations().get(job.workerId()).supportingSurface())) return true;
         try {
             var path = ResourceSiteHarvestKnownNavigation.retainedPath(state, job);
             return !HarvestServiceAccess.mayAdvance(state, job, path.get(Math.min(1, path.size() - 1)));
@@ -534,8 +563,10 @@ final class ResourceSiteHarvestPlanning {
         var job = jobForContinuation(state, action);
         if (job == null) return java.util.Set.of(action.subject());
         var settlement = site(state, job.siteId()).settlementId();
-        return java.util.Set.of(job.id(), job.siteId(), job.workerId(), settlement,
-                job.outputSlot().containerId());
+        var keys = new java.util.HashSet<SubjectId>(java.util.List.of(job.id(), job.siteId(), job.workerId(), settlement,
+                job.outputSlot().containerId(), job.equipment().itemId(), job.equipment().source().containerId()));
+        job.equipment().returnTarget().ifPresent(target -> keys.add(target.containerId()));
+        return java.util.Set.copyOf(keys);
     }
 
     /** COLD may not transfer an actor part into a chest held by a live physical custodian. */

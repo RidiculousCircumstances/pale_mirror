@@ -24,21 +24,25 @@ final class FrontierV3HarvestDeathResources {
                         && FrontierSceneBehaviors.resourceSiteHarvest(value).jobId().equals(job.id()))
                 .reduce((left, right) -> { throw new IllegalArgumentException("dead field worker has competing scenes"); }).orElse(null);
         var effects = new ArrayList<FrontierV3OperationAftermath>();
+        FrontierV3FieldEquipmentExecutor.deathEffect(level, state, job, body).ifPresent(effects::add);
         if (lease != null) FrontierV3FieldWorkOperation.deathEffect(level, runtime, state, lease, job, body, identity).ifPresent(effects::add);
         FrontierV3HarvestDeliveryOperation.deathEffect(level, state, job, body, identity).ifPresent(effects::add);
         FrontierV3HarvestHandAftermath.prepare(level, state, job, lease, body, identity).ifPresent(effects::add);
         var hand = body.getOffhandItem().copy();
+        var tool = body.getMainHandItem().copy();
         return FrontierV3ActorDeathResourceComposition.retained(effects,
-                () -> settle(level, runtime, body, id, hand, effects));
+                () -> settle(level, runtime, body, id, hand, tool, effects));
     }
     static void recover(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             Mob body, ActorBodyId id, FrontierV3BodyResourceSnapshot snapshot) {
         var hand = snapshot.slots(level).get(new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.OFF));
         if (hand == null) throw new IllegalStateException("field death lost its pre-loot offhand");
-        settle(level, runtime, body, id, hand, snapshot.effects());
+        var tool = snapshot.slots(level).get(new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN));
+        if (tool == null) throw new IllegalStateException("field death lost its pre-loot equipment slot");
+        settle(level, runtime, body, id, hand, tool, snapshot.effects());
     }
     private static void settle(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-            Mob body, ActorBodyId id, ItemStack before, List<FrontierV3OperationAftermath> effects) {
+            Mob body, ActorBodyId id, ItemStack before, ItemStack toolBefore, List<FrontierV3OperationAftermath> effects) {
         var state = runtime.decodedState().orElseThrow(); ActorBodyAuthority.requireRetiredDeath(state, id);
         FrontierV3HarvestDeliveryOperation.retireSettled(level, id, effects);
         FrontierV3HarvestHandAftermath.retireSettled(level, id, effects);
@@ -47,6 +51,13 @@ final class FrontierV3HarvestDeathResources {
         FrontierV3ResourceFieldAcceptanceExecutor.acknowledge(level, runtime, acceptedWork);
         state = runtime.decodedState().orElseThrow();
         var job = HarvestDeathResources.work(state, id.actorId()).orElseThrow();
+        if (job.hasPendingPhysicalWork()) return;
+        var tool = state.inventory().items().get(job.equipment().itemId());
+        if (tool != null && tool.custody().equals(new InventoryCustody.Actor(id.actorId()))) {
+            if (!ItemStack.matches(toolBefore, body.getMainHandItem()) || !FrontierV3ExactItemPresentation.exactMatch(toolBefore, tool)) return;
+            FrontierV3ExactHeldItemDeath.resolve(level, runtime, body, tool, "field:" + job.id().value(), "field_tool");
+            state = runtime.decodedState().orElseThrow();
+        }
         if (!HarvestDeathResources.ready(state, job)) return;
         var ledger = FrontierV3ResourceSiteLedger.get(level);
         for (var effect : effects) {

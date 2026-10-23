@@ -13,16 +13,7 @@ final class ProductionStationSupply {
             var station = record.productionStation().orElseThrow();
             var supplied = AutomaticStationSupply.offer(state, worker, record, tick);
             if (supplied.isPresent()) return supplied;
-            long demand = catalog.recipes().stream().filter(recipe -> recipe.capability() == station.capability())
-                    .mapToLong(recipe -> Math.multiplyExact(recipe.heatPerBatch(), (64 / recipe.ingredient().quantity()) * 2L)).max().orElse(0);
-            var automatic = AutomaticStationProduction.policy(state, station);
-            if (automatic.isPresent()) {
-                var recipe = catalog.require(automatic.orElseThrow().recipeId());
-                long missing = ProductionStockDemand.read(state, record.ownerId(), recipe.product().itemKind(), tick).missing();
-                long batches = Math.min(64 / recipe.ingredient().quantity(),
-                        (missing + recipe.product().quantity() - 1L) / recipe.product().quantity());
-                demand = Math.multiplyExact(batches, recipe.heatPerBatch());
-            }
+            long demand = StationFuelDemandComposition.heat(state, station, tick);
             if (demand == 0) continue;
             long available = ProductionStationEnergy.suppliedHeat(state, station.id());
             if (available >= demand) continue;

@@ -49,6 +49,7 @@ final class FrontierV3ShipmentDiagnosticJson {
                 + ",\"pendingPhysicalEffect\":" + shipment.pendingPhysicalStep().isPresent() + "},\"actorBody\":" + FrontierV3DiagnosticJson.position(body)
                 + ",\"materialPreparation\":" + (shipment.terminal() || shipment.reception().isPresent()
                     || shipment.pendingPhysicalStep().isPresent() || !selected ? "null"
+                    : shipment.cargo() instanceof ShipmentCargo.Individual ? "{\"representation\":\"individual\"}"
                     : FrontierV3MaterialPreparationDiagnosticJson.render(state, shipment.itemOrder()))
                 + ",\"goal\":" + (shipment.terminal() ? "null" : FrontierV3DiagnosticJson.position(
                     (movement == null ? shipment.movementOrder() : movement.order()).legalStations().getFirst().standingBody()))

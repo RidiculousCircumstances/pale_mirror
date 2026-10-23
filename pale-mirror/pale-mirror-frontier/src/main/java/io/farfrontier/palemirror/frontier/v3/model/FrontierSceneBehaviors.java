@@ -517,12 +517,12 @@ public final class FrontierSceneBehaviors {
             return SceneParticipantDeathDisposition.coordinated(lease);
         }
         @Override public Set<SubjectId> resourceHandAccounts(FrontierWorldState state, SceneLease lease) {
-            return FrontierProductionWorkSceneSupport.require(state, cause(lease)).bakeryWork()
+            return FrontierProductionWorkSceneSupport.require(state, cause(lease)).stationWork()
                     .map(work -> Set.of(work.actorAccountId())).orElseGet(Set::of);
         }
         @Override public SceneLeaseStatus recoveredStatus(FrontierWorldState state, SceneLease lease) {
             ProductionJob job = FrontierProductionWorkSceneSupport.require(state, cause(lease));
-            return blocked(state, job) || job.bakeryWork().isEmpty() && job.workProgress().terminalEffectEligible()
+            return blocked(state, job) || job.stationWork().isEmpty() && job.workProgress().terminalEffectEligible()
                     ? SceneLeaseStatus.DRAINING : SceneLeaseStatus.HOT;
         }
         private boolean blocked(FrontierWorldState state, ProductionJob job) {
@@ -559,7 +559,7 @@ public final class FrontierSceneBehaviors {
                     // The bakery retains its own stable scheduled review across every
                     // custody phase. The legacy completion continuation only accepts an
                     // output-ready corridor job and must not dispatch for a bakery handoff.
-                    : job.bakeryWork().isPresent() ? new SceneContinuation.None()
+                    : job.stationWork().isPresent() ? new SceneContinuation.None()
                     : job.workProgress().terminalEffectEligible()
                     ? new SceneContinuation.ResumeProductionCompletion(job.id(), Math.addExact(submittedAt, 1L))
                     : new SceneContinuation.None();

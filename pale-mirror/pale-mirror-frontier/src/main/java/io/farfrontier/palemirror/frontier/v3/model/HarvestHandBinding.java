@@ -10,7 +10,7 @@ public final class HarvestHandBinding {
     public static FrontierWorldState bind(FrontierWorldState state, ResourceSiteHarvestJob job,
             ResourceSiteHarvestHandProjected projected) {
         if (!job.id().equals(projected.jobId()) || !job.siteId().equals(projected.siteId())
-                || !job.actorAccountId().equals(projected.actorAccountId()) || job.progress().hasPendingPhysicalWork())
+                || !job.actorAccountId().equals(projected.actorAccountId()) || job.hasPendingPhysicalWork())
             throw new IllegalArgumentException("field hand binding lacks its exact settled work boundary");
         return bind(state, job, projected.actorEpoch(), projected.hand());
     }
@@ -36,7 +36,7 @@ public final class HarvestHandBinding {
         var job = state.resourceSites().site(observed.siteId()).harvestJob(identity.execution().activityOwnerId()).orElseThrow();
         var address = (PhysicalStackAddress.ActorHand) observed.hand().address();
         if (!subject.equals(job.siteId()) || !job.actorAccountId().equals(observed.accountId())
-                || job.progress().hasPendingPhysicalWork() || job.progress().completedCropSlots() != observed.completedCells()
+                || job.hasPendingPhysicalWork() || job.progress().completedCropSlots() != observed.completedCells()
                 || !address.entityId().equals(io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.entityId(
                     state.bootstrap().worldId(), job.workerId())))
             throw new IllegalArgumentException("retired hand has a changed field or progress boundary");

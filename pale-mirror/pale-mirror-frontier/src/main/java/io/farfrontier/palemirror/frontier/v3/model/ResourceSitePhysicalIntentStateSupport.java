@@ -120,6 +120,7 @@ public final class ResourceSitePhysicalIntentStateSupport {
         ResourceSite site = state.resourceSite(job.siteId());
         ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
         if (intent.status() != PhysicalIntentStatus.RUNNING
+                || !job.equipment().settled()
                 || !job.progress().complete() || !cycle.pendingPlayerBreaks().isEmpty()
                 || !receipt.intentId().equals(intent.id()) || !receipt.siteId().equals(job.siteId())
                 || !receipt.jobId().equals(job.id()) || !receipt.workerId().equals(job.workerId())
@@ -232,7 +233,7 @@ public final class ResourceSitePhysicalIntentStateSupport {
         ResourceFieldCycle cycle = state.resourceSites().cycle(job.siteId());
         PhysicalIntent intent = state.physicalIntents().get(job.intentId());
         if (intent == null || intent.status() != PhysicalIntentStatus.RUNNING
-                || !job.returningForBatch() || job.progress().complete()
+                || !job.deliveryDue()
                 || job.deliveredYieldQuantity() != delivered.deliveredYieldBefore()
                 || !cycle.pendingPlayerBreaks().isEmpty() || ResourceSiteHarvestCargo.quantity(state, job) != receipt.harvestedQuantity()
                 || !receipt.jobId().equals(job.id()) || !receipt.workerId().equals(job.workerId())

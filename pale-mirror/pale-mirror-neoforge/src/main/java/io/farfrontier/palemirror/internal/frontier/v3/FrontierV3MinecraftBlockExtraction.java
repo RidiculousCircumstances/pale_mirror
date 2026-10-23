@@ -25,11 +25,14 @@ final class FrontierV3MinecraftBlockExtraction implements BlockExtractionPort {
     private final ServerLevel level;
     private final Mob worker;
     private final FrontierV3ActorActuation authority;
+    private final io.farfrontier.palemirror.frontier.v3.model.tooling.ToolCatalog tools;
 
-    FrontierV3MinecraftBlockExtraction(ServerLevel level, Mob worker, FrontierV3ActorActuation authority) {
+    FrontierV3MinecraftBlockExtraction(ServerLevel level, Mob worker, FrontierV3ActorActuation authority,
+            io.farfrontier.palemirror.frontier.v3.model.tooling.ToolCatalog tools) {
         this.level = java.util.Objects.requireNonNull(level);
         this.worker = java.util.Objects.requireNonNull(worker);
         this.authority = java.util.Objects.requireNonNull(authority);
+        this.tools = java.util.Objects.requireNonNull(tools);
         if (worker.level() != level || !worker.isAlive()) throw new IllegalArgumentException("foreign extraction worker");
     }
 
@@ -45,7 +48,7 @@ final class FrontierV3MinecraftBlockExtraction implements BlockExtractionPort {
         if (!describe(source).equals(definition.before())) throw new IllegalArgumentException("extraction source changed");
         requireStateless(source, block(definition.after()));
         ItemStack tool = worker.getMainHandItem();
-        if (!BuiltInRegistries.ITEM.getKey(tool.getItem()).toString().equals(definition.toolKind()))
+        if (!suitable(tool, definition))
             throw new IllegalArgumentException("extraction tool changed");
         if (source.requiresCorrectToolForDrops() && !tool.isCorrectToolForDrops(source))
             throw new IllegalArgumentException("extraction tool cannot obtain this block's drops");
@@ -83,7 +86,7 @@ final class FrontierV3MinecraftBlockExtraction implements BlockExtractionPort {
         var successor = block(prepared.definition().after());
         requireStateless(level.getBlockState(position), successor);
         var tool = worker.getMainHandItem();
-        if (!BuiltInRegistries.ITEM.getKey(tool.getItem()).toString().equals(prepared.definition().toolKind())
+        if (!suitable(tool, prepared.definition())
                 || (level.getBlockState(position).requiresCorrectToolForDrops()
                     && !tool.isCorrectToolForDrops(level.getBlockState(position)))) return Result.TOOL_CHANGED;
         if (!level.setBlock(position, successor, 3)) return Result.UNAVAILABLE;
@@ -94,6 +97,12 @@ final class FrontierV3MinecraftBlockExtraction implements BlockExtractionPort {
         double radius = io.farfrontier.palemirror.frontier.v3.model.geometry.BlockInteractionReach
                 .VANILLA_ADULT_PEDESTRIAN.radiusMilli() / 1000.0D;
         return worker.getEyePosition().distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(target)) <= radius * radius;
+    }
+    private boolean suitable(ItemStack tool, BlockExtraction.Definition definition) {
+        return tool.getCount() == 1 && tool.isDamageableItem() && tools.suitable(
+                BuiltInRegistries.ITEM.getKey(tool.getItem()).toString(),
+                new io.farfrontier.palemirror.frontier.v3.model.ItemCondition(tool.getMaxDamage(), tool.getDamageValue()),
+                definition.toolRequirement());
     }
 
     static BlockExtraction.Block describe(BlockState state) {

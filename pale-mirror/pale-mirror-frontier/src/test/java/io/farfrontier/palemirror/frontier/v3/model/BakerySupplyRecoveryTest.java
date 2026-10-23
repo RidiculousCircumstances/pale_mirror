@@ -25,7 +25,7 @@ class BakerySupplyRecoveryTest {
         state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
         var original = started.job();
         assertEquals(21, original.outputCount());
-        machine = state.productionStations().require(original.bakeryWork().orElseThrow().stationId());
+        machine = state.productionStations().require(original.stationWork().orElseThrow().stationId());
         state = state.withChanges(FrontierWorldStateUpdate.begin().productionStations(state.productionStations().with(
                 new ProductionStations.Machine(machine.stationId(), 1600, Optional.empty(), machine.revision() + 1, Optional.empty()))));
         boolean loaded = false; var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
@@ -63,7 +63,7 @@ class BakerySupplyRecoveryTest {
                 .map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance).map(ProductionStarted.class::cast).findFirst().orElseThrow();
         state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(), new StrategicTaskTransition(successor.id(), StrategicTaskStatus.ACTIVE));
         state = ProductionProcess.reduceStarted(state, task.ownerId(), next);
-        assertEquals(next.job().bakeryWork().orElseThrow().stationAccountId(), next.job().bakeryWork().orElseThrow().sourceAccountId());
+        assertEquals(next.job().stationWork().orElseThrow().stationAccountId(), next.job().stationWork().orElseThrow().sourceAccountId());
         for (long due = 20020, steps = 0; state.productionJobs().containsKey(next.job().id()) && steps < 700; due += 20, steps++) {
             var job = state.productionJobs().get(next.job().id()); due = BakeryTestClock.due(state, job, due);
             var step = ProductionProcess.planCompletion(state, ProductionProcess.complete(job, due)).stream()
@@ -83,7 +83,7 @@ class BakerySupplyRecoveryTest {
                 .findFirst().orElseThrow();
         state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(), new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
         state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
-        var job = started.job(); var station = job.bakeryWork().orElseThrow().stationId();
+        var job = started.job(); var station = job.stationWork().orElseThrow().stationId();
         var participant = state.companies().goodsTrade().participants().participants().get(task.ownerId());
         var publicPlan = GoodsParticipantAssessment.view(state, participant, 200L).supplyPlan().orElseThrow();
         assertTrue(publicPlan.require("minecraft:coal").urgent(100));
@@ -109,7 +109,7 @@ class BakerySupplyRecoveryTest {
         var supplied = state.withInventory(state.inventory().withFungibleResources(ledger));
         assertTrue(SupplyCapacityComposition.dependencies(supplied, task.ownerId(), facts).isEmpty());
         assertEquals(ProductionStationProcessing.StartReadiness.INSUFFICIENT_HEAT,
-                ProductionStationProcessing.startReadiness(supplied, station, job.bakeryWork().orElseThrow().recipeId(), job.inputCount()),
+                ProductionStationProcessing.startReadiness(supplied, station, job.stationWork().orElseThrow().recipeId(), job.inputCount()),
                 "fuel on hand is a supply promise, not already burned heat");
 
         // A player can destroy the selected station before the baker arrives.

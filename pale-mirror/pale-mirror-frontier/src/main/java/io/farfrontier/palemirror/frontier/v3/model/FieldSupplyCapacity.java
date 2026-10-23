@@ -54,11 +54,17 @@ final class FieldSupplyCapacity implements SupplyCapacityPort {
                 Math.multiplyExact(workWindow, workers.size())));
         var forecast = io.farfrontier.palemirror.frontier.v3.model.supply.RenewableWorkForecast.assess(sources, workers.size(),
                 schedule.dayTicks(), workWindow, window.ticks());
+        var equipment = EquipmentProductiveCapacity.items(state, home, workers.stream().map(ResidentProfile::id)
+                .collect(java.util.stream.Collectors.toSet()), FieldEquipment.requirements());
+        long operations = EquipmentProductiveCapacity.remainingOperations(state, equipment, FieldHarvestExtraction.DEFINITION.toolRequirement());
+        long tilling = cells.stream().filter(cell -> cell.renew() && cell.condition().soil().untilled()).count();
+        long yieldPerUse = cells.stream().mapToLong(cell -> FieldAgronomy.yield(state.bootstrap(), cell.crop())).min().orElse(1);
+        long equipmentOutput = Math.multiplyExact(Math.max(0, operations - tilling), yieldPerUse);
         var releases = new ArrayList<SupplyPlanner.OutputRelease>();
         long promised = stocks.get(FieldHarvestExtraction.ITEM).promisedProduction();
         for (var release : forecast) {
-            long available = release.recipes() - promised;
-            if (available > 0) releases.add(new SupplyPlanner.OutputRelease(release.afterTicks(), Math.toIntExact(available)));
+            long available = Math.min(release.recipes(), equipmentOutput) - promised;
+            if (available > 0 && (releases.isEmpty() || available > releases.getLast().recipes())) releases.add(new SupplyPlanner.OutputRelease(release.afterTicks(), Math.toIntExact(available)));
         }
         if (releases.isEmpty()) return List.of();
         return List.of(new SupplyPlanner.Process("field-capacity:" + home.value(), FieldHarvestExtraction.ITEM, 1,

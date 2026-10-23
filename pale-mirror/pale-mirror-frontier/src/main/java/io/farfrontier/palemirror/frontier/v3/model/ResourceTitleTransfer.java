@@ -7,7 +7,7 @@ import java.util.Objects;
 /** Explicit rights transfer over one allocation; no physical move or inferred recipient. */
 public record ResourceTitleTransfer(SubjectId accountId, SubjectId claimId, SubjectId sourceOwnerId,
                                     SubjectId destinationOwnerId, Map<SubjectId, Integer> portions,
-                                    Map<SubjectId, SubjectId> splitLotIds) {
+                                    Map<SubjectId, SubjectId> splitLotIds) implements GoodsTitleTransfer {
     public ResourceTitleTransfer {
         Objects.requireNonNull(accountId); Objects.requireNonNull(claimId);
         Objects.requireNonNull(sourceOwnerId); Objects.requireNonNull(destinationOwnerId);

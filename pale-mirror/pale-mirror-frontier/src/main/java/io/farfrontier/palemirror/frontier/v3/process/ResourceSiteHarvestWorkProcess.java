@@ -26,7 +26,7 @@ public final class ResourceSiteHarvestWorkProcess {
         var job = lifecycle.harvestJob(changed.jobId()).orElseThrow();
         var field = state.resourceSites().cycle(subject);
         if (!subject.equals(changed.siteId()) || !job.id().equals(changed.jobId()) || !job.workerId().equals(changed.workerId())
-                || job.progress().complete() || job.returningForBatch() || job.progress().hasPendingPhysicalWork()
+                || job.progress().complete() || job.returningForBatch() || job.hasPendingPhysicalWork()
                 || field.epoch() != changed.epoch() || field.layout().revision() != changed.layoutRevision()
                 || !field.layout().cells().get(job.progress().nextCropSlotIndex()).id().equals(changed.cellId())
                 || !job.progress().work().equals(changed.previous()))

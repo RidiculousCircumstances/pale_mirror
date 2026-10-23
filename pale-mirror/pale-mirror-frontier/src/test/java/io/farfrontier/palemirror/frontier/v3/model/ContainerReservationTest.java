@@ -11,6 +11,26 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ContainerReservationTest {
+    @Test void individualOutputsReserveOneSlotEachAndCannotMergeWithFungibleStock() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:individual-capacity"), 41));
+        var home = state.bootstrap().settlements().getFirst().id(); var depot = FrontierWorldState.depotId(home);
+        var inventory = state.inventory();
+        while (inventory.containerCapacity(depot, java.util.Set.of()).freeCapacitySlots() > 2) {
+            int slot = inventory.firstFreeSlot(depot).orElseThrow();
+            inventory = inventory.store(new ExactItemStack(new SubjectId("item:capacity-fill-" + slot), home,
+                    "minecraft:stone", 1, new InventoryCustody.ContainerSlot(depot, slot)));
+        }
+        var demands = List.of(new ContainerInboundCapacity.Demand(new SubjectId("job:tool-one"), depot, "minecraft:iron_pickaxe", 1,
+                    ContainerInboundCapacity.Representation.INDIVIDUAL),
+                new ContainerInboundCapacity.Demand(new SubjectId("job:tool-two"), depot, "minecraft:iron_pickaxe", 1,
+                    ContainerInboundCapacity.Representation.INDIVIDUAL));
+        var incoming = ContainerInboundCapacity.incoming(demands, depot, java.util.Optional.empty());
+        assertTrue(inventory.availableSlots(depot, java.util.Set.of(), incoming).isEmpty());
+        assertFalse(inventory.canReceiveFungible(depot, "minecraft:coal", 1, java.util.Set.of(), incoming));
+        var completing = ContainerInboundCapacity.incoming(demands, depot, java.util.Optional.of(demands.getFirst().owner()));
+        assertFalse(inventory.availableSlots(depot, java.util.Set.of(), completing).isEmpty());
+    }
     @Test
     void inputPickupProtectsItsFreedCapacityUntilExactOutputDeliveryAcrossRecovery() {
         var state = ProductionProcessTest.productionTask(FrontierWorldState.initial(FrontierBootstrapper.create(
@@ -33,8 +53,8 @@ class ContainerReservationTest {
                 task.ownerId(), new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
         state = io.farfrontier.palemirror.frontier.v3.process.ProductionProcess.reduceStarted(state, task.ownerId(), started);
         long due = 300L;
-        while (state.productionJobs().get(started.job().id()).bakeryWork().orElseThrow().phase()
-                == BakeryWorkState.Phase.DEPOT_PICKUP && due < 10_000L) {
+        while (state.productionJobs().get(started.job().id()).stationWork().orElseThrow().phase()
+                == StationWorkState.Phase.DEPOT_PICKUP && due < 10_000L) {
             var job = state.productionJobs().get(started.job().id());
             var step = io.farfrontier.palemirror.frontier.v3.process.ProductionProcess.planCompletion(state,
                     io.farfrontier.palemirror.frontier.v3.process.ProductionProcess.complete(job, due)).stream()
@@ -43,7 +63,7 @@ class ContainerReservationTest {
             state = io.farfrontier.palemirror.frontier.v3.process.ProductionProcess.reduceBakeryColdStep(state, task.ownerId(), step);
             due += 20L;
         }
-        assertEquals(BakeryWorkState.Phase.STATION_LOAD, state.productionJobs().get(started.job().id()).bakeryWork().orElseThrow().phase());
+        assertEquals(StationWorkState.Phase.STATION_LOAD, state.productionJobs().get(started.job().id()).stationWork().orElseThrow().phase());
         assertTrue(state.inventory().firstFreeSlot(depot).isPresent(), "input really left storage");
         assertTrue(state.firstFreeContainerSlot(depot).isEmpty(), "new output reservations cannot steal that space");
         assertTrue(state.firstFreeContainerSlotForOutput(depot, started.job().id()).isPresent(), "the owner may deliver into its own space");
@@ -51,7 +71,7 @@ class ContainerReservationTest {
                 List.of(new ContainerInboundCapacity.Demand(started.job().id(), depot, "minecraft:bread", 64)),
                 depot, java.util.Optional.of(new SubjectId("job:foreign-output"))));
         var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
-        assertEquals(Map.of("minecraft:bread", 64L), recovered.pendingContainerInbound(depot));
+        assertEquals(Map.of("minecraft:bread", 64L), recovered.pendingContainerInbound(depot).quantities());
         assertTrue(recovered.firstFreeContainerSlot(depot).isEmpty());
         assertTrue(recovered.firstFreeContainerSlotForOutput(depot, started.job().id()).isPresent());
     }
@@ -84,7 +104,6 @@ class ContainerReservationTest {
         SubjectId wheat = new SubjectId("lot:bootstrap-1-wheat");
         SubjectId firstBread = new SubjectId("lot:reservation-first-bread");
         SubjectId bakeryBread = new SubjectId("lot:reservation-bakery-bread");
-        assertEquals(1, harvest.outputSlot().slot());
 
         FungibleResourceLedger first = state.inventory().fungibleResources().transformCold(accountId,
                 Map.of(wheat, 64), Map.of(), new ResourceLot(firstBread, harvestOwner(state, depot),
@@ -93,7 +112,7 @@ class ContainerReservationTest {
         assertTrue(state.canReceiveFungible(depot, "minecraft:bread", 64));
 
         // A second completed batch needs a second bread stack. The old packing algorithm
-        // put it in slot 1 and quarantined the still-active field despite ample free space.
+        // could occupy the field reservation despite ample free space.
         Map<SubjectId, ResourceLot> lots = new HashMap<>(first.lots());
         lots.put(bakeryBread, new ResourceLot(bakeryBread, harvestOwner(state, depot),
                 "minecraft:bread", 64, "test:bakery-output", List.of()));
@@ -103,9 +122,11 @@ class ContainerReservationTest {
                 Map.of(firstBread, 64, bakeryBread, 64), prior.claimQuantities()));
         FrontierWorldState completed = state.withInventory(state.inventory().withFungibleResources(
                 new FungibleResourceLedger(lots, first.claims(), accounts, first.bindings())));
-        assertTrue(ReferenceContainerCustody.expectedFungibleSlot(completed, depot, 1).isEmpty());
-        assertEquals("minecraft:bread", ReferenceContainerCustody.expectedFungibleSlot(completed, depot, 2)
-                .orElseThrow().itemKind());
+        assertTrue(ReferenceContainerCustody.expectedFungibleSlot(completed, depot, harvest.outputSlot().slot()).isEmpty());
+        assertEquals(128, java.util.stream.IntStream.range(0, completed.inventory().containers().get(depot).slotCount())
+                .mapToObj(slot -> ReferenceContainerCustody.expectedFungibleSlot(completed, depot, slot))
+                .flatMap(java.util.Optional::stream).filter(stack -> stack.itemKind().equals("minecraft:bread"))
+                .mapToInt(ReferenceContainerCustody.ProjectedFungibleSlot::quantity).sum());
         assertFalse(completed.containerSlotAvailable(harvest.outputSlot()));
         assertThrows(IllegalArgumentException.class, () -> ReferenceContainerCustody.expectedFungibleSlot(completed, depot, -1));
         FrontierWorldState recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(completed));

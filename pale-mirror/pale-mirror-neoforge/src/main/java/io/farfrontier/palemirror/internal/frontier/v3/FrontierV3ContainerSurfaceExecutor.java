@@ -296,9 +296,14 @@ final class FrontierV3ContainerSurfaceExecutor {
     }
 
     static List<FungiblePhysicalObservation.Stack> observedFungibleSlots(net.minecraft.world.Container chest, FrontierWorldState state, SubjectId containerId) {
+        return observedFungibleSlots(chest, state, containerId, java.util.Set.of());
+    }
+    /** A retained transformation may create an exact output before canonical confirmation. */
+    static List<FungiblePhysicalObservation.Stack> observedFungibleSlots(net.minecraft.world.Container chest,
+            FrontierWorldState state, SubjectId containerId, java.util.Set<Integer> declaredExactOutputs) {
         List<FungiblePhysicalObservation.Stack> observed = new java.util.ArrayList<>();
         for (int slot = 0; slot < chest.getContainerSize(); slot++) {
-            if (state.inventory().itemAt(containerId, slot).isPresent()) continue;
+            if (state.inventory().itemAt(containerId, slot).isPresent() || declaredExactOutputs.contains(slot)) continue;
             ItemStack actual = chest.getItem(slot);
             if (!actual.isEmpty()) observed.add(new FungiblePhysicalObservation.Stack(
                     new PhysicalStackAddress.ContainerSlot(new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.ContainerSlot(containerId, slot)),

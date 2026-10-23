@@ -5,7 +5,7 @@ import java.util.Objects;
 public record GoodsTradeReserved(GoodsTradeContract contract, List<GoodsTradeStockAllocation> allocations) implements FrontierPayload {
     public GoodsTradeReserved {
         Objects.requireNonNull(contract); allocations = List.copyOf(allocations);
-        if (allocations.isEmpty() || allocations.size() > 64) throw new IllegalArgumentException("invalid goods allocation count");
+        if (allocations.isEmpty() && contract.individualAllocations().isEmpty() || allocations.size() + contract.individualAllocations().size() > 64) throw new IllegalArgumentException("invalid goods allocation count");
     }
     @Override public String type() { return "frontier.goods_trade_reserved"; }
 }

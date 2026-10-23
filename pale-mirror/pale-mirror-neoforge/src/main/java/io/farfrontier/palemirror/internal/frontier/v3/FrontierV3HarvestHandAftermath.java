@@ -17,7 +17,7 @@ final class FrontierV3HarvestHandAftermath {
         var bindings = state.inventory().fungibleResources().bindings().values().stream()
                 .filter(binding -> binding.accountId().equals(job.actorAccountId())).toList();
         if (witness == null) {
-            if (!bindings.isEmpty() || job.progress().hasPendingPhysicalWork()) return Optional.empty();
+            if (!bindings.isEmpty() || job.hasPendingPhysicalWork()) return Optional.empty();
             var part = ResourceSiteHarvestCargo.part(state, job).orElse(null);
             if (part == null) return Optional.empty();
             // Newly admitted or released bodies already carry their canonical stock.
@@ -29,7 +29,7 @@ final class FrontierV3HarvestHandAftermath {
         var retainedPart = ResourceSiteHarvestCargo.part(state, job).orElseThrow();
         if (!witness.workerId().equals(identity.body().actorId()) || !witness.entityId().equals(body.getUUID())
                 || !witness.actorAccountId().equals(job.actorAccountId()) || lease == null || !witness.leaseId().equals(lease.id())
-                || job.progress().hasPendingPhysicalWork() || witness.actorEpoch() > lease.revision()
+                || job.hasPendingPhysicalWork() || witness.actorEpoch() > lease.revision()
                 || witness.accountedPrefix() != job.progress().completedCropSlots()
                 || !witness.lotId().equals(retainedPart.id()) || witness.quantity() != retainedPart.quantity())
             throw new IllegalStateException("field death projection differs from its exact retained cargo boundary");

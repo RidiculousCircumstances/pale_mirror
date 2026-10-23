@@ -53,8 +53,7 @@ final class PhysicalEffectObservationStateCodec {
                 output.writeInt(preparation.preparedSoilSlots()); output.writeInt(preparation.preparedCropSlots());
             } else if (observation instanceof ResourceSiteHarvestObservation harvest) {
                 output.writeByte(8); string(output, harvest.id().value()); string(output, harvest.intentId().value()); string(output, harvest.siteId().value());
-                string(output, harvest.workerId().value()); string(output, harvest.output().id().value()); string(output, harvest.output().economicOwnerId().value());
-                string(output, harvest.output().itemKind()); output.writeByte(harvest.output().count()); FrontierWorldStateCodec.writeCustody(output, harvest.output().custody());
+                string(output, harvest.workerId().value()); ExactItemStateCodec.write(output, harvest.output());
                 output.writeByte(harvest.harvestedCropSlots());
             } else if (observation instanceof ProductionTransformationObservation production) {
                 output.writeByte(9); string(output, production.id().value()); string(output, production.intentId().value()); string(output, production.inputItemId().value());
@@ -206,9 +205,8 @@ final class PhysicalEffectObservationStateCodec {
         return new ExplosionObservation(id, intentId, origin, radius, affected, changed, entities, items, input.readInt(), input.readInt());
     }
     private static ResourceSiteHarvestObservation harvest(DataInputStream input, PhysicalObservationId id, PhysicalIntentId intentId) throws IOException {
-        SubjectId site = new SubjectId(text(input)), worker = new SubjectId(text(input)), item = new SubjectId(text(input)), owner = new SubjectId(text(input));
-        String kind = text(input); int count = input.readUnsignedByte(); InventoryCustody custody = FrontierWorldStateCodec.readCustody(input);
-        return new ResourceSiteHarvestObservation(id, intentId, site, worker, new ExactItemStack(item, owner, kind, count, custody), input.readUnsignedByte());
+        SubjectId site = new SubjectId(text(input)), worker = new SubjectId(text(input));
+        return new ResourceSiteHarvestObservation(id, intentId, site, worker, ExactItemStateCodec.read(input), input.readUnsignedByte());
     }
     private static EquipmentIssueObservation equipmentIssue(DataInputStream input, PhysicalObservationId id, PhysicalIntentId intentId) throws IOException {
         SubjectId assault = new SubjectId(text(input)), resident = new SubjectId(text(input)), item = new SubjectId(text(input));

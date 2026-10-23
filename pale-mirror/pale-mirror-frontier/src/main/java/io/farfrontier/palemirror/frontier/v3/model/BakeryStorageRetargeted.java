@@ -8,7 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt;
 
 /** Owner-local replacement of an unbegun output handoff, never a transfer of goods. */
-public record BakeryStorageRetargeted(SubjectId jobId, BakeryWorkState.Phase phase,
+public record BakeryStorageRetargeted(SubjectId jobId, StationWorkState.Phase phase,
                                       SubjectId previousContainer, SubjectId destinationContainer,
                                       ActorExecutionId executionId, Optional<PedestrianRouteReceipt> plannedRoute) implements FrontierPayload {
     public BakeryStorageRetargeted {
@@ -17,7 +17,7 @@ public record BakeryStorageRetargeted(SubjectId jobId, BakeryWorkState.Phase pha
         Objects.requireNonNull(executionId); plannedRoute = Objects.requireNonNull(plannedRoute);
         if (executionId.activityKind() != ActorActivityKind.PRODUCTION || !executionId.activityOwnerId().equals(jobId))
             throw new IllegalArgumentException("bakery storage replacement has a foreign execution owner");
-        if (phase == BakeryWorkState.Phase.DELIVERED || previousContainer.equals(destinationContainer))
+        if (phase == StationWorkState.Phase.DELIVERED || previousContainer.equals(destinationContainer))
             throw new IllegalArgumentException("bakery storage replacement needs a different uncompleted destination");
     }
     @Override public String type() { return "frontier.bakery_storage_retargeted"; }

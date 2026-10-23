@@ -24,11 +24,16 @@ public final class HarvestDeathResources {
         return work(state, actor).filter(job -> {
             var location = state.actorLocations().get(actor);
             return location != null && location.condition().status() == ActorLifeStatus.DEAD
-                    && (job.progress().hasPendingPhysicalWork() || job.undeliveredYieldQuantity() > 0);
+                    && (job.hasPendingPhysicalWork() || job.undeliveredYieldQuantity() > 0);
         }).map(ResourceSiteHarvestJob::id);
     }
     public static boolean ready(FrontierWorldState state, ResourceSiteHarvestJob job) {
-        return !job.progress().hasPendingPhysicalWork() && !state.resourceSites().harvestMutationPending(job)
+        var equipment = state.inventory().items().get(job.equipment().itemId());
+        return resourceReady(state, job)
+                && (equipment == null || !equipment.custody().equals(new InventoryCustody.Actor(job.workerId())));
+    }
+    private static boolean resourceReady(FrontierWorldState state, ResourceSiteHarvestJob job) {
+        return !job.hasPendingPhysicalWork() && !state.resourceSites().harvestMutationPending(job)
                 && ReferenceContainerCustody.pendingOwnerForActor(state, job.workerId()).isEmpty();
     }
     public static FrontierWorldState settle(FrontierWorldState state, SubjectId subject, HarvestDeathSettled receipt) {
@@ -55,7 +60,7 @@ public final class HarvestDeathResources {
         var identity = outcome.identity(); ActorBodyAuthority.requireRetiredDeath(state, identity.body());
         state.actorExecutions().requireRetained(identity.execution());
         var job = state.resourceSites().site(outcome.siteId()).harvestJob(identity.execution().activityOwnerId()).orElseThrow();
-        if (!subject.equals(outcome.siteId()) || !job.workerId().equals(identity.body().actorId()) || !ready(state, job)
+        if (!subject.equals(outcome.siteId()) || !job.workerId().equals(identity.body().actorId()) || !resourceReady(state, job)
                 || !job.returningForBatch() && !job.progress().complete()
                 || job.deliveredYieldQuantity() != outcome.deliveredBefore()
                 || ResourceSiteHarvestCargo.quantity(state, job) != outcome.quantity())
@@ -81,7 +86,13 @@ public final class HarvestDeathResources {
         var order = ResourceSiteHarvestCargo.retiredDeliveryOrder(state, job, identity);
         var inventory = ActorItemCustody.transferRetiredObserved(state, order, identity, receipt.actorEpoch(),
                 receipt.depotEpoch(), java.util.List.of(), receipt.depotStacks());
-        var published = state.withChanges(retirement(state, job).inventory(inventory));
+        // A confirmed crop delivery is independent of the still-retained tool.
+        // Preserve the dead owner's lifecycle until that exact item is disposed of.
+        var update = ready(state, job) ? retirement(state, job) : FrontierWorldStateUpdate.begin().resourceSites(
+                state.resourceSites().replace(state.resourceSites().site(job.siteId()).deliverFullHarvestBatch(job,
+                        Optional.empty(), Optional.empty(), state.resourceSites().cycle(job.siteId()),
+                        state.actorLocations().get(job.workerId()).supportingSurface())));
+        var published = state.withChanges(update.inventory(inventory));
         if (!ReferenceContainerCustody.canonicalFingerprint(published, job.outputSlot().containerId()).equals(receipt.depotFingerprint()))
             throw new IllegalArgumentException("retired delivery differs from the complete physical destination");
         return ReferenceContainerCustody.closeConfirmedMutation(published,

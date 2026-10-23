@@ -27,9 +27,17 @@ final class ShipmentStateCodec {
         switch (value.authorization().kind()) { case GOODS_CONTRACT_SHIPMENT -> out.writeByte(1); case INTERNAL_SHIPMENT -> out.writeByte(2); case OWNED_GOODS_SHIPMENT -> out.writeByte(3); }
         id(out, value.authorization().claimId()); id(out, value.authorization().claimantId()); id(out, value.authorization().executorId());
         out.writeLong(value.authorization().authorizationRevision()); ActorExecutionStateCodec.writeId(out, value.execution());
-        source(out, value.sender()); endpoint(out, value.receiver()); id(out, value.sourceAccountId()); id(out, value.carriedAccountId()); id(out, value.receivingAccountId());
-        out.writeUTF(value.itemKind()); out.writeInt(value.lotQuantities().size());
-        for (var e : value.lotQuantities().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) { id(out, e.getKey()); out.writeInt(e.getValue()); }
+        source(out, value.sender()); endpoint(out, value.receiver());
+        switch (value.cargo()) {
+            case ShipmentCargo.Fungible cargo -> {
+                out.writeByte(1); id(out, cargo.sourceAccountId()); id(out, cargo.carriedAccountId()); id(out, cargo.receivingAccountId());
+                out.writeUTF(cargo.itemKind()); lots(out, cargo.portions());
+            }
+            case ShipmentCargo.Individual cargo -> {
+                out.writeByte(2); id(out, cargo.itemId()); id(out, cargo.ownerId()); out.writeUTF(cargo.itemKind());
+                out.writeInt(cargo.condition().maximumDamage()); out.writeInt(cargo.condition().damage()); out.writeBoolean(cargo.remaining());
+            }
+        }
         status(out, value.status()); out.writeLong(value.revision());
         out.writeBoolean(value.transportMissionId().isPresent()); if (value.transportMissionId().isPresent()) id(out, value.transportMissionId().orElseThrow());
         out.writeBoolean(value.mobileContainerId().isPresent()); if (value.mobileContainerId().isPresent()) id(out, value.mobileContainerId().orElseThrow());
@@ -48,23 +56,29 @@ final class ShipmentStateCodec {
         };
         var grant = new ResourceClaimDelegation(kind, id(in), id(in), id(in), in.readLong());
         var execution = ActorExecutionStateCodec.readId(in); ResourceSourceEndpoint sender = source(in); ShipmentEndpoint receiver = endpoint(in);
-        SubjectId source = id(in), carried = id(in), receiving = id(in); String item = in.readUTF();
-        int n = in.readInt(); if (n < 0 || n > 64) throw new IllegalArgumentException("invalid shipment lot count");
-        var lots = new LinkedHashMap<SubjectId, Integer>();
-        for (int i = 0; i < n; i++) if (lots.putIfAbsent(id(in), in.readInt()) != null) throw new IllegalArgumentException("duplicate shipment lot");
+        ShipmentCargo cargo = switch (in.readUnsignedByte()) {
+            case 1 -> new ShipmentCargo.Fungible(id(in), id(in), id(in), in.readUTF(), cargoPortions(in));
+            case 2 -> new ShipmentCargo.Individual(id(in), id(in), in.readUTF(), new ItemCondition(in.readInt(), in.readInt()), in.readBoolean());
+            default -> throw new IllegalArgumentException("unknown shipment cargo representation");
+        };
         var status = status(in); long revision = in.readLong();
         var mission = in.readBoolean() ? Optional.of(id(in)) : Optional.<SubjectId>empty();
         var mobile = in.readBoolean() ? Optional.of(id(in)) : Optional.<SubjectId>empty();
         var pending = in.readBoolean() ? Optional.of(ShipmentPhysicalStepCodec.read(in)) : Optional.<ShipmentPhysicalStep>empty();
         var reception = in.readBoolean() ? Optional.of(new ShipmentReception(id(in), id(in), lots(in))) : Optional.<ShipmentReception>empty();
-        return new Shipment(shipment, grant, execution, sender, receiver, source, carried, receiving, item, lots, status, revision, pending, reception, mission, mobile);
+        return new Shipment(shipment, grant, execution, sender, receiver, cargo, status, revision, pending, reception, mission, mobile);
     }
     static void lots(DataOutputStream out, Map<SubjectId, Integer> lots) throws IOException {
         out.writeInt(lots.size());
         for (var e : lots.entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) { id(out, e.getKey()); out.writeInt(e.getValue()); }
     }
     static Map<SubjectId, Integer> lots(DataInputStream in) throws IOException {
-        int n = in.readInt(); if (n < 1 || n > 64) throw new IllegalArgumentException("invalid transported portion lot count");
+        var portions = cargoPortions(in);
+        if (portions.isEmpty()) throw new IllegalArgumentException("empty transferred portion");
+        return portions;
+    }
+    private static Map<SubjectId, Integer> cargoPortions(DataInputStream in) throws IOException {
+        int n = in.readInt(); if (n < 0 || n > 64) throw new IllegalArgumentException("invalid transported portion lot count");
         var lots = new LinkedHashMap<SubjectId, Integer>();
         for (int i = 0; i < n; i++) if (lots.putIfAbsent(id(in), in.readInt()) != null) throw new IllegalArgumentException("duplicate transported portion lot");
         return lots;

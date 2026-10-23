@@ -61,7 +61,7 @@ class ProductionProcessTest {
 
         StrategicTask original = state.strategicPlans().tasks().get(job.taskId());
         StrategicTask other = new StrategicTask(new SubjectId("task:production-other"), original.objectiveId(), original.ownerId(),
-                StrategicTaskKind.PRODUCE_BREAD, Optional.empty(), original.requirements(), List.of(), StrategicTaskStatus.ACTIVE);
+                StrategicTaskKind.PRODUCE_AT_STATION, Optional.empty(), original.requirements(), List.of(), StrategicTaskStatus.ACTIVE);
         FrontierWorldState twoTasks = state.withStrategicPlans(state.strategicPlans().addTask(other));
         assertEquals(original, ProductionTransformationStateSupport.activeTask(twoTasks, job),
                 "physical completion must use the job's retained task even when another task has the same owner and kind");
@@ -499,7 +499,9 @@ class ProductionProcessTest {
 
         assertTrue(prepared.state().productionHoldReserves(source));
         assertFalse(prepared.state().containerSlotAvailable(source));
-        assertEquals(1, prepared.state().firstFreeContainerSlot(source.containerId()).orElseThrow());
+        int free = prepared.state().firstFreeContainerSlot(source.containerId()).orElseThrow();
+        assertTrue(source.slot() != free);
+        assertTrue(prepared.state().containerSlotAvailable(new InventoryCustody.ContainerSlot(source.containerId(), free)));
         assertThrows(IllegalArgumentException.class, () -> prepared.state().withInventory(prepared.state().inventory().store(intruder)));
     }
 
@@ -533,7 +535,7 @@ class ProductionProcessTest {
         assertEquals(PhysicalIntentStatus.UNKNOWN_AFTER_RESTART, blocked.physicalIntents().get(prepared.intent().id()).status());
         assertTrue(blocked.inventory().items().containsKey(new SubjectId("item:bootstrap-1-wheat")));
         assertEquals(StrategicTaskStatus.ACTIVE, blocked.strategicPlans().tasks().values().stream()
-                .filter(task -> task.kind() == StrategicTaskKind.PRODUCE_BREAD).findFirst().orElseThrow().status());
+                .filter(task -> task.kind() == StrategicTaskKind.PRODUCE_AT_STATION).findFirst().orElseThrow().status());
     }
 
     @Test
@@ -551,7 +553,7 @@ class ProductionProcessTest {
         assertTrue(completed.productionJobs().isEmpty());
         assertEquals("minecraft:bread", completed.inventory().items().get(prepared.job().outputItemId()).itemKind());
         assertEquals(StrategicTaskStatus.COMPLETED, completed.strategicPlans().tasks().values().stream()
-                .filter(task -> task.kind() == StrategicTaskKind.PRODUCE_BREAD).findFirst().orElseThrow().status());
+                .filter(task -> task.kind() == StrategicTaskKind.PRODUCE_AT_STATION).findFirst().orElseThrow().status());
         assertThrows(IllegalArgumentException.class, () -> transition(completed, prepared.settlementId(), prepared.intent(),
                 PhysicalIntentStatus.CONFIRMED, Optional.of(receipt)),
                 "the bounded recovery observation is consumed by its first terminal confirmation");
@@ -763,8 +765,8 @@ class ProductionProcessTest {
         SubjectId settlement = new SubjectId("settlement:1");
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:test-production"), settlement,
                 StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
-        StrategicTask task = new StrategicTask(new SubjectId("task:test-production"), objective.id(), settlement, StrategicTaskKind.PRODUCE_BREAD,
-                Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT), List.of(), status);
+        StrategicTask task = new StrategicTask(new SubjectId("task:test-production"), objective.id(), settlement, StrategicTaskKind.PRODUCE_AT_STATION,
+                Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_PRODUCTION_FACILITY, StrategicTaskRequirement.AVAILABLE_PRODUCTION_INPUT), List.of(), status);
         return state.withStrategicPlans(StrategicPlanState.initial(state.bootstrap()).addObjective(objective).addTask(task));
     }
 
@@ -848,8 +850,10 @@ class ProductionProcessTest {
         FungibleResourceLedger resources = state.inventory().fungibleResources().destroy(new SubjectId("custody:container-1-depot"),
                 Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of());
         SubjectId item = new SubjectId("item:bootstrap-1-wheat");
-        ExactItemStack wheat = new ExactItemStack(item, settlement, "minecraft:wheat", 64, new InventoryCustody.ContainerSlot(depot, 0));
-        return state.withInventory(state.inventory().withFungibleResources(resources).store(wheat));
+        var inventory = state.inventory().withFungibleResources(resources);
+        ExactItemStack wheat = new ExactItemStack(item, settlement, "minecraft:wheat", 64,
+                new InventoryCustody.ContainerSlot(depot, inventory.availableSlots(depot).getFirst()));
+        return state.withInventory(inventory.store(wheat));
     }
 
     static CommandResult submitSurface(io.farfrontier.palemirror.frontier.v3.api.FrontierEngine<FrontierWorldProjection> engine, WorldId world,
@@ -885,6 +889,8 @@ class ProductionProcessTest {
                     harvesting = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(harvesting, siteId, advanced);
                 else if (event.payload() instanceof ResourceSiteHarvestColdTraversalAdvanced advanced)
                     harvesting = ResourceSiteHarvestProcess.reduceColdTraversalAdvanced(harvesting, siteId, advanced);
+                else if (event.payload() instanceof FieldEquipmentChanged changed)
+                    harvesting = io.farfrontier.palemirror.frontier.v3.process.FieldEquipmentProcess.reduce(harvesting, siteId, changed, progress.dueAt().ticks());
                 else if (event.payload() instanceof ResourceSiteHarvestLabourChange changed)
                     harvesting = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(harvesting, siteId, changed);
                 else if (event.payload() instanceof ResourceSiteHarvestSegmentRenewed renewed)

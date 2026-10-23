@@ -27,7 +27,7 @@ final class BakeryHotEffectObservedCodec implements PayloadCodec {
         return new BakeryHotEffectObserved(
                 FrontierWorldPayloadCodecs.readSubject(input).value(),
                 new SceneLeaseId(FrontierWorldStateCodec.readString(input)),
-                BakeryWorkState.Phase.fromWireTag(input.readUnsignedByte()),
+                StationWorkState.Phase.fromWireTag(input.readUnsignedByte()),
                 new BodyPosition(input.readInt(), input.readInt(), input.readInt()),
                 input.readLong(), input.readLong(), PhysicalObservationStackCodec.readStacks(input), PhysicalObservationStackCodec.readStacks(input));
     }

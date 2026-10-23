@@ -5,7 +5,8 @@ import java.util.Map;
 /** Semantic port capacity belongs to the machine, not each recipe/hauler caller. */
 final class ProductionStationInventoryCapacity {
     static boolean receive(FrontierWorldState state, ProductionStationSpec station, String kind,
-                           int quantity, Map<String, Long> incoming) {
+                           int quantity, ContainerIncomingStock incoming) {
+        if (!incoming.individual().isEmpty()) return false;
         int slot;
         try { slot = ProductionStationRecipe.portForItemKind(state.bootstrap().ruleset().production(), station, kind); }
         catch (IllegalArgumentException unsupported) { return false; }
@@ -14,7 +15,7 @@ final class ProductionStationInventoryCapacity {
         var existing = ReferenceContainerCustody.expectedFungibleSlot(state, station.containerId(), slot);
         if (existing.filter(value -> !value.itemKind().equals(kind)).isPresent()) return false;
         long committed = quantity + (long) existing.map(ReferenceContainerCustody.ProjectedFungibleSlot::quantity).orElse(0);
-        for (var demand : incoming.entrySet()) {
+        for (var demand : incoming.fungible().entrySet()) {
             int port;
             try { port = ProductionStationRecipe.portForItemKind(state.bootstrap().ruleset().production(), station, demand.getKey()); }
             catch (IllegalArgumentException unsupported) { return false; }

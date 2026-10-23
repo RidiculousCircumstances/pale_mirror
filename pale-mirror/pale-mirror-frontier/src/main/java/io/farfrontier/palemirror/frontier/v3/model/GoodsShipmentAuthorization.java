@@ -15,6 +15,20 @@ final class GoodsShipmentAuthorization implements ShipmentAuthorizationPort {
             ShipmentReception receipt, ExactInventory inventory, CompanyRegistry companies) {
         validate(state, shipment, false);
         if (!recallable(state, shipment)) throw new IllegalArgumentException("commercial cargo cannot be recalled after sale");
+        if (shipment.cargo() instanceof ShipmentCargo.Individual cargo) {
+            var item = inventory.items().get(cargo.itemId());
+            if (!cargo.matches(item) || !(item.custody() instanceof InventoryCustody.ContainerSlot slot)
+                    || !shipment.sender().container().equals(java.util.Optional.of(slot.containerId()))
+                    || !receipt.lotQuantities().equals(cargo.portions()))
+                throw new IllegalArgumentException("cancelled individual cargo lacks exact source custody");
+            var contract = companies.goodsTrade().contracts().get(shipment.authorization().claimantId());
+            var disposition = new GoodsTradeDisposition(receipt.id(), contract.id(), contract.revision(), receipt.claimId(), 1,
+                    shipment.status() == Shipment.Status.AWAITING_LOAD ? GoodsTradeDisposition.Reason.CANCELLED_BEFORE_LOADING
+                            : GoodsTradeDisposition.Reason.RETURNED_BEFORE_DEPARTURE);
+            return FrontierWorldStateUpdate.begin().inventory(inventory.withEconomics(inventory.economics()
+                    .releasePortion(contract.financialReservationId(), contract.deliveredUnitPrice())))
+                    .companies(companies.withGoodsTrade(companies.goodsTrade().dispose(disposition)));
+        }
         var account = inventory.fungibleResources().accounts().get(shipment.sourceAccountId());
         if (account == null || !account.custody().equals(shipment.sender().custody())
                 || account.claimQuantities().getOrDefault(receipt.claimId(), 0) != receipt.quantity()
@@ -70,9 +84,14 @@ final class GoodsShipmentAuthorization implements ShipmentAuthorizationPort {
         var contract = state.companies().goodsTrade().contracts().get(shipment.authorization().claimantId());
         if (contract == null) throw new IllegalArgumentException("shipment reception lost its acknowledgement owner");
         var receipt = contract.acceptances().get(reception.id());
-        return receipt != null && receipt.title().claimId().equals(reception.claimId())
-                && receipt.title().accountId().equals(shipment.receivingAccountId())
-                && receipt.title().portions().equals(reception.lotQuantities());
+        if (receipt != null && receipt.title() instanceof IndividualTitleTransfer title)
+            return shipment.cargo() instanceof ShipmentCargo.Individual cargo && title.claimId().equals(reception.claimId())
+                    && title.before().id().equals(cargo.itemId()) && reception.lotQuantities().equals(java.util.Map.of(cargo.itemId(), 1))
+                    && title.before().custody() instanceof InventoryCustody.ContainerSlot slot
+                    && slot.containerId().equals(shipment.receiver().containerId());
+        return receipt != null && receipt.title() instanceof ResourceTitleTransfer title && title.claimId().equals(reception.claimId())
+                && title.accountId().equals(shipment.receivingAccountId())
+                && title.portions().equals(reception.lotQuantities());
     }
     @Override public java.util.Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> capacityCompletionOwner(Shipment shipment) {
         return java.util.Optional.of(shipment.authorization().claimantId());
@@ -86,6 +105,17 @@ final class GoodsShipmentAuthorization implements ShipmentAuthorizationPort {
     @Override public void validate(FrontierWorldState state, Shipment shipment, boolean admission) {
         ResourceClaimDelegation grant = shipment.authorization();
         GoodsTradeContract contract = state.companies().goodsTrade().contracts().get(grant.claimantId());
+        if (shipment.cargo() instanceof ShipmentCargo.Individual cargo) {
+            var allocation = contract == null ? null : contract.individualAllocations().get(grant.claimId());
+            if (allocation == null || !allocation.itemId().equals(cargo.itemId()) || !allocation.condition().equals(cargo.condition())
+                    || !allocation.economicOwnerId().equals(cargo.ownerId()) || !allocation.itemKind().equals(cargo.itemKind())
+                    || !shipment.sender().container().equals(java.util.Optional.of(contract.sourceContainerId()))
+                    || !contract.receiverContainerId().equals(shipment.receiver().containerId())
+                    || (admission ? grant.authorizationRevision() != contract.revision() : grant.authorizationRevision() > contract.revision()))
+                throw new IllegalArgumentException("individual shipment lacks exact commercial allocation and endpoints");
+            shipment.transportMissionId().map(state.shipments().missions()::get).ifPresent(mission -> validateMission(state, shipment, mission.organization()));
+            return;
+        }
         ClaimAllocation claim = state.inventory().fungibleResources().claims().get(grant.claimId());
         var expected = new java.util.LinkedHashMap<>(shipment.lotQuantities());
         shipment.reception().filter(r -> r.claimId().equals(grant.claimId()) && !receptionAccepted(state, shipment, r)).ifPresent(r ->

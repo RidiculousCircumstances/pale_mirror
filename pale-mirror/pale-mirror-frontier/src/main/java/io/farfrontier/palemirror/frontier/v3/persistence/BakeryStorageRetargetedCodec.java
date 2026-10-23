@@ -18,7 +18,7 @@ final class BakeryStorageRetargetedCodec implements PayloadCodec {
     }
     @Override public FrontierPayload decode(byte[] bytes) {
         return FrontierWorldPayloadCodecs.decodeProduction(bytes, in -> new BakeryStorageRetargeted(
-                FrontierWorldPayloadCodecs.readSubject(in).value(), BakeryWorkState.Phase.fromWireTag(in.readInt()),
+                FrontierWorldPayloadCodecs.readSubject(in).value(), StationWorkState.Phase.fromWireTag(in.readInt()),
                 FrontierWorldPayloadCodecs.readSubject(in).value(), FrontierWorldPayloadCodecs.readSubject(in).value(),
                 ActorExecutionStateCodec.readId(in), PedestrianRouteReceiptCodec.read(in)));
     }

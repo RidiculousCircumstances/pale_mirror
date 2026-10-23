@@ -275,6 +275,7 @@ final class ResourceSiteStateCodec {
             output.writeInt(harvest.deliveredYieldQuantity());
             output.writeInt(harvest.harvestedYieldQuantity());
             output.writeLong(harvest.storageRevision());
+            WorkToolAssignmentCodec.write(output, harvest.equipment());
             output.writeLong(harvest.target().layoutRevision());
             output.writeLong(harvest.target().cellId().value());
             output.writeLong(harvest.target().generation());
@@ -322,6 +323,7 @@ final class ResourceSiteStateCodec {
                 input.readInt(), input.readInt(), WorkStateCodec.readProgress(input), ResourceSiteHarvestAcceptanceCodec.readOptional(input));
         int delivered = input.readInt(), harvested = input.readInt();
         long storageRevision = input.readLong();
+        var equipment = WorkToolAssignmentCodec.read(input);
         var target = new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldWorkTarget(site,
                 input.readLong(), new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout.CellId(input.readLong()), input.readLong());
         boolean returning = input.readBoolean();
@@ -341,7 +343,7 @@ final class ResourceSiteStateCodec {
                 input.readLong(), ResourceSiteHarvestNavigationBlock.Reason.requireWireTag(input.readUnsignedByte())));
         return new ResourceSiteHarvestJob(id, task, site, worker, actor, depot, output, slot, intent,
                 progress, delivered, returning,
-                successorSlot, lastBatch, navigationBlock, harvested, target, storageRevision);
+                successorSlot, lastBatch, navigationBlock, harvested, target, storageRevision, equipment);
     }
 
     private static InventoryCustody.ContainerSlot readOutputSlot(DataInputStream input) throws IOException {

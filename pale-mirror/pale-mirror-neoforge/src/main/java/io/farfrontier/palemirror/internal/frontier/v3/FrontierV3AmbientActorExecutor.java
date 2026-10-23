@@ -332,7 +332,7 @@ final class FrontierV3AmbientActorExecutor {
             if (existing instanceof Zombie zombie) configureBioform(zombie, bioformProfile(state, actorId));
             if (existing instanceof Mob body) {
                 if (!FrontierV3ActorCarryProjection.matches(state, actorId, body)
-                        || !FrontierV3BakeryHandProjection.matchesAmbient(state, actorId, body)
+                        || !FrontierV3StationWorkHandProjection.matchesAmbient(state, actorId, body)
                         || !FrontierV3ResidentMealHandProjection.matchesAmbient(state, actorId, body)) return Result.CONFLICT;
                 // A live observed body already belongs to the actor. Preparing a
                 // meal/work presentation cannot relocate it to a lease checkpoint.
@@ -362,7 +362,7 @@ final class FrontierV3AmbientActorExecutor {
                         surface -> placementPermitted(state, lease, canonicalBody, surface), body -> {
                             if (body instanceof Zombie zombie) configureBioform(zombie, bioformProfile(state, actorId));
                             hydrateExactHeldEquipment(body, state, actorId);
-                            if (!FrontierV3BakeryHandProjection.prepareAmbientNew(state, actorId, body)
+                            if (!FrontierV3StationWorkHandProjection.prepareAmbientNew(state, actorId, body)
                                     || !FrontierV3ResidentMealHandProjection.prepareAmbientNew(state, actorId, body)) return false;
                             FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, actorId, bioform);
                             return resourceProjection.test(body);

@@ -12,6 +12,8 @@ public final class ExtractionWorkPolicy {
      * that commitment. Permission withdrawal and source invalidation still apply;
      * selecting any successor separately requires fresh demand. */
     public static boolean mayFinishTarget(FrontierWorldState state, ExtractionWork job, long atTick) {
+        if (job.target().isPresent() && !supportsTool(state,
+                ExtractionWorkAuthority.site(state, job).layout().require(job.target().orElseThrow().key().cell()), job)) return false;
         if (!SettlementWorkPolicy.permissions(state, ExtractionWorkAuthority.site(state, job).settlementId())
                 .permits(ResidentWorkKind.EXTRACTION, job.execution().actorId())) return false;
         var deposit = state.extractionSites().deposits().get(job.siteId());
@@ -44,12 +46,14 @@ public final class ExtractionWorkPolicy {
     }
     public static boolean finished(FrontierWorldState state, ExtractionWork job, long atTick) {
         var deposit = state.extractionSites().deposits().get(job.siteId());
-        return !requested(state, job, atTick) || !remaining(deposit);
+        return !requested(state, job, atTick) || !remaining(deposit)
+                || deposit.site().layout().cells().stream().noneMatch(cell ->
+                    deposit.cells().get(cell.id()).disposition() == ExtractionDeposit.Disposition.PRESENT && supportsTool(state, cell, job));
     }
     public static boolean supportsTool(FrontierWorldState state, ExtractionLayout.Cell cell, ExtractionWork job) {
         return cell.definition().coldOutput().size() == 1
-                && cell.definition().toolKind().equals(Objects.requireNonNull(
-                        state.inventory().items().get(job.toolId()), "retained mining tool").itemKind());
+                && state.bootstrap().ruleset().tools().serviceable(Objects.requireNonNull(
+                        state.inventory().items().get(job.toolId()), "retained mining tool"), cell.definition().toolRequirement());
     }
     public static boolean matchingOutput(ExtractionLayout.Cell cell, ExtractionWork job) {
         return cell.definition().coldOutput().size() == 1 && cell.definition().coldOutput().getFirst().itemKind().equals(job.outputKind());

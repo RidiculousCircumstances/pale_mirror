@@ -193,8 +193,8 @@ class UnitGroupTransportTest {
             var state = engine.canonicalState().state();
             if (admitted == null && !state.unitGroups().groups().isEmpty()) {
                 admitted = state.unitGroups().groups().values().iterator().next();
-                assertEquals(2, admitted.members().size());
-                assertEquals(List.of(UnitGroup.Role.CARRIER, UnitGroup.Role.GUIDE), admitted.members().stream().map(UnitGroup.Member::role).toList());
+                assertEquals(1, admitted.members().size());
+                assertEquals(UnitGroup.Role.CARRIER, admitted.members().getFirst().role());
             }
             if (admitted != null) {
                 var group = state.unitGroups().groups().get(admitted.id());
@@ -277,20 +277,20 @@ class UnitGroupTransportTest {
     }
     private static void assertReturnedGroupRetiresPausedPurpose(FrontierWorldState state, UnitGroup group) {
         var actors = new LinkedHashMap<>(state.actorExecutions().actors());
-        var guide = group.members().stream().filter(m -> m.role() == UnitGroup.Role.GUIDE).findFirst().orElseThrow();
-        var retained = actors.get(guide.actorId());
+        var member = group.members().getFirst();
+        var retained = actors.get(member.actorId());
         var purpose = retained.current().orElseThrow();
         assertEquals(ActorActivityKind.GROUP_MEMBER, purpose.activityKind());
         // A completed independent activity has released current authority, but the
         // registered activity turn has not resumed its exact saved purpose yet.
-        actors.put(guide.actorId(), new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecution(
-                guide.actorId(), retained.generation(), Optional.empty(), Optional.of(purpose)));
+        actors.put(member.actorId(), new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecution(
+                member.actorId(), retained.generation(), Optional.empty(), Optional.of(purpose)));
         var paused = state.withChanges(FrontierWorldStateUpdate.begin().actorExecutions(
                 new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState(actors)));
         var closed = UnitGroupProcess.reduce(paused, group.id(), new UnitGroupAdvanced(group.id(), group.revision(),
                 UnitGroupAdvanced.Change.CLOSE, group.goalOrdinal(), Optional.empty(), Optional.empty()));
         assertEquals(UnitGroup.Phase.CLOSED, closed.unitGroups().groups().get(group.id()).phase());
-        assertTrue(closed.actorExecutions().actors().get(guide.actorId()).suspended().isEmpty());
+        assertTrue(closed.actorExecutions().actors().get(member.actorId()).suspended().isEmpty());
         assertEquals(paused.inventory(), closed.inventory()); assertEquals(paused.actorLocations(), closed.actorLocations());
         var codec = new FrontierWorldStateCodec();
         assertEquals(closed, codec.decode(codec.encode(closed)));
@@ -414,28 +414,28 @@ class UnitGroupTransportTest {
                     .nextThresholdTick(state.bootstrap().ruleset().residentLife(),
                             state.humanPopulation().resident(member.actorId()).characteristics().effectiveMetabolismPermille(now))));
         }
-        var resumed = EnumSet.noneOf(ActorActivityKind.class);
+        var resumed = new HashSet<SubjectId>();
         var config = new FrontierEngineConfiguration<>(base.worldId(), state, new SimInstant(now), base.commandPlanner(),
                 base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(), schedules,
                 (TransactionCommitter) (transaction, durability) -> {
                     for (var event : transaction.events()) if (event.payload() instanceof
                             io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionResumed result
                             && selected.members().stream().anyMatch(member -> member.actorId().equals(result.successor().actorId()))) {
-                        resumed.add(result.successor().activityKind());
+                        resumed.add(result.successor().actorId());
                         assertTrue(transaction.events().stream().anyMatch(change -> change.payload() instanceof ScheduleEffect.Rescheduled wake
                                 && wake.replacement().equals(UnitGroupProcess.progress(selected.id(), result.atTick() + 1))),
                                 "meal completion must notify exact retained group in the resume transaction");
                     }
                 }, base.stateValidator());
         var engine = FrontierEngines.createCanonicalStateAccess(config);
-        for (int turn = 0; turn < 512 && resumed.size() < 2; turn++) {
+        for (int turn = 0; turn < 512 && resumed.size() < selected.members().size(); turn++) {
             var current = engine.canonicalState().state();
             var due = engine.checkpoint().schedules().stream().filter(action -> !FrontierWorldRuntimeDefinition.scheduledHeld(current, action))
                     .sorted().findFirst().orElseThrow();
             var result = engine.advanceTo(new SimInstant(Math.max(engine.checkpoint().instant().ticks(), due.dueAt().ticks())), new WorkBudget(1, 1024));
             assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
         }
-        assertEquals(EnumSet.of(ActorActivityKind.COURIER, ActorActivityKind.GROUP_MEMBER), resumed);
+        assertEquals(selected.members().stream().map(UnitGroup.Member::actorId).collect(java.util.stream.Collectors.toSet()), resumed);
     }
 
     @Test void forgedRoleDanglingMissionPrematureArrivalAndStaleEpochFailClosed() {
@@ -465,7 +465,7 @@ class UnitGroupTransportTest {
                 new UnitGroupAdvanced(group.id(), group.revision() - 1, UnitGroupAdvanced.Change.ARRIVE, group.goalOrdinal(), Optional.empty(), Optional.empty())));
         assertFalse(ActorExecutionCoordinator.ordinaryWorkAdmission(state, carrier.actorId()).permitted());
         var wrongPurpose = new ArrayList<>(group.members());
-        wrongPurpose.set(0, new UnitGroup.Member(carrier.actorId(), UnitGroup.Role.CARRIER, ActorActivityKind.GROUP_MEMBER, carrier.activityOwnerId()));
+        wrongPurpose.set(0, new UnitGroup.Member(carrier.actorId(), UnitGroup.Role.CARRIER, ActorActivityKind.COURIER, carrier.activityOwnerId()));
         var wrongOwner = new ArrayList<>(group.members());
         wrongOwner.set(0, new UnitGroup.Member(carrier.actorId(), UnitGroup.Role.CARRIER, carrier.activityKind(), new SubjectId("shipment:unknown-owner")));
         for (var roster : List.of(wrongPurpose, wrongOwner)) {

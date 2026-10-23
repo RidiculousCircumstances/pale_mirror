@@ -176,10 +176,10 @@ class StrategicObjectiveProcessTest {
                 StrategicObjectiveProcess.stockReconsideration(owner, new SubjectId("job:site-harvest-1-wheat-field-1"), -1, 61L));
         StrategicTask reviewed = reviewPlan.stream().map(ProposedEvent::payload).filter(StrategicTaskPlanned.class::isInstance)
                 .map(StrategicTaskPlanned.class::cast).map(StrategicTaskPlanned::task)
-                .filter(task -> task.kind() == StrategicTaskKind.PRODUCE_BREAD).findFirst().orElseThrow();
+                .filter(task -> task.kind() == StrategicTaskKind.PRODUCE_AT_STATION).findFirst().orElseThrow();
         StrategicTask woken = wakePlan.stream().map(ProposedEvent::payload).filter(StrategicTaskPlanned.class::isInstance)
                 .map(StrategicTaskPlanned.class::cast).map(StrategicTaskPlanned::task)
-                .filter(task -> task.kind() == StrategicTaskKind.PRODUCE_BREAD).findFirst().orElseThrow();
+                .filter(task -> task.kind() == StrategicTaskKind.PRODUCE_AT_STATION).findFirst().orElseThrow();
 
         assertEquals(1, reviewPlan.stream().map(ProposedEvent::payload).filter(StrategicObjectiveSelected.class::isInstance)
                 .map(StrategicObjectiveSelected.class::cast).findFirst().orElseThrow().objective().decisionOrdinal());
@@ -321,8 +321,8 @@ class StrategicObjectiveProcessTest {
         StrategicTaskPlanned task = planned.stream().map(ProposedEvent::payload).filter(StrategicTaskPlanned.class::isInstance)
                 .map(StrategicTaskPlanned.class::cast).filter(value -> value.task().objectiveId().equals(selected.objective().id())).findFirst().orElseThrow();
         assertEquals(StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, selected.objective().kind());
-        assertEquals(StrategicTaskKind.PRODUCE_BREAD, task.task().kind());
-        assertEquals(List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT), task.task().requirements());
+        assertEquals(StrategicTaskKind.PRODUCE_AT_STATION, task.task().kind());
+        assertEquals(List.of(StrategicTaskRequirement.ACTIVE_PRODUCTION_FACILITY, StrategicTaskRequirement.AVAILABLE_PRODUCTION_INPUT), task.task().requirements());
         assertTrue(planned.stream().map(ProposedEvent::payload).noneMatch(MarketDemandOpened.class::isInstance));
         assertTrue(planned.stream().anyMatch(event -> event.payload() instanceof io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created created
                 && created.action().equals(ProductionProcess.start(task.task(), 61L))));
@@ -363,7 +363,7 @@ class StrategicObjectiveProcessTest {
                         new CustodyAccount(accountId, new ResourceCustody.Container(depot),
                                 Map.of(lotId, 64), Map.of()));
         var stack = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                new InventoryCustody.ContainerSlot(depot, 0)), SettlementFoodPolicy.BREAD, 64);
+                new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).getFirst())), SettlementFoodPolicy.BREAD, 64);
         FungibleResourceLedger hot = cold.rebind(accountId, 2L,
                 FungiblePhysicalObservation.bind(cold, accountId, 2L, List.of(stack)));
         state = state.withInventory(state.inventory().withFungibleResources(hot));

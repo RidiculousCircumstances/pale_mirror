@@ -56,12 +56,12 @@ final class ProductionActivityCapability implements ActorActivityCapability {
         return false; // Production goals are issued by the exact production-scene consumer.
     }
     static ResidentWorkYield.Status checkpointStatus(ProductionJob job) {
-        return job.bakeryWork().isEmpty() ? ResidentWorkYield.Status.OWNER_SAFETY_HOLD
-                : job.bakeryWork().orElseThrow().pendingPhysicalStep().isPresent()
+        return job.stationWork().isEmpty() ? ResidentWorkYield.Status.OWNER_SAFETY_HOLD
+                : job.stationWork().orElseThrow().pendingPhysicalStep().isPresent()
                     ? ResidentWorkYield.Status.PENDING_PHYSICAL_EFFECT : ResidentWorkYield.Status.READY;
     }
     @Override public FrontierWorldState pause(FrontierWorldState state, ActorExecutionId execution, long atTick) {
-        return BakeryLabour.pauseJob(state, job(state, execution), atTick);
+        return StationWorkLabour.pauseJob(state, job(state, execution), atTick);
     }
     @Override public FrontierWorldState resume(FrontierWorldState state, ActorExecutionId execution, long atTick) {
         job(state, execution); return state;

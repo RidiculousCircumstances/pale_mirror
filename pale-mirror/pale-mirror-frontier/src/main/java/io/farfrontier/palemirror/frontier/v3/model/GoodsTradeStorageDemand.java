@@ -12,7 +12,7 @@ final class GoodsTradeStorageDemand {
     private record Held(SubjectId container, SubjectId claim) { }
     private static final ImmutableInputView<List<ContainerInboundCapacity.Demand>> VIEW = new ImmutableInputView<>();
     static List<ContainerInboundCapacity.Demand> pending(FrontierWorldState state) {
-        return VIEW.get(List.of(state.companies().goodsTrade().contracts(), state.inventory().fungibleResources().accounts()),
+        return VIEW.get(List.of(state.companies().goodsTrade().contracts(), state.inventory().fungibleResources().accounts(), state.inventory().items()),
                 () -> compute(state));
     }
     private static List<ContainerInboundCapacity.Demand> compute(FrontierWorldState state) {
@@ -27,11 +27,17 @@ final class GoodsTradeStorageDemand {
         for (GoodsTradeContract contract : trade.contracts().values()) {
             int incoming = 0;
             for (var claim : contract.outstandingClaims().entrySet()) {
-                incoming = Math.addExact(incoming, Math.subtractExact(claim.getValue(),
-                        held.getOrDefault(new Held(contract.receiverContainerId(), claim.getKey()), 0)));
+                var individual = contract.individualAllocations().get(claim.getKey());
+                int received = individual == null ? held.getOrDefault(new Held(contract.receiverContainerId(), claim.getKey()), 0)
+                        : state.inventory().items().get(individual.itemId()) instanceof ExactItemStack item
+                            && item.custody() instanceof InventoryCustody.ContainerSlot slot
+                            && slot.containerId().equals(contract.receiverContainerId()) ? 1 : 0;
+                incoming = Math.addExact(incoming, Math.subtractExact(claim.getValue(), received));
             }
             if (incoming < 0) throw new IllegalArgumentException("goods receiver holds more than its exact allocation");
-            if (incoming > 0) demands.add(new ContainerInboundCapacity.Demand(contract.id(), contract.receiverContainerId(), contract.itemKind(), incoming));
+            if (incoming > 0) demands.add(new ContainerInboundCapacity.Demand(contract.id(), contract.receiverContainerId(), contract.itemKind(), incoming,
+                    contract.individualAllocations().isEmpty() ? ContainerInboundCapacity.Representation.FUNGIBLE
+                            : ContainerInboundCapacity.Representation.INDIVIDUAL));
         }
         return List.copyOf(demands);
     }

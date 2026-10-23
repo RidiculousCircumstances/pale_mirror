@@ -13,13 +13,13 @@ public record SettlementLabourRules(Map<ResidentWorkKind, Entry> entries) {
     }
     public SettlementLabourRules {
         entries = Map.copyOf(entries);
-        if (!entries.keySet().containsAll(EnumSet.of(ResidentWorkKind.AGRICULTURE, ResidentWorkKind.BAKING, ResidentWorkKind.LOGISTICS)))
+        if (!entries.keySet().containsAll(EnumSet.of(ResidentWorkKind.AGRICULTURE, ResidentWorkKind.PRODUCTION, ResidentWorkKind.LOGISTICS)))
             throw new IllegalArgumentException("staffing rules must name every baseline work kind");
     }
     public static SettlementLabourRules initial() {
         return new SettlementLabourRules(Map.of(
                 ResidentWorkKind.AGRICULTURE, new Entry(3, 1, 1),
-                ResidentWorkKind.BAKING, new Entry(2, 1, 1),
+                ResidentWorkKind.PRODUCTION, new Entry(2, 1, 1),
                 ResidentWorkKind.LOGISTICS, new Entry(64, 0, 4)));
     }
     public String canonicalText() {

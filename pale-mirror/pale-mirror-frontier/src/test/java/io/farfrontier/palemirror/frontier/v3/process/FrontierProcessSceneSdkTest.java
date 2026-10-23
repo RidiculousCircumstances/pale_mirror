@@ -300,7 +300,7 @@ class FrontierProcessSceneSdkTest {
         @Override public HarvestContext acquireHot(HarvestContext context) {
             EngineContext engine = fork(context.engine()); ResourceSiteHarvestJob job = FrontierProcessSceneSdkTest.harvest(engine, context.site());
             BodyPosition body = state(engine).actorLocations().get(job.workerId()).body();
-            BlockPosition crop = FrontierResourceSitePlan.compile(state(engine).bootstrap()).get(context.site()).cropSlots().get(job.progress().nextCropSlotIndex());
+            BlockPosition crop = FrontierResourceSiteHarvestSceneSupport.candidate(state(engine), job).orElseThrow().cropSlot();
             SceneLease lease = SceneLease.forCause(new SceneLeaseId("lease:f0v-sdk-harvest-" + revision(engine).value()), state(engine).bootstrap().worldId(),
                     new ResourceSiteHarvestSceneCause(job.siteId(), job.id()), crop, instant(engine), revision(engine).value(), SceneLeaseStatus.PREPARED,
                     List.of(new SceneMember(job.workerId(), SceneLease.deterministicEntityId(state(engine).bootstrap().worldId(), job.workerId()))), Set.of(job.workerId()), Optional.empty());

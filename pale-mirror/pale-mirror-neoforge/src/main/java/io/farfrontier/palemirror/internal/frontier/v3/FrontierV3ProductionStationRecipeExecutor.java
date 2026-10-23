@@ -27,17 +27,22 @@ final class FrontierV3ProductionStationRecipeExecutor {
             var inputAddress = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(record.id(), station.inputSlot()));
             var source = boundary.before().stream().filter(value -> value.address().equals(inputAddress)).findFirst().orElseThrow();
             var input = new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(source.itemKind())), source.quantity());
-            var output = new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(recipe.product().itemKind())), operation.outputQuantity());
-            var effect = new FrontierV3StationRecipeEffect(physical.inventory(), station, recipe, input, operation.inputQuantity(), output);
+            var output = boundary.exactAfter().map(FrontierV3ExactItemPresentation::materializedStack).orElseGet(() ->
+                    new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(recipe.product().itemKind())), operation.outputQuantity()));
+            var effect = new FrontierV3StationRecipeEffect(physical.inventory(), station, recipe, input, operation.inputQuantity(), output,
+                    boundary.exactBefore());
             var participants = List.of(physical.persistence().get());
             var declaration = FrontierV3MinecraftOperation.declaration(FrontierV3OperationReceipt.Protocol.STATION_RECIPE, machine.stationId(),
                     new ProductionStationRecipeChanged(ProductionStationRecipeChanged.Stage.HOT_PREPARED, boundary, List.of()), participants);
             var applied = FrontierV3MinecraftOperation.apply(level, declaration, participants, effect::before,
                     () -> { effect.apply(); return true; }, effect::after);
             if (!applied.complete()) continue;
-            var observed = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(physical.inventory(), state, record.id());
+            var observed = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(physical.inventory(), state, record.id(),
+                    boundary.exactAfter().isPresent() ? Set.of(station.outputSlot()) : Set.of());
+            var observedExact = boundary.exactAfter().filter(item -> FrontierV3ExactItemPresentation.exactMatch(
+                    physical.inventory().getItem(station.outputSlot()), item));
             FrontierV3OperationConfirmation.submitRequired(level, runtime, applied.ticket(),
-                    new ProductionStationRecipeChanged(ProductionStationRecipeChanged.Stage.HOT_COMPLETED, boundary, observed));
+                    new ProductionStationRecipeChanged(ProductionStationRecipeChanged.Stage.HOT_COMPLETED, boundary, observed, observedExact));
             return;
         }
     }

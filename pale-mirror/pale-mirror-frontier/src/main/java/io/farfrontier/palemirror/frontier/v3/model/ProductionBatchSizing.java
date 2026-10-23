@@ -4,6 +4,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 public final class ProductionBatchSizing {
     /** Physical input/output transfer limits constrain one operation independently of the recipe. */
     public static int maximumRecipeBatches(ProductionRecipe recipe) {
+        if (!(recipe.outcome() instanceof ProductionRecipeOutcome.Fungible)) return 1;
         return Math.min(64 / recipe.ingredient().quantity(), 64 / recipe.product().quantity());
     }
     public static int inputQuantity(ProductionRecipe recipe, int availableInput, int outputCapacity, long availableHeat) {

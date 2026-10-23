@@ -73,16 +73,12 @@ final class SettlementEconomyPayloadCodecs {
                 if (!(item.custody() instanceof InventoryCustody.ContainerSlot slot)) {
                     throw new IllegalArgumentException("resource deposit must have container custody");
                 }
-                writeSubject(output, item.id()); writeSubject(output, item.economicOwnerId()); writeString(output, item.itemKind()); output.writeByte(item.count());
-                writeSubject(output, slot.containerId()); output.writeByte(slot.slot());
+                ExactItemStateCodec.write(output, item);
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return decodeProduction(bytes, input -> {
-                SubjectIdHolder item = readSubject(input); SubjectIdHolder owner = readSubject(input); String kind = readString(input); int count = input.readUnsignedByte();
-                SubjectIdHolder container = readSubject(input); int slot = input.readUnsignedByte();
-                return new ResourceDeposited(new ExactItemStack(item.value(), owner.value(), kind, count,
-                        new InventoryCustody.ContainerSlot(container.value(), slot)));
+                return new ResourceDeposited(ExactItemStateCodec.read(input));
             });
         }
     } private static final class ProductionStartedCodec implements PayloadCodec {
@@ -106,17 +102,14 @@ final class SettlementEconomyPayloadCodecs {
         @Override public String type() { return "frontier.production_completed"; } @Override public byte[] encode(FrontierPayload payload) {
             ProductionCompleted completed = (ProductionCompleted) payload;
             return encodeProduction(output -> {
-                writeSubject(output, completed.jobId()); writeSubject(output, completed.output().id()); writeSubject(output, completed.output().economicOwnerId()); writeString(output, completed.output().itemKind());
-                output.writeByte(completed.output().count());
+                writeSubject(output, completed.jobId());
                 if (!(completed.output().custody() instanceof InventoryCustody.ContainerSlot slot)) throw new IllegalArgumentException("production output must have container custody");
-                writeSubject(output, slot.containerId()); output.writeByte(slot.slot());
+                ExactItemStateCodec.write(output, completed.output());
             });
         }
         @Override public FrontierPayload decode(byte[] bytes) {
             return decodeProduction(bytes, input -> {
-                SubjectIdHolder job = readSubject(input); SubjectIdHolder output = readSubject(input); SubjectIdHolder owner = readSubject(input); String kind = readString(input); int count = input.readUnsignedByte();
-                SubjectIdHolder container = readSubject(input); int slot = input.readUnsignedByte();
-                return new ProductionCompleted(job.value(), new ExactItemStack(output.value(), owner.value(), kind, count, new InventoryCustody.ContainerSlot(container.value(), slot)));
+                return new ProductionCompleted(readSubject(input).value(), ExactItemStateCodec.read(input));
             });
         }
     } private static final class ProductionBlockedCodec implements PayloadCodec {
@@ -139,7 +132,7 @@ final class SettlementEconomyPayloadCodecs {
         writeSubject(output, job.id()); writeSubject(output, job.taskId()); writeSubject(output, job.settlementId()); writeSubject(output, job.facilityId()); writeSubject(output, job.workerId());
         writeSubject(output, job.consumedItemId()); writeSubject(output, job.outputItemId()); writeString(output, job.outputItemKind()); output.writeByte(job.outputCount());
         ProductionWorkProgressStateCodec.write(output, job.workProgress()); TraversalTopologyStateCodec.write(output, job.workTraversal()); output.writeShort(job.traversalCursor());
-        BakeryWorkStateCodec.write(output, job.bakeryWork()); StationApproachStateCodec.write(output, job.spatial());
+        BakeryWorkStateCodec.write(output, job.stationWork()); StationApproachStateCodec.write(output, job.spatial());
         ProductionJobStateCodec.writeRights(output, job.rights());
     }
     private static ProductionJob readJob(DataInputStream input) throws IOException {
@@ -155,9 +148,9 @@ final class SettlementEconomyPayloadCodecs {
         if (hold instanceof ProductionInputHold.Materialized) { output.writeByte(0); return; }
         if (hold instanceof ProductionInputHold.Cold cold) {
             ExactItemStack item = cold.item();
-            output.writeByte(1); writeSubject(output, item.economicOwnerId()); writeString(output, item.itemKind()); output.writeByte(item.count());
+            output.writeByte(1);
             if (!(item.custody() instanceof InventoryCustody.ContainerSlot slot)) throw new IllegalArgumentException("cold production input must retain its depot slot");
-            writeSubject(output, slot.containerId()); output.writeByte(slot.slot());
+            ExactItemStateCodec.write(output, item);
         } else if (hold instanceof ProductionInputHold.FungibleCold cold) {
             output.writeByte(4); writeSubject(output, cold.accountId()); writeSubject(output, cold.claimId());
             writeProductionInputLots(output, cold.inputLots());
@@ -169,8 +162,11 @@ final class SettlementEconomyPayloadCodecs {
     private static ProductionInputHold readProductionInputHold(DataInputStream input, SubjectId itemId) throws IOException {
         return switch (input.readUnsignedByte()) {
             case 0 -> new ProductionInputHold.Materialized(itemId);
-            case 1 -> new ProductionInputHold.Cold(new ExactItemStack(itemId, readSubject(input).value(), readString(input), input.readUnsignedByte(),
-                    new InventoryCustody.ContainerSlot(readSubject(input).value(), input.readUnsignedByte())));
+            case 1 -> {
+                var item = ExactItemStateCodec.read(input);
+                if (!item.id().equals(itemId)) throw new IllegalArgumentException("production hold lost its exact item identity");
+                yield new ProductionInputHold.Cold(item);
+            }
             case 2 -> new ProductionInputHold.FungibleCold(itemId, readSubject(input).value(), readSubject(input).value());
             case 3 -> new ProductionInputHold.FungibleBound(itemId, readSubject(input).value(), readSubject(input).value(), input.readLong());
             case 4 -> new ProductionInputHold.FungibleCold(itemId, readSubject(input).value(), readSubject(input).value(), readProductionInputLots(input));

@@ -26,7 +26,7 @@ public final class ProductionColdJourney {
 
     private static Optional<Step> step(FrontierWorldState state, ProductionJob job,
             Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.TraversalRejoin> selected) {
-        if (job.bakeryWork().isPresent()) throw new IllegalArgumentException("bakery does not use production station cursors");
+        if (job.stationWork().isPresent()) throw new IllegalArgumentException("bakery does not use production station cursors");
         var route = job.workTraversal().linearCorridorSurfaces();
         var actor = state.actorLocations().get(job.workerId());
         var spatial = job.spatial();

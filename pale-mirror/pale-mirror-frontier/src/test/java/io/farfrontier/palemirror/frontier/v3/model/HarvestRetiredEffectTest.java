@@ -66,7 +66,10 @@ class HarvestRetiredEffectTest {
                 // Modeled positive witness retirement. Native acceptance is a separate check.
                 next = apply(next, new ResourceSiteHarvestWorkAcknowledged(retained.progress().acceptance().orElseThrow()), due.dueAt().ticks());
             }
-            var ready = next;
+            var tool = next.inventory().items().get(job.equipment().itemId());
+            var ready = apply(next, new ExactItemCustodyChanged(tool.id(), tool.custody(),
+                    new InventoryCustody.WorldCarrier(java.util.UUID.randomUUID())), due.dueAt().ticks());
+            assertEquals(tool.condition(), ready.inventory().items().get(tool.id()).condition());
             var closed = apply(ready, settled, due.dueAt().ticks());
             assertTrue(closed.resourceSites().site(job.siteId()).harvestJob(job.id()).isEmpty());
             assertTrue(HarvestDeathResources.execution(closed, job.workerId()).isEmpty());

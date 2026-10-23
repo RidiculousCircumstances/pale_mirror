@@ -97,7 +97,7 @@ public final class ExtractionWorkTargets {
         var start = state.actorLocations().get(job.execution().actorId()).supportingSurface();
         var knowledge = knowledge(state, job);
         var priorities = ExtractionPriorities.read(state, deposit, Optional.of(job.id()), atTick);
-        var cells = new ArrayList<>(available);
+        var cells = new ArrayList<>(available.stream().filter(cell -> ExtractionWorkPolicy.supportsTool(state, cell, job)).toList());
         while (!cells.isEmpty()) {
             var candidate = spatialSelection(state, deposit, job.execution().actorId(), cells, policy, priorities);
             if (candidate.isEmpty()) return Optional.empty();

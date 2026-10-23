@@ -47,7 +47,7 @@ public final class ProductionProcess {
     private ProductionProcess() { }
 
     public static ScheduledAction start(StrategicTask task, long dueAt) {
-        if (task.kind() != StrategicTaskKind.PRODUCE_BREAD) throw new IllegalArgumentException("invalid production task schedule");
+        if (task.kind() != StrategicTaskKind.PRODUCE_AT_STATION) throw new IllegalArgumentException("invalid production task schedule");
         return new ScheduledAction(new ScheduleId("schedule:production-task-start-" + task.id().value().replace(':', '-')), new SimInstant(dueAt), 0,
                 task.id(), "frontier.settlement.production.task.start", 1);
     }
@@ -62,7 +62,8 @@ public final class ProductionProcess {
                                                                ProductionWorkSceneLeaseHandoff handoff) {
         ProductionJob job = FrontierProductionWorkSceneSupport.require(state, FrontierSceneBehaviors.productionWork(handoff.lease()));
         FrontierProductionWorkSceneSupport.requireCurrentWorker(state, job);
-        Settlement settlement = settlement(state, job.settlementId()); SettlementStructure workshop = workshop(settlement);
+        Settlement settlement = settlement(state, job.settlementId());
+        SettlementStructure workshop = settlement.structures().stream().filter(value -> value.id().equals(job.facilityId())).findFirst().orElseThrow();
         if (!subject.equals(job.settlementId()) || !workshop.id().equals(job.facilityId()) || handoff.ambientMembers().size() != 1
                 || !handoff.ambientMembers().getFirst().actorId().equals(job.workerId())) {
             throw new IllegalArgumentException("production-work hand-off must capture its one exact workshop worker");
@@ -72,7 +73,7 @@ public final class ProductionProcess {
         if (current == null || current.condition().status() != ActorLifeStatus.ALIVE) {
             throw new IllegalArgumentException("production-work hand-off has no living worker");
         }
-        if (job.bakeryWork().isPresent()) return state;
+        if (job.stationWork().isPresent()) return state;
         if (job.traversalCursor() != 0 || !job.workProgress().equals(ProductionWorkProgress.notStarted()) || job.spatial().pending()) {
             if (!capture.body().equals(current.body()))
                 throw new IllegalArgumentException("production hand-off requires independent current body inspection");
@@ -96,63 +97,8 @@ public final class ProductionProcess {
         }
     }
     private static List<ProposedEvent> planReadyStart(FrontierWorldState state, ScheduledAction action, long now) {
-        StrategicTask task = task(state, action.subject(), StrategicTaskStatus.PENDING); Settlement settlement = settlement(state, task.ownerId());
-        if (state.strategicPlans().objectives().get(task.objectiveId()).kind() == StrategicObjectiveKind.SETTLEMENT_COMPANY_PRODUCTION)
-            return CompanyBakeryPlanning.planStart(state, task, action, now);
-        SettlementStructure workshop = workshop(settlement);
-        if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.FACILITY_UNAVAILABLE);
-        if (!SettlementCommitmentComposition.ADMISSION.facilityAvailable(state, workshop.id()))
-            return List.of(reschedule(action, start(task, Math.addExact(now,
-                    state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval()))));
-        Optional<ResidentProfile> availableBaker = FrontierWorldStateSupport.availableWorkResident(
-                state, settlement.id(), ResidentWorkKind.BAKING, HumanCapability.INDUSTRY);
-        if (availableBaker.isEmpty()) {
-            return blocked(task, settlement, workshop, workshop.id(), ProductionDiagnosticProducer.WORKER_UNAVAILABLE);
-        }
-        List<ResidentProfile> eligible = ResidentWorkComposition.SELECTION.eligible(state, settlement.id(),
-                ResidentWorkKind.BAKING, HumanCapability.INDUSTRY, now);
-        if (eligible.isEmpty())
-            return List.of(reschedule(action, start(task, Math.addExact(now,
-                    state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval()))));
-        var availableInput = BakeryBatchSelection.available(state, settlement.id());
-        if (availableInput.isEmpty()) {
-            var stored = BakeryBatchSelection.storedInputContainers(state, settlement.id());
-            if (stored.stream().anyMatch(id -> !ReferenceContainerCustody.blocksCanonicalUse(state, id)))
-                return List.of(reschedule(action, start(task, Math.addExact(now, 20L))));
-            return blocked(task, settlement, workshop, stored.isEmpty() ? workshop.id() : stored.getFirst(), ProductionDiagnosticProducer.INPUT_UNAVAILABLE);
-        }
-        SubjectId depot = availableInput.orElseThrow().sourceContainer(state);
-        boolean physicalCustody = ReferenceContainerCustody.hasLiveCustody(state, depot);
-        var batch = BakeryBatchSelection.admissible(state, settlement.id(), now);
-        if (batch.isEmpty())
-            return List.of(reschedule(action, start(task, Math.addExact(now,
-                    state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval()))));
-        Optional<ExactItemStack> input = batch.orElseThrow().exactInput();
-        Optional<FungibleResourceCustodySupport.LotSelection> fungible = batch.orElseThrow().fungibleInput();
-        if (ReferenceContainerCustody.hasLiveCustody(state, batch.orElseThrow().sourceContainer(state))
-                    && !ReferenceContainerCustody.hasOperationalCustody(state, batch.orElseThrow().sourceContainer(state))
-                || fungible.isPresent() && !ProductionResourceCustody.canStart(state, fungible.orElseThrow(), batch.orElseThrow().quantity())) {
-            return List.of(reschedule(action, start(task, Math.addExact(now, 20L))));
-        }
-        // Exact and fungible stock remain distinct representations. A resource job admitted
-        // under physical custody reserves the current bound epoch, never a COLD mirror.
-        Optional<ProductionJob> selectedJob = ResidentWorkComposition.SELECTION.offers(state, settlement.id(), now,
-                BakeryJobAdmission.provider(task, settlement, workshop, input, fungible)).stream()
-                .map(ResidentWorkOffer::execution)
-                .filter(job -> ProductionCommercialProcess.canReserve(state, job)).findFirst();
-        // Finance is a start precondition.  A blocked task must not leave a durable job
-        // occupying its workshop: otherwise a later objective review could create a
-        // second job for the same facility and quarantine the canonical engine.
-        if (selectedJob.isEmpty()) {
-            // This branch offers public work: municipal production has no invoice.
-            // Company-owned or buyer-owned work retains its separate commercial admission.
-            return List.of(reschedule(action, start(task, Math.addExact(now,
-                    state.bootstrap().ruleset().cadence().resourceHarvestRetryInterval()))));
-        }
-        ProductionJob job = selectedJob.orElseThrow();
-        return List.of(transition(task, StrategicTaskStatus.ACTIVE), new ProposedEvent(settlement.id(),
-                new ProductionStarted(job, job.consumedItemId(), Optional.of(BakeryAdmissionNavigation.propose(state, job)))),
-                schedule(complete(job, now + 100L)));
+        StrategicTask task = task(state, action.subject(), StrategicTaskStatus.PENDING);
+        return ProductionPlanningComposition.start(state, task, action, now);
     }
 
     /** Restores the consumed completion action when an unstarted physical effect returns to COLD. */
@@ -183,7 +129,7 @@ public final class ProductionProcess {
                 || !ResidentActivityCoordinator.ordinaryWorkPermitted(state, job.workerId(), Math.max(currentTick, action.dueAt().ticks())))
             return List.of(reschedule(action, complete(job, ResidentActivityCoordinator.nextOrdinaryWorkCheck(
                     state, job.workerId(), Math.max(currentTick, action.dueAt().ticks())))));
-        if (job.bakeryWork().isPresent()) return BakeryCompletionPlanning.plan(state, job, action, currentTick);
+        if (job.stationWork().isPresent()) return StationWorkCompletionPlanning.plan(state, job, action, currentTick);
         Settlement settlement = settlement(state, job.settlementId()); StrategicTask task = activeTask(state, job); SettlementStructure workshop = workshop(settlement);
         if (state.structureConditions().get(workshop.id()) != StructureCondition.INTACT) return failActiveJob(state, task, settlement, workshop, job, ProductionDiagnosticProducer.FACILITY_UNAVAILABLE);
         if (ReferenceContainerCustody.blocksCanonicalUse(state, FrontierWorldState.depotId(settlement.id()))) {
@@ -315,7 +261,7 @@ public final class ProductionProcess {
                 .filter(job -> state.companies().market().acceptedForJob(job.id()).isPresent())
                 .filter(job -> ProductionCommercialProcess.contractFor(state, job).isPresent())
                 .filter(job -> state.strategicPlans().tasks().get(job.taskId()) instanceof StrategicTask task
-                        && task.ownerId().equals(job.settlementId()) && task.kind() == StrategicTaskKind.PRODUCE_BREAD
+                        && task.ownerId().equals(job.settlementId()) && task.kind() == StrategicTaskKind.PRODUCE_AT_STATION
                         && task.status() == StrategicTaskStatus.ACTIVE)
                 .reduce((left, right) -> { throw new IllegalArgumentException("one worker cannot retain two interruptible production jobs"); });
     }
@@ -327,41 +273,41 @@ public final class ProductionProcess {
     }
 
     public static FrontierWorldState reduceStarted(FrontierWorldState state, SubjectId subject, ProductionStarted started) {
-        return BakeryJobAdmission.admitStarted(state, subject, started);
+        return StationWorkAdmission.admit(state, subject, started);
     }
 
     public static FrontierWorldState reduceBakeryColdStep(FrontierWorldState state, SubjectId subject, BakeryColdStep step) {
-        return BakeryProcess.reduceColdStep(state, subject, step);
+        return StationWorkProcess.reduceColdStep(state, subject, step);
     }
     public static FrontierWorldState reduceBakeryHotBlockChanged(FrontierWorldState state, SubjectId subject,
                                                                    BakeryHotBlockChanged changed) {
-        return BakeryProcess.hotBlockChanged(state, subject, changed);
+        return StationWorkProcess.hotBlockChanged(state, subject, changed);
     }
     public static FrontierWorldState reduceBakeryHotEffectPrepared(FrontierWorldState state, SubjectId subject, BakeryHotEffectPrepared prepared) {
-        return BakeryProcess.prepareHotEffect(state, subject, prepared);
+        return StationWorkProcess.prepareHotEffect(state, subject, prepared);
     }
     public static FrontierWorldState reduceBakeryHotDeliveryAborted(FrontierWorldState state, SubjectId subject, BakeryHotDeliveryAborted aborted) {
-        return BakeryProcess.abortHotDelivery(state, subject, aborted);
+        return StationWorkProcess.abortHotDelivery(state, subject, aborted);
     }
     public static FrontierWorldState reduceBakeryHotEffectObserved(FrontierWorldState state, SubjectId subject, BakeryHotEffectObserved observed) {
-        return BakeryProcess.observeHotEffect(state, subject, observed);
+        return StationWorkProcess.observeHotEffect(state, subject, observed);
     }
     public static FrontierWorldState reduceBakeryRetiredEffectObserved(FrontierWorldState state, SubjectId subject, BakeryRetiredEffectObserved observed) {
-        return BakeryProcess.observeRetiredEffect(state, subject, observed);
+        return StationWorkProcess.observeRetiredEffect(state, subject, observed);
     }
     public static FrontierWorldState reduceBakeryWorkChanged(FrontierWorldState state, SubjectId subject, BakeryWorkChanged changed) {
-        return BakeryProcess.workChanged(state, subject, changed);
+        return StationWorkProcess.workChanged(state, subject, changed);
     }
     public static FrontierWorldState reduceBakeryHotHandRelease(FrontierWorldState state, SubjectId subject, BakeryHotHandRelease released) {
-        return BakeryProcess.releaseHotHand(state, subject, released);
+        return StationWorkProcess.releaseHotHand(state, subject, released);
     }
     public static FrontierWorldState reduceBakeryHotHandMaterialized(FrontierWorldState state, SubjectId subject,
                                                                       BakeryHotHandMaterialized observed) {
-        return BakeryProcess.materializeHotHand(state, subject, observed);
+        return StationWorkProcess.materializeHotHand(state, subject, observed);
     }
     public static FrontierWorldState reduceBakeryInputReallocated(FrontierWorldState state, SubjectId subject,
                                                                    BakeryInputReallocated reallocated) {
-        return BakeryProcess.reduceInputReallocated(state, subject, reallocated);
+        return StationWorkProcess.reduceInputReallocated(state, subject, reallocated);
     }
 
     public static FrontierWorldState reduceCompleted(FrontierWorldState state, SubjectId subject, ProductionCompleted completed) {
@@ -668,7 +614,7 @@ public final class ProductionProcess {
                     break;
                 }
                 if (!blocked.workId().equals(workshop.id()) || state.structureConditions().get(workshop.id()) != StructureCondition.INTACT
-                        || FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentWorkKind.BAKING, HumanCapability.INDUSTRY).isPresent()) {
+                        || FrontierWorldStateSupport.availableWorkResident(state, settlement.id(), ResidentWorkKind.PRODUCTION, HumanCapability.INDUSTRY).isPresent()) {
                     throw new IllegalArgumentException("production worker block precondition does not hold");
                 }
             }
@@ -701,7 +647,7 @@ public final class ProductionProcess {
         }
         ProductionJob job = state.productionJobs().get(blocked.workId());
         if (job == null || state.companies().market().acceptedForJob(job.id()).isPresent() || hasOpenWorkScene(state, job.id())) return state;
-        if (job.bakeryWork().isPresent()) return state;
+        if (job.stationWork().isPresent()) return state;
         return state.cancelProductionJob(job.id());
     }
 
@@ -712,7 +658,7 @@ public final class ProductionProcess {
                 || !FrontierSceneBehaviors.productionWork(lease).jobId().equals(finalized.jobId()) || job == null || !subject.equals(job.settlementId())) {
             throw new IllegalArgumentException("production scene finalization lacks its closed exact job scene");
         }
-        if (job.bakeryWork().isPresent()) {
+        if (job.stationWork().isPresent()) {
             // Releasing a failed scene does not retire actor/station cargo. The blocked job
             // remains its exact custodian until a later explicit recovery/compensation flow.
             task(state, job.taskId(), StrategicTaskStatus.BLOCKED);
@@ -740,12 +686,12 @@ public final class ProductionProcess {
                 reservationReleased.companies().market().cancel(order.orElseThrow().id(), MarketWorkOrderStatus.CANCELLED)));
     }
 
-    private static List<ProposedEvent> blocked(StrategicTask task, Settlement settlement, SettlementStructure workshop, SubjectId work, ProductionDiagnosticProducer producer) {
+    static List<ProposedEvent> blocked(StrategicTask task, Settlement settlement, SettlementStructure workshop, SubjectId work, ProductionDiagnosticProducer producer) {
         return List.of(new ProposedEvent(settlement.id(), producer.create(settlement.id(), workshop.id(), work, task.id())), transition(task, StrategicTaskStatus.BLOCKED));
     }
     static List<ProposedEvent> failActiveJob(FrontierWorldState state, StrategicTask task, Settlement settlement, SettlementStructure workshop,
                                                       ProductionJob job, ProductionDiagnosticProducer producer) {
-        if (job.bakeryWork().isPresent())
+        if (job.stationWork().isPresent())
             return blocked(task, settlement, workshop, job.id(), producer);
         Optional<MarketWorkOrder> order = state.companies().market().acceptedForJob(job.id());
         if (order.isEmpty() || hasOpenWorkScene(state, job.id())) return blocked(task, settlement, workshop, job.id(), producer);
@@ -767,22 +713,22 @@ public final class ProductionProcess {
     static FrontierWorldState observeMaterializedInputDeparture(FrontierWorldState state, SubjectId itemId,
                                                                  InventoryCustody source, ExactInventory inventory) {
         ProductionJob job = state.productionJobs().values().stream()
-                .filter(value -> value.consumedItemId().equals(itemId) && value.bakeryWork().isPresent()
+                .filter(value -> value.consumedItemId().equals(itemId) && value.stationWork().isPresent()
                         && value.inputHold() instanceof ProductionInputHold.Materialized
-                        && value.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DEPOT_PICKUP)
+                        && value.stationWork().orElseThrow().phase() == StationWorkState.Phase.DEPOT_PICKUP)
                 .findFirst().orElse(null);
         if (job == null) return state.withInventory(inventory);
         SubjectId depot = FrontierWorldState.depotId(job.settlementId());
         ExactItemStack current = inventory.items().get(itemId);
         if (current != null && current.custody() instanceof InventoryCustody.ContainerSlot slot
                 && slot.containerId().equals(depot)) return state.withInventory(inventory);
-        BakeryWorkBlock.Reason reason = job.bakeryWork().orElseThrow().pendingPhysicalStep().isPresent()
+        BakeryWorkBlock.Reason reason = job.stationWork().orElseThrow().pendingPhysicalStep().isPresent()
                 ? BakeryWorkBlock.Reason.AMBIGUOUS_EFFECT : BakeryWorkBlock.Reason.SOURCE_CHANGED;
         BakeryWorkBlock block = new BakeryWorkBlock(reason, depot,
                 source instanceof InventoryCustody.ContainerSlot slot ? slot.slot() : -1,
                 "minecraft:wheat", current == null ? 0 : current.count());
         var jobs = new java.util.LinkedHashMap<>(state.productionJobs());
-        jobs.put(job.id(), job.withBakeryWork(job.bakeryWork().orElseThrow().withBlock(java.util.Optional.of(block))));
+        jobs.put(job.id(), job.withStationWork(job.stationWork().orElseThrow().withBlock(java.util.Optional.of(block))));
         return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).productionJobs(jobs));
     }
 
@@ -797,8 +743,8 @@ public final class ProductionProcess {
         }
         // Bakery owns a retained order and replaces an uncollected depot input. The
         // physical observation atomically records its local source block in the reducer.
-        if (job.bakeryWork().isPresent()
-                && job.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DEPOT_PICKUP)
+        if (job.stationWork().isPresent()
+                && job.stationWork().orElseThrow().phase() == StationWorkState.Phase.DEPOT_PICKUP)
             return List.of(observation);
         MarketWorkOrder order = state.companies().market().acceptedForJob(job.id()).orElseThrow(() ->
                 new IllegalArgumentException("a materialized production input without an effect must retain its accepted market order"));
@@ -848,7 +794,7 @@ public final class ProductionProcess {
             if (state.physicalIntents().values().stream().anyMatch(intent -> intent.causeSubjectId().equals(job.id()))) continue;
             Settlement settlement = settlement(state, job.settlementId());
             StrategicTask task = state.strategicPlans().tasks().get(job.taskId());
-            if (task == null || task.kind() != StrategicTaskKind.PRODUCE_BREAD || !task.ownerId().equals(job.settlementId())) {
+            if (task == null || task.kind() != StrategicTaskKind.PRODUCE_AT_STATION || !task.ownerId().equals(job.settlementId())) {
                 throw new IllegalArgumentException("production facility loss has no exact job task");
             }
             if (task.status() != StrategicTaskStatus.ACTIVE) continue;
@@ -868,7 +814,7 @@ public final class ProductionProcess {
                 }
                 continue;
             }
-            if (job.bakeryWork().isPresent())
+            if (job.stationWork().isPresent())
                 continue; // A bakery allocation remains owned by its accepted job even before pickup.
             state.companies().market().acceptedForJob(job.id()).ifPresent(order -> events.add(new ProposedEvent(settlement.id(),
                     new MarketWorkOrderCancelled(order.id(), job.id(), ProductionBlockReason.FACILITY_UNAVAILABLE))));
@@ -889,7 +835,7 @@ public final class ProductionProcess {
     }
     private static StrategicTask task(FrontierWorldState state, SubjectId id, StrategicTaskStatus status) {
         StrategicTask task = state.strategicPlans().tasks().get(id);
-        if (task == null || task.kind() != StrategicTaskKind.PRODUCE_BREAD || task.status() != status) throw new IllegalStateException("production schedule has no matching strategic task");
+        if (task == null || task.kind() != StrategicTaskKind.PRODUCE_AT_STATION || task.status() != status) throw new IllegalStateException("production schedule has no matching strategic task");
         return task;
     }
     static StrategicTask activeTask(FrontierWorldState state, ProductionJob job) {
@@ -944,7 +890,7 @@ public final class ProductionProcess {
         return hold instanceof ProductionInputHold.Cold || hold instanceof ProductionInputHold.FungibleCold;
     }
     public static SubjectId jobId(StrategicTask task) {
-        if (task.kind() != StrategicTaskKind.PRODUCE_BREAD) {
+        if (task.kind() != StrategicTaskKind.PRODUCE_AT_STATION) {
             throw new IllegalArgumentException("production job identity requires a bread task");
         }
         // Review ordinals are local to schedule families. A stock wake can reuse
@@ -985,8 +931,8 @@ public final class ProductionProcess {
      * identity for the same job.
      */
     public static ScheduledAction complete(ProductionJob job, long due) { return ProductionContinuation.at(job, due); }
-    private static ProposedEvent transition(StrategicTask task, StrategicTaskStatus status) { return new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), status)); }
-    private static ProposedEvent schedule(ScheduledAction action) { return new ProposedEvent(action.subject(), new ScheduleEffect.Created(action)); }
+    static ProposedEvent transition(StrategicTask task, StrategicTaskStatus status) { return new ProposedEvent(task.ownerId(), new StrategicTaskTransition(task.id(), status)); }
+    static ProposedEvent schedule(ScheduledAction action) { return new ProposedEvent(action.subject(), new ScheduleEffect.Created(action)); }
     static ProposedEvent reschedule(ScheduledAction current, ScheduledAction replacement) {
         if (!current.id().equals(replacement.id())) throw new IllegalArgumentException("production completion reschedule must retain its stable identity");
         return new ProposedEvent(current.subject(), new ScheduleEffect.Rescheduled(current.id(), replacement));

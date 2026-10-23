@@ -14,7 +14,7 @@ public final class BakerySceneReconciliation {
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, BakeryStationSceneReconciled receipt) {
         var job = state.productionJobs().get(receipt.jobId());
         var lease = state.sceneLeases().get(receipt.leaseId());
-        if (job == null || !subject.equals(job.settlementId()) || job.bakeryWork().isEmpty()
+        if (job == null || !subject.equals(job.settlementId()) || job.stationWork().isEmpty()
                 || job.inputHold() instanceof ProductionInputHold.Materialized
                 || lease == null || lease.status() != SceneLeaseStatus.CONFLICT
                 || lease.revision() != receipt.leaseRevision() || lease.members().size() != 1
@@ -23,16 +23,16 @@ public final class BakerySceneReconciliation {
                 || !lease.members().getFirst().actorId().equals(job.workerId())
                 || !lease.members().getFirst().entityId().equals(receipt.entityId()))
             throw new IllegalArgumentException("station recovery lacks its exact conflicted owner/body");
-        var work = job.bakeryWork().orElseThrow();
+        var work = job.stationWork().orElseThrow();
         var actor = state.actorLocations().get(job.workerId());
         var ledger = state.inventory().fungibleResources();
         var station = state.inventory().containers().values().stream()
                 .flatMap(container -> container.productionStation().stream())
                 .filter(candidate -> candidate.id().equals(work.stationId())).findFirst().orElseThrow(
                         () -> new IllegalArgumentException("station recovery lost its production station"));
-        boolean atSource = work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP;
+        boolean atSource = work.phase() == StationWorkState.Phase.DEPOT_PICKUP;
         var batch = ledger.accounts().get(atSource ? work.sourceAccountId() : work.stationAccountId());
-        String kind = BakeryCargo.kind(job);
+        String kind = StationWorkCargo.kind(job);
         if (work.phase() != receipt.phase() || work.pendingPhysicalStep().isPresent()
                 || ContainerPhysicalAuthorityComposition.pending(state, atSource ? work.sourceContainerId() : station.containerId())
                 || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
@@ -42,7 +42,7 @@ public final class BakerySceneReconciliation {
                 || FrontierSceneLeaseStateSupport.hasBoundSceneHand(state, lease)
                 || batch == null || !batch.custody().equals(new ResourceCustody.Container(atSource ? work.sourceContainerId() : station.containerId()))
                 || !atSource && batch.lotQuantities().entrySet().stream().filter(entry -> ledger.lots().get(entry.getKey()).itemKind().equals(kind))
-                    .mapToInt(java.util.Map.Entry::getValue).sum() != BakeryCargo.quantity(job))
+                    .mapToInt(java.util.Map.Entry::getValue).sum() != StationWorkCargo.quantity(job))
             throw new IllegalArgumentException("station recovery cannot abandon cargo or a pending physical effect");
         if (atSource) {
             var claimId = switch (job.inputHold()) {
@@ -71,7 +71,7 @@ public final class BakerySceneReconciliation {
     public static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, BakerySceneReconciled receipt) {
         var job = state.productionJobs().get(receipt.jobId());
         var lease = state.sceneLeases().get(receipt.leaseId());
-        if (job == null || !subject.equals(job.settlementId()) || job.bakeryWork().isEmpty()
+        if (job == null || !subject.equals(job.settlementId()) || job.stationWork().isEmpty()
                 || job.inputHold() instanceof ProductionInputHold.Materialized
                 || lease == null || lease.status() != SceneLeaseStatus.CONFLICT
                 || lease.revision() != receipt.leaseRevision() || lease.members().size() != 1
@@ -79,20 +79,20 @@ public final class BakerySceneReconciliation {
                 || !FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id())
                 || !lease.members().getFirst().actorId().equals(job.workerId()))
             throw new IllegalArgumentException("bakery recovery lacks its exact conflicted owner");
-        var work = job.bakeryWork().orElseThrow();
+        var work = job.stationWork().orElseThrow();
         var hand = (PhysicalStackAddress.ActorHand) receipt.observedHand().address();
         var actor = state.actorLocations().get(job.workerId());
         var account = state.inventory().fungibleResources().accounts().get(work.actorAccountId());
         var bindings = state.inventory().fungibleResources().bindings().values().stream()
                 .filter(value -> value.accountId().equals(work.actorAccountId())).toList();
-        String kind = BakeryCargo.kind(job);
+        String kind = StationWorkCargo.kind(job);
         if (work.pendingPhysicalStep().isPresent()
-                || work.phase() != BakeryWorkState.Phase.STATION_LOAD && work.phase() != BakeryWorkState.Phase.DEPOT_DELIVERY
+                || work.phase() != StationWorkState.Phase.STATION_LOAD && work.phase() != StationWorkState.Phase.DEPOT_DELIVERY
                 || actor == null || actor.condition().status() != ActorLifeStatus.ALIVE
                 || state.actorMovements().containsKey(job.workerId())
                 || !ActorExecutionCoordinator.ambientAvailable(state, java.util.List.of(job.workerId()))
                 || !hand.actorId().equals(job.workerId()) || !hand.entityId().equals(lease.members().getFirst().entityId())
-                || !kind.equals(receipt.observedHand().itemKind()) || receipt.observedHand().quantity() != BakeryCargo.quantity(job)
+                || !kind.equals(receipt.observedHand().itemKind()) || receipt.observedHand().quantity() != StationWorkCargo.quantity(job)
                 || account == null || !account.custody().equals(new ResourceCustody.Actor(job.workerId()))
                 || bindings.size() > 1
                 || !bindings.isEmpty() && (!bindings.getFirst().address().equals(hand)
@@ -120,7 +120,7 @@ public final class BakerySceneReconciliation {
         // A body can be admitted before its positive cargo projection is bound.
         // Reuse the ordinary issuer atomically; never replace an existing binding
         // or grant work permission while leaving the carried stock unaccounted.
-        return bindings.isEmpty() ? BakeryProcess.materializeHotHand(restored, subject,
+        return bindings.isEmpty() ? StationWorkProcess.materializeHotHand(restored, subject,
                 new BakeryHotHandMaterialized(job.id(), lease.id(), work.actorAccountId(),
                         Math.max(1L, lease.revision()), receipt.observedHand())) : restored;
     }

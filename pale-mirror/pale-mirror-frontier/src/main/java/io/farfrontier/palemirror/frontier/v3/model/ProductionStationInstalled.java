@@ -8,7 +8,8 @@ public record ProductionStationInstalled(ContainerRecord container, BlockPositio
     public static final String TYPE = "frontier.production_station_installed";
     public ProductionStationInstalled {
         Objects.requireNonNull(container); Objects.requireNonNull(position); contents = List.copyOf(contents);
-        if (container.productionStation().isEmpty() || container.purpose() != ContainerPurpose.PRODUCTION_STATION || container.slotCount() != 3)
+        if (container.productionStation().isEmpty() || container.purpose() != ContainerPurpose.PRODUCTION_STATION
+                || container.slotCount() != container.productionStation().orElseThrow().inventorySize())
             throw new IllegalArgumentException("machine installation lacks its complete instance declaration");
     }
     @Override public String type() { return TYPE; }

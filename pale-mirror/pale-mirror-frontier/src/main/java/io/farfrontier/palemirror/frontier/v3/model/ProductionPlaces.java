@@ -7,7 +7,8 @@ import java.util.Set;
 final class ProductionPlaces {
     private static final Map<ProductionStationSpec.Capability, Set<StructureKind>> PLACES = Map.of(
             ProductionStationSpec.Capability.BAKING, Set.of(StructureKind.WORKSHOP),
-            ProductionStationSpec.Capability.SMELTING, Set.of(StructureKind.SMELTERY));
+            ProductionStationSpec.Capability.SMELTING, Set.of(StructureKind.SMELTERY),
+            ProductionStationSpec.Capability.FABRICATION, Set.of(StructureKind.FORGE));
     static void require(ProductionStationSpec.Capability capability, SettlementStructure facility) {
         var allowed = PLACES.get(capability);
         if (allowed == null || !allowed.contains(facility.kind()))

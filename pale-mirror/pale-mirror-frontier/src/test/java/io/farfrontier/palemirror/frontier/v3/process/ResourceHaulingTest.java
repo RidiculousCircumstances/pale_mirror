@@ -115,7 +115,7 @@ class ResourceHaulingTest {
                 new ResourceSourceEndpoint.Ground(source.settlementId(), source.custody(), source.station(), source.epoch() + 1),
                 depot.storage().orElseThrow().endpoint(), lot.itemKind(), 8, 1201), "stale source epochs must fail before a new claim/mission");
         assertEquals(8L, ContainerInboundCapacity.incoming(List.of(new ContainerInboundCapacity.Demand(offer.shipment().id(),
-                depot.id(), lot.itemKind(), 8)), depot.id(), Optional.empty()).get(lot.itemKind()));
+                depot.id(), lot.itemKind(), 8)), depot.id(), Optional.empty()).quantities().get(lot.itemKind()));
         assertTrue(ContainerInboundCapacity.incoming(List.of(new ContainerInboundCapacity.Demand(offer.shipment().id(),
                 depot.id(), lot.itemKind(), 8)), depot.id(), Optional.of(offer.shipment().id())).isEmpty());
         var loss = new GroundResourceDestroyed(account.id(), (ResourceCustody.Ground) account.custody(), 1, home.id(),

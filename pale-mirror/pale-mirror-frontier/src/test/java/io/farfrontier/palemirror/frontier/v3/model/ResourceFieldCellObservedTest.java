@@ -79,7 +79,7 @@ class ResourceFieldCellObservedTest {
         var goal = ResourceSiteHarvestGoal.current(hot.state(), job);
         var state = hot.state();
         if (!ResourceSiteHarvestGoal.actorAtWorkCell(state, job))
-            state = ResourceSiteHarvestProcessTest.inspectGoal(state, hot.site(), job, hot.lease().id());
+            state = HarvestObservationFixture.inspectGoal(state, hot.site(), job, hot.lease().id());
         state = ResourceSiteHarvestProcessTest.completeLabourHot(state, hot.site(), hot.lease().id());
         state = ResourceSiteHarvestProcess.reduceCropPrepared(state, hot.site(),
                 new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex(), job.target().generation()));
@@ -166,7 +166,7 @@ class ResourceFieldCellObservedTest {
         ResourceSiteHarvestJob job = hot.job();
         ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
         if (!ResourceSiteHarvestGoal.actorAtWorkCell(state, job))
-            state = ResourceSiteHarvestProcessTest.inspectGoal(state, site, job, hot.lease().id());
+            state = HarvestObservationFixture.inspectGoal(state, site, job, hot.lease().id());
         state = ResourceSiteHarvestProcessTest.completeLabourHot(state, site, hot.lease().id());
         state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site,
                 new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex(), job.target().generation()));

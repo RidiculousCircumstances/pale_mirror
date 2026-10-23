@@ -114,7 +114,7 @@ class ExpeditionSupplyFlowTest {
                     })) {
                         assertSame(mission.supplies().orElseThrow().journey(),
                                 io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionJourneyProof.select(state, mission));
-                        assertTrue(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(state, mission, engine.checkpoint().instant().ticks()));
+                        assertTrue(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(state, mission, engine.executionView().instant().ticks()));
                     }
                     var acceptedPath = mission.supplies().orElseThrow().journey().outward().surfaces();
                     var changed = state.recordPhysicalDelta(new PhysicalDelta(acceptedPath.get(acceptedPath.size() / 2).support(),
@@ -133,8 +133,8 @@ class ExpeditionSupplyFlowTest {
                 }
             }
             var current = engine.canonicalState().state();
-            var due = engine.checkpoint().schedules().stream().filter(a -> !FrontierWorldRuntimeDefinition.scheduledHeld(current, a)).sorted().findFirst().orElseThrow();
-            var result = engine.advanceTo(new SimInstant(Math.max(engine.checkpoint().instant().ticks(), due.dueAt().ticks())), new WorkBudget(1, 1024));
+            var due = engine.executionView().schedules().stream().filter(a -> !FrontierWorldRuntimeDefinition.scheduledHeld(current, a)).sorted().findFirst().orElseThrow();
+            var result = engine.advanceTo(new SimInstant(Math.max(engine.executionView().instant().ticks(), due.dueAt().ticks())), new WorkBudget(1, 1024));
             assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
         }
         assertNotNull(missionId); assertTrue(recovered); assertTrue(departed);
@@ -142,8 +142,8 @@ class ExpeditionSupplyFlowTest {
         // Stock is moved, not minted; its commercial neighbour remains allocated and must not be eaten.
         var travelling = engine.canonicalState().state(); var mission = travelling.shipments().missions().get(missionId);
         var group = travelling.unitGroups().groups().get(mission.groupId()); var asset = travelling.transportFleet().require(mission.transportAssetId().orElseThrow());
-        verifyHumanLossForecast(travelling, mission, engine.checkpoint().instant().ticks());
-        verifyAttachedCargoDeath(travelling, mission, engine.checkpoint().instant().ticks());
+        verifyHumanLossForecast(travelling, mission, engine.executionView().instant().ticks());
+        verifyAttachedCargoDeath(travelling, mission, engine.executionView().instant().ticks());
         var formationState = travelling;
         if (group.journey().isEmpty()) {
             var start = io.farfrontier.palemirror.frontier.v3.process.UnitGroupProcess.start(travelling, group, 1).orElseThrow();
@@ -157,7 +157,7 @@ class ExpeditionSupplyFlowTest {
         for (var member : formed.members()) positions.put(member.actorId(), positions.get(member.actorId()).withBody(
                 route.get(member.actorId().equals(fast) ? 25 : 0).standingBody()));
         var lagging = formationState.withChanges(FrontierWorldStateUpdate.begin().actorLocations(positions));
-        long travelTick = engine.checkpoint().instant().ticks();
+        long travelTick = engine.executionView().instant().ticks();
         assertFalse(io.farfrontier.palemirror.frontier.v3.model.group.GroupTravelCohesion.permits(lagging, formed, fast, route.get(26), travelTick),
                 "no fast member may leave an obstructed companion behind");
         var slow = formed.members().getLast().actorId();
@@ -214,7 +214,7 @@ class ExpeditionSupplyFlowTest {
                         new ResourceCustody.Container(asset.containerId()), Optional.empty(), FoodCatalog.BREAD, stocked.lotQuantities()),
                 new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(asset.containerId()), travelling.actorLocations().get(donor).supportingSurface(), slot, 0, 1);
         travelling = travelling.withInventory(ActorItemCustody.transferCold(travelling, donation));
-        long refillAt = engine.checkpoint().instant().ticks(); var population = travelling.humanPopulation();
+        long refillAt = engine.executionView().instant().ticks(); var population = travelling.humanPopulation();
         var nutrition = new LinkedHashMap<>(population.nutrition());
         nutrition.put(donor, new ResidentNutrition(ResidentNutritionStatus.HUNGRY, travelling.bootstrap().ruleset().residentLife().eatBelowUnits() - 1, refillAt, 0));
         travelling = travelling.withHumanPopulation(new HumanPopulation(population.households(), population.residents(), population.birthJobs(),
@@ -231,7 +231,7 @@ class ExpeditionSupplyFlowTest {
         assertTrue(provisioned.shipments().missions().get(missionId).replenishment().isEmpty());
         assertEquals(refill.quantity(), UnitInventory.available(provisioned.inventory().fungibleResources(), donor, mission.sender().settlementId(), FoodCatalog.BREAD));
         assertTrue(ResidentMealOpportunity.find(provisioned, donor, refillAt).orElseThrow().foodSource() instanceof ResidentFoodSource.Personal);
-        var schedules = new ArrayList<>(engine.checkpoint().schedules());
+        var schedules = new ArrayList<>(engine.executionView().schedules());
         var review = io.farfrontier.palemirror.frontier.v3.process.ResidentActivityProcess.review(donor, refillAt + 1);
         schedules.removeIf(a -> a.id().equals(review.id()) || a.subject().equals(donor)
                 && a.kind().equals(io.farfrontier.palemirror.frontier.v3.process.ResidentNeedProcess.REVIEW));
@@ -384,8 +384,8 @@ class ExpeditionSupplyFlowTest {
         var engine = FrontierEngines.createCanonicalStateAccess(config);
         for (int boundary = 0; boundary < 256 && engine.canonicalState().state().shipments().missions().isEmpty(); boundary++) {
             var current = engine.canonicalState().state();
-            var due = engine.checkpoint().schedules().stream().filter(a -> !FrontierWorldRuntimeDefinition.scheduledHeld(current, a)).sorted().findFirst().orElseThrow();
-            var result = engine.advanceTo(new SimInstant(Math.max(engine.checkpoint().instant().ticks(), due.dueAt().ticks())), new WorkBudget(1, 1024));
+            var due = engine.executionView().schedules().stream().filter(a -> !FrontierWorldRuntimeDefinition.scheduledHeld(current, a)).sorted().findFirst().orElseThrow();
+            var result = engine.advanceTo(new SimInstant(Math.max(engine.executionView().instant().ticks(), due.dueAt().ticks())), new WorkBudget(1, 1024));
             assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
         }
         var state = engine.canonicalState().state();
@@ -407,14 +407,14 @@ class ExpeditionSupplyFlowTest {
                 (geometry, from, to) -> { throw new AssertionError("materially impossible trip requested a route"); })) {
             assertTrue(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyPlanning.walkingLoad(
                     state, proposal, state.unitGroups().groups().get(mission.groupId()),
-                    engine.checkpoint().instant().ticks() + 96_000, 1, withoutFood).isEmpty());
+                    engine.executionView().instant().ticks() + 96_000, 1, withoutFood).isEmpty());
         }
         var quantities = new TreeMap<String, Integer>();
         resources.accounts().get(allocation.sourceAccountId()).lotQuantities().forEach((lot, q) -> quantities.merge(resources.lots().get(lot).itemKind(), q, Integer::sum));
         var layout = new ArrayList<FungiblePhysicalObservation.Stack>(); int slot = 0;
         for (var entry : quantities.entrySet()) for (int q = entry.getValue(); q > 0; q -= Math.min(64, q))
             layout.add(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                    new InventoryCustody.ContainerSlot(mission.sender().containerId(), slot++)), entry.getKey(), Math.min(64, q)));
+                    new InventoryCustody.ContainerSlot(mission.sender().containerId(), state.inventory().availableSlots(mission.sender().containerId()).get(slot++))), entry.getKey(), Math.min(64, q)));
         var bound = resources.rebind(allocation.sourceAccountId(), 7, FungiblePhysicalObservation.bind(resources, allocation.sourceAccountId(), 7, layout));
         state = state.withInventory(state.inventory().withFungibleResources(bound));
         var binding = bound.bindings().values().stream().filter(b -> b.accountId().equals(allocation.sourceAccountId())
@@ -450,7 +450,7 @@ class ExpeditionSupplyFlowTest {
         // The removed source lot also held merchandise: no cargo survives to justify departure.
         assertTrue(mission.shipmentIds().stream().map(after.shipments().shipments()::get).allMatch(Shipment::terminal));
         var returning = io.farfrontier.palemirror.frontier.v3.process.TransportMissionProcess.advance(after, mission.id(),
-                new TransportMissionAdvanced(mission.id(), mission.revision(), TransportMission.Stage.RETURNING), engine.checkpoint().instant().ticks());
+                new TransportMissionAdvanced(mission.id(), mission.revision(), TransportMission.Stage.RETURNING), engine.executionView().instant().ticks());
         assertEquals(beforeBread, bread(returning));
         assertTrue(returning.shipments().missions().get(mission.id()).supplies().isEmpty());
         assertTrue(mission.financialBudgetId().isEmpty(), "fully provisioned departure does not immobilize speculative cash");
@@ -477,7 +477,7 @@ class ExpeditionSupplyFlowTest {
             }
             if (missionId != null) {
                 var mission = state.shipments().missions().get(missionId); var supplies = mission.supplies().orElseThrow();
-                if (!recovered && supplies.allocations().stream().anyMatch(a -> a.loaded()) && !supplies.complete()) {
+                if (!recovered && supplies.allocations().stream().anyMatch(a -> a.loaded())) {
                     var checkpoint = engine.checkpoint(); var codec = new FrontierWorldStateCodec();
                     assertEquals(state, codec.decode(codec.encode(state)));
                     engine = FrontierEngines.recoverCanonicalStateAccess(config,
@@ -487,9 +487,9 @@ class ExpeditionSupplyFlowTest {
                 }
                 if (mission.stage() == TransportMission.Stage.OUTBOUND) {
                     assertTrue(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(
-                            state, mission, engine.checkpoint().instant().ticks()));
+                            state, mission, engine.executionView().instant().ticks()));
                     assertFalse(io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionSupplyAuthority.loadedForDeparture(
-                            state, mission, engine.checkpoint().instant().ticks() + 100_000L),
+                            state, mission, engine.executionView().instant().ticks() + 100_000L),
                             "a completed old load receipt is not a fresh nutrition/route forecast");
                     assertTrue(supplies.complete());
                     assertTrue(declaredClaims.stream().noneMatch(state.inventory().fungibleResources().claims()::containsKey));
@@ -501,9 +501,9 @@ class ExpeditionSupplyFlowTest {
                 }
             }
             var current = engine.canonicalState().state();
-            var due = engine.checkpoint().schedules().stream().filter(a -> !FrontierWorldRuntimeDefinition.scheduledHeld(current, a))
+            var due = engine.executionView().schedules().stream().filter(a -> !FrontierWorldRuntimeDefinition.scheduledHeld(current, a))
                     .sorted().findFirst().orElseThrow();
-            var result = engine.advanceTo(new SimInstant(Math.max(engine.checkpoint().instant().ticks(), due.dueAt().ticks())), new WorkBudget(1, 1024));
+            var result = engine.advanceTo(new SimInstant(Math.max(engine.executionView().instant().ticks(), due.dueAt().ticks())), new WorkBudget(1, 1024));
             assertEquals(EngineStatus.Kind.ACTIVE, result.status().kind(), result.status().failureDetail().orElse("active"));
         }
         assertNotNull(missionId, "accepted contract must dispatch its feasible provisioned group");

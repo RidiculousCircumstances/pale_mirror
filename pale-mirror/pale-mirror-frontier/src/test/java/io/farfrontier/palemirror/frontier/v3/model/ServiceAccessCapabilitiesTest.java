@@ -20,7 +20,7 @@ class ServiceAccessCapabilitiesTest {
         state = io.farfrontier.palemirror.frontier.v3.process.StrategicObjectiveProcess.reduceTaskTransition(state,
                 task.ownerId(), new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
         state = io.farfrontier.palemirror.frontier.v3.process.ProductionProcess.reduceStarted(state, task.ownerId(), started);
-        var job = started.job(); var pointId = BakeryStorage.source(job);
+        var job = started.job(); var pointId = StationWorkStorage.source(job);
         var point = ServiceBoundaryComposition.geometry(state, ServiceBoundaryComposition.declaration(state, pointId).identity());
         var exit = point.egressSurfaces().stream().sorted(java.util.Comparator.comparingInt(SurfaceAnchor::x)
                 .thenComparingInt(SurfaceAnchor::z)).findFirst().orElseThrow();

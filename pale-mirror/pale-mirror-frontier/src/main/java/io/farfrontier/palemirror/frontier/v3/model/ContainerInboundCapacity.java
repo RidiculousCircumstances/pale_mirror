@@ -8,17 +8,23 @@ public final class ContainerInboundCapacity {
     private ContainerInboundCapacity() { }
     private record Key(SubjectId owner, SubjectId container, String kind) { }
 
-    public record Demand(SubjectId owner, SubjectId container, String itemKind, int quantity) {
+    public enum Representation { FUNGIBLE, INDIVIDUAL }
+    public record Demand(SubjectId owner, SubjectId container, String itemKind, int quantity, Representation representation) {
         public Demand {
             Objects.requireNonNull(owner); Objects.requireNonNull(container); Objects.requireNonNull(itemKind);
+            Objects.requireNonNull(representation);
             if (itemKind.isBlank() || quantity <= 0) throw new IllegalArgumentException("invalid inbound storage demand");
+        }
+        public Demand(SubjectId owner, SubjectId container, String itemKind, int quantity) {
+            this(owner, container, itemKind, quantity, Representation.FUNGIBLE);
         }
     }
 
-    public static Map<String, Long> incoming(List<Demand> demands, SubjectId container,
+    public static ContainerIncomingStock incoming(List<Demand> demands, SubjectId container,
                                              Optional<SubjectId> completingOwner) {
         Objects.requireNonNull(container); Objects.requireNonNull(completingOwner);
         var totals = new HashMap<String, Long>();
+        var individual = new HashMap<String, Long>();
         var seen = new HashSet<Key>();
         boolean completionDeclared = completingOwner.isEmpty();
         for (Demand demand : demands) {
@@ -26,9 +32,10 @@ public final class ContainerInboundCapacity {
                 throw new IllegalArgumentException("duplicate inbound storage demand");
             if (!demand.container().equals(container)) continue;
             if (completingOwner.filter(demand.owner()::equals).isPresent()) completionDeclared = true;
-            else totals.merge(demand.itemKind(), (long) demand.quantity(), Math::addExact);
+            else (demand.representation() == Representation.INDIVIDUAL ? individual : totals)
+                    .merge(demand.itemKind(), (long) demand.quantity(), Math::addExact);
         }
         if (!completionDeclared) throw new IllegalArgumentException("output completion lacks its declared storage demand");
-        return Map.copyOf(totals);
+        return new ContainerIncomingStock(totals, individual);
     }
 }

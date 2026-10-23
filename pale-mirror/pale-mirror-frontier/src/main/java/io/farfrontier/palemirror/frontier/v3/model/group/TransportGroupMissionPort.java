@@ -195,7 +195,7 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
     }
     @Override public void requireBodyRelease(FrontierWorldState state, UnitGroup group, ActorExecutionId execution) {
         for (var parcel : TransportCargoExecution.parcels(state, group, execution))
-            if (parcel.pendingPhysicalStep().isPresent() || state.inventory().fungibleResources().bindings().values().stream()
+            if (parcel.pendingPhysicalStep().isPresent() || parcel.cargo() instanceof ShipmentCargo.Fungible && state.inventory().fungibleResources().bindings().values().stream()
                     .anyMatch(binding -> binding.accountId().equals(parcel.carriedAccountId())))
                 throw new IllegalArgumentException("transport body release retains a bound cargo/effect");
     }
@@ -212,7 +212,7 @@ public final class TransportGroupMissionPort implements UnitGroupMissionPort {
                 .filter(s -> TransportCargoExecution.shared(s) && s.execution().actorId().equals(member.actorId())
                         && s.mobileContainerId().isEmpty() && !s.terminal() && s.carrying()).toList();
         if (carried.size() > 1) throw new IllegalArgumentException("resident manifest exceeds one work hand");
-        return carried.isEmpty() ? Optional.empty() : Optional.of(new ActorCarriedResources.Presentation(member.actorId(),
+        return carried.isEmpty() || carried.getFirst().cargo() instanceof ShipmentCargo.Individual ? Optional.empty() : Optional.of(new ActorCarriedResources.Presentation(member.actorId(),
                 carried.getFirst().carriedAccountId(), new ActorItemSlot.Hand(ActorContainerItemOrder.Hand.MAIN)));
     }
 }

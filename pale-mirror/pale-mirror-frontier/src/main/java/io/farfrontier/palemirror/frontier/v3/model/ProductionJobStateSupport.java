@@ -104,12 +104,12 @@ final class ProductionJobStateSupport {
         if (hold instanceof ProductionInputHold.FungibleCold cold) {
             ProductionResourceCustody.requireNewHold(state, job, cold.accountId(), cold.claimId());
             claim = new ClaimAllocation(cold.claimId(), job.id(), job.rights().resourceOwner().id(),
-                    job.bakeryWork().map(BakeryWorkState::inputItemKind).orElse("minecraft:wheat"), job.inputCount(), cold.inputLots(), ClaimPurpose.PRODUCTION_WORK);
+                    job.stationWork().map(StationWorkState::inputItemKind).orElse("minecraft:wheat"), job.inputCount(), cold.inputLots(), ClaimPurpose.PRODUCTION_WORK);
             reserved = resources.reserve(claim, cold.accountId());
         } else if (hold instanceof ProductionInputHold.FungibleBound bound) {
             ProductionResourceCustody.requireNewHold(state, job, bound.accountId(), bound.claimId());
             claim = new ClaimAllocation(bound.claimId(), job.id(), job.rights().resourceOwner().id(),
-                    job.bakeryWork().map(BakeryWorkState::inputItemKind).orElse("minecraft:wheat"), job.inputCount(), bound.inputLots(), ClaimPurpose.PRODUCTION_WORK);
+                    job.stationWork().map(StationWorkState::inputItemKind).orElse("minecraft:wheat"), job.inputCount(), bound.inputLots(), ClaimPurpose.PRODUCTION_WORK);
             reserved = resources.reserveBound(claim, bound.accountId(), bound.authorityEpoch());
         } else {
             throw new IllegalArgumentException("fungible production job has no fungible input hold");
@@ -129,8 +129,8 @@ final class ProductionJobStateSupport {
         // actor/station custody (and a completed batch would lose its payment receipt).
         // Keep the job as the durable owner until delivery or an explicit compensation
         // transition moves the batch back to a safe owner.
-        if (job.bakeryWork().isPresent()
-                && job.bakeryWork().orElseThrow().phase() != BakeryWorkState.Phase.DEPOT_PICKUP)
+        if (job.stationWork().isPresent()
+                && job.stationWork().orElseThrow().phase() != StationWorkState.Phase.DEPOT_PICKUP)
             throw new IllegalArgumentException("bakery job with in-flight cargo cannot be cancelled");
         ExactInventory nextInventory = switch (job.inputHold()) {
             case ProductionInputHold.Cold cold -> restoreExactColdInput(state.inventory(), cold);

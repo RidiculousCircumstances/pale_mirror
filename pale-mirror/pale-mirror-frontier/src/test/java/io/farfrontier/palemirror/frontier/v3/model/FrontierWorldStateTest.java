@@ -48,11 +48,13 @@ class FrontierWorldStateTest {
 
         assertEquals(state.bootstrap().residentCount() + state.bootstrap().bioformCount()
                 + state.transportFleet().assets().size(), state.actorLocations().size());
-        assertEquals(12 * StructureKind.values().length, state.structureConditions().size());
+        assertEquals(state.bootstrap().settlements().stream().mapToInt(town -> town.structures().size()).sum(), state.structureConditions().size());
         assertEquals(27 + state.transportFleet().assets().size(), state.inventory().containers().size(),
                 "depots, bakery stations, hive stores, maintenance storage and exact mobile fleet containers");
         assertEquals(FrontierRouteNetwork.OWNER, state.inventory().containers().get(FrontierRouteNetwork.MAINTENANCE_CONTAINER).ownerId());
-        assertEquals(state.bootstrap().settlements().size() * EngineeringRecoveryTeam.MAX_MEMBERS, state.inventory().items().size());
+        assertEquals(state.bootstrap().settlements().size() * EngineeringRecoveryTeam.MAX_MEMBERS,
+                state.inventory().items().values().stream().filter(item -> item.itemKind().equals("minecraft:iron_pickaxe")).count());
+        assertTrue(state.inventory().items().values().stream().anyMatch(item -> item.itemKind().equals("minecraft:stone_hoe")));
         assertEquals(state.inventory().containers().keySet(), state.inventory().surfaces().keySet());
         assertTrue(state.productionJobs().isEmpty());
         assertTrue(state.serviceWorks().isEmpty());
@@ -88,7 +90,8 @@ class FrontierWorldStateTest {
         if (cell == null || plan == null) throw new AssertionError("test fixture has no bounded service-work corridor");
         InfectionCell selectedCell = cell;
         SettlementServiceWork work = new SettlementServiceWork(workId, new SubjectId("task:service-work-1"), SettlementServiceWorkKind.DECONTAMINATION, new SubjectId("settlement:1"),
-                medic.id(), facility, new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 1), plan.inputStation(), plan.workStation(),
+                medic.id(), facility, new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"),
+                        baseline.inventory().availableSlots(new SubjectId("container:1-depot")).getFirst()), plan.inputStation(), plan.workStation(),
                 new SubjectId("item:service-reagent"), new SettlementServiceTarget.Infection(selectedCell),
                 new PhysicalIntentId("intent:service-input-issue-1"), new PhysicalIntentId("intent:service-decontamination-1"),
                 plan.inputTraversal(), 0, plan.workTraversal(), 0, SettlementServiceWorkPhase.PREPARED, 0);
@@ -101,7 +104,8 @@ class FrontierWorldStateTest {
                         FixedScalar.whole(0), FixedScalar.whole(selectedCell.originAtY(0).z())),
                 0, PhysicalPostcondition.DECONTAMINATION_OBSERVED, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentLifecycleOwner.SETTLEMENT_SERVICE_DECONTAMINATION);
         ExactInventory inventory = baseline.inventory().store(new ExactItemStack(work.inputItemId(), work.settlementId(), "minecraft:glowstone_dust", 1,
-                        new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"), 1)))
+                        new InventoryCustody.ContainerSlot(new SubjectId("container:1-depot"),
+                        baseline.inventory().availableSlots(new SubjectId("container:1-depot")).getFirst())))
                 .withSurfaceStatus(new SubjectId("container:1-depot"), ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(new SubjectId("container:1-depot"), ContainerSurfaceStatus.ACTIVE);
         var declaration = SettlementServiceExecutionAuthority.admission(baseline, work);
@@ -206,7 +210,7 @@ class FrontierWorldStateTest {
                 new ExactItemStack(item, new SubjectId("settlement:1"), "minecraft:iron_ingot", 64, new InventoryCustody.ContainerSlot(container, 0)),
                 wheat, heldWheat), Map.of(), Map.of(), Map.of(), Map.of(), baseline.inventory().surfaces());
         inventory = inventory.recordConflict(InventoryDiagnosticProducer.PLAYER_EXPECTED_SLOT_MISSING.create(new SubjectId("conflict:codec-item"), item, container, 0));
-        FrontierWorldState taskBaseline = withActiveJobTask(baseline, new SubjectId("task:production-1-1"), StrategicTaskKind.PRODUCE_BREAD);
+        FrontierWorldState taskBaseline = withActiveJobTask(baseline, new SubjectId("task:production-1-1"), StrategicTaskKind.PRODUCE_AT_STATION);
         ProductionJob activeJob = new ProductionJob(new SubjectId("job:production-1-1"), new SubjectId("task:production-1-1"), new SubjectId("settlement:1"),
                 new SubjectId("structure:1-workshop"), new SubjectId("resident:1-3"), wheat, new ProductionInputHold.Cold(heldWheat),
                 new SubjectId("item:production-1-1-bread"), "minecraft:bread", 64);
@@ -475,7 +479,7 @@ class FrontierWorldStateTest {
                 Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(taskId, objectiveId, owner, kind, Optional.empty(),
                 hiveGrowth ? List.of(StrategicTaskRequirement.EXACT_HIVE_BIOMASS)
-                        : List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT),
+                        : List.of(StrategicTaskRequirement.ACTIVE_PRODUCTION_FACILITY, StrategicTaskRequirement.AVAILABLE_PRODUCTION_INPUT),
                 List.of(), StrategicTaskStatus.ACTIVE);
         return state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
     }

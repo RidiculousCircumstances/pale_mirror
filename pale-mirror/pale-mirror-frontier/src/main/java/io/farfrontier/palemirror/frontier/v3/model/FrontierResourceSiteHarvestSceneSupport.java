@@ -15,7 +15,8 @@ public final class FrontierResourceSiteHarvestSceneSupport {
         ResourceSiteHarvestJob job = state.resourceSites().sites().values().stream()
                 .flatMap(site -> site.harvestJobs().values().stream())
                 .filter(value -> value.id().equals(assignment.ownerId().orElseThrow())).findFirst().orElseThrow();
-        return !job.returningForBatch() || ResourceSiteHarvestCargo.deliveryCapacityAvailable(state, job);
+        return !FieldEquipment.waitingForStorage(state, job)
+                && (!job.deliveryDue() || ResourceSiteHarvestCargo.deliveryCapacityAvailable(state, job));
     }
     private FrontierResourceSiteHarvestSceneSupport() { }
     static Set<SubjectId> resumeWakeKeys(FrontierWorldState state, HumanAssignment assignment) {
@@ -23,7 +24,11 @@ public final class FrontierResourceSiteHarvestSceneSupport {
         ResourceSiteHarvestJob job = state.resourceSites().sites().values().stream()
                 .flatMap(site -> site.harvestJobs().values().stream())
                 .filter(value -> value.id().equals(assignment.ownerId().orElseThrow())).findFirst().orElseThrow();
-        return Set.of(job.id(), job.siteId(), job.outputSlot().containerId());
+        var keys = new java.util.HashSet<SubjectId>();
+        keys.add(job.id()); keys.add(job.siteId()); keys.add(job.outputSlot().containerId());
+        keys.add(job.equipment().itemId()); keys.add(job.equipment().source().containerId());
+        job.equipment().returnTarget().ifPresent(target -> keys.add(target.containerId()));
+        return Set.copyOf(keys);
     }
 
     /** Holding cargo does not entitle a capacity-blocked worker to monopolize the depot. */
@@ -32,9 +37,9 @@ public final class FrontierResourceSiteHarvestSceneSupport {
         ResourceSiteHarvestJob job = state.resourceSites().sites().values().stream()
                 .flatMap(site -> site.harvestJobs().values().stream())
                 .filter(value -> value.id().equals(assignment.ownerId().orElseThrow())).findFirst().orElseThrow();
-        return job.returningForBatch() && !ResourceSiteHarvestCargo.deliveryCapacityAvailable(state, job)
-                && ServiceAccessCoordinator.turnoverPoint(state, assignment.residentId())
-                    .filter(current -> current.pointId().equals(job.outputSlot().containerId())).isPresent();
+        return (FieldEquipment.waitingForStorage(state, job)
+                || job.deliveryDue() && !ResourceSiteHarvestCargo.deliveryCapacityAvailable(state, job))
+                && ServiceAccessCoordinator.turnoverPoint(state, assignment.residentId()).isPresent();
     }
 
     /** Field owner proves its own safe stop; generic execution never reads crop stages. */
@@ -90,7 +95,7 @@ public final class FrontierResourceSiteHarvestSceneSupport {
         ResourceSiteLifecycle lifecycle = state.resourceSites().site(job.siteId());
         if (lifecycle.phase() != ResourceSitePhase.HARVESTING
                 || lifecycle.harvestJob(job.id()).filter(job::equals).isEmpty()) return Optional.empty();
-        if (!job.progress().hasPendingPhysicalWork()
+        if (!job.hasPendingPhysicalWork()
                 && !HarvestStorageReplacement.retainedAvailable(state, job)) return Optional.empty();
         ResourceSite site = state.resourceSite(job.siteId());
         ActorLocation worker = state.actorLocations().get(job.workerId());
@@ -102,7 +107,7 @@ public final class FrontierResourceSiteHarvestSceneSupport {
         // that worker's canonical station, not the now-distant last crop. No crop work is
         // reopened when a player first reaches the worker near the depot. A worker
         // already at a delivery station still needs a HOT scope for hand/chest effects.
-        boolean workerSide = job.navigationBlock().isPresent() || job.progress().complete() || job.returningForBatch();
+        boolean workerSide = FieldEquipment.transferring(job) || job.navigationBlock().isPresent() || job.progress().complete() || job.returningForBatch();
         int demandCropIndex = workerSide
                 ? Math.max(0, job.progress().lastCompletedCropSlotIndex()) : job.progress().nextCropSlotIndex();
         BodyPosition body = worker.body();

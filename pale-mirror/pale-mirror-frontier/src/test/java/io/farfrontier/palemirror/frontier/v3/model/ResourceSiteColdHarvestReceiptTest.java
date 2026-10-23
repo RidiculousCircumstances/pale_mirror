@@ -294,6 +294,8 @@ class ResourceSiteColdHarvestReceiptTest {
                 "expected exact returned receipt, got " + returnedEvents);
         FrontierWorldState completedHotReturn = ResourceSiteHarvestProcess.reduceReturned(hotReturned, site,
                 (ResourceSiteHarvestReturned) returnedEvents.getFirst().payload(), returnAction.dueAt().ticks());
+        assertEquals(0, completedHotReturn.resourceSites().site(site).harvestJob(beforeReturn.id()).orElseThrow().undeliveredYieldQuantity());
+        completedHotReturn = completeColdHarvest(completedHotReturn, site, returnAction);
         assertEquals(ResourceSitePhase.GROWING, completedHotReturn.resourceSites().site(site).phase());
         assertEquals(hotReturned.actorLocations().get(beforeReturn.workerId()).body(),
                 completedHotReturn.actorLocations().get(beforeReturn.workerId()).body(),
@@ -305,6 +307,7 @@ class ResourceSiteColdHarvestReceiptTest {
         var pendingReceiptEvents = ResourceSiteHarvestProcess.planColdProgress(startedHotReturn, returnAction);
         FrontierWorldState pendingReceipt = ResourceSiteHarvestProcess.reduceReturned(startedHotReturn, site,
                 (ResourceSiteHarvestReturned) pendingReceiptEvents.getFirst().payload(), returnAction.dueAt().ticks());
+        pendingReceipt = completeColdHarvest(pendingReceipt, site, returnAction);
         assertEquals(ResourceSitePhase.GROWING, pendingReceipt.resourceSites().site(site).phase());
         assertTrue(pendingReceipt.resourceSites().site(site).harvestLineages().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow().receiptPending(),
                 "a started physical effect retains exactly one deferred receipt while canonical work finishes");
@@ -330,10 +333,17 @@ class ResourceSiteColdHarvestReceiptTest {
         // Stop at the owner boundary, before the separate stock wake admits bakery
         // actors that this owner-only fixture intentionally does not drive.
         var target = new io.farfrontier.palemirror.frontier.v3.api.SimInstant(returnAction.dueAt().ticks());
-        var result = engine.advanceTo(target, new WorkBudget(256, 2_048));
-        for (int turn = 0; turn < 8 && new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec()
-                .decode(engine.checkpoint().canonicalState()).resourceSites().site(site).phase() == ResourceSitePhase.HARVESTING; turn++)
-            result = engine.advanceTo(target, new WorkBudget(256, 2_048));
+        ScheduledAction terminalAction = pending.action();
+        var result = engine.advanceTo(target, new WorkBudget(1, 2_048));
+        for (int turn = 0; turn < 64 && new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()).resourceSites().site(site).harvestJob(beforeReturn.id()).isPresent(); turn++) {
+            var next = engine.checkpoint().schedules().stream().filter(action -> action.id().equals(pending.action().id()))
+                    .findFirst().orElse(null);
+            org.junit.jupiter.api.Assertions.assertNotNull(next, "owner continuation missing: " + result.status()
+                    + " schedules=" + engine.checkpoint().schedules() + " site=" + new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState()).resourceSites().site(site));
+            terminalAction = next;
+            result = engine.advanceTo(new io.farfrontier.palemirror.frontier.v3.api.SimInstant(
+                    Math.max(next.dueAt().ticks(), result.instant().ticks())), new WorkBudget(1, 2_048));
+        }
         FrontierWorldState terminal = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec()
                 .decode(engine.checkpoint().canonicalState());
 
@@ -356,7 +366,7 @@ class ResourceSiteColdHarvestReceiptTest {
         assertEquals(0, terminal.resourceSites().cycle(site).plantGrowthStage(), "bare harvested land cannot regrow without sowing");
         assertEquals(0, terminal.resourceSites().site(site).growthStage());
         assertEquals(List.of(new ScheduleEffect.Consumed(returnAction.id())),
-                ResourceSiteHarvestProcess.planColdProgress(terminal, returnAction).stream().map(ProposedEvent::payload).toList(),
+                ResourceSiteHarvestProcess.planColdProgress(terminal, terminalAction).stream().map(ProposedEvent::payload).toList(),
                 "a recovery tail is consumable only through the retained resolved terminal lineage");
         ScheduledAction unknown = new ScheduledAction(new io.farfrontier.palemirror.frontier.v3.api.ScheduleId("schedule:resource-site-harvest-cold-progress-site-harvest-forged"),
                 pending.action().dueAt(), 0, new SubjectId("site:forged"), ResourceSiteHarvestProcess.COLD_PROGRESS_KIND, 1);
@@ -367,8 +377,10 @@ class ResourceSiteColdHarvestReceiptTest {
         assertThrows(IllegalArgumentException.class, () -> ResourceSiteHarvestProcess.planColdProgress(terminal, wrongOwner),
                 "the correct retired job ID cannot borrow another site's terminal lineage");
 
-        FrontierWorldState renewed = terminal.withResourceSites(terminal.resourceSites().planSowing(site,
-                terminal.resourceSites().cycle(site).layout().cells().stream()
+        // Renewal is a separate owner scenario. The full engine above also admits
+        // other workers through its stock wake; retain the completed single-owner branch here.
+        FrontierWorldState renewed = completedHotReturn.withResourceSites(completedHotReturn.resourceSites().planSowing(site,
+                completedHotReturn.resourceSites().cycle(site).layout().cells().stream()
                         .map(ResourceFieldLayout.Cell::id).collect(java.util.stream.Collectors.toSet())));
         // Growth on bare land does not manufacture another harvest. The next
         // explicit opportunity is sowing under its retained permission.
@@ -423,6 +435,8 @@ class ResourceSiteColdHarvestReceiptTest {
                 else if (event.payload() instanceof ResourceSiteHarvestColdGoalAdvanced advanced) state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, site, advanced);
                 else if (event.payload() instanceof ResourceSiteHarvestCropPrepared crop) state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
                 else if (event.payload() instanceof ResourceSiteHarvestProgressed secondProgress) state = ResourceSiteHarvestProcess.reduceProgressed(state, site, secondProgress);
+                else if (event.payload() instanceof FieldEquipmentChanged changed) state = io.farfrontier.palemirror.frontier.v3.process.FieldEquipmentProcess.reduce(
+                        state, site, changed, action[0].dueAt().ticks());
                 else if (event.payload() instanceof ResourceSiteHarvestLabourChange changed) state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
                 else if (event.payload() instanceof ScheduleEffect.Rescheduled rescheduled) action[0] = rescheduled.replacement();
                 else throw new AssertionError("unexpected COLD harvest event: " + event.payload());
@@ -448,6 +462,8 @@ class ResourceSiteColdHarvestReceiptTest {
                 else if (event.payload() instanceof ResourceSiteHarvestColdGoalAdvanced advanced) state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, site, advanced);
                 else if (event.payload() instanceof ResourceSiteHarvestCropPrepared crop) state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
                 else if (event.payload() instanceof ResourceSiteHarvestProgressed continuingProgress) state = ResourceSiteHarvestProcess.reduceProgressed(state, site, continuingProgress);
+                else if (event.payload() instanceof FieldEquipmentChanged changed) state = io.farfrontier.palemirror.frontier.v3.process.FieldEquipmentProcess.reduce(
+                        state, site, changed, action[0].dueAt().ticks());
                 else if (event.payload() instanceof ResourceSiteHarvestLabourChange changed) state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
                 else if (event.payload() instanceof ScheduleEffect.Rescheduled rescheduled) action[0] = rescheduled.replacement();
                 else throw new AssertionError("unexpected continuing COLD harvest event: " + event.payload());
@@ -492,6 +508,8 @@ class ResourceSiteColdHarvestReceiptTest {
                 else if (event.payload() instanceof ResourceSiteHarvestReturned returned) state = ResourceSiteHarvestProcess.reduceReturned(state, site, returned, returned.coldDueAt());
                 else if (event.payload() instanceof ResourceSiteHarvestCropPrepared crop) state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
                 else if (event.payload() instanceof ResourceSiteHarvestProgressed progressed) state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);
+                else if (event.payload() instanceof FieldEquipmentChanged changed) state = io.farfrontier.palemirror.frontier.v3.process.FieldEquipmentProcess.reduce(
+                        state, site, changed, action[0].dueAt().ticks());
                 else if (event.payload() instanceof ResourceSiteHarvestLabourChange changed) state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
                 else if (event.payload() instanceof StrategicTaskTransition transition) {
                     state = StrategicObjectiveProcess.reduceTaskTransition(state, new SubjectId("settlement:1"), transition);
@@ -542,8 +560,8 @@ class ResourceSiteColdHarvestReceiptTest {
                 new SubjectId("settlement:1"), StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, java.util.Optional.empty(), 98,
                 StrategicObjectiveStatus.ACTIVE);
         StrategicTask breadTask = new StrategicTask(new SubjectId("task:deferred-harvest-bread"), breadObjective.id(),
-                new SubjectId("settlement:1"), StrategicTaskKind.PRODUCE_BREAD, java.util.Optional.empty(),
-                List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT), List.of(), StrategicTaskStatus.PENDING);
+                new SubjectId("settlement:1"), StrategicTaskKind.PRODUCE_AT_STATION, java.util.Optional.empty(),
+                List.of(StrategicTaskRequirement.ACTIVE_PRODUCTION_FACILITY, StrategicTaskRequirement.AVAILABLE_PRODUCTION_INPUT), List.of(), StrategicTaskStatus.PENDING);
         FrontierWorldState beforeReceipt = state.withStrategicPlans(state.strategicPlans().addObjective(breadObjective).addTask(breadTask));
         List<ProposedEvent> downstream = ProductionProcess.planStart(beforeReceipt, ProductionProcess.start(breadTask, 30_000L));
         assertFalse(downstream.stream().map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance)
@@ -639,7 +657,7 @@ class ResourceSiteColdHarvestReceiptTest {
         boolean stockWake = false;
         for (int step = 0; step < 1_024 && state.resourceSites().site(site).phase() == ResourceSitePhase.HARVESTING; step++) {
             yielded |= state.resourceSites().site(site).harvestJobs().values().stream()
-                    .anyMatch(job -> job.harvestedYieldQuantity() > 0);
+                    .anyMatch(job -> job.undeliveredYieldQuantity() > 0);
             List<ProposedEvent> planned = ResourceSiteHarvestProcess.planColdProgress(state, action);
             assertFalse(planned.isEmpty(), "COLD harvest must make one bounded durable disposition at step " + step);
             for (ProposedEvent event : planned) {
@@ -649,6 +667,8 @@ class ResourceSiteColdHarvestReceiptTest {
                     case ResourceSiteHarvestReturned returned -> state = ResourceSiteHarvestProcess.reduceReturned(state, site, returned, returned.coldDueAt());
                     case ResourceSiteHarvestCropPrepared crop -> state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
                     case ResourceSiteHarvestProgressed progressed -> state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);
+                    case FieldEquipmentChanged changed -> state = io.farfrontier.palemirror.frontier.v3.process.FieldEquipmentProcess.reduce(
+                            state, site, changed, action.dueAt().ticks());
                     case ResourceSiteHarvestLabourChange changed -> state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
                     case StrategicTaskTransition transition -> state = StrategicObjectiveProcess.reduceTaskTransition(state, state.resourceSite(site).settlementId(), transition);
                     case ScheduleEffect.Rescheduled rescheduled -> action = rescheduled.replacement();
@@ -691,6 +711,8 @@ class ResourceSiteColdHarvestReceiptTest {
                     case ResourceSiteHarvestColdGoalAdvanced advanced -> state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, site, advanced);
                     case ResourceSiteHarvestCropPrepared crop -> state = ResourceSiteHarvestProcess.reduceCropPrepared(state, site, crop);
                     case ResourceSiteHarvestProgressed progressed -> state = ResourceSiteHarvestProcess.reduceProgressed(state, site, progressed);
+                    case FieldEquipmentChanged changed -> state = io.farfrontier.palemirror.frontier.v3.process.FieldEquipmentProcess.reduce(
+                            state, site, changed, action.dueAt().ticks());
                     case ResourceSiteHarvestLabourChange changed -> state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestWorkProcess.reduce(state, site, changed);
                     case ScheduleEffect.Rescheduled rescheduled -> action = rescheduled.replacement();
                     default -> throw new AssertionError("unexpected pre-terminal COLD harvest event: " + event.payload().type());

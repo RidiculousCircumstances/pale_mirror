@@ -420,7 +420,7 @@ final class FrontierDevelopmentScenarios {
                 .orElseThrow(() -> new IllegalStateException("medical fixture needs one non-medic patient"));
         SubjectId supply = new SubjectId("item:development-medical-remedy");
         ExactInventory inventory = state.inventory().store(new ExactItemStack(supply, settlement.id(), MedicalEvacuationStateSupport.FIRST_TREATMENT_SUPPLY, 1,
-                        new InventoryCustody.ContainerSlot(depot, 1)));
+                        new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).getFirst())));
         state = state.withInventory(inventory).withHumanPopulation(state.humanPopulation()
                 .transitionHealth(patient, ResidentHealthStatus.EXPOSED, 1L)
                 .transitionHealth(patient, ResidentHealthStatus.INFECTED, 2L));
@@ -444,7 +444,7 @@ final class FrontierDevelopmentScenarios {
         SubjectId depot = FrontierWorldState.depotId(settlement.id());
         state = state.withInfection(cell, new FixedRatio(new FixedScalar(750_000L)))
                 .withInventory(state.inventory().store(new ExactItemStack(reagent, settlement.id(), DecontaminationPolicy.REAGENT, 1,
-                        new InventoryCustody.ContainerSlot(depot, 1))));
+                        new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).getFirst()))));
         String suffix = settlement.id().value().replace(':', '-');
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:development-" + suffix + "-decontamination"), settlement.id(),
                 StrategicObjectiveKind.SETTLEMENT_CONTAIN_LOCAL_INFECTION, Optional.of(cell), 1, StrategicObjectiveStatus.ACTIVE);
@@ -511,10 +511,10 @@ final class FrontierDevelopmentScenarios {
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:development-production-input-theft"), settlementId,
                 StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(new SubjectId("task:development-production-input-theft"), objective.id(), settlementId,
-                StrategicTaskKind.PRODUCE_BREAD, Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT),
+                StrategicTaskKind.PRODUCE_AT_STATION, Optional.empty(), List.of(StrategicTaskRequirement.ACTIVE_PRODUCTION_FACILITY, StrategicTaskRequirement.AVAILABLE_PRODUCTION_INPUT),
                 List.of(), StrategicTaskStatus.ACTIVE);
         state = state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
-        SubjectId worker = SettlementWorkPolicy.permissions(state, settlementId).workers(ResidentWorkKind.BAKING)
+        SubjectId worker = SettlementWorkPolicy.permissions(state, settlementId).workers(ResidentWorkKind.PRODUCTION)
                 .stream().sorted().findFirst().orElseThrow();
         SubjectId company = CompanyFoundationProcess.companyId(settlementId);
         ExactItemStack input = state.inventory().items().get(new SubjectId("item:bootstrap-1-wheat"));
@@ -550,7 +550,7 @@ final class FrontierDevelopmentScenarios {
         SubjectId depot = FrontierWorldState.depotId(new SubjectId("settlement:1"));
         FungibleResourceLedger resources = state.inventory().fungibleResources().destroy(account, Map.of(lot, 64), Map.of());
         ExactItemStack wheat = new ExactItemStack(item, new SubjectId("settlement:1"), "minecraft:wheat", 64,
-                new InventoryCustody.ContainerSlot(depot, 0));
+                new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).getFirst()));
         return state.withInventory(state.inventory().withFungibleResources(resources).store(wheat));
     }
 

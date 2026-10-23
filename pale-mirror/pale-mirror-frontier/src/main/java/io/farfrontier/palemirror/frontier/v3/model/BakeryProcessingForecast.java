@@ -16,7 +16,7 @@ final class BakeryProcessingForecast {
         var recipe = BakeryRecipes.bread(state);
         var definition = state.bootstrap().ruleset().workCatalog().require(recipe.product().itemKind(), WorkOperation.PRODUCE);
         if (recipe.processingMode() == ProductionRecipe.ProcessingMode.AUTOMATIC) return definition.workUnits();
-        int speed = SettlementWorkPolicy.permissions(state, home).workers(ResidentWorkKind.BAKING).stream()
+        int speed = SettlementWorkPolicy.permissions(state, home).workers(ResidentWorkKind.PRODUCTION).stream()
                 .map(id -> state.humanPopulation().resident(id))
                 .filter(r -> state.actorLocations().get(r.id()).condition().status() == ActorLifeStatus.ALIVE && r.capability(definition.capability()) > 0)
                 .mapToInt(r -> ResidentWorkStatistics.speedPermille(r, definition, state.bootstrap().ruleset().workCatalog()))
@@ -49,10 +49,10 @@ final class BakeryProcessingForecast {
                     if (!assignment.active()) return true;
                     if (assignment.kind() != HumanAssignmentKind.PRODUCTION) return false;
                     var job = state.productionJobs().get(assignment.ownerId().orElseThrow());
-                    return job != null && job.facilityId().equals(facility.id()) && job.bakeryWork().isPresent()
-                            && job.bakeryWork().orElseThrow().block().isEmpty();
+                    return job != null && job.facilityId().equals(facility.id()) && job.stationWork().isPresent()
+                            && job.stationWork().orElseThrow().block().isEmpty();
                 };
-        var workers = SupplyLabourCapacity.candidates(state, home, ResidentWorkKind.BAKING, definition.capability(), eligible)
+        var workers = SupplyLabourCapacity.candidates(state, home, ResidentWorkKind.PRODUCTION, definition.capability(), eligible)
                 .stream().filter(eligible).toList();
         int speed = workers.stream().mapToInt(resident -> ResidentWorkStatistics.speedPermille(resident, definition,
                 state.bootstrap().ruleset().workCatalog())).min().orElse(0);

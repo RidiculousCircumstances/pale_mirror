@@ -14,12 +14,28 @@ import java.util.Optional;
  */
 public final class FrontierContainerSocketPlan {
     private FrontierContainerSocketPlan() { }
+    private record SupportKey(SubjectId owner, BlockPosition position) { }
+    private static final ImmutableInputView<java.util.Map<SupportKey, Optional<GrayboxCell>>> STORAGE_SUPPORTS = new ImmutableInputView<>();
+
+    /** Storage on an authored support waits for that geometry owner, just like other sockets.
+     * The container supplies its owner; this query never searches for a missing ownership declaration. */
+    private static synchronized Optional<GrayboxCell> storageSupport(FrontierWorldState state,
+            ContainerRecord record, BlockPosition position) {
+        if (state.physicalDeltas().containsKey(position)) return Optional.empty();
+        return STORAGE_SUPPORTS.get(java.util.List.of(state.bootstrap(), state.hiveColony(), state.routeTopology(),
+                        state.inventory().containers(), state.inventory().surfaces()), java.util.HashMap::new)
+                .computeIfAbsent(new SupportKey(record.ownerId(), position), key -> Optional.ofNullable(
+                    FrontierGrayboxPlan.intactSemanticCell(state.bootstrap(), state.hiveColony(), state.routeTopology(), key.owner(), key.position())));
+    }
 
     public static Optional<ContainerSocketSupport> declaredSupport(FrontierWorldState state, ContainerSurface surface) {
         var record = state.inventory().containers().get(surface.containerId());
         if (record == null || !surface.fixed()) return Optional.empty();
-        if (record.purpose() == ContainerPurpose.RESOURCE_STORAGE)
-            return Optional.of(new ContainerSocketSupport.Terrain(surface.position().offset(0, -1, 0)));
+        if (record.purpose() == ContainerPurpose.RESOURCE_STORAGE) {
+            var position = surface.position().offset(0, -1, 0);
+            return Optional.of(storageSupport(state, record, position).<ContainerSocketSupport>map(ContainerSocketSupport.Graybox::new)
+                    .orElseGet(() -> new ContainerSocketSupport.Terrain(position)));
+        }
         if (record.purpose() == ContainerPurpose.EXTRACTIVE_STORAGE)
             return ExtractionWorksiteBlocks.socketSupport(state, surface).map(value -> value);
         return support(state, surface).map(ContainerSocketSupport.Graybox::new);

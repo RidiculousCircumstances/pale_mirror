@@ -13,10 +13,11 @@ public final class ResidentWorkComposition {
                     return ResourceSiteHarvestPlanning.availableWork(state, resident, tick);
                 }
             }, new ResidentWorkAvailabilityPort() {
-                public ResidentWorkKind kind() { return ResidentWorkKind.BAKING; }
+                public ResidentWorkKind kind() { return ResidentWorkKind.PRODUCTION; }
                 public HumanCapability capability() { return HumanCapability.INDUSTRY; }
                 public boolean available(FrontierWorldState state, ResidentProfile resident, long tick) {
-                    return BakeryJobAdmission.availableWork(state, resident, tick);
+                    return BakeryJobAdmission.availableWork(state, resident, tick)
+                            || EquipmentJobAdmission.availableWork(state, resident, tick);
                 }
             }, new ResidentWorkAvailabilityPort() {
                 public ResidentWorkKind kind() { return ResidentWorkKind.LOGISTICS; }

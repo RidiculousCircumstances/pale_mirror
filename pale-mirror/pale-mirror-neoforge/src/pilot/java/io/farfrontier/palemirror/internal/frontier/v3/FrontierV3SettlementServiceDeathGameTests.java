@@ -118,7 +118,7 @@ public final class FrontierV3SettlementServiceDeathGameTests {
         var depot = FrontierWorldState.depotId(settlement.id());
         var inventory = initial.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE).store(new ExactItemStack(new SubjectId("item:service-death-native"),
-                        settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, 1)));
+                        settlement.id(), DecontaminationPolicy.REAGENT, 1, new InventoryCustody.ContainerSlot(depot, initial.inventory().firstFreeSlot(depot).orElseThrow())));
         // Whole fixture translation keeps the source and its declared access port together.
         // Moving only the chest surface would produce an impossible retained relationship.
         var pending = task.withStatus(StrategicTaskStatus.PENDING);

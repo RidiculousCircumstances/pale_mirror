@@ -17,9 +17,15 @@ final class OwnedGoodsShipmentAuthorization extends SameOwnerShipmentAuthorizati
                 || !mission.shipmentIds().contains(shipment.id()) || buyer == null
                 || !buyer.settlementId().equals(shipment.receiver().settlementId())
                 || !mission.organization().home().equals(shipment.receiver())
-                || claim == null || claim.purpose() != ClaimPurpose.INTERNAL_LOGISTICS
-                || !claim.claimantId().equals(grant.claimantId()) || !claim.economicOwnerId().equals(grant.claimantId())
-                || !claim.itemKind().equals(shipment.itemKind()) || !claim.lotQuantities().equals(shipment.lotQuantities()))
+                || !validStock(state, shipment, claim))
             throw new IllegalArgumentException("owned goods transport lacks its paid buyer allocation and exact collection mission");
+    }
+    private static boolean validStock(FrontierWorldState state, Shipment shipment, ClaimAllocation claim) {
+        var owner = shipment.authorization().claimantId();
+        if (shipment.cargo() instanceof ShipmentCargo.Individual cargo)
+            return cargo.ownerId().equals(owner) && cargo.matches(state.inventory().items().get(cargo.itemId()));
+        return claim != null && claim.purpose() == ClaimPurpose.INTERNAL_LOGISTICS && claim.claimantId().equals(owner)
+                && claim.economicOwnerId().equals(owner) && claim.itemKind().equals(shipment.itemKind())
+                && claim.lotQuantities().equals(shipment.portions());
     }
 }

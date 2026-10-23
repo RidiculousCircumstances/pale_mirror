@@ -13,10 +13,14 @@ public sealed interface ExtractionPhysicalStep permits ExtractionPhysicalStep.Eq
         public Equipment { Objects.requireNonNull(observation); Objects.requireNonNull(slot);
             if (containerEpoch < 1) throw new IllegalArgumentException("equipment effect lacks current container custody"); }
     }
-    record BlockWork(ActorHotObservation observation, BlockExtraction extraction, int carriedBefore, long sourceEpoch) implements ExtractionPhysicalStep {
+    record BlockWork(ActorHotObservation observation, BlockExtraction extraction, int carriedBefore, long sourceEpoch,
+                     io.farfrontier.palemirror.frontier.v3.model.tooling.ToolUse toolUse) implements ExtractionPhysicalStep {
         public BlockWork {
             Objects.requireNonNull(observation); Objects.requireNonNull(extraction);
+            Objects.requireNonNull(toolUse);
             if (!observation.actuation().execution().equals(extraction.execution()) || carriedBefore < 0 || carriedBefore >= 64
+                    || !toolUse.before().custody().equals(new io.farfrontier.palemirror.frontier.v3.model.InventoryCustody.Actor(extraction.execution().actorId()))
+                    || toolUse.wear() != extraction.definition().toolRequirement().wear()
                     || extraction.output().size() != 1 || carriedBefore + extraction.output().getFirst().quantity() > 64 || sourceEpoch < 1)
                 throw new IllegalArgumentException("block work lacks its exact actor and bounded output-stack preimage");
         }

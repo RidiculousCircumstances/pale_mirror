@@ -8,7 +8,7 @@ final class FrontierV3ContainerCapacityJson {
     private FrontierV3ContainerCapacityJson() { }
     static String render(FrontierWorldState state, SubjectId subject) {
         var capacity = state.inventory().containerCapacity(subject, state.reservedContainerSlots(subject));
-        String inbound = state.pendingContainerInbound(subject).entrySet().stream()
+        String inbound = state.pendingContainerInbound(subject).quantities().entrySet().stream()
                 .sorted(java.util.Map.Entry.comparingByKey())
                 .map(entry -> "\"" + FrontierV3DiagnosticJson.quote(entry.getKey()) + "\":" + entry.getValue())
                 .collect(java.util.stream.Collectors.joining(",", "{", "}"));

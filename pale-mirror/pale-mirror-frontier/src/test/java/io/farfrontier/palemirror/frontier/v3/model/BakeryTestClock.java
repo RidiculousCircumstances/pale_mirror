@@ -5,7 +5,7 @@ final class BakeryTestClock {
     private BakeryTestClock() { }
     static long due(FrontierWorldState state, ProductionJob job, long proposed) {
         var retained = state.productionJobs().get(job.id());
-        return retained == null ? proposed : BakeryLabour.progress(state, retained)
+        return retained == null ? proposed : StationWorkLabour.progress(state, retained)
                 .filter(WorkProgress::running).map(work -> Math.max(proposed, work.activeUntilTick()))
                 .orElse(proposed);
     }

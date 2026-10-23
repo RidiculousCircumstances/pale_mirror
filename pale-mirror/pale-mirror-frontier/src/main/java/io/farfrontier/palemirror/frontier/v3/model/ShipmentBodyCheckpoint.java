@@ -8,7 +8,7 @@ final class ShipmentBodyCheckpoint implements ActorActivityBodyCheckpoint {
         var shipment = request.expectedState().shipments().shipments().get(request.execution().activityOwnerId());
         if (shipment == null || !shipment.execution().equals(request.execution())
                 || shipment.pendingPhysicalStep().isPresent()
-                || request.expectedState().inventory().fungibleResources().bindings().values().stream()
+                || shipment.cargo() instanceof ShipmentCargo.Fungible && request.expectedState().inventory().fungibleResources().bindings().values().stream()
                     .anyMatch(binding -> binding.accountId().equals(shipment.carriedAccountId())))
             throw new IllegalArgumentException("courier body departure retains an unsettled hand/effect");
         return new ActorMovementBodyCheckpoint().acknowledge(request);

@@ -27,12 +27,14 @@ public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, T
                 throw new IllegalArgumentException("shipment identity, allocation or courier has competing owners");
             if (!value.terminal()) {
                 var actorPrior = actors.putIfAbsent(value.execution().actorId(), value);
-                var accountPrior = carriedAccounts.putIfAbsent(value.carriedAccountId(), value);
+                var accountPrior = value.cargo() instanceof ShipmentCargo.Fungible cargo
+                        ? carriedAccounts.putIfAbsent(cargo.carriedAccountId(), value) : null;
                 for (var prior : java.util.stream.Stream.of(actorPrior, accountPrior).filter(Objects::nonNull).toList())
                     if (!TransportCargoExecution.shared(value) || !TransportCargoExecution.shared(prior)
                             || !value.execution().equals(prior.execution()) || !value.transportMissionId().equals(prior.transportMissionId())
                             || value.mobileContainerId().isEmpty() || !value.mobileContainerId().equals(prior.mobileContainerId())
-                            || !value.carriedAccountId().equals(prior.carriedAccountId()))
+                            || value.cargo() instanceof ShipmentCargo.Fungible a && prior.cargo() instanceof ShipmentCargo.Fungible b
+                                && !a.carriedAccountId().equals(b.carriedAccountId()))
                         throw new IllegalArgumentException("shared cargo lacks one exact asset/mission/execution");
             }
         }
@@ -49,9 +51,13 @@ public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, T
         if (!previous.equals(shipments.get(previous.id())) || !replacement.id().equals(previous.id())
                 || !(replacement.reception().isPresent() && previous.status() == Shipment.Status.CARRYING
                     && previous.reception().isEmpty() && previous.unloaded(replacement.reception().orElseThrow()).equals(replacement)
+                    || previous.cargo() instanceof ShipmentCargo.Individual && previous.reception().isPresent()
+                        && replacement.status() == Shipment.Status.CARGO_DISPOSED && previous.receivedItemLost().equals(replacement)
                     || previous.reception().isPresent() && previous.acknowledged(previous.reception().orElseThrow().id()).equals(replacement)
                     || ShipmentStorageRetargeted.unbegun(previous) && !previous.receiver().containerId().equals(replacement.receiver().containerId())
-                        && previous.retargetStorage(replacement.receiver(), replacement.receivingAccountId()).equals(replacement)
+                        && (replacement.cargo() instanceof ShipmentCargo.Fungible cargo
+                            ? previous.retargetStorage(replacement.receiver(), cargo.receivingAccountId())
+                            : previous.retargetIndividualStorage(replacement.receiver())).equals(replacement)
                     || (replacement.status() == previous.status()
                     ? replacement.pendingPhysicalStep().isPresent() && previous.prepare(replacement.pendingPhysicalStep().orElseThrow()).equals(replacement)
                     : previous.withStatus(replacement.status()).equals(replacement))))
@@ -70,6 +76,19 @@ public record ShipmentState(Map<SubjectId, Shipment> shipments, Map<SubjectId, T
         next.put(previous.id(), new Shipment(previous.id(), grant, previous.execution(), previous.sender(), previous.receiver(),
                 previous.sourceAccountId(), previous.carriedAccountId(), previous.receivingAccountId(), previous.itemKind(), lots,
                 previous.status(), Math.addExact(previous.revision(), 1), Optional.empty(), Optional.empty(),
+                previous.transportMissionId(), previous.mobileContainerId()));
+        return new ShipmentState(next, missions);
+    }
+    public ShipmentState purchasedIndividual(Shipment previous, ResourceClaimDelegation grant, io.farfrontier.palemirror.frontier.v3.api.SubjectId buyer) {
+        if (!previous.equals(shipments.get(previous.id())) || !(previous.cargo() instanceof ShipmentCargo.Individual cargo)
+                || previous.status() != Shipment.Status.CARRYING || previous.pendingPhysicalStep().isPresent() || previous.reception().isPresent()
+                || previous.authorization().kind() != ResourceClaimDelegation.Kind.GOODS_CONTRACT_SHIPMENT
+                || grant.kind() != ResourceClaimDelegation.Kind.OWNED_GOODS_SHIPMENT
+                || !grant.executorId().equals(previous.id()) || !grant.claimantId().equals(buyer) || grant.authorizationRevision() != 1)
+            throw new IllegalArgumentException("individual purchase lacks its exact carrying predecessor");
+        var next = new LinkedHashMap<>(shipments);
+        next.put(previous.id(), new Shipment(previous.id(), grant, previous.execution(), previous.sender(), previous.receiver(),
+                cargo.ownedBy(buyer), previous.status(), Math.addExact(previous.revision(), 1), Optional.empty(), Optional.empty(),
                 previous.transportMissionId(), previous.mobileContainerId()));
         return new ShipmentState(next, missions);
     }

@@ -18,9 +18,10 @@ class GoodsTradePlayerStockLossTest {
             var claim = shipment.authorization().claimId();
             var contract = state.companies().goodsTrade().contracts().get(shipment.authorization().claimantId());
             state = GoodsTradeTest.factForFamily(state, owner, new ShipmentDispatched(shipment), 0, "shipments");
+            var sourceSlot = state.inventory().availableSlots(depot).getFirst();
             var resources = state.inventory().fungibleResources();
             var stacks = List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                    new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:wheat", 64));
+                    new InventoryCustody.ContainerSlot(depot, sourceSlot)), "minecraft:wheat", 64));
             resources = resources.rebind(account, 1, FungiblePhysicalObservation.bind(resources, account, 1, stacks));
             state = ReferenceContainerCustodyFixtures.observedAndHeld(state.withInventory(state.inventory()
                     .withFungibleResources(resources).withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
@@ -31,7 +32,7 @@ class GoodsTradePlayerStockLossTest {
             assertFalse(SourceStockClaimLoss.canDepart(before, account, shipment.itemKind(), 65));
             var remaining = departed == 64 ? List.<FungiblePhysicalObservation.Stack>of()
                     : List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                        new InventoryCustody.ContainerSlot(depot, 0)), shipment.itemKind(), 64 - departed));
+                        new InventoryCustody.ContainerSlot(depot, sourceSlot)), shipment.itemKind(), 64 - departed));
             var loss = assertInstanceOf(FungibleStockDepartureObserved.class, FungibleContainerPlayerEdit.classify(
                     resources, account, depot, owner, 1, UUID.randomUUID(), UUID.randomUUID(), remaining,
                     SourceStockClaimLoss.admissibleClaims(before, account)));

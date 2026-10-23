@@ -13,13 +13,16 @@ final class ProductionStationSpecCodec {
         out.writeByte(station.capability().wireTag()); writePosition(out, station.workerStation().support());
         writePosition(out, station.socketSurface().support());
         out.writeByte(station.inputSlot()); out.writeByte(station.outputSlot()); out.writeByte(station.fuelSlot());
+        out.writeBoolean(station.maintenanceSlot().isPresent());
+        if (station.maintenanceSlot().isPresent()) out.writeByte(station.maintenanceSlot().getAsInt());
     }
     static ProductionStationSpec read(DataInputStream in) throws IOException {
         return new ProductionStationSpec(new SubjectId(readString(in)), new SubjectId(readString(in)),
                 new SubjectId(readString(in)), new ProductionEquipment.Id(readString(in)),
                 ProductionStationSpec.Capability.fromWireTag(in.readUnsignedByte()),
                 new SurfaceAnchor(readPosition(in)), new SurfaceAnchor(readPosition(in)),
-                in.readUnsignedByte(), in.readUnsignedByte(), in.readUnsignedByte());
+                in.readUnsignedByte(), in.readUnsignedByte(), in.readUnsignedByte(),
+                in.readBoolean() ? java.util.OptionalInt.of(in.readUnsignedByte()) : java.util.OptionalInt.empty());
     }
     private ProductionStationSpecCodec() { }
 }

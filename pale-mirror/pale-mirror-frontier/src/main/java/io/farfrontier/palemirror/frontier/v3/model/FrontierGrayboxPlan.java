@@ -414,7 +414,7 @@ public final class FrontierGrayboxPlan {
         return switch (structure.kind()) {
             case HALL -> SettlementAccessPort.forHall(structure).ownedSurfaces();
             case DEPOT -> SettlementDepotServicePort.forDepot(structure).ownedAccessSurfaces();
-            case WORKSHOP, SMELTERY -> SettlementWorkshopServicePort.forWorkshop(structure).ownedAccessSurfaces();
+            case WORKSHOP, SMELTERY, FORGE -> SettlementWorkshopServicePort.forWorkshop(structure).ownedAccessSurfaces();
             case INFIRMARY -> SettlementInfirmaryTreatmentPort.forInfirmary(structure).ownedAccessSurfaces();
             default -> List.of();
         };
@@ -586,7 +586,7 @@ public final class FrontierGrayboxPlan {
         if (part == GrayboxSemanticPart.WORKSHOP_PROCESS_STATION) return GrayboxMaterial.WORKSHOP_PROCESS;
         return switch (kind) {
             case HALL -> GrayboxMaterial.HALL; case HOUSING -> GrayboxMaterial.HOUSING; case FARM -> GrayboxMaterial.FARM;
-            case WORKSHOP, SMELTERY -> GrayboxMaterial.WORKSHOP; case DEPOT -> GrayboxMaterial.DEPOT; case INFIRMARY -> GrayboxMaterial.INFIRMARY;
+            case WORKSHOP, SMELTERY, FORGE -> GrayboxMaterial.WORKSHOP; case DEPOT -> GrayboxMaterial.DEPOT; case INFIRMARY -> GrayboxMaterial.INFIRMARY;
         };
     }
 
@@ -604,7 +604,7 @@ public final class FrontierGrayboxPlan {
         int width = SettlementStructureFootprint.width(structure.kind());
         int depth = SettlementStructureFootprint.depth(structure.kind());
         int height = condition == StructureCondition.DAMAGED ? 2 : switch (structure.kind()) {
-            case HALL -> 5; case DEPOT, WORKSHOP, SMELTERY -> 4; default -> 3;
+            case HALL -> 5; case DEPOT, WORKSHOP, SMELTERY, FORGE -> 4; default -> 3;
         };
         for (int x = -width / 2; x <= (width - 1) / 2; x++) for (int z = -depth / 2; z <= (depth - 1) / 2; z++) {
             BlockPosition floor = structure.anchor().offset(x, 0, z);

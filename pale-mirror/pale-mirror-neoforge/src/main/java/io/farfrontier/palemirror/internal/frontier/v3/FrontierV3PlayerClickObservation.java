@@ -13,7 +13,7 @@ final class FrontierV3PlayerClickObservation {
     static ContainerPlayerEditObserved capture(ServerPlayer player, FrontierWorldState state,
             FrontierV3ContainerClickTransaction transaction) {
         var members = new ArrayList<ContainerPlayerEditObserved.Member>();
-        ExactItemCustodyChanged ingress = null; var seenExact = new HashSet<io.farfrontier.palemirror.frontier.v3.api.SubjectId>();
+        ExactItemIngress ingress = null; var seenExact = new HashSet<io.farfrontier.palemirror.frontier.v3.api.SubjectId>();
         for (var member : transaction.members()) {
             var physical = FrontierV3PhysicalContainer.loaded(player.serverLevel(), state, member.containerId()).orElseThrow();
             var stacks = new ArrayList<FungiblePhysicalObservation.Stack>();
@@ -27,19 +27,31 @@ final class FrontierV3PlayerClickObservation {
                 var id = FrontierV3ExactItemPresentation.itemId(stack);
                 if (id.isPresent()) {
                     var item = state.inventory().items().get(id.orElseThrow());
-                    if (item == null || !FrontierV3ExactItemPresentation.exactMatch(stack, item) || !seenExact.add(item.id()))
+                    if (item == null || !FrontierV3ExactItemPresentation.exactMatch(stack,
+                            FrontierV3ExactContainerIngress.observedCondition(stack, item)) || !seenExact.add(item.id()))
                         throw new IllegalStateException("native click produced a foreign or duplicate exact item");
                     if (item.custody().equals(destination)) continue;
                     if (!item.custody().equals(new InventoryCustody.Player(player.getUUID())) || ingress != null
-                            || FrontierV3InventoryObservationExecutor.hasExactItem(player, item)
-                            || FrontierV3ExactItemPresentation.exactMatch(player.containerMenu.getCarried(), item))
+                            || player.getInventory().items.stream().anyMatch(s -> FrontierV3ExactItemPresentation.itemId(s).filter(item.id()::equals).isPresent())
+                            || FrontierV3ExactItemPresentation.itemId(player.containerMenu.getCarried()).filter(item.id()::equals).isPresent())
                         throw new IllegalStateException("native click lost its exact player source");
-                    ingress = new ExactItemCustodyChanged(item.id(), item.custody(), destination);
+                    ingress = new ExactItemIngress.Returned(item,
+                            FrontierV3ExactContainerIngress.observedCondition(stack, item).withCustody(destination));
                 } else {
-                    if (!ItemStack.isSameItemSameComponents(stack, new ItemStack(stack.getItem(), stack.getCount())))
+                    if (!FrontierV3ExactContainerIngress.plainSupported(stack))
                         throw new IllegalStateException("native click produced unsupported item components");
-                    stacks.add(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(destination),
-                            BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), stack.getCount()));
+                    if (stack.isDamageableItem()) {
+                        if (ingress != null) throw new IllegalStateException("one click produced multiple individual arrivals");
+                        var itemId = new io.farfrontier.palemirror.frontier.v3.api.SubjectId("item:player-contribution:"
+                                + UUID.nameUUIDFromBytes((transaction.id() + "/" + member.containerId().value() + "/" + slot)
+                                    .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                        var item = new ExactItemStack(itemId, member.ownerId(), BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(),
+                                1, destination, new ItemCondition(stack.getMaxDamage(), stack.getDamageValue()));
+                        FrontierV3ExactItemPresentation.bindExactItemId(stack, itemId);
+                        physical.inventory().setChanged();
+                        ingress = new ExactItemIngress.Contribution(item);
+                    } else stacks.add(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(destination),
+                                BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), stack.getCount()));
                 }
             }
             members.add(new ContainerPlayerEditObserved.Member(member.containerId(), member.accountId(), member.ownerId(),

@@ -9,7 +9,7 @@ import java.util.Objects;
 
 /** Actual loaded source/destination postcondition for one prepared bakery effect. */
 public record BakeryHotEffectObserved(SubjectId jobId, SceneLeaseId leaseId,
-                                      BakeryWorkState.Phase phase, BodyPosition observedWorker,
+                                      StationWorkState.Phase phase, BodyPosition observedWorker,
                                       long sourceEpoch, long destinationEpoch,
                                       List<FungiblePhysicalObservation.Stack> remainingSource,
                                       List<FungiblePhysicalObservation.Stack> destination)

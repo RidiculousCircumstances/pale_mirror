@@ -21,7 +21,9 @@ public final class ShipmentPhysicalAuthority {
                 result.add(new ContainerSlotClaim(new ContainerSlotClaim.Owner(ContainerSlotClaim.Family.SHIPMENT, shipment.id()), new InventoryCustody.ContainerSlot(
                         shipment.unloadingEndpoint().containerId(), step.destinationSlot()),
                         ShipmentAuthorizationComposition.capacityCompletionOwner(shipment).map(owner -> new ContainerInboundCapacity.Demand(
-                                owner, shipment.unloadingEndpoint().containerId(), shipment.itemKind(), step.lotQuantities().values().stream().mapToInt(Integer::intValue).sum()))));
+                                owner, shipment.unloadingEndpoint().containerId(), shipment.itemKind(), step.lotQuantities().values().stream().mapToInt(Integer::intValue).sum(),
+                                shipment.cargo() instanceof ShipmentCargo.Individual ? ContainerInboundCapacity.Representation.INDIVIDUAL
+                                        : ContainerInboundCapacity.Representation.FUNGIBLE))));
             else if (shipment.status() == Shipment.Status.AWAITING_LOAD && shipment.mobileContainerId().isPresent())
                 result.add(new ContainerSlotClaim(new ContainerSlotClaim.Owner(ContainerSlotClaim.Family.SHIPMENT, shipment.id()), new InventoryCustody.ContainerSlot(
                         shipment.mobileContainerId().orElseThrow(), step.destinationSlot())));

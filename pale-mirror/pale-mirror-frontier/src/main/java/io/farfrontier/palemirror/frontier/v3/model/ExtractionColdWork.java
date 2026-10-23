@@ -135,14 +135,16 @@ public final class ExtractionColdWork {
                     throw new IllegalArgumentException("mining effect would remove an occupied support or retained exit");
                 var effect = BlockExtraction.prepareKnown("extraction:" + job.id().value() + ":" + job.revision(), job.execution(),
                         cell.source(), cell.definition(), deposit.cells().get(cell.id()).knownBlock());
+                var use = io.farfrontier.palemirror.frontier.v3.model.tooling.ToolUse.prepare(tool,
+                        state.bootstrap().ruleset().tools(), cell.definition().toolRequirement());
                 var output = effect.output().getFirst();
                 if (effect.output().size() != 1 || !output.itemKind().equals(job.outputKind()))
                     throw new IllegalArgumentException("mining batch output differs from its declared held resource");
                 var ledger = state.inventory().fungibleResources().accrueColdActorExtractionPart(output,
                         ExtractionWorkEffects.output(state, job, output), job.carriedAccountId(), job.execution().actorId());
                 var depleted = deposit.extracted(cell.id(), target.revision(), effect.operationId());
-                var next = ExtractionWorkEffects.afterBlock(state, job, depleted, ExtractionWorkAuthority.carried(state, job) + output.quantity(), tick);
-                return state.withChanges(update.inventory(state.inventory().withFungibleResources(ledger))
+                var next = ExtractionWorkEffects.afterBlock(state, job, depleted, ExtractionWorkAuthority.carried(state, job) + output.quantity(), tick, use.after());
+                return state.withChanges(update.inventory(state.inventory().changeCondition(use.before(), use.after().condition()).withFungibleResources(ledger))
                         .extractionSites(state.extractionSites().settle(job, next, depleted)));
             }
         }

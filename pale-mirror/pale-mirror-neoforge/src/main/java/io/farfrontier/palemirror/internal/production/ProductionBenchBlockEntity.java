@@ -15,14 +15,19 @@ import net.minecraft.world.level.block.state.BlockState;
 /** Actual machine slots, persisted by Minecraft; not a second canonical stock ledger. */
 public final class ProductionBenchBlockEntity extends BaseContainerBlockEntity {
     public static final int INPUT = 0, OUTPUT = 1, FUEL = 2, SLOT_COUNT = 3;
-    private NonNullList<ItemStack> items = NonNullList.withSize(SLOT_COUNT, ItemStack.EMPTY);
+    public static final int MAINTENANCE_TARGET = 3;
+    private final PaleMirrorProductionStations.Layout layout;
+    private NonNullList<ItemStack> items;
     public ProductionBenchBlockEntity(BlockPos position, BlockState state) {
         super(PaleMirrorProductionStations.BENCH_ENTITY.get(), position, state);
+        layout = PaleMirrorProductionStations.layout(state.getBlock());
+        items = NonNullList.withSize(layout.slots(), ItemStack.EMPTY);
     }
-    @Override public int getContainerSize() { return SLOT_COUNT; }
+    public PaleMirrorProductionStations.Layout layout() { return layout; }
+    @Override public int getContainerSize() { return layout.slots(); }
     @Override protected NonNullList<ItemStack> getItems() { return items; }
     @Override protected void setItems(NonNullList<ItemStack> next) {
-        if (next.size() != SLOT_COUNT) throw new IllegalArgumentException("station inventory has wrong slot count");
+        if (next.size() != getContainerSize()) throw new IllegalArgumentException("station inventory has wrong slot count");
         items = next;
     }
     @Override protected Component getDefaultName() { return getBlockState().getBlock().getName(); }
@@ -35,7 +40,7 @@ public final class ProductionBenchBlockEntity extends BaseContainerBlockEntity {
     }
     @Override protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
-        items = NonNullList.withSize(SLOT_COUNT, ItemStack.EMPTY);
+        items = NonNullList.withSize(getContainerSize(), ItemStack.EMPTY);
         ContainerHelper.loadAllItems(tag, items, registries);
     }
 }

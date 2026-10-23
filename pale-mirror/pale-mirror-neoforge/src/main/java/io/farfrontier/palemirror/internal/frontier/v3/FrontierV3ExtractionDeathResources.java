@@ -66,9 +66,11 @@ final class FrontierV3ExtractionDeathResources {
                 int count = block.carriedBefore() + block.extraction().output().getFirst().quantity();
                 external = witness.externalSuccessor(); var expectedAfter = external.orElse(block.extraction().definition().after());
                 before = () -> witness.phase() == FrontierV3WorksiteBlockWitness.Phase.SETTLED
+                        && FrontierV3ToolUse.before(body.getMainHandItem(), block.toolUse())
                         && FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(pos)).equals(block.extraction().definition().before())
                         && plain(body.getOffhandItem(), job.outputKind(), block.carriedBefore());
                 after = () -> witness.phase() == FrontierV3WorksiteBlockWitness.Phase.EFFECT_BLOCK_APPLIED
+                        && FrontierV3ToolUse.after(body.getMainHandItem(), block.toolUse())
                         && witness.effectOperation().equals(Optional.of(block.extraction().operationId()))
                         && FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(pos)).equals(expectedAfter)
                         && plain(body.getOffhandItem(), job.outputKind(), count);

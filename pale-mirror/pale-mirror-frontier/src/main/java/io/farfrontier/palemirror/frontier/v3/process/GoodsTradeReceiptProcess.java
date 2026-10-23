@@ -36,17 +36,9 @@ public final class GoodsTradeReceiptProcess {
                 var reception = shipment.reception().orElseThrow();
                 if (!action.id().equals(review(contract.id(), reception.id(), action.dueAt().ticks()).id())) continue;
                 SubjectId claimId = reception.claimId();
-                CustodyAccount account = ledger.accounts().get(shipment.receivingAccountId());
-                if (account == null || !account.custody().equals(new ResourceCustody.Container(contract.receiverContainerId()))
-                        || account.claimQuantities().getOrDefault(claimId, 0) != reception.quantity())
-                    throw new IllegalArgumentException("transport reception lost its exact received allocation");
                 var receiptId = reception.id();
-                var children = new LinkedHashMap<SubjectId, SubjectId>();
-                for (var portion : reception.lotQuantities().entrySet())
-                    if (ledger.lots().get(portion.getKey()).quantity() > portion.getValue())
-                        children.put(portion.getKey(), new SubjectId("lot:goods-" + token(receiptId, contract.revision(), portion.getKey())));
                 var receipt = new GoodsTradeAcceptance(receiptId, contract.id(), contract.revision(),
-                        new ResourceTitleTransfer(account.id(), claimId, contract.seller().id(), contract.buyer().id(), reception.lotQuantities(), children));
+                        GoodsShipmentTitle.received(state, shipment, contract, receiptId, claimId, reception.lotQuantities(), false));
                 var acknowledged = new ShipmentReceiptAcknowledged(shipment.id(), shipment.revision(), reception.id());
                 ShipmentStateSupport.acknowledge(GoodsTradeStateSupport.accept(state, contract.buyer().id(), receipt, now), shipment.id(), acknowledged);
                 var events = new ArrayList<>(List.of(new ProposedEvent(contract.buyer().id(), new GoodsTradeAccepted(receipt)),
@@ -70,14 +62,8 @@ public final class GoodsTradeReceiptProcess {
                     || !shipment.authorization().claimantId().equals(contract.id()) || shipment.status() != Shipment.Status.CARRYING
                     || !action.id().equals(review(contract.id(), shipment.id(), action.dueAt().ticks()).id())) continue;
             var receiptId = new SubjectId("receipt:goods-pickup/" + token(shipment.id(), 0, contract.id()));
-            var children = new LinkedHashMap<SubjectId, SubjectId>(); var resources = state.inventory().fungibleResources();
-            shipment.lotQuantities().forEach((lot, quantity) -> {
-                if (resources.lots().get(lot).quantity() > quantity)
-                    children.put(lot, new SubjectId("lot:goods-" + token(receiptId, contract.revision(), lot)));
-            });
-            var receipt = new GoodsTradeAcceptance(receiptId, contract.id(), contract.revision(), new ResourceTitleTransfer(
-                    shipment.carriedAccountId(), shipment.authorization().claimId(), contract.seller().id(), contract.buyer().id(),
-                    shipment.lotQuantities(), children));
+            var receipt = new GoodsTradeAcceptance(receiptId, contract.id(), contract.revision(),
+                    GoodsShipmentTitle.received(state, shipment, contract, receiptId, shipment.authorization().claimId(), shipment.portions(), true));
             var collected = new GoodsTradeCollected(shipment.id(), shipment.revision(), receipt);
             GoodsTradeCollectionSupport.accept(state, contract.buyer().id(), collected, now);
             var events = new ArrayList<>(List.of(new ProposedEvent(contract.buyer().id(), collected), cancelled,

@@ -505,7 +505,7 @@ class ResidentMealProcessTest {
                 Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of(),
                 new ResourceLot(bread, settlement.id(), "minecraft:bread", 64, "test", List.of()));
         var source = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                new InventoryCustody.ContainerSlot(depot, 0)), "minecraft:bread", 64);
+                new InventoryCustody.ContainerSlot(depot, initial.inventory().availableSlots(depot).getFirst())), "minecraft:bread", 64);
         var bound = cold.rebind(account, 1L, FungiblePhysicalObservation.bind(cold, account, 1L, List.of(source)));
         FrontierWorldState state = initial.withChanges(FrontierWorldStateUpdate.begin()
                 .actorLocations(actors).inventory(initial.inventory().withFungibleResources(bound))
@@ -541,7 +541,7 @@ class ResidentMealProcessTest {
                         ModeledActorBodyFacts.hotObservation(state, meal.executionId(), 1L)));
         assertEquals(ResidentMeal.Phase.TAKE, state.humanPopulation().meals().get(resident).phase());
         var preparation = new ResidentMealHotEffectPrepared(resident,
-                new ResidentMealPhysicalStep(ResidentMeal.Phase.TAKE, 0, 64, 1L, 1L, 1L, meal.executionId()));
+                new ResidentMealPhysicalStep(ResidentMeal.Phase.TAKE, ((PhysicalStackAddress.ContainerSlot) source.address()).slot().slot(), 64, 1L, 1L, 1L, meal.executionId()));
         assertTrue(preparation.requiresDurableBeforeEffect(), "the executor may act immediately after acceptance");
         state = ResidentMealProcess.reduceHotPrepared(state, resident, preparation);
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));

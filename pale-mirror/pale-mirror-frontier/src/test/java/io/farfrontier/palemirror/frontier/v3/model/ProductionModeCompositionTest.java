@@ -62,12 +62,12 @@ class ProductionModeCompositionTest {
             if (step.action() == BakeryColdStep.Action.RECIPE) {
                 ProductionStationSpec station = state.inventory().containers().values().stream()
                         .flatMap(container -> container.productionStation().stream())
-                        .filter(value -> value.id().equals(job.bakeryWork().orElseThrow().stationId()))
+                        .filter(value -> value.id().equals(job.stationWork().orElseThrow().stationId()))
                         .findFirst().orElseThrow();
                 if (exact) assertEquals(new InventoryCustody.ContainerSlot(station.containerId(), station.outputSlot()),
                         state.inventory().items().get(job.outputItemId()).custody());
                 else assertEquals(new ResourceCustody.Container(station.containerId()),
-                        state.inventory().fungibleResources().accounts().get(job.bakeryWork().orElseThrow().stationAccountId()).custody());
+                        state.inventory().fungibleResources().accounts().get(job.stationWork().orElseThrow().stationAccountId()).custody());
             }
         }
         assertFalse(state.productionJobs().containsKey(job.id()), "bakery job did not finish its station sequence");

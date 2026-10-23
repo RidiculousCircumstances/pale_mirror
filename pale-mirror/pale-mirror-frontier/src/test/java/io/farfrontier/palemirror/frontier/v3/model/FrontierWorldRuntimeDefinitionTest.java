@@ -47,8 +47,8 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(12, projection.settlementCount());
         assertEquals(48, projection.bioformCount());
         org.junit.jupiter.api.Assertions.assertTrue(projection.residentCount() >= 240 && projection.residentCount() <= 480);
-        assertEquals(projection.settlementCount() * EngineeringRecoveryTeam.MAX_MEMBERS, projection.itemStackCount(),
-                "ordinary bootstrap wheat and hive biomass are fungible lots, not permanent exact stacks");
+        assertEquals(projection.settlementCount() * (EngineeringRecoveryTeam.MAX_MEMBERS + 3), projection.itemStackCount(),
+                "only engineering tools and three field tools per town are exact items; bulk resources remain fungible");
         assertEquals(0, projection.activeProductionJobCount());
         assertEquals(18, projection.infectedCellCount());
     }
@@ -364,7 +364,7 @@ class FrontierWorldRuntimeDefinitionTest {
 
 
     private static StrategicTask productionTask(FrontierWorldState state) {
-        return state.strategicPlans().tasks().values().stream().filter(task -> task.kind() == StrategicTaskKind.PRODUCE_BREAD)
+        return state.strategicPlans().tasks().values().stream().filter(task -> task.kind() == StrategicTaskKind.PRODUCE_AT_STATION)
                 .reduce((left, right) -> { throw new AssertionError("production task must be unique in this fixture"); }).orElseThrow();
     }
 

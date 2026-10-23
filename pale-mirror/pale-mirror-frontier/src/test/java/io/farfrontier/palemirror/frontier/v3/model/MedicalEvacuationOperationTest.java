@@ -49,7 +49,7 @@ class MedicalEvacuationOperationTest {
         ExactInventory inventory = state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
                 .store(new ExactItemStack(supply, settlement.id(), MedicalEvacuationStateSupport.FIRST_TREATMENT_SUPPLY, 1,
-                        new InventoryCustody.ContainerSlot(depot, 1)));
+                        new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).getFirst())));
         state = state.withInventory(inventory).withHumanPopulation(state.humanPopulation().transitionHealth(patient, ResidentHealthStatus.EXPOSED, 100L)
                 .transitionHealth(patient, ResidentHealthStatus.INFECTED, 200L));
         SubjectId operationId = new SubjectId("medical:owner-test");
@@ -789,7 +789,7 @@ class MedicalEvacuationOperationTest {
         SubjectId supply = new SubjectId("item:medical-lifecycle-remedy");
         SubjectId patient = settlement.residents().stream().map(Resident::id).filter(id -> state.humanPopulation().resident(id).capability(HumanCapability.MEDICINE) < 50).findFirst().orElseThrow();
         ExactInventory inventory = state.inventory().withSurfaceStatus(depot, ContainerSurfaceStatus.PREPARED).withSurfaceStatus(depot, ContainerSurfaceStatus.ACTIVE)
-                .store(new ExactItemStack(supply, settlement.id(), MedicalEvacuationStateSupport.FIRST_TREATMENT_SUPPLY, 1, new InventoryCustody.ContainerSlot(depot, 1)));
+                .store(new ExactItemStack(supply, settlement.id(), MedicalEvacuationStateSupport.FIRST_TREATMENT_SUPPLY, 1, new InventoryCustody.ContainerSlot(depot, state.inventory().availableSlots(depot).getFirst())));
         return state.withInventory(inventory).withHumanPopulation(state.humanPopulation().transitionHealth(patient, ResidentHealthStatus.EXPOSED, 100L)
                 .transitionHealth(patient, ResidentHealthStatus.INFECTED, 200L));
     }

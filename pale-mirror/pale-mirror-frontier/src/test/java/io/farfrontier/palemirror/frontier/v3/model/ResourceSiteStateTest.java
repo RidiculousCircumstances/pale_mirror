@@ -58,7 +58,9 @@ class ResourceSiteStateTest {
                 new SubjectId("item:site-harvest-1-wheat-field-1"),
                 new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(new SubjectId("settlement:1")), 1),
                 new PhysicalIntentId("intent:site-harvest-1-wheat-field-1"), completeProgress(site.layout().cells().size()),
-                ResourceFieldCycle.seeded(siteId, site.layout(), 1).target(site.layout().cells().getFirst().id()));
+                ResourceFieldCycle.seeded(siteId, site.layout(), 1).target(site.layout().cells().getFirst().id()),
+                new WorkToolAssignment(new SubjectId("item:field-hoe"), ResourceStorageAccess.at(baseline,
+                        FrontierWorldState.depotId(new SubjectId("settlement:1"))).endpoint(), WorkToolAssignment.Stage.RETURNED));
         ResourceFieldCycle unworked = ResourceFieldCycle.seeded(siteId, site.layout(), 1);
         ResourceSiteLifecycle ready = growing;
         assertThrows(IllegalArgumentException.class, () -> new ResourceSiteState(Map.of(siteId, ResourceSiteDeclaration.of(site)), Map.of(siteId, ready),

@@ -317,12 +317,12 @@ public final class FrontierReadabilityPlan {
 
     private static BlockPosition structureBoardPosition(SettlementStructure structure, StructureCondition condition) {
         int depth = switch (structure.kind()) {
-            case HALL, FARM, WORKSHOP, SMELTERY, DEPOT -> 7;
+            case HALL, FARM, WORKSHOP, SMELTERY, FORGE, DEPOT -> 7;
             case HOUSING, INFIRMARY -> 6;
         };
         int height = condition == StructureCondition.DAMAGED ? 2 : switch (structure.kind()) {
             case HALL -> 5;
-            case DEPOT, WORKSHOP, SMELTERY -> 4;
+            case DEPOT, WORKSHOP, SMELTERY, FORGE -> 4;
             default -> 3;
         };
         return structure.anchor().offset(0, Math.max(2, height - 1), -depth / 2 - 1);
@@ -371,6 +371,7 @@ public final class FrontierReadabilityPlan {
             case FARM -> "FARM";
             case WORKSHOP -> "BAKERY";
             case SMELTERY -> "SMELTERY";
+            case FORGE -> "FORGE";
             case DEPOT -> "DEPOT";
             case INFIRMARY -> "INFIRMARY";
         };
@@ -552,12 +553,14 @@ public final class FrontierReadabilityPlan {
         if (jobs.size() == 1) return workshopJobText(state, jobs.getFirst());
         var phases = jobs.stream().collect(java.util.stream.Collectors.groupingBy(job -> {
             var task = state.strategicPlans().tasks().get(job.taskId());
-            var work = job.bakeryWork().orElseThrow();
+            var work = job.stationWork().orElseThrow();
             if (state.actorLocations().get(job.workerId()).condition().status() != ActorLifeStatus.ALIVE
                     || task != null && task.status() == StrategicTaskStatus.BLOCKED
                     || work.block().isPresent() || ProductionOutputCapacity.depotDeliveryUnavailable(state, job))
                 return "PAUSED";
             return switch (work.phase()) {
+                case TARGET_PICKUP -> "TOOL PICKUP";
+                case TARGET_LOAD -> "TOOL LOAD";
                 case DEPOT_PICKUP -> "PICKUP";
                 case STATION_LOAD -> "LOAD";
                 case PROCESSING -> "BAKING";
@@ -578,7 +581,7 @@ public final class FrontierReadabilityPlan {
         if (demand == null) throw new IllegalStateException("accepted workshop order has no buyer demand");
         StrategicTask task = state.strategicPlans().tasks().get(job.taskId());
         boolean bakerLost = state.actorLocations().get(job.workerId()).condition().status() != ActorLifeStatus.ALIVE;
-        String bakery = job.bakeryWork().map(work -> "\n" + (bakerLost ? "BAKER PAUSED · WORKER UNAVAILABLE"
+        String bakery = job.stationWork().map(work -> "\n" + (bakerLost ? "BAKER PAUSED · WORKER UNAVAILABLE"
                 : task != null && task.status() == StrategicTaskStatus.BLOCKED ? "BAKER PAUSED · WORK BLOCKED"
                 : work.block().map(block -> switch (block.reason()) {
             case SOURCE_CHANGED -> "BAKER PAUSED · WHEAT CHANGED";
@@ -589,10 +592,12 @@ public final class FrontierReadabilityPlan {
             case MACHINE_UNAVAILABLE -> "BAKER PAUSED · STATION UNAVAILABLE";
         }).orElseGet(() -> ProductionOutputCapacity.depotDeliveryUnavailable(state, job)
                 ? "BAKER PAUSED · STORAGE FULL" : switch (work.phase()) {
+            case TARGET_PICKUP -> "WORKER · REPAIR TARGET PICKUP";
+            case TARGET_LOAD -> "WORKER · MAINTENANCE PORT";
             case DEPOT_PICKUP -> "BAKER · WHEAT PICKUP";
             case STATION_LOAD -> "BAKER · STATION INPUT";
-            case PROCESSING -> BakeryLabour.complete(state, job) ? "BAKING · WORK COMPLETE"
-                    : BakeryLabour.progress(state, job).filter(WorkProgress::running).isPresent() ? "BAKING · WORKING" : "BAKING · PAUSED";
+            case PROCESSING -> StationWorkLabour.complete(state, job) ? "BAKING · WORK COMPLETE"
+                    : StationWorkLabour.progress(state, job).filter(WorkProgress::running).isPresent() ? "BAKING · WORKING" : "BAKING · PAUSED";
             case STATION_UNLOAD -> "BAKER · BREAD READY";
             case DEPOT_DELIVERY -> "BAKER · BREAD DELIVERY";
             case DELIVERED -> "BAKER · BREAD STORED";

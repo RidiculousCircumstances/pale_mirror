@@ -10,7 +10,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 /** One COLD-only movement, transfer or station-work fact for the currently retained bread job. */
-public record BakeryColdStep(SubjectId jobId, BakeryWorkState.Phase expectedPhase, Action action,
+public record BakeryColdStep(SubjectId jobId, StationWorkState.Phase expectedPhase, Action action,
                              SurfaceAnchor nextSurface, ActorExecutionId executionId,
                              Optional<PedestrianRouteReceipt> plannedRoute, Optional<BakeryLabourChange> labourChange) implements FrontierPayload {
     public enum Action {
@@ -39,7 +39,7 @@ public record BakeryColdStep(SubjectId jobId, BakeryWorkState.Phase expectedPhas
             throw new IllegalArgumentException("bakery step needs its exact production owner and movement evidence");
     }
 
-    public BakeryColdStep(SubjectId jobId, BakeryWorkState.Phase expectedPhase, Action action,
+    public BakeryColdStep(SubjectId jobId, StationWorkState.Phase expectedPhase, Action action,
             SurfaceAnchor nextSurface, ActorExecutionId executionId, Optional<PedestrianRouteReceipt> route) {
         this(jobId, expectedPhase, action, nextSurface, executionId, route, Optional.empty());
     }

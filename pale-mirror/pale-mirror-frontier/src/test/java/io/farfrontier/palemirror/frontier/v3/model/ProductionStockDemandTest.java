@@ -16,7 +16,7 @@ class ProductionStockDemandTest {
         assertThrows(IllegalArgumentException.class, () -> new StockTargetDemand(-1, 0, 0, 0));
         assertThrows(ArithmeticException.class, () -> new StockTargetDemand(1, Long.MAX_VALUE, 1, 0).covered());
         assertThrows(IllegalArgumentException.class, () -> StockSupplyComposition.register(List.of()));
-        var bakery = new BakeryStockSupply();
+        var bakery = new StationWorkStockSupply();
         assertThrows(IllegalArgumentException.class, () -> StockSupplyComposition.register(List.of(bakery, bakery)));
     }
 

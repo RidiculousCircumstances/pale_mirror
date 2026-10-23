@@ -26,12 +26,12 @@ final class ProductionClaimForfeitureOwner implements FungibleClaimForfeitureOwn
         var executions = transaction.executions();
         for (var claim : claims) {
             ProductionJob job = requireJob(before, claim);
-            if (job.bakeryWork().isPresent()) {
-                BakeryWorkState work = job.bakeryWork().orElseThrow();
+            if (job.stationWork().isPresent()) {
+                StationWorkState work = job.stationWork().orElseThrow();
                 CustodyAccount sourceAfter = inventory.fungibleResources().accounts().get(work.sourceAccountId());
                 int available = sourceAfter == null ? 0 : sourceAfter.lotQuantities().values().stream().mapToInt(Integer::intValue).sum();
-                jobs.put(job.id(), job.withBakeryWork(work.withBlock(Optional.of(new BakeryWorkBlock(
-                        BakeryWorkBlock.Reason.SOURCE_CHANGED, BakeryStorage.source(job), -1,
+                jobs.put(job.id(), job.withStationWork(work.withBlock(Optional.of(new BakeryWorkBlock(
+                        BakeryWorkBlock.Reason.SOURCE_CHANGED, StationWorkStorage.source(job), -1,
                         claim.itemKind(), Math.min(available, 127))))));
                 continue; // Keep the accepted order/payment; this baker may reallocate before pickup.
             }
@@ -53,18 +53,18 @@ final class ProductionClaimForfeitureOwner implements FungibleClaimForfeitureOwn
             throw new IllegalArgumentException("stock loss has no declared production owner");
         if (!(job.inputHold() instanceof ProductionInputHold.FungibleBound held) || !held.claimId().equals(claim.id())
                 || !claim.economicOwnerId().equals(job.settlementId())
-                || !job.bakeryWork().map(BakeryWorkState::inputItemKind).orElse("minecraft:wheat").equals(claim.itemKind())
+                || !job.stationWork().map(StationWorkState::inputItemKind).orElse("minecraft:wheat").equals(claim.itemKind())
                 || claim.quantity() != job.inputCount() || !claim.lotQuantities().equals(held.inputLots())
                 || state.physicalIntents().values().stream().anyMatch(intent -> intent.causeSubjectId().equals(job.id()))
-                || job.bakeryWork().isEmpty() && state.sceneLeases().values().stream().anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
+                || job.stationWork().isEmpty() && state.sceneLeases().values().stream().anyMatch(lease -> lease.status() != SceneLeaseStatus.CLOSED
                     && FrontierSceneBehaviors.isProductionWork(lease) && FrontierSceneBehaviors.productionWork(lease).jobId().equals(job.id())))
             throw new IllegalArgumentException("stock loss cannot bypass an active production effect");
         StrategicTask task = state.strategicPlans().tasks().get(job.taskId());
-        if (task == null || task.kind() != StrategicTaskKind.PRODUCE_BREAD || task.status() != StrategicTaskStatus.ACTIVE
+        if (task == null || task.kind() != StrategicTaskKind.PRODUCE_AT_STATION || task.status() != StrategicTaskStatus.ACTIVE
                 || !task.ownerId().equals(job.settlementId()))
             throw new IllegalArgumentException("stock loss has no exact current production task");
-        if (job.bakeryWork().isPresent() && (job.bakeryWork().orElseThrow().phase() != BakeryWorkState.Phase.DEPOT_PICKUP
-                || job.bakeryWork().orElseThrow().pendingPhysicalStep().isPresent()))
+        if (job.stationWork().isPresent() && (!job.stationWork().orElseThrow().phase().inputAtSource()
+                || job.stationWork().orElseThrow().pendingPhysicalStep().isPresent()))
             throw new IllegalArgumentException("bakery input cannot be reallocated after a physical effect begins");
         MarketWorkOrder order = state.companies().market().acceptedForJob(job.id()).orElse(null);
         if (order != null) {

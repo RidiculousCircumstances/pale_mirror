@@ -33,7 +33,8 @@ public record ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount,
             throw new IllegalArgumentException("retained placement targets a slot outside this container");
         productionStation.ifPresent(station -> {
             if (!station.containerId().equals(id) || station.inputSlot() >= slotCount || station.outputSlot() >= slotCount
-                    || station.fuelSlot() >= slotCount)
+                    || station.fuelSlot() >= slotCount
+                    || station.maintenanceSlot().isPresent() && station.maintenanceSlot().getAsInt() >= slotCount)
                 throw new IllegalArgumentException("production station does not own its declared bounded container");
         });
     }

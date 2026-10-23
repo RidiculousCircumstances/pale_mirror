@@ -132,12 +132,14 @@ final class ExtractionSiteStateCodec {
     }
     static void writeDefinition(DataOutputStream out, BlockExtraction.Definition definition) throws IOException {
         out.writeUTF(definition.id()); writeBlock(out, definition.before()); writeBlock(out, definition.after());
-        out.writeUTF(definition.toolKind()); out.writeUTF(definition.lootTable()); out.writeByte(definition.coldOutput().size());
+        out.writeUTF(definition.toolRequirement().ability()); out.writeInt(definition.toolRequirement().minimumGrade());
+        out.writeInt(definition.toolRequirement().wear()); out.writeUTF(definition.lootTable()); out.writeByte(definition.coldOutput().size());
         for (var output : definition.coldOutput()) { out.writeUTF(output.itemKind()); out.writeByte(output.quantity()); }
     }
     static BlockExtraction.Definition readDefinition(DataInputStream in) throws IOException {
         String id = in.readUTF(); var before = readBlock(in); var after = readBlock(in);
-        String tool = in.readUTF(), loot = in.readUTF(); int outputs = in.readUnsignedByte();
+        var tool = new io.farfrontier.palemirror.frontier.v3.model.tooling.ToolRequirement(in.readUTF(), in.readInt(), in.readInt());
+        String loot = in.readUTF(); int outputs = in.readUnsignedByte();
         if (outputs < 1 || outputs > BlockExtraction.MAX_OUTPUTS) throw new IllegalArgumentException("invalid extraction output count");
         var values = new ArrayList<BlockExtraction.Output>();
         for (int i = 0; i < outputs; i++) values.add(new BlockExtraction.Output(in.readUTF(), in.readUnsignedByte()));

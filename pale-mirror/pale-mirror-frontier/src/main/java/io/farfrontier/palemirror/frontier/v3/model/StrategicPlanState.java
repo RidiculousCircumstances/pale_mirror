@@ -140,9 +140,10 @@ public final class StrategicPlanState {
                     StrategicTaskRequirement.AVAILABLE_HIVE_BOMBER)))) {
                 throw new IllegalArgumentException("hive settlement assault task has an invalid decomposition");
             }
-            if ((objective.kind() == StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD || objective.kind() == StrategicObjectiveKind.SETTLEMENT_COMPANY_PRODUCTION)
-                    && (task.kind() != StrategicTaskKind.PRODUCE_BREAD || !task.requirements().equals(List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP,
-                    StrategicTaskRequirement.EXACT_WHEAT_INPUT)))) {
+            if ((objective.kind() == StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD || objective.kind() == StrategicObjectiveKind.SETTLEMENT_COMPANY_PRODUCTION
+                    || objective.kind() == StrategicObjectiveKind.SETTLEMENT_MAINTAIN_EQUIPMENT)
+                    && (task.kind() != StrategicTaskKind.PRODUCE_AT_STATION || !task.requirements().equals(List.of(StrategicTaskRequirement.ACTIVE_PRODUCTION_FACILITY,
+                    StrategicTaskRequirement.AVAILABLE_PRODUCTION_INPUT)))) {
                 throw new IllegalArgumentException("settlement production task has an invalid decomposition");
             }
             if (objective.kind() == StrategicObjectiveKind.SETTLEMENT_PATROL_OBSTRUCTED_ROUTE

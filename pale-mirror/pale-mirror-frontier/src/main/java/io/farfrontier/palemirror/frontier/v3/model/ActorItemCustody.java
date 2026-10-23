@@ -124,8 +124,10 @@ public final class ActorItemCustody {
         // The owner fences the receipt; exact post-layout binding and the inventory
         // update still reject foreign contents and newly overcommitted capacity.
         if (!observed && order.direction() == ActorContainerItemOrder.Direction.TAKE
-                && !ContainerStorageAdmission.receive(state, storage.containerId(), order.portion().itemKind(),
-                    order.portion().quantity(), java.util.Optional.empty()))
+                && !(order.portion() instanceof ActorContainerItemOrder.Portion.Exact
+                    ? ContainerStorageAdmission.receiveIndividuals(state, storage.containerId(), order.portion().itemKind(), 1, Optional.empty())
+                    : ContainerStorageAdmission.receive(state, storage.containerId(), order.portion().itemKind(),
+                        order.portion().quantity(), Optional.empty())))
             throw new IllegalArgumentException("attached storage has no capacity for the declared portion");
     }
 
@@ -166,14 +168,13 @@ public final class ActorItemCustody {
     }
 
     private static void requireEndpoint(ContainerRecord container, ActorContainerItemOrder order) {
-        if (container == null || order.portion() instanceof ActorContainerItemOrder.Portion.Exact exact
-                && !container.ownerId().equals(exact.item().economicOwnerId())) {
+        if (container == null) {
             throw new IllegalArgumentException("actor item endpoint has no compatible declared container");
         }
         if (order.direction() == ActorContainerItemOrder.Direction.PLACE
                 && container.storage().filter(policy -> !policy.filter().accepts(order.portion().itemKind())).isPresent())
             throw new IllegalArgumentException("declared storage filter refuses this resource portion");
-        // Fungible custody and title are independent. The calling owner authorizes the order;
+        // Custody and title are independent. The calling owner authorizes the order;
         // the resource ledger validates quantities/claims and preserves each lot's actual owner.
     }
     private static void requireRetired(FrontierWorldState state, ActorResourceItemOrder order, ActorActuationId identity) {
@@ -182,6 +183,14 @@ public final class ActorItemCustody {
         state.actorExecutions().requireRetained(identity.execution());
     }
     private static void requireExactDestinationSlot(FrontierWorldState state, ActorContainerItemOrder order) {
+        if (order.actorSlot() instanceof ActorItemSlot.AttachedStorage storage) {
+            var exact = (ActorContainerItemOrder.Portion.Exact) order.portion();
+            var slot = exact.attachedSlot().orElseThrow();
+            if (!slot.containerId().equals(storage.containerId()) || order.direction() == ActorContainerItemOrder.Direction.TAKE
+                    && state.inventory().itemAt(slot.containerId(), slot.slot()).isPresent())
+                throw new IllegalArgumentException("individual cargo overwrites attached storage");
+            return;
+        }
         if (!(order.actorSlot() instanceof ActorItemSlot.Hand hand) || hand.hand() != ActorContainerItemOrder.Hand.MAIN)
             throw new IllegalArgumentException("exact equipment declares the common primary equipment slot");
         if (order.direction() == ActorContainerItemOrder.Direction.TAKE && UnitInventoryPresentation.inventory(state, order.actorId()).values()

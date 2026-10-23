@@ -50,7 +50,8 @@ public final class ExtractionPhysicalStateSupport {
                     throw new IllegalArgumentException("physical extraction lacks its exact source, tool rule or custody epoch");
                 var tool = state.inventory().items().get(job.toolId());
                 if (tool == null || !tool.custody().equals(new InventoryCustody.Actor(job.execution().actorId()))
-                        || !tool.itemKind().equals(cell.definition().toolKind()))
+                        || !tool.equals(block.toolUse().before())
+                        || !state.bootstrap().ruleset().tools().serviceable(tool, cell.definition().toolRequirement()))
                     throw new IllegalArgumentException("mining tool no longer belongs to this actor");
             }
         }
@@ -126,9 +127,9 @@ public final class ExtractionPhysicalStateSupport {
                 if (event.externalSuccessor().isPresent()) depleted = depleted.observe(target.key().cell(), target.revision() + 1,
                         event.externalSuccessor().orElseThrow());
                 var next = retired ? job.transition(ExtractionWork.Phase.STORE, Optional.empty())
-                        : ExtractionWorkEffects.afterBlock(state, job, depleted, expected.quantity(), atTick);
+                        : ExtractionWorkEffects.afterBlock(state, job, depleted, expected.quantity(), atTick, block.toolUse().after());
                 sites = sites.settle(job, next, depleted);
-                changes.inventory(state.inventory().withFungibleResources(ledger))
+                changes.inventory(state.inventory().changeCondition(block.toolUse().before(), block.toolUse().after().condition()).withFungibleResources(ledger))
                         .replicaCustody(ExtractionSourceCustody.closeMutation(state, sites, target, canonicalRevision));
             }
         }

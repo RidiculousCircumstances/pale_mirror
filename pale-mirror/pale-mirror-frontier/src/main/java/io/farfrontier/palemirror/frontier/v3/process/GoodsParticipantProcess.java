@@ -57,16 +57,11 @@ public final class GoodsParticipantProcess {
                         && value.sourceContainerId().equals(value.receiverContainerId()))
                 .sorted(Comparator.comparing(GoodsTradeContract::id)).toList()) {
             if (ReferenceContainerCustody.blocksCanonicalUse(state, contract.receiverContainerId())) continue;
-            var account = FungibleResourceCustodySupport.accountAtContainer(state, contract.receiverContainerId()).orElseThrow();
             for (var claimId : contract.outstandingClaims().keySet().stream().sorted().toList()) {
-                if (!account.claimQuantities().containsKey(claimId)) continue;
-                var claim = state.inventory().fungibleResources().claims().get(claimId);
-                var splits = new HashMap<SubjectId, SubjectId>();
-                for (var lot : claim.lotQuantities().entrySet()) if (state.inventory().fungibleResources().lots().get(lot.getKey()).quantity() > lot.getValue())
-                    splits.put(lot.getKey(), new SubjectId("lot:goods-local/" + WorkOpportunityIdentity.digest(contract.id().value()
-                            + "|" + contract.revision() + "|" + lot.getKey().value())));
+                var title = GoodsTitleAccounting.local(state, contract, claimId);
+                if (title.isEmpty()) continue;
                 var receipt = new GoodsTradeAcceptance(new SubjectId("receipt:goods-local/" + contract.id().value().replace(':', '-') + "/" + contract.revision()),
-                        contract.id(), contract.revision(), new ResourceTitleTransfer(account.id(), claim.id(), contract.seller().id(), contract.buyer().id(), claim.lotQuantities(), splits));
+                        contract.id(), contract.revision(), title.orElseThrow());
                 state = GoodsTradeStateSupport.accept(state, participant.party().id(), receipt, now);
                 events.add(new ProposedEvent(participant.party().id(), new GoodsTradeAccepted(receipt)));
                 events.addAll(GoodsParticipantWakeup.party(state, contract.seller().id(), receipt.id().value(), now));

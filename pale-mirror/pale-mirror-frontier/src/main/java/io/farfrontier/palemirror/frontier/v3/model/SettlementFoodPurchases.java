@@ -15,7 +15,7 @@ public final class SettlementFoodPurchases {
         var food = stocks.get(recipe.product().itemKind());
         var commodity = state.bootstrap().ruleset().goodsTrade().policies().get(GoodsPolicyKind.PUBLIC_SETTLEMENT).stream()
                 .filter(value -> value.itemKind().equals(recipe.product().itemKind())).findFirst().orElseThrow();
-        long promisedFood = StockSupplyComposition.pending(state, StockSupplyPort.Key.BAKERY).stream()
+        long promisedFood = StockSupplyComposition.pending(state, StockSupplyPort.Key.STATION_WORK).stream()
                 .filter(value -> value.economicOwner().equals(home) && value.itemKind().equals(recipe.product().itemKind()))
                 .mapToLong(StockSupplyPort.Commitment::incoming).sum();
         long deficit = Math.max(0, StockTargetDemand.target(commodity, residents, food.protectedMinimum())

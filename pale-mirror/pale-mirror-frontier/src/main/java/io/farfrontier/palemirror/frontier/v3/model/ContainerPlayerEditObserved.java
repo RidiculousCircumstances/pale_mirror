@@ -6,7 +6,7 @@ import java.util.*;
 
 /** One causal player action over an explicitly composed inventory; members retain their identities. */
 public record ContainerPlayerEditObserved(UUID playerId, UUID interactionId, List<Member> members,
-        Optional<PlayerReturn> returning, Optional<ExactItemCustodyChanged> exactIngress) implements FrontierPayload {
+        Optional<PlayerReturn> returning, Optional<ExactItemIngress> exactIngress) implements FrontierPayload {
     public ContainerPlayerEditObserved(UUID playerId, UUID interactionId, List<Member> members, Optional<PlayerReturn> returning) {
         this(playerId, interactionId, members, returning, Optional.empty());
     }
@@ -42,8 +42,9 @@ public record ContainerPlayerEditObserved(UUID playerId, UUID interactionId, Lis
             throw new IllegalArgumentException("composed edit requires distinct explicitly declared members");
         if (exactIngress.isPresent()) {
             var transfer = exactIngress.orElseThrow(); var declared = members;
-            if (returning.isPresent() || !transfer.from().equals(new InventoryCustody.Player(playerId))
-                    || !(transfer.to() instanceof InventoryCustody.ContainerSlot destination)
+            if (returning.isPresent() || (transfer instanceof ExactItemIngress.Returned returned
+                    && !returned.before().custody().equals(new InventoryCustody.Player(playerId)))
+                    || !(transfer.after().custody() instanceof InventoryCustody.ContainerSlot destination)
                     || declared.stream().noneMatch(m -> m.containerId().equals(destination.containerId())))
                 throw new IllegalArgumentException("exact ingress requires this player and an explicitly declared destination");
         }

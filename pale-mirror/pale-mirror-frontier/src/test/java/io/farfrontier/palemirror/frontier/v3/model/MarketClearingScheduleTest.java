@@ -22,8 +22,8 @@ class MarketClearingScheduleTest {
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:market-baker-free-window"), settlement,
                 StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(new SubjectId("task:market-baker-free-window"), objective.id(), settlement,
-                StrategicTaskKind.PRODUCE_BREAD, Optional.empty(),
-                List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT),
+                StrategicTaskKind.PRODUCE_AT_STATION, Optional.empty(),
+                List.of(StrategicTaskRequirement.ACTIVE_PRODUCTION_FACILITY, StrategicTaskRequirement.AVAILABLE_PRODUCTION_INPUT),
                 List.of(), StrategicTaskStatus.PENDING);
         FrontierWorldState pending = initial.withStrategicPlans(initial.strategicPlans().addObjective(objective).addTask(task));
         SubjectId depotAccount = ReferenceContainerCustody.scopeId(FrontierWorldState.depotId(settlement));

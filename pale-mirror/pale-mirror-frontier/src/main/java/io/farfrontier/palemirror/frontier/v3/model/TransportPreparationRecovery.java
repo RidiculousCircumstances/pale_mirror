@@ -35,7 +35,7 @@ public final class TransportPreparationRecovery {
             if (shipment.terminal()) continue;
             if (shipment.status() == Shipment.Status.AWAITING_LOAD) {
                 changes = ShipmentAuthorizationComposition.cancelledAtSource(state, shipment,
-                        ShipmentReception.unloaded(shipment, shipment.lotQuantities()), changes);
+                        ShipmentReception.unloaded(shipment, shipment.portions()), changes);
                 shipments = shipments.replace(shipment, shipment.withStatus(Shipment.Status.ALLOCATION_WITHDRAWN));
                 executions = TransportCargoExecution.afterParcelClosed(executions, shipment);
             } else shipments = shipments.replace(shipment, shipment.withStatus(Shipment.Status.RETURNING));

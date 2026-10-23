@@ -201,7 +201,9 @@ final class FrontierV3InventoryObservationExecutor {
         String kind = BuiltInRegistries.ITEM.getKey(actual.getItem()).toString();
         var target = state.inventory().containers().get(container);
         if (target == null) throw new IllegalArgumentException("physical deposit targets an unknown exact container");
-        ExactItemStack deposited = new ExactItemStack(itemId, target.ownerId(), kind, actual.getCount(), new InventoryCustody.ContainerSlot(container, slot));
+        ExactItemStack deposited = new ExactItemStack(itemId, target.ownerId(), kind, actual.getCount(), new InventoryCustody.ContainerSlot(container, slot),
+                actual.isDamageableItem() ? new io.farfrontier.palemirror.frontier.v3.model.ItemCondition(actual.getMaxDamage(), actual.getDamageValue())
+                        : io.farfrontier.palemirror.frontier.v3.model.ItemCondition.NONE);
         runtime.afterCommand(FrontierV3CommandSubmission.submit(runtime, "resource-deposit", itemId.value(), new ResourceDeposited(deposited)),
                 () -> FrontierV3ExactItemPresentation.clearPendingIngress(actual));
     }

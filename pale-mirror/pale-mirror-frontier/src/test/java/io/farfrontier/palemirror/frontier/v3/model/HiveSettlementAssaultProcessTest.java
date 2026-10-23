@@ -63,8 +63,8 @@ class HiveSettlementAssaultProcessTest {
                 productionOwner, StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, Optional.empty(), 2,
                 StrategicObjectiveStatus.ACTIVE);
         StrategicTask productionTask = new StrategicTask(new SubjectId("task:assault-occupied-production"),
-                productionObjective.id(), productionOwner, StrategicTaskKind.PRODUCE_BREAD, Optional.empty(),
-                List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT),
+                productionObjective.id(), productionOwner, StrategicTaskKind.PRODUCE_AT_STATION, Optional.empty(),
+                List.of(StrategicTaskRequirement.ACTIVE_PRODUCTION_FACILITY, StrategicTaskRequirement.AVAILABLE_PRODUCTION_INPUT),
                 List.of(), StrategicTaskStatus.ACTIVE);
         FrontierWorldState withProductionTask = fixture.state().withStrategicPlans(fixture.state().strategicPlans()
                 .addObjective(productionObjective).addTask(productionTask));

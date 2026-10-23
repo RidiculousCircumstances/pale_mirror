@@ -325,7 +325,7 @@ class GoodsTradeTest {
                 .acquire(new PhysicalCustodyLease(ReferenceContainerCustody.scopeId(SOURCE), SOURCE, ReferenceContainerCustody.PROVIDER_ID,
                         7, 7, 2, PhysicalCustodyLeaseStatus.ACQUIRED, null));
         var resources = state.inventory().fungibleResources();
-        var address = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(SOURCE, 0));
+        var address = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(SOURCE, state.inventory().availableSlots(SOURCE).getFirst()));
         resources = resources.rebind(SOURCE_ACCOUNT, 7, FungiblePhysicalObservation.bind(resources, SOURCE_ACCOUNT, 7,
                 List.of(new FungiblePhysicalObservation.Stack(address, shipment.itemKind(), 64))));
         var mobileAddress = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(mobileId, 0));
@@ -639,7 +639,7 @@ class GoodsTradeTest {
                                 7, 7, 2, PhysicalCustodyLeaseStatus.ACQUIRED, null));
                 resources = resources.rebind(SOURCE_ACCOUNT, 7, FungiblePhysicalObservation.bind(resources, SOURCE_ACCOUNT, 7,
                         List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                                new InventoryCustody.ContainerSlot(SOURCE, 0)), "minecraft:bread", 60))));
+                                new InventoryCustody.ContainerSlot(SOURCE, state.inventory().availableSlots(SOURCE).getFirst())), "minecraft:bread", 60))));
                 state = state.withChanges(FrontierWorldStateUpdate.begin()
                         .inventory(state.inventory().withFungibleResources(resources)).replicaCustody(custody));
                 var scope = ReferenceContainerCustody.scopeId(SOURCE); var leases = new java.util.HashMap<>(custody.custodyByScope());
@@ -718,7 +718,7 @@ class GoodsTradeTest {
 
     @Test void inboundCommitmentUsesTheExistingStorageOwnerAndStopsDoubleCountingAfterArrival() {
         FrontierWorldState state = reserved();
-        assertEquals(Map.of("minecraft:wheat", 60L), ContainerStorageAdmission.inbound(state, RECEIVER, java.util.Optional.empty()));
+        assertEquals(new ContainerIncomingStock(Map.of("minecraft:wheat", 60L), Map.of()), ContainerStorageAdmission.inbound(state, RECEIVER, java.util.Optional.empty()));
         FrontierWorldState arrived = arrive(state);
         assertTrue(ContainerStorageAdmission.inbound(arrived, RECEIVER, java.util.Optional.empty()).isEmpty());
         assertEquals(60, arrived.companies().goodsTrade().contracts().get(CONTRACT).remainingQuantity());
@@ -734,7 +734,7 @@ class GoodsTradeTest {
         var resources = state.inventory().fungibleResources().transfer(SOURCE_ACCOUNT, RECEIVER_ACCOUNT, Map.of(LOT, 20), Map.of(child, 20));
         state = state.withInventory(state.inventory().withFungibleResources(resources));
         FrontierDomainRelationships.validate(state);
-        assertEquals(Map.of("minecraft:wheat", 40L), ContainerStorageAdmission.inbound(state, RECEIVER, java.util.Optional.empty()));
+        assertEquals(new ContainerIncomingStock(Map.of("minecraft:wheat", 40L), Map.of()), ContainerStorageAdmission.inbound(state, RECEIVER, java.util.Optional.empty()));
         var receipt = new GoodsTradeAcceptance(id("receipt:shipment-one"), CONTRACT, 0,
                 new ResourceTitleTransfer(RECEIVER_ACCOUNT, child, SELLER, BUYER, Map.of(LOT, 20), Map.of(LOT, id("lot:shipment-bought"))));
         FixedScalar beforeBuyer = state.inventory().economics().require(BUYER).balance();
@@ -774,7 +774,7 @@ class GoodsTradeTest {
         var resources = state.inventory().fungibleResources();
         resources = resources.rebind(SOURCE_ACCOUNT, 7, FungiblePhysicalObservation.bind(resources, SOURCE_ACCOUNT, 7,
                 List.of(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(
-                        new InventoryCustody.ContainerSlot(SOURCE, 0)), "minecraft:wheat", 64))));
+                        new InventoryCustody.ContainerSlot(SOURCE, state.inventory().availableSlots(SOURCE).getFirst())), "minecraft:wheat", 64))));
         state = state.withInventory(state.inventory().withFungibleResources(resources));
         var binding = resources.bindings().values().stream().filter(b -> b.accountId().equals(SOURCE_ACCOUNT)).findFirst().orElseThrow();
         var player = java.util.UUID.fromString("00000000-0000-0000-0000-000000000131");

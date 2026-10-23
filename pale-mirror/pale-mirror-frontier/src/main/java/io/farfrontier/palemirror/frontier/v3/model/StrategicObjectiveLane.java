@@ -11,11 +11,13 @@ package io.farfrontier.palemirror.frontier.v3.model;
  */
 public enum StrategicObjectiveLane {
     STRATEGIC,
-    FACILITY;
+    FACILITY,
+    EQUIPMENT;
 
     static StrategicObjectiveLane forKind(StrategicObjectiveKind kind) {
         return switch (kind) {
             case SETTLEMENT_HARVEST_RESOURCE_SITE -> FACILITY;
+            case SETTLEMENT_MAINTAIN_EQUIPMENT -> EQUIPMENT;
             default -> STRATEGIC;
         };
     }

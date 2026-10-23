@@ -61,7 +61,7 @@ class ResourceSiteHarvestSceneReconciliationTest {
                             "minecraft:wheat", preceding))));
             state = state.withInventory(state.inventory().withFungibleResources(resources));
         }
-        state = ResourceSiteHarvestProcessTest.inspectGoal(state, hot.site(), job, hot.lease().id());
+        state = HarvestObservationFixture.inspectGoal(state, hot.site(), job, hot.lease().id());
         state = ResourceSiteHarvestProcessTest.completeLabourHot(state, hot.site(), hot.lease().id());
         job = state.resourceSites().site(hot.site()).harvestJob(job.id()).orElseThrow();
         state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceCropPrepared(state, hot.site(),
@@ -137,7 +137,7 @@ class ResourceSiteHarvestSceneReconciliationTest {
                 java.util.Set.of(job.workerId()), java.util.Optional.empty());
         var state = ResourceSiteHarvestProcessTest.confirmedPhysicalParticipants(approaching.prepareSceneLease(lease), lease)
                 .transitionSceneLease(lease.id(), SceneLeaseStatus.HOT);
-        state = ResourceSiteHarvestProcessTest.inspectGoal(state, job.siteId(), job, lease.id());
+        state = HarvestObservationFixture.inspectGoal(state, job.siteId(), job, lease.id());
         var hand = new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ActorHand(job.workerId(),
                 lease.members().getFirst().entityId()), "minecraft:wheat", 64);
         state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceHandProjected(state, fixture.site(),
@@ -207,7 +207,14 @@ class ResourceSiteHarvestSceneReconciliationTest {
         var applied = new HarvestRetiredDeliveryObserved(identity, job.siteId(), job.deliveredYieldQuantity(),
                 receipt.harvestedQuantity(), java.util.Optional.of(receipt));
         assertThrows(IllegalArgumentException.class, () -> applyRetiredDelivery(before, applied));
-        var settled = applyRetiredDelivery(dead, applied);
+        var delivered = applyRetiredDelivery(dead, applied);
+        var retained = delivered.resourceSites().site(job.siteId()).harvestJob(job.id()).orElseThrow();
+        assertEquals(0, retained.undeliveredYieldQuantity());
+        assertFalse(HarvestDeathResources.ready(delivered, retained), "delivery cannot erase the tool still on the dead actor");
+        var dropped = dropTool(delivered, job);
+        var settled = HarvestDeathResources.settle(dropped, job.siteId(), new HarvestDeathSettled(job.siteId(), identity,
+                retained.progress().completedCropSlots(), retained.harvestedYieldQuantity(), retained.deliveredYieldQuantity(),
+                0, java.util.Optional.empty()));
         assertFalse(settled.inventory().fungibleResources().accounts().containsKey(job.actorAccountId()));
         assertTrue(settled.resourceSites().site(job.siteId()).harvestJob(job.id()).isEmpty());
         assertTrue(HarvestDeathResources.execution(settled, job.workerId()).isEmpty());
@@ -220,6 +227,14 @@ class ResourceSiteHarvestSceneReconciliationTest {
         assertThrows(IllegalArgumentException.class, () -> applyRetiredDelivery(settled, applied));
         assertThrows(IllegalArgumentException.class, () -> applyRetiredDelivery(dead, new HarvestRetiredDeliveryObserved(
                 identity, job.siteId(), job.deliveredYieldQuantity() + 1, receipt.harvestedQuantity(), java.util.Optional.of(receipt))));
+    }
+
+    private static FrontierWorldState dropTool(FrontierWorldState state, ResourceSiteHarvestJob job) {
+        var item = state.inventory().items().get(job.equipment().itemId());
+        var result = applyRetiredDelivery(state, new ExactItemCustodyChanged(item.id(), item.custody(),
+                new InventoryCustody.WorldCarrier(java.util.UUID.randomUUID())));
+        assertEquals(item.condition(), result.inventory().items().get(item.id()).condition());
+        return result;
     }
 
     private static FrontierWorldState applyRetiredDelivery(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.FrontierPayload receipt) {
@@ -298,7 +313,7 @@ class ResourceSiteHarvestSceneReconciliationTest {
         assertEquals(bound.inventory(), applyRetiredDelivery(withoutScene, receipt).inventory(),
                 "retained carried stock does not reacquire the former work scene");
         var ground = new ResourceCustody.Ground(java.util.UUID.randomUUID(), new BlockPosition(1, 64, 1));
-        var settled = HarvestDeathResources.settle(bound, job.siteId(), new HarvestDeathSettled(job.siteId(), identity,
+        var settled = HarvestDeathResources.settle(dropTool(bound, job), job.siteId(), new HarvestDeathSettled(job.siteId(), identity,
                 job.progress().completedCropSlots(), job.harvestedYieldQuantity(), job.deliveredYieldQuantity(),
                 projection.actorEpoch(), java.util.Optional.of(ground)));
         assertTrue(HarvestDeathResources.work(settled, job.workerId()).isEmpty());
@@ -311,7 +326,7 @@ class ResourceSiteHarvestSceneReconciliationTest {
         var state = oneObservedCrop(hot);
         var job = (ResourceSiteHarvestJob) state.resourceSites().site(hot.site()).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         var goal = ResourceSiteHarvestGoal.current(state, job);
-        state = ResourceSiteHarvestProcessTest.inspectGoal(state, hot.site(), job, hot.lease().id());
+        state = HarvestObservationFixture.inspectGoal(state, hot.site(), job, hot.lease().id());
         state = ResourceSiteHarvestProcessTest.completeLabourHot(state, hot.site(), hot.lease().id());
         state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceCropPrepared(state, hot.site(),
                 new ResourceSiteHarvestCropPrepared(job.id(), goal.nextWorkSlot(), job.target().generation()));
@@ -397,7 +412,7 @@ class ResourceSiteHarvestSceneReconciliationTest {
         var state = hot.state();
         var goal = ResourceSiteHarvestGoal.current(state, job);
         if (!ResourceSiteHarvestGoal.actorAtWorkCell(state, job))
-            state = ResourceSiteHarvestProcessTest.inspectGoal(state, hot.site(), job, hot.lease().id());
+            state = HarvestObservationFixture.inspectGoal(state, hot.site(), job, hot.lease().id());
         state = ResourceSiteHarvestProcessTest.completeLabourHot(state, hot.site(), hot.lease().id());
         state = io.farfrontier.palemirror.frontier.v3.process.ResourceSiteHarvestProcess.reduceCropPrepared(state, hot.site(),
                 new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex(), job.target().generation()));

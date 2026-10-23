@@ -1,0 +1,189 @@
+{
+  "schema": 1,
+  "id": "disposable_equipment_repair_restart",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 41
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25575,
+    "profile": "equipment-repair"
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative PMTestPilot"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-1-forge-station",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -7,
+        "y": -1,
+        "z": -5
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "item",
+          "id": "item:tool-test-target",
+          "expect": {
+            "status": "ok",
+            "condition": {
+              "maxDamage": 131,
+              "damage": 100
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "release_fast_forward_hold"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "scene",
+      "id": "job:production-tool-test",
+      "expect": {
+        "status": "ok",
+        "leaseStatus": "HOT"
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-1-forge-station",
+          "field": "position"
+        }
+      }
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "item",
+      "id": "item:tool-test-target",
+      "expect": {
+        "status": "ok",
+        "condition": {
+          "maxDamage": 131,
+          "damage": 35
+        },
+        "custody": {
+          "kind": "CONTAINER_SLOT",
+          "container": "container:1-depot"
+        }
+      },
+      "timeoutMs": 240000,
+      "causalMilestone": "same_worn_tool_repaired_and_delivered"
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "job:production-tool-test",
+      "expect": {
+        "status": "not_found"
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:1-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -3,
+        "y": 0,
+        "z": -3
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:1-depot",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 30000
+    }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 3,
+    "resumeSetup": [
+      {
+        "type": "visit",
+        "dimension": "pale_mirror:frontier_graybox",
+        "position": {
+          "diagnostic": {
+            "view": "container",
+            "id": "container:structure-1-forge-station",
+            "field": "position"
+          }
+        },
+        "offset": {
+          "x": -7,
+          "y": -1,
+          "z": -5
+        },
+        "settleMs": 1000
+      }
+    ]
+  },
+  "assertions": [
+    {
+      "after": 4,
+      "view": "item",
+      "id": "item:tool-test-target",
+      "expect": {
+        "status": "ok",
+        "owner": "settlement:1",
+        "condition": {
+          "maxDamage": 131,
+          "damage": 35
+        },
+        "custody": {
+          "kind": "CONTAINER_SLOT",
+          "container": "container:1-depot"
+        }
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 3,
+      "name": "forge-entrance-before-restart"
+    },
+    {
+      "after": 7,
+      "name": "same-repaired-tool-in-warehouse",
+      "presentation": "player"
+    }
+  ]
+}

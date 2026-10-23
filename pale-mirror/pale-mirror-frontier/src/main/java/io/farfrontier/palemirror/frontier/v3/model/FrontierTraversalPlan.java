@@ -58,7 +58,7 @@ public record FrontierTraversalPlan(Map<TraversalTopologyId, TraversalTopology> 
         return Optional.ofNullable(switch (structure.kind()) {
             case HALL -> SettlementAccessPort.forHall(structure).topologyPort();
             case DEPOT -> SettlementDepotServicePort.forDepot(structure).topologyPort();
-            case WORKSHOP, SMELTERY -> SettlementWorkshopServicePort.forWorkshop(structure).topologyPort();
+            case WORKSHOP, SMELTERY, FORGE -> SettlementWorkshopServicePort.forWorkshop(structure).topologyPort();
             case INFIRMARY -> SettlementInfirmaryTreatmentPort.forInfirmary(structure).topologyPort();
             default -> null;
         });

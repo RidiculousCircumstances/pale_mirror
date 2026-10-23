@@ -10,7 +10,9 @@ public final class FieldHarvestExtraction {
     public static final BlockExtraction.Definition DEFINITION = new BlockExtraction.Definition(
             "pale_mirror:grain_harvest_v1",
             new BlockExtraction.Block("minecraft:wheat", Map.of("age", "7")),
-            new BlockExtraction.Block("minecraft:air", Map.of()), "minecraft:air",
+            new BlockExtraction.Block("minecraft:air", Map.of()),
+            new io.farfrontier.palemirror.frontier.v3.model.tooling.ToolRequirement(
+                    io.farfrontier.palemirror.frontier.v3.model.tooling.ToolAbilities.HARVEST, 0, 1),
             "pale_mirror:extraction/grain_harvest_v1", List.of(new BlockExtraction.Output(ITEM, 1)));
     private FieldHarvestExtraction() { }
 
@@ -18,7 +20,7 @@ public final class FieldHarvestExtraction {
         if (quantity < 1 || quantity > 64)
             throw new IllegalArgumentException("undeclared grain extraction yield " + quantity);
         return quantity == 1 ? DEFINITION : new BlockExtraction.Definition(
-                "pale_mirror:grain_harvest_" + quantity, DEFINITION.before(), DEFINITION.after(), DEFINITION.toolKind(),
+                "pale_mirror:grain_harvest_" + quantity, DEFINITION.before(), DEFINITION.after(), DEFINITION.toolRequirement(),
                 DEFINITION.lootTable(), List.of(new BlockExtraction.Output(ITEM, quantity)));
     }
     public static BlockExtraction.Definition definition(FrontierBootstrap bootstrap, BlockPosition position) {

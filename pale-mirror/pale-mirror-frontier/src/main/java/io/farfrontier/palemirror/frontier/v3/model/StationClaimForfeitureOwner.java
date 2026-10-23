@@ -10,15 +10,15 @@ final class StationClaimForfeitureOwner implements FungibleClaimForfeitureOwner 
                 .filter(value -> value.id().value().equals(claim.claimantId())).findFirst().orElseThrow(
                         () -> new IllegalArgumentException("station claim lost its exact processing owner"));
         if (claim.purpose() != ClaimPurpose.STATION_PROCESSING || operation.transformed()
-                || !(operation.inputCustody() instanceof ProductionOperation.FungibleInput input)
-                || !input.claims().equals(java.util.Map.of(claim.id(), claim.quantity()))
-                || !input.lots().equals(claim.lotQuantities()))
+                || operation.inputCustody().materials().isEmpty()
+                || !operation.inputCustody().materials().orElseThrow().claims().equals(java.util.Map.of(claim.id(), claim.quantity()))
+                || !operation.inputCustody().materials().orElseThrow().lots().equals(claim.lotQuantities()))
             throw new IllegalArgumentException("station stock loss contradicts its current operation allocation");
         return operation;
     }
     @Override public void validate(FrontierWorldState state, ClaimAllocation claim, SubjectId sourceAccount) {
         var operation = require(state, claim);
-        if (!((ProductionOperation.FungibleInput) operation.inputCustody()).accountId().equals(sourceAccount)
+        if (!operation.inputCustody().materials().orElseThrow().accountId().equals(sourceAccount)
                 || ContainerPhysicalAuthorityComposition.pending(state, ProductionStationEnergy.record(state, operation.stationId()).id()))
             throw new IllegalArgumentException("station claim loss cannot bypass a retained physical effect");
     }

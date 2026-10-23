@@ -83,7 +83,7 @@ class ResourceFieldForeignCellObservedTest {
         ResourceSiteHarvestJob job = hot.job();
         ResourceSiteHarvestGoal goal = ResourceSiteHarvestGoal.current(state, job);
         if (!ResourceSiteHarvestGoal.actorAtWorkCell(state, job))
-            state = ResourceSiteHarvestProcessTest.inspectGoal(state, SITE, job, hot.lease().id());
+            state = HarvestObservationFixture.inspectGoal(state, SITE, job, hot.lease().id());
         state = ResourceSiteHarvestProcessTest.completeLabourHot(state, SITE, hot.lease().id());
         state = ResourceSiteHarvestProcess.reduceCropPrepared(state, SITE,
                 new ResourceSiteHarvestCropPrepared(job.id(), job.progress().nextCropSlotIndex(), job.target().generation()));

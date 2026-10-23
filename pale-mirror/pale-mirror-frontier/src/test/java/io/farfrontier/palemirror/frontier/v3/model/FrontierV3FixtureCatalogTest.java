@@ -33,7 +33,7 @@ class FrontierV3FixtureCatalogTest {
         var state = configuration.initialState();
         assertEquals(1, state.productionJobs().size());
         var job = state.productionJobs().values().iterator().next();
-        assertEquals(BakeryWorkState.Phase.DEPOT_PICKUP, job.bakeryWork().orElseThrow().phase());
+        assertEquals(StationWorkState.Phase.DEPOT_PICKUP, job.stationWork().orElseThrow().phase());
         assertTrue(state.inventory().fungibleResources().lots().containsKey(job.consumedItemId()));
         assertTrue(!state.inventory().fungibleResources().lots().containsKey(job.outputItemId()));
         assertTrue(state.sceneLeases().isEmpty());
@@ -46,12 +46,12 @@ class FrontierV3FixtureCatalogTest {
         var state = configuration.initialState();
         assertEquals(1, state.productionJobs().size());
         var job = state.productionJobs().values().iterator().next();
-        assertEquals(BakeryWorkState.Phase.PROCESSING, job.bakeryWork().orElseThrow().phase());
-        assertTrue(BakeryLabour.progress(state, job).orElseThrow().running());
+        assertEquals(StationWorkState.Phase.PROCESSING, job.stationWork().orElseThrow().phase());
+        assertTrue(StationWorkLabour.progress(state, job).orElseThrow().running());
         assertEquals(new SubjectId("job:production-" + job.taskId().value().substring("task:".length())), job.id());
         assertTrue(SettlementWorkPolicy.permissions(state, job.settlementId())
-                .permits(ResidentWorkKind.BAKING, job.workerId()));
-        assertEquals(new SubjectId("lot:" + job.id().value().substring("job:".length()) + "-bread"), job.outputItemId());
+                .permits(ResidentWorkKind.PRODUCTION, job.workerId()));
+        assertEquals("minecraft:bread", job.outputItemKind());
         assertTrue(state.inventory().fungibleResources().lots().containsKey(job.consumedItemId()));
         assertTrue(!state.inventory().fungibleResources().lots().containsKey(job.outputItemId()));
         assertTrue(state.sceneLeases().isEmpty(), "profile begins COLD, not in an injected HOT scene");
@@ -64,15 +64,15 @@ class FrontierV3FixtureCatalogTest {
         var state = configuration.initialState();
         assertEquals(1, state.productionJobs().size());
         var job = state.productionJobs().values().iterator().next();
-        assertEquals(BakeryWorkState.Phase.PROCESSING, job.bakeryWork().orElseThrow().phase());
-        assertTrue(BakeryLabour.progress(state, job).orElseThrow().running());
+        assertEquals(StationWorkState.Phase.PROCESSING, job.stationWork().orElseThrow().phase());
+        assertTrue(StationWorkLabour.progress(state, job).orElseThrow().running());
         var held = assertInstanceOf(ProductionInputHold.FungibleCold.class, job.inputHold());
         assertEquals(java.util.Map.of(new SubjectId("lot:production-two-field-first"), 32,
                 new SubjectId("lot:production-two-field-second"), 32), held.inputLots());
         assertEquals(1, state.inventory().fungibleResources().claims().size());
-        assertEquals(new SubjectId("claim:" + job.id().value().substring("job:".length())), held.claimId());
+        assertTrue(state.inventory().fungibleResources().claims().containsKey(held.claimId()));
         assertEquals(java.util.Map.of(held.claimId(), 64), state.inventory().fungibleResources().accounts()
-                .get(job.bakeryWork().orElseThrow().stationAccountId()).claimQuantities());
+                .get(job.stationWork().orElseThrow().stationAccountId()).claimQuantities());
         assertTrue(state.sceneLeases().isEmpty());
         assertTrue(!configuration.initialSchedules().isEmpty());
     }
@@ -158,7 +158,7 @@ class FrontierV3FixtureCatalogTest {
             FrontierV3FixtureCatalog.Profile profile = profiles.get(index);
             assertTrue(profile.provider().length() > 0);
             assertTrue(java.util.Set.of("production", "expedition-candidate", "quarry-graybox", "quarry-front",
-                    "fuelled-quarry", "supply-quarry", "market-quarry", "quarry-r22").contains(profile.rulesetId()));
+                    "fuelled-quarry", "supply-quarry", "market-quarry", "quarry-r22", "tool-graybox").contains(profile.rulesetId()));
             assertTrue(profile.sourceProfile().length() > 0);
             assertTrue(profile.requiredAssertion().length() > 0);
             String world = "frontier:catalog-" + profile.id();
@@ -166,6 +166,7 @@ class FrontierV3FixtureCatalogTest {
             assertEquals(world, configuration.worldId().value());
             var expected = switch (profile.rulesetId()) {
                 case "production" -> FrontierRulesets.production();
+                case "tool-graybox" -> FrontierRulesets.toolGraybox();
                 case "expedition-candidate" -> FrontierRulesets.installed("frontier-v3-expedition-candidate-r2");
                 case "quarry-graybox" -> FrontierRulesets.installed("frontier-v3-quarry-graybox-r4");
                 case "quarry-front" -> FrontierRulesets.installed("frontier-v3-quarry-graybox-r7");

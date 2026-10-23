@@ -95,9 +95,8 @@ public record ExtractionRules(boolean enabled, int producerStride, int width, in
             throw new IllegalArgumentException("invalid bounded extraction content rules");
         if (surfaceCut.isPresent() && (terraces.isEmpty() || geology.isEmpty()
                 || surfaceCut.orElseThrow().topY() != geology.orElseThrow().maxY() + 1
-                || !surfaceCut.orElseThrow().cover().toolKind().equals(source.toolKind())
                 || surfaceCut.orElseThrow().cover().before().equals(source.before())))
-            throw new IllegalArgumentException("surface cut requires contiguous declared geology and one compatible tool");
+            throw new IllegalArgumentException("surface cut requires contiguous declared geology");
     }
     public static ExtractionRules disabled() { return initial(false); }
     public static ExtractionRules graybox() { return initial(true); }
@@ -124,7 +123,9 @@ public record ExtractionRules(boolean enabled, int producerStride, int width, in
                 java.util.Optional.of(new io.farfrontier.palemirror.frontier.v3.model.geometry.ExcavationTerraces(4, 4)),
                 java.util.Optional.of(new ExtractionSurfaceCut(63, 1, new BlockExtraction.Definition(
                         "pale_mirror:quarry_surface_preparation", new BlockExtraction.Block("minecraft:grass_block", Map.of("snowy", "false")),
-                        new BlockExtraction.Block("minecraft:air", Map.of()), base.source().toolKind(), "minecraft:blocks/grass_block",
+                        new BlockExtraction.Block("minecraft:air", Map.of()),
+                        new io.farfrontier.palemirror.frontier.v3.model.tooling.ToolRequirement(
+                                io.farfrontier.palemirror.frontier.v3.model.tooling.ToolAbilities.DIG, 0, 1), "minecraft:blocks/grass_block",
                         List.of(new BlockExtraction.Output("minecraft:dirt", 1))))));
     }
     private static ExtractionRules initial(boolean enabled) {
@@ -132,7 +133,8 @@ public record ExtractionRules(boolean enabled, int producerStride, int width, in
                 new BlockExtraction.Definition("pale_mirror:stone_extraction",
                         new BlockExtraction.Block("minecraft:stone", Map.of()),
                         new BlockExtraction.Block("minecraft:air", Map.of()),
-                        "minecraft:stone_pickaxe", "minecraft:blocks/stone",
+                        new io.farfrontier.palemirror.frontier.v3.model.tooling.ToolRequirement(
+                                io.farfrontier.palemirror.frontier.v3.model.tooling.ToolAbilities.MINE, 0, 1), "minecraft:blocks/stone",
                         List.of(new BlockExtraction.Output("minecraft:cobblestone", 1))));
     }
     public static ExtractionRules availableFrontGraybox() {
@@ -169,7 +171,7 @@ public record ExtractionRules(boolean enabled, int producerStride, int width, in
                 + "|" + minersPerSite + "|" + haulBatch + "|" + reviewTicks
                 + "|" + exteriorClearance + "|" + pitDepth + "|" + projectionWritesPerTurn + "|" + source.id()
                 + "|" + blockText(source.before()) + "|" + blockText(source.after())
-                + "|" + source.toolKind() + "|" + source.lootTable() + "|"
+                + "|" + source.toolRequirement() + "|" + source.lootTable() + "|"
                 + source.coldOutput().stream().map(value -> value.itemKind() + ":" + value.quantity())
                     .collect(java.util.stream.Collectors.joining(";"))
                 + (developmentBatchCells == 0 ? "" : "|development=" + developmentBatchCells)

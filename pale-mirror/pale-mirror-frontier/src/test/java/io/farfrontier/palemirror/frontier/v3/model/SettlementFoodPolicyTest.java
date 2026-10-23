@@ -48,7 +48,7 @@ class SettlementFoodPolicyTest {
             int count = Math.min(left, 64);
             inventory = inventory.store(new ExactItemStack(new SubjectId("item:exact-food-reserve-" + slot),
                     settlement, SettlementFoodPolicy.BREAD, count,
-                    new InventoryCustody.ContainerSlot(depot, slot)));
+                    new InventoryCustody.ContainerSlot(depot, inventory.availableSlots(depot).getFirst())));
             left -= count;
         }
         FrontierWorldState state = initial.withInventory(inventory);

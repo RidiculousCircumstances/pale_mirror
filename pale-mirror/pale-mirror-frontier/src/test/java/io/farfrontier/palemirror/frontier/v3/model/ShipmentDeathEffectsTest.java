@@ -23,7 +23,7 @@ class ShipmentDeathEffectsTest {
         state = state.withChanges(FrontierWorldStateUpdate.begin().ambientLeases(Map.of(actor, lease)));
         var container = shipment.sender().container().orElseThrow();
         state = ReferenceContainerCustodyFixtures.observedAndHeld(state, container);
-        var source = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(container, 0));
+        var source = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(container, state.inventory().availableSlots(container).getFirst()));
         var resources = state.inventory().fungibleResources();
         resources = resources.rebind(shipment.sourceAccountId(), 1, FungiblePhysicalObservation.bind(resources,
                 shipment.sourceAccountId(), 1, List.of(new FungiblePhysicalObservation.Stack(source, shipment.itemKind(), 64))));
@@ -92,7 +92,7 @@ class ShipmentDeathEffectsTest {
         var layout = new ArrayList<FungiblePhysicalObservation.Stack>();
         for (var entry : totals.entrySet()) for (int count = entry.getValue(); count > 0; count -= Math.min(count, 64))
             layout.add(new FungiblePhysicalObservation.Stack(new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(
-                    container, layout.size())), entry.getKey(), Math.min(count, 64)));
+                    container, state.inventory().availableSlots(container).get(layout.size()))), entry.getKey(), Math.min(count, 64)));
         if (account != null) state = state.withInventory(state.inventory().withFungibleResources(resources.rebind(account.id(), 1,
                 FungiblePhysicalObservation.bind(resources, account.id(), 1, layout))));
         var identity = new ActorActuationId(ActorBodyAuthority.current(state, actor), shipment.execution());

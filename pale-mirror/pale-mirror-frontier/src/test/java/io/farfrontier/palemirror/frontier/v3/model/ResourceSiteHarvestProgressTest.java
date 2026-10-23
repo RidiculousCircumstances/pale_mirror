@@ -21,7 +21,10 @@ class ResourceSiteHarvestProgressTest {
                 new InventoryCustody.ContainerSlot(new SubjectId("container:large-field-1"), 0),
                 new PhysicalIntentId("intent:site-harvest-large-field-1"), progress,
                 0, false, Optional.empty(), Optional.empty(), Optional.empty(), progress.completedCropSlots(),
-                new ResourceFieldWorkTarget(site, 1L, new ResourceFieldLayout.CellId(1L), 0L), 1L);
+                new ResourceFieldWorkTarget(site, 1L, new ResourceFieldLayout.CellId(1L), 0L), 1L,
+                new WorkToolAssignment(new SubjectId("item:field-hoe"), new ShipmentEndpoint.Storage(
+                        new SubjectId("settlement:1"), new SubjectId("container:large-field-1"), new SurfaceAnchor(new BlockPosition(0, 64, 0)),
+                        Optional.empty(), new SurfaceAnchor(new BlockPosition(0, 64, 0))), WorkToolAssignment.Stage.EQUIPPED));
     }
 
     @Test void deliveredBatchIsBoundedByActualHandAndRoundTripsWithoutRouteCache() {

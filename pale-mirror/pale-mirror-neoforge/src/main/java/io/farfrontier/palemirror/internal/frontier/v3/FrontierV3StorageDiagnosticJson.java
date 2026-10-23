@@ -18,7 +18,7 @@ final class FrontierV3StorageDiagnosticJson {
         var receipts = deliveries.stream().map(shipment -> "{\"shipment\":\"" + FrontierV3DiagnosticJson.quote(shipment.id().value())
                 + "\",\"sourceEntity\":\"" + ((ResourceSourceEndpoint.Ground) shipment.sender()).custody().entityId()
                 + "\",\"itemKind\":\"" + FrontierV3DiagnosticJson.quote(shipment.itemKind()) + "\",\"remainingCargo\":"
-                + shipment.lotQuantities().values().stream().mapToInt(Integer::intValue).sum() + "}").collect(Collectors.joining(",", "[", "]"));
+                + shipment.portions().values().stream().mapToInt(Integer::intValue).sum() + "}").collect(Collectors.joining(",", "[", "]"));
         return ",\"storage\":{\"role\":\"" + policy.role() + "\",\"priority\":" + policy.priority()
                 + ",\"allItems\":" + policy.filter().allItems() + ",\"items\":" + items
                 + ",\"groundReceiptPresent\":" + !deliveries.isEmpty() + ",\"groundReceipts\":" + receipts + "}";

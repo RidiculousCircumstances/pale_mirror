@@ -43,7 +43,7 @@ public final class SettlementSupplyPlanning {
                 .mapToLong(r -> r.characteristics().effectiveMetabolismPermille(atTick)).sum();
         for (var commodity : trade.policies().get(GoodsPolicyKind.PUBLIC_SETTLEMENT)) {
             var stock = Objects.requireNonNull(observed.get(commodity.itemKind()), "missing canonical supply stock");
-            long promised = StockSupplyComposition.pending(state, StockSupplyPort.Key.BAKERY).stream()
+            long promised = StockSupplyComposition.pending(state, StockSupplyPort.Key.STATION_WORK).stream()
                     .filter(c -> c.economicOwner().equals(home) && c.itemKind().equals(commodity.itemKind())).mapToLong(StockSupplyPort.Commitment::incoming).sum();
             promised = Math.addExact(promised, StockSupplyComposition.pending(state, StockSupplyPort.Key.FIELD).stream()
                     .filter(c -> c.economicOwner().equals(home) && c.itemKind().equals(commodity.itemKind())).mapToLong(StockSupplyPort.Commitment::incoming).sum());

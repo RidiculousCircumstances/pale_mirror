@@ -18,17 +18,25 @@ final class ActorClaimDelegationComposition {
             throw new IllegalArgumentException("delegated item authority lacks an exact validation/preparation owner");
     }
     static ActorItemTransferPreparation prepare(FrontierWorldState state, ActorResourceItemOrder order) {
-        if (!(order.portion() instanceof ActorContainerItemOrder.Portion.Fungible portion) || portion.delegation().isEmpty())
+        var delegation = delegation(order);
+        if (delegation.isEmpty())
             return ActorItemTransferPreparation.unchanged(state, order);
-        var port = PREPARATIONS.get(portion.delegation().orElseThrow().kind());
+        var port = PREPARATIONS.get(delegation.orElseThrow().kind());
         if (port == null) throw new IllegalArgumentException("unregistered delegated item preparation");
         return port.apply(state, order);
     }
     static void validate(FrontierWorldState state, ActorResourceItemOrder order) {
-        if (!(order.portion() instanceof ActorContainerItemOrder.Portion.Fungible portion) || portion.delegation().isEmpty()) return;
-        var port = PORTS.get(portion.delegation().orElseThrow().kind());
+        var delegation = delegation(order);
+        if (delegation.isEmpty()) return;
+        var port = PORTS.get(delegation.orElseThrow().kind());
         if (port == null) throw new IllegalArgumentException("unregistered delegated item authority");
         port.accept(state, order);
+    }
+    private static java.util.Optional<ResourceClaimDelegation> delegation(ActorResourceItemOrder order) {
+        return switch (order.portion()) {
+            case ActorContainerItemOrder.Portion.Fungible value -> value.delegation();
+            case ActorContainerItemOrder.Portion.Exact value -> value.delegation();
+        };
     }
     private ActorClaimDelegationComposition() { }
 }

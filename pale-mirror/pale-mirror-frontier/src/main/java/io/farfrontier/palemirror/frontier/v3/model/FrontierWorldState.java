@@ -238,7 +238,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
         Objects.requireNonNull(navigationGeometry, "navigation geometry");
         if (!fullValidationDeferred()) {
             navigationGeometry.requireWithin(bootstrap.bounds());
-            productionStations.validate(inventory, bootstrap.ruleset().production());
+            productionStations.validate(inventory, bootstrap.ruleset().production(), bootstrap.ruleset().tools());
             ContainerPhysicalReservations.validate(inventory, resourceSites, productionJobs, shipments, extractionSites, physicalIntents);
             ActorBodyAuthority.validate(actorLocations, fencedRecovery);
             validateFullState(bootstrap, actorLocations, structureConditions, infection, inventory, productionJobs,
@@ -263,10 +263,10 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
                                           io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionState actorExecutions,
                                           io.farfrontier.palemirror.frontier.v3.model.expedition.TransportFleet transportFleet,
                                           ProductionStations productionStations) {
-            productionJobs.values().stream().filter(job -> job.bakeryWork().isPresent())
-                    .forEach(job -> BakeryStationOperation.validate(productionStations, job));
+            productionJobs.values().stream().filter(job -> job.stationWork().isPresent())
+                    .forEach(job -> StationWorkOperation.validate(productionStations, job));
             ProductionOperationCompletionComposition.validateRelations(productionStations,
-                    Map.of(ProductionOrderKind.BAKERY, BakeryStationOperation.activeOrders(productionJobs)));
+                    Map.of(ProductionOrderKind.STATION_WORK, StationWorkOperation.activeOrders(productionJobs)));
             resourceSites.validate(bootstrap); HarvestContainerReservations.validate(inventory, resourceSites);
             HarvestContainerReservations.validateAccounts(inventory, resourceSites);
             strategicPlans.validate(bootstrap, routeTopology, humanPopulation, resourceSites);
@@ -398,15 +398,16 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
             ProductionJob job = entry.getValue();
             job.rights().validate(inventory, companies, job);
             if (!entry.getKey().equals(job.id())) throw new IllegalArgumentException("production job map key must match job identity");
-            requireJobTask(strategicPlans, job.taskId(), job.settlementId(), StrategicTaskKind.PRODUCE_BREAD, "production");
+            requireJobTask(strategicPlans, job.taskId(), job.settlementId(), StrategicTaskKind.PRODUCE_AT_STATION, "production");
             Settlement settlement = FrontierWorldStateSupport.settlement(bootstrap, job.settlementId());
             SettlementStructure facility = FrontierWorldStateSupport.structure(settlement, job.facilityId());
-            if (facility.kind() != StructureKind.WORKSHOP) throw new IllegalArgumentException("production job facility must be a workshop");
+            if (job.stationWork().isEmpty() && facility.kind() != StructureKind.WORKSHOP)
+                throw new IllegalArgumentException("legacy production job facility must be a workshop");
             ResidentProfile worker = humanPopulation.resident(job.workerId());
             if (worker == null) throw new IllegalArgumentException("production job worker must be a canonical resident");
             if (!worker.settlementId().equals(settlement.id())) throw new IllegalArgumentException("bread production job worker must belong to its retained settlement");
-            if (job.bakeryWork().isPresent()) {
-                BakeryWorkValidation.validate(inventory, job, settlement, bootstrap.ruleset().production());
+            if (job.stationWork().isPresent()) {
+                StationWorkValidation.validate(inventory, job, settlement, bootstrap.ruleset().production());
                 continue;
             }
             if (inventory.items().containsKey(job.outputItemId())) {
@@ -773,7 +774,7 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
     public java.util.OptionalInt firstFreeContainerSlotForOutput(SubjectId containerId, SubjectId completingOwner) {
         return ContainerStorageAdmission.first(this, containerId, Optional.of(completingOwner), this::productionHoldReserves);
     }
-    public Map<String, Long> pendingContainerInbound(SubjectId containerId) {
+    public ContainerIncomingStock pendingContainerInbound(SubjectId containerId) {
         return ContainerStorageAdmission.inbound(this, containerId, Optional.empty());
     }
     private static void requireJobTask(StrategicPlanState plans, SubjectId taskId, SubjectId ownerId,

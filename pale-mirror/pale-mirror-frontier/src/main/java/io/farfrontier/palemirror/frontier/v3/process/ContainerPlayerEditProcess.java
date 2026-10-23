@@ -43,14 +43,21 @@ final class ContainerPlayerEditProcess {
         for (var member : edit.members()) validate(state, member);
         var next = state;
         if (edit.exactIngress().isPresent()) {
-            var transfer = edit.exactIngress().orElseThrow();
-            var item = state.inventory().items().get(transfer.itemId());
-            if (item == null || !item.custody().equals(transfer.from()))
-                throw new IllegalArgumentException("exact ingress differs from its declared canonical source");
-            var observation = new ProposedEvent(FrontierWorldStateSupport.itemOwner(state, transfer), transfer);
-            if (consequences != null) consequences.addAll(ExactItemDepartureComposition.plan(state, command, transfer.itemId(), observation)
-                    .stream().filter(event -> !event.equals(observation)).toList());
-            next = FrontierPhysicalProcessModule.reduceCustodyChanged(next, observation.subject(), transfer);
+            switch (edit.exactIngress().orElseThrow()) {
+                case ExactItemIngress.Contribution contribution -> next = FrontierWorldPhysicalObservationProcess.reduceResourceDeposit(
+                        next, contribution.after().economicOwnerId(), new ResourceDeposited(contribution.after()));
+                case ExactItemIngress.Returned returned -> {
+                    if (!returned.before().equals(state.inventory().items().get(returned.before().id())))
+                        throw new IllegalArgumentException("exact ingress differs from its retained canonical predecessor");
+                    var transfer = returned.transfer();
+                    var observation = new ProposedEvent(FrontierWorldStateSupport.itemOwner(state, transfer), transfer);
+                    if (consequences != null) consequences.addAll(ExactItemDepartureComposition.plan(state, command, transfer.itemId(), observation)
+                            .stream().filter(event -> !event.equals(observation)).toList());
+                    if (!returned.before().condition().equals(returned.after().condition()))
+                        next = next.withInventory(next.inventory().changeCondition(returned.before(), returned.after().condition()));
+                    next = FrontierPhysicalProcessModule.reduceCustodyChanged(next, observation.subject(), transfer);
+                }
+            }
         }
         int returned = 0;
         for (var member : edit.members()) {

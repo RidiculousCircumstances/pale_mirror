@@ -303,7 +303,7 @@ final class FrontierV3SceneExecutor {
                                 if (body instanceof Zombie zombie) FrontierV3AmbientActorExecutor.configureBioform(zombie,
                                         FrontierV3AmbientActorExecutor.bioformProfile(state, member.actorId()));
                                 FrontierV3ScenePresentation.applyAmbientActorPresentation(body, state, member.actorId(), bioform);
-                                return FrontierV3BakeryHandProjection.prepareNew(state, lease, member, body);
+                                return FrontierV3StationWorkHandProjection.prepareNew(state, lease, member, body);
                             }, Optional.of(canonical)));
             if (result == FrontierV3ActorBodyController.Result.DEFERRED) return BodyMaterialization.DEFERRED;
             if (result == FrontierV3ActorBodyController.Result.CONFLICT) return BodyMaterialization.CONFLICT;

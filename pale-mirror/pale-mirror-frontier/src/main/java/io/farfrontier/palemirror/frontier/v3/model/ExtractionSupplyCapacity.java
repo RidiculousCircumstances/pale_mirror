@@ -34,17 +34,17 @@ final class ExtractionSupplyCapacity implements SupplyCapacityPort {
                             || assignments.assignment(r.id()).kind() == HumanAssignmentKind.EXTRACTION)
                     .sorted(Comparator.comparing(ResidentProfile::id)).toList();
             var ids = candidates.stream().map(ResidentProfile::id).collect(java.util.stream.Collectors.toSet());
-            long tools = state.inventory().items().values().stream().filter(item -> item.economicOwnerId().equals(home)
-                    && item.itemKind().equals(material.toolKind()) && (item.custody() instanceof InventoryCustody.Actor actor && ids.contains(actor.actorId())
-                    || item.custody() instanceof InventoryCustody.ContainerSlot slot
-                        && !ReferenceContainerCustody.blocksCanonicalUse(state, slot.containerId()))).count();
-            var workers = candidates.stream().limit(tools).toList();
+            var equipment = EquipmentProductiveCapacity.items(state, home, ids,
+                    io.farfrontier.palemirror.frontier.v3.model.tooling.EquipmentRequirements.allOf(Set.of(material.toolRequirement())));
+            var workers = candidates.stream().limit(equipment.size()).toList();
             if (workers.isEmpty()) continue;
             var forecasts = state.extractionSites().deposits().values().stream().filter(d -> d.site().settlementId().equals(home))
                     .map(d -> ExtractionProductionForecast.assess(state, d, material, workers)).filter(f -> f.outputs() > 0).toList();
             if (forecasts.isEmpty()) continue;
-            long quantity = forecasts.stream().mapToLong(f -> f.outputs()).sum();
-            long work = Math.max(1, Math.ceilDiv(forecasts.stream().mapToLong(f -> f.labourTicks()).sum(), quantity));
+            long reachable = forecasts.stream().mapToLong(f -> f.outputs()).sum();
+            long quantity = Math.min(reachable, EquipmentProductiveCapacity.remainingOperations(state, equipment, material.toolRequirement()));
+            if (quantity == 0) continue;
+            long work = Math.max(1, Math.ceilDiv(forecasts.stream().mapToLong(f -> f.labourTicks()).sum(), reachable));
             long first = forecasts.stream().mapToLong(f -> f.firstOutputTicks()).min().orElseThrow();
             long period = Math.max(1, Math.ceilDiv(Math.multiplyExact(work, schedule.dayTicks()), Math.multiplyExact(daily, workers.size())));
             long opening = SupplyPlanningWindow.completionDelay(schedule, first);

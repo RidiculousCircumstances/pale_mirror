@@ -124,6 +124,7 @@ final class ResourceSitePayloadCodecs {
                     output.writeInt(job.deliveredYieldQuantity());
                     output.writeInt(job.harvestedYieldQuantity());
                     output.writeLong(job.storageRevision());
+                    WorkToolAssignmentCodec.write(output, job.equipment());
                     output.writeLong(job.target().layoutRevision());
                     output.writeLong(job.target().cellId().value());
                     output.writeLong(job.target().generation());
@@ -154,6 +155,7 @@ final class ResourceSitePayloadCodecs {
                     var acceptance = ResourceSiteHarvestAcceptanceCodec.readOptional(input);
                     int delivered = input.readInt(), harvested = input.readInt();
                     long storageRevision = input.readLong();
+                    var equipment = WorkToolAssignmentCodec.read(input);
                     var target = new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldWorkTarget(site,
                             input.readLong(), new io.farfrontier.palemirror.frontier.v3.model.ResourceFieldLayout.CellId(input.readLong()), input.readLong());
                     boolean returningForBatch = input.readBoolean();
@@ -171,7 +173,7 @@ final class ResourceSitePayloadCodecs {
                     return new ResourceSiteHarvestStarted(new ResourceSiteHarvestJob(id, task, site, worker, actorAccount, depotAccount, output,
                             new InventoryCustody.ContainerSlot(depot, slot), new io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId(intent),
                             new ResourceSiteHarvestProgress(total, completed, pending, selected, lastCompleted, workProgress, acceptance), delivered,
-                            returningForBatch, successorSlot, lastBatch, java.util.Optional.empty(), harvested, target, storageRevision),
+                            returningForBatch, successorSlot, lastBatch, java.util.Optional.empty(), harvested, target, storageRevision, equipment),
                             PedestrianRouteReceiptCodec.read(input), PedestrianRouteReceiptCodec.read(input));
                 });
             }

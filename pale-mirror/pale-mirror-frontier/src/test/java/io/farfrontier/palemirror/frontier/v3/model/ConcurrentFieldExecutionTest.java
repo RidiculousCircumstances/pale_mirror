@@ -116,18 +116,19 @@ class ConcurrentFieldExecutionTest {
                 distance(firstTarget, secondTarget), "registered admission spreads starts instead of following the same row");
         assertIndependentTerminalTraces(engine.canonicalState().state(), site, admitted);
 
-        for (int turn = 0; turn < 256; turn++) {
+        for (int turn = 0; turn < 1024; turn++) {
             var jobs = engine.canonicalState().state().resourceSites().site(site).harvestJobs();
             if (jobs.size() == 3 && jobs.values().stream().allMatch(job -> job.harvestedYieldQuantity() > 0)) break;
-            var next = engine.checkpoint().schedules().stream()
+            var current = engine.canonicalState().state();
+            var next = engine.checkpoint().schedules().stream().filter(action -> !FrontierWorldRuntimeDefinition.scheduledHeld(current, action))
                     .min(Comparator.comparing(ScheduledAction::dueAt).thenComparing(ScheduledAction::id)).orElseThrow();
-            requireActive(engine.advanceTo(next.dueAt(), new WorkBudget(1, 64)).status());
+            requireActive(engine.advanceTo(new SimInstant(Math.max(next.dueAt().ticks(), engine.checkpoint().instant().ticks())), new WorkBudget(1, 64)).status());
         }
         FrontierWorldState worked = engine.canonicalState().state();
         var jobs = worked.resourceSites().site(site).harvestJobs();
         assertEquals(admitted.keySet(), jobs.keySet());
         for (var job : jobs.values()) {
-            assertTrue(job.harvestedYieldQuantity() > 0, "all three admitted workers must produce their own confirmed crop");
+            assertTrue(job.harvestedYieldQuantity() > 0, "all three admitted workers must acquire their tools and produce confirmed crop: " + job.workerId() + " at=" + engine.checkpoint().instant());
             assertEquals(job.undeliveredYieldQuantity(), ResourceSiteHarvestCargo.quantity(worked, job));
             assertTrue(job.target().current(worked.resourceSites().cycle(site)));
         }

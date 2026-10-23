@@ -37,7 +37,27 @@ public record ProductionOperation(Id id, SubjectId stationId, SubjectId orderId,
     public record Id(SubjectId value) {
         public Id { Objects.requireNonNull(value, "production operation identity"); }
     }
-    public sealed interface InputCustody permits ExactInput, FungibleInput { }
+    public sealed interface InputCustody permits ExactInput, FungibleInput, RepairInput {
+        default Optional<FungibleInput> materials() {
+            return switch (this) {
+                case ExactInput ignored -> Optional.empty();
+                case FungibleInput value -> Optional.of(value);
+                case RepairInput value -> Optional.of(value.materialsInput());
+            };
+        }
+        default Optional<ExactItemStack> maintenanceTarget() {
+            return this instanceof RepairInput repair ? Optional.of(repair.target()) : Optional.empty();
+        }
+    }
+    /** The target is retained independently from consumed materials; it is never a fungible ingredient. */
+    public record RepairInput(FungibleInput materialsInput, ExactItemStack target) implements InputCustody {
+        public RepairInput {
+            Objects.requireNonNull(materialsInput); Objects.requireNonNull(target);
+            if (target.count() != 1 || target.condition().maximumDamage() == 0 || target.condition().damage() == 0
+                    || !(target.custody() instanceof InventoryCustody.ContainerSlot))
+                throw new IllegalArgumentException("maintenance requires one damaged individual in station custody");
+        }
+    }
     public record ExactInput(SubjectId itemId) implements InputCustody {
         public ExactInput { Objects.requireNonNull(itemId); }
     }
@@ -61,8 +81,9 @@ public record ProductionOperation(Id id, SubjectId stationId, SubjectId orderId,
         progress = Objects.requireNonNull(progress);
         if (inputQuantity < 1 || inputQuantity > 64 || outputQuantity < 1 || outputQuantity > 64
                 || committedHeat < 0 || committedHeat > 1_000_000_000L
-                || inputCustody instanceof FungibleInput fungible
-                    && fungible.lots().values().stream().mapToInt(Integer::intValue).sum() != inputQuantity
+                || inputCustody.materials().filter(input -> input.lots().values().stream()
+                    .mapToInt(Integer::intValue).sum() != inputQuantity).isPresent()
+                || inputCustody instanceof RepairInput repair && !repair.target().id().equals(outputId)
                 || transformed && progress.filter(WorkProgress::complete).isEmpty()
                 || initiator instanceof PlayerInitiator player && player.attendanceIntent() == PlayerAttendanceIntent.PAUSED
                     && progress.filter(WorkProgress::running).isPresent()

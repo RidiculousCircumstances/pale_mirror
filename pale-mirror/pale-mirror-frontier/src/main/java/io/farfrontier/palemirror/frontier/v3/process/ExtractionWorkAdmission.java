@@ -14,7 +14,7 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
     ExtractionWorkAdmission(SubjectId siteId) { this.siteId = Objects.requireNonNull(siteId); }
     @Override public ResidentWorkKind kind() { return ResidentWorkKind.EXTRACTION; }
     @Override public HumanCapability capability() { return HumanCapability.EXTRACTION; }
-    record Opportunity(ExtractionToolSelection.Selection tool, ExtractionLayout.Cell cell, ShipmentEndpoint destination,
+    record Opportunity(WorkEquipmentSelection.Selection tool, ExtractionLayout.Cell cell, ShipmentEndpoint destination,
             Optional<PedestrianRouteReceipt> sourceRoute, Optional<PedestrianRouteReceipt> storageRoute) { }
     static Optional<Opportunity> opportunity(FrontierWorldState state, ResidentProfile resident, SubjectId siteId, long tick) {
         var deposit = Objects.requireNonNull(state.extractionSites().deposits().get(siteId), "declared mining site");
@@ -29,7 +29,7 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
         cells.removeIf(cell -> priorities.require(cell.id()).missing() == 0);
         if (cells.isEmpty()) return Optional.empty();
         var selectedTool = ExtractionToolSelection.select(state, resident, cells.stream()
-                .map(cell -> cell.definition().toolKind()).collect(java.util.stream.Collectors.toSet()));
+                .map(cell -> cell.definition().toolRequirement()).collect(java.util.stream.Collectors.toSet()));
         if (selectedTool.isEmpty()) return Optional.empty();
         var tool = selectedTool.orElseThrow();
         var slot = (InventoryCustody.ContainerSlot) tool.item().custody();
@@ -41,7 +41,7 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
             if (candidate.isEmpty()) return Optional.empty();
             var cell = candidate.orElseThrow();
             cells.remove(cell);
-            if (!cell.definition().toolKind().equals(tool.item().itemKind())) continue;
+            if (!state.bootstrap().ruleset().tools().serviceable(tool.item(), cell.definition().toolRequirement())) continue;
             var output = cell.definition().coldOutput().getFirst();
             var candidates = ResourceStorageSelection.receivingCandidates(state, resident.settlementId(), output.itemKind(),
                     output.quantity(), cell.workstation(), STORAGE, Optional.empty());
@@ -113,7 +113,7 @@ final class ExtractionWorkAdmission implements ResidentWorkProvider<ExtractionWo
                 .filter(value -> ExtractionWorkEffects.target(deposit, value).equals(target)).findFirst().orElseThrow(
                         () -> new IllegalArgumentException("mining start has a reserved, removed or stale source"));
         ExtractionWorkTargets.requireStationAvailable(state, deposit, resident.id(), cell);
-        if (!cell.definition().toolKind().equals(tool.itemKind()) || cell.definition().coldOutput().size() != 1
+        if (!state.bootstrap().ruleset().tools().serviceable(tool, cell.definition().toolRequirement()) || cell.definition().coldOutput().size() != 1
                 || !cell.definition().coldOutput().getFirst().itemKind().equals(job.outputKind())
                 || !ResourceStorageSelection.receivingCandidates(state, resident.settlementId(), job.outputKind(),
                     cell.definition().coldOutput().getFirst().quantity(), cell.workstation(), STORAGE, Optional.empty()).contains(job.storageTarget()))

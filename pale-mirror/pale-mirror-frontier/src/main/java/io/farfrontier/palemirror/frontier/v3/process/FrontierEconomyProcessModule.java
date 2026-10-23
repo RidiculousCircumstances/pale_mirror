@@ -112,7 +112,7 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                 FrontierDomainRelationships.declaredEdge(FrontierDomainRelationships.Kind.JOB_INPUT, owner, owner,
                         new FrontierDomainRelationships.SubjectEndpoint(resourceKind, inputId), FrontierDomainRelationships.Lifecycle.ACTIVE, job.id().value())));
         relations.add(FrontierDomainRelationships.declaredEdge(FrontierDomainRelationships.Kind.JOB_OUTPUT, owner, owner,
-                new FrontierDomainRelationships.SubjectEndpoint(resourceKind, job.outputItemId()), FrontierDomainRelationships.Lifecycle.ACTIVE, job.id().value()));
+                new FrontierDomainRelationships.SubjectEndpoint(job.outputEntityKind(), job.outputItemId()), FrontierDomainRelationships.Lifecycle.ACTIVE, job.id().value()));
         return new PhysicalIntentRetirementAccount.Binding(intent.lifecycleOwner(), intent.id(), new PhysicalIntentRetirementAccount.Exact<>(relations), continuation,
                 new PhysicalIntentRetirementAccount.Exact<>(job.workerId()), new PhysicalIntentRetirementAccount.Exact<>(job.consumedItemId()),
                 transition.status() == io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentStatus.UNKNOWN_AFTER_RESTART
@@ -181,10 +181,10 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                 return FrontierWorldCommandPlanner.rejected("bakery death settlement requires the physical executor");
             try {
                 var job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(settled.identity().execution().activityOwnerId()));
-                var next = BakeryDeathResources.settle(state, job.settlementId(), settled);
+                var next = StationWorkDeathResources.settle(state, job.settlementId(), settled);
                 var events = new java.util.ArrayList<ProposedEvent>(); events.add(new ProposedEvent(job.settlementId(), settled));
                 events.add(new ProposedEvent(job.id(), new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Cancelled(ProductionContinuation.at(job, 0).id())));
-                events.addAll(BakeryCompletionPlanning.stationReleaseWake(state, next, job.id(), command.id().value(), command.submittedAt().ticks()));
+                events.addAll(StationWorkCompletionPlanning.stationReleaseWake(state, next, job.id(), command.id().value(), command.submittedAt().ticks()));
                 return new CommandPlan.Accepted(List.copyOf(events));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
@@ -196,12 +196,12 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                 var successor = ProductionProcess.reduceBakeryRetiredEffectObserved(state, job.settlementId(), retired);
                 var events = new java.util.ArrayList<ProposedEvent>();
                 events.add(new ProposedEvent(job.settlementId(), retired));
-                var work = job.bakeryWork().orElseThrow();
-                var container = work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY
-                        ? BakeryStorage.current(job) : ProductionStationEnergy.record(state, work.stationId()).id();
+                var work = job.stationWork().orElseThrow();
+                var container = work.phase().sourcePickup() || work.phase() == StationWorkState.Phase.DEPOT_DELIVERY
+                        ? StationWorkStorage.current(job) : ProductionStationEnergy.record(state, work.stationId()).id();
                 events.addAll(ConfirmedContainerMutationPlan.close(successor, List.of(container), command.expectedRevision().next().value()));
-                events.addAll(BakeryCompletionPlanning.stationReleaseWake(state, successor, job.id(), command.id().value(), command.submittedAt().ticks()));
-                if (retired.applied() && retired.effect().phase() == BakeryWorkState.Phase.DEPOT_DELIVERY)
+                events.addAll(StationWorkCompletionPlanning.stationReleaseWake(state, successor, job.id(), command.id().value(), command.submittedAt().ticks()));
+                if (retired.applied() && retired.effect().phase() == StationWorkState.Phase.DEPOT_DELIVERY)
                     events.addAll(GoodsParticipantWakeup.container(successor, container, command.id().value(), command.submittedAt().ticks()));
                 return new CommandPlan.Accepted(List.copyOf(events));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
@@ -214,15 +214,15 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                 var successor = ProductionProcess.reduceBakeryHotEffectObserved(state, job.settlementId(), observed);
                 var events = new java.util.ArrayList<ProposedEvent>();
                 events.add(new ProposedEvent(job.settlementId(), observed));
-                var work = job.bakeryWork().orElseThrow();
-                SubjectId container = work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
-                        || work.phase() == BakeryWorkState.Phase.DEPOT_DELIVERY ? BakeryStorage.current(job)
+                var work = job.stationWork().orElseThrow();
+                SubjectId container = work.phase().sourcePickup()
+                        || work.phase() == StationWorkState.Phase.DEPOT_DELIVERY ? StationWorkStorage.current(job)
                         : ProductionStationEnergy.record(state, work.stationId()).id();
                 events.addAll(ConfirmedContainerMutationPlan.close(successor, List.of(container), command.expectedRevision().next().value()));
-                events.addAll(BakeryCompletionPlanning.stationReleaseWake(state, successor, job.id(),
+                events.addAll(StationWorkCompletionPlanning.stationReleaseWake(state, successor, job.id(),
                         command.id().value(), command.submittedAt().ticks()));
-                if (job.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DEPOT_DELIVERY
-                        && successor.productionJobs().get(job.id()).bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.DELIVERED)
+                if (job.stationWork().orElseThrow().phase() == StationWorkState.Phase.DEPOT_DELIVERY
+                        && successor.productionJobs().get(job.id()).stationWork().orElseThrow().phase() == StationWorkState.Phase.DELIVERED)
                     events.addAll(GoodsParticipantWakeup.container(successor, job.rights().destinationContainerId(), command.id().value(), command.submittedAt().ticks()));
                 return new CommandPlan.Accepted(List.copyOf(events));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
@@ -279,7 +279,7 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
             try {
                 ProductionJob job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(changed.jobId()));
                 ProductionProcess.reduceBakeryHotBlockChanged(
-                        BakeryLabour.pauseJob(state, job, command.submittedAt().ticks()), job.settlementId(), changed);
+                        StationWorkLabour.pauseJob(state, job, command.submittedAt().ticks()), job.settlementId(), changed);
                 return new CommandPlan.Accepted(List.of(new ProposedEvent(job.settlementId(), changed)));
             } catch (IllegalArgumentException invalid) { return FrontierWorldCommandPlanner.rejected(invalid.getMessage()); }
         }
@@ -311,12 +311,12 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
                 yield ProductionProcess.reduceBakeryColdStep(state, event.subject(), step);
             }
             case BakeryInputReallocated reallocated -> ProductionProcess.reduceBakeryInputReallocated(state, event.subject(), reallocated);
-            case BakeryStorageRetargeted retargeted -> BakeryStorageReplacement.apply(state, event.subject(), retargeted);
+            case BakeryStorageRetargeted retargeted -> StationWorkStorageReplacement.apply(state, event.subject(), retargeted);
             case BakeryHotEffectPrepared prepared -> ProductionProcess.reduceBakeryHotEffectPrepared(state, event.subject(), prepared);
             case BakeryHotDeliveryAborted aborted -> ProductionProcess.reduceBakeryHotDeliveryAborted(state, event.subject(), aborted);
             case BakeryHotEffectObserved observed -> ProductionProcess.reduceBakeryHotEffectObserved(state, event.subject(), observed);
             case BakeryRetiredEffectObserved retired -> ProductionProcess.reduceBakeryRetiredEffectObserved(state, event.subject(), retired);
-            case BakeryDeathSettled settled -> BakeryDeathResources.settle(state, event.subject(), settled);
+            case BakeryDeathSettled settled -> StationWorkDeathResources.settle(state, event.subject(), settled);
             case BakeryWorkChanged changed -> {
                 if (changed.change().atTick() != event.instant().ticks())
                     throw new IllegalArgumentException("bakery labour observation has a foreign simulation instant");
@@ -329,7 +329,7 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
             case BakeryHotBlockChanged changed -> {
                 var job = FrontierProductionWorkSceneSupport.require(state, new ProductionWorkSceneCause(changed.jobId()));
                 yield ProductionProcess.reduceBakeryHotBlockChanged(
-                        BakeryLabour.pauseJob(state, job, event.instant().ticks()), event.subject(), changed);
+                        StationWorkLabour.pauseJob(state, job, event.instant().ticks()), event.subject(), changed);
             }
             case ProductionWorkTraversalBlocked blocked -> ProductionProcess.reduceWorkTraversalBlocked(state, event.subject(), blocked);
             case ProductionWorkSceneLeasePrepared prepared -> reduceWorkScenePrepared(state, event.subject(), event, prepared);
@@ -389,7 +389,7 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
         if (!subject.equals(FrontierProductionWorkSceneSupport.owner(state, FrontierSceneBehaviors.productionWork(prepared.lease()))) || !prepared.lease().handoffInstant().equals(event.instant()))
             throw new IllegalArgumentException("production-work scene preparation does not match its retained hand-off");
         var job = FrontierProductionWorkSceneSupport.require(state, FrontierSceneBehaviors.productionWork(prepared.lease()));
-        state = BakeryLabour.pauseJob(state, job, event.instant().ticks());
+        state = StationWorkLabour.pauseJob(state, job, event.instant().ticks());
         return ProductionJourneyKnowledge.atScopeAdmission(state, state.productionJobs().get(job.id())).prepareSceneLease(prepared.lease());
     }
     private static FrontierWorldState reduceWorkSceneHandoff(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
@@ -398,7 +398,7 @@ final class FrontierEconomyProcessModule implements FrontierWorldProcessModule {
             throw new IllegalArgumentException("production-work scene hand-off does not match its retained worker");
         FrontierWorldState rebased = ProductionProcess.rebaseForAmbientHandoff(state, subject, handoff);
         var job = FrontierProductionWorkSceneSupport.require(rebased, FrontierSceneBehaviors.productionWork(handoff.lease()));
-        rebased = BakeryLabour.pauseJob(rebased, job, event.instant().ticks());
+        rebased = StationWorkLabour.pauseJob(rebased, job, event.instant().ticks());
         return rebased.handoffAmbientScene(new SceneLeaseHandoff(handoff.lease(), handoff.ambientMembers()));
     }
 }

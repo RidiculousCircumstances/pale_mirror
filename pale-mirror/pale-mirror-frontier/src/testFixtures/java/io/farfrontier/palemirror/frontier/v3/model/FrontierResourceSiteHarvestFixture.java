@@ -187,6 +187,8 @@ final class FrontierResourceSiteHarvestFixture {
         ScheduledAction next = null;
         for (ProposedEvent proposed : ResourceSiteHarvestProcess.planColdProgress(state, action)) {
             switch (proposed.payload()) {
+                case FieldEquipmentChanged changed -> state = io.farfrontier.palemirror.frontier.v3.process.FieldEquipmentProcess
+                        .reduce(state, siteId, changed, action.dueAt().ticks());
                 case ResourceSiteHarvestColdGoalAdvanced advanced ->
                         state = ResourceSiteHarvestProcess.reduceColdGoalAdvanced(state, siteId, advanced);
                 case ResourceSiteHarvestLabourChange changed ->

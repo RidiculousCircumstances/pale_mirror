@@ -199,7 +199,7 @@ final class FrontierV3ResourceFieldWorkExecutor {
         if (execution == null || !execution.activityOwnerId().equals(job.id()))
             throw new IllegalArgumentException("extraction lost its exact field execution");
         return new FrontierV3MinecraftBlockExtraction(level, worker,
-                FrontierV3ResourceSiteHarvestSceneExecutor.workActuation(state, runtime, lease, job, worker));
+                FrontierV3ResourceSiteHarvestSceneExecutor.workActuation(state, runtime, lease, job, worker), state.bootstrap().ruleset().tools());
     }
 
     private static BlockState block(ResourceFieldCellTransition.Step step) {

@@ -275,7 +275,11 @@ public final class FrontierV3PlayerCustodyGameTests {
         FungibleResourceLedger resources = base.initialState().inventory().fungibleResources().destroy(account, Map.of(lot, 64), Map.of());
         ExactItemStack wheat = new ExactItemStack(new SubjectId("item:bootstrap-1-wheat"), settlement, "minecraft:wheat", 64,
                 new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(settlement), 0));
-        FrontierWorldState state = base.initialState().withInventory(base.initialState().inventory().withFungibleResources(resources).store(wheat));
+        var inventory = base.initialState().inventory().withFungibleResources(resources);
+        // This fixture isolates exact wheat/player custody from independent starter equipment.
+        for (var item : inventory.items().values().stream().filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot
+                && slot.containerId().equals(FrontierWorldState.depotId(settlement))).toList()) inventory = inventory.withoutItem(item.id());
+        FrontierWorldState state = base.initialState().withInventory(inventory.store(wheat));
         FrontierEngineConfiguration<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> configuration =
                 new FrontierEngineConfiguration<>(base.worldId(), state, base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(),
                         base.stateCodec(), base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());

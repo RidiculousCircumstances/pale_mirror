@@ -14,7 +14,7 @@ public record ResourceSiteHarvestGoal(SubjectId jobId, SubjectId siteId, Subject
                                       List<SurfaceAnchor> legalStations,
                                       TraversalCapability capability, ArrivalContract arrivalContract) {
     public enum Kind {
-        WORK_CELL(1), DEPOT_SERVICE(2);
+        WORK_CELL(1), DEPOT_SERVICE(2), EQUIPMENT_SERVICE(3), EQUIPMENT_RETURN(4);
         private final int wireTag;
         Kind(int wireTag) { this.wireTag = wireTag; }
         public int wireTag() { return wireTag; }
@@ -23,7 +23,7 @@ public record ResourceSiteHarvestGoal(SubjectId jobId, SubjectId siteId, Subject
             throw new IllegalArgumentException("unknown resource-site harvest goal kind");
         }
     }
-    public enum ArrivalContract { EXACT_WORK_STATION, ANY_DEPOT_SERVICE_STATION }
+    public enum ArrivalContract { EXACT_WORK_STATION, ANY_DEPOT_SERVICE_STATION, EXACT_STORAGE_STATION }
 
     public ResourceSiteHarvestGoal {
         Objects.requireNonNull(jobId, "field goal job");
@@ -40,6 +40,8 @@ public record ResourceSiteHarvestGoal(SubjectId jobId, SubjectId siteId, Subject
                 || (kind == Kind.WORK_CELL) != cellId.isPresent()
                 || (kind == Kind.WORK_CELL && (arrivalContract != ArrivalContract.EXACT_WORK_STATION || legalStations.size() != 1))
                 || (kind == Kind.DEPOT_SERVICE && arrivalContract != ArrivalContract.ANY_DEPOT_SERVICE_STATION)
+                || ((kind == Kind.EQUIPMENT_SERVICE || kind == Kind.EQUIPMENT_RETURN)
+                    && (arrivalContract != ArrivalContract.EXACT_STORAGE_STATION || legalStations.size() != 1))
                 || capability != TraversalCapability.PEDESTRIAN)
             throw new IllegalArgumentException("field goal must name one typed, bounded pedestrian destination");
     }
@@ -50,8 +52,9 @@ public record ResourceSiteHarvestGoal(SubjectId jobId, SubjectId siteId, Subject
 
     /** The work owner chooses the CellId/depot; the movement subsystem sees only this destination. */
     public MovementOrder movementOrder() {
-        return new MovementOrder(jobId, workerId, nextWorkSlot, goalRevision, legalStations, capability,
-                kind == Kind.WORK_CELL ? MovementOrder.ArrivalPolicy.EXACT_STATION
+        return new MovementOrder(jobId, workerId, kind == Kind.EQUIPMENT_SERVICE || kind == Kind.EQUIPMENT_RETURN
+                ? ResourceFieldLayout.MAX_CELLS + (long) kind.wireTag() : nextWorkSlot, goalRevision, legalStations, capability,
+                kind != Kind.DEPOT_SERVICE ? MovementOrder.ArrivalPolicy.EXACT_STATION
                         : MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
     }
 
@@ -75,6 +78,13 @@ public record ResourceSiteHarvestGoal(SubjectId jobId, SubjectId siteId, Subject
     public SurfaceAnchor representative() { return legalStations.getFirst(); }
 
     public static ResourceSiteHarvestGoal current(FrontierWorldState state, ResourceSiteHarvestJob job) {
+        if (FieldEquipment.transferring(job)) {
+            var cycle = state.resourceSites().cycle(job.siteId());
+            return new ResourceSiteHarvestGoal(job.id(), job.siteId(), job.workerId(), cycle.layout().revision(),
+                    job.storageRevision(), cycle.layout().cells().size(), job.equipment().stage() == WorkToolAssignment.Stage.ACQUIRING
+                        ? Kind.EQUIPMENT_SERVICE : Kind.EQUIPMENT_RETURN, Optional.empty(),
+                    List.of(FieldEquipment.endpoint(state, job).station()), TraversalCapability.PEDESTRIAN, ArrivalContract.EXACT_STORAGE_STATION);
+        }
         int slot = job.returningForBatch() || job.progress().complete()
                 ? state.resourceSites().cycle(job.siteId()).layout().cells().size()
                 : job.progress().nextCropSlotIndex();
@@ -106,5 +116,10 @@ public record ResourceSiteHarvestGoal(SubjectId jobId, SubjectId siteId, Subject
         if (!access.settlementId().equals(site.settlementId()))
             throw new IllegalArgumentException("field goal has a foreign output container");
         return access;
+    }
+
+    public static ResourceStorageAccess servicePort(FrontierWorldState state, ResourceSiteHarvestJob job) {
+        return FieldEquipment.transferring(job)
+                ? ResourceStorageAccess.at(state, FieldEquipment.endpoint(state, job).containerId()) : depotPort(state, job);
     }
 }

@@ -24,7 +24,7 @@ class BakeryLabourIntegrationTest {
         state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
         for (long tick = 300, turn = 0; turn < 200; tick += 20, turn++) {
             var job = state.productionJobs().get(started.job().id());
-            if (job.bakeryWork().orElseThrow().phase() == BakeryWorkState.Phase.PROCESSING)
+            if (job.stationWork().orElseThrow().phase() == StationWorkState.Phase.PROCESSING)
                 return new Fixture(state, job, tick);
             var step = step(state, job, tick);
             state = ProductionProcess.reduceBakeryColdStep(state, job.settlementId(), step);
@@ -52,7 +52,7 @@ class BakeryLabourIntegrationTest {
             assertEquals(f.state().inventory(), running.inventory());
             assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryColdStep(
                     running, f.job().settlementId(), start), "duplicate start cannot award labour");
-            var progress = BakeryLabour.progress(running, f.job()).orElseThrow();
+            var progress = StationWorkLabour.progress(running, f.job()).orElseThrow();
             assertEquals(0, progress.completedMilliWork());
             assertTrue(progress.activeUntilTick() > f.tick());
         }
@@ -60,7 +60,7 @@ class BakeryLabourIntegrationTest {
         var partial = ProductionProcess.planCompletion(running, ProductionProcess.complete(f.job(), f.tick() + 1));
         assertTrue(partial.stream().noneMatch(event -> event.payload() instanceof BakeryColdStep),
                 "an executor call before the retained deadline cannot award another work unit");
-        var progress = BakeryLabour.progress(running, f.job()).orElseThrow();
+        var progress = StationWorkLabour.progress(running, f.job()).orElseThrow();
         var finish = step(running, f.job(), progress.activeUntilTick());
         assertTrue(finish.labourChange().orElseThrow().next().complete());
         var complete = ProductionProcess.reduceBakeryColdStep(codec.decode(codec.encode(running)),
@@ -76,28 +76,28 @@ class BakeryLabourIntegrationTest {
         var running = ProductionProcess.reduceBakeryColdStep(f.state(), f.job().settlementId(),
                 step(f.state(), f.job(), f.tick()));
         var job = running.productionJobs().get(f.job().id());
-        var before = BakeryLabour.progress(running, job).orElseThrow();
+        var before = StationWorkLabour.progress(running, job).orElseThrow();
         var previous = running.humanPopulation().resident(job.workerId()).characteristics().workModifiers();
         var next = previous.with(new ResidentWorkModifiers.Modifier(new SubjectId("modifier:bakery-speed"),
                 HumanCapability.INDUSTRY, 2_000));
         var edited = ResidentWorkModifiersProcess.reduce(running, job.workerId(),
                 new ResidentWorkModifiersChanged(job.workerId(), f.tick() + 100, previous, next));
-        var paused = BakeryLabour.progress(edited, job).orElseThrow();
+        var paused = StationWorkLabour.progress(edited, job).orElseThrow();
         assertEquals(before.completedAt(f.tick() + 100), paused.completedMilliWork());
         assertFalse(paused.running());
-        var resumed = BakeryLabour.next(edited, edited.productionJobs().get(job.id()), f.tick() + 300, true);
+        var resumed = StationWorkLabour.next(edited, edited.productionJobs().get(job.id()), f.tick() + 300, true);
         assertEquals(paused.completedMilliWork(), resumed.completedMilliWork(), "paused time is not work");
         assertEquals(Math.min(edited.bootstrap().ruleset().workCatalog().maxSpeedPermille(), before.ratePermille() * 2),
                 resumed.ratePermille());
         var execution = edited.actorExecutions().current(ActorActivityKind.PRODUCTION).get(job.workerId());
-        edited = BakeryLabour.change(edited, job, resumed);
+        edited = StationWorkLabour.change(edited, job, resumed);
         var suspended = ActorExecutionComposition.CAPABILITIES.require(ActorActivityKind.PRODUCTION)
                 .pause(edited, execution, f.tick() + 350);
-        var settled = BakeryLabour.progress(suspended, job).orElseThrow();
+        var settled = StationWorkLabour.progress(suspended, job).orElseThrow();
         assertFalse(settled.running());
         assertEquals(resumed.completedAt(f.tick() + 350), settled.completedMilliWork());
         var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(suspended));
-        assertEquals(settled, BakeryLabour.progress(recovered, job).orElseThrow());
+        assertEquals(settled, StationWorkLabour.progress(recovered, job).orElseThrow());
     }
 
     @Test void anOwnerLocalStationHoldStopsLabourWithoutChangingStockOrClearingTheHold() {
@@ -105,18 +105,18 @@ class BakeryLabourIntegrationTest {
         var running = ProductionProcess.reduceBakeryColdStep(f.state(), f.job().settlementId(),
                 step(f.state(), f.job(), f.tick()));
         var job = running.productionJobs().get(f.job().id());
-        var work = job.bakeryWork().orElseThrow();
+        var work = job.stationWork().orElseThrow();
         var hold = new BakeryWorkBlock(BakeryWorkBlock.Reason.MACHINE_UNAVAILABLE,
                 work.stationId(), -1, "minecraft:air", 0);
         var blocked = running.withChanges(FrontierWorldStateUpdate.begin().productionJobs(Map.of(job.id(),
-                job.withBakeryWork(work.withBlock(Optional.of(hold))))));
+                job.withStationWork(work.withBlock(Optional.of(hold))))));
         var pause = step(blocked, job, f.tick() + 100);
         assertFalse(pause.labourChange().orElseThrow().next().running());
         var held = ProductionProcess.reduceBakeryColdStep(blocked, job.settlementId(), pause);
         assertEquals(blocked.inventory(), held.inventory());
-        assertEquals(Optional.of(hold), held.productionJobs().get(job.id()).bakeryWork().orElseThrow().block());
-        assertEquals(BakeryLabour.progress(running, job).orElseThrow().completedAt(f.tick() + 100),
-                BakeryLabour.progress(held, job).orElseThrow().completedMilliWork());
+        assertEquals(Optional.of(hold), held.productionJobs().get(job.id()).stationWork().orElseThrow().block());
+        assertEquals(StationWorkLabour.progress(running, job).orElseThrow().completedAt(f.tick() + 100),
+                StationWorkLabour.progress(held, job).orElseThrow().completedMilliWork());
         assertTrue(ProductionProcess.planCompletion(held, ProductionProcess.complete(job, f.tick() + 1_000)).stream()
                 .noneMatch(event -> event.payload() instanceof BakeryColdStep));
     }
@@ -124,7 +124,7 @@ class BakeryLabourIntegrationTest {
     @Test void stationCannotConvertEarlyAndLabourCannotForgeRateOrPredecessor() {
         var f = loadedStation();
         var start = step(f.state(), f.job(), f.tick());
-        var early = new BakeryColdStep(f.job().id(), BakeryWorkState.Phase.PROCESSING,
+        var early = new BakeryColdStep(f.job().id(), StationWorkState.Phase.PROCESSING,
                 BakeryColdStep.Action.RECIPE, start.nextSurface(), start.executionId(), Optional.empty());
         assertThrows(IllegalArgumentException.class, () -> ProductionProcess.reduceBakeryColdStep(
                 f.state(), f.job().settlementId(), early));

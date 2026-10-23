@@ -43,6 +43,7 @@ public final class FrontierV3FixtureCatalog {
     private static final String RESOURCE = "frontier-v3-pilot-profiles.properties";
     /** Test-only catalog: an alternate immutable ruleset must be named here and in the profile file. */
     private static final Map<String, FrontierRuleset> RULESETS = Map.of("production", FrontierRulesets.production(),
+            "tool-graybox", FrontierRulesets.toolGraybox(),
             "expedition-candidate", FrontierRulesets.installed("frontier-v3-expedition-candidate-r2"),
             "quarry-graybox", FrontierRulesets.installed("frontier-v3-quarry-graybox-r4"),
             "quarry-front", FrontierRulesets.installed("frontier-v3-quarry-graybox-r7"),
@@ -52,6 +53,8 @@ public final class FrontierV3FixtureCatalog {
             "quarry-r22", FrontierRulesets.installed("frontier-v3-quarry-graybox-r22"));
     private static final Map<String, BiFunction<WorldId, Long, FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection>>> PROVIDERS = Map.ofEntries(
             Map.entry("world", FrontierWorldRuntimeDefinition::configuration),
+            Map.entry("equipmentRepair", (world, seed) -> equipmentWorkConfiguration(world, seed, true)),
+            Map.entry("equipmentManufacture", (world, seed) -> equipmentWorkConfiguration(world, seed, false)),
             Map.entry("quarryR22World", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("quarry-r22"))),
             Map.entry("quarryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("quarry-graybox"))),
             Map.entry("fuelledQuarryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("fuelled-quarry"))),
@@ -345,6 +348,11 @@ public final class FrontierV3FixtureCatalog {
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
     }
 
+    public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> equipmentWorkConfiguration(WorldId world, long seed, boolean repair) {
+        var fixture = EquipmentWorkFixture.create(world, seed, repair);
+        return configured(world, fixture.state(), SimInstant.ZERO, List.of(ProductionProcess.complete(fixture.job(), 300)));
+    }
+
     public static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> productionWorkConfiguration(WorldId worldId, long seed) {
         FrontierDevelopmentScenarios.MaterializedProductionFixture fixture = FrontierDevelopmentScenarios.materializedProductionWorkFixture(worldId, seed);
         return configured(worldId, fixture.state(), fixture.instant(), fixture.schedules());
@@ -373,8 +381,8 @@ public final class FrontierV3FixtureCatalog {
         StrategicObjective objective = new StrategicObjective(new SubjectId("objective:development-fungible-production"), settlement,
                 StrategicObjectiveKind.SETTLEMENT_PRODUCE_BREAD, java.util.Optional.empty(), 1, StrategicObjectiveStatus.ACTIVE);
         StrategicTask task = new StrategicTask(new SubjectId("task:development-fungible-production"), objective.id(), settlement,
-                StrategicTaskKind.PRODUCE_BREAD, java.util.Optional.empty(),
-                List.of(StrategicTaskRequirement.ACTIVE_WORKSHOP, StrategicTaskRequirement.EXACT_WHEAT_INPUT), List.of(), StrategicTaskStatus.PENDING);
+                StrategicTaskKind.PRODUCE_AT_STATION, java.util.Optional.empty(),
+                List.of(StrategicTaskRequirement.ACTIVE_PRODUCTION_FACILITY, StrategicTaskRequirement.AVAILABLE_PRODUCTION_INPUT), List.of(), StrategicTaskStatus.PENDING);
         state = state.withStrategicPlans(state.strategicPlans().addObjective(objective).addTask(task));
         var engine = io.farfrontier.palemirror.frontier.v3.kernel.FrontierEngines.createCanonicalStateAccess(
                 configured(worldId, state, SimInstant.ZERO, List.of(ProductionProcess.start(task, 200L))));
@@ -385,9 +393,9 @@ public final class FrontierV3FixtureCatalog {
                     new io.farfrontier.palemirror.frontier.v3.kernel.WorkBudget(100, 100));
             var current = engine.canonicalState().state();
             if (current.productionJobs().size() == 1 && current.productionJobs().values().iterator().next()
-                    .bakeryWork().filter(work -> freshJob ? work.phase() == BakeryWorkState.Phase.DEPOT_PICKUP
-                            : work.phase() == BakeryWorkState.Phase.PROCESSING
-                            && BakeryLabour.progress(current, current.productionJobs().values().iterator().next())
+                    .stationWork().filter(work -> freshJob ? work.phase() == StationWorkState.Phase.DEPOT_PICKUP
+                            : work.phase() == StationWorkState.Phase.PROCESSING
+                            && StationWorkLabour.progress(current, current.productionJobs().values().iterator().next())
                                 .filter(progress -> progress.running() && !progress.complete()).isPresent()).isPresent()) {
                 var boundary = engine.checkpoint();
                 return configured(worldId, current, boundary.instant(), boundary.schedules());

@@ -31,7 +31,7 @@ public record ResidentPresentation(String name, String settlement, String task, 
             case EXTRACTION -> "Miner";
             case EQUIPMENT_SERVICE -> "Resident";
             case PRODUCTION -> assignment.ownerId().map(state.productionJobs()::get)
-                    .filter(job -> job.bakeryWork().isPresent()).isPresent() ? "Baker" : "Production worker";
+                    .filter(job -> job.stationWork().isPresent()).isPresent() ? "Baker" : "Production worker";
             case COURIER -> "Carrier";
             case GROUP_MEMBER -> "Companion";
             case ROUTE_PATROL -> "Guard";

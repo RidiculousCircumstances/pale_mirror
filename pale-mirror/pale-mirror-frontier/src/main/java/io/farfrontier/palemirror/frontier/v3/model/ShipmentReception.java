@@ -17,7 +17,7 @@ public record ShipmentReception(SubjectId id, SubjectId claimId, Map<SubjectId, 
     public static ShipmentReception unloaded(Shipment shipment, Map<SubjectId, Integer> lots) {
         var token = java.util.UUID.nameUUIDFromBytes((shipment.id().value() + "\n" + shipment.revision()).getBytes(StandardCharsets.UTF_8));
         return new ShipmentReception(new SubjectId("receipt:shipment-" + token),
-                lots.equals(shipment.lotQuantities()) ? shipment.authorization().claimId() : new SubjectId("claim:shipment-" + token), lots);
+                lots.equals(shipment.portions()) ? shipment.authorization().claimId() : new SubjectId("claim:shipment-" + token), lots);
     }
     public int quantity() { return lotQuantities.values().stream().mapToInt(Integer::intValue).sum(); }
 }

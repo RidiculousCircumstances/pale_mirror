@@ -15,7 +15,8 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
                                      Optional<InventoryCustody.ContainerSlot> batchSuccessorSlot,
                                      Optional<ResourceSiteHarvestBatchDelivered> lastConfirmedBatch,
                                      Optional<ResourceSiteHarvestNavigationBlock> navigationBlock,
-                                     int harvestedYieldQuantity, ResourceFieldWorkTarget target, long storageRevision) implements ResourceSiteWork {
+                                     int harvestedYieldQuantity, ResourceFieldWorkTarget target, long storageRevision,
+                                     WorkToolAssignment equipment) implements ResourceSiteWork {
     public ResourceSiteHarvestJob {
         Objects.requireNonNull(id, "field job"); Objects.requireNonNull(taskId, "field task");
         Objects.requireNonNull(siteId, "field site"); Objects.requireNonNull(workerId, "field worker");
@@ -26,6 +27,7 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
         lastConfirmedBatch = Objects.requireNonNull(lastConfirmedBatch, "last confirmed field batch");
         navigationBlock = Objects.requireNonNull(navigationBlock, "field navigation block");
         Objects.requireNonNull(target, "exact field work target");
+        Objects.requireNonNull(equipment, "exact field equipment assignment");
         if (!target.siteId().equals(siteId)) throw new IllegalArgumentException("field target belongs to another site");
         progress.acceptance().ifPresent(accepted -> {
             var receipt = accepted.receipt();
@@ -55,9 +57,9 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
     public ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId siteId, SubjectId workerId,
                                   SubjectId actorAccountId, SubjectId depotAccountId, SubjectId outputItemId,
                                   InventoryCustody.ContainerSlot outputSlot, PhysicalIntentId intentId,
-                                  ResourceSiteHarvestProgress progress, ResourceFieldWorkTarget target) {
+                                  ResourceSiteHarvestProgress progress, ResourceFieldWorkTarget target, WorkToolAssignment equipment) {
         this(id, taskId, siteId, workerId, actorAccountId, depotAccountId, outputItemId, outputSlot, intentId,
-                progress, 0, false, Optional.empty(), Optional.empty(), Optional.empty(), 0, target, 1L);
+                progress, 0, false, Optional.empty(), Optional.empty(), Optional.empty(), 0, target, 1L, equipment);
     }
 
     private static boolean matchesLastBatch(ResourceSiteHarvestBatchDelivered batch, SubjectId jobId,
@@ -74,6 +76,11 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
     public int undeliveredYieldQuantity() {
         return harvestedYieldQuantity - deliveredYieldQuantity;
     }
+    /** A completed work pool still delivers its last part before returning equipment. */
+    public boolean deliveryDue() {
+        return undeliveredYieldQuantity() > 0 && (returningForBatch || progress.complete());
+    }
+    public boolean hasPendingPhysicalWork() { return progress.hasPendingPhysicalWork() || equipment.pending().isPresent(); }
 
     public ResourceSiteHarvestJob withConfirmedCrop(ResourceSiteHarvestProgress next, ResourceFieldCycle.WorkOutcome outcome) {
         return withConfirmedCrop(next, outcome, outcome == ResourceFieldCycle.WorkOutcome.HARVESTED ? 1 : 0);
@@ -86,7 +93,7 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
             throw new IllegalArgumentException("field outcome differs from exact extraction output");
         return new ResourceSiteHarvestJob(id, taskId, siteId, workerId, actorAccountId, depotAccountId,
                 outputItemId, outputSlot, intentId, next, deliveredYieldQuantity, returningForBatch,
-                batchSuccessorSlot, lastConfirmedBatch, navigationBlock, Math.addExact(harvestedYieldQuantity, produced), target, storageRevision);
+                batchSuccessorSlot, lastConfirmedBatch, navigationBlock, Math.addExact(harvestedYieldQuantity, produced), target, storageRevision, equipment);
     }
 
     /** Bind only a chosen current cell; terminal and depot-bound jobs retain their historical target. */
@@ -101,7 +108,7 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
                 progress.lastCompletedCropSlotIndex(), Optional.empty(), progress.acceptance());
         return new ResourceSiteHarvestJob(id, taskId, siteId, workerId, actorAccountId, depotAccountId,
                 outputItemId, outputSlot, intentId, selected, deliveredYieldQuantity, returningForBatch,
-                batchSuccessorSlot, lastConfirmedBatch, navigationBlock, harvestedYieldQuantity, next, storageRevision);
+                batchSuccessorSlot, lastConfirmedBatch, navigationBlock, harvestedYieldQuantity, next, storageRevision, equipment);
     }
 
     public ResourceSiteHarvestJob withWork(WorkProgress work) {
@@ -168,6 +175,13 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
             throw new IllegalArgumentException("field batch return lacks its exact full hand");
         return copy(progress, deliveredYieldQuantity, true, Optional.empty(), lastConfirmedBatch, Optional.empty());
     }
+    /** Stop choosing cells at a safe checkpoint, preserving every actual cell and carried item. */
+    public ResourceSiteHarvestJob endWorkOffer() {
+        if (hasPendingPhysicalWork() || progress.complete() || batchSuccessorSlot.isPresent())
+            throw new IllegalArgumentException("field offer cannot finish across a pending effect or reservation");
+        return copy(progress.afterDeliverySelection(-1), deliveredYieldQuantity, false,
+                Optional.empty(), lastConfirmedBatch, Optional.empty());
+    }
 
     public ResourceSiteHarvestJob reserveBatchSuccessorSlot(InventoryCustody.ContainerSlot nextSlot) {
         Objects.requireNonNull(nextSlot, "reserved next field output slot");
@@ -189,15 +203,16 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
                                                           Optional<ResourceSiteHarvestBatchDelivered> confirmedBatch) {
         Objects.requireNonNull(nextSlot, "optional next field depot slot");
         Objects.requireNonNull(confirmedBatch, "confirmed field batch receipt");
-        if (!returningForBatch || progress.complete() || navigationBlock.isPresent()
+        if (!deliveryDue() || navigationBlock.isPresent()
                 || undeliveredYieldQuantity() < 1
+                || progress.complete() && nextSlot.isPresent()
                 || nextSlot.filter(slot -> !slot.containerId().equals(outputSlot.containerId()) || slot.equals(outputSlot)).isPresent()
                 || batchSuccessorSlot.isPresent() && !batchSuccessorSlot.equals(nextSlot))
             throw new IllegalArgumentException("field batch delivery has no exact depot continuation");
         return new ResourceSiteHarvestJob(id, taskId, siteId, workerId, actorAccountId, depotAccountId,
                 outputItemId, nextSlot.orElse(outputSlot), intentId,
-                nextSlot.isPresent() ? progress : progress.afterDeliverySelection(-1), harvestedYieldQuantity,
-                false, Optional.empty(), confirmedBatch, Optional.empty(), harvestedYieldQuantity, target, storageRevision);
+                nextSlot.isPresent() || progress.complete() ? progress : progress.afterDeliverySelection(-1), harvestedYieldQuantity,
+                false, Optional.empty(), confirmedBatch, Optional.empty(), harvestedYieldQuantity, target, storageRevision, equipment);
     }
 
     /** A settled, finished offer retains its output address as history, not an empty-slot reservation. */
@@ -211,7 +226,7 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
         return new ResourceSiteHarvestJob(id, taskId, siteId, workerId, actorAccountId,
                 ReferenceContainerCustody.scopeId(slot.containerId()), outputItemId, slot, replacementIntent,
                 progress, deliveredYieldQuantity, returningForBatch, Optional.empty(), lastConfirmedBatch,
-                Optional.empty(), harvestedYieldQuantity, target, Math.addExact(storageRevision, 1L));
+                Optional.empty(), harvestedYieldQuantity, target, Math.addExact(storageRevision, 1L), equipment);
     }
 
     public boolean matchesWorkGoal(ResourceSiteHarvestGoal goal, SurfaceAnchor observedStation) {
@@ -264,6 +279,15 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
                                         Optional<ResourceSiteHarvestBatchDelivered> batch,
                                         Optional<ResourceSiteHarvestNavigationBlock> blocked) {
         return new ResourceSiteHarvestJob(id, taskId, siteId, workerId, actorAccountId, depotAccountId,
-                outputItemId, outputSlot, intentId, nextProgress, delivered, returning, successor, batch, blocked, harvestedYieldQuantity, target, storageRevision);
+                outputItemId, outputSlot, intentId, nextProgress, delivered, returning, successor, batch, blocked, harvestedYieldQuantity, target, storageRevision, equipment);
+    }
+
+    public ResourceSiteHarvestJob withEquipment(WorkToolAssignment next) {
+        if (!next.itemId().equals(equipment.itemId()) || !next.source().equals(equipment.source()))
+            throw new IllegalArgumentException("field transfer cannot substitute its reserved equipment");
+        return new ResourceSiteHarvestJob(id, taskId, siteId, workerId, actorAccountId, depotAccountId, outputItemId,
+                outputSlot, intentId, progress, deliveredYieldQuantity, returningForBatch, batchSuccessorSlot,
+                lastConfirmedBatch, navigationBlock, harvestedYieldQuantity, target,
+                next.returnTarget().equals(equipment.returnTarget()) ? storageRevision : Math.addExact(storageRevision, 1L), next);
     }
 }

@@ -89,6 +89,25 @@ final class GoodsOrderMatching {
                         Math.min(sellerIntent.orElseThrow().quantity(), buyerIntent.orElseThrow().quantity()));
                 FixedScalar price = sell.unitPriceLimit();
                 max = (int) Math.min(max, funding / price.raw());
+                if (GoodsStockSpecification.forKind(state.bootstrap().ruleset().goodsTrade(), sell.itemKind()).representation()
+                        == GoodsStockSpecification.Representation.INDIVIDUAL) {
+                    if (max < 1 || !GoodsTradeStateSupport.receivingCapacity(state, buy.containerId(), buy.itemKind(), 1)
+                            || ReferenceContainerCustody.blocksCanonicalUse(state, sell.containerId())
+                            || ReferenceContainerCustody.hasLiveCustody(state, sell.containerId())
+                                && !ReferenceContainerCustody.hasOperationalCustody(state, sell.containerId())) continue;
+                    var stock = GoodsParticipantStorage.individualStock(state, seller, sell.containerId(), sell.itemKind());
+                    if (stock.isEmpty()) { disposition = "NO_ELIGIBLE_INDIVIDUAL_STOCK"; continue; }
+                    var item = stock.getFirst();
+                    String stem = WorkOpportunityIdentity.digest(sell.id().value() + "|" + buy.id().value()
+                            + "|" + sell.committedQuantity() + "|" + buy.committedQuantity() + "|" + item.id().value());
+                    var contractId = new SubjectId("contract:goods/" + stem); var claimId = new SubjectId("claim:goods/" + stem);
+                    var allocation = new IndividualResourceAllocation(claimId, contractId, sell.party().id(), item.id(), item.itemKind(), item.condition());
+                    var contract = new GoodsTradeContract(contractId, sell.id(), buy.id(), sell.party(), buy.party(),
+                            new GoodsTradeFulfillment(GoodsTradeFulfillment.Mode.SELLER_DELIVERY, sell.party()), sell.containerId(), buy.containerId(),
+                            sell.itemKind(), 1, price, new SubjectId("reservation:goods/" + stem), 0, Map.of(claimId, 1), Map.of(), Map.of(), 0, 0,
+                            FixedScalar.ZERO, Map.of(claimId, allocation));
+                    return new Search(Optional.of(new Match(contract, List.of())), "MATCH", checked);
+                }
                 for (int quantity = Math.min(max, state.bootstrap().ruleset().goodsTrade().maximumBatch()); quantity > 0; quantity--) {
                     if (!sell.containerId().equals(buy.containerId()) && !GoodsTradeStateSupport.receivingCapacity(state,
                             buy.containerId(), buy.itemKind(), quantity)) { disposition = "RECEIVER_CAPACITY"; continue; }

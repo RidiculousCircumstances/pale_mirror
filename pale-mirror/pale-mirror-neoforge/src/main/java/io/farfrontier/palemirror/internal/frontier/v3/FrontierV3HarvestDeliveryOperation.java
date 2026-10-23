@@ -40,7 +40,7 @@ final class FrontierV3HarvestDeliveryOperation {
         if (witness == null || !witness.jobId().equals(job.id())) return Optional.empty();
         if (!witness.workerId().equals(job.workerId()) || !witness.entityId().equals(body.getUUID())
                 || !witness.intentId().equals(job.intentId()) || !witness.containerId().equals(job.outputSlot().containerId())
-                || witness.slot() != job.outputSlot().slot() || witness.intermediate() != job.returningForBatch()
+                || witness.slot() != job.outputSlot().slot() || witness.intermediate() != job.deliveryDue()
                 || witness.deliveredYieldBefore() != job.deliveredYieldQuantity()
                 || witness.quantity() != ResourceSiteHarvestCargo.quantity(state, job))
             throw new IllegalStateException("field death delivery witness differs from retained work");

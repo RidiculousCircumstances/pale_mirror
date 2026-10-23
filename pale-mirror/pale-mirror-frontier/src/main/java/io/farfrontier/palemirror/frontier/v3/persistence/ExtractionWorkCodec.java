@@ -48,6 +48,7 @@ final class ExtractionWorkCodec {
                 for (var output : effect.output()) { out.writeUTF(output.itemKind()); out.writeByte(output.quantity()); }
                 out.writeByte(block.carriedBefore());
                 out.writeLong(block.sourceEpoch());
+                ExactItemStateCodec.write(out, block.toolUse().before()); out.writeInt(block.toolUse().wear());
             }
             case ExtractionPhysicalStep.Cargo cargo -> {
                 out.writeByte(3); ActorItemTransferStepCodec.write(out, cargo.transfer());
@@ -65,7 +66,8 @@ final class ExtractionWorkCodec {
                 if (count < 1 || count > BlockExtraction.MAX_OUTPUTS) throw new IllegalArgumentException("invalid retained extraction outputs");
                 var outputs = new ArrayList<BlockExtraction.Output>();
                 for (int index = 0; index < count; index++) outputs.add(new BlockExtraction.Output(in.readUTF(), in.readUnsignedByte()));
-                yield new ExtractionPhysicalStep.BlockWork(observation, new BlockExtraction(operation, execution, position, definition, outputs), in.readUnsignedByte(), in.readLong());
+                yield new ExtractionPhysicalStep.BlockWork(observation, new BlockExtraction(operation, execution, position, definition, outputs),
+                        in.readUnsignedByte(), in.readLong(), new io.farfrontier.palemirror.frontier.v3.model.tooling.ToolUse(ExactItemStateCodec.read(in), in.readInt()));
             }
             case 3 -> new ExtractionPhysicalStep.Cargo(ActorItemTransferStepCodec.read(in));
             default -> throw new IllegalArgumentException("unknown extraction physical operation tag");

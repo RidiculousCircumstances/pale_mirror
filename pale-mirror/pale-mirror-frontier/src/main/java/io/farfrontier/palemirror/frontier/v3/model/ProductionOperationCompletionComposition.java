@@ -4,7 +4,7 @@ import java.util.*;
 
 /** Closed composition root. A producer supplies the client key; no recipe or ID-based dispatch. */
 public final class ProductionOperationCompletionComposition {
-    private static final Map<ProductionOrderKind, ProductionOrderPort> ORDERS = register(List.of(new BakeryStationCompletion()));
+    private static final Map<ProductionOrderKind, ProductionOrderPort> ORDERS = register(List.of(new StationWorkCompletion()));
     private static Map<ProductionOrderKind, ProductionOrderPort> register(List<ProductionOrderPort> entries) {
         var ports = new EnumMap<ProductionOrderKind, ProductionOrderPort>(ProductionOrderKind.class);
         for (var entry : entries) if (ports.putIfAbsent(Objects.requireNonNull(entry.kind()), entry) != null)

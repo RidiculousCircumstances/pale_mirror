@@ -27,10 +27,13 @@ final class FieldWorkForecast {
     static List<ResidentProfile> workers(FrontierWorldState state, SubjectId home) {
         var definition = state.bootstrap().ruleset().workCatalog().require(FieldHarvestExtraction.ITEM, WorkOperation.HARVEST);
         var assignments = HumanAssignmentProjection.compile(state);
-        return SupplyLabourCapacity.candidates(state, home, ResidentWorkKind.AGRICULTURE, definition.capability(),
+        var candidates = SupplyLabourCapacity.candidates(state, home, ResidentWorkKind.AGRICULTURE, definition.capability(),
                 r -> assignments.assignment(r.id()).kind() == HumanAssignmentKind.FIELD_HARVEST).stream()
                 .filter(r -> !assignments.assignment(r.id()).active()
                         || assignments.assignment(r.id()).kind() == HumanAssignmentKind.FIELD_HARVEST).toList();
+        var equipment = EquipmentProductiveCapacity.items(state, home, candidates.stream().map(ResidentProfile::id)
+                .collect(java.util.stream.Collectors.toSet()), FieldEquipment.requirements());
+        return candidates.stream().limit(equipment.size()).toList();
     }
     RenewableWorkForecast.Source source(FieldSupplyCapacity.Cell cell) {
         var condition = cell.condition();
@@ -55,6 +58,15 @@ final class FieldWorkForecast {
         var catalog = state.bootstrap().ruleset().workCatalog(); var definition = catalog.require(FieldHarvestExtraction.ITEM, operation);
         int speed = workers.stream().mapToInt(r -> ResidentWorkStatistics.speedPermille(r, definition, catalog))
                 .min().orElse(catalog.minSpeedPermille());
+        if (operation != WorkOperation.SOW && !workers.isEmpty()) {
+            var requirement = operation == WorkOperation.TILL ? FieldEquipment.requirement(ResourceFieldCycle.WorkOutcome.TILLED).orElseThrow()
+                    : FieldHarvestExtraction.DEFINITION.toolRequirement();
+            var equipment = EquipmentProductiveCapacity.items(state, workers.getFirst().settlementId(), workers.stream().map(ResidentProfile::id)
+                    .collect(java.util.stream.Collectors.toSet()), FieldEquipment.requirements());
+            final int workerSpeed = speed;
+            speed = equipment.stream().mapToInt(item -> io.farfrontier.palemirror.frontier.v3.model.tooling.ToolWorkRate.speedPermille(
+                    workerSpeed, state.bootstrap().ruleset().tools(), item, requirement)).min().orElse(speed);
+        }
         return Math.ceilDiv(Math.multiplyExact(definition.workUnits(), 1000L), speed);
     }
     private long travel(BlockPosition crop, int yield) {

@@ -50,7 +50,8 @@ public final class ProductionStationProcessing {
     }
     /** Loading hands the allocation lifecycle to the installed operation without changing any lot, address or epoch. */
     public static ExactInventory adoptInputOwnership(ExactInventory inventory, ProductionOperation operation) {
-        if (!(operation.inputCustody() instanceof ProductionOperation.FungibleInput input)) return inventory;
+        if (operation.inputCustody().materials().isEmpty()) return inventory;
+        var input = operation.inputCustody().materials().orElseThrow();
         var ledger = inventory.fungibleResources();
         for (var id : input.claims().keySet()) {
             var prior = ledger.claims().get(id);
@@ -67,9 +68,12 @@ public final class ProductionStationProcessing {
                 .replace(previous, previous.confirmTransformation()));
     }
     /** The requesting order owns collection until the confirmed pickup; players can still forfeit this promise. */
-    public static ExactInventory reserveOutput(ExactInventory inventory, ProductionOperation operation, long epoch) {
+    public static ExactInventory reserveOutput(ExactInventory inventory, ProductionOperation operation,
+                                               ProductionRecipeOutcome outcome, long epoch) {
         if (!(operation.initiator() instanceof ProductionOperation.OrderInitiator order)
-                || !(operation.inputCustody() instanceof ProductionOperation.FungibleInput input)) return inventory;
+                || operation.inputCustody().materials().isEmpty()
+                || !(outcome instanceof ProductionRecipeOutcome.Fungible)) return inventory;
+        var input = operation.inputCustody().materials().orElseThrow();
         var ledger = inventory.fungibleResources(); var output = ledger.lots().get(operation.outputId());
         if (output == null) throw new IllegalArgumentException("station cannot reserve absent output");
         var claim = new ClaimAllocation(operation.outputClaimId(), order.orderId(), output.economicOwnerId(), output.itemKind(),
@@ -96,8 +100,11 @@ public final class ProductionStationProcessing {
             throw new IllegalArgumentException("station abandonment has a different operation");
         var next = machine.cancel(expected.id()); // Rejects pending physical fuel/recipe effects.
         var resources = state.inventory().fungibleResources();
-        if (expected.inputCustody() instanceof ProductionOperation.FungibleInput input) {
-            var claims = expected.transformed() ? java.util.Set.of(expected.outputClaimId()) : input.claims().keySet();
+        if (expected.inputCustody().materials().isPresent()) {
+            var input = expected.inputCustody().materials().orElseThrow();
+            var claims = expected.transformed() ? state.bootstrap().ruleset().production().require(expected.recipeId()).outcome()
+                    instanceof ProductionRecipeOutcome.Fungible ? java.util.Set.of(expected.outputClaimId())
+                    : java.util.Set.<SubjectId>of() : input.claims().keySet();
             for (var id : claims) if (!resources.claims().containsKey(id))
                 throw new IllegalArgumentException("station abandonment lost its allocation");
             resources = resources.releaseClaims(claims);

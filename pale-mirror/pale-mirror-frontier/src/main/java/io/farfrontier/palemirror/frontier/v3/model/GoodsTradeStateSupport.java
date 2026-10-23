@@ -8,7 +8,10 @@ import java.util.Map;
 public final class GoodsTradeStateSupport {
     private GoodsTradeStateSupport() { }
     public static boolean receivingCapacity(FrontierWorldState state, SubjectId container, String commodity, int quantity) {
-        return ContainerStorageAdmission.receive(state, container, commodity, quantity, java.util.Optional.empty());
+        return GoodsStockSpecification.forKind(state.bootstrap().ruleset().goodsTrade(), commodity).representation()
+                == GoodsStockSpecification.Representation.INDIVIDUAL
+                ? ContainerStorageAdmission.receiveIndividuals(state, container, commodity, quantity, java.util.Optional.empty())
+                : ContainerStorageAdmission.receive(state, container, commodity, quantity, java.util.Optional.empty());
     }
 
     public static FrontierWorldState place(FrontierWorldState state, SubjectId subject, GoodsTradeOrder order, long now) {
@@ -22,9 +25,14 @@ public final class GoodsTradeStateSupport {
 
     public static FrontierWorldState reserve(FrontierWorldState state, SubjectId subject, GoodsTradeContract contract,
                                              List<GoodsTradeStockAllocation> allocations, long now) {
-        if (!subject.equals(contract.seller().id()) || allocations.isEmpty() || allocations.size() > 64) {
+        if (!subject.equals(contract.seller().id()) || allocations.isEmpty() && contract.individualAllocations().isEmpty()
+                || allocations.size() + contract.individualAllocations().size() > 64) {
             throw new IllegalArgumentException("goods reservation lacks its declared seller or stock allocations");
         }
+        var specification = GoodsStockSpecification.forKind(state.bootstrap().ruleset().goodsTrade(), contract.itemKind());
+        if (specification.representation() == GoodsStockSpecification.Representation.FUNGIBLE && !contract.individualAllocations().isEmpty()
+                || specification.representation() == GoodsStockSpecification.Representation.INDIVIDUAL && !allocations.isEmpty())
+            throw new IllegalArgumentException("goods allocation contradicts its declared commodity representation");
         contract.seller().validate(state.inventory().economics()); contract.buyer().validate(state.inventory().economics());
         requireContainer(state, contract.sourceContainerId()); requireContainer(state, contract.receiverContainerId());
         int protectedMinimum = GoodsTradeSourceAdmission.protectedMinimum(state, contract.seller(), contract.itemKind(), now);
@@ -35,12 +43,23 @@ public final class GoodsTradeStateSupport {
                 - contract.quantity() < protectedMinimum)
             throw new IllegalArgumentException("goods reservation would spend the protected local reserve");
         if (!contract.sourceContainerId().equals(contract.receiverContainerId())
-                && !ContainerStorageAdmission.receive(state, contract.receiverContainerId(), contract.itemKind(),
-                        contract.quantity(), java.util.Optional.empty())) {
+                && !receivingCapacity(state, contract.receiverContainerId(), contract.itemKind(), contract.quantity())) {
             throw new IllegalArgumentException("goods receiver has insufficient unreserved storage capacity");
         }
         GoodsTradeState trade = state.companies().goodsTrade().admit(contract, now);
         var declared = allocations.stream().collect(java.util.stream.Collectors.toMap(a -> a.claim().id(), a -> a.claim().quantity()));
+        for (var exact : contract.individualAllocations().values()) {
+            if (!GoodsStockSpecification.forKind(state.bootstrap().ruleset().goodsTrade(), contract.itemKind())
+                        .accepts(state.inventory().items().get(exact.itemId()))
+                    || ReferenceContainerCustody.blocksCanonicalUse(state, contract.sourceContainerId())
+                    || ReferenceContainerCustody.hasLiveCustody(state, contract.sourceContainerId())
+                        && !ReferenceContainerCustody.hasOperationalCustody(state, contract.sourceContainerId())
+                    || declared.putIfAbsent(exact.id(), 1) != null || !exact.matches(state.inventory().items().get(exact.itemId()))
+                    || !(state.inventory().items().get(exact.itemId()).custody() instanceof InventoryCustody.ContainerSlot slot)
+                    || !slot.containerId().equals(contract.sourceContainerId())
+                    || WorkEquipmentClaimComposition.reserved(state).contains(exact.itemId()))
+                throw new IllegalArgumentException("individual sale lacks current unreserved source stock");
+        }
         if (!declared.equals(contract.outstandingClaims())) {
             throw new IllegalArgumentException("goods reservation omits or duplicates exact contract allocations");
         }
@@ -71,20 +90,11 @@ public final class GoodsTradeStateSupport {
             throw new IllegalArgumentException("goods acceptance lacks its exact receiving buyer");
         }
         GoodsTradeState trade = state.companies().goodsTrade().accept(receipt, now);
-        ResourceTitleTransfer title = receipt.title();
-        CustodyAccount account = state.inventory().fungibleResources().accounts().get(title.accountId());
-        ClaimAllocation claim = state.inventory().fungibleResources().claims().get(title.claimId());
-        if (account == null || !(account.custody() instanceof ResourceCustody.Container container)
-                || !container.containerId().equals(contract.receiverContainerId()) || claim == null
-                || claim.purpose() != ClaimPurpose.GOODS_TRADE || !claim.claimantId().equals(contract.id())
-                || !claim.itemKind().equals(contract.itemKind())
-                || !title.sourceOwnerId().equals(contract.seller().id()) || !title.destinationOwnerId().equals(contract.buyer().id())) {
-            throw new IllegalArgumentException("goods acceptance has no exact already-accounted receiving custody");
-        }
-        FungibleResourceLedger resources = state.inventory().fungibleResources().transferTitle(title);
-        EconomicLedger economics = state.inventory().economics().settlePortion(contract.financialReservationId(),
+        var title = receipt.title();
+        var inventory = GoodsTitleAccounting.accept(state, contract, title, new ResourceCustody.Container(contract.receiverContainerId()));
+        EconomicLedger economics = inventory.economics().settlePortion(contract.financialReservationId(),
                 contract.deliveredUnitPrice().multiply(title.quantity()));
-        ExactInventory inventory = state.inventory().withFungibleResources(resources).withEconomics(economics);
+        inventory = inventory.withEconomics(economics);
         return state.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory)
                 .companies(state.companies().withGoodsTrade(trade)));
     }
@@ -121,6 +131,7 @@ public final class GoodsTradeStateSupport {
             }
             requireContainer(state, order.containerId());
         }
+        var individualItems = new java.util.HashSet<SubjectId>();
         for (GoodsTradeContract contract : trade.contracts().values()) {
             GoodsTradeState.validateTerms(contract, trade.orders().get(contract.sellOrderId()), trade.orders().get(contract.buyOrderId()));
             orderTotals.merge(contract.sellOrderId(), contract.quantity(), Math::addExact);
@@ -133,6 +144,12 @@ public final class GoodsTradeStateSupport {
                 throw new IllegalArgumentException("goods contract has a missing or mismatched financial hold");
             }
             for (var allocation : contract.outstandingClaims().entrySet()) {
+                var individual = contract.individualAllocations().get(allocation.getKey());
+                if (individual != null) {
+                    if (!individualItems.add(individual.itemId()) || !individual.matches(state.inventory().items().get(individual.itemId())))
+                        throw new IllegalArgumentException("individual contract lost its allocated item or condition");
+                    continue;
+                }
                 ClaimAllocation claim = state.inventory().fungibleResources().claims().get(allocation.getKey());
                 if (claim == null || claim.purpose() != ClaimPurpose.GOODS_TRADE || !claim.claimantId().equals(contract.id())
                         || !claim.economicOwnerId().equals(contract.seller().id()) || !claim.itemKind().equals(contract.itemKind())
@@ -201,6 +218,14 @@ public final class GoodsTradeStateSupport {
                 || ReferenceContainerCustody.blocksCanonicalUse(state, contract.sourceContainerId())
                 || state.physicalIntents().values().stream().anyMatch(i -> i.causeSubjectId().equals(contract.id())
                     || i.roles().namedRoles().containsValue(claimId))) return false;
+        var individual = contract.individualAllocations().get(claimId);
+        if (individual != null) {
+            var item = state.inventory().items().get(individual.itemId());
+            return individual.matches(item) && item.custody() instanceof InventoryCustody.ContainerSlot slot
+                    && slot.containerId().equals(contract.sourceContainerId())
+                    && (!ReferenceContainerCustody.hasLiveCustody(state, slot.containerId())
+                        || ReferenceContainerCustody.hasOperationalCustody(state, slot.containerId()));
+        }
         var account = FungibleResourceCustodySupport.accountAtContainer(state, contract.sourceContainerId()).orElse(null);
         if (account == null || account.claimQuantities().getOrDefault(claimId, 0)
                 != contract.outstandingClaims().get(claimId)) return false;
@@ -229,6 +254,10 @@ public final class GoodsTradeStateSupport {
         GoodsTradeState trade = state.companies().goodsTrade().dispose(disposition);
         if (state.shipments().holds(disposition.claimId()))
             throw new IllegalArgumentException("cancellation must settle its dispatched shipment first");
+        if (contract.individualAllocations().containsKey(disposition.claimId()))
+            return state.withChanges(FrontierWorldStateUpdate.begin().companies(state.companies().withGoodsTrade(trade))
+                    .inventory(state.inventory().withEconomics(state.inventory().economics().releasePortion(
+                        contract.financialReservationId(), contract.deliveredUnitPrice().multiply(disposition.quantity())))));
         var resources = state.inventory().fungibleResources();
         CustodyAccount account = resources.accounts().values().stream()
                 .filter(a -> a.claimQuantities().containsKey(disposition.claimId())).findFirst().orElseThrow(

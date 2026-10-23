@@ -7,7 +7,12 @@ import java.util.Set;
 /** Immutable single-product recipe. Inventory custody and labour are separate owners. */
 public record ProductionRecipe(Id id, ProductionStationSpec.Capability capability,
                                Ingredient ingredient, Product product, long heatPerBatch,
-                               ProcessingMode processingMode) {
+                               ProcessingMode processingMode, ProductionRecipeOutcome outcome) {
+    /** Existing resource recipes explicitly use fungible output; equipment recipes declare their identity semantics. */
+    public ProductionRecipe(Id id, ProductionStationSpec.Capability capability, Ingredient ingredient,
+            Product product, long heatPerBatch, ProcessingMode processingMode) {
+        this(id, capability, ingredient, product, heatPerBatch, processingMode, new ProductionRecipeOutcome.Fungible());
+    }
     public record Id(String value) {
         public Id { requireItemKey(value); }
     }
@@ -40,6 +45,9 @@ public record ProductionRecipe(Id id, ProductionStationSpec.Capability capabilit
     public ProductionRecipe {
         Objects.requireNonNull(id); Objects.requireNonNull(capability);
         Objects.requireNonNull(ingredient); Objects.requireNonNull(product); Objects.requireNonNull(processingMode);
+        Objects.requireNonNull(outcome);
+        if (!(outcome instanceof ProductionRecipeOutcome.Fungible) && product.quantity() != 1)
+            throw new IllegalArgumentException("equipment recipe declares one individual output per operation");
         if (heatPerBatch < 0 || heatPerBatch > 1_000_000_000L)
             throw new IllegalArgumentException("invalid recipe heat requirement");
     }
@@ -47,6 +55,8 @@ public record ProductionRecipe(Id id, ProductionStationSpec.Capability capabilit
         if (quantity < 1 || quantity > 64 || quantity % ingredient.quantity() != 0)
             throw new IllegalArgumentException("input does not form complete bounded recipe batches");
         int output = Math.multiplyExact(quantity / ingredient.quantity(), product.quantity());
+        if (!(outcome instanceof ProductionRecipeOutcome.Fungible) && output != 1)
+            throw new IllegalArgumentException("individual equipment operations cannot batch identities");
         if (output > 64) throw new IllegalArgumentException("recipe output exceeds its bounded transport portion");
         return output;
     }
@@ -63,7 +73,8 @@ public record ProductionRecipe(Id id, ProductionStationSpec.Capability capabilit
         return id.value() + ":" + capability.wireTag() + ":"
                 + ingredient.acceptedItems().stream().sorted().collect(java.util.stream.Collectors.joining(","))
                 + ":" + ingredient.quantity() + ":" + product.itemKind() + ":" + product.quantity()
-                + ":" + heatPerBatch + ":" + processingMode.wireTag();
+                + ":" + heatPerBatch + ":" + processingMode.wireTag()
+                + (outcome instanceof ProductionRecipeOutcome.Fungible ? "" : ":" + outcome.canonicalText());
     }
     static void requireItemKey(String key) {
         if (key == null || !key.matches("[a-z][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9_./-]{0,127}"))

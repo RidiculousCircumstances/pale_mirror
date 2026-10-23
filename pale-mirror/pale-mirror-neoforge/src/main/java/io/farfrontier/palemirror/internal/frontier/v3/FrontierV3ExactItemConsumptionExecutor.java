@@ -163,8 +163,7 @@ final class FrontierV3ExactItemConsumptionExecutor {
     /** Restart predicate: the same identity tag with exactly the expected remainder is the only success. */
     static boolean consumed(ChestBlockEntity chest, Target target) {
         ItemStack stack = chest.getItem(target.slot()); int remainder = target.item().count() - target.count();
-        return remainder == 0 ? stack.isEmpty() : FrontierV3ExactItemPresentation.exactMatch(stack, new ExactItemStack(
-                target.item().id(), target.item().economicOwnerId(), target.item().itemKind(), remainder, target.item().custody()));
+        return remainder == 0 ? stack.isEmpty() : FrontierV3ExactItemPresentation.exactMatch(stack, target.item().withCount(remainder));
     }
 
     private static void inspectRunning(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalIntent intent, Target target, ChestBlockEntity chest) {

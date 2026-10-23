@@ -56,6 +56,7 @@ public final class FrontierRulesets {
     private static final FrontierRuleset DYNAMIC_FARMING_GRAYBOX = higherFuelDemand(PREVIOUS_DYNAMIC_FARMING_GRAYBOX);
     private static final FrontierRuleset MINERAL_DEPOSITS_GRAYBOX = ironDeposits(DYNAMIC_FARMING_GRAYBOX);
     private static final FrontierRuleset SMELTING_GRAYBOX = smelting(MINERAL_DEPOSITS_GRAYBOX);
+    private static final FrontierRuleset TOOL_GRAYBOX = GrayboxToolProduction.extend(SMELTING_GRAYBOX);
     /** Existing worlds retain their exact selector and timing; they are never silently retuned. */
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R6 = ruleset("frontier-v3-production-r6", 8, 1L, 20L, 1L);
     private static final FrontierRuleset PREVIOUS_PRODUCTION_R4 = ruleset("frontier-v3-production-r4", 6, 1L, 20L, 1L);
@@ -69,6 +70,7 @@ public final class FrontierRulesets {
      */
     private static final FrontierRuleset LEGACY_PRE_RULESET_R79 = ruleset("frontier-v3-legacy-pre-ruleset-r79", 3, 200L, 100L, 200L);
     private static final Map<String, FrontierRuleset> INSTALLED = Map.ofEntries(
+            Map.entry(TOOL_GRAYBOX.id(), TOOL_GRAYBOX),
             Map.entry(MINERAL_DEPOSITS_GRAYBOX.id(), MINERAL_DEPOSITS_GRAYBOX),
             Map.entry(SMELTING_GRAYBOX.id(), SMELTING_GRAYBOX),
             Map.entry(DYNAMIC_FARMING_GRAYBOX.id(), DYNAMIC_FARMING_GRAYBOX),
@@ -112,6 +114,7 @@ public final class FrontierRulesets {
     public static FrontierRuleset dynamicFarmingGraybox() { return DYNAMIC_FARMING_GRAYBOX; }
     public static FrontierRuleset mineralDepositsGraybox() { return MINERAL_DEPOSITS_GRAYBOX; }
     public static FrontierRuleset smeltingGraybox() { return SMELTING_GRAYBOX; }
+    public static FrontierRuleset toolGraybox() { return TOOL_GRAYBOX; }
 
     private static FrontierRuleset smelting(FrontierRuleset base) {
         var id = new ProductionRecipe.Id("pale_mirror:iron_smelting");
@@ -149,7 +152,8 @@ public final class FrontierRulesets {
                 "pale_mirror:iron_extraction",
                 new io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block("minecraft:iron_ore", Map.of()),
                 new io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block("minecraft:air", Map.of()),
-                base.extraction().source().toolKind(), "minecraft:blocks/iron_ore",
+                new io.farfrontier.palemirror.frontier.v3.model.tooling.ToolRequirement(
+                        io.farfrontier.palemirror.frontier.v3.model.tooling.ToolAbilities.MINE, 1, 2), "minecraft:blocks/iron_ore",
                 java.util.List.of(new io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Output("minecraft:raw_iron", 1)));
         var pockets = new java.util.ArrayList<>(base.extraction().additionalPockets());
         pockets.add(new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionPocketProfile(2, 2, 16, 1, 6, iron));
@@ -357,7 +361,7 @@ public final class FrontierRulesets {
         var coal = new io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Definition(
                 "pale_mirror:coal_extraction", new io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block("minecraft:coal_ore", Map.of()),
                 new io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block("minecraft:air", Map.of()),
-                base.extraction().source().toolKind(), "minecraft:blocks/coal_ore",
+                base.extraction().source().toolRequirement(), "minecraft:blocks/coal_ore",
                 java.util.List.of(new io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Output("minecraft:coal", 1)));
         var extraction = base.extraction().withPocket(new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionPocketProfile(2, 1, 2, 2, 2, coal));
         var stocks = new java.util.ArrayList<InitialSettlementStock>();

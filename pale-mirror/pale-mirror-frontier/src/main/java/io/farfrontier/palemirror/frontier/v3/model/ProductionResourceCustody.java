@@ -53,8 +53,8 @@ public final class ProductionResourceCustody {
         Map<SubjectId, ProductionJob> jobs = new LinkedHashMap<>(state.productionJobs());
         for (ProductionJob job : state.productionJobs().values()) {
             if (departedBakerySource(job, accountId)) continue;
-            if (job.bakeryWork().isPresent() && BakeryWorkValidation.awaitingInputReallocation(resources,
-                    job, job.bakeryWork().orElseThrow())) continue;
+            if (job.stationWork().isPresent() && StationWorkValidation.awaitingInputReallocation(resources,
+                    job, job.stationWork().orElseThrow())) continue;
             if (job.inputHold() instanceof ProductionInputHold.FungibleCold cold && cold.accountId().equals(accountId)) {
                 requireClaim(state, resources, job, accountId, cold.claimId());
                 jobs.put(job.id(), job.withInputHold(new ProductionInputHold.FungibleBound(cold.itemId(), accountId, cold.claimId(), epoch, cold.inputLots())));
@@ -75,8 +75,8 @@ public final class ProductionResourceCustody {
         var recovery = state.fencedRecovery();
         for (ProductionJob job : state.productionJobs().values()) {
             if (departedBakerySource(job, accountId)) continue;
-            if (job.bakeryWork().isPresent() && BakeryWorkValidation.awaitingInputReallocation(resources,
-                    job, job.bakeryWork().orElseThrow())) continue;
+            if (job.stationWork().isPresent() && StationWorkValidation.awaitingInputReallocation(resources,
+                    job, job.stationWork().orElseThrow())) continue;
             if (!(job.inputHold() instanceof ProductionInputHold.FungibleBound bound) || !bound.accountId().equals(accountId)) continue;
             if (bound.authorityEpoch() != epoch) throw new IllegalArgumentException("production input release has a foreign epoch");
             for (var intent : state.physicalIntents().values()) {
@@ -100,7 +100,7 @@ public final class ProductionResourceCustody {
 
     /** The input hold records the selected source; after pickup it is not a live depot authority. */
     private static boolean departedBakerySource(ProductionJob job, SubjectId accountId) {
-        return job.bakeryWork().filter(work -> work.phase() != BakeryWorkState.Phase.DEPOT_PICKUP
+        return job.stationWork().filter(work -> work.phase() != StationWorkState.Phase.DEPOT_PICKUP && !work.phase().maintenanceTransfer()
                 && work.sourceAccountId().equals(accountId)).isPresent();
     }
 

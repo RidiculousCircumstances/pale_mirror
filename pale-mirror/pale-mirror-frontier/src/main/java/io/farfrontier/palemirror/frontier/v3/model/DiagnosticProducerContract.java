@@ -136,7 +136,7 @@ public final class DiagnosticProducerContract {
         "frontier.resource_field_foreign_change_held", "frontier.resource_field_foreign_cell_observed",
         "frontier.resource_field_foreign_change_acknowledged", "frontier.resource_field_player_break_prepared",
         "frontier.resource_site_growth_advanced", "frontier.resource_site_harvest_cold_traversal_advanced", "frontier.resource_site_harvest_cold_goal_advanced", "frontier.resource_site_harvest_cold_goal_held",
-                "frontier.resource_site_harvest_returned", "frontier.resource_site_harvest_crop_prepared",
+                "frontier.resource_site_harvest_returned", "frontier.resource_site_harvest_crop_prepared", "frontier.field_equipment_changed",
         "frontier.harvest_death_settled", "frontier.harvest_retired_effect_observed", "frontier.harvest_retired_delivery_observed", "frontier.harvest_retired_hand_observed",
         "frontier.resource_site_harvest_hot_traversal_advanced", "frontier.resource_site_harvest_hot_goal_arrived",
         "frontier.resource_site_harvest_progressed", "frontier.resource_site_harvest_work_acknowledged",

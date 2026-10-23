@@ -332,7 +332,7 @@ public final class StrategicObjectiveProcess {
             return withPreemption(preempted, concatenate(observedAndHealth, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)), new ProposedEvent(owner, new StrategicTaskPlanned(task)),
                     new ProposedEvent(owner, new ScheduleEffect.Created(HiveGrowthProcess.start(task, currentTick + 100L))));
         }
-        if (task.kind() == StrategicTaskKind.PRODUCE_BREAD) {
+        if (task.kind() == StrategicTaskKind.PRODUCE_AT_STATION) {
             return withPreemption(preempted, concatenate(observedAndHealth, next), new ProposedEvent(owner, new StrategicObjectiveSelected(objective)),
                         new ProposedEvent(owner, new StrategicTaskPlanned(task)), new ProposedEvent(task.id(),
                         new ScheduleEffect.Created(ProductionProcess.start(task, currentTick + 1L))));
@@ -438,7 +438,7 @@ public final class StrategicObjectiveProcess {
             case HIVE_EXPAND_INFECTION -> StrategicTaskKind.SPREAD_INFECTION_CELL;
             case HIVE_GROW_ORGANISM -> StrategicTaskKind.GROW_HIVE_ORGANISM;
             case HIVE_ASSAULT_SETTLEMENT -> StrategicTaskKind.ASSAULT_SETTLEMENT;
-            case SETTLEMENT_PRODUCE_BREAD, SETTLEMENT_COMPANY_PRODUCTION -> StrategicTaskKind.PRODUCE_BREAD;
+            case SETTLEMENT_PRODUCE_BREAD, SETTLEMENT_COMPANY_PRODUCTION, SETTLEMENT_MAINTAIN_EQUIPMENT -> StrategicTaskKind.PRODUCE_AT_STATION;
             case SETTLEMENT_PATROL_OBSTRUCTED_ROUTE -> StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE;
             case SETTLEMENT_CONSTRUCT_ROUTE_BYPASS -> StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS;
             case SETTLEMENT_HARVEST_RESOURCE_SITE -> StrategicTaskKind.HARVEST_RESOURCE_SITE;

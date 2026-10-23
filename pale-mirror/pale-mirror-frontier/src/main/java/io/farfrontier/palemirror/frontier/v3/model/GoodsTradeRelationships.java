@@ -25,7 +25,11 @@ final class GoodsTradeRelationships {
             add(edges, Kind.GOODS_SOURCE_CONTAINER, owner, EntityKind.CONTAINER, contract.sourceContainerId(), life);
             add(edges, Kind.GOODS_RECEIVER_CONTAINER, owner, EntityKind.CONTAINER, contract.receiverContainerId(), life);
             if (!contract.terminal()) add(edges, Kind.GOODS_RESERVATION, owner, EntityKind.FINANCIAL_RESERVATION, contract.financialReservationId(), life);
-            for (SubjectId claim : contract.outstandingClaims().keySet()) add(edges, Kind.GOODS_CLAIM, owner, EntityKind.RESOURCE_CLAIM, claim, life);
+            for (SubjectId claim : contract.outstandingClaims().keySet()) {
+                var individual = contract.individualAllocations().get(claim);
+                if (individual != null) add(edges, Kind.GOODS_ITEM, owner, EntityKind.EXACT_ITEM, individual.itemId(), life);
+                else add(edges, Kind.GOODS_CLAIM, owner, EntityKind.RESOURCE_CLAIM, claim, life);
+            }
         }
     }
     private static SubjectEndpoint endpoint(EntityKind kind, SubjectId id) { return new SubjectEndpoint(kind, id); }

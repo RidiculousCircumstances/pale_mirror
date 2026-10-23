@@ -26,7 +26,7 @@ final class FrontierV3BakerySceneReconciliation {
             entity = level.getEntity(member.entityId());
         }
         if (!(entity instanceof Mob body) || !body.isAlive() || !FrontierV3SceneExecutor.owned(body, state, lease, member)
-                || !FrontierV3BakeryHandProjection.matchesCurrent(state, lease, member, body)) return;
+                || !FrontierV3StationWorkHandProjection.matchesCurrent(state, lease, member, body)) return;
         if (!FrontierV3ActorBodyController.inspectCurrent(level, runtime, body)) return;
         state = runtime.decodedState().orElseThrow();
         var observed = FrontierV3SupportedBodyCapture.observe(level, body);
@@ -36,7 +36,7 @@ final class FrontierV3BakerySceneReconciliation {
         var job = state.productionJobs().get(jobId);
         if (job == null) return;
         if (body.getMainHandItem().isEmpty()) {
-            var phase = job.bakeryWork().orElseThrow().phase();
+            var phase = job.stationWork().orElseThrow().phase();
             if (!BakeryStationSceneReconciled.emptyHandPhase(phase)) return;
             var receipt = new BakeryStationSceneReconciled(jobId, lease.id(), lease.revision(),
                     fence.authorityEpoch(), body.getUUID(), observed.orElseThrow(), phase);
@@ -49,7 +49,7 @@ final class FrontierV3BakerySceneReconciliation {
             return;
         }
         var hand = body.getMainHandItem();
-        var accountId = job.bakeryWork().orElseThrow().actorAccountId();
+        var accountId = job.stationWork().orElseThrow().actorAccountId();
         boolean unbound = state.inventory().fungibleResources().bindings().values().stream()
                 .noneMatch(binding -> binding.accountId().equals(accountId));
         if (unbound && !FrontierV3ActorCarryProjection.witnessed(state, member.actorId(), body)) return;
@@ -67,8 +67,8 @@ final class FrontierV3BakerySceneReconciliation {
     private static boolean restoreStationBody(ServerLevel level,
             FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, FrontierWorldState state, SceneLease lease) {
         var job = state.productionJobs().get(FrontierSceneBehaviors.productionWork(lease).jobId());
-        if (job == null || job.bakeryWork().isEmpty() || job.inputHold() instanceof ProductionInputHold.Materialized) return false;
-        var work = job.bakeryWork().orElseThrow();
+        if (job == null || job.stationWork().isEmpty() || job.inputHold() instanceof ProductionInputHold.Materialized) return false;
+        var work = job.stationWork().orElseThrow();
         if (!BakeryStationSceneReconciled.emptyHandPhase(work.phase())
                 || work.pendingPhysicalStep().isPresent()
                 || !FrontierV3ServerLifecycle.newSceneAdmissionReady(level, lease.handoffPosition())
@@ -85,8 +85,8 @@ final class FrontierV3BakerySceneReconciliation {
                                             FrontierWorldState state, SceneLease lease, SceneMember member) {
         var jobId = FrontierSceneBehaviors.productionWork(lease).jobId();
         var job = state.productionJobs().get(jobId);
-        if (job == null || job.bakeryWork().isEmpty()) return;
-        var phase = job.bakeryWork().orElseThrow().phase();
+        if (job == null || job.stationWork().isEmpty()) return;
+        var phase = job.stationWork().orElseThrow().phase();
         if (!BakeryStationSceneReconciled.emptyHandPhase(phase)) return;
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
         var departure = FrontierV3SceneDepartureObserver.validDeparture(state, lease, member, ledger).orElse(null);

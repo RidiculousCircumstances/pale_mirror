@@ -22,14 +22,14 @@ public record StrategicTask(SubjectId id, SubjectId objectiveId, SubjectId owner
         requirements = List.copyOf(requirements); dependencies = List.copyOf(dependencies);
         if (kind != StrategicTaskKind.GROW_HIVE_ORGANISM
                 && kind != StrategicTaskKind.ASSAULT_SETTLEMENT
-                && kind != StrategicTaskKind.PRODUCE_BREAD
+                && kind != StrategicTaskKind.PRODUCE_AT_STATION
                 && kind != StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE
                 && kind != StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS && kind != StrategicTaskKind.HARVEST_RESOURCE_SITE && infectionTarget.isEmpty()) {
             throw new IllegalArgumentException("infection strategic task requires an infection target");
         }
         if ((kind == StrategicTaskKind.GROW_HIVE_ORGANISM
                 || kind == StrategicTaskKind.ASSAULT_SETTLEMENT
-                || kind == StrategicTaskKind.PRODUCE_BREAD
+                || kind == StrategicTaskKind.PRODUCE_AT_STATION
                 || kind == StrategicTaskKind.PATROL_OBSTRUCTED_ROUTE
                 || kind == StrategicTaskKind.CONSTRUCT_ROUTE_BYPASS || kind == StrategicTaskKind.HARVEST_RESOURCE_SITE) && infectionTarget.isPresent()) {
             throw new IllegalArgumentException("hive growth task cannot carry an infection target");

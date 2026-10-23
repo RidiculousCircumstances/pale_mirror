@@ -253,7 +253,9 @@ public final class ExpeditionSupplyPlanning {
             int cargoSlots = member.role() == UnitGroup.Role.CARRIER ? 1 : 0;
             boolean cargoAlreadyCounted = cargoSlots != 0 && mission.shipmentIds().stream().map(state.shipments().shipments()::get)
                     .filter(Objects::nonNull).filter(shipment -> shipment.execution().actorId().equals(member.actorId()))
-                    .anyMatch(shipment -> presentations.containsKey(shipment.carriedAccountId()));
+                    .anyMatch(shipment -> shipment.cargo() instanceof ShipmentCargo.Individual cargo
+                            ? state.inventory().actorItems(member.actorId()).stream().anyMatch(item -> item.id().equals(cargo.itemId()))
+                            : presentations.containsKey(shipment.carriedAccountId()));
             if (cargoSlots != 0 && used.contains(main) && !cargoAlreadyCounted) return Optional.empty();
             free.put(member.actorId(), UnitInventoryPresentation.slots().stream().filter(slot -> !used.contains(slot)
                     && (cargoSlots == 0 || !slot.equals(main))).toList());

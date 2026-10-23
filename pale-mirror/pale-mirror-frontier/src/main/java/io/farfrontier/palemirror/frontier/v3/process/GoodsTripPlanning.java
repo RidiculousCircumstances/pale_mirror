@@ -82,13 +82,15 @@ final class GoodsTripPlanning {
                     var raw = search.match().orElseThrow();
                     var fulfillment = new GoodsTradeFulfillment(mode, mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? seller.party() : buyer.party());
                     var matchContract = raw.contract().declareFulfillment(fulfillment);
-                    if (raw.allocations().size() != 1) throw new IllegalArgumentException("trip selection requires one exact allocation per match");
+                    if (raw.allocations().size() + matchContract.individualAllocations().size() != 1) throw new IllegalArgumentException("trip selection requires one exact allocation per match");
                     considered.add(matchContract.itemKind());
                     if (matchContract.sourceContainerId().equals(matchContract.receiverContainerId())) break;
                     state = GoodsTradeStateSupport.reserve(state, seller.party().id(), matchContract, raw.allocations(), now);
                     reservedPrefixes.add(state);
                     reservations.add(new ProposedEvent(seller.party().id(), new GoodsTradeReserved(matchContract, raw.allocations())));
                     for (var allocation : raw.allocations()) parcels.add(new GoodsTripAssembly.Parcel(matchContract, allocation.claim(), allocation.accountId()));
+                    for (var allocation : matchContract.individualAllocations().values())
+                        parcels.add(new GoodsTripAssembly.Parcel(matchContract, new GoodsTripAssembly.Stock.Individual(allocation)));
                 }
                 if (parcels.isEmpty()) continue;
                 // Bounded capacity backtracking, never cancel/re-reserve a published sale.
@@ -171,8 +173,8 @@ final class GoodsTripPlanning {
             events.addAll(GoodsTripAssembly.events(declaration, now));
             var admitted = TransportMissionProcess.admit(quotation.state(), declaration.mission().id(), declaration, now);
             return new Result(admitted, List.copyOf(events), "TRIP_ADMITTED; cause=" + departure
-                    + "; parcels=" + candidate.parcels().size() + "; items=" + candidate.parcels().stream().mapToInt(p -> p.claim().quantity()).sum()
-                    + "; delivery=" + quotation.parcels().stream().mapToLong(p -> p.contract().deliveryUnitPrice().multiply(p.claim().quantity()).raw()).sum()
+                    + "; parcels=" + candidate.parcels().size() + "; items=" + candidate.parcels().stream().mapToInt(p -> p.quantity()).sum()
+                    + "; delivery=" + quotation.parcels().stream().mapToLong(p -> p.contract().deliveryUnitPrice().multiply(p.quantity()).raw()).sum()
                     + "; workerTicks=" + cost.workerTicks()
                     + "; members=" + declaration.group().members().size() + "; mission=" + declaration.mission().id().value());
         }
@@ -207,8 +209,8 @@ final class GoodsTripPlanning {
         var quantities = new TreeMap<String, Integer>(); var amounts = new TreeMap<String, Long>();
         for (var parcel : parcels) {
             var contract = parcel.contract();
-            quantities.merge(contract.itemKind(), parcel.claim().quantity(), Math::addExact);
-            amounts.merge(contract.itemKind(), contract.goodsUnitPrice().multiply(parcel.claim().quantity()).raw(), Math::addExact);
+            quantities.merge(contract.itemKind(), parcel.quantity(), Math::addExact);
+            amounts.merge(contract.itemKind(), contract.goodsUnitPrice().multiply(parcel.quantity()).raw(), Math::addExact);
         }
         var lines = new TreeMap<String, ProcurementSelection.Line>();
         quantities.forEach((item, quantity) -> lines.put(item, new ProcurementSelection.Line(quantity,
@@ -224,7 +226,7 @@ final class GoodsTripPlanning {
         var rules = state.bootstrap().ruleset().goodsTrade(); var view = GoodsParticipantAssessment.trading(state, buyer, now);
         var quantities = new TreeMap<String, Integer>();
         for (var parcel : parcels) {
-            var contract = parcel.contract(); quantities.merge(contract.itemKind(), parcel.claim().quantity(), Math::addExact);
+            var contract = parcel.contract(); quantities.merge(contract.itemKind(), parcel.quantity(), Math::addExact);
         }
         return GoodsDispatchAdvice.assess(state, view, quantities, journeyTicks, now);
     }

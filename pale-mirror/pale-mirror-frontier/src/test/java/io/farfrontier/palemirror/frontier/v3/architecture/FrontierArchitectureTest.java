@@ -22,14 +22,14 @@ final class FrontierArchitectureTest {
     static final ArchRule service_access_coordinator_does_not_inspect_family_work = noClasses()
             .that().haveSimpleName("ServiceAccessCoordinator")
             .should().dependOnClassesThat().haveNameMatching(
-                    ".*\\.(ProductionJob|BakeryWorkState|BakeryWorkGoal|ResourceSiteHarvestJob|ResourceSiteHarvestGoal|ResidentMeal)")
+                    ".*\\.(ProductionJob|StationWorkState|StationWorkGoal|ResourceSiteHarvestJob|ResourceSiteHarvestGoal|ResidentMeal)")
             .because("registered service Strategies interpret family stages; the shared arbiter receives complete nominal demands");
 
     @ArchTest
     static final ArchRule execution_coordinator_does_not_inspect_family_work = noClasses()
             .that().haveSimpleName("ActorExecutionCoordinator")
             .should().dependOnClassesThat().haveNameMatching(
-                    ".*\\.(ProductionJob|BakeryWorkState|ResourceSiteHarvestJob|ResourceSiteHarvestProgress|"
+                    ".*\\.(ProductionJob|StationWorkState|ResourceSiteHarvestJob|ResourceSiteHarvestProgress|"
                             + "FrontierProductionWorkSceneSupport|FrontierResourceSiteHarvestSceneSupport)")
             .because("family owners supply checkpoint Strategies; shared coordination cannot inspect their jobs");
 

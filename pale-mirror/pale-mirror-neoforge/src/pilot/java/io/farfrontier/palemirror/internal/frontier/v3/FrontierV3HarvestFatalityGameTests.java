@@ -40,6 +40,8 @@ public final class FrontierV3HarvestFatalityGameTests {
         var body = EntityType.VILLAGER.create(level);
         var id = ActorBodyAuthority.current(state, job.workerId());
         body.setUUID(ActorBodyId.entityId(state.bootstrap().worldId(), job.workerId()));
+        body.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,
+                FrontierV3ExactItemPresentation.materializedStack(job.equipment().lastUse().orElseThrow().before()));
         body.setPos(target.getX() + .5, target.getY(), target.getZ() + .5); body.setNoAi(true);
         FrontierV3ActorCarrierComposition.stamp(body, FrontierV3ActorCarrierComposition.fromCanonical(state, job.workerId(),
                 ActorKind.RESIDENT, FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY, body.getUUID(),
@@ -59,7 +61,7 @@ public final class FrontierV3HarvestFatalityGameTests {
             var witness = FrontierV3ResourceFieldWitness.claimed(job.siteId(), cycle.epoch(), ResourceFieldPhysicalSurface.fromCycle(cycle))
                     .begin(cycle.physicalWorkTransition(cell.id()).orElseThrow(), FrontierV3ResourceFieldWorkExecutor.cause(job, cycle, cell.id()));
             ledger.replaceFieldClaim(owner, owner.withWitness(witness)); ledger.persist(level);
-            // Terrain-only tilling has no extraction dependency or fake entity participant.
+            // Tilling changes terrain and the retained hoe condition in one operation.
             var operation = FrontierV3FieldWorkOperation.apply(level, state, lease, job, body, cell,
                     witness.cell(cell.id()).pending().orElseThrow(), null);
             helper.assertTrue(operation.complete() && level.getBlockState(target.below()).is(Blocks.FARMLAND),
@@ -69,8 +71,8 @@ public final class FrontierV3HarvestFatalityGameTests {
             helper.assertValueEqual(resources.effects().size(), 1, "pre-loot zero-health observation retains the exact terrain effect");
             var identity = new ActorActuationId(id, HarvestDeathResources.execution(state, job.workerId()).orElseThrow());
             var declaration = resources.effects().getFirst().child().declaration();
-            helper.assertTrue(declaration.participants().stream().noneMatch(port -> port.medium() == FrontierV3OperationReceipt.Medium.ENTITIES),
-                    "terrain work must not invent a body mutation participant");
+            helper.assertTrue(declaration.participants().stream().anyMatch(port -> port.medium() == FrontierV3OperationReceipt.Medium.ENTITIES),
+                    "tool wear includes its actual body participant in the durable operation");
             var location = state.actorLocations().get(job.workerId());
             var death = new ActorBodyDied(id, location.body(), location.condition().health(), Optional.empty(),
                     Optional.of(identity.execution()), "fixture:native-field-fatality");

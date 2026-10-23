@@ -23,7 +23,7 @@ public final class MarketClearingProcess {
     private MarketClearingProcess() { }
 
     public static MarketDemand foodDemand(FrontierWorldState state, StrategicTask task, long openedAt) {
-        if (task.kind() != StrategicTaskKind.PRODUCE_BREAD) throw new IllegalArgumentException("only bread work creates the current food demand");
+        if (task.kind() != StrategicTaskKind.PRODUCE_AT_STATION) throw new IllegalArgumentException("only bread work creates the current food demand");
         String suffix = task.id().value().substring("task:".length());
         return new MarketDemand(new SubjectId("demand:" + suffix), task.ownerId(), task.id(), BREAD, 64,
                 state.bootstrap().ruleset().rates().worksJobPrice(), openedAt,
@@ -44,7 +44,7 @@ public final class MarketClearingProcess {
         if (now > demand.expiresAtTick()) return List.of(new ProposedEvent(demand.buyerId(), new MarketDemandExpired(demand.id())),
                 taskTransition(state, demand, StrategicTaskStatus.PENDING, StrategicTaskStatus.BLOCKED));
         StrategicTask task = state.strategicPlans().tasks().get(demand.reasonId());
-        if (task == null || task.status() != StrategicTaskStatus.PENDING || !task.ownerId().equals(demand.buyerId()) || task.kind() != StrategicTaskKind.PRODUCE_BREAD) {
+        if (task == null || task.status() != StrategicTaskStatus.PENDING || !task.ownerId().equals(demand.buyerId()) || task.kind() != StrategicTaskKind.PRODUCE_AT_STATION) {
             return List.of(new ProposedEvent(demand.buyerId(), new MarketDemandCancelled(demand.id(), MarketDemandCancellationReason.TASK_NO_LONGER_PENDING)));
         }
         // Capacity may disappear between objective selection and market clearing. Keep the
@@ -114,7 +114,7 @@ public final class MarketClearingProcess {
 
     public static FrontierWorldState reduceOpened(FrontierWorldState state, SubjectId subject, MarketDemandOpened opened) {
         MarketDemand demand = opened.demand(); StrategicTask task = state.strategicPlans().tasks().get(demand.reasonId());
-        if (!subject.equals(demand.buyerId()) || task == null || task.kind() != StrategicTaskKind.PRODUCE_BREAD || task.status() != StrategicTaskStatus.PENDING
+        if (!subject.equals(demand.buyerId()) || task == null || task.kind() != StrategicTaskKind.PRODUCE_AT_STATION || task.status() != StrategicTaskStatus.PENDING
                 || !task.ownerId().equals(demand.buyerId()) || !foodDemand(state, task, demand.openedAtTick()).equals(demand)) {
             throw new IllegalArgumentException("market food demand must be emitted for its exact pending production task");
         }
@@ -162,8 +162,8 @@ public final class MarketClearingProcess {
             }
             throw new IllegalArgumentException("market cancellation must name one accepted active work order");
         }
-        if (job.bakeryWork().isPresent()
-                && job.bakeryWork().orElseThrow().phase() != BakeryWorkState.Phase.DEPOT_PICKUP)
+        if (job.stationWork().isPresent()
+                && job.stationWork().orElseThrow().phase() != StationWorkState.Phase.DEPOT_PICKUP)
             throw new IllegalArgumentException("market cannot cancel a bakery batch held by an actor or station");
         MarketDemand demand = state.companies().market().demands().get(order.demandId());
         StrategicTask task = demand == null ? null : state.strategicPlans().tasks().get(demand.reasonId());
@@ -216,7 +216,7 @@ public final class MarketClearingProcess {
         MarketDemand demand = state.companies().market().demands().get(cancelled.demandId());
         StrategicTask task = demand == null ? null : state.strategicPlans().tasks().get(demand.reasonId());
         if (demand == null || !subject.equals(demand.buyerId()) || task == null || !task.ownerId().equals(subject)
-                || task.kind() != StrategicTaskKind.PRODUCE_BREAD || task.status() != StrategicTaskStatus.PENDING) {
+                || task.kind() != StrategicTaskKind.PRODUCE_AT_STATION || task.status() != StrategicTaskStatus.PENDING) {
             throw new IllegalArgumentException("market cancellation must close its exact pending food task demand");
         }
         return state.withCompanies(state.companies().withMarket(state.companies().market().cancelOpen(demand.id())));

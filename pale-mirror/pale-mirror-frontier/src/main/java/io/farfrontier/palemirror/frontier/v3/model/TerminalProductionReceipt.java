@@ -28,7 +28,6 @@ public record TerminalProductionReceipt(SubjectId jobId, SubjectId workerId,
         if (outputKind.isBlank() || outputCount < 1 || topologyRevision < 0L || traversalCursor < 0) throw new IllegalArgumentException("terminal production receipt is invalid");
         if (inputLots.isEmpty() || inputLots.size() > 64 || !inputLots.containsKey(inputId)
                 || inputLots.values().stream().anyMatch(quantity -> quantity < 1 || quantity > 64)
-                || inputLots.values().stream().mapToInt(Integer::intValue).sum() != outputCount
                 || inputRepresentation == ResourceRepresentation.EXACT_ITEM && inputLots.size() != 1) {
             throw new IllegalArgumentException("terminal production receipt lost its exact input allocation");
         }
@@ -43,7 +42,12 @@ public record TerminalProductionReceipt(SubjectId jobId, SubjectId workerId,
     public static TerminalProductionReceipt of(ProductionJob job) {
         Objects.requireNonNull(job, "completed production job");
         ResourceRepresentation representation = job.inputHold().resourceRepresentation();
-        return new TerminalProductionReceipt(job.id(), job.workerId(), job.consumedItemId(), job.inputQuantities(), job.outputItemId(), representation, representation, job.outputItemKind(), job.outputCount(),
+        ResourceRepresentation output = switch (job.outputEntityKind()) {
+            case EXACT_ITEM -> ResourceRepresentation.EXACT_ITEM;
+            case RESOURCE_LOT -> ResourceRepresentation.RESOURCE_LOT;
+            default -> throw new IllegalArgumentException("production product has non-resource identity");
+        };
+        return new TerminalProductionReceipt(job.id(), job.workerId(), job.consumedItemId(), job.inputQuantities(), job.outputItemId(), representation, output, job.outputItemKind(), job.outputCount(),
                 job.workTraversal().id(), job.workTraversal().revision(), job.traversalCursor(), job.workTraversal().linearCorridorSurfaces().get(job.traversalCursor()).standingBody());
     }
 }

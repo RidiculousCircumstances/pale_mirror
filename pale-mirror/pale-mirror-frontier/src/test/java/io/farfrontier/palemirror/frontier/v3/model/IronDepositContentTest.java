@@ -29,7 +29,9 @@ class IronDepositContentTest {
         }
         assertTrue(rules.initialSettlementStocks().stream().noneMatch(s -> s.itemKind().equals("minecraft:raw_iron")));
         var iron = rules.extraction().definitionFor(new BlockExtraction.Block("minecraft:iron_ore", Map.of())).orElseThrow();
-        assertEquals(rules.extraction().source().toolKind(), iron.toolKind());
+        assertEquals(rules.extraction().source().toolRequirement().ability(), iron.toolRequirement().ability());
+        assertTrue(iron.toolRequirement().minimumGrade() >= rules.extraction().source().toolRequirement().minimumGrade());
+        assertTrue(iron.toolRequirement().wear() > rules.extraction().source().toolRequirement().wear());
         assertEquals(List.of(new BlockExtraction.Output("minecraft:raw_iron", 1)), iron.coldOutput());
         assertEquals(3 * rules.workCatalog().require("minecraft:coal_ore", WorkOperation.EXTRACT).workUnits(),
                 2 * rules.workCatalog().require("minecraft:iron_ore", WorkOperation.EXTRACT).workUnits());

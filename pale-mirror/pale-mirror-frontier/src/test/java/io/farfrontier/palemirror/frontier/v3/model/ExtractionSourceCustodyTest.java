@@ -28,10 +28,14 @@ class ExtractionSourceCustodyTest {
                 sites.geologicalExclusions(), sites.geology(), sites.knowledge());
         assertTrue(ExtractionSourceCustody.mutationAvailable(sites, one));
         assertTrue(ExtractionSourceCustody.mutationAvailable(sites, two));
+        var toolDefinition = GrayboxToolCatalog.initialFor(initial().bootstrap().ruleset().tools(), List.of(first.definition().toolRequirement())).getFirst();
+        var equipment = new ExactItemStack(one.toolId(), deposit.site().settlementId(), toolDefinition.itemKind(), 1,
+                new InventoryCustody.Actor(one.execution().actorId()), toolDefinition.pristine());
         var step = new ExtractionPhysicalStep.BlockWork(new ActorHotObservation(new ActorActuationId(
                 new ActorBodyId(one.execution().actorId(), 1), one.execution()), one.revision()),
                 BlockExtraction.prepareKnown(ExtractionPhysicalStateSupport.operation(one), one.execution(), first.source(),
-                        first.definition(), first.definition().before()), 0, 1);
+                        first.definition(), first.definition().before()), 0, 1,
+                io.farfrontier.palemirror.frontier.v3.model.tooling.ToolUse.prepare(equipment, initial().bootstrap().ruleset().tools(), first.definition().toolRequirement()));
         var event = new ExtractionHotPrepared(one.id(), step); var codecs = FrontierWorldRuntimeDefinition.payloadCodecs();
         var restored = (ExtractionHotPrepared) codecs.decode(event.type(), codecs.encode(event));
         var retained = one.prepare(restored.step());

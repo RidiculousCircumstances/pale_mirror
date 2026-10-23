@@ -7,7 +7,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 /** A physical witness blocks or clears only its retained bakery job, never the whole scene. */
-public record BakeryHotBlockChanged(SubjectId jobId, SceneLeaseId leaseId, BakeryWorkState.Phase phase,
+public record BakeryHotBlockChanged(SubjectId jobId, SceneLeaseId leaseId, StationWorkState.Phase phase,
                                     Optional<BakeryWorkBlock> block) implements FrontierPayload {
     public BakeryHotBlockChanged {
         Objects.requireNonNull(jobId, "bakery block job");
