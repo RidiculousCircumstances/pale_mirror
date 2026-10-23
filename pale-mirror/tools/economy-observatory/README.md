@@ -49,3 +49,22 @@ Checks: `python3 -m unittest discover -s tools/economy-observatory` from source
 root; NeoForge `FrontierV3EconomyProjectionTest`; kernel
 `DeferredTransactionPublicationTest` verifies only confirmed publication,
 idempotent completion and observer failure isolation.
+
+UI follow-up: selecting filters applies immediately. Trade has intersecting seller
+and buyer filters, including CSV and daily aggregates. Every table supports column
+sorting; monetary columns use raw numeric values. Tables have independent bounded
+scroll areas and sticky headers; refresh preserves scroll and chosen sort.
+
+The Performance tab reads `/api/performance`, backed by one background loop calling
+only the existing `pale_mirror v3 inspect performance` diagnostic over loopback RCON
+once per 10 seconds (3-second total response bound, 64 KiB response cap). Credentials
+stay local in server.properties; HTTP accepts no command or endpoint parameter.
+No browser-triggered game requests, additional Java ticking or new telemetry owner.
+This optional read-only poll uses existing bounded diagnostic producers. RCON being
+disabled/unreachable produces explicit unavailable/stale metrics, independently of
+economic collection. The collector retains up to 360 performance samples in memory;
+restart clears this short history. A server counter reset/world change also clears
+it. Missing samples never become zero-valued queue or latency measurements.
+Displayed tick duration is the existing host-through-PM portion, not full Minecraft
+MSPT. Observed tick frequency uses counter deltas/wall intervals and is unavailable
+on the first sample or across a failed poll, not inferred from processing duration.

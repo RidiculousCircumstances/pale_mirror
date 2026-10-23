@@ -34,4 +34,14 @@ class Observations(unittest.TestCase):
         with self.store.connect() as db:
             self.assertEqual(db.execute('SELECT sum(receipts) FROM trade_days').fetchone()[0],1)
         self.assertEqual(self.store.view({})['sales'],[])
+    def test_direction_filters_intersect_with_town_and_resource_before_aggregation(self):
+        first=self.sale()
+        reverse={**first,'id':'reverse','seller':'b','buyer':'a','quantity':10}
+        other={**first,'id':'other','seller':'a','buyer':'c','quantity':20}
+        self.store.ingest(self.batch([self.sample(),first,reverse,other]))
+        view=self.store.view({'seller':'a','buyer':'b','town':'b','item':'minecraft:bread'})
+        self.assertEqual([s['id'] for s in view['sales']],['accepted-1'])
+        self.assertEqual(view['matrix'][0]['quantity'],3)
+        self.assertEqual(view['daily'][0]['quantity'],3)
+        self.assertEqual(self.store.view({'seller':'a','buyer':'b','town':'c'})['matrix'],[])
 if __name__=='__main__': unittest.main()

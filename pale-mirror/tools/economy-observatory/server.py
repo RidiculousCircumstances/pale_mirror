@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 from store import Store
+from performance import Performance
 
 WEB = Path(__file__).with_name('web')
 MAX_BATCH_BYTES = 8*1024*1024
@@ -44,8 +45,9 @@ def collect(source, store, stopping):
 class Server(ThreadingHTTPServer):
     daemon_threads=True
     request_queue_size=16
-    def __init__(self, address, store):
+    def __init__(self, address, store, performance):
         self.store=store
+        self.performance=performance
         self.requests=threading.BoundedSemaphore(8)
         super().__init__(address,Handler)
     def process_request(self, request, client_address):
@@ -64,7 +66,9 @@ class Handler(BaseHTTPRequestHandler):
         self.connection.settimeout(10)
         url=urlsplit(self.path)
         try:
-            if url.path in ('/api/view','/api/export.csv'):
+            if url.path == '/api/performance':
+                self.send(json.dumps(self.server.performance.view(),separators=(',',':')).encode(),'application/json')
+            elif url.path in ('/api/view','/api/export.csv'):
                 params={k:v[-1] for k,v in parse_qs(url.query).items()}
                 data=self.server.store.view(params)
                 if url.path.endswith('.csv'):
@@ -95,7 +99,9 @@ def main():
     parser.add_argument('--bind',default='127.0.0.1'); parser.add_argument('--port',type=int,default=8093)
     args=parser.parse_args(); store=Store(args.database); stop=threading.Event()
     worker=threading.Thread(target=collect,args=(args.source,store,stop),daemon=True,name='economic-collector');worker.start()
-    server=Server((args.bind,args.port),store)
+    performance=Performance(args.source)
+    monitor=threading.Thread(target=performance.collect,args=(stop,),daemon=True,name="performance-collector");monitor.start()
+    server=Server((args.bind,args.port),store,performance)
     try: server.serve_forever()
-    finally: stop.set();server.server_close();worker.join(timeout=3)
+    finally: stop.set();server.server_close();worker.join(timeout=3);monitor.join(timeout=3)
 if __name__=='__main__': main()

@@ -163,3 +163,51 @@ footer {
   max-width: 40%;
   text-align: right;
 }
+
+#trade-filters:not([hidden]) {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+th .sort {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  width: 100%;
+}
+th .sort:hover {
+  color: #fff;
+}
+th .sort:focus-visible {
+  outline: 2px solid #74c9ab;
+  outline-offset: 5px;
+}
+th[aria-sort="ascending"],
+th[aria-sort="descending"] {
+  color: #b6f5dc;
+}
+
+.table-scroll {
+  max-height: min(65vh, 640px);
+  overflow: auto;
+  border: 1px solid #30464f;
+  border-radius: 5px;
+}
+.table-scroll table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.table-scroll th {
+  z-index: 1;
+  box-shadow: 0 1px 0 #405963;
+}
+.table-scroll:focus-visible {
+  outline: 2px solid #74c9ab;
+}
+
+[hidden] {
+  display: none !important;
+}

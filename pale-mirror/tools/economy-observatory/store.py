@@ -121,11 +121,15 @@ class Store:
             item, town = params.get('item',''), params.get('town','')
             if item: condition += ' AND item=?'; values.append(item)
             if town: condition += ' AND (seller=? OR buyer=?)'; values.extend((town,town))
+            for key in ('seller','buyer'):
+                if params.get(key): condition+=' AND '+key+'=?'; values.append(params[key])
             sales = [dict(r) for r in db.execute('SELECT * FROM sales WHERE '+condition+' ORDER BY tick DESC,id LIMIT 500',values)]
             matrix = [dict(r) for r in db.execute('SELECT seller,buyer,item,sum(quantity) quantity,sum(goods_raw) goods_raw,sum(delivery_raw) delivery_raw,count(*) receipts FROM sales WHERE '+condition+' GROUP BY seller,buyer,item ORDER BY goods_raw DESC LIMIT 2048',values)]
             daily_condition, daily_values = 'world=? AND day>=? AND day<=?', [world,start//24000,end//24000]
             if item: daily_condition+=' AND item=?'; daily_values.append(item)
             if town: daily_condition+=' AND (seller=? OR buyer=?)'; daily_values.extend((town,town))
+            for key in ('seller','buyer'):
+                if params.get(key): daily_condition+=' AND '+key+'=?'; daily_values.append(params[key])
             daily = [dict(r) for r in db.execute('SELECT * FROM trade_days WHERE '+daily_condition+' ORDER BY day DESC LIMIT 4096',daily_values)]
             snapshot=db.execute('SELECT body FROM samples WHERE world=? ORDER BY revision DESC LIMIT 1',(world,)).fetchone()
             latest=json.loads(snapshot['body']) if snapshot else None

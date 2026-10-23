@@ -14,11 +14,21 @@ const $ = (id) => document.getElementById(id),
     );
 const n = (x) =>
     Number(x || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 }),
-  money = (x) => (Number(x || 0) / 1e6).toLocaleString("ru-RU", { maximumFractionDigits: 6 }),
+  money = (x) =>
+    (Number(x || 0) / 1e6).toLocaleString("ru-RU", {
+      maximumFractionDigits: 6,
+    }),
   short = (x) => String(x ?? "").replace(/^minecraft:/, "");
+let performanceData = null;
 let data = null,
   tab = "towns",
-  busy = false;
+  busy = false,
+  refreshPending = false;
+const sorts = new Map();
+const collator = new Intl.Collator("ru", {
+  numeric: true,
+  sensitivity: "base",
+});
 const tabs = {
   towns: "Поселения",
   stocks: "Запасы",
@@ -28,6 +38,7 @@ const tabs = {
   production: "Производство",
   history: "История",
   gaps: "Покрытие",
+  performance: "Производительность",
 };
 $("tabs").innerHTML = Object.entries(tabs)
   .map(([k, v]) => `<button data-tab="${k}">${v}</button>`)
@@ -35,14 +46,19 @@ $("tabs").innerHTML = Object.entries(tabs)
 $("tabs").onclick = (e) => {
   if (e.target.dataset.tab) {
     tab = e.target.dataset.tab;
-    render();
+    refresh();
   }
 };
 const params = () =>
   new URLSearchParams(
-    ["world", "town", "item", "from", "to"].flatMap((k) =>
-      $(k).value ? [[k, $(k).value]] : [],
-    ),
+    [
+      "world",
+      "town",
+      "item",
+      "from",
+      "to",
+      ...(tab === "trade" ? ["seller", "buyer"] : []),
+    ].flatMap((k) => ($(k).value ? [[k, $(k).value]] : [])),
   );
 function options(id, rows, empty) {
   const current = $(id).value;
@@ -54,13 +70,53 @@ function options(id, rows, empty) {
   if (rows.some((r) => r[0] === current)) $(id).value = current;
 }
 function table(title, rows, cols, exportName) {
+  const sort = sorts.get(title);
+  if (sort) {
+    const get = cols[sort.column][2] || cols[sort.column][1];
+    rows = [...rows].sort((a, b) => {
+      const x = get(a),
+        y = get(b);
+      return (
+        sort.direction *
+        (typeof x === "number" && typeof y === "number"
+          ? x - y
+          : collator.compare(String(x ?? ""), String(y ?? "")))
+      );
+    });
+  }
   return (
     `<h2>${esc(title)}</h2>${exportName ? `<p><a href="/api/export.csv?${esc(params())}&table=${exportName}">Скачать CSV (тот же период и лимит)</a></p>` : ""}` +
     (rows.length
-      ? `<table><thead><tr>${cols.map((c) => `<th>${esc(c[0])}</th>`).join("")}</tr></thead><tbody>${rows.map((r) => `<tr>${cols.map((c) => `<td>${esc(c[1](r))}</td>`).join("")}</tr>`).join("")}</tbody></table>`
+      ? `<div class="table-scroll" tabindex="0" role="region" aria-label="${esc(title)}"><table><thead><tr>${cols
+          .map((c, i) => {
+            const active = sort?.column === i;
+            return `<th scope="col" aria-sort="${active ? (sort.direction === 1 ? "ascending" : "descending") : "none"}"><button class="sort" data-table="${esc(title)}" data-column="${i}">${esc(c[0])} <span aria-hidden="true">${active ? (sort.direction === 1 ? "↑" : "↓") : "↕"}</span></button></th>`;
+          })
+          .join(
+            "",
+          )}</tr></thead><tbody>${rows.map((r) => `<tr>${cols.map((c) => `<td>${esc(c[1](r))}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`
       : '<p class="empty">Нет данных в выбранном периоде</p>')
   );
 }
+$("content").addEventListener("click", (event) => {
+  if (event.target.closest("[data-refresh-performance]")) {
+    refresh();
+    return;
+  }
+  const button = event.target.closest("button[data-column]");
+  if (!button) return;
+  const key = button.dataset.table,
+    column = Number(button.dataset.column),
+    previous = sorts.get(key);
+  sorts.set(key, {
+    column,
+    direction: previous?.column === column ? -previous.direction : 1,
+  });
+  render();
+  [...document.querySelectorAll("button[data-column]")]
+    .find((b) => b.dataset.table === key && Number(b.dataset.column) === column)
+    ?.focus({ preventScroll: true });
+});
 const name = (id) =>
   data?.latest?.settlements?.find((s) => s.id === id)?.name || id;
 const filtered = (rows, townKey = "town") =>
@@ -69,7 +125,13 @@ const filtered = (rows, townKey = "town") =>
       (!$("town").value || r[townKey] === $("town").value) &&
       (!$("item").value || r.item === $("item").value),
   );
-function chart(title, series) {
+function chart(
+  title,
+  series,
+  points = data.history || [],
+  formatTime = n,
+  axis = "тики",
+) {
   const colors = [
     "#83d5b2",
     "#f1bd75",
@@ -78,7 +140,6 @@ function chart(title, series) {
     "#f28088",
     "#b4c983",
   ];
-  const points = data.history || [];
   if (points.length < 2)
     return `<h2>${esc(title)}</h2><p class="empty">Нужно минимум два снимка</p>`;
   const a = points[0].tick,
@@ -86,18 +147,41 @@ function chart(title, series) {
   let max = 1;
   for (const s of series)
     for (const p of points) max = Math.max(max, s.value(p));
-  return `<h2>${esc(title)}</h2><p class="muted">Максимум шкалы ${n(max)} · тики ${a}–${b}. Между снимками состояние неизвестно.</p><svg viewBox="0 0 1000 230" preserveAspectRatio="none">${series.map((s, i) => `<polyline fill="none" stroke="${colors[i % colors.length]}" stroke-width="2" points="${points.map((p) => `${20 + (960 * (p.tick - a)) / Math.max(1, b - a)},${210 - (190 * s.value(p)) / max}`).join(" ")}"/>`).join("")}</svg><div class="legend">${series.map((s, i) => `<span style="color:${colors[i % colors.length]}">${esc(s.label)}</span>`).join("")}</div>`;
+  return `<h2>${esc(title)}</h2><p class="muted">Максимум шкалы ${n(max)} · ${axis} ${formatTime(a)}–${formatTime(b)}. Между снимками состояние неизвестно.</p><svg viewBox="0 0 1000 230" preserveAspectRatio="none">${series.map((s, i) => `<polyline fill="none" stroke="${colors[i % colors.length]}" stroke-width="2" points="${points.map((p) => `${20 + (960 * (p.tick - a)) / Math.max(1, b - a)},${210 - (190 * s.value(p)) / max}`).join(" ")}"/>`).join("")}</svg><div class="legend">${series.map((s, i) => `<span style="color:${colors[i % colors.length]}">${esc(s.label)}</span>`).join("")}</div>`;
+}
+function setContent(html) {
+  const positions = new Map(
+    [...$("content").querySelectorAll(".table-scroll")].map((region) => [
+      region.getAttribute("aria-label"),
+      [region.scrollTop, region.scrollLeft],
+    ]),
+  );
+  $("content").innerHTML = html;
+  for (const region of $("content").querySelectorAll(".table-scroll")) {
+    const previous = positions.get(region.getAttribute("aria-label"));
+    if (previous) {
+      region.scrollTop = previous[0];
+      region.scrollLeft = previous[1];
+    }
+  }
 }
 function render() {
-  if (!data?.latest) {
-    $("content").innerHTML =
-      '<p class="empty">Ожидается первый снимок сервера</p>';
-    return;
-  }
-  const s = data.latest;
+  $("trade-filters").hidden = tab !== "trade";
+  $("filters").hidden = tab === "performance";
+  $("summary").hidden = tab === "performance";
+  $("coverage").hidden = tab === "performance";
   document
     .querySelectorAll("[data-tab]")
     .forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+  if (tab === "performance") {
+    setContent(performanceView());
+    return;
+  }
+  if (!data?.latest) {
+    setContent('<p class="empty">Ожидается первый снимок сервера</p>');
+    return;
+  }
+  const s = data.latest;
   const towns = s.settlements.filter(
     (t) => !$("town").value || t.id === $("town").value,
   );
@@ -118,14 +202,12 @@ function render() {
       ["Поселение", (r) => r.name],
       ["Жителей", (r) => r.residents],
       ["Голодны", (r) => r.hungry],
-      ["Баланс", (r) => money(r.balanceRaw)],
-      ["Зарезервировано", (r) => money(r.reservedRaw)],
-      ["Бюджеты", (r) => money(r.budgetsRaw)],
-      ["Можно потратить", (r) => money(r.availableRaw)],
-      [
-        "Получено / уплачено",
-        (r) => money(r.receivedRaw) + " / " + money(r.paidRaw),
-      ],
+      ["Баланс", (r) => money(r.balanceRaw), (r) => r.balanceRaw],
+      ["Зарезервировано", (r) => money(r.reservedRaw), (r) => r.reservedRaw],
+      ["Бюджеты", (r) => money(r.budgetsRaw), (r) => r.budgetsRaw],
+      ["Можно потратить", (r) => money(r.availableRaw), (r) => r.availableRaw],
+      ["Получено", (r) => money(r.receivedRaw), (r) => r.receivedRaw],
+      ["Уплачено", (r) => money(r.paidRaw), (r) => r.paidRaw],
     ]);
   if (tab === "stocks")
     html =
@@ -149,7 +231,7 @@ function render() {
         ["Сторона", (r) => r.side],
         ["Ресурс", (r) => short(r.item)],
         ["Доступно", (r) => r.quantity],
-        ["Цена / ед.", (r) => money(r.priceRaw)],
+        ["Цена / ед.", (r) => money(r.priceRaw), (r) => r.priceRaw],
         ["Истекает, тик", (r) => r.expires],
       ]);
   if (tab === "trade")
@@ -162,9 +244,13 @@ function render() {
           ["Покупатель", (r) => name(r.buyer)],
           ["Товар", (r) => short(r.item)],
           ["Количество", (r) => r.quantity],
-          ["Стоимость товара", (r) => money(r.goods_raw)],
-          ["Доставка", (r) => money(r.delivery_raw)],
-          ["Средняя цена товара", (r) => money(r.goods_raw / r.quantity)],
+          ["Стоимость товара", (r) => money(r.goods_raw), (r) => r.goods_raw],
+          ["Доставка", (r) => money(r.delivery_raw), (r) => r.delivery_raw],
+          [
+            "Средняя цена товара",
+            (r) => money(r.goods_raw / r.quantity),
+            (r) => r.goods_raw / r.quantity,
+          ],
           ["Приёмок", (r) => r.receipts],
         ],
         "matrix",
@@ -178,8 +264,12 @@ function render() {
           ["Покупатель", (r) => name(r.buyer)],
           ["Товар", (r) => short(r.item)],
           ["Количество", (r) => r.quantity],
-          ["Цена / ед.", (r) => money(r.goods_raw / r.quantity)],
-          ["Доставка", (r) => money(r.delivery_raw)],
+          [
+            "Цена / ед.",
+            (r) => money(r.goods_raw / r.quantity),
+            (r) => r.goods_raw / r.quantity,
+          ],
+          ["Доставка", (r) => money(r.delivery_raw), (r) => r.delivery_raw],
         ],
         "sales",
       ) +
@@ -190,14 +280,17 @@ function render() {
             (!$("town").value ||
               r.seller === $("town").value ||
               r.buyer === $("town").value) &&
-            (!$("item").value || r.item === $("item").value),
+            (!$("item").value || r.item === $("item").value) &&
+            (!$("seller").value || r.seller === $("seller").value) &&
+            (!$("buyer").value || r.buyer === $("buyer").value),
         ),
         [
           ["Договор", (r) => r.id],
           ["Продавец", (r) => name(r.seller)],
           ["Покупатель", (r) => name(r.buyer)],
           ["Товар", (r) => short(r.item)],
-          ["Заказано / принято", (r) => r.quantity + " / " + r.accepted],
+          ["Заказано", (r) => r.quantity],
+          ["Принято", (r) => r.accepted],
           ["Потеряно / отменено", (r) => r.disposed],
         ],
       );
@@ -284,7 +377,7 @@ function render() {
       points.map(([day, v]) => ({ day, price: v[0] / v[1], quantity: v[1] })),
       [
         ["День", (r) => r.day],
-        ["Цена / ед.", (r) => money(r.price)],
+        ["Цена / ед.", (r) => money(r.price), (r) => r.price],
         ["Объём", (r) => r.quantity],
       ],
     );
@@ -297,15 +390,165 @@ function render() {
         ["Причина", (r) => r.reason],
         ["Детали", (r) => r.body],
       ]);
-  $("content").innerHTML = html;
+  setContent(html);
+}
+$("content").addEventListener("change", (event) => {
+  if (event.target.matches("[data-performance-auto]"))
+    $("auto").checked = event.target.checked;
+});
+function performanceView() {
+  const value = performanceData;
+  const controls = `<div class="performance-controls"><button data-refresh-performance>Обновить показатели</button><label class="check"><input type="checkbox" data-performance-auto ${$("auto").checked ? "checked" : ""}>Автообновление</label></div>`;
+  if (!value?.latest)
+    return (
+      controls +
+      `<p class="empty">Метрики пока недоступны: ${esc(value?.error || "ожидание первого снимка")}</p>`
+    );
+  const d = value.latest,
+    last = value.history.at(-1),
+    ms = (x) => (x == null ? "—" : n(x / 1e6));
+  const field = (x) => (x == null ? "—" : x);
+  const values = (object, keys) =>
+    keys.map(([label, key]) => ({ label, value: field(object?.[key]) }));
+  return (
+    controls +
+    `<p class="${value.error || value.ageSeconds > 25 ? "warn" : "muted"}">Весь сервер · ${esc(value.world)} · данные ${n(value.ageSeconds)} с назад · интервал ${value.intervalSeconds} с${value.error ? " · " + esc(value.error) : ""}. Фильтры экономики здесь не применяются.</p>
+    <p class="muted">Время тика — измеренная часть до обработчика Pale Mirror, не полный MSPT Minecraft. Тики/с вычислены по разнице счётчика между снимками, не по времени обработки. История — до часа с запуска сборщика; при перезапуске сервера начинается заново.</p>` +
+    table(
+      "Сервер сейчас",
+      [
+        {
+          label: "Наблюдаемые тики/с",
+          value: last?.tps == null ? "—" : n(last.tps),
+        },
+        {
+          label: "Среднее время тика, мс (64 последних)",
+          value: last?.meanMs == null ? "—" : n(last.meanMs),
+        },
+        {
+          label: "Пиковое время тика, мс (64 последних)",
+          value: last?.maxMs == null ? "—" : n(last.maxMs),
+        },
+        {
+          label: "Обычные тики в ожидании",
+          value: field(d.pendingOrdinaryTicks),
+        },
+        {
+          label: "Перемотка: осталось тиков",
+          value: field(d.fastForwardRemaining),
+        },
+        { label: "Ошибка перемотки", value: d.fastForwardFailure || "Нет" },
+        { label: "Снимок симуляции, тик", value: field(d.instant) },
+      ],
+      [
+        ["Показатель", (r) => r.label],
+        ["Значение", (r) => r.value],
+      ],
+    ) +
+    table(
+      "Очередь событий",
+      values(d.scheduleQueue, [
+        ["Готовы", "ready"],
+        ["Ожидают условия", "held"],
+        ["Будущие", "future"],
+        ["Проверяются", "checking"],
+        ["Всего", "total"],
+        ["Отставание готовых, тики", "oldestReadyLagTicks"],
+      ]),
+      [
+        ["Показатель", (r) => r.label],
+        ["Значение", (r) => r.value],
+      ],
+    ) +
+    table(
+      "Маршрутизация",
+      values(d.pedestrianPlanning, [
+        ["В очереди", "waiting"],
+        ["Активные поиски", "activeSearches"],
+        ["Работающие потоки", "runningWorkers"],
+        ["Размер пула", "workerPoolSize"],
+        ["Ожидающие порции расчёта", "queuedWorkerSlices"],
+        ["Завершённые маршруты", "completedSearches"],
+        ["Максимальное ожидание, шаги планировщика", "oldestWaitPlanningTurns"],
+      ]),
+      [
+        ["Показатель", (r) => r.label],
+        ["Значение", (r) => r.value],
+      ],
+    ) +
+    table(
+      "Запись канонического журнала",
+      [
+        ...values(d.canonicalWal, [
+          ["Записей в буфере", "bufferedRecords"],
+          ["Байт в буфере", "bufferedBytes"],
+        ]),
+        {
+          label: "Ожидается подтверждение диска",
+          value:
+            d.canonicalWal?.awaitingDurability == null
+              ? "—"
+              : d.canonicalWal.awaitingDurability
+                ? "Да"
+                : "Нет",
+        },
+        {
+          label: "Текущее ожидание, мс",
+          value: ms(d.canonicalWal?.pendingNanos),
+        },
+        {
+          label: "Последняя запись, мс",
+          value: ms(d.canonicalWal?.lastFlushNanos),
+        },
+        {
+          label: "Максимальная запись с запуска, мс",
+          value: ms(d.canonicalWal?.maxFlushNanos),
+        },
+      ],
+      [
+        ["Показатель", (r) => r.label],
+        ["Значение", (r) => r.value],
+      ],
+    ) +
+    chart(
+      "Время серверного тика, мс",
+      [
+        { label: "Среднее", value: (p) => p.meanMs ?? 0 },
+        { label: "Максимум", value: (p) => p.maxMs ?? 0 },
+      ],
+      value.history
+        .filter((p) => p.meanMs != null)
+        .map((p) => ({ ...p, tick: p.at })),
+      (time) => new Date(time * 1000).toLocaleTimeString("ru-RU"),
+      "время",
+    ) +
+    '<p class="muted">Паузы сбора не доказывают отсутствие пиков.</p>'
+  );
 }
 async function refresh() {
-  if (busy) return;
+  if (busy) {
+    refreshPending = true;
+    return;
+  }
+  const query = params().toString();
+  const requestedTab = tab;
   busy = true;
   try {
-    const res = await fetch("/api/view?" + params());
+    const res = await fetch("/api/view?" + query);
     if (!res.ok) throw new Error(await res.text());
-    data = await res.json();
+    const received = await res.json();
+    let performanceReceived = null;
+    if (requestedTab === "performance") {
+      const metrics = await fetch("/api/performance");
+      if (!metrics.ok) throw new Error(await metrics.text());
+      performanceReceived = await metrics.json();
+    }
+    if (query !== params().toString() || requestedTab !== tab) {
+      refreshPending = true;
+      return;
+    }
+    data = received;
+    if (performanceReceived) performanceData = performanceReceived;
     options(
       "world",
       data.worlds.map((w) => [w.world, w.name]),
@@ -316,6 +559,12 @@ async function refresh() {
         data.latest.settlements.map((t) => [t.id, t.name]),
         "Все поселения",
       );
+      for (const key of ["seller", "buyer"])
+        options(
+          key,
+          data.latest.settlements.map((t) => [t.id, t.name]),
+          "Все поселения",
+        );
       options(
         "item",
         [
@@ -342,10 +591,22 @@ async function refresh() {
     $("health").className = "warn";
   } finally {
     busy = false;
+    if (refreshPending) {
+      refreshPending = false;
+      refresh();
+    }
   }
 }
 $("filters").onsubmit = (e) => {
   e.preventDefault();
+  refresh();
+};
+$("filters").addEventListener("change", (event) => {
+  if (event.target.id !== "auto") refresh();
+});
+$("reset-filters").onclick = () => {
+  for (const key of ["town", "seller", "buyer", "item", "from", "to"])
+    $(key).value = "";
   refresh();
 };
 setInterval(() => {

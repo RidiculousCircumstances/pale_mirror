@@ -34,10 +34,21 @@
         type="number"
         min="0"
         placeholder="Сейчас" /></label
+    ><span id="trade-filters" hidden>
+      <label
+        >Продавец<select id="seller">
+          <option value="">Все поселения</option>
+        </select></label
+      >
+      <label
+        >Покупатель<select id="buyer">
+          <option value="">Все поселения</option>
+        </select></label
+      > </span
     ><button>Обновить</button
     ><label class="check"
       ><input id="auto" type="checkbox" checked />Каждые 5 с</label
-    >
+    ><button type="button" id="reset-filters">Сбросить фильтры</button>
   </form>
   <p id="coverage"></p>
   <div id="summary" class="cards"></div>
