@@ -464,3 +464,41 @@ local ingress permission. Existing whole-settlement visibility coverage now also
 rejects road expansion beyond the local footprint. Focused index/actuation checks
 PASS r239o-local-index.log; guardrails and native first-admission PASS
 r239o-scene-gate.log. This is not yet live recovery or latency acceptance.
+
+## R239p: finish polling rounds and remove native terrain/read stalls
+
+R239o live recovery no longer crashes (pilot cb6fb072-525b-4d04-8606-5bc7de3d84f1,
+two visits complete), but debt2537 at03:34/instant593447 exposed an R239n regression.
+Only9 preparations completed, ready0/checking5/future606. Each eight-classification
+continuation began a new keyless-held polling round, refilling checking as quickly
+as it drained. The clock boundary correctly stayed pending, revealing starvation.
+ScheduleExecutionIndex now captures the polling count per canonical Revision and
+target SimInstant. Continuations drain that same round; a changed state or time
+reopens it. Predicate-only queue selection has no revision proof and keeps fresh
+rounds. A13-held-action regression proves draining and both invalidation paths.
+Do not accept low CPU/tick peaks while ordinary simulation debt grows.
+
+The all-short-waits JFR shows login208.5ms inside native Player.tick, specifically
+fluid/collision reads invoking getChunkBlocking and doing many queued chunk loads.
+SectionStorage parks total only~9ms around that tick; sparse CPU sampling alone
+had not explained it. Pinned source confirms ServerPlayer.doTick guards only
+spectators with Entity.touchingUnloadedChunk; that uses hasChunksAt, not completed
+LevelChunks. A narrow WrapWithCondition now gates only world-dependent Player.tick
+on the same bbox+1 halo via shared getChunkNow readiness in the PMphysicalworld.
+Native tickets continue loading; network, inventory and player bookkeeping remain
+outside the gate. No air substitution, synchronous chunk requests or repositioning.
+Native tests prove absent terrain stays absent under readiness inspection.
+
+Departure-return fencing had98 journal waits totaling82.9ms in r239o. Native
+entity-read completion now awaits its journal receipt asynchronously. Both
+publication and completion use EntityStorage's own mailbox, so native flush can
+drain them without the separate server-task pump. Reservations survive pending
+writes; failed writes fail deserialization. An unchanged return marker still
+awaits the earlier submitted prefix, never borrows an in-memory marker as durable.
+Mailbox tests cover delayed success, synchronous and asynchronous failure, and
+completion only on the native owner mailbox.
+
+Focused kernel/runtime/mailbox checks+guardrails PASS r239p-gates.log;25 native
+body-lifetime/readiness tests PASS r239p-native.log. No80ms claim before live
+measurements with actual ordinary time progression. JFR/async-profiler receipts
+r239o-profile.tsv and ~/.local/state/pale-mirror/profiles/r239o-transition-wall.jfr.

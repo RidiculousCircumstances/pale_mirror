@@ -267,7 +267,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         }
         if (pendingCommit != null) return advanceResult(List.of(), Optional.empty(), WorkConsumption.NONE);
         admissionIndex.begin(budget);
-        schedules.beginExecutionPass(target, budget.maxClassificationEvaluations());
+        schedules.beginExecutionPass(target, budget.maxClassificationEvaluations(), revision);
         List<TransactionId> completed = new ArrayList<>();
         int weight = 0;
         ScheduledAction blocked = null;

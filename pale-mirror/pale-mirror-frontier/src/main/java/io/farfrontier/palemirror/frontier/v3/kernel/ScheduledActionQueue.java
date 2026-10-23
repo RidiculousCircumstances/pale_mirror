@@ -63,7 +63,12 @@ public final class ScheduledActionQueue {
         return action.equals(ordered.isEmpty() ? null : ordered.first());
     }
 
-    void beginExecutionPass(SimInstant instant, int maximumChecks) { execution.begin(instant, maximumChecks); }
+    void beginExecutionPass(SimInstant instant, int maximumChecks) {
+        execution.begin(instant, maximumChecks, Optional.empty());
+    }
+    void beginExecutionPass(SimInstant instant, int maximumChecks, io.farfrontier.palemirror.frontier.v3.api.Revision revision) {
+        execution.begin(instant, maximumChecks, Optional.of(revision));
+    }
     void refreshReadiness(SimInstant instant, int maximumChecks,
                           Function<ScheduledAction, ScheduleAdmissionIndex.Decision> assessment,
                           Function<ScheduledAction, Set<SubjectId>> dependencies) {

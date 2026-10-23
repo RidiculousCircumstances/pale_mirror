@@ -24,7 +24,7 @@ final class FrontierV3DepartureReturnReadFence {
         return beforeDeserialize(source, deserializer, raw -> {
             try {
                 FrontierV3OperationEntityColumns.loaded(level, chunk, raw.orElse(null));
-                fenceBeforeVanillaLoad(level, chunk, raw.orElse(null));
+                return fenceBeforeVanillaLoad(level, chunk, raw.orElse(null));
             }
             catch (RuntimeException publicationFailure) {
                 PaleMirrorMod.LOGGER.error("Entity return-read fence could not be published chunk={}; vanilla load held", chunk, publicationFailure);
@@ -36,27 +36,27 @@ final class FrontierV3DepartureReturnReadFence {
     /** The native flush must be able to execute the fence and subsequent deserialization. */
     static CompletableFuture<Optional<CompoundTag>> beforeDeserialize(
             CompletableFuture<Optional<CompoundTag>> source, java.util.concurrent.Executor deserializer,
-            java.util.function.Consumer<Optional<CompoundTag>> publish, Runnable release) {
+            java.util.function.Function<Optional<CompoundTag>, CompletableFuture<?>> publish, Runnable release) {
         var result = new CompletableFuture<Optional<CompoundTag>>();
         source.whenComplete((raw, failure) -> deserializer.execute(() -> {
-            // Use EntityStorage's own server-thread mailbox. Its flush drains
-            // this mailbox while saveAll retries pending loads. A separate
-            // server.execute task cannot run inside that synchronous save loop.
-            // EntityStorage deserializes only after this dependent future completes.
-            try {
-                if (failure != null) {
-                    result.completeExceptionally(failure);
-                    return;
-                }
-                try {
-                    publish.accept(raw);
-                    result.complete(raw);
-                } catch (RuntimeException publicationFailure) {
-                    result.completeExceptionally(publicationFailure);
-                }
-            } finally {
-                release.run();
+            // Both phases use EntityStorage's own mailbox: its synchronous flush
+            // drains that mailbox without pumping the unrelated server task queue.
+            if (failure != null) {
+                try { result.completeExceptionally(failure); } finally { release.run(); }
+                return;
             }
+            final CompletableFuture<?> receipt;
+            try { receipt = java.util.Objects.requireNonNull(publish.apply(raw)); }
+            catch (RuntimeException publicationFailure) {
+                try { result.completeExceptionally(publicationFailure); } finally { release.run(); }
+                return;
+            }
+            receipt.whenComplete((ignored, writeFailure) -> deserializer.execute(() -> {
+                try {
+                    if (writeFailure != null) result.completeExceptionally(writeFailure);
+                    else result.complete(raw);
+                } finally { release.run(); }
+            }));
         }));
         return result;
     }
@@ -99,14 +99,16 @@ final class FrontierV3DepartureReturnReadFence {
         }
     }
 
-    static void fenceBeforeVanillaLoad(ServerLevel level, ChunkPos chunk, CompoundTag raw) {
+    static CompletableFuture<Long> fenceBeforeVanillaLoad(ServerLevel level, ChunkPos chunk, CompoundTag raw) {
         var world = FrontierV3PhysicalWorld.WORLD_ID;
         var actors = FrontierV3AmbientCarrierLedger.get(level, world);
-        boolean changed = fenceStoredInventory(chunk, raw, actors);
+        fenceStoredInventory(chunk, raw, actors);
         // A failed publication fails the dependent vanilla read: otherwise an
         // unjournaled returned body could move while an old saved departure
         // still looks eligible to a later no-load recovery after a crash.
-        if (changed) actors.persist(level, world);
+        // Even an unchanged marker may belong to an earlier outstanding read's
+        // write. Await the submitted prefix, not merely this call's dirty flag.
+        return actors.persistAsync(level, world);
     }
 
     static boolean fenceStoredInventory(ChunkPos chunk, CompoundTag raw,

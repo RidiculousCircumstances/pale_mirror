@@ -20,6 +20,9 @@ final class ScheduleExecutionIndex {
     private final Set<ScheduleId> auditCandidates = new HashSet<>();
     private final Map<ScheduleId, Long> readySince = new HashMap<>();
     private long missedWakes;
+    private Optional<io.farfrontier.palemirror.frontier.v3.api.Revision> pollRevision = Optional.empty();
+    private SimInstant pollInstant;
+    private int pollRemaining;
 
     void created(ScheduledAction action) {
         future.add(action); readySince.put(action.id(), action.dueAt().ticks());
@@ -30,7 +33,10 @@ final class ScheduleExecutionIndex {
     }
 
     /** Metadata promotion is bounded separately from owner business assessment. */
-    void begin(SimInstant now, int limit) {
+    void begin(SimInstant now, int limit, Optional<io.farfrontier.palemirror.frontier.v3.api.Revision> revision) {
+        if (revision.isEmpty() || !revision.equals(pollRevision) || !now.equals(pollInstant)) {
+            pollRevision = revision; pollInstant = now; pollRemaining = polled.size();
+        }
         promoteDue(now, limit);
         for (int count = 0; count < limit && !audits.isEmpty() && audits.firstKey() <= now.ticks(); count++) {
             var action = audits.firstEntry().getValue().first();
@@ -39,7 +45,10 @@ final class ScheduleExecutionIndex {
         }
         // No wake address was declared: inspect fairly, never invent a dependency
         // or let an unchanged refusal stand in front of independently READY work.
-        int count = Math.min(limit, polled.size());
+        // A cooperative continuation drains the captured polling round. Refilled
+        // refusals cannot renew the round indefinitely at the same state/time.
+        int count = Math.min(limit, Math.min(pollRemaining, polled.size()));
+        pollRemaining -= count;
         for (int index = 0; index < count; index++) {
             var action = polled.values().iterator().next();
             removeWait(action.id()); checking.put(action.id(), action);

@@ -17,4 +17,10 @@ final class FrontierV3LoadedWorld {
         return level.getChunkSource().getChunkNow(x >> 4, z >> 4) != null;
     }
     static boolean ready(ServerLevel level, BlockPos position) { return chunk(level, position) != null; }
+    static boolean ready(ServerLevel level, net.minecraft.world.phys.AABB bounds) {
+        for (int x = net.minecraft.util.Mth.floor(bounds.minX) >> 4; x <= net.minecraft.util.Mth.ceil(bounds.maxX) >> 4; x++)
+            for (int z = net.minecraft.util.Mth.floor(bounds.minZ) >> 4; z <= net.minecraft.util.Mth.ceil(bounds.maxZ) >> 4; z++)
+                if (!readyAtBlockColumn(level, x << 4, z << 4)) return false;
+        return true;
+    }
 }

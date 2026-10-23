@@ -15,6 +15,28 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ScheduledActionQueueTest {
+    @Test void cooperativeSlicesFinishOneKeylessPollingRoundBeforeStartingAnother() {
+        var queue = new ScheduledActionQueue();
+        for (int i = 0; i < 13; i++) queue.schedule(action("schedule:poll-" + i, 1, 0, "resident:poll-" + i, 1));
+        var now = new SimInstant(1);
+        queue.selectDue(now, new WorkBudget(64, 64), ignored -> false);
+        var checks = new AtomicInteger();
+        for (int i = 0; i < 8; i++) {
+            queue.beginExecutionPass(now, 8, io.farfrontier.palemirror.frontier.v3.api.Revision.ZERO);
+            queue.refreshReadiness(now, 8, ignored -> {
+                checks.incrementAndGet(); return ScheduleAdmissionIndex.Decision.HELD;
+            }, ignored -> Set.of());
+        }
+        assertEquals(13, checks.get(), "unchanged refusals are assessed once across continuations");
+        assertEquals(0, queue.pressure(now).checking(), "refilled waiters cannot prevent time advancement");
+        queue.beginExecutionPass(now, 8, new io.farfrontier.palemirror.frontier.v3.api.Revision(1));
+        queue.refreshReadiness(now, 8, ignored -> ScheduleAdmissionIndex.Decision.READY, ignored -> Set.of());
+        assertEquals(8, queue.pressure(now).ready(), "a changed canonical state reopens keyless checks at the same tick");
+        queue.beginExecutionPass(new SimInstant(2), 8, new io.farfrontier.palemirror.frontier.v3.api.Revision(1));
+        queue.refreshReadiness(new SimInstant(2), 8, ignored -> ScheduleAdmissionIndex.Decision.READY, ignored -> Set.of());
+        assertEquals(13, queue.pressure(new SimInstant(2)).ready(), "advancing time also reopens waiting predicates");
+    }
+
     @Test void untouchedTransactionReusesSnapshotButQueueChangesNeverMutateAPublishedView() {
         var queue = new ScheduledActionQueue();
         var first = action("schedule:first-snapshot", 20, 0, "resident:a", 1);
