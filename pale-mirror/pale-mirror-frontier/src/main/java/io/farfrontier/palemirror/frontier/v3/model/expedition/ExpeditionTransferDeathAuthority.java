@@ -17,7 +17,7 @@ public final class ExpeditionTransferDeathAuthority {
                 .filter(a -> a.claimId().equals(receipt.claimId())).findFirst().orElseThrow(
                         () -> new IllegalArgumentException("retired expedition effect lost its exact claim")) : null;
         var pending = refill == null ? allocation.pending() : refill.pending();
-        var order = refill == null ? mission.supplies().orElseThrow().order(mission.id(), mission.organization().home(), allocation)
+        var order = refill == null ? mission.supplies().orElseThrow().order(mission.id(), allocation)
                 : refill.order(mission.id(), mission.revision());
         if (!pending.equals(Optional.of(receipt.step()))) throw new IllegalArgumentException("retired expedition effect has no original prepared fence");
         var sourceSurface = state.inventory().surfaces().get(order.containerEndpoint().containerId());

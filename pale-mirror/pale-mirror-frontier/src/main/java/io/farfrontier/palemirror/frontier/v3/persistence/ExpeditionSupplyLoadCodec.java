@@ -22,6 +22,7 @@ final class ExpeditionSupplyLoadCodec {
         out.writeInt(load.allocations().size());
         for (var a : load.allocations()) {
             UnitGroupStateCodec.id(out, a.claimId()); UnitGroupStateCodec.id(out, a.actorId());
+            ShipmentStateCodec.endpoint(out, a.source());
             UnitGroupStateCodec.id(out, a.sourceAccountId()); UnitGroupStateCodec.id(out, a.destinationAccountId());
             ActorItemSlotCodec.write(out, a.slot()); ShipmentStateCodec.lots(out, a.lots());
             out.writeByte(a.outcome().wireTag()); out.writeBoolean(a.pending().isPresent());
@@ -44,7 +45,7 @@ final class ExpeditionSupplyLoadCodec {
             throw new IllegalArgumentException("duplicate supply assembly station actor");
         int size = UnitGroupStateCodec.count(in, 320); var allocations = new ArrayList<ExpeditionSupplyLoad.Allocation>();
         for (int i = 0; i < size; i++) allocations.add(new ExpeditionSupplyLoad.Allocation(
-                UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in),
+                UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in), ShipmentStateCodec.endpoint(in), UnitGroupStateCodec.id(in), UnitGroupStateCodec.id(in),
                 ActorItemSlotCodec.read(in), ShipmentStateCodec.lots(in), ExpeditionSupplyLoad.Outcome.fromWireTag(in.readUnsignedByte()),
                 in.readBoolean() ? Optional.of(ActorItemTransferStepCodec.read(in)) : Optional.empty()));
         return new ExpeditionSupplyLoad(kind, duration, tick, targets, assembly, allocations, revision, journey);

@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "id": "live_settlement_loading",
+  "server": {"host": "127.0.0.1", "port": 25565},
+  "pilot": {"username": "PMTestPilot"},
+  "setup": [
+    {"type": "command", "command": "/gamemode spectator"},
+    {"type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      {"view": "container", "id": "container:7-depot", "expect": {"status": "ok", "position": {"x": 137, "y": 65, "z": 14}}}
+    ]}
+  ],
+  "actions": [
+    {"type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": {"x": 128, "y": 74, "z": 5}, "settleMs": 0},
+    {"type": "wait_until_block", "position": {"x": 137, "y": 65, "z": 14}, "block": "minecraft:chest", "timeoutMs": 30000},
+    {"type": "wait_until_diagnostic", "view": "first_visibility", "id": "8,0", "expect": {"presentationReady": true, "dynamicReady": true}, "timeoutMs": 30000},
+    {"type": "look", "at": {"x": 140, "y": 65, "z": 0}},
+    {"type": "inspect", "view": "performance", "id": ""},
+    {"type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": {"x": -120, "y": 74, "z": -330}, "settleMs": 0},
+    {"type": "look", "at": {"x": -100, "y": 64, "z": -340}},
+    {"type": "inspect", "view": "summary", "id": ""},
+    {"type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": {"x": 128, "y": 74, "z": 5}, "settleMs": 0},
+    {"type": "wait_until_block", "position": {"x": 137, "y": 65, "z": 14}, "block": "minecraft:chest", "timeoutMs": 30000},
+    {"type": "wait_until_diagnostic", "view": "first_visibility", "id": "8,0", "expect": {"presentationReady": true, "dynamicReady": true}, "timeoutMs": 30000},
+    {"type": "look", "at": {"x": 140, "y": 65, "z": 0}},
+    {"type": "inspect", "view": "performance", "id": ""},
+    {"type": "inspect", "view": "summary", "id": ""}
+  ],
+  "assertions": [
+    {"after": 14, "view": "summary", "id": "", "expect": {"status": "ok", "requiredConflicts": 0, "sceneConflicts": 0, "inventoryConflicts": 0}}
+  ],
+  "frames": [{"after": 4, "name": "first-clearwater-visit"}, {"after": 7, "name": "mining-settlement-visit"}, {"after": 12, "name": "returned-clearwater-visit"}]
+}

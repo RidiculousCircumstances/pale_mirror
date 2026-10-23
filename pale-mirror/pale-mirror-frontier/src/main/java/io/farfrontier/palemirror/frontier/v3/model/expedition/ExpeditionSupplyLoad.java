@@ -21,11 +21,11 @@ public record ExpeditionSupplyLoad(String foodKind, long forecastDurationTicks, 
             throw new IllegalArgumentException("unknown expedition loading outcome");
         }
     }
-    public record Allocation(SubjectId claimId, SubjectId actorId, SubjectId sourceAccountId,
+    public record Allocation(SubjectId claimId, SubjectId actorId, ShipmentEndpoint source, SubjectId sourceAccountId,
                              SubjectId destinationAccountId, ActorItemSlot slot, Map<SubjectId, Integer> lots,
                              Outcome outcome, Optional<ActorItemTransferStep> pending) {
         public Allocation {
-            Objects.requireNonNull(claimId); Objects.requireNonNull(actorId); Objects.requireNonNull(sourceAccountId);
+            Objects.requireNonNull(claimId); Objects.requireNonNull(actorId); Objects.requireNonNull(source); Objects.requireNonNull(sourceAccountId);
             Objects.requireNonNull(destinationAccountId); Objects.requireNonNull(slot);
             lots = Map.copyOf(lots); pending = Objects.requireNonNull(pending); Objects.requireNonNull(outcome);
             if (lots.isEmpty() || lots.size() > 64 || lots.values().stream().anyMatch(q -> q == null || q < 1 || q > 64)
@@ -37,19 +37,19 @@ public record ExpeditionSupplyLoad(String foodKind, long forecastDurationTicks, 
         public boolean withdrawn() { return outcome == Outcome.SOURCE_WITHDRAWN; }
         public Allocation prepare(ActorItemTransferStep step) {
             if (outcome != Outcome.RESERVED || pending.isPresent()) throw new IllegalArgumentException("supply allocation already applied or prepared");
-            return new Allocation(claimId, actorId, sourceAccountId, destinationAccountId, slot, lots, Outcome.RESERVED, Optional.of(step));
+            return new Allocation(claimId, actorId, source, sourceAccountId, destinationAccountId, slot, lots, Outcome.RESERVED, Optional.of(step));
         }
         public Allocation confirmed() {
             if (outcome != Outcome.RESERVED) throw new IllegalArgumentException("supply allocation already settled");
-            return new Allocation(claimId, actorId, sourceAccountId, destinationAccountId, slot, lots, Outcome.LOADED, Optional.empty());
+            return new Allocation(claimId, actorId, source, sourceAccountId, destinationAccountId, slot, lots, Outcome.LOADED, Optional.empty());
         }
         public Allocation sourceWithdrawn() {
             if (outcome != Outcome.RESERVED || pending.isPresent()) throw new IllegalArgumentException("supply source cannot withdraw an applied or prepared interaction");
-            return new Allocation(claimId, actorId, sourceAccountId, destinationAccountId, slot, lots, Outcome.SOURCE_WITHDRAWN, Optional.empty());
+            return new Allocation(claimId, actorId, source, sourceAccountId, destinationAccountId, slot, lots, Outcome.SOURCE_WITHDRAWN, Optional.empty());
         }
         Allocation unappliedAfterDeath() {
             if (outcome != Outcome.RESERVED || pending.isEmpty()) throw new IllegalArgumentException("death settlement has no prepared allocation");
-            return new Allocation(claimId, actorId, sourceAccountId, destinationAccountId, slot, lots, Outcome.SOURCE_WITHDRAWN, Optional.empty());
+            return new Allocation(claimId, actorId, source, sourceAccountId, destinationAccountId, slot, lots, Outcome.SOURCE_WITHDRAWN, Optional.empty());
         }
     }
     public ExpeditionSupplyLoad {
@@ -83,15 +83,16 @@ public record ExpeditionSupplyLoad(String foodKind, long forecastDurationTicks, 
     public boolean needsReplan() { return allocations.stream().anyMatch(Allocation::withdrawn); }
     public ExpeditionSupplyLoad replace(Allocation before, Allocation after) {
         if (!allocations.contains(before) || !before.claimId().equals(after.claimId()) || !before.actorId().equals(after.actorId())
-                || !before.sourceAccountId().equals(after.sourceAccountId()) || !before.destinationAccountId().equals(after.destinationAccountId())
+                || !before.source().equals(after.source()) || !before.sourceAccountId().equals(after.sourceAccountId()) || !before.destinationAccountId().equals(after.destinationAccountId())
                 || !before.slot().equals(after.slot()) || !before.lots().equals(after.lots()))
             throw new IllegalArgumentException("supply transition changes its exact allocation");
         return new ExpeditionSupplyLoad(foodKind, forecastDurationTicks, calculatedAtTick, foodTargets, assemblyStations,
                 allocations.stream().map(a -> a.equals(before) ? after : a).toList(), revision, journey);
     }
-    public ActorContainerItemOrder order(SubjectId owner, ShipmentEndpoint source, Allocation allocation) {
+    public ActorContainerItemOrder order(SubjectId owner, Allocation allocation) {
         int ordinal = allocations.indexOf(allocation);
         if (ordinal < 0 || allocation.loaded()) throw new IllegalArgumentException("supply order lacks a current loading obligation");
+        var source = allocation.source();
         return new ActorContainerItemOrder(owner, allocation.actorId(), ActorContainerItemOrder.Direction.TAKE,
                 new ActorContainerItemOrder.Portion.Fungible(allocation.sourceAccountId(), new ResourceCustody.Container(source.containerId()),
                         allocation.destinationAccountId(), allocation.slot() instanceof ActorItemSlot.AttachedStorage storage

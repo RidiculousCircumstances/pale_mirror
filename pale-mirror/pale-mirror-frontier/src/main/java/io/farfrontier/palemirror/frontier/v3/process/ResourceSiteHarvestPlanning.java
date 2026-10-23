@@ -140,9 +140,11 @@ final class ResourceSiteHarvestPlanning {
                     && lifecycle.phase() != ResourceSitePhase.GROWING) continue;
             var site = site(state, lifecycle.siteId());
             if (state.structureConditions().get(site.facilityId()) != StructureCondition.INTACT) continue;
-            var projected = task.status() == StrategicTaskStatus.PENDING
-                    ? state.withStrategicPlans(state.strategicPlans().transitionTask(task.id(), StrategicTaskStatus.ACTIVE)) : state;
-            if (offer(projected, task, site, resident, atTick).isPresent()) return true;
+            // Read demand against the actual shared input. A speculative task
+            // activation per resident invalidates every economic view although
+            // no work, stock or capacity changed. Only navigation of the selected
+            // provisional job below needs the hypothetical active owner.
+            if (offer(state, task, site, resident, atTick).isPresent()) return true;
         }
         return false;
     }
@@ -190,7 +192,11 @@ final class ResourceSiteHarvestPlanning {
         java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt> fieldRoute = java.util.Optional.empty();
         if (outcome != ResourceFieldCycle.WorkOutcome.SKIPPED_BLOCKED
                 && outcome != ResourceFieldCycle.WorkOutcome.SKIPPED_IMMATURE) {
-            FrontierWorldState admitted = state.withResourceSites(state.resourceSites().replace(lifecycle.harvesting(job)));
+            var plans = state.strategicPlans();
+            if (plans.tasks().get(task.id()).status() == StrategicTaskStatus.PENDING)
+                plans = plans.transitionTask(task.id(), StrategicTaskStatus.ACTIVE);
+            FrontierWorldState admitted = state.withChanges(FrontierWorldStateUpdate.begin()
+                    .strategicPlans(plans).resourceSites(state.resourceSites().replace(lifecycle.harvesting(job))));
             try {
                 var route = ResourceSiteHarvestKnownNavigation.plannedPath(admitted, job);
                 fieldRoute = route.size() < 2 ? java.util.Optional.empty() : java.util.Optional.of(

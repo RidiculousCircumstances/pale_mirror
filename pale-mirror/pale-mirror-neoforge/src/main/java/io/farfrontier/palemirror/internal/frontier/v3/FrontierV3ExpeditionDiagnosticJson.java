@@ -32,7 +32,7 @@ final class FrontierV3ExpeditionDiagnosticJson {
                     + ",\"refillPending\":" + m.replenishment().isPresent()
                     + ",\"materialPreparation\":" + (!m.preparingSupplies() ? "null"
                         : m.supplies().flatMap(s -> s.next().filter(a -> a.pending().isEmpty())
-                        .map(a -> FrontierV3MaterialPreparationDiagnosticJson.render(state, s.order(m.id(), m.organization().home(), a))))
+                        .map(a -> FrontierV3MaterialPreparationDiagnosticJson.render(state, s.order(m.id(), a))))
                         .orElse("null"))
                     + ",\"navigationStatus\":" + string(readiness.status()) + ",\"navigationReason\":" + string(readiness.reason())
                     + ",\"memberView\":" + string(group.id().value())

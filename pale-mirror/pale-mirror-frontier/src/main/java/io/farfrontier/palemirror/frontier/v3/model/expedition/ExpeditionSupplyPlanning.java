@@ -9,11 +9,6 @@ import java.util.*;
 /** Adapts actual roster, routes and stock to the pure policy; never creates food or a body. */
 public final class ExpeditionSupplyPlanning {
     private ExpeditionSupplyPlanning() { }
-    /** Cheap source-authority preflight. It promises neither enough food nor a journey. */
-    public static Optional<CustodyAccount> availableSource(FrontierWorldState state, SubjectId container) {
-        return ReferenceContainerCustody.blocksCanonicalUse(state, container) ? Optional.empty()
-                : FungibleResourceCustodySupport.accountAtContainer(state, container);
-    }
     public static Optional<ExpeditionSupplyLoad> walkingLoad(FrontierWorldState state, TransportMission mission,
                                                             UnitGroup group, long now) {
         return walkingLoad(state, mission, group, now, 1, state.inventory().fungibleResources());
@@ -25,9 +20,7 @@ public final class ExpeditionSupplyPlanning {
     public static Optional<ExpeditionSupplyLoad> walkingLoad(FrontierWorldState state, TransportMission mission,
             UnitGroup group, long now, long revision, FungibleResourceLedger availableResources) {
         var rules = state.bootstrap().ruleset(); var life = rules.residentLife();
-        var source = availableSource(state, mission.organization().home().containerId()).orElse(null);
-        if (source == null) return Optional.empty();
-        if (!couldSupplyShortestJourney(state, mission, group, now, availableResources, source)) return Optional.empty();
+        if (!couldSupplyShortestJourney(state, mission, group, now, availableResources)) return Optional.empty();
         var knowledge = TransportGroupMissionPort.knowledgeForEndpoints(state, mission.sender(), mission.receiver()).forActors(state, group.members().stream().map(UnitGroup.Member::actorId).toList());
         ExpeditionJourneyProof journey;
         try { journey = ExpeditionJourneyProof.select(state, mission, group); }
@@ -41,11 +34,11 @@ public final class ExpeditionSupplyPlanning {
                     journey.outward().edges(), journey.returning().edges());
             if (inputs.isEmpty()) return Optional.empty();
             var input = inputs.orElseThrow(); var free = input.freeSlots();
-            int cargoSlots = input.roster().stream().mapToInt(ExpeditionProvisioning.Member::cargoStackSlots).sum();
-            int foodAvailable = resources.unclaimedQuantity(source.id(), mission.organization().sponsor().id(), food.itemKind());
+            int foodAvailable = availableFood(state, mission, resources, food.itemKind());
             var plan = forecast(state, mission, group, input, food, foodAvailable);
             if (!plan.feasible()) continue;
             var allocations = new ArrayList<ExpeditionSupplyLoad.Allocation>(); var targets = new LinkedHashMap<SubjectId, Integer>();
+            var pickupOrigins = new HashMap<SubjectId, SurfaceAnchor>();
             boolean fits = true;
             for (var member : group.members()) {
                 var supply = plan.members().get(member.actorId()); if (supply == null) continue;
@@ -53,15 +46,19 @@ public final class ExpeditionSupplyPlanning {
                 int remaining = supply.loadFoodItems(), index = 0;
                 while (remaining > 0) {
                     if (index >= free.get(member.actorId()).size()) { fits = false; break; }
-                    int quantity = Math.min(64, remaining);
-                    var selected = FungibleResourceCustodySupport.selectAtAccount(resources, source.id(),
+                    var source = source(state, mission, resources, member.actorId(), food.itemKind(), pickupOrigins);
+                    if (source.isEmpty()) { fits = false; break; }
+                    var selectedSource = source.orElseThrow();
+                    int quantity = Math.min(Math.min(64, remaining), selectedSource.quantity());
+                    var selected = FungibleResourceCustodySupport.selectAtAccount(resources, selectedSource.accountId(),
                             mission.organization().sponsor().id(), food.itemKind(), quantity).orElseThrow();
                     var claim = supplyClaim(mission.id(), revision, member.actorId().value(), index);
                     var account = supplyAccount(claim);
-                    var allocation = new ExpeditionSupplyLoad.Allocation(claim, member.actorId(), source.id(), account,
+                    var allocation = new ExpeditionSupplyLoad.Allocation(claim, member.actorId(), selectedSource.endpoint(), selectedSource.accountId(), account,
                             free.get(member.actorId()).get(index++), selected.lotQuantities(), ExpeditionSupplyLoad.Outcome.RESERVED, Optional.empty());
                     resources = reserve(resources, allocation, mission.id(), mission.organization().sponsor().id(), food.itemKind());
                     allocations.add(allocation); remaining -= quantity;
+                    pickupOrigins.put(member.actorId(), selectedSource.endpoint().station());
                 }
                 if (!fits) break;
             }
@@ -73,13 +70,17 @@ public final class ExpeditionSupplyPlanning {
                 int remaining = Math.max(0, plan.sharedFoodItems() - stocked);
                 int index = 0;
                 while (remaining > 0) {
-                    int quantity = Math.min(64, remaining);
-                    var selected = FungibleResourceCustodySupport.selectAtAccount(resources, source.id(), mission.organization().sponsor().id(), food.itemKind(), quantity).orElseThrow();
+                    var source = source(state, mission, resources, asset.actorId(), food.itemKind(), pickupOrigins);
+                    if (source.isEmpty()) { fits = false; break; }
+                    var selectedSource = source.orElseThrow();
+                    int quantity = Math.min(Math.min(64, remaining), selectedSource.quantity());
+                    var selected = FungibleResourceCustodySupport.selectAtAccount(resources, selectedSource.accountId(), mission.organization().sponsor().id(), food.itemKind(), quantity).orElseThrow();
                     var claim = supplyClaim(mission.id(), revision, "shared", index++);
-                    var allocation = new ExpeditionSupplyLoad.Allocation(claim, asset.actorId(), source.id(), destination,
+                    var allocation = new ExpeditionSupplyLoad.Allocation(claim, asset.actorId(), selectedSource.endpoint(), selectedSource.accountId(), destination,
                             new ActorItemSlot.AttachedStorage(asset.containerId()), selected.lotQuantities(), ExpeditionSupplyLoad.Outcome.RESERVED, Optional.empty());
                     resources = reserve(resources, allocation, mission.id(), mission.organization().sponsor().id(), food.itemKind());
                     allocations.add(allocation); remaining -= quantity;
+                    pickupOrigins.put(asset.actorId(), selectedSource.endpoint().station());
                 }
             }
             if (fits) {
@@ -99,12 +100,12 @@ public final class ExpeditionSupplyPlanning {
      * provisions and actual transport capacity use the same owner forecast as the
      * full journey. A positive answer grants neither a route nor departure. */
     private static boolean couldSupplyShortestJourney(FrontierWorldState state, TransportMission mission,
-            UnitGroup group, long now, FungibleResourceLedger resources, CustodyAccount source) {
+            UnitGroup group, long now, FungibleResourceLedger resources) {
         var home = mission.homeRendezvous(); var remote = mission.destinationRendezvous();
         long edges = Math.abs((long) home.x() - remote.x()) + Math.abs((long) home.z() - remote.z());
         for (var food : state.bootstrap().ruleset().residentLife().foods().foods().values()) {
             var input = walkingInputs(state, mission, group, now, food, resources, edges, edges);
-            int stock = resources.unclaimedQuantity(source.id(), mission.organization().sponsor().id(), food.itemKind());
+            int stock = availableFood(state, mission, resources, food.itemKind());
             if (input.isPresent() && forecast(state, mission, group, input.orElseThrow(), food, stock).feasible()) return true;
         }
         return false;
@@ -113,12 +114,11 @@ public final class ExpeditionSupplyPlanning {
     public static boolean supplyAvailableForRetainedJourney(FrontierWorldState state, TransportMission mission,
             UnitGroup group, long now, FungibleResourceLedger resources) {
         var journey = mission.supplies().orElseThrow().journey();
-        var source = FungibleResourceCustodySupport.accountAtContainer(state, mission.organization().home().containerId());
         // This is material feasibility for the already committed journey, not a
         // new route/departure proof. No search or formation selection in replay.
         for (var food : state.bootstrap().ruleset().residentLife().foods().foods().values()) {
             var input = walkingInputs(state, mission, group, now, food, resources, journey.outward().edges(), journey.returning().edges());
-            int stock = source.map(a -> resources.unclaimedQuantity(a.id(), mission.organization().sponsor().id(), food.itemKind())).orElse(0);
+            int stock = availableFood(state, mission, resources, food.itemKind());
             if (input.isPresent() && forecast(state, mission, group, input.orElseThrow(), food, stock).feasible()) return true;
         }
         return false;
@@ -156,19 +156,29 @@ public final class ExpeditionSupplyPlanning {
     public static void requireSelectedLoad(FrontierWorldState state, TransportMission mission, UnitGroup group,
             ExpeditionSupplyLoad load, FungibleResourceLedger resources) {
         load.journey().require(state, mission, group);
-        var source = FungibleResourceCustodySupport.accountAtContainer(state, mission.organization().home().containerId()).orElseThrow();
-        if (ReferenceContainerCustody.blocksCanonicalUse(state, mission.organization().home().containerId()))
-            throw new IllegalArgumentException("selected supply source is physically unavailable");
+        for (var allocation : load.allocations()) {
+            var source = allocation.source();
+            ShipmentEndpointComposition.validate(state, source);
+            var account = resources.accounts().get(allocation.sourceAccountId());
+            if (!source.settlementId().equals(mission.organization().home().settlementId())
+                    || !ResourceStorageSelection.permits(state.inventory(), source.containerId(),
+                        mission.organization().sponsor().id(), load.foodKind(), Set.of(ResourceStorageRole.WAREHOUSE))
+                    || ReferenceContainerCustody.blocksCanonicalUse(state, source.containerId())
+                    || account == null || !account.custody().equals(new ResourceCustody.Container(source.containerId())))
+                throw new IllegalArgumentException("selected supply source is foreign or physically unavailable");
+        }
         var food = state.bootstrap().ruleset().residentLife().foods().require(load.foodKind());
         var input = walkingInputs(state, mission, group, load.calculatedAtTick(), food, resources,
                 load.journey().outward().edges(), load.journey().returning().edges()).orElseThrow();
+        // Replay checks only the declared stock. Reserving the exact lots below
+        // proves availability; it cannot discover a different source or route.
         var plan = forecast(state, mission, group, input, food,
-                resources.unclaimedQuantity(source.id(), mission.organization().sponsor().id(), food.itemKind()));
+                load.allocations().stream().mapToInt(ExpeditionSupplyLoad.Allocation::quantity).sum());
         var targets = new LinkedHashMap<SubjectId, Integer>();
         plan.members().forEach((id, member) -> targets.put(id, member.requiredFoodItems()));
         if (!plan.feasible() || plan.durationTicks() != load.forecastDurationTicks() || !targets.equals(load.foodTargets())
                 || load.allocations().stream().anyMatch(a -> a.outcome() != ExpeditionSupplyLoad.Outcome.RESERVED || a.pending().isPresent()
-                    || !a.sourceAccountId().equals(source.id()) || !(a.slot() instanceof ActorItemSlot.AttachedStorage)
+                    || !(a.slot() instanceof ActorItemSlot.AttachedStorage)
                         && (!input.freeSlots().getOrDefault(a.actorId(), List.of()).contains(a.slot())
                             || resources.accounts().containsKey(a.destinationAccountId()))))
             throw new IllegalArgumentException("selected supplies have stale needs, slots, source or estimate");
@@ -194,6 +204,25 @@ public final class ExpeditionSupplyPlanning {
     }
     private record WalkingInputs(List<ExpeditionProvisioning.Member> roster, Map<SubjectId, List<ActorItemSlot>> freeSlots,
                                  long outward, long returning) { }
+    private static int availableFood(FrontierWorldState state, TransportMission mission, FungibleResourceLedger resources, String food) {
+        return ResourceStorageSelection.sources(state, resources, mission.organization().sponsor().id(), food,
+                mission.homeRendezvous(), Set.of(ResourceStorageRole.WAREHOUSE)).stream()
+                .filter(source -> source.endpoint().settlementId().equals(mission.organization().home().settlementId()))
+                .mapToInt(ResourceStorageSelection.Source::quantity).reduce(0, Math::addExact);
+    }
+    private static Optional<ResourceStorageSelection.Source> source(FrontierWorldState state, TransportMission mission,
+            FungibleResourceLedger resources, SubjectId actor, String food, Map<SubjectId, SurfaceAnchor> pickupOrigins) {
+        var origin = pickupOrigins.getOrDefault(actor, state.actorLocations().get(actor).supportingSurface());
+        for (var source : ResourceStorageSelection.sources(state, resources, mission.organization().sponsor().id(), food,
+                origin, Set.of(ResourceStorageRole.WAREHOUSE))) {
+            if (!source.endpoint().settlementId().equals(mission.organization().home().settlementId())) continue;
+            var knowledge = ShipmentEndpointComposition.knowledge(state, List.of(mission.sender(), mission.receiver(), source.endpoint()));
+            var approach = ActorStorageApproach.select(state, source.endpoint(), actor, origin, knowledge);
+            if (approach.isPresent()) return Optional.of(new ResourceStorageSelection.Source(
+                    approach.orElseThrow(), source.accountId(), source.quantity()));
+        }
+        return Optional.empty();
+    }
     private static Optional<WalkingInputs> walkingInputs(FrontierWorldState state, TransportMission mission, UnitGroup group,
                                                         long now, FoodCatalog.Food food, FungibleResourceLedger resources) {
         ExpeditionJourneyProof journey;

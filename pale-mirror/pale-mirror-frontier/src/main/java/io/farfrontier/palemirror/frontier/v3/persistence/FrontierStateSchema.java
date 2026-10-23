@@ -8,7 +8,9 @@ final class FrontierStateSchema {
     // Accounts retain exact cumulative cash turnover. Never invent history for old worlds.
     // Prepared container projections retain their exact physical predecessor.
     // Population event grammar includes exact displaced-pickup reapproach.
-    static final int VERSION = 299;
+    // Every expedition provision allocation retains its independently selected
+    // source port; replay must never substitute the cargo warehouse.
+    static final int VERSION = 300;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

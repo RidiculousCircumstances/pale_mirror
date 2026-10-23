@@ -39,7 +39,7 @@ public final class ExpeditionSupplyMovementProvider implements ActorMovementProv
             throw new IllegalArgumentException("supply movement lost its loading mission");
         var load = mission.supplies().orElseThrow(); var allocation = load.allocations().stream()
                 .filter(a -> a.claimId().equals(context.claimId()) && !a.loaded()).findFirst().orElseThrow();
-        var order = load.order(mission.id(), mission.organization().home(), allocation).movementOrder();
+        var order = load.order(mission.id(), allocation).movementOrder();
         if (!order.equals(movement.order()) || allocation.pending().isPresent()
                 || !ExpeditionSupplyAuthority.execution(state, mission, allocation).equals(Optional.of(movement.executionId())))
             throw new IllegalArgumentException("supply movement has a stale goal or foreign participant authority");
@@ -48,16 +48,20 @@ public final class ExpeditionSupplyMovementProvider implements ActorMovementProv
     @Override public void validate(FrontierWorldState state, ActorMovement movement) { mission(state, movement); }
     @Override public KnownPedestrianRouteKnowledge placementKnowledge(FrontierWorldState state, ActorMovement movement) {
         var m = mission(state, movement);
-        return TransportGroupMissionPort.knowledgeForEndpoints(state, m.sender(), m.receiver()).forActor(state, movement.order().actorId());
+        var endpoints = new ArrayList<>(List.of(m.sender(), m.receiver()));
+        if (movement.context() instanceof ActorMovementContext.ExpeditionSupply supply)
+            endpoints.add(m.supplies().orElseThrow().allocations().stream()
+                    .filter(a -> a.claimId().equals(supply.claimId())).findFirst().orElseThrow().source());
+        return ShipmentEndpointComposition.knowledge(state, endpoints).forActor(state, movement.order().actorId());
     }
     @Override public FrontierWorldState start(FrontierWorldState state, ActorMovement movement, FrontierWorldStateUpdate update) {
         validate(state, movement); state.actorExecutions().requireCurrent(movement.executionId()); return state.withChanges(update);
     }
     @Override public List<SurfaceAnchor> route(FrontierWorldState state, ActorMovement movement, SurfaceAnchor start) {
-        var m = mission(state, movement); return TransportGroupMissionPort.knowledgeForEndpoints(state, m.sender(), m.receiver()).forActor(state, movement.order().actorId()).plannedPath(start, movement.order());
+        return placementKnowledge(state, movement).plannedPath(start, movement.order());
     }
     @Override public void requireRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
-        var m = mission(state, movement); TransportGroupMissionPort.knowledgeForEndpoints(state, m.sender(), m.receiver()).forActor(state, movement.order().actorId()).requireRoute(route);
+        placementKnowledge(state, movement).requireRoute(route);
         if (!movement.order().arrivedAt(route.getLast()) && route.size() != TimedKnownRoute.MAX_SURFACES)
             throw new IllegalArgumentException("supply route is neither a bounded prefix nor its declared station");
     }

@@ -91,3 +91,37 @@ and recovery gates remain the supporting evidence, not a claimed human pass.
 
 Clearwater machine111/65/-18, nearby warehouse107/65/-23. Clients need the new
 hosted mod because `pale_mirror:smelter` is a new registered block.
+
+## Follow-up: independent provisions and planning cost
+
+R226 runtime exposed a cargo/provision coupling: a valid mineral warehouse
+rejects bread, yet the expedition previously required provisions from its cargo
+endpoint. Provisioning now selects actual unclaimed stock through the common
+warehouse owner/filter/custody rules and the actor's shared route/approach policy.
+Each allocation retains its exact typed source endpoint and account. Navigation,
+service access, HOT receipt/closure, COLD transfer, source-change recovery, death
+and wake dependencies all use that retained address. Cargo destination and trade
+settlement are unchanged. Replacement selection is explicit; replay cannot
+rediscover another source. Schema300 rejects old saves; use a fresh test world.
+
+HOT and COLD profiles independently identified repeated economic assessment
+during worker preference as the principal sampled server CPU cost: HOT1548/2009
+execution samples, COLD1564/2001. Speculative per-resident task activation created
+a new whole-state identity before demand evaluation, defeating shared immutable
+assessment views. Demand now reads the actual common input; only provisional
+navigation sees the candidate job/task activation. Immature/empty field work
+does not query market demand. Trip review rejects stock/funding/consent-infeasible
+endpoint pairs before requesting regional route estimates. No priority bypass,
+stale-cache tolerance, invented resource or asynchronous-wait-as-failure added.
+
+Same retained R226 snapshot730869, identical twelve-settlement logistics-worker
+selection: warm passes352–534ms before,18–24ms after (first pass1766/1137ms).
+These are narrow offline measurements, not overall TPS or login latency. Original
+world/profile retained; a fresh world must not be cited as the performance fix.
+Focused separate-source replanning verifies retained pickup through codec recovery,
+rejects arrival at the cargo port and source substitution, and conserves stock.
+Existing expedition/trade/harvest/cultivation checks and713 NeoForge v3 checks
+pass; the native economy/physical-resource slice passes53/53. Guardrails and
+packaged-JAR verification pass. This is affected-path verification, not a new
+complete repository test-suite pass.
+Live login/chunk and end-to-end shipment checks remain pending at this checkpoint.

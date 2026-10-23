@@ -60,7 +60,7 @@ public sealed interface ActorMovementContext permits ActorMovementContext.Servic
             var allocation = load.allocations().stream().filter(a -> a.claimId().equals(claimId)).findFirst().orElseThrow();
             var group = refs.groups().groups().get(mission.groupId());
             if (!allocation.actorId().equals(movement.order().actorId()) || allocation.loaded() || allocation.pending().isPresent()
-                    || !load.order(mission.id(), mission.organization().home(), allocation).movementOrder().equals(movement.order())
+                    || !load.order(mission.id(), allocation).movementOrder().equals(movement.order())
                     || group == null || !group.member(movement.order().actorId()).activityOwnerId().equals(movement.executionId().activityOwnerId()))
                 throw new IllegalArgumentException("supply movement lost its exact order or participant authority");
         }

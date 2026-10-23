@@ -39,6 +39,24 @@ public final class ResourceStorageSelection {
         }
     }
     private ResourceStorageSelection() { }
+    /** Real unclaimed stock in eligible storage, independent of the task's cargo destination. */
+    public record Source(ShipmentEndpoint endpoint, SubjectId accountId, int quantity) {
+        public Source {
+            Objects.requireNonNull(endpoint); Objects.requireNonNull(accountId);
+            if (quantity < 1) throw new IllegalArgumentException("source must contain real available stock");
+        }
+    }
+    public static List<Source> sources(FrontierWorldState state, FungibleResourceLedger resources,
+            SubjectId owner, String itemKind, SurfaceAnchor origin, Set<ResourceStorageRole> roles) {
+        var result = new ArrayList<Source>();
+        for (var endpoint : candidates(state, owner, itemKind, origin, roles)) {
+            var account = FungibleResourceCustodySupport.accountAtContainer(state, endpoint.containerId()).orElse(null);
+            if (account == null || !resources.accounts().containsKey(account.id())) continue;
+            int quantity = resources.unclaimedQuantity(account.id(), owner, itemKind);
+            if (quantity > 0) result.add(new Source(endpoint, account.id(), quantity));
+        }
+        return List.copyOf(result);
+    }
     /** Checks a retained declaration without discovering or ranking another endpoint. */
     public static boolean permits(ExactInventory inventory, SubjectId containerId, SubjectId owner,
             String itemKind, Set<ResourceStorageRole> roles) {

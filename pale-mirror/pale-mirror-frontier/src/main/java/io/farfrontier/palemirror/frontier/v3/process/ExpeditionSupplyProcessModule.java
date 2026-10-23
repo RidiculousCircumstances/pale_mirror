@@ -33,9 +33,9 @@ final class ExpeditionSupplyProcessModule implements FrontierWorldProcessModule 
         var containers = new ArrayList<SubjectId>();
         var previous = state.shipments().missions().get(mission);
         if (command.payload() instanceof ExpeditionSupplyHotLoaded receipt) {
-            containers.add(previous.organization().home().containerId());
             var allocation = previous.supplies().orElseThrow().allocations().stream()
                     .filter(a -> a.claimId().equals(receipt.claimId())).findFirst().orElseThrow();
+            containers.add(allocation.source().containerId());
             if (allocation.slot() instanceof ActorItemSlot.AttachedStorage storage) containers.add(storage.containerId());
         } else if (command.payload() instanceof ExpeditionReplenishmentHotLoaded) {
             containers.add(previous.replenishment().orElseThrow().containerId());
@@ -43,9 +43,9 @@ final class ExpeditionSupplyProcessModule implements FrontierWorldProcessModule 
             var refill = previous.replenishment().filter(t -> t.claimId().equals(receipt.claimId())).orElse(null);
             if (refill != null) containers.add(refill.containerId());
             else {
-                containers.add(previous.organization().home().containerId());
                 var allocation = previous.supplies().orElseThrow().allocations().stream()
                         .filter(a -> a.claimId().equals(receipt.claimId())).findFirst().orElseThrow();
+                containers.add(allocation.source().containerId());
                 if (allocation.slot() instanceof ActorItemSlot.AttachedStorage storage) containers.add(storage.containerId());
             }
             // The dying carrier retains exact slot bindings for the following native

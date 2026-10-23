@@ -33,6 +33,9 @@ public final class TransportMissionProcess {
         if (mission == null) return java.util.Set.of(action.subject());
         var keys = new java.util.HashSet<SubjectId>();
         keys.add(mission.id()); keys.add(mission.groupId()); keys.add(mission.sender().containerId()); keys.add(mission.organization().home().containerId());
+        mission.supplies().ifPresent(load -> load.allocations().stream().filter(a -> !a.loaded() && !a.withdrawn())
+                .forEach(a -> { keys.add(a.source().containerId()); keys.add(a.sourceAccountId()); }));
+        mission.replenishment().ifPresent(transfer -> keys.add(transfer.containerId()));
         var group = state.unitGroups().groups().get(mission.groupId());
         group.members().forEach(member -> keys.add(member.actorId()));
         return java.util.Set.copyOf(keys);

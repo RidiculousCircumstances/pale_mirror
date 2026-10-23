@@ -49,7 +49,7 @@ class ExpeditionTransferDeathTest {
         resources = resources.rebind(allocation.sourceAccountId(), 1, FungiblePhysicalObservation.bind(resources, allocation.sourceAccountId(), 1, source));
         state = state.withInventory(state.inventory().withFungibleResources(resources));
         var execution = ExpeditionSupplyAuthority.execution(state, mission, allocation).orElseThrow();
-        var order = mission.supplies().orElseThrow().order(mission.id(), mission.sender(), allocation);
+        var order = mission.supplies().orElseThrow().order(mission.id(), allocation);
         var step = new ActorItemTransferStep(new ActorHotObservation(new ActorActuationId(body, execution), 1),
                 MaterialSourceSelection.select(resources, order), body.physicalEpoch());
         state = state.withChanges(FrontierWorldStateUpdate.begin().shipments(state.shipments().replaceSupplies(mission,

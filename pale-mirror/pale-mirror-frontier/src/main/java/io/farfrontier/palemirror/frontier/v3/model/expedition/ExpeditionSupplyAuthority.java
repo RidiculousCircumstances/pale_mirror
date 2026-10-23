@@ -19,7 +19,7 @@ public final class ExpeditionSupplyAuthority {
     }
     public static boolean pendingForContainer(FrontierWorldState state, SubjectId container) {
         return state.shipments().missions().values().stream().anyMatch(m -> m.supplies().stream().flatMap(load -> load.allocations().stream())
-                .anyMatch(a -> a.pending().isPresent() && (m.organization().home().containerId().equals(container)
+                .anyMatch(a -> a.pending().isPresent() && (a.source().containerId().equals(container)
                     || a.slot() instanceof ActorItemSlot.AttachedStorage storage && storage.containerId().equals(container)))
                 || m.replenishment().filter(t -> t.containerId().equals(container) && t.pending().isPresent()).isPresent());
     }
@@ -134,14 +134,15 @@ public final class ExpeditionSupplyAuthority {
             if (claim == null || claim.purpose() != ClaimPurpose.EXPEDITION_SUPPLY || !claim.claimantId().equals(mission.id())
                     || !claim.economicOwnerId().equals(mission.organization().sponsor().id()) || !claim.itemKind().equals(load.foodKind())
                     || claim.quantity() != a.quantity() || !claim.lotQuantities().equals(a.lots()) || account == null
-                    || !account.custody().equals(new ResourceCustody.Container(mission.organization().home().containerId()))
+                    || !a.source().settlementId().equals(mission.organization().home().settlementId())
+                    || !account.custody().equals(new ResourceCustody.Container(a.source().containerId()))
                     || account.claimQuantities().getOrDefault(a.claimId(), 0) != a.quantity()
                     || resources.accounts().containsKey(a.destinationAccountId()) && !(a.slot() instanceof ActorItemSlot.AttachedStorage))
                 throw new IllegalArgumentException("unloaded expedition stock lost its exact source reservation");
             a.pending().ifPresent(step -> {
                 state.actorExecutions().requireRetained(step.observation().actuation().execution());
                 if (!step.observation().actuation().body().actorId().equals(a.actorId())
-                        || !step.source().equals(MaterialSourceSelection.select(resources, load.order(mission.id(), mission.organization().home(), a))))
+                        || !step.source().equals(MaterialSourceSelection.select(resources, load.order(mission.id(), a))))
                     throw new IllegalArgumentException("prepared supply interaction lost its exact actor/resource preimage");
             });
         }
@@ -183,7 +184,7 @@ public final class ExpeditionSupplyAuthority {
     }
     public static FrontierWorldState coldLoaded(FrontierWorldState state, SubjectId missionId, SubjectId claimId) {
         var mission = requireLoading(state, missionId, claimId); var load = mission.supplies().orElseThrow();
-        var allocation = load.next().orElseThrow(); var order = load.order(mission.id(), mission.organization().home(), allocation);
+        var allocation = load.next().orElseThrow(); var order = load.order(mission.id(), allocation);
         if (allocation.pending().isPresent() || execution(state, mission, allocation).isEmpty()
                 || state.actorMovements().containsKey(allocation.actorId()) || !ServiceAccessCoordinator.available(state,
                     ExpeditionSupplyServiceAccess.identity(mission, allocation)))
@@ -194,10 +195,10 @@ public final class ExpeditionSupplyAuthority {
     }
     public static FrontierWorldState prepare(FrontierWorldState state, SubjectId missionId, SubjectId claimId, ActorItemTransferStep step) {
         var mission = requireLoading(state, missionId, claimId); var load = mission.supplies().orElseThrow(); var a = load.next().orElseThrow();
-        var order = load.order(mission.id(), mission.organization().home(), a);
+        var order = load.order(mission.id(), a);
         var lease = state.ambientLeases().get(a.actorId()); var execution = execution(state, mission, a).orElseThrow();
         if (lease == null || lease.status() != AmbientLeaseStatus.HOT || state.actorMovements().containsKey(a.actorId())
-                || !ReferenceContainerCustody.hasOperationalCustody(state, mission.organization().home().containerId())
+                || !ReferenceContainerCustody.hasOperationalCustody(state, a.source().containerId())
                 || !ServiceAccessCoordinator.available(state, ExpeditionSupplyServiceAccess.identity(mission, a))
                 || !MaterialSourcePreparation.review(state, order).requireReady().equals(step.source())
                 || step.destinationEpoch() != destinationEpoch(state, a, step.observation().actuation().body().physicalEpoch())
@@ -211,7 +212,7 @@ public final class ExpeditionSupplyAuthority {
     public static FrontierWorldState observed(FrontierWorldState state, SubjectId missionId, SubjectId claimId, ActorItemTransferStep step,
             List<FungiblePhysicalObservation.Stack> remainder, List<FungiblePhysicalObservation.Stack> destination) {
         var mission = requireLoading(state, missionId, claimId); var load = mission.supplies().orElseThrow(); var a = load.next().orElseThrow();
-        var order = load.order(mission.id(), mission.organization().home(), a);
+        var order = load.order(mission.id(), a);
         if (!a.pending().equals(Optional.of(step))) throw new IllegalArgumentException("supply receipt has no exact retained pre-effect declaration");
         var execution = execution(state, mission, a).orElseThrow(); var lease = state.ambientLeases().get(a.actorId());
         if (lease == null || lease.status() != AmbientLeaseStatus.HOT || state.actorMovements().containsKey(a.actorId()))

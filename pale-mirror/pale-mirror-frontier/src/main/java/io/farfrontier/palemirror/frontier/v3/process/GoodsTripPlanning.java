@@ -42,6 +42,13 @@ final class GoodsTripPlanning {
             if (other == null || !other.party().equals(peer.party()) || !other.settlementId().equals(peer.settlementId())) continue;
             var reviewedPairs = new EnumMap<GoodsTradeFulfillment.Mode, Integer>(GoodsTradeFulfillment.Mode.class);
             for (var endpoints : GoodsOrderMatching.endpointPairs(initial, other, buyer, now)) {
+            // Connectivity is relevant only after current consent, stock,
+            // receiving capacity and funds permit at least a goods-only match.
+            // This is a necessary condition, not admission: freight and every
+            // exact allocation are rechecked on the candidate draft below.
+            var feasible = GoodsOrderMatching.first(initial, reviewer, now,
+                    Optional.of(other.party()), Optional.of(buyer.party()), Set.of(), Optional.of(endpoints));
+            if (feasible.match().isEmpty()) { decision = feasible.disposition(); continue; }
             RouteEdges edges;
             try { edges = routeEdges(initial, endpoints); }
             catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
