@@ -21,14 +21,19 @@ record FrontierV3ActorBodyDeparture(FrontierV3ActorCarrierComposition.Declaratio
             Optional<HandStack> offhand, Optional<HandStack> mainhand) {
         this(identity, residenceGeneration, observed, canonicalBody, canonicalHealth, execution, offhand, mainhand, Optional.empty());
     }
-    record HandStack(String itemKind, int quantity, Optional<SubjectId> exactItemId) {
+    record HandStack(String itemKind, int quantity, Optional<SubjectId> exactItemId, java.util.Map<String, Integer> components) {
+        HandStack(String itemKind, int quantity, Optional<SubjectId> exactItemId) { this(itemKind, quantity, exactItemId, java.util.Map.of()); }
         HandStack(String itemKind, int quantity) { this(itemKind, quantity, Optional.empty()); }
         HandStack {
             Objects.requireNonNull(exactItemId);
+            components = FrontierV3HandComponents.validate(components);
             if (itemKind == null || !itemKind.matches("[a-z][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9_./-]{0,127}")
                     || quantity < 1 || quantity > 64) throw new IllegalArgumentException("invalid saved actor hand");
         }
-        void writeIdentity(CompoundTag tag) { exactItemId.ifPresent(id -> tag.putString("exactItemId", id.value())); }
+        void writeIdentity(CompoundTag tag) {
+            exactItemId.ifPresent(id -> tag.putString("exactItemId", id.value()));
+            FrontierV3HandComponents.write(tag, components);
+        }
         static Optional<SubjectId> readIdentity(CompoundTag tag) {
             if (!tag.contains("exactItemId")) return Optional.empty();
             if (!tag.contains("exactItemId", Tag.TAG_STRING)) throw new IllegalStateException("invalid exact hand identity");
@@ -152,6 +157,6 @@ record FrontierV3ActorBodyDeparture(FrontierV3ActorCarrierComposition.Declaratio
         var value = tag.getCompound(key);
         if (!value.contains("item", Tag.TAG_STRING) || !value.contains("count", Tag.TAG_INT))
             throw new IllegalStateException("incomplete hand evidence");
-        return Optional.of(new FrontierV3ActorBodyDeparture.HandStack(value.getString("item"), value.getInt("count"), HandStack.readIdentity(value)));
+        return Optional.of(new FrontierV3ActorBodyDeparture.HandStack(value.getString("item"), value.getInt("count"), HandStack.readIdentity(value), FrontierV3HandComponents.read(value)));
     }
 }

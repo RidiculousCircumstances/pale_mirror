@@ -161,7 +161,17 @@ class FrontierV3SceneDeparturePersistenceTest {
         assertTrue(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).orElseThrow().matches(equipped));
         data.putString(FrontierV3ExactItemPresentation.ITEM_ID_KEY, "item:other-pick");
         assertFalse(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).orElseThrow().matches(equipped));
-        components.putInt("minecraft:damage", 1);
+        data.putString(FrontierV3ExactItemPresentation.ITEM_ID_KEY, toolId.value());
+        components.putInt("minecraft:damage", 6);
+        var damaged = new FrontierV3ActorBodyDeparture.HandStack(held.itemKind(), 1, held.exactItemId(),
+                java.util.Map.of("minecraft:damage", 6));
+        var used = new FrontierV3SceneDeparture(base.carrier(), base.residenceGeneration(), base.leaseId(), base.sceneRevision(),
+                base.observed(), base.canonicalHealthAtCapture(), java.util.Optional.empty(), java.util.Optional.of(damaged));
+        assertEquals(used, FrontierV3SceneDeparture.load(used.save()));
+        assertTrue(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).orElseThrow().matches(used));
+        components.putInt("minecraft:damage", 7);
+        assertFalse(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).orElseThrow().matches(used));
+        components.putString("minecraft:custom_name", "foreign");
         assertTrue(FrontierV3SceneDeparturePersistence.SavedBody.from(entity).isEmpty());
     }
 

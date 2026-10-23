@@ -84,7 +84,7 @@ record FrontierV3SceneDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier, 
             CompoundTag held = tag.getCompound("offhand");
             if (!held.contains("itemKind", Tag.TAG_STRING) || !held.contains("quantity", Tag.TAG_INT))
                 throw new IllegalStateException("incomplete scene departure hand evidence");
-            hand = Optional.of(new HandStack(held.getString("itemKind"), held.getInt("quantity"), HandStack.readIdentity(held)));
+            hand = Optional.of(new HandStack(held.getString("itemKind"), held.getInt("quantity"), HandStack.readIdentity(held), FrontierV3HandComponents.read(held)));
         }
         Optional<HandStack> main = Optional.empty();
         if (tag.contains("mainhand")) {
@@ -92,7 +92,7 @@ record FrontierV3SceneDeparture(FrontierV3AmbientCarrierLedger.Carrier carrier, 
             CompoundTag held = tag.getCompound("mainhand");
             if (!held.contains("itemKind", Tag.TAG_STRING) || !held.contains("quantity", Tag.TAG_INT))
                 throw new IllegalStateException("incomplete scene main hand evidence");
-            main = Optional.of(new HandStack(held.getString("itemKind"), held.getInt("quantity"), HandStack.readIdentity(held)));
+            main = Optional.of(new HandStack(held.getString("itemKind"), held.getInt("quantity"), HandStack.readIdentity(held), FrontierV3HandComponents.read(held)));
         }
         return new FrontierV3SceneDeparture(carrier, tag.getLong("residenceGeneration"), new SceneLeaseId(tag.getString("lease")), tag.getLong("sceneRevision"),
                 new SceneMemberPosition(carrier.identity().actorId(), new BodyPosition(tag.getInt("x"), tag.getInt("y"), tag.getInt("z")),

@@ -39,7 +39,7 @@ class FrontierV3ActorBodyLifetimeTest {
     }
     @Test void commonBodyDepartureRetainsTheExactEquipmentIdentity() {
         var original = receipt(running());
-        var held = new FrontierV3ActorBodyDeparture.HandStack("minecraft:stone_pickaxe", 1, Optional.of(new SubjectId("item:body-tool")));
+        var held = new FrontierV3ActorBodyDeparture.HandStack("minecraft:stone_pickaxe", 1, Optional.of(new SubjectId("item:body-tool")), java.util.Map.of("minecraft:damage", 6));
         var equipped = new FrontierV3ActorBodyDeparture(original.identity(), original.residenceGeneration(), original.observed(),
                 original.canonicalBody(), original.canonicalHealth(), original.executionAtCapture(), original.offhand(), Optional.of(held));
         assertEquals(equipped, FrontierV3ActorBodyDeparture.load(equipped.save()));

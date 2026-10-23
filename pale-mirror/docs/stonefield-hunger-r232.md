@@ -46,3 +46,29 @@ attempt after journal recovery. Field-turns native slice20/20 passed. Focused
 operation-ledger/runtime JUnit33/33 and guardrails passed; results are in
 `build/r232-hunger-verification.log`. This is boundary verification, not proof
 that the two old residents resumed or a full-world hunger acceptance.
+
+## Used-tool departure defect found during the new HOT/COLD run
+
+After the live mining visit and subsequent release restart, Rosa and Ada retained
+UNKNOWN_AFTER_RESTART body leases. Their work/meal positions stopped advancing
+in COLD, although no native mining effect was pending. The earlier unload log
+recorded CAPTURE_UNAVAILABLE for their bodies. Static inspection found a second
+independent contradiction: ActorHandEvidence accepted exact identity tags but
+compared the remaining components with a pristine Minecraft stack. Every worn
+pick carries `minecraft:damage`; therefore a usable tool rejected body capture.
+The offline native-save reader likewise rejected this supported component.
+
+One shared hand-component boundary now retains the exact supported integer patch
+(damage, maximum damage, maximum stack size) alongside item identity. Live capture,
+common body/scene receipt persistence and vanilla saved-hand inspection agree.
+Different observed wear cannot certify the old receipt; unsupported components
+still reject visibly. Scene hand observation uses this same boundary. This does
+not repair tools, erase ambiguous operations, fabricate departure evidence or
+change item/resource ownership. Native defaults remain native defaults; offline
+inspection does not require Minecraft registry initialization.
+
+Verification:31focused body/scene/ledger persistence checks and guardrailsPASS;
+native `hand-evidence` slice1/1PASS. The native test serializes a worn exact pick
+using vanilla ItemStack.save and compares it with live evidence, then rejects
+changed wear and unsupported components. build/r232-hand-tests.log and
+build/r232-native-hand.log. Live return/unload validation follows deployment.

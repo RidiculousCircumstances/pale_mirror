@@ -16,6 +16,8 @@ final class FrontierV3ActorHandEvidence {
     static boolean capturable(ItemStack actual) {
         if (actual.isEmpty()) return true;
         var expected = new ItemStack(actual.getItem(), actual.getCount());
+        try { FrontierV3HandComponents.copy(actual, expected); }
+        catch (IllegalArgumentException unsupported) { return false; }
         var id = FrontierV3ExactItemPresentation.itemId(actual);
         id.ifPresent(value -> CustomData.update(DataComponents.CUSTOM_DATA, expected,
                 tag -> tag.putString(FrontierV3ExactItemPresentation.ITEM_ID_KEY, value.value())));
@@ -24,7 +26,7 @@ final class FrontierV3ActorHandEvidence {
     static Optional<FrontierV3ActorBodyDeparture.HandStack> observed(ItemStack actual) {
         if (!capturable(actual)) throw new IllegalArgumentException("unsupported actor hand components");
         return actual.isEmpty() ? Optional.empty() : Optional.of(new FrontierV3ActorBodyDeparture.HandStack(
-                BuiltInRegistries.ITEM.getKey(actual.getItem()).toString(), actual.getCount(), FrontierV3ExactItemPresentation.itemId(actual)));
+                BuiltInRegistries.ITEM.getKey(actual.getItem()).toString(), actual.getCount(), FrontierV3ExactItemPresentation.itemId(actual), FrontierV3HandComponents.patch(actual)));
     }
     /** Vanilla serialized stack read, without registries or loading the entity/chunk into the world. */
     static Optional<FrontierV3ActorBodyDeparture.HandStack> saved(CompoundTag raw) {
@@ -32,18 +34,26 @@ final class FrontierV3ActorHandEvidence {
         if (!raw.contains("id", Tag.TAG_STRING) || !raw.contains("count", Tag.TAG_INT))
             throw new IllegalArgumentException("incomplete serialized actor hand");
         Optional<SubjectId> id = Optional.empty();
+        var values = new java.util.TreeMap<String, Integer>();
         if (raw.contains("components")) {
             if (!raw.contains("components", Tag.TAG_COMPOUND)) throw new IllegalArgumentException("invalid hand components");
             var components = raw.getCompound("components");
-            if (!components.getAllKeys().equals(Set.of("minecraft:custom_data"))
-                    || !components.contains("minecraft:custom_data", Tag.TAG_COMPOUND))
+            if (components.isEmpty() || !components.getAllKeys().stream().allMatch(key -> key.equals("minecraft:custom_data")
+                    || FrontierV3HandComponents.keys().contains(key)))
                 throw new IllegalArgumentException("unsupported serialized actor hand components");
-            var data = components.getCompound("minecraft:custom_data");
-            if (!data.getAllKeys().equals(Set.of(FrontierV3ExactItemPresentation.ITEM_ID_KEY))
-                    || !data.contains(FrontierV3ExactItemPresentation.ITEM_ID_KEY, Tag.TAG_STRING))
-                throw new IllegalArgumentException("unsupported exact hand declaration");
-            id = Optional.of(new SubjectId(data.getString(FrontierV3ExactItemPresentation.ITEM_ID_KEY)));
+            for (var key : FrontierV3HandComponents.keys()) if (components.contains(key)) {
+                if (!components.contains(key, Tag.TAG_INT)) throw new IllegalArgumentException("invalid saved hand integer component");
+                values.put(key, components.getInt(key));
+            }
+            if (components.contains("minecraft:custom_data")) {
+                if (!components.contains("minecraft:custom_data", Tag.TAG_COMPOUND)) throw new IllegalArgumentException("invalid saved hand identity");
+                var data = components.getCompound("minecraft:custom_data");
+                if (!data.getAllKeys().equals(Set.of(FrontierV3ExactItemPresentation.ITEM_ID_KEY))
+                        || !data.contains(FrontierV3ExactItemPresentation.ITEM_ID_KEY, Tag.TAG_STRING))
+                    throw new IllegalArgumentException("unsupported exact hand declaration");
+                id = Optional.of(new SubjectId(data.getString(FrontierV3ExactItemPresentation.ITEM_ID_KEY)));
+            }
         }
-        return Optional.of(new FrontierV3ActorBodyDeparture.HandStack(raw.getString("id"), raw.getInt("count"), id));
+        return Optional.of(new FrontierV3ActorBodyDeparture.HandStack(raw.getString("id"), raw.getInt("count"), id, values));
     }
 }

@@ -91,6 +91,7 @@ public final class FrontierV3GameTestSlice {
                     || batchName.startsWith("pm-frontier-v3-scene-z-route-patrol-")
                     || batchName.equals("pm-frontier-v3-scene-strikes")
                     || batchName.equals("pm-frontier-v3-scene-observer-combat-calibration");
+            case "hand-evidence" -> batchName.equals("pm-frontier-v3-hand-evidence");
             case "service-death" -> batchName.equals("pm-frontier-v3-service-death")
                     || batchName.equals("pm-frontier-v3-settlement-service-input") || batchName.equals("pm-frontier-v3-equipment-death");
             case "physical-ownership-fences" -> batchName.equals("pm-frontier-v3-object-boards")
