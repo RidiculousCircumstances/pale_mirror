@@ -45,5 +45,18 @@ class ExtractionProductionForecastTest {
         assertEquals(forecast.outputs() - 1, next.outputs(), "external depletion cannot retain old capacity");
         assertEquals(forecast, ExtractionProductionForecast.assess(state, deposit, definition, workers),
                 "revisiting an earlier immutable branch must recover its own forecast");
+        assertTrue(deposit.presentMaterials().contains(definition));
+        var depletedCells = new HashMap<>(deposit.cells());
+        for (long id : deposit.site().layout().materialCells().get(definition)) {
+            var prior = depletedCells.get(id);
+            depletedCells.put(id, new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionDeposit.CellState(
+                    prior.revision() + 1,
+                    io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionDeposit.Disposition.EXTERNALLY_CHANGED,
+                    definition.after(), prior.extractionOperation()));
+        }
+        var depleted = new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionDeposit(
+                deposit.site(), depletedCells, deposit.geometry(), deposit.development());
+        assertFalse(depleted.presentMaterials().contains(definition), "a declaration index must not resurrect depleted material");
+        assertTrue(deposit.presentMaterials().contains(definition), "immutable branches keep their own depletion facts");
     }
 }

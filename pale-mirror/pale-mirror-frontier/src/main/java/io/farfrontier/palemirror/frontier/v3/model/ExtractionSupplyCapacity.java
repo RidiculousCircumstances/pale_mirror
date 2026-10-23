@@ -13,8 +13,7 @@ final class ExtractionSupplyCapacity implements SupplyCapacityPort {
         if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().isEmpty()) return List.of();
         var materials = new HashSet<BlockExtraction.Definition>();
         for (var deposit : state.extractionSites().deposits().values()) if (deposit.site().settlementId().equals(home))
-            for (var cell : deposit.site().layout().cells())
-                if (deposit.cells().get(cell.id()).disposition() == ExtractionDeposit.Disposition.PRESENT) materials.add(cell.definition());
+            materials.addAll(deposit.presentMaterials());
         var assignments = HumanAssignmentProjection.compile(state);
         var schedule = state.humanPopulation().schedule(home);
         long daily = schedule.segments().stream().filter(s -> s.window() == SettlementDailySchedule.Window.WORK)

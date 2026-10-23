@@ -37,6 +37,16 @@ class AutomaticStationProductionTest {
             assertTrue(SettlementLocalCirculation.surfaceCells(home).contains(ProductionFacilityLayout.metalStorageStation(facility).support()));
         }
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
+        var spec = record.productionStation().orElseThrow();
+        var recipe = state.bootstrap().ruleset().production().recipes().stream()
+                .filter(r -> r.capability() == spec.capability()).findFirst().orElseThrow();
+        assertTrue(AutomaticStationProduction.stations(state, record.ownerId(), recipe).contains(record));
+        var conditions = new HashMap<>(state.structureConditions());
+        conditions.put(spec.facilityId(), StructureCondition.DAMAGED);
+        var damaged = state.withChanges(FrontierWorldStateUpdate.begin().structureConditions(conditions));
+        assertFalse(AutomaticStationProduction.stations(damaged, record.ownerId(), recipe).contains(record),
+                "changed facility condition must invalidate the installed-station index");
+        assertTrue(AutomaticStationProduction.stations(state, record.ownerId(), recipe).contains(record));
     }
     @Test void partialInputCompletesWithoutWorkerAndSurvivesRecoveryWithExactFuelCost() {
         var state = initial(); var record = station(state); var spec = record.productionStation().orElseThrow();

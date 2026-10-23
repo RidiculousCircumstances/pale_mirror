@@ -57,6 +57,17 @@ public record ExtractionDeposit(ExtractionSite site, Map<Long, CellState> cells,
     public List<ExtractionLayout.Cell> available(Set<Long> reserved) {
         return accessibleSources(reserved).stream().filter(cell -> development.openedCells().contains(cell.id())).toList();
     }
+    /** Material discovery stops at the first remaining source in each declaration group.
+     * It grants neither development permission nor equipment/access admission. */
+    public Set<BlockExtraction.Definition> presentMaterials() {
+        var result = new LinkedHashSet<BlockExtraction.Definition>();
+        site.layout().materialCells().forEach((material, ids) -> {
+            for (long id : ids) if (cells.get(id).disposition() == Disposition.PRESENT) {
+                result.add(material); break;
+            }
+        });
+        return Collections.unmodifiableSet(result);
+    }
     /** Known source/standing clearance; development permission is a separate owner decision. */
     public List<ExtractionLayout.Cell> accessibleSources(Set<Long> reserved) {
         return site.layout().cells().stream().filter(cell -> cells.get(cell.id()).disposition() == Disposition.PRESENT

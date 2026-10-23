@@ -5,6 +5,7 @@ import java.util.*;
 
 /** A common finite planning horizon; capability owners alone select eligible workers. */
 final class SupplyLabourCapacity {
+    private record Candidate(ResidentProfile resident, boolean permitted, int skill) { }
     /** Advisory workforce potential precedes demand-driven staffing. This grants no permission. */
     static List<ResidentProfile> candidates(FrontierWorldState state, SubjectId home, ResidentWorkKind work,
             HumanCapability capability, java.util.function.Predicate<ResidentProfile> retainedByOwner) {
@@ -21,10 +22,11 @@ final class SupplyLabourCapacity {
                         && !state.humanPopulation().migrations().containsKey(r.id())
                         && state.actorLocations().get(r.id()).condition().status() == ActorLifeStatus.ALIVE)
                 .filter(r -> assignments.idle(r.id()) || retainedByOwner.test(r))
-                .sorted(Comparator.comparingInt((ResidentProfile r) -> permissions.permits(work, r.id()) ? 0 : 1)
-                        .thenComparing(Comparator.comparingInt((ResidentProfile r) -> r.capability(capability)).reversed())
-                        .thenComparing(ResidentProfile::id))
-                .limit(rule.targetWorkers()).toList();
+                .map(r -> new Candidate(r, permissions.permits(work, r.id()), r.capability(capability)))
+                .sorted(Comparator.comparingInt((Candidate c) -> c.permitted() ? 0 : 1)
+                        .thenComparing(Comparator.comparingInt(Candidate::skill).reversed())
+                        .thenComparing(c -> c.resident().id()))
+                .limit(rule.targetWorkers()).map(Candidate::resident).toList();
     }
     static Map<String, Long> over(FrontierWorldState state, SubjectId home, Collection<SubjectId> workers,
                                   SupplyPlanningWindow window) {

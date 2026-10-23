@@ -68,17 +68,33 @@ final class GoodsOrderMatching {
                 var buyer = trade.participants().participants().get(buy.party().id());
                 if (buyer == null || !buyer.party().equals(buy.party()) || !known(seller, buyer) || !known(buyer, seller)) continue;
                 if (sell.unitPriceLimit().compareTo(buy.unitPriceLimit()) > 0) { disposition = "PRICE_LIMIT"; continue; }
+                long availableCash = state.inventory().economics().availableToReserve(buyer.party().id()).raw();
+                if (sell.unitPriceLimit().raw() > Math.max(0, availableCash - unreservedDeliveryExpense.raw())) {
+                    disposition = "INSUFFICIENT_PROCUREMENT_FUNDS"; continue;
+                }
                 if (!GoodsParticipantStorage.eligible(state, seller, sell.containerId(), sell.itemKind())
                         || !GoodsParticipantStorage.eligible(state, buyer, buy.containerId(), buy.itemKind())) {
                     disposition = "STORAGE_UNAVAILABLE"; continue;
+                }
+                // Reject a physically empty or full endpoint before evaluating
+                // either participant's complete production/funding policy. This
+                // is only a necessary condition; exact allocations, authority
+                // and the complete quantity are still validated below.
+                if (GoodsParticipantStorage.unclaimed(state, seller, sell.containerId(), sell.itemKind()) == 0) {
+                    disposition = "SOURCE_ALLOCATION_OR_PHYSICAL_AUTHORITY"; continue;
+                }
+                if (!sell.containerId().equals(buy.containerId())
+                        && !GoodsTradeStateSupport.receivingCapacity(state, buy.containerId(), buy.itemKind(), 1)) {
+                    disposition = "RECEIVER_CAPACITY"; continue;
                 }
                 long funding = GoodsParticipantFunding.purchase(GoodsParticipantAssessment.trading(state, buyer, now),
                         state.bootstrap().ruleset().goodsTrade(), buy.itemKind()).raw();
                 funding = Math.max(0, funding - unreservedDeliveryExpense.raw());
                 if (funding < sell.unitPriceLimit().raw()) { disposition = "INSUFFICIENT_PROCUREMENT_FUNDS"; continue; }
-                var sellerIntent = intent(state, seller, sell.itemKind(), GoodsTradeOrder.Side.SELL, now, cachedIntents);
                 var buyerIntent = intent(state, buyer, buy.itemKind(), GoodsTradeOrder.Side.BUY, now, cachedIntents);
-                if (sellerIntent.isEmpty() || buyerIntent.isEmpty()) { disposition = "CURRENT_RESERVE_STOCK_OR_FUNDS"; continue; }
+                if (buyerIntent.isEmpty()) { disposition = "CURRENT_RESERVE_STOCK_OR_FUNDS"; continue; }
+                var sellerIntent = intent(state, seller, sell.itemKind(), GoodsTradeOrder.Side.SELL, now, cachedIntents);
+                if (sellerIntent.isEmpty()) { disposition = "CURRENT_RESERVE_STOCK_OR_FUNDS"; continue; }
                 if (sell.unitPriceLimit().compareTo(sellerIntent.orElseThrow().limit()) < 0
                         || sell.unitPriceLimit().compareTo(buyerIntent.orElseThrow().limit()) > 0) {
                     disposition = "CURRENT_PRICE_POLICY"; continue;

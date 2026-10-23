@@ -6,13 +6,22 @@ import java.util.*;
 /** Institution-to-machine admission. No worker, movement, physical write or private inventory ledger. */
 public final class AutomaticStationProduction {
     public record Offer(ProductionOperation operation, ClaimAllocation claim, long epoch) { }
+    private record StationKey(SubjectId home, ProductionStationSpec.Capability capability) { }
+    private static final ImmutableInputView<Map<StationKey, List<ContainerRecord>>> INSTALLED = new ImmutableInputView<>();
     public static List<ContainerRecord> stations(FrontierWorldState state, SubjectId home, ProductionRecipe recipe) {
-        return state.inventory().containers().values().stream().filter(record -> record.ownerId().equals(home))
-                .filter(record -> record.productionStation().filter(spec -> spec.capability() == recipe.capability()).isPresent())
-                .filter(record -> state.inventory().surfaces().get(record.id()).status() != ContainerSurfaceStatus.RETIRED
-                        && state.inventory().surfaces().get(record.id()).status() != ContainerSurfaceStatus.CONFLICT)
-                .filter(record -> state.structureConditions().get(record.productionStation().orElseThrow().facilityId()) == StructureCondition.INTACT)
-                .sorted(Comparator.comparing(ContainerRecord::id)).toList();
+        return INSTALLED.get(List.of(state.inventory().containers(), state.inventory().surfaces(), state.structureConditions()), () -> {
+            var grouped = new HashMap<StationKey, List<ContainerRecord>>();
+            for (var record : state.inventory().containers().values()) {
+                if (record.productionStation().isEmpty()) continue;
+                var spec = record.productionStation().orElseThrow();
+                var status = state.inventory().surfaces().get(record.id()).status();
+                if (status == ContainerSurfaceStatus.RETIRED || status == ContainerSurfaceStatus.CONFLICT
+                        || state.structureConditions().get(spec.facilityId()) != StructureCondition.INTACT) continue;
+                grouped.computeIfAbsent(new StationKey(record.ownerId(), spec.capability()), ignored -> new ArrayList<>()).add(record);
+            }
+            grouped.replaceAll((key, records) -> records.stream().sorted(Comparator.comparing(ContainerRecord::id)).toList());
+            return Map.copyOf(grouped);
+        }).getOrDefault(new StationKey(home, recipe.capability()), List.of());
     }
     public static Optional<ProductionCatalog.AutomaticPolicy> policy(FrontierWorldState state, ProductionStationSpec spec) {
         return state.bootstrap().ruleset().production().automaticPolicies().stream()
