@@ -1,0 +1,108 @@
+{
+  "schema": 1,
+  "id": "live_tool_return_after_interrupted_transfer",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:7-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -2,
+        "y": -1,
+        "z": -2
+      },
+      "settleMs": 0,
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:7-depot",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE",
+        "custody": {
+          "status": "ACQUIRED"
+        }
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:7-depot",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 15000
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:iron_pickaxe",
+      "count": 1,
+      "timeoutMs": 15000
+    },
+    {
+      "type": "inspect",
+      "view": "container",
+      "id": "container:7-depot"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 5,
+      "view": "container",
+      "id": "container:7-depot",
+      "expect": {
+        "status": "ok",
+        "replica": {
+          "state": "OBSERVED_CURRENT",
+          "conflict": ""
+        }
+      }
+    },
+    {
+      "after": 6,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "requiredConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 5,
+      "name": "recovered-tool-returned",
+      "presentation": "player"
+    }
+  ]
+}

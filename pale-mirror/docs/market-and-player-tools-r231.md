@@ -83,4 +83,22 @@ The retained placement-proof event remains readable; the new boundary uses tag2.
 Meal admission still reapproaches if its body is away from the service point; it
 cannot award taking/consumption by acknowledgement. Regression covers independent
 observation, displaced pose, codec, no resource transfer and repeated admission.
-Final live receipts are recorded after the follow-up deployment.
+Follow-up admission slice:16 tests PASS; guardrails/compile/clean packaged buildPASS.
+Deployed code24d0bab61, PID3513265, retained frontier-v3-r229-observatory-20261023.
+SHA512 c911e0833e8f8d60009869e30c6cd92b6e0e77bd5669674aa2ddc449e9930ad46370187ebe933854d3e8dc22f4f833dc962b0f362b236433f08618d54180e77d.
+Root pack b67d9a5 source unchanged; hosted/server artifacts updated through scripts.
+
+Native live-tool-container-transfer PASS, build/r231-native-transfer-3.json:
+ordinary shift withdrawal/return and two-click reorder; screenshots reviewed.
+Canonical diagnostics show engineering-tool-2 removed from its chest slot and
+subsequently retained at slot26, with unchanged identity. A separate recovery
+return scenario restored engineering-tool-1, taken immediately before quarantine,
+after server restart. build/r231-native-recovery-return.json PASS: all four original
+engineering-tool identities back in the chest, observed physical slots CURRENT,
+player inventory empty in the retained frame. This is a real interrupted-run
+recovery observation, not a scripted crash/recovery campaign. Both clients exited.
+Summary tick187900: requiredConflicts0, inventoryConflicts0, sceneConflicts0,
+incidentIndexSize0. No new quarantine after the follow-up deployment.
+Economy tick187341 ACTIVE,165 SELL orders, minimum89698raw, no one-microcoin SELL
+orders. This short observation does not establish whole-economy balance or justify
+rewriting old accepted trades. build/r231-final-economy.json retains the sample.
