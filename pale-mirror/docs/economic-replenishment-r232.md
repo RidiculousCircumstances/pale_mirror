@@ -72,7 +72,7 @@ Native adapter-mirrors12/12PASS includes generated distant biomes/surface matchi
 unloaded geometry. GuardrailsPASS. No full game-test suite or long-run economy
 balance acceptance is claimed by these focused checks.
 
-Next: clean-ref package, fresh R26 deployment and live HOT/COLD diagnostics.
+Clean-ref package, fresh R26 deployment and live HOT/COLD diagnostics are recorded below.
 
 ### Distant-world startup correction
 
@@ -140,3 +140,40 @@ in-flight recovery coverage remains in place.
 Verification of the quote-admission change:63focused trade, sourcing, dispatch,
 lot and mixed recovery testsPASS; guardrailsPASS
 (`build/r232-selected-route-tests.log`).
+
+## Live R26 result (2026-10-23)
+
+Deployed clean source54572fb75 in frontier-v3-r232-distant-20261023, seed126/r26.
+The pack selects the same hashed declaration (root38e27bc). Retained the new
+world through follow-up repairs rather than discard its real trade obligations.
+Runtime restarted20:19:26+05, deployment verification passed. Code SHA-512:
+`cb6e4c6fc45a7ac007acbdd6419e165c8f2740f03d155501df144e8a8c566db86aed0337376e792a863bfd3c53d43d7927154b0f36599a2c2da2c9783de39e9b`.
+
+Canonical commerce now admits and completes real shipments: first receipt97067
+Hearthvale→Ashcross coal1, goods19.999999 plus delivery8. Other completed routes
+include Hearthvale→Clearwater, Westhaven→Southgate/Sunreach/Mossbrook and
+Redwillow→Dawnbridge. At126687 eleven resource receipts are retained, including
+coal13 at123214. The shipment grouping is separate from per-resource receipts.
+A seller-delivery mission Dawnbridge→Redwillow carries wheat131 (64+64+3) on an
+actual reserved donkey with one human. A buyer-collection mission for wheat111
+(64+47) also reserves a donkey. The latter is still preparing/travelling toward
+assembly; neither admission nor carriage is reported as confirmed delivery.
+
+Small coal lots still occur when the horizon's useful requirement and available
+funds are small or need is due. There is no unconditional64-unit minimum and no
+invented funding. Larger distances make transport more expensive; they cannot
+manufacture demand, capital or supply. This run proves usable delivery/cash
+settlement and large-load admission, not long-run economic equilibrium.
+
+Distant search no longer accumulates every possible quotation: a late sample has
+zero waiting distant searches and two active with oldest26planning turns, versus
+roughly90waiting before selection-only proof. Ordinary full server tick cost is
+not solved by that correction: one64-sample window averaged about50ms with a1.46s
+peak; startup had a4.94s peak. Older JFR attributes substantial inclusive CPU to
+GoodsParticipantAssessment. These are retained performance limitations, not a
+claim that the world now scales without further profiling.
+
+HOT/COLD hunger acceptance is recorded separately in stonefield-hunger-r232.md.
+Native pilot16468bba-af1c-4565-8ee3-97228476fc16 completed and exited. No testclient
+is left running. All sampled canonical/inventory/scene conflict counts were zero;
+the diagnostic verdict covers retained conflicts, not absence of every latent bug.

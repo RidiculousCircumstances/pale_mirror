@@ -96,3 +96,23 @@ the chunk leaves. After the pending effect is discharged, an unloaded ACQUIRED
 source can release only against that complete, current, durable region image.
 Missing/stale/pending witnesses cannot release custody. This closes the source
 boundary as well as the actor boundary; a missing entity alone cannot unlock it.
+
+Final boundary checks:22focused domain tests (including architecture),16operation
+ledger/confirmation tests and guardrailsPASS. Added current-codec/engine recovery
+coverage for unused living preparation, exact stale-body rejection, duplicate
+cancellation rejection and unchanged resources/deposits. Fixture schedules include
+the resident wake which production already owns. No broad obsolete-test campaign.
+
+On54572fb75, native scenario16468bba-af1c-4565-8ee3-97228476fc16 passed ordinary
+HOT→away→HOT. Rosa mined one more coal cell (9→10extracted), delivered batch4→5,
+ate when the next hunger threshold121946 arrived, and reached RETURN_TOOL rev21
+by123429. After final disconnect20:23:19 the worn-pick departure was recorded;
+124027 showed CLOSED/bodyreleased/COLDavailable and satiety989. By124635 work15
+had retired, preserving Rosa; she was nourished980. Ada also ate again at126440
+and was nourished993 at126997. This proves the original symptom's continuation,
+not permanent zero hunger. No pending effect was forcibly replayed.
+
+Frames show the generated coal worksite, rendered on both visits; the overhead
+camera does not establish a complete visual mining animation. The native scenario
+and correlated state/log evidence establish work, nutrition and departure facts.
+Server retained zero conflict counts and the departure queue drained tozero.
