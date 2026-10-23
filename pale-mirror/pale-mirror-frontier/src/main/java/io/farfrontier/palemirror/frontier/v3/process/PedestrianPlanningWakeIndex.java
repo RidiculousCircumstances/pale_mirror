@@ -93,5 +93,6 @@ public final class PedestrianPlanningWakeIndex {
     }
 
     public int waitingCount() { return waits.size(); }
+    boolean tracks(ScheduledAction action) { return waits.containsKey(action.id()); }
     public int readyCount() { return ready.size(); }
 }

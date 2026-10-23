@@ -13,6 +13,8 @@ import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3JournalNb
 
 /** Storage protocol only. Families declare their tables, record codec and physical fences. */
 abstract class FrontierV3JournaledSavedData extends SavedData {
+    /** Current immutable record's exact submitted prefix, independent of unrelated rows. */
+    interface RecordedTable<K, V> extends Map<K, V> { boolean durable(K key); }
     private final FrontierV3PhysicalStoreKind kind;
     interface StoredTable {
         int index();
@@ -107,7 +109,7 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
             }
         });
     }
-    protected final <K,V> Map<K,V> fragmentedTable(String name, Map<K,V> initial, Function<K,String> key, Fragments<K,V> codec) {
+    protected final <K,V> RecordedTable<K,V> fragmentedTable(String name, Map<K,V> initial, Function<K,String> key, Fragments<K,V> codec) {
         int index = kind.table(name).wireTag();
         if (index < 0 || tables.stream().anyMatch(table -> table.index() == index))
             throw new IllegalArgumentException("undeclared or duplicate physical table: " + name);
@@ -324,10 +326,11 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
             if (!same(entry.getValue(), actual.get(entry.getKey()))) throw new IOException("physical record content mismatch: " + entry.getKey());
     }
     static String address(int table, String key, String part) { return table + ":" + key.length() + ":" + key + ":" + part; }
-    private final class Table<K, V> extends AbstractMap<K, V> implements StoredTable {
+    private final class Table<K, V> extends AbstractMap<K, V> implements StoredTable, RecordedTable<K, V> {
         private final int index;
         private final Map<K, V> values;
         private final Set<K> dirty = new LinkedHashSet<>();
+        private final Map<K, java.util.concurrent.CompletableFuture<Long>> writeReceipts = new HashMap<>();
         private final Function<K, String> key;
         private final Fragments<K,V> codec;
         private final Map<K,Map<String,CompoundTag>> committed = new HashMap<>();
@@ -353,7 +356,20 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
             return prior;
         }
         @Override public void clear() { dirty.addAll(values.keySet()); if (!values.isEmpty()) setDirty(); values.clear(); }
+        public boolean durable(K identity) {
+            if (!declared || !values.containsKey(identity) || dirty.contains(identity)) return false;
+            var receipt = writeReceipts.get(identity);
+            if (receipt == null) return true; // Recovered or synchronously forced row.
+            if (!receipt.isDone()) return false;
+            receipt.join(); return true; // Completed exceptional writes must remain visible.
+        }
+        @Override public void submitted(java.util.concurrent.CompletableFuture<Long> receipt) {
+            var submitted = java.util.List.copyOf(dirty);
+            accept();
+            for (var identity : submitted) if (values.containsKey(identity)) writeReceipts.put(identity, receipt);
+        }
         public void accept() {
+            dirty.forEach(writeReceipts::remove);
             if (prepared.isEmpty() && !declared) {
                 for (var identity : values.keySet()) committed.put(identity, codec.split(identity, values.get(identity)));
             } else if (prepared.isEmpty() && declared && committed.isEmpty()) {

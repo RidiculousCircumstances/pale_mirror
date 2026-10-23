@@ -72,11 +72,20 @@ public final class FrontierReadabilityPlan {
     /** Read-only formatting index. Each selected board reads current facts, not cached job text. */
     public static final class StableBoardIndex {
         private final StableObjectGeometry geometry;
+        private final java.util.List<FrontierObjectBoard.Placement> placements;
         private final Map<SubjectId, java.util.function.BiFunction<FrontierWorldState, Long, FrontierObjectBoard>> renderers;
 
         public StableBoardIndex(FrontierWorldState state, StableObjectGeometry geometry) {
             if (!geometry.matches(state)) throw new IllegalArgumentException("stale board index geometry");
             this.geometry = geometry;
+            var positions = new LinkedHashMap<SubjectId, BlockPosition>();
+            state.bootstrap().settlements().forEach(settlement -> settlement.structures().forEach(structure ->
+                    positions.put(structure.id(), structureBoardPosition(structure, state.structureConditions().get(structure.id())))));
+            state.bootstrap().hive().organs().forEach(organ -> positions.put(organ.id(), organ.anchor().offset(0, 2, -3)));
+            state.resourceSiteDescriptors().values().forEach(site -> positions.put(site.id(), fieldBoardPosition(state, site)));
+            positions.put(FrontierRouteNetwork.OWNER, FrontierRouteNetwork.maintenanceContainerPosition(state.bootstrap()).offset(0, 3, -3));
+            placements = positions.entrySet().stream().sorted(Map.Entry.comparingByKey())
+                    .map(entry -> new FrontierObjectBoard.Placement(entry.getKey(), entry.getValue())).toList();
             var renderers = new LinkedHashMap<SubjectId, java.util.function.BiFunction<FrontierWorldState, Long, FrontierObjectBoard>>();
             state.bootstrap().settlements().forEach(settlement -> settlement.structures().forEach(structure ->
                     renderers.put(structure.id(), (current, atTick) -> structureBoard(current, settlement, structure, stage(current, structure.id()), atTick))));
@@ -111,6 +120,7 @@ public final class FrontierReadabilityPlan {
         }
 
         public boolean contains(SubjectId owner) { return renderers.containsKey(owner); }
+        public java.util.List<FrontierObjectBoard.Placement> placements() { return placements; }
     }
 
     private static FrontierObjectBoard structureBoard(FrontierWorldState state, Settlement settlement,

@@ -253,9 +253,9 @@ final class FrontierV3ResourceSiteExecutor {
             var cursors = CELL_CURSORS.computeIfAbsent(runtime, ignored -> new HashMap<>());
             var selection = FrontierV3ResourceFieldProjectionSelection.select(cycle, owner.witness(),
                     cursors.getOrDefault(site.id(), 0));
-            cursors.put(site.id(), selection.nextIndex());
-            if (!selection.cells().isEmpty())
-                FrontierV3ResourceFieldGrowthProjector.projectCurrentBatch(level, runtime, site.id(), selection.cells());
+            if (selection.cells().isEmpty()
+                    || FrontierV3ResourceFieldGrowthProjector.projectCurrentBatch(level, runtime, site.id(), selection.cells()))
+                cursors.put(site.id(), selection.nextIndex());
             return;
         }
         // Only a per-cell physical owner may project the current field. A stage/prefix

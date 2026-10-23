@@ -27,7 +27,7 @@ import java.util.Map;
 final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
     private static final int FORMAT = 20;
     static final int MAX_SITES = ResourceSiteState.MAX_SITES;
-    private final Map<SubjectId, FieldClaim> fieldClaims;
+    private final RecordedTable<SubjectId, FieldClaim> fieldClaims;
     /** A positive cell-owned delivery is fenced before either Vanilla inventory is edited. */
     private final Map<SubjectId, FrontierV3ResourceSiteDeliveryWitness> fieldDeliveries;
     /** A COLD actor part cannot first appear in a HOT hand without this before-effect owner. */
@@ -39,7 +39,6 @@ final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
     /** An external edit owns one cell's physical cause until its local WAL/claim agree. */
     private final Map<CellMutationKey, FrontierV3ResourceFieldForeignChangeWitness> fieldForeignChanges;
     private final FrontierV3LocalOperationReceipts operationReceipts;
-    private boolean recoverOperationReceipts;
 
     private FrontierV3ResourceSiteLedger() { this(new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>(),
             new LinkedHashMap<>(), new LinkedHashMap<>(), new LinkedHashMap<>(), Map.of()); }
@@ -71,20 +70,25 @@ final class FrontierV3ResourceSiteLedger extends FrontierV3JournaledSavedData {
         fieldForeignChanges = table("fieldForeignChanges", foreign, FrontierV3ResourceSiteLedger::mutationAddress, (id, value) -> value.write());
         operationReceipts = new FrontierV3LocalOperationReceipts(table("operationReceipts", receipts,
                 java.util.UUID::toString, (id, value) -> FrontierV3OperationReceiptCodec.write(value)));
-        recoverOperationReceipts = !receipts.isEmpty();
     }
     static FrontierV3ResourceSiteLedger get(ServerLevel level) {
         var ledger = FrontierV3JournaledSavedData.get(level, FrontierV3PhysicalStoreKind.FIELDS,
                 FrontierV3ResourceSiteLedger::new, FrontierV3ResourceSiteLedger::load);
-        if (ledger.recoverOperationReceipts) {
-            ledger.completeOperations(level); ledger.recoverOperationReceipts = false;
-        }
+        if (!ledger.operationReceipts.isEmpty()) ledger.completeOperationsDeferred(level);
         return ledger;
     }
     void operationCompleted(ServerLevel level, java.util.UUID ticket) {
         operationReceipts.add(FrontierV3OperationLedger.get(level).require(ticket));
     }
     void completeOperations(ServerLevel level) { operationReceipts.complete(level, () -> persist(level)); }
+    void completeOperationsDeferred(ServerLevel level) {
+        operationReceipts.completeDeferred(FrontierV3OperationLedger.get(level), () -> persistAsync(level),
+                () -> FrontierV3OperationLedger.get(level).persistAsync(level));
+    }
+    boolean prepareFieldDurable(ServerLevel level, SubjectId site) {
+        persistAsync(level);
+        return fieldClaims.durable(site);
+    }
     static java.nio.file.Path storageFile(ServerLevel level) {
         return FrontierV3JournaledSavedData.storageFile(level, FrontierV3PhysicalStoreKind.FIELDS);
     }

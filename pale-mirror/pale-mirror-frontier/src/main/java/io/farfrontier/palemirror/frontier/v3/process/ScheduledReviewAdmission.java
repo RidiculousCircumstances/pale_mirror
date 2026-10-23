@@ -62,7 +62,8 @@ final class ScheduledReviewAdmission {
             }
             @Override public boolean acceptsReconsideration() { return coalescible; }
             @Override public Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) { return delegate.wakeDependencies(state, action); }
-            @Override public void restorePlanningWait(FrontierWorldState state, ScheduledAction action, SimInstant instant) { delegate.restorePlanningWait(state, action, instant); }
+            @Override public java.util.Optional<java.util.function.Supplier<List<ProposedEvent>>> recoveryPlan(
+                    FrontierWorldState state, ScheduledAction action, SimInstant instant) { return delegate.recoveryPlan(state, action, instant); }
         };
     }
 }

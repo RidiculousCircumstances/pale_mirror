@@ -12,5 +12,6 @@ import java.util.Set;
 interface FrontierScheduledPlanner extends ScheduledActionPlanner<FrontierWorldState> {
     default boolean acceptsReconsideration() { return false; }
     default Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) { return Set.of(); }
-    default void restorePlanningWait(FrontierWorldState state, ScheduledAction action, SimInstant instant) { }
+    default java.util.Optional<java.util.function.Supplier<java.util.List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent>>>
+            recoveryPlan(FrontierWorldState state, ScheduledAction action, SimInstant instant) { return java.util.Optional.empty(); }
 }

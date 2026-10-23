@@ -22,10 +22,10 @@ final class ScheduledPlanningRecovery {
             @Override public java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledHold<FrontierWorldState>>
                     holdProof(FrontierWorldState state, ScheduledAction action) { return delegate.holdProof(state, action); }
             @Override public Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) { return delegate.wakeDependencies(state, action); }
-            @Override public void restorePlanningWait(FrontierWorldState state, ScheduledAction action,
+            @Override public Optional<java.util.function.Supplier<List<ProposedEvent>>> recoveryPlan(FrontierWorldState state, ScheduledAction action,
                     io.farfrontier.palemirror.frontier.v3.api.SimInstant instant) {
                 // This is a read-only owner preview; its events never enter the engine.
-                PedestrianPlanningContinuations.restore(action, () -> delegate.plan(state, action,
+                return Optional.of(() -> delegate.plan(state, action,
                         new io.farfrontier.palemirror.frontier.v3.api.SimInstant(Math.max(instant.ticks(), action.dueAt().ticks()))));
             }
         };

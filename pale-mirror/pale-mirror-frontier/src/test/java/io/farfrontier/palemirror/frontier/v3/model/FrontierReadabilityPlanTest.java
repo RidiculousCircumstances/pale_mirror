@@ -27,6 +27,8 @@ class FrontierReadabilityPlanTest {
         var changed = state.withHumanPopulation(state.humanPopulation().accrueHunger(actor, 30_000L));
         assertTrue(geometry.matches(changed), "nutrition changes must not rebuild object cells");
         var expected = FrontierReadabilityPlan.compileStableBaseline(changed, 0L).boards();
+        assertEquals(expected.values().stream().map(FrontierObjectBoard::placement).collect(java.util.stream.Collectors.toSet()),
+                java.util.Set.copyOf(index.placements()), "visibility-only slots retain every exact board position");
         expected.forEach((owner, board) -> assertEquals(board, index.render(changed, owner, 0L)));
         var conditions = new LinkedHashMap<>(state.structureConditions());
         conditions.put(settlement.structures().getFirst().id(), StructureCondition.DESTROYED);

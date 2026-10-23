@@ -13,6 +13,36 @@ import static org.junit.jupiter.api.Assertions.*;
 class FrontierV3LocalOperationReceiptsTest {
     @BeforeAll static void version() { net.minecraft.SharedConstants.tryDetectVersion(); }
     @TempDir Path directory;
+    @Test void deferredClosureWaitsForBothPrefixesAndPreservesLaterOutboxEntries() {
+        var ledger = FrontierV3OperationLedger.inMemory();
+        var participant = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.CHUNK_BLOCKS, "1", 1);
+        var first = ledger.prepare(new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.FIELD_PROJECTION,
+                new SubjectId("field:a"), "a", "a", Set.of(participant)));
+        ledger.applied(first.nativeReceipt(participant));
+        var receipts = new FrontierV3LocalOperationReceipts(new LinkedHashMap<>());
+        receipts.add(ledger.require(first.ticket()));
+        var owner = new java.util.concurrent.CompletableFuture<Long>();
+        var operations = new java.util.concurrent.CompletableFuture<Long>();
+        receipts.completeDeferred(ledger, () -> owner, () -> operations);
+        assertFalse(ledger.require(first.ticket()).ownerClosed(), "submission cannot close an undurable owner transition");
+        var later = ledger.prepare(new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.FIELD_PROJECTION,
+                new SubjectId("field:b"), "b", "b", Set.of(participant)));
+        ledger.applied(later.nativeReceipt(participant)); receipts.add(ledger.require(later.ticket()));
+        owner.complete(1L);
+        receipts.completeDeferred(ledger, () -> { fail("later edits cannot move the captured prefix"); return owner; }, () -> operations);
+        assertTrue(ledger.require(first.ticket()).ownerClosed()); assertFalse(receipts.isEmpty());
+        assertFalse(ledger.require(later.ticket()).ownerClosed());
+        operations.complete(1L);
+        receipts.completeDeferred(ledger, () -> owner, () -> operations);
+        assertEquals(Set.of(later.ticket()), FrontierV3LocalOperationReceipts.read(wrap(receipts), "receipts").keySet());
+        var failed = new java.util.concurrent.CompletableFuture<Long>();
+        failed.completeExceptionally(new IllegalStateException("disk failed"));
+        assertThrows(java.util.concurrent.CompletionException.class, () -> receipts.completeDeferred(ledger, () -> failed, () -> operations));
+        assertFalse(ledger.require(later.ticket()).ownerClosed());
+    }
+    private static CompoundTag wrap(FrontierV3LocalOperationReceipts receipts) {
+        var value = new CompoundTag(); value.put("receipts", receipts.write()); return value;
+    }
     @Test void ownerOutboxSurvivesFailedClosureAndDoesNotPretendNativeStateIsSaved() throws Exception {
         var world = new WorldId("frontier:local-operation"); var dimension = ResourceLocation.parse("minecraft:overworld");
         var path = directory.resolve("operations.dat"); var ledger = FrontierV3OperationLedger.inMemory();

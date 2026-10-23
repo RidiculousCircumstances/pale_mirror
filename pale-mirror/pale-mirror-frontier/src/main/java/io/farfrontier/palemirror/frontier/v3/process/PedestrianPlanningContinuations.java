@@ -11,6 +11,34 @@ import java.util.function.Supplier;
 public final class PedestrianPlanningContinuations {
     private static PedestrianPlanningWakeIndex current;
     private PedestrianPlanningContinuations() { }
+    record RecoveryCandidate(ScheduledAction action, Supplier<List<ProposedEvent>> planning) { }
+    private record RecoveredWait(ScheduledAction action, PedestrianRoutePlanning.Prepared<List<ProposedEvent>> advice) { }
+    /** Volatile hints only: effects are discarded; changed or already registered continuations win. */
+    public static final class Recovery {
+        private final PedestrianPlanningWakeIndex owner;
+        private final List<RecoveredWait> waits;
+        private Recovery(PedestrianPlanningWakeIndex owner, List<RecoveredWait> waits) { this.owner = owner; this.waits = List.copyOf(waits); }
+        public void publish(java.util.function.Predicate<ScheduledAction> retained) {
+            if (current != owner) throw new IllegalStateException("planning recovery lost its runtime owner");
+            for (var wait : waits) if (retained.test(wait.action()) && !owner.tracks(wait.action())) {
+                var ready = wait.advice().acquire();
+                owner.replace(wait.action(), wait.advice().observation().requests());
+                owner.changed(ready);
+            }
+        }
+    }
+    static Supplier<Recovery> prepareRestore(Supplier<List<RecoveryCandidate>> candidates) {
+        var owner = java.util.Objects.requireNonNull(current, "planning recovery owner");
+        var view = PedestrianRoutePlanning.readView();
+        return () -> {
+            var waits = new java.util.ArrayList<RecoveredWait>();
+            for (var candidate : candidates.get()) {
+                var advice = PedestrianRoutePlanning.prepare(view, candidate.planning());
+                if (!advice.observation().requests().isEmpty()) waits.add(new RecoveredWait(candidate.action(), advice));
+            }
+            return new Recovery(owner, waits);
+        };
+    }
     static boolean waiting(ScheduledAction action) {
         var index = current;
         return index != null && index.waiting(action);
@@ -64,11 +92,5 @@ public final class PedestrianPlanningContinuations {
         if (successor == null) index.remove(action.id());
         else index.replace(successor, observation.requests());
         return observation.result();
-    }
-    /** Reconstruct dependencies against the retained action; proposed domain outcomes are deliberately discarded. */
-    static void restore(ScheduledAction action, Supplier<List<ProposedEvent>> planning) {
-        if (current == null) throw new IllegalStateException("planning recovery lacks its bound continuation owner");
-        var observation = PedestrianRoutePlanning.observe(planning);
-        current.replace(action, observation.requests());
     }
 }

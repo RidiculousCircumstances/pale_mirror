@@ -555,15 +555,24 @@ public final class FrontierWorldProcessCatalog {
     }
 
     /** Rebuild volatile dependencies once on runtime admission, without committing or replaying domain effects. */
+    public static java.util.function.Supplier<PedestrianPlanningContinuations.Recovery> preparePlanningWaits(
+            DeterministicProcessRegistry registry, FrontierWorldState state,
+            io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView view) {
+        return PedestrianPlanningContinuations.prepareRestore(() -> {
+            var candidates = new java.util.ArrayList<PedestrianPlanningContinuations.RecoveryCandidate>();
+            for (var action : view.schedules()) {
+                registry.requireScheduledOwner(action.kind());
+                var planner = java.util.Objects.requireNonNull(SCHEDULED_PLANNERS.get(action.kind()), "recovery planner");
+                if (!planner.held(state, action)) planner.recoveryPlan(state, action, view.instant())
+                        .ifPresent(plan -> candidates.add(new PedestrianPlanningContinuations.RecoveryCandidate(action, plan)));
+            }
+            return java.util.List.copyOf(candidates);
+        });
+    }
     public static void restorePlanningWaits(DeterministicProcessRegistry registry, FrontierWorldState state,
             io.farfrontier.palemirror.frontier.v3.api.FrontierScheduleView view) {
-        for (var action : view.schedules()) {
-            registry.requireScheduledOwner(action.kind());
-            var planner = SCHEDULED_PLANNERS.get(action.kind());
-            if (planner == null) throw new IllegalStateException("restored continuation has no declared planner");
-            if (!planner.held(state, action))
-                planner.restorePlanningWait(state, action, view.instant());
-        }
+        var retained = java.util.Set.copyOf(view.schedules());
+        preparePlanningWaits(registry, state, view).get().publish(retained::contains);
     }
 
     public static boolean scheduledHeld(DeterministicProcessRegistry registry, FrontierWorldState state, ScheduledAction action) {

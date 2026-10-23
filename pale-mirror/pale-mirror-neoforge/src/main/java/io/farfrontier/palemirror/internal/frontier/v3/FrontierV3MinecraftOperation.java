@@ -119,6 +119,9 @@ final class FrontierV3MinecraftOperation {
     static List<Result> applyBatch(ServerLevel level, List<Request> requests) {
         return applyBatch(level, requests, false);
     }
+    static List<Result> applyBatchDeferred(ServerLevel level, List<Request> requests) {
+        return applyBatch(level, requests, true);
+    }
     /** The same native boundary, with async force receipts. A waiting result has
      * not invoked mutation; callers retain their live permission until it does. */
     static Result applyDeferred(ServerLevel level, Request request) {

@@ -11,6 +11,33 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PedestrianPlanningWakeIndexTest {
+    @Test void detachedRecoveryPublishesOnlyRetainedUnregisteredWaits() throws Exception {
+        var index = new PedestrianPlanningWakeIndex();
+        var retained = action("retained", 6000); var replaced = action("replaced", 6000);
+        var cancelled = action("cancelled", 6000);
+        try (var planner = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(planner);
+                var waits = PedestrianPlanningContinuations.bind(index);
+                var worker = java.util.concurrent.Executors.newSingleThreadExecutor()) {
+            var preparation = PedestrianPlanningContinuations.prepareRestore(() -> java.util.stream.IntStream.range(0, 3)
+                    .mapToObj(i -> new PedestrianPlanningContinuations.RecoveryCandidate(List.of(retained, replaced, cancelled).get(i), () -> {
+                        var query = request(3 + i);
+                        PedestrianRoutePlanning.query(GROUND, query.start(), query.target());
+                        PedestrianRoutePlanning.await(query);
+                        return List.of(new ProposedEvent(retained.subject(), new ScheduleEffect.Cancelled(retained.id())));
+                    })).toList());
+            var recovery = worker.submit(preparation::get).get();
+            assertEquals(0, planner.pendingCount(), "worker cannot acquire live navigation work");
+            assertEquals(0, index.waitingCount(), "worker cannot publish volatile wake ownership");
+            index.replace(replaced, List.of(request(10)));
+            recovery.publish(action -> !action.equals(cancelled));
+            assertEquals(1, planner.pendingCount(), "stale or already refreshed advice cannot acquire work");
+            while (planner.pendingCount() > 0) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            index.changed(planner.drainChanges());
+            assertEquals(List.of(retained), index.ready(view(20, retained, replaced)));
+            index.changed(List.of(new PedestrianPlanningChange(request(10), PedestrianPlanningChange.Kind.RESULT_AVAILABLE)));
+            assertEquals(List.of(retained, replaced), index.ready(view(20, retained, replaced)), "newer wait survives recovery");
+        }
+    }
     @Test void wakeRetainsUnfinishedSiblingUntilOwnerReplacesOrCancelsItsDemand() {
         var index = new PedestrianPlanningWakeIndex(); var owner = action("mixed", 6000);
         var fast = request(3); var slow = request(20);

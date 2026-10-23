@@ -144,7 +144,15 @@ public final class FrontierV3ResourceFieldObservationGameTests {
             // Restore the actual persisted pending claims: first physical effect applied, second not.
             var saved = (FrontierV3ResourceSiteLedger.FieldOwnership) persistedField(level, siteId);
             ledger.replaceFieldClaim((FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(siteId), saved);
-            FrontierV3ResourceFieldGrowthProjector.projectAcceptedBatch(level, site, acceptedNext, ids);
+            boolean completed = false;
+            for (int attempt = 0; attempt < 4 && !completed; attempt++) {
+                FrontierV3ResourceFieldGrowthProjector.projectAcceptedBatch(level, site, acceptedNext, ids, true);
+                // Resolve genuine storage receipts, never substitute a physical or canonical result.
+                ledger.persist(level); FrontierV3OperationLedger.get(level).persist(level);
+                var progress = (FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(siteId);
+                completed = ids.stream().allMatch(id -> progress.witness().cell(id).pending().isEmpty());
+            }
+            helper.assertTrue(completed, "deferred batch must resume after its exact durable permissions");
             var recovered = (FrontierV3ResourceSiteLedger.FieldOwnership) persistedField(level, siteId);
             helper.assertTrue(ids.stream().allMatch(id -> recovered.witness().cell(id).pending().isEmpty()
                             && recovered.witness().cell(id).committed().growthStage() == 2)

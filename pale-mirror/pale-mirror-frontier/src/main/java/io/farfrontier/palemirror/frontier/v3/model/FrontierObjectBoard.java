@@ -6,6 +6,11 @@ import java.util.Objects;
 
 /** One concise, object-local player briefing derived from canonical world state. */
 public record FrontierObjectBoard(SubjectId ownerId, BlockPosition position, Tone tone, Scope scope, String text) {
+    /** Visibility can be selected without computing any status or economic text. */
+    public record Placement(SubjectId ownerId, BlockPosition position) {
+        public Placement { Objects.requireNonNull(ownerId); Objects.requireNonNull(position); }
+    }
+    public Placement placement() { return new Placement(ownerId, position); }
     public enum Tone { SETTLEMENT, HIVE, WARNING }
     /**
      * A semantic distance class, not a client preference or a second state store.

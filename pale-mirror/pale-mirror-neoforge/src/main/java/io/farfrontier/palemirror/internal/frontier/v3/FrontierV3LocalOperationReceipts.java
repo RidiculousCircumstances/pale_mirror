@@ -9,6 +9,8 @@ import java.util.*;
  * Neither this protocol nor its recovery callback interprets that transition. */
 final class FrontierV3LocalOperationReceipts {
     private final Map<UUID, FrontierV3OperationReceipt> receipts;
+    private Map<UUID, FrontierV3OperationReceipt> completing = Map.of();
+    private java.util.concurrent.CompletableFuture<Long> ownerWrite, closureWrite;
     FrontierV3LocalOperationReceipts(Map<UUID, FrontierV3OperationReceipt> receipts) {
         validate(receipts); this.receipts = receipts;
     }
@@ -36,7 +38,35 @@ final class FrontierV3LocalOperationReceipts {
     void complete(FrontierV3OperationLedger ledger, Runnable forceOwner, Runnable forceOperations) {
         if (isEmpty()) return;
         forceOwner.run(); // Also persists the family's transition, not merely this outbox.
-        for (var proof : receipts.values()) {
+        close(ledger, receipts.values());
+        forceOperations.run();
+        receipts.clear();
+        forceOwner.run(); // Crash before this append replays closure only, never the physical action.
+        clearContinuation();
+    }
+    /** The same outbox protocol, polled by its owner. Each stage retains its exact
+     * prefix: new owner edits cannot postpone or borrow an older acknowledgement. */
+    void completeDeferred(FrontierV3OperationLedger ledger,
+            java.util.function.Supplier<java.util.concurrent.CompletableFuture<Long>> persistOwner,
+            java.util.function.Supplier<java.util.concurrent.CompletableFuture<Long>> persistOperations) {
+        if (isEmpty()) { clearContinuation(); return; }
+        if (ownerWrite == null) {
+            completing = Map.copyOf(receipts); ownerWrite = persistOwner.get();
+        }
+        if (!ownerWrite.isDone()) return;
+        ownerWrite.join();
+        if (closureWrite == null) {
+            close(ledger, completing.values()); closureWrite = persistOperations.get();
+        }
+        if (!closureWrite.isDone()) return;
+        closureWrite.join();
+        completing.forEach((ticket, proof) -> receipts.remove(ticket, proof));
+        persistOwner.get(); // Durable closure permits clearing; stale outbox on restart is harmless.
+        clearContinuation();
+    }
+    private void clearContinuation() { completing = Map.of(); ownerWrite = null; closureWrite = null; }
+    private static void close(FrontierV3OperationLedger ledger, Collection<FrontierV3OperationReceipt> proofs) {
+        for (var proof : proofs) {
             var current = ledger.find(proof.ticket()).orElse(null);
             if (current == null) {
                 if (!ledger.prunable(proof.nativeReceipt(proof.declaration().participants().iterator().next())))
@@ -48,9 +78,6 @@ final class FrontierV3LocalOperationReceipts {
             ledger.closeOwner(current.ticket());
             if (ledger.require(current.ticket()).retirable()) ledger.retire(current.ticket());
         }
-        forceOperations.run();
-        receipts.clear();
-        forceOwner.run(); // Crash before this append replays closure only, never the physical action.
     }
     private static boolean sameOperation(FrontierV3OperationReceipt left, FrontierV3OperationReceipt right) {
         return left.ticket().equals(right.ticket()) && left.sequence() == right.sequence()

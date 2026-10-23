@@ -58,3 +58,38 @@ weight or coalescing. Ordinary retained mining/field/food/production/shipment
 physical steps use existing asynchronous before-effect receipts. Native player,
 death and other non-repeatable callbacks retain their explicit synchronous API.
 This does not yet claim elimination of every physical confirmation force.
+
+Second candidate072e5f57d: first three COLD minutes had only the startup3.394s
+outlier; recent64 maxima about17ms. Exploratory full-pack HOT run
+`aed6b88f-7b0f-4fcd-89a2-37bc6f95e345` visited Clearwater440/0 and
+Stonefield-600/-1360, completed with zero retained conflicts. Login620ms included
+object-board172ms; field projection reached107ms and repeated50ms spans. Later
+settled HOT windows do not erase those failures. No JFR in this measurement;
+client startup and one local compile overlapped initial ingress.
+
+The next correction rebuilds volatile navigation wait hints on the existing
+bounded preparation worker. It discards preview events, publishes only exact
+retained schedule generations and never overwrites a newer wait registration.
+The synchronous test/recovery entry uses that same protocol. No first-tick full
+policy preview remains. Board discovery now builds placements without rendering
+worldwide economic text; only loaded selected boards render current facts. The
+physical cursor compares only overlay inputs, avoiding global population/route
+readout scans on every presentation turn.
+
+Fragmented physical tables now expose exact current-record durability receipts.
+Unrelated new rows cannot postpone a saved record; a changed row cannot borrow
+its prior receipt. Field growth batches retain their discovery cursor while
+permissions are pending, apply disjoint operations through the common deferred
+boundary, and close through the shared asynchronous owner outbox. The outbox
+waits for the family's completed transition, then the operation closure, before
+clearing its captured entries; later entries are not cleared with an older batch.
+Native/player synchronous APIs retain their existing causal guarantees.
+
+Verification: guardrails, recovery/replay, readability, and affected adapter tests
+PASS (`r239-ingress-tests.log`). Delayed-prefix record/outbox tests and journal
+recovery PASS;28 native field/board tests PASS (`r239-ingress-native-final.log`),
+including split physical batch recovery with actual durable permissions. The
+initial native test incorrectly treated partial batch progress as complete;
+its terminal per-cell check now awaits both actual cell outcomes. This correction
+did not weaken the terminal assertion. Live measurement of this next correction
+is still required;80ms is not yet established.

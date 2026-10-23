@@ -20,6 +20,8 @@ final class FrontierV3PedestrianPlanning {
     private static AutoCloseable binding;
     private static AutoCloseable continuationBinding;
     private static PedestrianPlanningWakeIndex continuations;
+    private static java.util.function.Supplier<PedestrianPlanningContinuations.Recovery> recoveryPlan;
+    private static java.util.concurrent.Future<PedestrianPlanningContinuations.Recovery> recovery;
     private static int deferredReady;
     private FrontierV3PedestrianPlanning() { }
 
@@ -47,10 +49,11 @@ final class FrontierV3PedestrianPlanning {
             owner = runtime; planner = next; workers = nextWorkers; binding = nextBinding;
             continuations = new PedestrianPlanningWakeIndex();
             continuationBinding = PedestrianPlanningContinuations.bind(continuations);
-            FrontierWorldProcessCatalog.restorePlanningWaits(FrontierWorldRuntimeDefinition.processRegistry(),
+            recoveryPlan = FrontierWorldProcessCatalog.preparePlanningWaits(FrontierWorldRuntimeDefinition.processRegistry(),
                     (FrontierWorldState) runtime.decodedState().orElseThrow(), runtime.executionView().orElseThrow());
         }
         if (owner != runtime) throw new IllegalStateException("pedestrian planning has a foreign runtime owner");
+        recoverWaits(runtime);
         continuations.releaseUnused(planner::discardUnobserved);
         long started = System.nanoTime();
         planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * slices,
@@ -58,6 +61,21 @@ final class FrontierV3PedestrianPlanning {
         continuations.changed(planner.drainChanges());
         admitReady(runtime, continuations);
         deferredReady = continuations.readyCount();
+    }
+    private static void recoverWaits(FrontierV3ServerRuntime<?, ?> runtime) {
+        if (recoveryPlan != null) {
+            var captured = recoveryPlan;
+            var submitted = runtime.prepareReadOnly(() -> FrontierWorldState.duringUnpublishedTransition(() ->
+                    io.farfrontier.palemirror.frontier.v3.model.ImmutablePlanningScope.within(captured)));
+            if (submitted.isPresent()) { recovery = submitted.orElseThrow(); recoveryPlan = null; }
+        }
+        if (recovery == null || !recovery.isDone()) return;
+        try { recovery.get().publish(runtime::retainsScheduledAction); recovery = null; }
+        catch (InterruptedException error) {
+            Thread.currentThread().interrupt(); throw new IllegalStateException("planning recovery interrupted", error);
+        } catch (java.util.concurrent.ExecutionException error) {
+            throw new IllegalStateException("planning recovery failed", error.getCause());
+        }
     }
     static void admitReady(FrontierV3ServerRuntime<?, ?> runtime, PedestrianPlanningWakeIndex index) {
         if (index.waitingCount() == 0 || runtime.awaitingCanonicalPredecessor()) return;
@@ -157,6 +175,8 @@ final class FrontierV3PedestrianPlanning {
     }
     static synchronized void forget(FrontierV3ServerRuntime<?, ?> runtime) {
         if (owner != runtime) return;
+        if (recovery != null) recovery.cancel(true);
+        recovery = null; recoveryPlan = null;
         try { continuationBinding.close(); binding.close(); }
         catch (Exception error) { throw new IllegalStateException("cannot release pedestrian planner", error); }
         finally { planner.close(); workers.shutdownNow(); workers = null; binding = null; continuationBinding = null; continuations = null; planner = null; owner = null; deferredReady = 0; }
