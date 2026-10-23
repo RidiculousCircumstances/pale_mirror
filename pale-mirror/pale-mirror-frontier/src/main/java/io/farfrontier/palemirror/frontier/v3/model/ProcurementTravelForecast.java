@@ -6,6 +6,11 @@ import io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionTiming;
 
 /** Quote cost/timing advice, never arrival coverage or route authority. No asynchronous cache dependency. */
 public final class ProcurementTravelForecast {
+    private record Query(SubjectId source, String item, GoodsParticipant buyer, TransportOrganization.Itinerary itinerary) { }
+    private record Endpoints(SubjectId source, SubjectId receiver, TransportOrganization.Itinerary itinerary) { }
+    private static final ImmutableInputView<BoundedValueMemo<Query, Optional<Estimate>>> QUOTES = new ImmutableInputView<>();
+    private static final ImmutableInputView<BoundedValueMemo<Endpoints, Estimate>> JOURNEYS = new ImmutableInputView<>();
+    private static final ImmutableInputView<List<TransportMission>> ORDERED = new ImmutableInputView<>();
     public record Estimate(long deliveryTicks, long labourTicks, long journeyTicks) { }
     static Optional<Estimate> read(FrontierWorldState state, GoodsTradeOrder offer, GoodsParticipant buyer) {
         return read(state, offer.containerId(), offer.itemKind(), buyer);
@@ -15,6 +20,11 @@ public final class ProcurementTravelForecast {
     }
     static Optional<Estimate> read(FrontierWorldState state, SubjectId source, String item, GoodsParticipant buyer,
                                    TransportOrganization.Itinerary itinerary) {
+        return QUOTES.get(List.of(state), () -> new BoundedValueMemo<Query, Optional<Estimate>>(256))
+                .get(new Query(source, item, buyer, itinerary), () -> select(state, source, item, buyer, itinerary));
+    }
+    private static Optional<Estimate> select(FrontierWorldState state, SubjectId source, String item, GoodsParticipant buyer,
+            TransportOrganization.Itinerary itinerary) {
         return GoodsParticipantStorage.containers(state, buyer, item).stream()
                 .filter(id -> GoodsTradeStateSupport.receivingCapacity(state, id, item, 1))
                 .map(id -> between(state, source, id, itinerary))
@@ -24,7 +34,14 @@ public final class ProcurementTravelForecast {
      * routes for every quotation; selected transport admission owns that proof. */
     public static Estimate between(FrontierWorldState state, SubjectId source, SubjectId receiver,
                                    TransportOrganization.Itinerary itinerary) {
-        for (var mission : state.shipments().missions().values().stream().sorted(Comparator.comparing(TransportMission::id)).toList()) {
+        return JOURNEYS.get(List.of(state), () -> new BoundedValueMemo<Endpoints, Estimate>(256))
+                .get(new Endpoints(source, receiver, itinerary), () -> calculate(state, source, receiver, itinerary));
+    }
+    private static Estimate calculate(FrontierWorldState state, SubjectId source, SubjectId receiver,
+            TransportOrganization.Itinerary itinerary) {
+        var ordered = ORDERED.get(List.of(state.shipments().missions()), () -> state.shipments().missions().values().stream()
+                .sorted(Comparator.comparing(TransportMission::id)).toList());
+        for (var mission : ordered) {
             if (!mission.sender().containerId().equals(source) || !mission.receiver().containerId().equals(receiver)
                     || mission.supplies().isEmpty() || mission.supplies().orElseThrow().needsReplan()
                     || !state.unitGroups().groups().containsKey(mission.groupId())) continue;

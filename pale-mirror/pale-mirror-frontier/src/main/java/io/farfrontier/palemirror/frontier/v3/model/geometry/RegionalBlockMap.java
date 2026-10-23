@@ -52,7 +52,7 @@ public final class RegionalBlockMap<V> extends AbstractMap<BlockPosition, V> {
     }
     /** Replace complete changed regions, including removal; preserve all other immutable parts. */
     public RegionalBlockMap<V> replace(Map<Region, Map<BlockPosition, V>> changes) {
-        var next = new HashMap<>(parts);
+        Map<Region, Part<V>> next = null;
         for (var entry : changes.entrySet()) {
             var region = Objects.requireNonNull(entry.getKey()); var values = entry.getValue();
             values.forEach((position, value) -> {
@@ -60,9 +60,10 @@ public final class RegionalBlockMap<V> extends AbstractMap<BlockPosition, V> {
                 if (!Region.at(position).equals(region)) throw new IllegalArgumentException("foreign geometry region");
             });
             if (values.equals(in(region))) continue;
+            if (next == null) next = new HashMap<>(parts);
             if (values.isEmpty()) next.remove(region); else next.put(region, new Part<>(values));
         }
-        return next.equals(parts) ? this : new RegionalBlockMap<>(next);
+        return next == null ? this : new RegionalBlockMap<>(next);
     }
     @Override public V get(Object key) { return key instanceof BlockPosition position ? in(Region.at(position)).get(position) : null; }
     @Override public boolean containsKey(Object key) { return get(key) != null; }

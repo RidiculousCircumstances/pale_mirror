@@ -33,6 +33,9 @@ class TransportFleetTest {
                         base.reducer(), new FrontierWorldStateCodec(), base.projectionMapper(), base.limits(),
                         java.util.List.of(), base.transactionCommitter()));
         var before = state;
+        var organizer = state.companies().goodsTrade().participants().participants().get(asset.homeSettlementId());
+        assertTrue(GoodsTransportOptions.forLoad(before, organizer, 12000, 1, 1).stream()
+                .anyMatch(option -> option.animal().filter(asset::equals).isPresent()));
         assertInstanceOf(CommandResult.Accepted.class, submit(engine, "mobile-prepare",
                 new PhysicalReplicaCustodyPayloads.ReferenceProjectionPrepared(asset.containerId(), 1, 0, "", "")));
         var prepared = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
@@ -43,6 +46,11 @@ class TransportFleetTest {
         assertFalse(ReferenceContainerCustody.hasOperationalCustody(prepared, asset.containerId()));
         assertEquals(java.util.Optional.of(asset.containerId()), ActorInventoryInteractionFences.pendingOwner(prepared, asset.actorId()));
         assertTrue(ActorInventoryInteractionFences.pending(prepared, asset.actorId()));
+        assertTrue(GoodsTransportOptions.forLoad(prepared, organizer, 12000, 1, 1).stream()
+                .noneMatch(option -> option.animal().filter(asset::equals).isPresent()),
+                "a cached economic offer cannot retain an asset across its new physical inventory fence");
+        assertTrue(GoodsTransportOptions.forLoad(before, organizer, 12000, 1, 1).stream()
+                .anyMatch(option -> option.animal().filter(asset::equals).isPresent()), "the original immutable branch remains valid");
         var courtesy = ActorSpatialCourtesy.assess(prepared, execution);
         assertFalse(courtesy.ready(), "local avoidance must honor a separately owned mobile inventory operation");
         assertEquals(asset.containerId(), courtesy.waiting().orElseThrow().dependencyOwner());
