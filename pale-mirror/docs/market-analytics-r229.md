@@ -93,3 +93,16 @@ revision102170/tick34919. Preserved for investigation; do not claim conflict-fre
 live acceptance. Earlier pilot attempts failed on an airborne visit coordinate
 (actual feet64 versus requested68) and rejected fast-forward during pending HOT
 work. Corrected scenario uses ground visits and ordinary observed time.
+
+The depot conflict has a static producer explanation: the fungible observation
+executor independently submitted FungibleStackBindingsReleased on CHECKPOINTED,
+which atomically released the reference scope before its owner confirmed an exact
+item return. Current canonical and observed hashes agreed; retained replica did
+not. Removed that second release producer. Reference release now checks canonical
+fingerprint before any layout release; domain release rejects stale images even
+through a direct command. Confirmed mutation closure remains the sole successor
+path. Focused34 domain/architecture +4adapter tests and guardrails/build PASS
+(build/r229-custody-fix-check.log), including returned exact tool beside bound
+fungibles, rejected stale release without mutation and successful explicit closure.
+Existing conflicted world is retained as evidence; no automatic reclassification
+of an already conflicted physical image is introduced.

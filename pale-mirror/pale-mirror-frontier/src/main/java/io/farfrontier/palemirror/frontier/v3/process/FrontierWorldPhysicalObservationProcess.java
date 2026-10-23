@@ -339,6 +339,7 @@ public final class FrontierWorldPhysicalObservationProcess {
                         || containerLease.authorityEpoch() != released.authorityEpoch()) {
                     throw new IllegalArgumentException("fungible container release requires its exact reference custody epoch");
                 }
+                ReferenceContainerCustody.requireUnchangedRelease(state, container.containerId());
                 if (containerLease.status() == PhysicalCustodyLeaseStatus.ACQUIRED) {
                     var checkpoint = new PhysicalReplicaCustodyPayloads.CustodyCheckpointed(containerLease.scopeId(),
                             containerLease.authorityEpoch(), containerLease.expectedCanonicalRevision(), containerLease.expectedReplicaRevision());

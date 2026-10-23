@@ -7,7 +7,6 @@ import io.farfrontier.palemirror.frontier.v3.model.ContainerSurfaceStatus;
 import io.farfrontier.palemirror.frontier.v3.model.CustodyAccount;
 import io.farfrontier.palemirror.frontier.v3.model.FungiblePhysicalObservation;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleResourceLedger;
-import io.farfrontier.palemirror.frontier.v3.model.FungibleStackBindingsReleased;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleStackLayoutObserved;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalCustodyLease;
@@ -51,10 +50,8 @@ final class FrontierV3FungibleResourceObservationExecutor {
             var physical = FrontierV3PhysicalContainer.loaded(level, state, custody.containerId()).orElse(null);
             if (physical == null || !level.shouldTickBlocksAt(physical.position())) continue;
             PhysicalCustodyLease lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(custody.containerId()));
-            if (lease != null && lease.status() == PhysicalCustodyLeaseStatus.CHECKPOINTED) {
-                release(runtime, account, lease);
-                return;
-            }
+            // The reference owner closes both layout and custody after checking the whole
+            // physical image, including exact equipment. A layout observer cannot release it.
             if (ReferenceContainerCustody.isReferenceContainer(state, custody.containerId())
                     && (lease == null || !lease.live() || lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED)) continue;
             long epoch = lease == null ? nextEpoch(state, custody.containerId()) : lease.authorityEpoch();
@@ -104,17 +101,6 @@ final class FrontierV3FungibleResourceObservationExecutor {
         return result instanceof CommandResult.Accepted;
     }
 
-
-    private static void release(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, CustodyAccount account, PhysicalCustodyLease lease) {
-        FungibleResourceLedger resources = runtime.decodedState().orElseThrow().inventory().fungibleResources();
-        List<PhysicalStackBinding> current = resources.bindings().values().stream().filter(binding -> binding.accountId().equals(account.id())).toList();
-        if (current.isEmpty()) return;
-        if (current.stream().anyMatch(binding -> binding.authorityEpoch() != lease.authorityEpoch())) {
-            throw new IllegalStateException("fungible resource binding has a stale reference custody epoch");
-        }
-        FrontierV3CommandSubmission.submit(runtime, "fungible-release", account.id().value(),
-                new FungibleStackBindingsReleased(account.id(), lease.authorityEpoch()));
-    }
 
     private static long nextEpoch(FrontierWorldState state, SubjectId containerId) {
         return state.replicaCustody().custodyByScope().values().stream().filter(lease -> lease.objectId().equals(containerId))

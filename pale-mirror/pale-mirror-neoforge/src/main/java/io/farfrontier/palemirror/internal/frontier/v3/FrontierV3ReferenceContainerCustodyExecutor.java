@@ -567,6 +567,9 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
 
     private static boolean release(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, PhysicalCustodyLease lease) {
         FrontierWorldState state = runtime.decodedState().orElseThrow(() -> new IllegalStateException("v3 runtime is inactive"));
+        PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(lease.objectId());
+        if (requiresLoadedMutationConfirmation(lease, replica,
+                ReferenceContainerCustody.canonicalFingerprint(state, lease.objectId()))) return false;
         List<PhysicalStackBinding> bound = state.inventory().fungibleResources().bindings().values().stream()
                 .filter(binding -> state.inventory().fungibleResources().accounts().get(binding.accountId()).custody() instanceof ResourceCustody.Container container
                         && container.containerId().equals(lease.objectId())).toList();
@@ -581,9 +584,6 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
             return submit(runtime, "fungible-release", lease.objectId(), lease.authorityEpoch(),
                     new FungibleStackBindingsReleased(accountId, lease.authorityEpoch()));
         }
-        PhysicalReplicaRecord replica = state.replicaCustody().replicas().get(lease.objectId());
-        if (requiresLoadedMutationConfirmation(lease, replica,
-                ReferenceContainerCustody.canonicalFingerprint(state, lease.objectId()))) return false;
         return submit(runtime, "release-renew", lease.objectId(), lease.authorityEpoch(), new CustodyReleased(lease.scopeId(),
                 lease.authorityEpoch(), lease.expectedCanonicalRevision(), lease.expectedReplicaRevision()));
     }

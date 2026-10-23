@@ -130,6 +130,7 @@ public final class ReferenceContainerCustody {
     /** Releases a checkpointed scope together with its unstarted exact production actuators. */
     public static FrontierWorldState release(FrontierWorldState state, PhysicalReplicaCustodyPayloads.CustodyReleased transition) {
         var lease = state.replicaCustody().custodyByScope().get(transition.scopeId());
+        if (lease != null) requireUnchangedRelease(state, lease.objectId());
         var custody = state.replicaCustody().release(transition.scopeId(), transition.expectedEpoch(),
                 transition.expectedCanonicalRevision(), transition.expectedReplicaRevision());
         if (lease == null) throw new IllegalArgumentException("container release has no current custody");
@@ -138,6 +139,14 @@ public final class ReferenceContainerCustody {
         }
         var released = ProductionTransformationStateSupport.releasePreparedForContainer(state, lease.objectId());
         return released.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody));
+    }
+
+    /** An ordinary release cannot stand in for a confirmed physical mutation. */
+    public static void requireUnchangedRelease(FrontierWorldState state, SubjectId containerId) {
+        var replica = state.replicaCustody().replicas().get(containerId);
+        if (replica == null || !replica.fingerprint().equals(canonicalFingerprint(state, containerId))) {
+            throw new IllegalArgumentException("container release requires confirmation of its changed physical image: " + containerId);
+        }
     }
 
     /**

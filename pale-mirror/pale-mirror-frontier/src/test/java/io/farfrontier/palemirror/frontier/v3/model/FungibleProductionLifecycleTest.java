@@ -29,6 +29,35 @@ class FungibleProductionLifecycleTest {
     }
 
     @Test
+    void exactItemReturnCannotReleaseStaleReplicaThroughFungibleLayout() {
+        Fixture f = fixture();
+        var inventory = f.state().inventory();
+        var returned = new ExactItemStack(new SubjectId("item:returned-tool"), f.job().settlementId(),
+                "minecraft:stone_hoe", 1, new InventoryCustody.ContainerSlot(f.depot(),
+                inventory.availableSlots(f.depot()).getFirst()));
+        var changed = f.state().withChanges(FrontierWorldStateUpdate.begin().inventory(inventory.store(returned)));
+        var world = changed.bootstrap().worldId();
+        var base = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        var config = new FrontierEngineConfiguration<>(world, changed, SimInstant.ZERO,
+                base.commandPlanner(), base.scheduledPlanner(), base.reducer(), new FrontierWorldStateCodec(),
+                base.projectionMapper(), base.limits(), List.of(), base.transactionCommitter());
+        var engine = FrontierEngines.create(config);
+        var before = engine.checkpoint();
+        var rejection = assertInstanceOf(CommandResult.Rejected.class,
+                submit(engine, "stale-release", new FungibleStackBindingsReleased(f.account(), 1L)));
+        assertTrue(rejection.rejection().toString().contains("changed physical image"));
+        assertArrayEquals(before.canonicalState(), engine.checkpoint().canonicalState());
+        assertInstanceOf(CommandResult.Accepted.class, submit(engine, "confirmed-return",
+                ReferenceContainerCustody.confirmedMutationTransition(changed, f.depot(), 2L)));
+        var closed = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
+        assertEquals(returned, closed.inventory().items().get(returned.id()));
+        assertEquals(ReferenceContainerCustody.canonicalFingerprint(closed, f.depot()),
+                closed.replicaCustody().replicas().get(f.depot()).fingerprint());
+        assertTrue(closed.inventory().fungibleResources().bindings().isEmpty());
+        assertEquals(closed, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(closed)));
+    }
+
+    @Test
     void unstartedEffectReleaseRestoresOneColdContinuationAndRejectsItsLateActuatorAfterRecovery() {
         assertReleasedContinuation(false);
     }
