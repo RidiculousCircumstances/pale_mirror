@@ -118,6 +118,20 @@ $("content").addEventListener("click", (event) => {
     .find((b) => b.dataset.table === key && Number(b.dataset.column) === column)
     ?.focus({ preventScroll: true });
 });
+// One delegated handler for bounded history; chart inspection never queries the server.
+$("content").addEventListener("pointermove", event => {
+  const sample = event.target.closest("[data-chart-tip]");
+  for (const tip of $("content").querySelectorAll(".chart-tooltip")) tip.hidden = true;
+  if (!sample) return;
+  const chart = sample.closest(".time-chart"), tip = chart.querySelector(".chart-tooltip");
+  tip.textContent = sample.dataset.chartTip; tip.hidden = false;
+  const box = chart.getBoundingClientRect();
+  tip.style.left = `${Math.max(0, Math.min(event.clientX-box.left+12, box.width-tip.offsetWidth))}px`;
+  tip.style.top = `${Math.max(0, event.clientY-box.top-tip.offsetHeight-12)}px`;
+});
+$("content").addEventListener("pointerleave", () => {
+  for (const tip of $("content").querySelectorAll(".chart-tooltip")) tip.hidden = true;
+});
 const name = (id) =>
   data?.latest?.settlements?.find((s) => s.id === id)?.name || id;
 const filtered = (rows, townKey = "town") =>
@@ -132,6 +146,7 @@ function chart(
   points = data.history || [],
   formatTime = n,
   axis = "тики",
+  unit = "",
 ) {
   const colors = [
     "#83d5b2",
@@ -148,7 +163,20 @@ function chart(
   let max = 1;
   for (const s of series)
     for (const p of points) max = Math.max(max, s.value(p));
-  return `<h2>${esc(title)}</h2><p class="muted">Максимум шкалы ${n(max)} · ${axis} ${formatTime(a)}–${formatTime(b)}. Между снимками состояние неизвестно.</p><svg viewBox="0 0 1000 230" preserveAspectRatio="none">${series.map((s, i) => `<polyline fill="none" stroke="${colors[i % colors.length]}" stroke-width="2" points="${points.map((p) => `${20 + (960 * (p.tick - a)) / Math.max(1, b - a)},${210 - (190 * s.value(p)) / max}`).join(" ")}"/>`).join("")}</svg><div class="legend">${series.map((s, i) => `<span style="color:${colors[i % colors.length]}">${esc(s.label)}</span>`).join("")}</div>`;
+  const x = (p) => 64 + 916 * (p.tick - a) / Math.max(1, b - a);
+  const y = (value) => 198 - 174 * value / max;
+  const ticks = Array.from({length: 5}, (_, i) => max * i / 4);
+  const grid = ticks.map(value => `<line x1="64" x2="980" y1="${y(value)}" y2="${y(value)}" stroke="#30464f"/><text x="55" y="${y(value)}" text-anchor="end" dominant-baseline="middle">${n(value)}</text>`).join("");
+  const labels = [a, (a+b)/2, b].map((value, i) => `<text x="${64+458*i}" y="221" text-anchor="${i===0?'start':i===2?'end':'middle'}">${esc(formatTime(value))}</text>`).join("");
+  const lines = series.map((s, i) => `<polyline fill="none" stroke="${colors[i % colors.length]}" stroke-width="2" points="${points.map(p => `${x(p)},${y(s.value(p))}`).join(" ")}"/>`).join("");
+  const hits = points.map((p, i) => {
+    const left = i ? (x(points[i-1])+x(p))/2 : 64;
+    const right = i+1<points.length ? (x(p)+x(points[i+1]))/2 : 980;
+    const tick = axis === "время" ? p.simulationTick : p.tick;
+    const info = `${axis === "время" ? formatTime(p.tick)+" · " : ""}Тик ${tick == null ? "—" : n(tick)}\n${series.map(s => `${s.label}: ${n(s.value(p))}${unit ? " "+unit : ""}`).join("\n")}`;
+    return `<rect class="chart-sample" x="${left}" y="24" width="${Math.max(0,right-left)}" height="174" fill="transparent" data-chart-tip="${esc(info)}"/>`;
+  }).join("");
+  return `<h2>${esc(title)}</h2><p class="muted">${axis} ${formatTime(a)}–${formatTime(b)}. Между снимками состояние неизвестно.</p><div class="time-chart"><svg viewBox="0 0 1000 230" preserveAspectRatio="none" role="img" aria-label="${esc(title)}"><g class="chart-scale"><text x="9" y="15">${esc(unit)}</text>${grid}${labels}</g>${lines}${hits}</svg><div class="chart-tooltip" role="tooltip" hidden></div></div><div class="legend">${series.map((s, i) => `<span style="color:${colors[i % colors.length]}">${esc(s.label)}</span>`).join("")}</div>`;
 }
 function setContent(html) {
   const positions = new Map(
@@ -527,9 +555,10 @@ function performanceView() {
       ],
       value.history
         .filter((p) => p.meanMs != null)
-        .map((p) => ({ ...p, tick: p.at })),
+        .map((p) => ({ ...p, simulationTick: p.tick, tick: p.at })),
       (time) => new Date(time * 1000).toLocaleTimeString("ru-RU"),
       "время",
+      "мс",
     ) +
     '<p class="muted">Паузы сбора не доказывают отсутствие пиков.</p>'
   );
