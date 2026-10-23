@@ -124,4 +124,47 @@ Existing expedition/trade/harvest/cultivation checks and713 NeoForge v3 checks
 pass; the native economy/physical-resource slice passes53/53. Guardrails and
 packaged-JAR verification pass. This is affected-path verification, not a new
 complete repository test-suite pass.
-Live login/chunk and end-to-end shipment checks remain pending at this checkpoint.
+## R227 deployment and bounded live verification
+
+Implementation ba0abc0f deployed from clean detached `pm-r227-release`.
+World `frontier-v3-r227-provisions-20261023`, seed126/r24/schema300. R226 world
+and snapshot730869 retained for diagnosis; ordinary saved shutdown before reset.
+Artifact SHA512:
+`1c16735b118732d70b5eed400cb7f8c8b7a404c45d405306db3803abececfbcc7d0c8e4499e897c4a8fd74cf2388da77db18b3ace2279ff62725351affb4f39c`.
+Clean-ref guardrails/JAR/package, pack validation and post-start identity passed.
+
+Full-pack native pilot,20FPS/private Xvfb, no injected resources or money:
+
+- `live-settlement-loading`, run a820455f-8cf3-436a-bf29-18d819821e61:
+  first Clearwater target1.199s, repeat0.299s. Spectator target/packet readiness,
+  NOT HOT actors or full-scene rendering. Immediate frames still had mesh holes.
+- `live-settlement-ingress-render`, run
+  59341309-834c-4be4-8002-04d23f993d38: actual HOT Clearwater/Ironmeadow/Southgate
+  visits0.198/1.100/0.600s; three inspected frames after5000ms client wait show
+  ground/roads/buildings without holes in those views. Not every scene/process
+  or a mature-world latency guarantee. Client disconnected/stopped afterward.
+- Relative6000-tick advance from2782 completed exactly at8782, no failed target.
+  At9200 no pending fast-forward, route queue0, ready-event lag0; recent PM turn
+  mean7.67ms, max308.39ms over64 samples. Startup global maximum1.476s remains;
+  no `Can't keep up` or quarantine during these checks. This is PM turn time,
+  not a claimed whole-server TPS measurement or absence of all spikes.
+
+At snapshot11402 all347 residents were nourished, but no admitted trade contract
+or completed live shipment had yet appeared. Separate-store provision selection,
+actual COLD withdrawal/stock conservation and codec recovery are covered by the
+focused domain test; full native separate-store commercial delivery is NOT
+claimed. Fresh-world health does not establish long-run economic solvency or
+explain away R226 fuel/cash starvation. Receipts: build/r227-live-loading.json,
+r227-live-hot.json, r227-performance-cold-completed.json, r227-economy-final.txt;
+profiles/r227-login-hot.jfr. Old/new profiles have different world ages; the
+controlled same-snapshot comparison above is the performance regression evidence.
+
+Ordinary same-world save/stop/restart also succeeded: restart1792730060,
+wrapperPID2257302, exact artifact verification PASS. At11793 all retained required,
+scene, inventory and replica-custody conflicts0; no incident. At11790 pending
+fast-forward0, route waiting0 and ready-event lag0. Recovery has a distinct2.35s
+startup keep-up warning (PM maximum2.338s); recent64 PM turns averaged11.08ms,
+maximum87.50ms. Therefore this release does NOT claim elimination of startup
+peaks. `build/r227-performance-recovery.json` retains the measurement. The first
+verification attempt preceded the listening socket and was retried after the
+ordinary ready record; it was not a runtime crash or silent verifier bypass.
