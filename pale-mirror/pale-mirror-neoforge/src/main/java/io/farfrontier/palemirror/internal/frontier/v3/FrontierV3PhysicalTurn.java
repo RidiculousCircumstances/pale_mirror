@@ -15,6 +15,7 @@ final class FrontierV3PhysicalTurn {
      */
     static void beginRecovery(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         FrontierV3PhysicalExecutors.registry();
+        FrontierV3SceneBehaviorRegistry.registry();
         FrontierV3ResourceSiteExecutor.beginRecovery(level, runtime);
         FrontierV3PlayerCustodyRecovery.beginRecovery(runtime);
     }

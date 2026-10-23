@@ -78,6 +78,9 @@ final class FrontierV3SceneBehaviorRegistry {
         this.ordered = List.copyOf(registrations);
     }
 
+    /** Resolve and validate providers at service composition, before the first gameplay turn. */
+    static FrontierV3SceneBehaviorRegistry registry() { return CURRENT; }
+
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         CURRENT.tickAll(level, runtime);
     }

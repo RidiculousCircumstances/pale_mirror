@@ -655,3 +655,15 @@ cache was already thread-local. No market limits, prices, event timing or work
 selection policy are changed. No new timing tests. Focused semantic validation
 PASS, including actual mixed-trip loading, settlement and return after kernel
 recovery; guardrails PASS (r239v-gates.log). Live throughput measurements pending.
+
+R239v live pilot1346bfc2-fffe-4503-ad9a-5d398fbf9a68 passed both visits and retained
+incident assertions, no new quarantine. Throughput monitor20samples/15s: initial
+COLD debt120→0, then HOT debt rose to645 and subsequent COLD fluctuated630–865
+(final774). This does NOT establish sustained realtime throughput. No live client
+remains. JFR stopped before verification of the next change.
+A120.000566ms startup tick (sample143,04:16:08.028+05) contained106.37ms scenes;
+JFR proves deferred SceneBehaviorRegistry class initialization plus first helper
+loading. R239w resolves that closed provider registry during existing recovery
+composition, before ordinary ticks. No scene effects, fake ticks or hidden work
+are executed to initialize it. Existing physical-executor/scene-registration
+checks andguardrails PASS (r239w-gates.log). Further live measurement required.
