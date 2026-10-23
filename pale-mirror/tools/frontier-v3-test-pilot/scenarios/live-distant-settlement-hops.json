@@ -1,0 +1,212 @@
+{
+  "schema": 1,
+  "id": "live_distant_settlement_hops",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode spectator"
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": 440,
+        "y": 78,
+        "z": 0
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "first_visibility",
+      "id": "27,0",
+      "expect": {
+        "presentationReady": true,
+        "dynamicReady": true
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -600,
+        "y": 78,
+        "z": 0
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "first_visibility",
+      "id": "-38,0",
+      "expect": {
+        "presentationReady": true,
+        "dynamicReady": true
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -1480,
+        "y": 78,
+        "z": -1360
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "first_visibility",
+      "id": "-93,-85",
+      "expect": {
+        "presentationReady": true,
+        "dynamicReady": true
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": 1600,
+        "y": 78,
+        "z": 1480
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "first_visibility",
+      "id": "100,92",
+      "expect": {
+        "presentationReady": true,
+        "dynamicReady": true
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -600,
+        "y": 78,
+        "z": -1360
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "first_visibility",
+      "id": "-38,-85",
+      "expect": {
+        "presentationReady": true,
+        "dynamicReady": true
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": 440,
+        "y": 78,
+        "z": 0
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "first_visibility",
+      "id": "27,0",
+      "expect": {
+        "presentationReady": true,
+        "dynamicReady": true
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 25,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    }
+  ],
+  "frames": []
+}

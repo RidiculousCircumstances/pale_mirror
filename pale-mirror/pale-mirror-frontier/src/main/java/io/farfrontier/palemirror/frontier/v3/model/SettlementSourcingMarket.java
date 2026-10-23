@@ -5,6 +5,7 @@ import java.util.*;
 
 /** Canonical economic facts -> pure sourcing advice; no recursive participant views or ledger writes. */
 final class SettlementSourcingMarket {
+    private static final ImmutableInputView<List<GoodsTradeOrder>> ORDERED = new ImmutableInputView<>();
     static SourcingMarket read(FrontierWorldState state, GoodsParticipant buyer, List<SupplyPlanner.Process> capacities, long now) {
         if (now < 0) throw new IllegalArgumentException("negative sourcing instant");
         var tradeRules = state.bootstrap().ruleset().goodsTrade();
@@ -18,8 +19,9 @@ final class SettlementSourcingMarket {
                     .orElse(commodity.minimumSellPrice()).raw());
         });
         var offers = new TreeMap<String, SourcingMarket.Offer>();
-        for (var order : trade.orders().values().stream().sorted(Comparator.comparing(GoodsTradeOrder::unitPriceLimit)
-                .thenComparing(GoodsTradeOrder::id)).toList()) {
+        var ordered = ORDERED.get(List.of(trade.orders()), () -> trade.orders().values().stream()
+                .sorted(Comparator.comparing(GoodsTradeOrder::unitPriceLimit).thenComparing(GoodsTradeOrder::id)).toList());
+        for (var order : ordered) {
             if (order.side() != GoodsTradeOrder.Side.SELL || !order.counterparty().equals(buyer.party())
                     || order.expiresAtTick() <= now || order.availableQuantity() == 0 || !references.containsKey(order.itemKind())
                     || buyer.known().stream().noneMatch(known -> known.party().equals(order.party()))) continue;

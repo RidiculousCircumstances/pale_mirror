@@ -7,13 +7,18 @@ import java.util.function.Predicate;
 /** Shared storage admission. Future-demand ownership is declared by the composition, not discovered here. */
 final class ContainerStorageAdmission {
     private ContainerStorageAdmission() { }
+    private record IncomingQuery(SubjectId container, Optional<SubjectId> completing) { }
+    private static final ImmutableKeyedInputView<IncomingQuery, ContainerIncomingStock> INCOMING = new ImmutableKeyedInputView<>(512);
 
     static ContainerIncomingStock inbound(FrontierWorldState state, SubjectId container, Optional<SubjectId> completing) {
-        // Prove the completion's declared owner even when its entire demand is now slot-backed.
-        ContainerInboundCapacity.incoming(ContainerStorageDemandSources.demands(state), container, completing);
-        var uncovered = ContainerPhysicalReservations.uncoveredDemands(state).stream()
-                .filter(demand -> completing.filter(demand.owner()::equals).isEmpty()).toList();
-        return ContainerInboundCapacity.incoming(uncovered, container, Optional.empty());
+        var demands = ContainerStorageDemandSources.demands(state);
+        var uncovered = ContainerPhysicalReservations.uncoveredDemands(state);
+        return INCOMING.get(state.bootstrap(), new IncomingQuery(container, completing), List.of(demands, uncovered), () -> {
+            // Prove the completion's declared owner even when its entire demand is slot-backed.
+            ContainerInboundCapacity.incoming(demands, container, completing);
+            return ContainerInboundCapacity.incoming(uncovered.stream()
+                    .filter(demand -> completing.filter(demand.owner()::equals).isEmpty()).toList(), container, Optional.empty());
+        });
     }
     static boolean receive(FrontierWorldState state, SubjectId container, String kind, int quantity, Optional<SubjectId> completing) {
         var record = state.inventory().containers().get(container);

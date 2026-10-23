@@ -6,7 +6,15 @@ import java.util.*;
 
 /** Equipment policy consumes the common delivered-input/labour valuation, never a second price model. */
 final class EquipmentRecipeValuation {
+    private record Query(SubjectId home, long tick) { }
+    private static final ImmutableInputView<BoundedValueMemo<Query, SourcingMarket>> VIEWS = new ImmutableInputView<>();
     static SourcingMarket read(FrontierWorldState state, SubjectId home, long tick) {
+        // Requests and acquisition consume identical cost facts. Exact state and
+        // instant retain offer expiry and draft stock/funding invalidation.
+        return VIEWS.get(List.of(state), () -> new BoundedValueMemo<Query, SourcingMarket>(256))
+                .get(new Query(home, tick), () -> project(state, home, tick));
+    }
+    private static SourcingMarket project(FrontierWorldState state, SubjectId home, long tick) {
         var catalog = state.bootstrap().ruleset().production();
         var window = new SupplyPlanningWindow(state.humanPopulation().schedule(home).dayTicks());
         var stocks = new TreeMap<String, SupplyPlanner.Stock>();
