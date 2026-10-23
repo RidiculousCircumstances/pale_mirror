@@ -72,8 +72,20 @@ final class FrontierV3ExtractionExecutor {
                 return false;
             }
         }
+        // A knowledge fence may need an asynchronous WAL acknowledgement. It must
+        // finish BEFORE the common journal consumes the single native attempt.
+        // Resume through the owner so neither the captured job nor body permission
+        // can outlive a competing canonical transition.
+        if (step instanceof ExtractionPhysicalStep.BlockWork block
+                && !FrontierV3ManagedBlockWrites.preparePlannedWrites(level, runtime, List.of(
+                    new FrontierV3ManagedBlockWrites.PlannedWrite(new BlockPos(block.extraction().target().x(),
+                            block.extraction().target().y(), block.extraction().target().z()),
+                            FrontierV3MinecraftBlockExtraction.block(block.extraction().definition().after()))), () -> {
+                    var current = runtime.decodedState().orElseThrow();
+                    if (job.equals(current.extractionSites().work().get(job.id()))) progress(level, runtime, current, job);
+                })) return false;
         try {
-            var effect = apply(level, state, job, step, worker, actuation);
+            var effect = apply(level, runtime.decodedState().orElseThrow(), job, step, worker, actuation);
             if (effect == null) return false;
             var retainedStep = step;
             return FrontierV3OperationConfirmation.submit(level, runtime, effect.ticket(), effect.receipt(), () -> {

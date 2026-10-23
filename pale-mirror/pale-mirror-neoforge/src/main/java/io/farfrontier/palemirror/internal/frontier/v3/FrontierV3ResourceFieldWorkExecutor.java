@@ -133,8 +133,18 @@ final class FrontierV3ResourceFieldWorkExecutor {
                     + ";actualCause=" + pending.causationId() + ";cell=" + id.value());
         var review = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, id, cause(job, cycle, id));
         if (review.disposition() == FrontierV3ResourceFieldObservation.Disposition.UNLOADED) return Result.pending();
-        var operation = FrontierV3FieldWorkOperation.apply(level, state, lease, job, worker, cell, pending,
-                extractionPort(level, runtime, state, lease, worker, job));
+        var writes = pending.transition().steps().stream().map(step -> new FrontierV3ManagedBlockWrites.PlannedWrite(
+                minecraft(step.part() == ResourceFieldCellTransition.Part.SOIL ? cell.soil().support() : cell.crop()), block(step))).toList();
+        if (!FrontierV3ManagedBlockWrites.preparePlannedWrites(level, runtime, writes, () -> {
+            var current = runtime.decodedState().orElseThrow();
+            var site = current.resourceSites().sites().get(job.siteId());
+            if (site != null && job.equals(site.harvestJobs().get(job.id()))
+                    && worker.isAlive() && FrontierV3ActorHandObservation.ownsCurrentHarvest(current, lease, job))
+                advance(level, runtime, current, lease, job, worker);
+        })) return Result.pending();
+        var current = runtime.decodedState().orElseThrow();
+        var operation = FrontierV3FieldWorkOperation.apply(level, current, lease, job, worker, cell, pending,
+                extractionPort(level, runtime, current, lease, worker, job));
         if (operation.status() == FrontierV3MinecraftOperation.Status.WAITING_DURABILITY) return Result.pending();
         if (!operation.complete()) return Result.conflict("cell-operation-" + operation.status().name().toLowerCase(java.util.Locale.ROOT));
         // The common receipt, not a matching block/count, authorizes advancement of
