@@ -10,14 +10,16 @@ public record AmbientBodyConfirmed(SubjectId actorId, long leaseRevision, Bounda
                                    io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId bodyId,
                                    java.util.Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteReceipt> placementRoute) implements FrontierPayload {
     public enum Boundary {
-        ADMISSION(0), SERVICE_OCCUPANCY(1);
+        ADMISSION(0), SERVICE_OCCUPANCY(1), INSPECTED_BODY_ADMISSION(2);
         private final int tag;
         Boundary(int tag) { this.tag = tag; }
         public int wireTag() { return tag; }
+        public boolean admitsScope() { return this != SERVICE_OCCUPANCY; }
         public static Boundary fromWireTag(int tag) {
             return switch (tag) {
                 case 0 -> ADMISSION;
                 case 1 -> SERVICE_OCCUPANCY;
+                case 2 -> INSPECTED_BODY_ADMISSION;
                 default -> throw new IllegalArgumentException("unknown ambient body boundary");
             };
         }
@@ -27,8 +29,8 @@ public record AmbientBodyConfirmed(SubjectId actorId, long leaseRevision, Bounda
         Objects.requireNonNull(previousBody); Objects.requireNonNull(observedBody);
         Objects.requireNonNull(bodyId);
         Objects.requireNonNull(placementRoute);
-        if (boundary == Boundary.SERVICE_OCCUPANCY && placementRoute.isPresent())
-            throw new IllegalArgumentException("service occupancy is an observation, not placement authority");
+        if (boundary != Boundary.ADMISSION && placementRoute.isPresent())
+            throw new IllegalArgumentException("inspected body acknowledgement is not placement authority");
         if (!bodyId.actorId().equals(actorId)) throw new IllegalArgumentException("ambient acknowledgement has a foreign physical actor");
         if (leaseRevision < 1) throw new IllegalArgumentException("body confirmation needs an exact lease revision");
     }

@@ -36,6 +36,26 @@ class AmbientBodyConfirmationProcessTest {
         assertEquals(recovered.humanPopulation().meals(), resumed.humanPopulation().meals());
         assertEquals(recovered.inventory(), resumed.inventory());
     }
+    @Test void inspectedLivingBodyMaySettleOutsidePlacementZoneWithoutInventingArrival() throws Exception {
+        Fixture f = fixture();
+        var lease = f.state().ambientLeases().get(f.medic());
+        var start = lease.handoffBody().supportingSurface();
+        var displaced = new SurfaceAnchor(new BlockPosition(start.x() + 24, start.y() - 1, start.z())).standingBody();
+        var evidence = new AmbientBodyConfirmed(f.medic(), lease.revision(),
+                AmbientBodyConfirmed.Boundary.INSPECTED_BODY_ADMISSION, lease.handoffBody(), displaced,
+                ActorBodyAuthority.current(f.state(), f.medic()), java.util.Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> AmbientBodyConfirmationProcess.reduce(f.state(), evidence),
+                "a scope cannot fabricate its body's displacement");
+        var inspected = ModeledActorBodyFacts.inspected(f.state(), f.medic(), displaced);
+        var codecs = FrontierWorldPayloadCodecs.create();
+        var decoded = (AmbientBodyConfirmed) codecs.decode(evidence.type(), codecs.encode(evidence));
+        var next = AmbientBodyConfirmationProcess.reduce(inspected, decoded);
+        assertSame(inspected.actorLocations(), next.actorLocations());
+        assertEquals(AmbientLeaseStatus.HOT, next.ambientLeases().get(f.medic()).status());
+        assertEquals(ResidentMeal.Phase.MOVE, next.humanPopulation().meals().get(f.medic()).phase());
+        assertEquals(inspected.inventory(), next.inventory());
+        assertThrows(IllegalArgumentException.class, () -> AmbientBodyConfirmationProcess.reduce(next, decoded));
+    }
     private record Fixture(FrontierWorldState state, SubjectId security, SubjectId medic, SettlementDepotServicePort port) { }
     private Fixture fixture() {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:body-admission"), 20260918065L));

@@ -116,7 +116,7 @@ public final class AmbientActorProcess {
             case AmbientBodyConfirmed confirmed -> {
                 if (!subject.equals(owner(state, confirmed.actorId()))) throw new IllegalArgumentException("body confirmation lacks its canonical owner");
                 FrontierWorldState admitted = AmbientBodyConfirmationProcess.reduce(state, confirmed);
-                yield confirmed.boundary() == AmbientBodyConfirmed.Boundary.ADMISSION
+                yield confirmed.boundary().admitsScope()
                         ? refreshHotPurpose(admitted, confirmed.actorId(), instant.ticks()) : admitted;
             }
             case AmbientLeasePrepared prepared -> reduce(state, subject, instant, prepared);

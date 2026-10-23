@@ -54,4 +54,33 @@ Expanded NeoForge tests exposed an unchanged baseline failure in
 FrontierFileStoreTest: its synthetic container did not exist in world inventory.
 It is now an actual declared depot with a matching observed fingerprint; the WAL
 recovery/release obligation remains tested. No production validation was weakened.
-Native live receipts and final deployment identity are appended after execution.
+Domain market/Goods/player-edit/inventory slice: 124 tests passed. NeoForge broad
+slice: 822 passed and the baseline fixture failure above; the repaired persistence/
+click/operation slice subsequently passed all 40 tests. Guardrails and packaged
+build passed. This is affected-boundary verification, not a new full native gate.
+
+## Live follow-up: physical body admission
+
+Build76edd6883 was deployed to the retained R229 world. The initial native visit
+used the chest height as the nearby player's floor height; actual feet were one
+block lower. Correcting the scenario offset resolved that fixture error.
+The next run successfully shift-took a pickaxe, then the runtime quarantined in
+AmbientPlacementPolicy.requireServicePoint via AmbientHotAdmission.
+
+Static cause: the common body controller already owns physical insertion and
+independent pose observation, including vertical settling. Ambient admission
+nevertheless reselected a placement route from the historical lease pose to the
+already existing body's observed pose. WORK service placement requires a declared
+service zone, which a settled/pushed body need not occupy. This conflates creation
+permission with activity-scope admission and can quarantine unrelated interaction.
+
+INSPECTED_BODY_ADMISSION is an explicit acknowledgement of a current RUNNING body,
+not relocation permission. Its actor/epoch/observed pose must match the independent
+body owner; stale leases and invented positions remain rejected. The adapter first
+inspects the body, then admits the scope without a second birthplace/path search.
+Fresh body placement keeps its existing pre-insertion geometric/permission checks.
+The retained placement-proof event remains readable; the new boundary uses tag2.
+Meal admission still reapproaches if its body is away from the service point; it
+cannot award taking/consumption by acknowledgement. Regression covers independent
+observation, displaced pose, codec, no resource transfer and repeated admission.
+Final live receipts are recorded after the follow-up deployment.

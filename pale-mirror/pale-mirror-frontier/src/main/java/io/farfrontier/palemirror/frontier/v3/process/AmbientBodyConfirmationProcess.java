@@ -16,16 +16,20 @@ public final class AmbientBodyConfirmationProcess {
                 || ActorBodyAuthority.require(state, evidence.bodyId()).phase() != FencedRecoveryPhase.RUNNING)
             throw new IllegalArgumentException("scope acknowledgement lacks its independently inspected body or lease epoch");
         FrontierWorldStateSupport.requirePosition(state.bootstrap().bounds(), evidence.observedBody().supportingSurface().support());
-        if (evidence.boundary() == AmbientBodyConfirmed.Boundary.ADMISSION) {
+        if (evidence.boundary().admitsScope()) {
             if (lease.status() != AmbientLeaseStatus.PREPARED || !lease.handoffBody().equals(evidence.previousBody()))
                 throw new IllegalArgumentException("body admission is outside its declared prepared placement zone");
-            AmbientPlacementPolicy.requireSelected(state, lease, evidence.observedBody().supportingSurface(), evidence.placementRoute());
+            // Fresh placement proposals retain their route proof. An independently
+            // inspected RUNNING body already exists: physics may have moved it since
+            // the scope was prepared. Acknowledgement must not select its birthplace again.
+            if (evidence.boundary() == AmbientBodyConfirmed.Boundary.ADMISSION)
+                AmbientPlacementPolicy.requireSelected(state, lease, evidence.observedBody().supportingSurface(), evidence.placementRoute());
         } else if (lease.status() != AmbientLeaseStatus.HOT || !serviceOccupancyChanged(state, evidence.actorId(),
                 evidence.previousBody(), evidence.observedBody())) {
             throw new IllegalArgumentException("body checkpoint is not a current HOT service occupancy change");
         }
         FrontierWorldState next = state;
-        if (evidence.boundary() != AmbientBodyConfirmed.Boundary.ADMISSION) return next;
+        if (!evidence.boundary().admitsScope()) return next;
         var leases = new LinkedHashMap<>(next.ambientLeases());
         leases.put(evidence.actorId(), new AmbientActorLease(lease.actorId(), evidence.observedBody(), lease.handoffInstant(),
                 lease.revision(), lease.status(), lease.goal(), lease.goalBody()));
