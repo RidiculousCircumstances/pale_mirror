@@ -106,3 +106,55 @@ path. Focused34 domain/architecture +4adapter tests and guardrails/build PASS
 fungibles, rejected stale release without mutation and successful explicit closure.
 Existing conflicted world is retained as evidence; no automatic reclassification
 of an already conflicted physical image is introduced.
+
+## Deployed verification — 2026-10-23
+
+Server implementation24a795734; UI-only precision correction6f65e9f22. Pack
+installer c03f924/index6c79117. No push. Clean detached build and both preflight /
+post-start verification passed. Live world frontier-v3-r229-observatory-20261023,
+seed126/r25/schema301. Previous world retained for its diagnosed conflict.
+JAR SHA512:
+605635b61a82e35777eea9d37767275344631a4363fc5d31b7138e9e55e2dc44e7a984b27f16755bc44dc41e7b7cc43c8275e3a3f030b1fefadad545a9f8958b
+
+The enabled server exporter feeds the separate far-frontier-economy.service at
+http://100.100.78.29:8093/ (private VPN). Installed service target
+/home/rd/far-frontier-economy; history data/economy.sqlite. No client update needed
+for this server/analytical change. Native pilot is stopped between checks.
+
+Live browser checked all eight tabs, settlement filter, mobile layout, current
+stocks and charts, actual coal flow CSV and no JavaScript errors. Playwright MCP
+had a missing configured executable; used the existing local Playwright package
+and installed Chrome, not a new browser harness. Screenshot build/r229-dashboard.png
+and receipts build/r229-dashboard-live-tabs.txt. Small monetary values retain all
+six fixed-point decimal places rather than rounding legitimate prices to zero.
+
+Actual equivalent engine workloads with observer disabled/enabled ended at the
+same469 transactions and byte-identical canonical state. 500tick run in20tick
+steps544/474ms; one accelerated500tick request411/342ms. These short JIT-sensitive
+measurements do not establish an improvement or precise overhead percentage.
+Producer microbenchmark and bounded queue are the narrower cost evidence.
+Live24,000tick acceleration completed. At final check ordinary recent64 host
+samples averaged5.88ms, max58.04ms; FFremaining0. This is the instrumented host
+portion, not complete TPS or a before/after server performance experiment.
+Analytical service memory~27MB. No overflow/projection-loss gap observed in this
+interval; canonical workload remains independent if collection falls behind.
+
+Native live runs6efcaab1-dc9e-4bef-9568-0cbf2e0b610a and
+d51b1a58-a985-43de-9e42-51c42f9c8902 passed the checked-in HOT-away-HOT scenario:
+zero retained conflicts; second run field remained harvesting and progressed
+planted249→244 over29445→30734ticks. Frames are depot-side and do not show the
+whole field; this is boundary/progress evidence, not full visual harvest-cycle
+acceptance or proof of every equipment return. An attempted additional12000tick
+advance correctly rejected while a HOT harvest was pending; it was not counted
+as completed. Initial original-crash farmer terminal proof remains recorded above.
+Prior unload CAPTURE_UNAVAILABLE messages remain an explicitly limited observation;
+subsequent progress was observed, but no general body-unload correctness claim.
+
+Graceful server restart retained the same analytical world/history: UI STOPPED at
+31215/rev86482, then ACTIVE with explicit process_restart coverage marker.
+Independent collector restarts retained records without errors. Final state check
+31416/rev87304:0conflicts/0incidents. Later32645 analytics:17real production/input
+flow groups, no collector error. Confirmed sales are still0 in this fresh world;
+trade aggregation/receipt dedup and price separation have unit coverage, but this
+short live interval does not claim an observed completed caravan sale or balanced
+long-running economy. No sales or historical totals were fabricated for UI testing.
