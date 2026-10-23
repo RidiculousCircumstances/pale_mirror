@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3RecordDurabilityTest {
@@ -44,5 +46,32 @@ class FrontierV3RecordDurabilityTest {
         public CompoundTag save(CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
             rows.forEach(tag::putInt); return tag;
         }
+    }
+
+    @Test void successorCannotBorrowPredecessorReceiptOrWaitForUnrelatedRecord() {
+        var durability = new FrontierV3RecordDurability<String>();
+        var first = new CompletableFuture<Long>();
+        var successor = new CompletableFuture<Long>();
+        var other = new CompletableFuture<Long>();
+        durability.submitted("actor", first);
+        durability.submitted("other", other);
+        assertFalse(durability.ready("actor"));
+        durability.submitted("actor", successor);
+        first.complete(1L);
+        assertFalse(durability.ready("actor"));
+        successor.complete(2L);
+        assertTrue(durability.ready("actor"));
+        assertFalse(durability.ready("other"));
+        assertTrue(durability.ready("actor"));
+    }
+
+    @Test void failedSubmissionRemainsFailureUntilOwnerConfirmsReplacement() {
+        var durability = new FrontierV3RecordDurability<String>();
+        var failed = CompletableFuture.<Long>failedFuture(new IllegalStateException("disk write failed"));
+        durability.submitted("actor", failed);
+        assertThrows(CompletionException.class, () -> durability.ready("actor"));
+        assertThrows(CompletionException.class, () -> durability.ready("actor"));
+        durability.forget("actor"); // Owner synchronously forced or deleted the image.
+        assertTrue(durability.ready("actor"));
     }
 }

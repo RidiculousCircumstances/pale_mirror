@@ -88,8 +88,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3ServerRuntimeTest {
-    @Test @org.junit.jupiter.api.Timeout(10)
-    void readyCalculationAndDurabilityFinishAtCapturedInstantWithoutAnotherHostTick(@TempDir Path directory) throws Exception {
+    @org.junit.jupiter.params.ParameterizedTest @org.junit.jupiter.params.provider.ValueSource(ints = {1, 17})
+    @org.junit.jupiter.api.Timeout(10)
+    void readyCalculationAndDurabilityRetainCapturedInstantAcrossElapsedBacklog(int observedTicks, @TempDir Path directory) throws Exception {
         var base = denseConfiguration(); var delegate = base.scheduledPlanner();
         var detached = new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledActionPlanner<Counter>() {
             public List<ProposedEvent> plan(Counter state, io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction action) {
@@ -107,7 +108,8 @@ class FrontierV3ServerRuntimeTest {
         var owner = new java.util.concurrent.LinkedBlockingQueue<Runnable>();
         try (var signal = new FrontierV3ReadyTurn(owner::add, () -> runtime.runPersistenceTurn(runtime::resumeOrdinaryTurn))) {
             runtime.onReady(signal::signal);
-            runtime.observeOrdinaryHostTick(); runtime.beginOrdinaryTurn(new WorkBudget(64, 128));
+            for (int tick = 0; tick < observedTicks; tick++) runtime.observeOrdinaryHostTick();
+            runtime.beginOrdinaryTurn(new WorkBudget(64, 128));
             runtime.runPersistenceTurn(runtime::resumeOrdinaryTurn);
             while (runtime.decodedState().orElseThrow().value() < 6) {
                 var next = owner.poll(2, java.util.concurrent.TimeUnit.SECONDS);
@@ -118,12 +120,14 @@ class FrontierV3ServerRuntimeTest {
                 next.run();
             }
             assertEquals(1, runtime.canonicalState().orElseThrow().instant().ticks());
-            assertEquals(0, runtime.pendingOrdinaryTicks());
+            assertEquals(observedTicks - 1, runtime.pendingOrdinaryTicks());
             assertTrue(runtime.executionView().orElseThrow().schedules().isEmpty());
+            while (runtime.pendingOrdinaryTicks() > 0) owner.take().run();
+            assertEquals(observedTicks, runtime.canonicalState().orElseThrow().instant().ticks());
         } finally { runtime.shutdown(); }
         var recovered = FrontierV3ServerRuntime.start(base, new FrontierFileStore(directory, payloads), 100);
         assertEquals(6, recovered.decodedState().orElseThrow().value());
-        assertEquals(1, recovered.canonicalState().orElseThrow().instant().ticks()); recovered.shutdown();
+        assertEquals(observedTicks, recovered.canonicalState().orElseThrow().instant().ticks()); recovered.shutdown();
     }
     @Test void readyResumptionSharesOneObservedTickAllowance(@TempDir Path directory) {
         var payloads = PayloadCodecs.merge(codecs(), io.farfrontier.palemirror.frontier.v3.kernel.KernelPayloadCodecs.scheduleEffects());
@@ -131,11 +135,12 @@ class FrontierV3ServerRuntimeTest {
         var budget = new WorkBudget(2, 8);
         runtime.observeOrdinaryHostTick(); runtime.beginOrdinaryTurn(budget);
         runtime.resumeOrdinaryTurn();
-        assertEquals(2, runtime.decodedState().orElseThrow().value());
+        assertTrue(runtime.decodedState().orElseThrow().value() <= 2);
         for (int i = 0; i < 8; i++) runtime.resumeOrdinaryTurn();
         assertEquals(2, runtime.decodedState().orElseThrow().value(), "a completion signal never renews work admission");
         assertEquals(1, runtime.canonicalState().orElseThrow().instant().ticks());
-        runtime.observeOrdinaryHostTick(); runtime.beginOrdinaryTurn(budget); runtime.resumeOrdinaryTurn();
+        runtime.observeOrdinaryHostTick(); runtime.beginOrdinaryTurn(budget);
+        for (int i = 0; i < 8; i++) runtime.resumeOrdinaryTurn();
         assertEquals(4, runtime.decodedState().orElseThrow().value());
         runtime.shutdown();
     }

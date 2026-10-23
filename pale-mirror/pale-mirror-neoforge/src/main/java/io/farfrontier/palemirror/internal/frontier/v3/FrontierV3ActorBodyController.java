@@ -156,8 +156,8 @@ final class FrontierV3ActorBodyController {
         // an irreversible ledger write followed by a rejected domain transition.
         if (io.farfrontier.palemirror.frontier.v3.model.ActorInventoryInteractionFences.pending(state, actor)) return;
         var declaration = receipt.identity();
-        if (!ledger.fence(declaration, declaration.epoch(), 0L)) return;
-        ledger.persist(level, state.bootstrap().worldId());
+        if (!ledger.fence(declaration, declaration.epoch(), 0L)
+                || !ledger.prepareActorDurable(level, state.bootstrap().worldId(), actor)) return;
         var location = state.actorLocations().get(actor);
         var payload = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyUnloaded(body,
                 location.body(), location.condition().health(), receipt.observed().body(), receipt.observed().health(),
@@ -504,9 +504,8 @@ final class FrontierV3ActorBodyController {
             if (!(FrontierV3CommandSubmission.submitResult(runtime, "actor-body-saved-checkpoint", actorId.value(), receipt)
                     instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return false;
         }
-        if (!ledger.fence(physical.identity(), id.physicalEpoch(), 0L)) return false;
-        ledger.persist(level, state.bootstrap().worldId());
-        return true;
+        return ledger.fence(physical.identity(), id.physicalEpoch(), 0L)
+                && ledger.prepareActorDurable(level, state.bootstrap().worldId(), actorId);
     }
 
     /** Protect the reservation interval before the durable returned-body fence is published. */
@@ -601,7 +600,8 @@ final class FrontierV3ActorBodyController {
         boolean dead = recognizesRetiredDeadBody(level, state, body);
         if (dead && FrontierV3BodyFatalityOperation.holdsBody(level, state, body)) return false;
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
-        if (!dead && !ledger.fencesBody(declaration)) return false;
+        if (!dead && (!ledger.fencesBody(declaration)
+                || !ledger.prepareActorDurable(level, state.bootstrap().worldId(), declaration.actorId()))) return false;
         if (!FrontierV3GoalNavigation.retireIncarnation(body, id)) return false;
         body.discard();
         return true;

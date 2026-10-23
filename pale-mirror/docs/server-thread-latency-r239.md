@@ -412,3 +412,32 @@ R239m final41 focused tests PASS, including six asynchronous scheduled actions,
 WAL forces and capacity checkpoints completed at instant1 after exactly one
 observed host tick, followed by exact restart. Guardrails PASS:
 `build/r239m-acceptance.log`. No elapsed-speed acceptance is inferred from tests.
+
+## R239n: bounded ready publication and per-record departure durability
+
+Live ca12a2ccb improved throughput: ordinary debt was0–2 at03:17–03:20,
+compared with2817 in the previous run. This is not an exact speed ratio across
+evolving states. Login347.2ms, transitions142.4/107.6ms and ready82.5ms still fail
+80ms. Pilot Gradle preparation overlapped initial10s; login was after it finished.
+
+Ready callbacks now publish one action with a small classification prefix,
+sharing the original host tick allowance. The ordinary execution boundary is
+captured across yields; processing many actions due together cannot manufacture
+one simulation tick per successor. Completed consumption is retained when a
+checkpoint defers the next prefix. Async six-action/restart coverage retains
+execution instant1 with either1 or17 observed host ticks.
+
+Saved-body departure previously waited synchronously for journal forces
+(14–18ms samples in r239m). FrontierV3RecordDurability extracts the existing
+record-prefix rule from JournaledSavedData, reused by the actor ledger. Only
+submission of the same actor replaces its receipt. Dirty successors cannot
+borrow an earlier image; failures propagate; confirmed/deleted rows retire
+receipt state. Saved departure checkpoint/release now poll that exact receipt.
+The related stale-body discard also requires durability, so this change does
+not expose removal before the fence is on disk. Native death and join barriers
+remain synchronous pending a separate protocol review.
+
+Verification: runtime/carrier/adoption/recognition focused checks and guardrails
+PASS r239n-gates.log;24 native body-lifetime tests and physical-store/field-witness
+checks PASS r239n-body.log. Existing record dirty-successor test is retained with
+two focused receipt isolation/failure checks. Live peak acceptance remains open.

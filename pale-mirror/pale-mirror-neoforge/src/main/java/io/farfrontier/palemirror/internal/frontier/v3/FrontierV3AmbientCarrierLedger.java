@@ -29,6 +29,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
     private static final int MAX_CARRIERS = 4_096;
     private final Map<SubjectId, Carrier> carriers;
     private final java.util.Set<SubjectId> dirtyActors = new java.util.TreeSet<>();
+    private final FrontierV3RecordDurability<SubjectId> writeReceipts = new FrontierV3RecordDurability<>();
     private FrontierV3JournalStore journal;
     private java.nio.file.Path journalPath;
     private void markDirty(SubjectId actor) { dirtyActors.add(actor); setDirty(); }
@@ -309,6 +310,7 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
                 updates.put(actor.value(), row == null ? null : FrontierV3CarrierJournalImage.encode(row));
             }
             journal.append(updates);
+            dirtyActors.forEach(writeReceipts::forget);
             dirtyActors.clear(); setDirty(false);
         } catch (java.io.IOException failure) {
             throw new java.io.UncheckedIOException("unable to persist carrier journal", failure);
@@ -326,12 +328,22 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
                 updates.put(actor.value(), row == null ? null : FrontierV3CarrierJournalImage.encode(row));
             }
             var receipt = journal.appendAsync(updates);
+            for (var actor : dirtyActors) {
+                if (updates.get(actor.value()) == null) writeReceipts.forget(actor);
+                else writeReceipts.submitted(actor, receipt);
+            }
             dirtyActors.clear(); setDirty(false); // Submitted is not durable: the caller retains the exact receipt.
             return receipt;
         } catch (java.io.IOException failure) {
             throw new java.io.UncheckedIOException("unable to admit carrier journal write", failure);
         }
     }
+    /** Submit current changes, then poll only this actor's exact journal prefix. */
+    boolean prepareActorDurable(ServerLevel level, WorldId worldId, SubjectId actor) {
+        persistAsync(level, worldId);
+        return !dirtyActors.contains(actor) && writeReceipts.ready(actor);
+    }
+
     static FrontierV3AmbientCarrierLedger readFile(java.nio.file.Path path, HolderLookup.Provider registries) {
         try {
             var store = FrontierV3JournalStore.open(path);

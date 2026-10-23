@@ -346,7 +346,7 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
         private final int index;
         private final Map<K, V> values;
         private final Set<K> dirty = new LinkedHashSet<>();
-        private final Map<K, java.util.concurrent.CompletableFuture<Long>> writeReceipts = new HashMap<>();
+        private final FrontierV3RecordDurability<K> writeReceipts = new FrontierV3RecordDurability<>();
         private final Function<K, String> key;
         private final Fragments<K,V> codec;
         private final Map<K,Map<String,CompoundTag>> committed = new HashMap<>();
@@ -374,18 +374,15 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
         @Override public void clear() { dirty.addAll(values.keySet()); if (!values.isEmpty()) setDirty(); values.clear(); }
         public boolean durable(K identity) {
             if (!declared || !values.containsKey(identity) || dirty.contains(identity)) return false;
-            var receipt = writeReceipts.get(identity);
-            if (receipt == null) return true; // Recovered or synchronously forced row.
-            if (!receipt.isDone()) return false;
-            receipt.join(); return true; // Completed exceptional writes must remain visible.
+            return writeReceipts.ready(identity);
         }
         @Override public void submitted(java.util.concurrent.CompletableFuture<Long> receipt) {
             var submitted = java.util.List.copyOf(dirty);
             accept();
-            for (var identity : submitted) if (values.containsKey(identity)) writeReceipts.put(identity, receipt);
+            for (var identity : submitted) if (values.containsKey(identity)) writeReceipts.submitted(identity, receipt);
         }
         public void accept() {
-            dirty.forEach(writeReceipts::remove);
+            dirty.forEach(writeReceipts::forget);
             if (prepared.isEmpty() && !declared) {
                 for (var identity : values.keySet()) committed.put(identity, codec.split(identity, values.get(identity)));
             } else if (prepared.isEmpty() && declared && committed.isEmpty()) {

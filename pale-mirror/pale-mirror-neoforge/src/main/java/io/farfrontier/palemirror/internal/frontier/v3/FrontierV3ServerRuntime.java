@@ -318,22 +318,35 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     String preparationDiagnostic() { return preparations.diagnostic(engine != null && engine.hasPendingCalculation()); }
 
     void onReady(Runnable listener) {
+        readiness = Objects.requireNonNull(listener);
         preparations.onReady(listener);
         if (store instanceof FrontierFileStore files) files.onReady(listener);
     }
+    private Runnable readiness = () -> { };
     private Optional<WorkBudget> ordinaryTurnBudget = Optional.empty();
-    private boolean ordinaryDeferred;
+    private Long ordinaryBoundary;
     /** One allowance per observed host tick, shared by all ready continuations. */
     void beginOrdinaryTurn(WorkBudget budget) { ordinaryTurnBudget = Optional.of(Objects.requireNonNull(budget)); }
     void resumeOrdinaryTurn() {
         if (ordinaryTurnBudget.isEmpty()) return;
         var budget = ordinaryTurnBudget.orElseThrow();
-        var result = advanceOrdinaryTime(budget);
-        if (result.isPresent()) ordinaryTurnBudget = result.orElseThrow().consumed().remaining(budget);
+        // Cooperative owner tasks complete one transaction and a small admission
+        // prefix. The original tick allowance is shared, not multiplied by wakes.
+        var quantum = new WorkBudget(1, budget.maxWeight(), Math.min(8, budget.maxClassificationEvaluations()),
+                Math.min(1, budget.maxExecutionEvaluations()), budget.maxActionWeight());
+        long before = instant.ticks();
+        var result = advanceOrdinaryTime(quantum);
+        if (result.isEmpty()) return;
+        var used = result.orElseThrow().consumed();
+        ordinaryTurnBudget = used.remaining(budget);
+        if (ordinaryTurnBudget.isPresent() && (pendingOrdinaryTicks > 0 || ordinaryBoundary != null)
+                && !engine.hasPendingCalculation() && !engine.hasPendingCommit()
+                && (instant.ticks() > before || used.actions() > 0 || used.classifications() > 0 || used.executions() > 0))
+            readiness.run();
     }
 
     Optional<AdvanceResult> advanceOrdinaryTime(WorkBudget budget) {
-        if (pendingOrdinaryTicks == 0 && !ordinaryDeferred) return Optional.empty();
+        if (pendingOrdinaryTicks == 0 && ordinaryBoundary == null) return Optional.empty();
         // Preserve each causal readiness/audit boundary, but permit several in
         // one durability turn. All share the original execution AND assessment
         // allowance; physical executors are not replayed and checkpoint debt is
@@ -344,15 +357,20 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         var remaining = Optional.of(budget);
         var transactions = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.api.TransactionId>();
         int actions = 0, weight = 0, classifications = 0, executions = 0;
-        while ((instant.ticks() < target || ordinaryDeferred) && remaining.isPresent()) {
+        while ((instant.ticks() < target || ordinaryBoundary != null) && remaining.isPresent()) {
             long before = instant.ticks();
-            long boundary = engine.nextExecutionBoundary().map(value -> Math.max(1L, value.ticks() - before))
-                    .orElse(target - before);
-            var result = advanceInterval(Math.toIntExact(Math.min(target - before, boundary)), remaining.orElseThrow(), true);
+            if (ordinaryBoundary == null) {
+                long boundary = engine.nextExecutionBoundary().map(value -> Math.max(1L, value.ticks() - before))
+                        .orElse(target - before);
+                ordinaryBoundary = before + Math.min(target - before, boundary);
+            }
+            // A yield is not a new simulation interval. In particular, draining
+            // several actions due together must not add a tick to each successor.
+            var result = advanceInterval(Math.toIntExact(Math.max(0, ordinaryBoundary - before)), remaining.orElseThrow(), true);
             pendingOrdinaryTicks = Math.subtractExact(pendingOrdinaryTicks, instant.ticks() - before);
-            if (result.isEmpty()) return Optional.empty();
+            if (result.isEmpty()) break; // Preserve consumption from any completed prefix.
             latest = result.orElseThrow(); transactions.addAll(latest.transactions());
-            ordinaryDeferred = latest.deferredAction().isPresent();
+            if (latest.deferredAction().isEmpty() && !engine.hasPendingCommit()) ordinaryBoundary = null;
             var used = latest.consumed();
             actions += used.actions(); weight += used.weight(); classifications += used.classifications(); executions += used.executions();
             remaining = used.remaining(remaining.orElseThrow());
