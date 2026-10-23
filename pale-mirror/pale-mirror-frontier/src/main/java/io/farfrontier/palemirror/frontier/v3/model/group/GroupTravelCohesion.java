@@ -34,14 +34,14 @@ public final class GroupTravelCohesion {
                                               MovementPermission previous) {
         var policy = UnitGroupMissionPorts.require(group).travelPolicy(state, group);
         var living = group.members().stream().filter(m -> state.actorLocations().get(m.actorId()).condition().status() == ActorLifeStatus.ALIVE).toList();
-        double enclosingWidth = living.stream().mapToDouble(m -> state.actorLocations().get(m.actorId()).navigationProfile().width())
-                .max().orElseThrow();
-        int spacing = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianHeadway.formationSpacing(policy.spacing(), enclosingWidth);
         var member = group.member(actorId);
         int slot = living.indexOf(member);
         if (slot < 0) return MovementPermission.hold(MovementPermission.Reason.INACTIVE_MEMBER);
         double basePace = 1.0 / policy.ticksPerEdge();
         if (living.size() == 1) return MovementPermission.allow(new TravelPace(basePace));
+        double enclosingWidth = living.stream().mapToDouble(m -> state.actorLocations().get(m.actorId()).navigationProfile().width())
+                .max().orElseThrow();
+        int spacing = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianHeadway.formationSpacing(policy.spacing(), enclosingWidth);
         var route = group.journey().orElseThrow().route();
         var current = positions.currentPointAt(actorId);
         if (current.isEmpty()) return MovementPermission.hold(MovementPermission.Reason.POSITION_UNAVAILABLE, actorId);
