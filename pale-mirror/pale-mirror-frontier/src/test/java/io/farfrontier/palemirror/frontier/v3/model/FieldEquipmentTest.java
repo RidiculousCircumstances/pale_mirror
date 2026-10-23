@@ -22,6 +22,12 @@ class FieldEquipmentTest {
         assertEquals(WorkToolAssignment.Stage.RELEASED, cancelled.equipment().stage());
         assertTrue(cancelled.progress().complete()); assertEquals(0, cancelled.harvestedYieldQuantity());
         assertEquals(player, after.inventory().items().get(tool.id()).custody());
+        assertEquals(player, ExactItemReadIndex.owned(after.inventory(), tool.economicOwnerId(), tool.itemKind()).stream()
+                .filter(item -> item.id().equals(tool.id())).findFirst().orElseThrow().custody());
+        assertEquals(tool, ExactItemReadIndex.owned(before.inventory(), tool.economicOwnerId(), tool.itemKind()).stream()
+                .filter(item -> item.id().equals(tool.id())).findFirst().orElseThrow(), "old immutable branch must retain its own custody");
+        assertFalse(WorkEquipmentSelection.available(after, tool.economicOwnerId(), after.inventory().items().get(tool.id()),
+                FieldEquipment.requirements(), java.util.Set.of()), "index membership grants no work availability");
         assertEquals(before.resourceSites().cycle(job.siteId()), after.resourceSites().cycle(job.siteId()));
         assertFalse(WorkEquipmentClaimComposition.reserved(after).contains(tool.id()));
     }

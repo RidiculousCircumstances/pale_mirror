@@ -20,9 +20,6 @@ final class FrontierV3PedestrianFollowing {
         return ahead > 0 && forward > Math.abs(across);
     }
     static double paceFraction(double distance, double actorWidth, double peerWidth) {
-        double clearance = (actorWidth + peerWidth) / 2;
-        // Body dimensions define both collision clearance and one-body-length headway.
-        // Following changes input, not the accepted path or its progress deadline.
-        return Math.clamp((distance - clearance) / actorWidth, 0, 1);
+        return io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianHeadway.paceFraction(distance, actorWidth, peerWidth);
     }
 }

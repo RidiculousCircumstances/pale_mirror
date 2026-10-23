@@ -21,7 +21,7 @@ final class FrontierV3PedestrianTraffic {
     private static final int MAX_BODIES = 256;
     private static final java.util.Map<Mob, NearObservation> NEAR = new java.util.WeakHashMap<>();
     record NearObservation(java.lang.ref.WeakReference<ServerLevel> level, long tick, Path path, int node, net.minecraft.world.phys.Vec3 position,
-                           boolean blocked, boolean crossing, double pace) { }
+                           boolean blocked, boolean crossing, double pace, double followingSpacing) { }
     private FrontierV3PedestrianTraffic() { }
 
     record Body(java.util.UUID id, AABB bounds) { }
@@ -54,30 +54,40 @@ final class FrontierV3PedestrianTraffic {
     /** One bounded native spatial query per current body/path/node/physical turn.
      * Shared by blockage, courtesy waiting and pace; actual collision stays Minecraft-owned. */
     static NearObservation nearby(ServerLevel level, Mob actor, Path path) {
-        if (path == null || path.isDone()) return new NearObservation(new java.lang.ref.WeakReference<>(level), level.getGameTime(), path, -1, actor.position(), false, false, 1);
+        return nearby(level, actor, path, 0);
+    }
+    static NearObservation nearby(ServerLevel level, Mob actor, Path path, double followingSpacing) {
+        if (path == null || path.isDone()) return new NearObservation(new java.lang.ref.WeakReference<>(level), level.getGameTime(), path, -1, actor.position(), false, false, 1, followingSpacing);
         var prior = NEAR.get(actor);
         if (prior != null && prior.level().get() == level && prior.tick() == level.getGameTime() && prior.path() == path
-                && prior.node() == path.getNextNodeIndex() && prior.position().equals(actor.position())) return prior;
-        int end = Math.min(path.getNodeCount(), path.getNextNodeIndex() + 2);
+                && prior.node() == path.getNextNodeIndex() && prior.position().equals(actor.position()) && prior.followingSpacing() == followingSpacing) return prior;
+        int nearEnd = Math.min(path.getNodeCount(), path.getNextNodeIndex() + 2);
+        int end = Math.min(path.getNodeCount(), path.getNextNodeIndex()
+                + Math.max(2, (int) Math.ceil(followingSpacing + actor.getBbWidth())));
         AABB area = actor.getBoundingBox();
         for (int index = path.getNextNodeIndex(); index < end; index++) area = area.minmax(nativeNodeBodyAt(actor, path.getNode(index).asBlockPos()));
         var peers = level.getEntitiesOfClass(LivingEntity.class, area,
                 other -> other != actor && other.isAlive() && !other.isSpectator());
         boolean blocked = false, crossing = false; double pace = 1;
         for (var peer : peers) {
-            boolean intersects = false;
-            for (int index = path.getNextNodeIndex(); index < end; index++)
-                if (nativeNodeBodyAt(actor, path.getNode(index).asBlockPos()).intersects(peer.getBoundingBox())) { intersects = true; break; }
+            boolean intersects = false, near = false;
+            for (int index = path.getNextNodeIndex(); index < end; index++) {
+                if (nativeNodeBodyAt(actor, path.getNode(index).asBlockPos()).intersects(peer.getBoundingBox())) {
+                    intersects = true; near |= index < nearEnd;
+                }
+            }
             if (!intersects) continue;
-            if (following(actor, peer, path)) pace = Math.min(pace, FrontierV3PedestrianFollowing.paceFraction(
-                    actor.position().distanceTo(peer.position()), actor.getBbWidth(), peer.getBbWidth()));
-            else {
+            if (following(actor, peer, path)) pace = Math.min(pace, io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianHeadway.paceFraction(
+                    actor.position().distanceTo(peer.position()), actor.getBbWidth(), peer.getBbWidth(), followingSpacing));
+            else if (near) {
+                // Only co-flow headway looks farther; distant crossing bodies
+                // must not trigger premature obstruction/courtesy handling.
                 blocked = true;
                 var direction = heading(actor, path);
                 crossing |= FrontierV3PedestrianFollowing.crossing(direction, peer.getDeltaMovement());
             }
         }
-        var result = new NearObservation(new java.lang.ref.WeakReference<>(level), level.getGameTime(), path, path.getNextNodeIndex(), actor.position(), blocked, crossing, pace);
+        var result = new NearObservation(new java.lang.ref.WeakReference<>(level), level.getGameTime(), path, path.getNextNodeIndex(), actor.position(), blocked, crossing, pace, followingSpacing);
         NEAR.put(actor, result); return result;
     }
 
@@ -199,7 +209,15 @@ final class FrontierV3PedestrianTraffic {
         // is still an obstacle, not a travelling peer whose headway we must keep.
         if (other instanceof Mob mob && !FrontierV3MinecraftGoalNavigation.travelling(mob)
                 && mob.getNavigation().isDone()) return false;
-        return FrontierV3PedestrianFollowing.coFlow(actor.position(), heading(actor, path), other.position(), other.getDeltaMovement());
+        // Retained native intent survives a headway pause. Velocity alone would
+        // reclassify a paused fellow traveller as a parked obstacle and discard
+        // the following path. Parked bodies still have no admitted moving intent.
+        var motion = other.getDeltaMovement();
+        if (other instanceof Mob mob && FrontierV3MinecraftGoalNavigation.travelling(mob)) {
+            var peerPath = mob.getNavigation().getPath();
+            if (peerPath != null && !peerPath.isDone()) motion = heading(mob, peerPath);
+        }
+        return FrontierV3PedestrianFollowing.coFlow(actor.position(), heading(actor, path), other.position(), motion);
     }
 
     private static net.minecraft.world.phys.Vec3 heading(Mob actor, Path path) {
@@ -214,8 +232,8 @@ final class FrontierV3PedestrianTraffic {
     }
 
     /** Local following preserves the native path; only a real stationary/crossing blocker replans it. */
-    static double followingPace(ServerLevel level, Mob actor, Path path) {
-        return nearby(level, actor, path).pace();
+    static double followingPace(ServerLevel level, Mob actor, Path path, double followingSpacing) {
+        return nearby(level, actor, path, followingSpacing).pace();
     }
 
     private static AABB stationBodyAt(Mob actor, BlockPos feet) {

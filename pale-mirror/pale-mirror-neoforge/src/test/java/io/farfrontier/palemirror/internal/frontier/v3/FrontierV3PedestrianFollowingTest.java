@@ -5,6 +5,21 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3PedestrianFollowingTest {
+    @Test void formationClearanceSupportsBothOrdersOfMixedWidthTravellers() {
+        double wide = io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile.DONKEY.width();
+        var spacing = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianHeadway.formationSpacing(2, wide);
+        assertEquals(3, spacing);
+        assertEquals(1, FrontierV3PedestrianFollowing.paceFraction(spacing, wide, .6));
+        assertEquals(1, FrontierV3PedestrianFollowing.paceFraction(spacing, .6, wide));
+        assertEquals(FrontierV3PedestrianFollowing.paceFraction(2, wide, .6),
+                FrontierV3PedestrianFollowing.paceFraction(2, .6, wide));
+        assertEquals(0, FrontierV3PedestrianFollowing.paceFraction(.9, wide, .6));
+    }
+    @Test void declaredFormationSpacingAlsoControlsNarrowFollowers() {
+        assertEquals(1, io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianHeadway.paceFraction(3, .6, .6, 3));
+        assertTrue(io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianHeadway.paceFraction(2, .6, .6, 3) < 1);
+        assertEquals(0, io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianHeadway.paceFraction(.6, .6, .6, 3));
+    }
     @Test void onlyAnActualCrossingGetsAShortWaitRatherThanAnImmediateReplan() {
         var heading = new Vec3(1, 0, 0);
         assertTrue(FrontierV3PedestrianFollowing.crossing(heading, new Vec3(0, 0, .1)));

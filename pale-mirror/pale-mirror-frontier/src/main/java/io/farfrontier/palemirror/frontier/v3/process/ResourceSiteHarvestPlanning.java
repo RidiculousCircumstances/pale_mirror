@@ -156,6 +156,11 @@ final class ResourceSiteHarvestPlanning {
         if (!ResidentActivityCoordinator.mayStartOrdinaryWork(state, farmer.id(), tick)
                 || !ActorExecutionCoordinator.ordinaryWorkAdmission(state, farmer.id()).permitted())
             return java.util.Optional.empty();
+        // An impossible equipment admission cannot win work priority. Reject it
+        // before the market-wide demand evaluation; the selected offer still
+        // proves its exact tool and route below.
+        if (!WorkEquipmentSelection.hasAvailable(state, farmer.settlementId(), FieldEquipment.requirements(),
+                WorkEquipmentClaimComposition.reserved(state))) return java.util.Optional.empty();
         if (!FieldWorkDemand.requested(state, site, tick))
             return java.util.Optional.empty();
         ActorLocation worker = state.actorLocations().get(farmer.id());

@@ -25,7 +25,7 @@ public final class GroupFormation {
         var result = new LinkedHashMap<SubjectId, SurfaceAnchor>();
         int index = cursor;
         for (var member : members) {
-            while (index >= 0 && (result.containsValue(route.get(index)) || !knowledge.clearStation(route.get(index)))) index--;
+            while (index >= 0 && (!separated(route.get(index), result.values(), bodySpacing) || !knowledge.clearStation(route.get(index)))) index--;
             SurfaceAnchor station;
             if (index >= 0) station = route.get(index);
             else {
@@ -35,8 +35,7 @@ public final class GroupFormation {
                 queue.add(route.get(cursor)); seen.add(route.get(cursor)); station = null;
                 while (!queue.isEmpty() && seen.size() <= GroupRendezvous.MAX_VISITED) {
                     var candidate = queue.removeFirst();
-                    if (knowledge.clearStation(candidate) && result.values().stream().allMatch(value -> Math.abs((long) value.x() - candidate.x())
-                            + Math.abs((long) value.z() - candidate.z()) >= bodySpacing)) { station = candidate; break; }
+                    if (knowledge.clearStation(candidate) && separated(candidate, result.values(), bodySpacing)) { station = candidate; break; }
                     for (int[] offset : List.of(new int[]{0,-1}, new int[]{-1,0}, new int[]{1,0}, new int[]{0,1})) {
                         for (var next : knowledge.surfacesAt(candidate.x() + offset[0], candidate.z() + offset[1])) {
                             if (knowledge.geometry().bounds().contains(next.support()) && !knowledge.geometry().blocked(next)
@@ -51,6 +50,10 @@ public final class GroupFormation {
             index -= bodySpacing;
         }
         return Map.copyOf(result);
+    }
+    private static boolean separated(SurfaceAnchor candidate, java.util.Collection<SurfaceAnchor> selected, int spacing) {
+        return selected.stream().allMatch(value -> Math.hypot((double) value.x() - candidate.x(),
+                (double) value.z() - candidate.z()) >= spacing);
     }
     public static UnitGroup.Journey first(UnitGroup group, SurfaceAnchor destination, List<SurfaceAnchor> route, KnownPedestrianRouteKnowledge knowledge, int spacing) {
         return first(group.members(), destination, route, knowledge, spacing);

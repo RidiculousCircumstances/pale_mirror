@@ -20,7 +20,7 @@ final class EquipmentReserveSupply implements ReserveSupplyPort {
             if (commodity.stock().representation() != GoodsStockSpecification.Representation.INDIVIDUAL
                     || state.bootstrap().ruleset().tools().find(commodity.itemKind()).isEmpty()) continue;
             var containers = GoodsParticipantStorage.containers(state, participant, commodity.itemKind());
-            long protectedStock = state.inventory().items().values().stream().filter(item -> retained.contains(item.id()) && (!committed.contains(item.id()) || promisedSale.contains(item.id()))
+            long protectedStock = ExactItemReadIndex.owned(state.inventory(), home, commodity.itemKind()).stream().filter(item -> retained.contains(item.id()) && (!committed.contains(item.id()) || promisedSale.contains(item.id()))
                     && item.economicOwnerId().equals(home) && item.itemKind().equals(commodity.itemKind()) && commodity.stock().accepts(item)
                     && item.custody() instanceof InventoryCustody.ContainerSlot slot && containers.contains(slot.containerId())).count();
             long incoming = StockSupplyComposition.pending(state, StockSupplyPort.Key.TRADE).stream().filter(c ->

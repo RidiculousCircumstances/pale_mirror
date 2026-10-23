@@ -41,6 +41,15 @@ final class FrontierV3RouteNavigation {
             leg = leg(goal, nearest(actor, route));
             LEGS.put(actor, leg);
         }
+        var passing = FrontierV3MinecraftGoalNavigation.transitHandoff(actor,
+                new FrontierV3MinecraftGoalNavigation.Demand(leg.stations(), goal.scope(), goal.order()), goal.legalStations());
+        if (passing.isPresent()) {
+            int index = route.subList(leg.startIndex(), route.size()).indexOf(passing.orElseThrow());
+            if (index >= 0) {
+                leg = leg(goal, leg.startIndex() + index);
+                LEGS.put(actor, leg);
+            }
+        }
         var result = pursueLeg(level, actor, leg, permission);
         if (leg.retryHints(level.getGameTime(), result.status())) {
             // A failed distant fallback is not a permanent replacement for the
@@ -89,7 +98,7 @@ final class FrontierV3RouteNavigation {
     private static Leg leg(FrontierV3GoalNavigation.Goal goal, int start) {
         List<SurfaceAnchor> route = goal.routeHint();
         List<SurfaceAnchor> stations = new ArrayList<>();
-        for (int offset = 4; offset <= MAX_LEG_SUPPORTS; offset += 4) {
+        for (int offset = MAX_LEG_SUPPORTS; offset >= 4; offset -= 4) {
             SurfaceAnchor station = route.get(Math.min(route.size() - 1, start + offset));
             if (!stations.contains(station)) stations.add(station);
         }

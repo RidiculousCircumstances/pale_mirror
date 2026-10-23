@@ -104,7 +104,7 @@ final class FrontierV3MinecraftGoalNavigation {
             current = observed;
             // Vanilla's ordinary graph ignores living bodies. Replan around a current
             // occupant before the no-motion deadline, without changing the semantic goal.
-            var near = FrontierV3PedestrianTraffic.nearby(level, actor, activePath);
+            var near = FrontierV3PedestrianTraffic.nearby(level, actor, activePath, permission.followingSpacing());
             boolean crossing = activePath != null && near.blocked() && near.crossing()
                     && waitForCrossing(actor, activePath, level.getGameTime());
             if (!near.blocked()) CROSSINGS.remove(actor);
@@ -112,7 +112,7 @@ final class FrontierV3MinecraftGoalNavigation {
                 stopPath(actor);
                 activePath = null;
             }
-            double following = crossing ? 0 : FrontierV3PedestrianTraffic.followingPace(level, actor, activePath);
+            double following = crossing ? 0 : FrontierV3PedestrianTraffic.followingPace(level, actor, activePath, permission.followingSpacing());
             current = current.following(following == 0, level.getGameTime());
             long baseProgressBudget = permission.pace().map(pace -> Math.max((long) STALLED_TICKS,
                     (long) Math.ceil(0.5 / pace.blocksPerTick())))
@@ -191,6 +191,9 @@ final class FrontierV3MinecraftGoalNavigation {
                 path = candidate;
                 target = station;
             }
+            // Transit candidates are ordered farthest first by the route owner.
+            // Exact work goals retain their ordinary shortest reachable selection.
+            if (!brakeOnArrival) break;
         }
         if (path == null) {
             if (traffic != null) {
@@ -221,6 +224,23 @@ final class FrontierV3MinecraftGoalNavigation {
                     level.getGameTime(), retained.lastProgressAt(),
                         actor.position(), path, remainingDistance(path, actor.position()), retained.followingWait(), brakeOnArrival));
         return new Result(Status.IN_PROGRESS, "minecraft-path-started");
+    }
+
+    /** A local hint is a pass-through point, never a work-arrival receipt. The next
+     * accepted path starts from the actual body and still checks terrain and scope. */
+    static Optional<SurfaceAnchor> transitHandoff(Mob actor, Demand demand, List<SurfaceAnchor> terminalStations) {
+        var control = ACTIVE.get(actor);
+        if (control == null || control.brakeOnArrival() || !control.permission().current(actor)
+                || !demand.matches(control.legalStations(), control.scope(), control.order())
+                || terminalStations.contains(control.target())) return Optional.empty();
+        Path path = actor.getNavigation().getPath();
+        if (path == null || path != control.progressPath() || !path.canReach()
+                || path.getNextNodeIndex() < path.getNodeCount() - 2
+                || FrontierV3BodyObservation.capture(actor).support().isEmpty()) return Optional.empty();
+        Vec3 endpoint = path.getEntityPosAtNode(actor, path.getNodeCount() - 1);
+        double lead = Math.max(1.0, actor.getBbWidth());
+        if (actor.position().distanceToSqr(endpoint) > lead * lead) return Optional.empty();
+        return Optional.of(control.target());
     }
 
     /** Called before the ordinary entity tick; NoAI prevents a second vanilla goal owner. */
@@ -430,7 +450,7 @@ final class FrontierV3MinecraftGoalNavigation {
         if (crossing != null && crossing.path() == actor.getNavigation().getPath()
                 && actor.level().getGameTime() - crossing.since() < RETRY_TICKS
                 && FrontierV3PedestrianTraffic.nearby((ServerLevel) actor.level(), actor, crossing.path()).crossing()) return 0;
-        double following = FrontierV3PedestrianTraffic.followingPace((ServerLevel) actor.level(), actor, actor.getNavigation().getPath());
+        double following = FrontierV3PedestrianTraffic.followingPace((ServerLevel) actor.level(), actor, actor.getNavigation().getPath(), permission.followingSpacing());
         if (following == 0) return 0;
         return permission.pace().map(pace -> {
             var support = actor.getBlockPosBelowThatAffectsMyMovement();

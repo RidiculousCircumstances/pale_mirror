@@ -67,7 +67,7 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
             }).mapToInt(Map.Entry::getValue).reduce(0, Math::addExact);
             int unclaimed = accounts.stream().mapToInt(value -> ledger.unclaimedQuantity(value.id(), participant.party().id(), commodity.itemKind())).reduce(0, Math::addExact);
             if (commodity.stock().representation() == GoodsStockSpecification.Representation.INDIVIDUAL) {
-                owned = Math.toIntExact(state.inventory().items().values().stream().filter(item ->
+                owned = Math.toIntExact(ExactItemReadIndex.owned(state.inventory(), participant.party().id(), commodity.itemKind()).stream().filter(item ->
                         item.economicOwnerId().equals(participant.party().id()) && item.itemKind().equals(commodity.itemKind())
                         && commodity.stock().accepts(item) && item.custody() instanceof InventoryCustody.ContainerSlot slot
                         && containers.contains(slot.containerId())).count());

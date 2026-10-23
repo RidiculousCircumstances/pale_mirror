@@ -247,7 +247,7 @@ public final class KnownPedestrianRouteKnowledge {
         return geometry.clearStation(surface);
     }
     public int formationSpacing(int requested) {
-        return profile == null ? requested : Math.max(requested, (int) Math.ceil(profile.width()));
+        return profile == null ? requested : io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianHeadway.formationSpacing(requested, profile.width());
     }
 
     public List<SurfaceAnchor> plannedPath(SurfaceAnchor start, MovementOrder order) {

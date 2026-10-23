@@ -25,7 +25,7 @@ public final class EquipmentStockProjection {
                 .filter(c -> !c.terminal() && c.seller().id().equals(home))
                 .flatMap(c -> c.individualAllocations().values().stream()).map(IndividualResourceAllocation::itemId)
                 .collect(java.util.stream.Collectors.toSet());
-        for (var item : state.inventory().items().values()) {
+        for (var item : ExactItemReadIndex.owned(state.inventory(), home)) {
             if (!item.economicOwnerId().equals(home) || sold.contains(item.id()) || catalog.find(item.itemKind()).isEmpty()) continue;
             boolean available = switch (item.custody()) {
                 case InventoryCustody.ContainerSlot slot -> {
@@ -76,7 +76,7 @@ public final class EquipmentStockProjection {
     }
     private static Set<SubjectId> projectRetained(FrontierWorldState state, SubjectId home, List<EquipmentWorkDemand> demands) {
         var retained = new HashSet<SubjectId>(); var catalog = state.bootstrap().ruleset().tools();
-        var units = state.inventory().items().values().stream()
+        var units = ExactItemReadIndex.owned(state.inventory(), home).stream()
                 .filter(item -> item.economicOwnerId().equals(home) && catalog.find(item.itemKind()).isPresent())
                 .filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot
                         && state.inventory().containers().get(slot.containerId()).ownerId().equals(home)

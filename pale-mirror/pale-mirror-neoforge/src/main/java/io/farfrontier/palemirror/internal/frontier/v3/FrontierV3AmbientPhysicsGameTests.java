@@ -75,8 +75,13 @@ public final class FrontierV3AmbientPhysicsGameTests {
                         + "; blockers=" + following.blockers());
         helper.assertTrue(!FrontierV3PedestrianTraffic.blockedAhead(level, actor, following.path()),
                 "refresh preserves the accepted path instead of restarting around the poputchik");
-        helper.assertTrue(FrontierV3PedestrianTraffic.followingPace(level, actor, following.path()) < 1,
+        helper.assertTrue(FrontierV3PedestrianTraffic.followingPace(level, actor, following.path(), 0) < 1,
                 "near following uses headway without path cancellation");
+        peer.setPos(start.getX() + 3, start.getY() + 1, start.getZ() + .5);
+        FrontierV3PedestrianTraffic.forget(actor);
+        helper.assertTrue(FrontierV3PedestrianTraffic.followingPace(level, actor, following.path(), 3) < 1,
+                "declared formation headway sees a fellow traveller beyond the near obstruction window");
+        peer.setPos(start.getX() + 1.5, start.getY() + 1, start.getZ() + .5);
         peer.getNavigation().stop(); peer.setDeltaMovement(Vec3.ZERO);
         helper.runAfterDelay(1, () -> {
             // The common near-body observation is intentionally stable within one physical

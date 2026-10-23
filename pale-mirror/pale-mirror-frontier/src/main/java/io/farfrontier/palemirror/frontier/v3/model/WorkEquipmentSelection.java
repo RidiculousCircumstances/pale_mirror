@@ -9,11 +9,18 @@ import java.util.*;
 public final class WorkEquipmentSelection {
     public record Selection(ExactItemStack item, ShipmentEndpoint source, Optional<PedestrianRouteReceipt> route) { }
 
+    /** Cheap necessary admission, without choosing a worker route or evaluating market demand. */
+    public static boolean hasAvailable(FrontierWorldState state, SubjectId owner,
+            EquipmentRequirements requirements, Set<SubjectId> unavailable) {
+        return ExactItemReadIndex.owned(state.inventory(), owner).stream()
+                .anyMatch(item -> available(state, owner, item, requirements, unavailable));
+    }
+
     public static Optional<Selection> select(FrontierWorldState state, SubjectId owner, SurfaceAnchor origin,
             EquipmentRequirements requirements, Set<SubjectId> unavailable) {
         var triedStores = new HashSet<SubjectId>();
         KnownPedestrianNavigation.RouteUnavailable waiting = null;
-        for (var item : state.inventory().items().values().stream()
+        for (var item : ExactItemReadIndex.owned(state.inventory(), owner).stream()
                 .filter(value -> available(state, owner, value, requirements, unavailable))
                 .sorted(Comparator.comparingLong((ExactItemStack item) -> distance(origin, endpoint(state, item).station()))
                         .thenComparing(ExactItemStack::id)).toList()) {

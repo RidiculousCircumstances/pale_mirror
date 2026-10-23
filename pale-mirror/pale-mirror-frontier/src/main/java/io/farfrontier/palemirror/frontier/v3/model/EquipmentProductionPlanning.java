@@ -33,7 +33,7 @@ public final class EquipmentProductionPlanning {
                 result.add(new Request(deficit.demand().pool(), recipe, Optional.empty(), deficit.immediate(),
                         definition.orElseThrow().durability() - definition.orElseThrow().maintenanceReserve(), cost, workCost));
             } else if (recipe.outcome() instanceof ProductionRecipeOutcome.Repair repair) {
-                for (var item : state.inventory().items().values()) {
+                for (var item : ExactItemReadIndex.owned(state.inventory(), home)) {
                     if (!item.economicOwnerId().equals(home) || !item.itemKind().equals(recipe.product().itemKind())
                             || item.condition().damage() == 0 || reserved.contains(item.id())
                             || !(item.custody() instanceof InventoryCustody.ContainerSlot slot)

@@ -22,15 +22,19 @@ final class FrontierV3GoalNavigation {
         abstract boolean current(Mob actor);
         abstract Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> navigationProfile();
         Optional<TravelPace> pace() { return Optional.empty(); }
+        double followingSpacing() { return 0; }
     }
     private static final class CapturedPermission extends ProviderPermission {
         private final Mob actor;
         private final FrontierV3ActorActuation actuation;
         private final Optional<TravelPace> pace;
+        private final double followingSpacing;
         private final io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile profile;
-        private CapturedPermission(Mob actor, FrontierV3ActorActuation actuation, Optional<TravelPace> pace) {
+        private CapturedPermission(Mob actor, FrontierV3ActorActuation actuation, Optional<TravelPace> pace, double followingSpacing) {
             this.actor = Objects.requireNonNull(actor); this.actuation = Objects.requireNonNull(actuation);
             this.pace = Objects.requireNonNull(pace);
+            if (!Double.isFinite(followingSpacing) || followingSpacing < 0) throw new IllegalArgumentException("invalid following spacing");
+            this.followingSpacing = followingSpacing;
             this.profile = actuation.navigationProfile().orElseThrow(() -> new IllegalArgumentException("navigation lost its declared profile"));
         }
         @Override boolean current(Mob candidate) {
@@ -38,6 +42,7 @@ final class FrontierV3GoalNavigation {
         }
         @Override Optional<io.farfrontier.palemirror.frontier.v3.model.navigation.UnitNavigationProfile> navigationProfile() { return Optional.of(profile); }
         @Override Optional<TravelPace> pace() { return pace; }
+        @Override double followingSpacing() { return followingSpacing; }
     }
     /** Unmodeled physical fixtures have no canonical identity and cannot acquire one through this permission. */
     private static final class UnmodeledPermission extends ProviderPermission {
@@ -144,17 +149,27 @@ final class FrontierV3GoalNavigation {
             return new Result(Status.AMBIGUOUS, "stale-body-or-execution-authority", Optional.empty(), Optional.empty());
         if (FrontierV3PedestrianCourtesy.active(actor))
             return new Result(Status.IN_PROGRESS, "owner-authorized-spatial-yield", Optional.empty(), Optional.empty());
-        return pursueCaptured(level, actor, goal, actuation, pace);
+        return pursueCaptured(level, actor, goal, actuation, pace, 0);
+    }
+    static Result pursue(ServerLevel level, Mob actor, Goal goal, FrontierV3ActorActuation actuation,
+                          io.farfrontier.palemirror.frontier.v3.model.navigation.MovementPermission movement) {
+        if (!movement.allowed()) throw new IllegalArgumentException("held movement cannot actuate navigation");
+        if (!actuation.current(actor))
+            return new Result(Status.AMBIGUOUS, "stale-body-or-execution-authority", Optional.empty(), Optional.empty());
+        if (FrontierV3PedestrianCourtesy.active(actor))
+            return new Result(Status.IN_PROGRESS, "owner-authorized-spatial-yield", Optional.empty(), Optional.empty());
+        return pursueCaptured(level, actor, goal, actuation, movement.pace(),
+                movement.spacing().map(value -> (double) value.normalSpacing()).orElse(0.0));
     }
 
     static Result pursueCourtesy(ServerLevel level, Mob actor, Goal goal, FrontierV3ActorActuation actuation) {
         if (!FrontierV3PedestrianCourtesy.active(actor))
             throw new IllegalArgumentException("courtesy motion requires its admitted owner checkpoint");
-        return pursueCaptured(level, actor, goal, actuation, Optional.empty());
+        return pursueCaptured(level, actor, goal, actuation, Optional.empty(), 0);
     }
 
     private static Result pursueCaptured(ServerLevel level, Mob actor, Goal goal, FrontierV3ActorActuation actuation,
-                                          Optional<TravelPace> pace) {
+                                          Optional<TravelPace> pace, double followingSpacing) {
         Objects.requireNonNull(actuation, "navigation actuation");
         if (!actuation.current(actor))
             return new Result(Status.AMBIGUOUS, "stale-body-or-execution-authority", Optional.empty(), Optional.empty());
@@ -164,7 +179,7 @@ final class FrontierV3GoalNavigation {
             FrontierV3ControlledMobMotion.retireLocalActuation(actor);
         }
         ACTUATIONS.put(actor, actuation);
-        return pursueProvider(level, actor, goal, new CapturedPermission(actor, actuation, pace));
+        return pursueProvider(level, actor, goal, new CapturedPermission(actor, actuation, pace, followingSpacing));
     }
 
     private static Result pursueProvider(ServerLevel level, Mob actor, Goal goal, ProviderPermission permission) {

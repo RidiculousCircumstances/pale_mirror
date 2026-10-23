@@ -97,7 +97,7 @@ final class FrontierV3ActorMovementNavigation {
         }
         try {
             FrontierV3GoalNavigation.Result result = FrontierV3GoalNavigation.pursue(level, body,
-                    FrontierV3GoalNavigation.Goal.routed(movement.order(), route.waypoints(), state.bootstrap().bounds()), actuation, permission.pace());
+                    FrontierV3GoalNavigation.Goal.routed(movement.order(), route.waypoints(), state.bootstrap().bounds()), actuation, permission);
             if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED)
                 blocked(body, movement, "minecraft_path:" + result.reason());
             else BLOCKED.remove(body);

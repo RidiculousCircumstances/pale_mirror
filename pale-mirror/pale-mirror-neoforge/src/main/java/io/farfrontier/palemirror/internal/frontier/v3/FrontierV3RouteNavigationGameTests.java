@@ -268,6 +268,41 @@ public final class FrontierV3RouteNavigationGameTests {
         });
     }
 
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 110)
+    public static void wideTransitPassesHintBeforeCenteringButStillProvesFinalArrival(GameTestHelper helper) {
+        floor(helper); var level = helper.getLevel();
+        var animal = helper.spawnWithNoFreeWill(EntityType.DONKEY, new Vec3(2.5, 1, 2.5));
+        var hint = new java.util.ArrayList<SurfaceAnchor>();
+        for (int x = 2; x <= 6; x++) hint.add(anchor(helper, x, 2));
+        for (int z = 3; z <= 6; z++) hint.add(anchor(helper, 6, z));
+        for (int x = 5; x >= 2; x--) hint.add(anchor(helper, x, 6));
+        for (int z = 5; z >= 3; z--) hint.add(anchor(helper, 2, z));
+        hint.add(anchor(helper, 3, 3)); hint.add(anchor(helper, 4, 3));
+        var target = hint.getLast();
+        var goal = FrontierV3GoalNavigation.Goal.routed(order(target), hint, bounds(helper));
+        helper.runAfterDelay(1, () -> {
+            boolean passed = false;
+            for (int turn = 0; turn < 240 && !FrontierV3SemanticMovement.arrived(level, animal, target); turn++) {
+                var stations = FrontierV3MinecraftGoalNavigation.observation(animal).targets();
+                var handoff = stations.isEmpty() ? java.util.Optional.<SurfaceAnchor>empty()
+                        : FrontierV3MinecraftGoalNavigation.transitHandoff(animal,
+                            new FrontierV3MinecraftGoalNavigation.Demand(stations, goal.scope(), goal.order()), goal.legalStations());
+                if (handoff.isPresent()) {
+                    helper.assertTrue(!goal.legalStations().contains(handoff.orElseThrow()), "transit must not waive final arrival");
+                    passed |= !FrontierV3SemanticMovement.arrived(level, animal, handoff.orElseThrow());
+                }
+                var result = FrontierV3GoalNavigation.pursue(level, animal, goal);
+                helper.assertTrue(result.status() != FrontierV3GoalNavigation.Status.ARRIVED,
+                        "passing a hint cannot report the terminal task as complete");
+                FrontierV3GoalNavigation.advanceAtEntityBoundary(animal); animal.aiStep();
+            }
+            helper.assertTrue(passed, "wide body must hand off before exact intermediate centering");
+            helper.assertTrue(FrontierV3SemanticMovement.arrived(level, animal, target), "final work station still requires actual arrival: " + animal.position());
+            FrontierV3GoalNavigation.stop(animal); animal.discard(); helper.succeed();
+        });
+    }
+
     private static void floor(GameTestHelper helper) {
         for (int x = 0; x <= 7; x++) for (int z = 0; z <= 7; z++) {
             BlockPos support = helper.absolutePos(new BlockPos(x, 0, z));

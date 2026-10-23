@@ -125,7 +125,8 @@ class GroupMovementObservationTest {
                 original.revision(), original.goalOrdinal(), Optional.of(new UnitGroup.Journey(route.getLast(), route, route.size() - 1,
                         original.journey().orElseThrow().stations())));
         var front = group.members().getFirst().actorId(); var back = group.members().getLast().actorId();
-        int spacing = UnitGroupMissionPorts.require(group).travelPolicy(state, group).spacing();
+        int spacing = UnitGroupMissionPorts.require(group).knowledge(state, group).formationSpacing(
+                UnitGroupMissionPorts.require(group).travelPolicy(state, group).spacing());
         var lead = SurfaceAnchor.at(10, 63, 16); var follower = SurfaceAnchor.at(10 - spacing, 63, 0);
         ActorPositionView positions = actor -> (actor.equals(front) ? lead : follower).standingBody();
         assertFalse(GroupTravelCohesion.assess(state, group, front, lead, positions).allowed());
