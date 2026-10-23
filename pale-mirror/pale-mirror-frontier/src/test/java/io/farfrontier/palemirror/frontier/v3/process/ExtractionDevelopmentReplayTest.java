@@ -47,6 +47,8 @@ class ExtractionDevelopmentReplayTest {
                     .filter(ScheduleEffect.ReconsiderationRequested.class::isInstance)
                     .map(ScheduleEffect.ReconsiderationRequested.class::cast).findFirst().orElseThrow();
             assertEquals(ExtractionContinuation.review(deposit.site().settlementId(), 6001), wake.action());
+            assertDoesNotThrow(() -> FrontierWorldProcessCatalog.requireReconsideration(wake.action()),
+                    "the emitted review must be admitted by the real closed registry");
             assertEquals(observed, accepted.events().getFirst().payload());
             assertTrue(accepted.events().stream().noneMatch(event -> event.payload() instanceof ExtractionFrontierOpened
                     || event.payload() instanceof ExtractionAreaExtended));
