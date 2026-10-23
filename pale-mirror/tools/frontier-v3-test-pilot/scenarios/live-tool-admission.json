@@ -1,0 +1,129 @@
+{
+  "schema": 1,
+  "id": "live_tool_admission",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    }
+  ],
+  "actions": [
+    {
+      "type": "wait",
+      "ms": 20000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:10-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -2,
+        "y": -1,
+        "z": 0
+      },
+      "settleMs": 2000
+    },
+    {
+      "type": "inspect",
+      "view": "site",
+      "id": "site:10-wheat-field"
+    },
+    {
+      "type": "wait",
+      "ms": 20000
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": 2000,
+        "y": 64,
+        "z": 2000
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "wait",
+      "ms": 20000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:10-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -2,
+        "y": -1,
+        "z": 0
+      },
+      "settleMs": 2000
+    },
+    {
+      "type": "wait",
+      "ms": 20000
+    },
+    {
+      "type": "inspect",
+      "view": "site",
+      "id": "site:10-wheat-field"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 5,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "requiredConflicts": 0
+      }
+    },
+    {
+      "after": 11,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "requiredConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 3,
+      "name": "initial-field-admission"
+    },
+    {
+      "after": 10,
+      "name": "return-field-admission"
+    }
+  ]
+}

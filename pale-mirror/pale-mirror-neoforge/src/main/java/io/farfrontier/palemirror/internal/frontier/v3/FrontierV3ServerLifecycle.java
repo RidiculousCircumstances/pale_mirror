@@ -251,6 +251,7 @@ public final class FrontierV3ServerLifecycle {
             }
         }
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
+            FrontierV3EconomyObservatory.attach(runtime, server.getWorldPath(LevelResource.ROOT));
             PaleMirrorMod.LOGGER.info("Frontier v3 runtime started for {}", server.getWorldPath(LevelResource.ROOT));
             String pilotRunId = System.getProperty(PILOT_RUN_ID_PROPERTY, "");
             if (!pilotRunId.isBlank()) {
@@ -495,7 +496,6 @@ public final class FrontierV3ServerLifecycle {
         FAST_FORWARD_OUTCOMES.remove(server); FAST_FORWARD_SLICE_TELEMETRY.remove(server); INITIAL_CANONICAL_HOLDS.remove(server);
     }
     static void releaseRuntime(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        Objects.requireNonNull(runtime, "runtime");
         FrontierV3PedestrianPlanning.forget(runtime);
         FrontierV3ActorAdoptionPersistence.forget(runtime);
         FrontierV3SceneDeparturePersistence.forget(runtime);
@@ -508,7 +508,7 @@ public final class FrontierV3ServerLifecycle {
         FrontierV3AmbientActorExecutor.forget(runtime);
         FrontierV3SceneExecutor.forget(runtime);
         FrontierV3SettlementAssaultSceneExecutor.forget(runtime);
-        runtime.shutdown();
+        FrontierV3EconomyObservatory.detach(runtime); runtime.shutdown();
     }
     private static void advanceQueuedCanonicalTime(MinecraftServer server, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
         long sliceStarted = System.nanoTime();

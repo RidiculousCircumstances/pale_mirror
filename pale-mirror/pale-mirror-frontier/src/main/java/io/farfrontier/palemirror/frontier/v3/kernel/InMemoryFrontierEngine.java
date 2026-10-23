@@ -38,6 +38,11 @@ import java.util.function.Consumer;
  * no filesystem behaviour; Wave 2 supplies the durable store behind the same transaction facts.
  */
 final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements FrontierCanonicalStateAccess<S, P> {
+    private io.farfrontier.palemirror.frontier.v3.api.CanonicalPublicationObserver<S> publicationObserver;
+    @Override public void observePublications(io.farfrontier.palemirror.frontier.v3.api.CanonicalPublicationObserver<S> observer) {
+        if (Thread.currentThread() != ownerThread) throw new IllegalStateException("observer registration off owner thread");
+        publicationObserver = observer;
+    }
     private final Thread ownerThread = Thread.currentThread();
     private final WorldId worldId;
     private final CommandPlanner<S> commandPlanner;
@@ -536,6 +541,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 confirmation = () -> true;
             } else confirmation = Objects.requireNonNull(transactionCommitter.prepare(transaction, durability));
         }
+        var previousState = state;
         var publishedState = nextState;
         boolean publishedWakeAll = wakeAll;
         Runnable publish = () -> {
@@ -550,6 +556,10 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             else schedules.wake(wakeKeys, eventInstant.ticks());
             transactions.add(transaction);
             acceptedCommandReceipt.ifPresent(receipts::add);
+            if (publicationObserver != null) {
+                try { publicationObserver.published(transaction, previousState, publishedState); }
+                catch (RuntimeException ignored) { /* Non-authoritative observer cannot quarantine published work. */ }
+            }
         };
         // Retain identity before the first poll too: it may have admitted bytes and
         // then failed to force them. That revision must never get a second writer.

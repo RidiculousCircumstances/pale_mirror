@@ -60,6 +60,22 @@ class DeferredTransactionPublicationTest {
         assertEquals(3, engine.canonicalState().state()); assertEquals(1, engine.checkpoint().receipts().size());
         assertTrue(engine.advanceDurability()); assertEquals(1, disk.submitted.size());
     }
+    @Test void observationOccursOnlyAfterPublicationAndCannotRollBackAcceptedWork() {
+        var disk = new Disk(); var engine = FrontierEngines.createCanonicalStateAccess(configuration(disk, List.of()));
+        var observations = new ArrayList<Integer>();
+        engine.observePublications((tx, before, after) -> {
+            assertEquals(0, before); assertEquals(3, after);
+            assertEquals(after, engine.canonicalState().state());
+            observations.add(after);
+            throw new IllegalStateException("collector unavailable");
+        });
+        assertInstanceOf(CommandResult.Pending.class, engine.submit(command("observed")));
+        assertTrue(observations.isEmpty());
+        disk.ready = true; assertTrue(engine.advanceDurability());
+        assertEquals(List.of(3), observations); assertEquals(3, engine.canonicalState().state());
+        assertFalse(engine.hasPendingCommit()); assertTrue(engine.advanceDurability());
+        assertEquals(List.of(3), observations);
+    }
     @Test void scheduledCompletionIsNotConsumedOrReplannedWhileItsRecordWaits() {
         var disk = new Disk();
         var action = new ScheduledAction(new ScheduleId("schedule:work"), new SimInstant(5), 0, OWNER, "test.work", 1);

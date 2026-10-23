@@ -10,4 +10,8 @@ package io.farfrontier.palemirror.frontier.v3.api;
  */
 public interface FrontierCanonicalStateAccess<S, P extends FrontierProjection> extends FrontierEngine<P> {
     FrontierCanonicalState<S> canonicalState();
+
+    /** Optional read-only observer, invoked only after publication. Host must enqueue
+     * bounded immutable evidence without I/O or mutations. Exceptions cannot undo a commit. */
+    void observePublications(CanonicalPublicationObserver<S> observer);
 }

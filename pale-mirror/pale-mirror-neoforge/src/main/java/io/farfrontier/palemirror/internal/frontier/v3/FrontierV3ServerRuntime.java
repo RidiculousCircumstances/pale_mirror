@@ -134,6 +134,10 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
                 Objects.requireNonNull(failure, "startup failure"), identity);
     }
 
+    void observePublications(io.farfrontier.palemirror.frontier.v3.api.CanonicalPublicationObserver<S> observer) {
+        if (engine != null) engine.observePublications(observer);
+    }
+
     FrontierV3RuntimeStatus status() { return status; }
 
     FrontierExecutionMetrics executionMetrics() { return configuration.executionMetrics(); }

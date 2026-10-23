@@ -1,0 +1,165 @@
+:root {
+  color-scheme: dark;
+  font:
+    14px system-ui,
+    sans-serif;
+  color: #dce7e6;
+  background: #101b22;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  padding: 26px 4vw;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #30424b;
+  padding-bottom: 18px;
+}
+small {
+  letter-spacing: 2px;
+  color: #85b7ad;
+}
+h1 {
+  font-size: 27px;
+  margin: 8px 0;
+}
+form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 22px 0 10px;
+  align-items: end;
+}
+label {
+  display: grid;
+  gap: 6px;
+  color: #9db2bb;
+  font-size: 12px;
+}
+input,
+select,
+button {
+  padding: 9px;
+  border: 1px solid #405963;
+  border-radius: 5px;
+  background: #1a2a33;
+  color: #e6f1ef;
+}
+input[type="number"] {
+  width: 140px;
+}
+button {
+  cursor: pointer;
+}
+button:hover,
+button.active {
+  border-color: #74c9ab;
+  background: #24473f;
+}
+.check {
+  display: flex;
+  padding: 10px;
+  align-items: center;
+}
+.cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 20px 0;
+}
+.card {
+  background: #1c2e37;
+  padding: 15px 22px;
+  border-radius: 7px;
+  min-width: 160px;
+}
+.card strong {
+  display: block;
+  font-size: 25px;
+  margin-bottom: 4px;
+}
+.card span {
+  color: #9fb5be;
+}
+nav {
+  display: flex;
+  gap: 8px;
+  margin: 22px 0;
+  flex-wrap: wrap;
+}
+main {
+  overflow: auto;
+  min-height: 400px;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  background: #14242d;
+}
+th,
+td {
+  text-align: right;
+  padding: 10px 13px;
+  border-bottom: 1px solid #2a3b44;
+  white-space: nowrap;
+}
+th {
+  color: #99c6bd;
+  font-size: 12px;
+  position: sticky;
+  top: 0;
+  background: #20353f;
+}
+td:first-child,
+th:first-child {
+  text-align: left;
+}
+tr:hover {
+  background: #213740;
+}
+.muted,
+footer,
+#coverage {
+  color: #92a9b4;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.warn {
+  color: #f8c580;
+}
+a {
+  color: #8cd5bc;
+}
+h2 {
+  font-size: 19px;
+}
+svg {
+  width: 100%;
+  height: 230px;
+  background: #152731;
+  border: 1px solid #30464f;
+  border-radius: 5px;
+}
+footer {
+  margin-top: 30px;
+}
+.legend {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin: 12px 0 28px;
+}
+.empty {
+  padding: 45px;
+  color: #9aafb6;
+  text-align: center;
+}
+#health {
+  max-width: 40%;
+  text-align: right;
+}
