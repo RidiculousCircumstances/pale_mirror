@@ -9,10 +9,12 @@ import java.util.function.LongUnaryOperator;
 final class FrontierV3PendingProjection {
     private static final class Slice {
         List<WorksiteBlock> version = List.of();
+        List<WorksiteBlock> desired = List.of();
         final Map<BlockPosition, WorksiteBlock> cells = new HashMap<>();
         final LinkedHashMap<BlockPosition, WorksiteBlock> pending = new LinkedHashMap<>();
         Object availability;
-        void update(List<WorksiteBlock> next) {
+        void refresh() {
+            var next = desired;
             if (version == next) return;
             var retained = new HashSet<BlockPosition>();
             for (var block : next) {
@@ -29,18 +31,26 @@ final class FrontierV3PendingProjection {
     void update(Map<Long, List<WorksiteBlock>> current) {
         if (version == current) return;
         slices.keySet().retainAll(current.keySet());
-        current.forEach((key, cells) -> slices.computeIfAbsent(key, ignored -> new Slice()).update(cells));
+        // Retain immutable declarations without building per-cell queues for unloaded chunks.
+        current.forEach((key, cells) -> slices.computeIfAbsent(key, ignored -> new Slice()).desired = cells);
         version = current;
     }
     void invalidate(long chunk, BlockPosition position) {
         var slice = slices.get(chunk);
-        if (slice != null && slice.cells.containsKey(position)) slice.pending.put(position, slice.cells.get(position));
+        if (slice != null) {
+            slice.refresh();
+            if (slice.cells.containsKey(position)) slice.pending.put(position, slice.cells.get(position));
+        }
     }
     void complete(long chunk, WorksiteBlock block) {
         var slice = slices.get(chunk);
-        if (slice != null) slice.pending.remove(block.position(), block);
+        if (slice != null) { slice.refresh(); slice.pending.remove(block.position(), block); }
     }
-    int pending(long chunk) { var slice = slices.get(chunk); return slice == null ? 0 : slice.pending.size(); }
+    int pending(long chunk) {
+        var slice = slices.get(chunk);
+        if (slice == null) return 0;
+        slice.refresh(); return slice.pending.size();
+    }
     /** A whole chunk gets a bounded contiguous slice; alternating preferred/fair turns prevent starvation. */
     List<WorksiteBlock> batch(LongFunction<Object> availability, LongUnaryOperator priority, int limit) {
         return batch(availability, priority, limit, java.util.Set.of());
@@ -51,6 +61,7 @@ final class FrontierV3PendingProjection {
         if (limit < 1) throw new IllegalArgumentException("positive projection budget required");
         for (var entry : slices.entrySet()) {
             var slice = entry.getValue(); var token = availability.apply(entry.getKey());
+            if (token != null) slice.refresh();
             if (!Objects.equals(token, slice.availability)) {
                 slice.availability = token;
                 if (token != null) for (var block : slice.version) slice.pending.put(block.position(), block);

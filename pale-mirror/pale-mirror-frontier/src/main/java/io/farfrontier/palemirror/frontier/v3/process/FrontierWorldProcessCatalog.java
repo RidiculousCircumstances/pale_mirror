@@ -251,7 +251,7 @@ public final class FrontierWorldProcessCatalog {
             Map.entry(DefenderEquipmentProcess.REVIEW_ACTION, (state, action) -> DefenderEquipmentProcess.plan(state, action)),
             Map.entry(DefenderEquipmentReturnProcess.REVIEW_ACTION, (state, action) -> DefenderEquipmentReturnProcess.plan(state, action)),
             Map.entry(ResidentNeedProcess.REVIEW, (state, action) -> ResidentNeedProcess.plan(state, action)),
-            Map.entry(ResidentActivityProcess.REVIEW, withPlanningRecovery(new FrontierScheduledPlanner() {
+            Map.entry(ResidentActivityProcess.REVIEW, detached(withPlanningRecovery(new FrontierScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ResidentActivityProcess.plan(state, action);
                 }
@@ -269,7 +269,7 @@ public final class FrontierWorldProcessCatalog {
                 @Override public Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) {
                     return ResidentActivityProcess.wakeDependencies(state, action.subject());
                 }
-            })),
+            }))),
             Map.entry(ResidentMealProcess.PROGRESS, withPlanningRecovery(new FrontierScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ResidentMealProcess.planProgress(state, action);

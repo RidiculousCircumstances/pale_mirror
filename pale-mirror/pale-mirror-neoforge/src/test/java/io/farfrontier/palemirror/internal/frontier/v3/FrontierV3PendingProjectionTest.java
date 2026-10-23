@@ -19,6 +19,22 @@ class FrontierV3PendingProjectionTest {
         assertTrue(queue.batch(key -> token, key -> key, 8, Set.of(first.position())).isEmpty());
         assertEquals(List.of(first), queue.batch(key -> token, key -> key, 8));
     }
+    @Test void unloadedDeclarationsAreNotEnumeratedAndLatestRevisionIsUsedOnArrival() {
+        var queue = new FrontierV3PendingProjection();
+        var forbidden = new AbstractList<WorksiteBlock>() {
+            @Override public int size() { return 1; }
+            @Override public WorksiteBlock get(int index) { throw new AssertionError("unloaded chunk enumerated"); }
+        };
+        var loaded = cell(1, 1); var revised = cell(33, 2);
+        queue.update(Map.of(1L, List.of(loaded), 2L, forbidden));
+        var token = new Object();
+        assertEquals(List.of(loaded), queue.batch(key -> key == 1 ? token : null, key -> 0, 64));
+        queue.complete(1, loaded);
+        queue.update(Map.of(1L, List.of(loaded), 2L, List.of(revised)));
+        assertEquals(List.of(revised), queue.batch(key -> token, key -> 0, 64));
+        queue.complete(2, cell(33, 1));
+        assertEquals(1, queue.pending(2), "old completion must not erase the current declaration");
+    }
     private static WorksiteBlock cell(int x, long revision) {
         return new WorksiteBlock(new WorksiteBlock.Key(CellMutationKey.OwnerFamily.EXTRACTIVE_SITE,
                 new SubjectId("extraction:queue-test"), WorksiteBlock.Role.NATURAL_TERRAIN, x + 1),

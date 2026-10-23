@@ -48,6 +48,7 @@ final class FrontierV3JournalStore implements FrontierV3PhysicalJournal {
     private final Object fileLock;
     private final ArrayDeque<Pending> queue = new ArrayDeque<>();
     private long queuedBytes;
+    private CompletableFuture<Long> latestSubmission;
     private boolean writerScheduled;
     private final Path checkpoint, journal;
     private final SortedMap<String, byte[]> rows = new TreeMap<>();
@@ -149,6 +150,9 @@ final class FrontierV3JournalStore implements FrontierV3PhysicalJournal {
     }
     @Override public synchronized CompletableFuture<Long> appendAsync(Map<String, byte[]> replacements) throws IOException {
         checkHealthy();
+        // An unchanged owner needs the already-submitted prefix, not another
+        // writer task or filesystem probe. First use still creates the baseline.
+        if (replacements.isEmpty() && latestSubmission != null) return latestSubmission;
         var next = new TreeMap<String, byte[]>();
         replacements.forEach((key, value) -> {
             if (Objects.requireNonNull(key).isEmpty() || key.length() > 256)
@@ -169,7 +173,8 @@ final class FrontierV3JournalStore implements FrontierV3PhysicalJournal {
                 throw new IOException("physical journal writer unavailable", busy);
             }
         }
-        return pending.receipt();
+        latestSubmission = pending.receipt();
+        return latestSubmission;
     }
     public void checkHealthy() throws IOException {
         health.check();

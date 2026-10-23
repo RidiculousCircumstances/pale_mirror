@@ -62,7 +62,15 @@ class ResidentActivityProcessTest {
             assertTrue(ResidentActivityCoordinator.requestsYield(state, actor, 24_000));
             assertEquals(0, planner.pendingCount(), "eligibility and yield intent may not initiate food searches");
             var action = ResidentActivityProcess.review(actor, 24_000);
-            var proposed = PedestrianPlanningContinuations.plan(action, () -> ResidentActivityProcess.plan(state, action));
+            var preparation = FrontierWorldProcessCatalog.prepareScheduled(
+                    FrontierWorldRuntimeDefinition.processRegistry(), state, action, action.dueAt()).orElseThrow();
+            java.util.function.Supplier<List<io.farfrontier.palemirror.frontier.v3.api.ProposedEvent>> completion;
+            try (var worker = java.util.concurrent.Executors.newSingleThreadExecutor()) {
+                completion = worker.submit(preparation::prepare).get();
+            }
+            assertEquals(0, planner.pendingCount(), "detached activity advice cannot acquire native routing");
+            assertEquals(0, index.waitingCount(), "the owning thread publishes the continuation");
+            var proposed = completion.get();
             assertTrue(proposed.stream().noneMatch(event -> event.payload() instanceof ResidentMealStarted));
             var successor = proposed.stream().map(event -> event.payload()).filter(ScheduleEffect.Rescheduled.class::isInstance)
                     .map(ScheduleEffect.Rescheduled.class::cast).findFirst().orElseThrow().replacement();

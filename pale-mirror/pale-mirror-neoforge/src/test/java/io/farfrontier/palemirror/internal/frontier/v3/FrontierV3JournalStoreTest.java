@@ -33,6 +33,23 @@ class FrontierV3JournalStoreTest {
         assertEquals(1, store.image().get("actor:a")[0]);
     }
 
+    @Test void unchangedFlushWaitsForItsSubmittedPrefixWithoutCreatingMoreWriterWork() throws Exception {
+        var work = new ArrayDeque<Runnable>();
+        var store = FrontierV3JournalStore.open(directory.resolve("prefix.dat"), work::add);
+        var baseline = store.appendAsync(Map.of());
+        assertSame(baseline, store.appendAsync(Map.of()));
+        work.remove().run(); assertEquals(0L, baseline.join());
+        var first = store.appendAsync(Map.of("a", new byte[]{1}));
+        for (int i = 0; i < 100; i++) assertSame(first, store.appendAsync(Map.of()));
+        assertFalse(first.isDone()); assertEquals(1, store.pressure().queuedWrites());
+        work.remove().run();
+        assertSame(first, store.appendAsync(Map.of())); assertTrue(work.isEmpty());
+        var second = store.appendAsync(Map.of("b", new byte[]{2}));
+        assertNotSame(first, second); assertSame(second, store.appendAsync(Map.of()));
+        assertFalse(second.isDone(), "a completed old prefix cannot acknowledge new writes");
+        work.remove().run(); assertEquals(2L, second.join());
+    }
+
     @Test void changedRowsAndTombstonesDoNotRewriteCheckpoint() throws Exception {
         Path file = directory.resolve("physical.dat");
         var store = FrontierV3JournalStore.open(file);

@@ -8,10 +8,14 @@ import java.util.function.IntConsumer;
 final class FrontierV3CooperativeStageCursor {
     private int next;
     void run(int size, BooleanSupplier admitted, IntConsumer execute) {
-        while (next < size && admitted.getAsBoolean()) {
+        run(size, admitted, () -> true, execute);
+    }
+    void run(int size, BooleanSupplier admitted, BooleanSupplier remainingBudget, IntConsumer execute) {
+        boolean progressed = false;
+        while (next < size && (!progressed || remainingBudget.getAsBoolean()) && admitted.getAsBoolean()) {
             int current = next;
             execute.accept(current);
-            next = current + 1;
+            next = current + 1; progressed = true;
         }
         if (next == size) next = 0;
     }

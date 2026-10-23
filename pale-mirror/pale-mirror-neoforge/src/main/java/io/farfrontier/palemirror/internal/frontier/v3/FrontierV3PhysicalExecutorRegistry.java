@@ -83,12 +83,14 @@ final class FrontierV3PhysicalExecutorRegistry {
                         .map(Definition::id).toList())).begin((long)
                 (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D), System::nanoTime);
         activePreparation.put(world, admission);
+        long started = System.nanoTime();
+        long allowance = (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D);
         try { continuations.computeIfAbsent(runtime, ignored -> new FrontierV3CooperativeStageCursor()).run(ordered.size(), () -> {
             var capacity = runtime.commandAdmissionCapacity();
             // A predecessor can quarantine the runtime. Preserve that primary trace and
             // stop this turn instead of throwing a second missing-Optional exception.
             return capacity.isPresent() && capacity.orElseThrow().hasCausalHeadroom() && !runtime.awaitingCanonicalPredecessor();
-        }, index -> {
+        }, () -> System.nanoTime() - started < allowance, index -> {
             Definition definition = ordered.get(index);
             // Definitions presently represent one invocation.  A future multi-slice executor must
             // declare and consume its own bounded work units rather than adding a second tick call.

@@ -85,7 +85,7 @@ final class FrontierV3BodyOperationIntegration {
                 || !FrontierV3NativeOperationMarkers.contains(body.getPersistentData(), link.operation().nativeReceipt(link.participant()))) return true;
         var operations = FrontierV3OperationLedger.get(level);
         if (retired(operations, link)) {
-            carriers.forgetBodyOperation(link); carriers.persist(level, state.bootstrap().worldId()); return false;
+            carriers.forgetBodyOperation(link); carriers.persistAsync(level, state.bootstrap().worldId()); return false;
         }
         if (!operations.durableOperation(link.operation().ticket())) return true;
         if (FrontierV3OperationConfirmation.submitRecovery(level, runtime, link.operation().ticket(), consequence, java.util.Optional.empty())) {
@@ -99,7 +99,11 @@ final class FrontierV3BodyOperationIntegration {
         // ActorBodyPresent may become durable between turns. Once RUNNING, ordinary
         // inspection no longer calls confirm, so exact owner cleanup must follow that receipt.
         if (carriers.bodyOperation(link.actor()).filter(link::equals).isEmpty()) return;
-        carriers.forgetBodyOperation(link); carriers.persist(level, link.world());
+        // This removes only a redundant owner link AFTER canonical admission. The
+        // operation journal owns closure/pinned receipt durability. A crash before
+        // this cleanup is saved restores the old link; recover/retired above then
+        // removes it without inserting or admitting the body a second time.
+        carriers.forgetBodyOperation(link); carriers.persistAsync(level, link.world());
     }
     private static boolean retired(FrontierV3OperationLedger operations, FrontierV3BodyAdmissionOperation link) {
         return operations.prunable(link.operation().nativeReceipt(link.participant()));

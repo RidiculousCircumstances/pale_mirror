@@ -7,6 +7,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3CooperativeStageCursorTest {
+    @Test void budgetYieldRetainsTheOrderedSuffixAndNeverBypassesDurability() {
+        var cursor = new FrontierV3CooperativeStageCursor(); var seen = new ArrayList<Integer>();
+        cursor.run(3, () -> false, () -> false, index -> fail("no effect before durability"));
+        for (int i = 0; i < 6; i++) cursor.run(3, () -> true, () -> false, seen::add);
+        assertEquals(List.of(0, 1, 2, 0, 1, 2), seen, "one admitted stage progresses even after a spent soft budget");
+    }
+
     @Test void everyStageGetsItsTurnDespiteAnAlwaysWritingPredecessor() {
         var cursor = new FrontierV3CooperativeStageCursor();
         var ready = new AtomicBoolean(true); var seen = new ArrayList<Integer>();

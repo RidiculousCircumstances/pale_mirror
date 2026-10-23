@@ -131,3 +131,58 @@ lifecycle now actually calls its existingasyncwriteAPI. Focusednegative/crash
 checks and24nativebody-lifetimetestsPASS (r239e-gates.log). Explicit saved-body
 checkpoint andnative-world canonicalwrite barriers are remaining synchronous
 sources, not silently waived. Source is not yet proof of80msliveperformance.
+
+
+## First-pass batching and resident activity (next candidate)
+
+3f3318 startup no longer reproduces the 3.15s schedule-allocation stall. An
+isolated90s startup JFR (r239e-startup.jfr) finds a302.5ms first physical pass,
+79.8ms worksiteprojection, and max51.6ms GC pause. These are not <=80ms acceptance.
+The registry had only a preparation budget: required stages accumulated in one
+pass. Its existing ordered continuation now yields between complete stages at
+the hostsoftbudget, preserving dependencyorder and admission guards. One admitted
+stage always progresses; current state is re-read on resume. Canonicaltime and
+native movement are not budget-skipped. Individual stage overruns remain visible.
+
+Pending worksite queues retain immutable chunk declarations and enumerate cells
+only for available/requested chunks. Replacement and stale completion checks
+remain exact; unavailable chunks cannot claim physical completion. This removes
+per-cell queue allocation for every COLD mine. Initial domain geometry composition
+is still eager and is not claimed eliminated.
+
+An independently logged resident activity review took80.97ms (tick92.72ms).
+Its registered planner now uses the same detached preparation capability as
+extraction/reviews, with unchanged semantic priority, instant and hold rules.
+Owner-side route acquisition and exact snapshot validation remain mandatory.
+Throughput/debt must be measured; a lower tick peak alone is not acceptance.
+
+The first native gate used unsupported slice `aftermath`; Minecraft did not run
+tests although Gradle returned success. That is invalid native evidence, replaced
+by the actual `physical-turn` slice, with test-count/result inspection.
+
+The120s HOT profile of3f3318 (r239e-hot.jfr, no concurrent build) attributes
+49server waits >=10ms,566.6ms total,max20ms, to post-admission carrier-link
+cleanup. That redundant link now saves asynchronously; the common operation
+journal still owns closure and its receipt pin. Restart with the old link follows
+the existing ownerClosed/retired recovery, never repeats entity insertion.
+11saved-departure waits (139.2ms total,max29ms) remain a separate causal fence.
+GCmax61.64ms; login574ms included vanilla classloading/commands/chunk processing
+and first PM board geometry. No attribution of all574ms to PM is justified.
+HOT run9f5ba759-9a47-4a61-a428-a8166349a9de: zero retainedscene/inventory/required
+conflicts; debt337then declining, but cancelledReady101 requires follow-up.
+
+Unchanged physical journal flushes now reuse the most recent submitted receipt,
+including unfinished writes, instead of scheduling empty tasks behind that same
+prefix. Initial empty baseline creation and failure publication are preserved.
+The deterministic queued-executor check proves no early acknowledgement and
+that a later write cannot borrow an older completed receipt.
+
+Physical-turn negative/recovery slice:9passed after replacing its obsolete
+single-invocation READY expectation with bounded continuation to the same result.
+Focused kernel/activity/pending-queue checks passed; final body/journal checks
+and deployment evidence follow below.
+
+Final source gates: guardrails,47kernel/activity tests,12queue/worker tests,
+10journaltests,9nativephysical-turn and24nativebody-lifetimetestsPASS.
+Receipts: build/r239f-gates.log (initial physical-turn assertion failed as
+documented), r239f-physical-turn.log, r239f-body-journal.log.

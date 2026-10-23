@@ -166,9 +166,13 @@ public final class FrontierV3ProductionPhysicalTurnGameTests {
                     player.getYRot(), player.getXRot());
             helper.assertValueEqual(FrontierV3GrayboxExecutor.firstVisibility(runtime, destination.x + "," + destination.z).status(),
                     "UNOBSERVED", "the player destination has no synthetic prior projection record");
-            FrontierV3PhysicalTurn.observeAndRun(level, runtime);
+            // A soft-budget yield preserves the ordered suffix; READY is a physical
+            // result, not a promise that every registered stage fits in one invocation.
+            for (int turn = 0; turn < 80 && !FrontierV3GrayboxExecutor.firstVisibility(
+                    runtime, destination.x + "," + destination.z).status().equals("READY"); turn++)
+                FrontierV3PhysicalTurn.observeAndRun(level, runtime);
             helper.assertValueEqual(FrontierV3GrayboxExecutor.firstVisibility(runtime, destination.x + "," + destination.z).status(),
-                    "READY", "the registered production turn fences and projects an already-present destination before scene consumption");
+                    "READY", "registered production turns fence and project the destination before scene consumption");
         } finally {
             FrontierV3GrayboxExecutor.forgetFirstVisibility(runtime);
             FrontierV3GrayboxExecutor.forget(runtime);
