@@ -10,6 +10,14 @@ import java.util.Objects;
  * Journal delivery stays live even when new effects lack canonical capacity. */
 final class FrontierV3PhysicalTurn {
     private FrontierV3PhysicalTurn() { }
+    /** Validate the closed composition and hydrate recovery owners before ordinary
+     * execution. This performs no physical effects and advances no simulation time.
+     */
+    static void beginRecovery(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        FrontierV3PhysicalExecutors.registry();
+        FrontierV3ResourceSiteExecutor.beginRecovery(level, runtime);
+        FrontierV3PlayerCustodyRecovery.beginRecovery(runtime);
+    }
     static void run(ServerLevel physicalWorld, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
         FrontierV3NativeBodyResidence.restore(physicalWorld);
         FrontierV3PhysicalExecutors.registry().tick(Objects.requireNonNull(physicalWorld, "physical world"),

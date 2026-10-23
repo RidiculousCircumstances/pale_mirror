@@ -37,6 +37,24 @@ final class FrontierV3PedestrianPlanning {
     }
     private static void tick(FrontierV3ServerRuntime<?, ?> runtime, long allowance, int parallelism, int slices) {
         if (allowance <= 0) throw new IllegalArgumentException("navigation host budget must be positive");
+        initialize(runtime, parallelism);
+        recoverWaits(runtime);
+        continuations.releaseUnused(planner::discardUnobserved);
+        long started = System.nanoTime();
+        planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * slices,
+                () -> System.nanoTime() - started < allowance);
+        continuations.changed(planner.drainChanges());
+        admitReady(runtime, continuations);
+        deferredReady = continuations.readyCount();
+    }
+    /** Bind the service during startup, not by class-loading its implementation
+     * in the first ordinary world tick. Detached recovery still waits asynchronously.
+     */
+    static synchronized void start(FrontierV3ServerRuntime<?, ?> runtime) {
+        initialize(runtime, io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.NAVIGATION_WORKERS.get());
+        recoverWaits(runtime);
+    }
+    private static void initialize(FrontierV3ServerRuntime<?, ?> runtime, int parallelism) {
         if (owner == null) {
             // Host-owned bounded pool. A task captures only immutable known
             // geometry; no worker can access ServerLevel, chunks or domain writes.
@@ -53,14 +71,6 @@ final class FrontierV3PedestrianPlanning {
                     (FrontierWorldState) runtime.decodedState().orElseThrow(), runtime.executionView().orElseThrow());
         }
         if (owner != runtime) throw new IllegalStateException("pedestrian planning has a foreign runtime owner");
-        recoverWaits(runtime);
-        continuations.releaseUnused(planner::discardUnobserved);
-        long started = System.nanoTime();
-        planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * slices,
-                () -> System.nanoTime() - started < allowance);
-        continuations.changed(planner.drainChanges());
-        admitReady(runtime, continuations);
-        deferredReady = continuations.readyCount();
     }
     private static void recoverWaits(FrontierV3ServerRuntime<?, ?> runtime) {
         if (recoveryPlan != null) {

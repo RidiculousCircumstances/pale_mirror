@@ -8,13 +8,13 @@ import java.util.*;
 /** One family-owned continuation after either HOT/COLD depletion or external clearance. */
 final class ExtractionDevelopmentContinuation {
     private ExtractionDevelopmentContinuation() { }
-    static FrontierWorldState appendAfterObservation(FrontierWorldState state, SubjectId site, List<ProposedEvent> events, long tick) {
-        try { return append(state, site, events, tick); }
-        catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable pending) {
-            // Valid depletion/player observations commit independently of a future plan.
-            // The existing exact site review retains the opportunity and its calculation wait.
-            return state;
-        }
+    static void requestAfterObservation(FrontierWorldState state, SubjectId site, List<ProposedEvent> events, long tick) {
+        // Accept the physical fact independently of economic/geometric planning.
+        // The existing detached settlement review owns development, staffing and
+        // retained route waits. Reconsideration coalesces at its earliest deadline.
+        var home = state.extractionSites().deposits().get(site).site().settlementId();
+        events.add(new ProposedEvent(home, new io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.ReconsiderationRequested(
+                ExtractionContinuation.review(home, Math.addExact(tick, 1)))));
     }
     static FrontierWorldState append(FrontierWorldState state, SubjectId site, List<ProposedEvent> events, long tick) {
         if (!ExtractionWorkPlanning.demanded(state, state.extractionSites().deposits().get(site).site().settlementId(), tick)) return state;

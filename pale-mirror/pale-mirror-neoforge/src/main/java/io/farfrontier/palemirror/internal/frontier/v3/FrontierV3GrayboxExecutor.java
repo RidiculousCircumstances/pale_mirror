@@ -701,6 +701,7 @@ final class FrontierV3GrayboxExecutor {
         private final Map<ChunkPos, List<ChunkPos>> hiveVisibilityChunks;
         private final Map<ChunkPos, List<ChunkPos>> settlementVisibilityChunks;
         private final List<ChunkCells> chunks;
+        private final Map<ChunkKey, ChunkCells> chunksByKey;
         private int nextChunkIndex;
         private final List<GrayboxCell> dynamicHiveCells;
         private final Map<ChunkKey, List<GrayboxCell>> dynamicHiveCellsByChunk;
@@ -713,7 +714,7 @@ final class FrontierV3GrayboxExecutor {
                        FrontierV3HiveFoundryAudit.HiveExpectations baselineHiveExpectations,
                        FrontierV3HiveFoundryAudit.HiveExpectations hiveExpectations, Map<ChunkPos, List<GrayboxCell>> hiveVisibilityCells,
                        Map<ChunkPos, List<ChunkPos>> hiveVisibilityChunks, Map<ChunkPos, List<ChunkPos>> settlementVisibilityChunks,
-                       List<ChunkCells> chunks, int nextChunkIndex, java.util.Set<BlockPos> activeWorksiteStaging,
+                       List<ChunkCells> chunks, Map<ChunkKey, ChunkCells> chunksByKey, int nextChunkIndex, java.util.Set<BlockPos> activeWorksiteStaging,
                        List<GrayboxCell> dynamicHiveCells, int nextDynamicHiveIndex,
                        List<GrayboxCell> worksiteStagingCells, int nextWorksiteStagingIndex, boolean preferWorksiteStaging) {
             this.input = input;
@@ -727,6 +728,7 @@ final class FrontierV3GrayboxExecutor {
             this.hiveVisibilityChunks = hiveVisibilityChunks;
             this.settlementVisibilityChunks = settlementVisibilityChunks;
             this.chunks = chunks;
+            this.chunksByKey = chunksByKey;
             this.nextChunkIndex = nextChunkIndex;
             this.dynamicHiveCells = dynamicHiveCells;
             this.dynamicHiveCellsByChunk = dynamicHiveCells.stream().collect(java.util.stream.Collectors.groupingBy(ChunkKey::of,
@@ -780,14 +782,15 @@ final class FrontierV3GrayboxExecutor {
             Map<ChunkKey, List<GrayboxCell>> grouped = new LinkedHashMap<>();
             cells.forEach(cell -> grouped.computeIfAbsent(ChunkKey.of(cell), ignored -> new ArrayList<>()).add(cell));
             List<ChunkCells> chunks = grouped.entrySet().stream().sorted(Map.Entry.comparingByKey()).map(entry -> {
-                ChunkCells before = prior == null ? null : prior.chunk(entry.getKey());
+                ChunkCells before = prior == null ? null : prior.chunksByKey.get(entry.getKey());
                 return new ChunkCells(entry.getKey(), List.copyOf(entry.getValue()), before);
             }).toList();
             int next = prior == null || chunks.isEmpty() ? 0 : indexOf(chunks, prior.nextChunkKey());
             Map<ChunkPos, List<GrayboxCell>> hiveCells = hiveVisibilityFence(hiveExpectations);
             return new Cursor(input, structuralBaseline, dynamicHiveOverlay, baselineStructuralCeilings, structuralCeilings, baselineHiveExpectations, hiveExpectations,
                     hiveCells, hiveVisibilityChunks(hiveCells),
-                    FrontierV3SettlementVisibilityIndex.compile(state, structuralBaseline), chunks, next, activeWorksiteStaging,
+                    FrontierV3SettlementVisibilityIndex.compile(state, structuralBaseline), chunks,
+                    chunks.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(ChunkCells::key, value -> value)), next, activeWorksiteStaging,
                     dynamicHiveCells, nextDynamicHiveIndex, worksiteStagingCells, worksiteIndex(worksiteStagingCells, prior == null ? 0 : prior.nextWorksiteStagingIndex),
                     prior == null || prior.preferWorksiteStaging);
         }
@@ -800,7 +803,7 @@ final class FrontierV3GrayboxExecutor {
             if (structuralBaseline == null) throw new IllegalStateException("test-only cursor has no structural provider baseline");
             List<GrayboxCell> staging = stagingCells(replacement, structuralBaseline, dynamicHiveOverlay);
             return new Cursor(replacement, structuralBaseline, dynamicHiveOverlay, baselineStructuralCeilings, structuralCeilings, baselineHiveExpectations, hiveExpectations, hiveVisibilityCells,
-                    hiveVisibilityChunks, settlementVisibilityChunks, chunks, nextChunkIndex, stagingPositions(replacement),
+                    hiveVisibilityChunks, settlementVisibilityChunks, chunks, chunksByKey, nextChunkIndex, stagingPositions(replacement),
                     dynamicHiveCells, nextDynamicHiveIndex, staging, worksiteIndex(staging, nextWorksiteStagingIndex), preferWorksiteStaging);
         }
         Cursor withDynamicHiveOverlay(FrontierGrayboxPlan.StructuralInput replacement, FrontierWorldState state) {
@@ -814,7 +817,7 @@ final class FrontierV3GrayboxExecutor {
             Map<ChunkPos, List<GrayboxCell>> hiveCells = hiveVisibilityFence(expectations);
             return new Cursor(replacement, structuralBaseline, dynamic,
                     baselineStructuralCeilings, new OverlayCeilings(baselineStructuralCeilings, structuralCeilings(dynamic)), baselineHiveExpectations, expectations, hiveCells,
-                    hiveVisibilityChunks(hiveCells), settlementVisibilityChunks, chunks, nextChunkIndex, stagingPositions(replacement),
+                    hiveVisibilityChunks(hiveCells), settlementVisibilityChunks, chunks, chunksByKey, nextChunkIndex, stagingPositions(replacement),
                     dynamicCells, nextDynamicHiveIndex, stagingCells(replacement, structuralBaseline, dynamic), nextWorksiteStagingIndex, preferWorksiteStaging);
         }
         FrontierSettlementAssaultBattlefield.Provider providerSnapshot(FrontierWorldState state, FrontierV3ProjectionWork work) {
@@ -823,7 +826,7 @@ final class FrontierV3GrayboxExecutor {
         }
         boolean retainsWorksiteStaging(BlockPos position) { return activeWorksiteStaging.contains(position); }
         List<GrayboxCell> cellsIn(ChunkPos chunk) {
-            ChunkCells selected = chunk(new ChunkKey(chunk.x, chunk.z));
+            ChunkCells selected = chunksByKey.get(new ChunkKey(chunk.x, chunk.z));
             List<GrayboxCell> dynamic = dynamicHiveCellsByChunk.getOrDefault(new ChunkKey(chunk.x, chunk.z), List.of());
             if (selected == null) return dynamic;
             if (dynamic.isEmpty()) return selected.cells();
@@ -875,9 +878,6 @@ final class FrontierV3GrayboxExecutor {
         }
         private static int dynamicHiveIndex(List<GrayboxCell> cells, int index) {
             return cells.isEmpty() ? 0 : Math.floorMod(index, cells.size());
-        }
-        private ChunkCells chunk(ChunkKey key) {
-            return chunks.stream().filter(chunk -> chunk.key().equals(key)).findFirst().orElse(null);
         }
         Optional<GrayboxCell> structuralCellAt(BlockPosition position) {
             return structuralBaseline == null ? Optional.empty() : Optional.ofNullable(structuralBaseline.cells().get(position));

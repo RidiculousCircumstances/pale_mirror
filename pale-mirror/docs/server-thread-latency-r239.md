@@ -538,3 +538,39 @@ and checks marker retention before completion and recovery after completion.
 Verification: build/r239q-verification.log — focused operation-ledger/retirement
 checks, guardrails and25native body-lifetime tests PASS, all dimensions saved.
 Live effect must still be measured; no <=80ms claim from these checks.
+
+R239q live: pilot200ce83a-652d-46e8-ae13-5de7e600970c completed both visits.
+No >80ms login/transition tick. One subsequent extraction-effect tick96.4ms,
+plus startup107/123/83ms; still NOT target acceptance. Instant603510/debt9 then
+604454/debt73, preparations1428. Report progress and debt together.
+
+## R239r: physical confirmation does not own future economic planning
+
+The exact96.4ms peak at22:46:32.613UTC entered economic supply/forecast from
+ExtractionHotObserved command planning, through appendAfterObservation. Confirming
+one mined block synchronously assessed demand and considered opening/extending
+the deposit. It now records the fact and emits the existing coalesced settlement
+extraction-review request. The registered detached review owns development,
+staffing and access waits. Earliest-deadline coalescing prevents one queued review
+per extracted block. COLD depletion and external edits use the same boundary.
+The existing replay test now explicitly proves zero path calculations in the
+observation, real access calculations in the review, and recovered pending waits.
+
+Other evidenced work removed: Graybox Cursor.cellsIn did a linear search of every
+plan chunk for each chunk-load/send probe (wall samples r239p-wall.tsv). Its exact
+chunk index is built once and retained across dynamic overlay/staging changes.
+HierarchicalPedestrianSearch rebuilt positive route/itinerary proofs at each
+publication/poll, including main-thread samples at a transition. Immutable proof
+is assembled on the worker once; compatible rebases preserve its exact tokens.
+An itinerary is offered to the bounded reuse cache once, not every refinement.
+
+JFR startup peaks were lazy service class transformation (planner/physical
+registry) and first field-ledger recovery. Service composition and field recovery
+now belong to the existing explicit startup boundary. This moves one-time work
+before ordinary gameplay; it does not eliminate startup CPU or pretend to do
+physical work in a warmup. Navigation recovery itself remains asynchronous.
+No search breadth, route correctness, canonical timing or durability is weakened.
+
+Verification r239r:36frontier +10adapter checks andguardrails PASS
+(build/r239r-gates.log);2native block-extraction checks PASS andall dimensions
+saved (r239r-native.log). Next step is same-world live peak/progress measurement.

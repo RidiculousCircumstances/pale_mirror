@@ -70,6 +70,7 @@ final class PedestrianSearchTask {
     private void reset() { search = factory.apply(request); searchGeometry = request.geometry(); }
     private static Step calculate(HierarchicalPedestrianSearch search, int budget, BooleanSupplier mayContinue) {
         long before = search.workUnits(); var result = search.advance(budget, mayContinue);
+        search.preparePublication();
         int spent = Math.toIntExact(result.workUnits() - before);
         if (spent < 0 || spent > budget) throw new IllegalStateException("pedestrian search exceeded its slice: " + spent + "/" + budget);
         return new Step(result, spent);

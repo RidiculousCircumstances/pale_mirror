@@ -58,6 +58,8 @@ public final class HierarchicalPedestrianSearch {
     private final PedestrianItineraryCache itineraries;
     private PedestrianMacroSearch itineraryJoin;
     private boolean reusePrepared;
+    private boolean itineraryPublished;
+    private Map<PedestrianRegion.Tile, Object> terminalProof, itineraryProof;
     private boolean destinationChecked;
     private int endpointsChecked;
     private int destinationNode, destinationEdge, destinationDirection = -1, destinationOffset, destinationExit, destinationEntrance;
@@ -112,15 +114,29 @@ public final class HierarchicalPedestrianSearch {
     private Map<PedestrianRegion.Tile, Object> resultDependencies() {
         if (terminal == null) return dependencies;
         return switch (terminal.status()) {
-            case FOUND, SEGMENT_READY -> proofDependencies(terminal.route());
+            case FOUND, SEGMENT_READY -> {
+                if (terminalProof == null) terminalProof = Map.copyOf(proofDependencies(terminal.route()));
+                yield terminalProof;
+            }
             case ESTIMATED -> itineraryDependencies();
             default -> dependencies;
         };
     }
     private Map<PedestrianRegion.Tile, Object> itineraryDependencies() {
+        if (itineraryProof != null) return itineraryProof;
         var surfaces = new ArrayList<SurfaceAnchor>(); surfaces.add(start); surfaces.add(target);
         for (var portal : itinerary) { surfaces.add(portal.exit()); surfaces.add(portal.entrance()); }
-        return proofDependencies(surfaces);
+        itineraryProof = Map.copyOf(proofDependencies(surfaces));
+        return itineraryProof;
+    }
+
+    /** Assemble immutable positive proofs on the calculation side. A compatible
+     * rebase preserves all surveyed tokens; neither terminal route nor itinerary
+     * changes afterward. Publication need not rescan their surfaces on the owner.
+     */
+    synchronized void preparePublication() {
+        if (itinerary != null) itineraryDependencies();
+        if (terminal != null) resultDependencies();
     }
     private Map<PedestrianRegion.Tile, Object> proofDependencies(List<SurfaceAnchor> surfaces) {
         var proof = new LinkedHashMap<PedestrianRegion.Tile, Object>();
@@ -369,7 +385,10 @@ public final class HierarchicalPedestrianSearch {
     }
     /** Server publication after generation/dependency checks; never called from a worker. */
     synchronized void publishReuse() {
-        if (itineraries != null && itinerary != null) itineraries.remember(geometry, target, itinerary, itineraryDependencies());
+        if (!itineraryPublished && itineraries != null && itinerary != null) {
+            itineraries.remember(geometry, target, itinerary, itineraryDependencies());
+            itineraryPublished = true;
+        }
     }
     /** 1 means possible incoming access, -1 proved isolation, 0 cooperative continuation. */
     private int probeDestination() {

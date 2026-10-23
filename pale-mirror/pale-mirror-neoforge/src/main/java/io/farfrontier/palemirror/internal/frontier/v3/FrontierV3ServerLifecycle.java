@@ -228,15 +228,15 @@ public final class FrontierV3ServerLifecycle {
             INITIAL_CANONICAL_HOLDS.put(server, Boolean.TRUE);
         }
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
-            FrontierV3GrayboxExecutor.primeStructuralBaseline(runtime);
-            FrontierV3ResourceSiteExecutor.beginRecovery(runtime);
-            FrontierV3PlayerCustodyRecovery.beginRecovery(runtime);
             try {
+                FrontierV3GrayboxExecutor.primeStructuralBaseline(runtime);
+                FrontierV3PhysicalTurn.beginRecovery(physicalWorld, runtime);
                 int uninspectable = FrontierV3PhysicalIntentRestartSafety.quarantineUninspectableRunningIntents(runtime, physicalWorld);
                 int ambientUnknown = FrontierV3AmbientLeaseRestartSafety.quarantineActiveLeases(runtime);
                 int sceneUnknown = FrontierV3SceneLeaseRestartSafety.quarantineActiveLeases(runtime);
                 int mobilizationUnknown = FrontierV3HiveMobilizationRestartSafety.quarantineReleasingMobilizations(runtime);
                 FrontierV3CalendarBinding.attachActive(physicalWorld, runtime);
+                FrontierV3PedestrianPlanning.start(runtime);
                 if (uninspectable > 0) {
                     PaleMirrorMod.LOGGER.error("Frontier v3 quarantined {} uninspectable running physical intent(s) after restart", uninspectable);
                 }

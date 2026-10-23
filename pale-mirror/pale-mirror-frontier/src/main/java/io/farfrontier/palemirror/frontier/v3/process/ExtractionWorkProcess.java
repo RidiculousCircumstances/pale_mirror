@@ -197,7 +197,7 @@ final class ExtractionWorkProcess {
         var events = new ArrayList<ProposedEvent>();
         events.add(new ProposedEvent(job.id(), event));
         if (event.operation() == ExtractionWorkProgressed.Operation.EXTRACT_BLOCK)
-            ExtractionDevelopmentContinuation.appendAfterObservation(preview, job.siteId(), events, now);
+            ExtractionDevelopmentContinuation.requestAfterObservation(preview, job.siteId(), events, now);
         if (events.stream().noneMatch(proposed -> proposed.subject().equals(job.id()) && proposed.payload() instanceof ScheduleEffect))
             events.add(ExtractionContinuation.wake(job.id(), now));
         return List.copyOf(events);

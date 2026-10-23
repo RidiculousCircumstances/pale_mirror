@@ -53,7 +53,9 @@ final class FrontierV3ResourceSiteExecutor {
         RECOVERY_SITES.remove(runtime); RECOVERY_TURNS.remove(runtime);
         FrontierV3ResourceFieldWorldChangeExecutor.forget(runtime);
     }
-    static void beginRecovery(FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+    static void beginRecovery(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        // Restore the owner before admitting ordinary field work, not on its first tick.
+        FrontierV3ResourceSiteLedger.get(level);
         FrontierWorldState state = runtime.decodedState().orElse(null); if (state == null) return;
         Set<SubjectId> pending = state.resourceSites().sites().values().stream()
                 .filter(FrontierV3ResourceSiteExecutor::projectsGrowthStage).map(ResourceSiteLifecycle::siteId)
