@@ -13,6 +13,15 @@ public final class GoodsParticipantProcess {
         return new ScheduledAction(new ScheduleId("schedule:goods-participant/" + party.value().replace(':', '-')),
                 new SimInstant(due), 0, party, REVIEW, 1);
     }
+    /** Structural workload, not measured host time or a trade permission.
+     * Each peer is compared under every supported fulfillment mode. */
+    static int reviewWorkUnits(FrontierWorldState state, ScheduledAction action) {
+        var participant = state.companies().goodsTrade().participants().participants().get(action.subject());
+        if (participant == null) throw new IllegalArgumentException("goods review lost its declared participant");
+        int modes = state.bootstrap().ruleset().goodsTrade().supplyPlanning().enabled()
+                ? GoodsTradeFulfillment.Mode.values().length : 1;
+        return Math.addExact(1, Math.multiplyExact(participant.known().size(), modes));
+    }
     /** Due time orders the queue; only the supplied execution instant authorizes current trades. */
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, SimInstant executionInstant) {
         return ImmutablePlanningScope.within(() -> planInScope(state, action, executionInstant));

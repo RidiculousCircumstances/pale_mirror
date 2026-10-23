@@ -37,6 +37,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierWorldProcessCatalogTest {
+    @Test void manyPeerTradeReviewFitsOneTurnButCannotBatchWithAnotherFullMarketReview() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:review-workload"),
+                126, FrontierRulesets.installed("frontier-v3-quarry-graybox-r26")));
+        var registry = FrontierWorldRuntimeDefinition.processRegistry();
+        var home = new SubjectId("settlement:1");
+        var review = io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(home, 1);
+        int weight = FrontierWorldProcessCatalog.scheduledAdmissionWeight(registry, state, review);
+        int allowance = state.bootstrap().ruleset().execution().maxWeight();
+        assertTrue(weight <= allowance && weight * 2 > allowance,
+                "whole-market reviews must fit individually without a burst of full peer scans");
+        var request = (ScheduleEffect.ReconsiderationRequested) io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantWakeup
+                .party(state, home, "stock-changed", 0).getFirst().payload();
+        assertEquals(weight, FrontierWorldProcessCatalog.scheduledAdmissionWeight(registry, state, request.action()));
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldProcessCatalog.scheduledAdmissionWeight(registry, state,
+                io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(new SubjectId("settlement:unknown"), 1)));
+    }
+
     @Test void retiredHiveSupplyHasNoProcessScheduleOrPayloadOwner() {
         var registry = FrontierWorldRuntimeDefinition.processRegistry();
         for (String kind : List.of("frontier.supply.task.start", "frontier.supply.cargo.load",

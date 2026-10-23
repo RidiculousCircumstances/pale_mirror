@@ -7,17 +7,27 @@ import io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import java.util.List;
 import java.util.Set;
+import java.util.function.ToIntBiFunction;
 
 /** Decorates an explicitly registered review capability; the kernel knows no business families. */
 final class ScheduledReviewAdmission {
     private ScheduledReviewAdmission() { }
     static FrontierScheduledPlanner policyReview(FrontierScheduledPlanner delegate) {
-        return decorate(delegate, false);
+        return policyReview(delegate, (state, action) -> 1);
     }
     static FrontierScheduledPlanner coalescedReview(FrontierScheduledPlanner delegate) {
-        return decorate(delegate, true);
+        return coalescedReview(delegate, (state, action) -> 1);
     }
-    private static FrontierScheduledPlanner decorate(FrontierScheduledPlanner delegate, boolean coalescible) {
+    static FrontierScheduledPlanner policyReview(FrontierScheduledPlanner delegate,
+            ToIntBiFunction<FrontierWorldState, ScheduledAction> workUnits) {
+        return decorate(delegate, false, workUnits);
+    }
+    static FrontierScheduledPlanner coalescedReview(FrontierScheduledPlanner delegate,
+            ToIntBiFunction<FrontierWorldState, ScheduledAction> workUnits) {
+        return decorate(delegate, true, workUnits);
+    }
+    private static FrontierScheduledPlanner decorate(FrontierScheduledPlanner delegate, boolean coalescible,
+            ToIntBiFunction<FrontierWorldState, ScheduledAction> workUnits) {
         return new FrontierScheduledPlanner() {
             @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) { return delegate.plan(state, action); }
             @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, SimInstant instant) { return delegate.plan(state, action, instant); }
@@ -25,7 +35,13 @@ final class ScheduledReviewAdmission {
             @Override public java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledHold<FrontierWorldState>>
                     holdProof(FrontierWorldState state, ScheduledAction action) { return delegate.holdProof(state, action); }
             @Override public int admissionWeight(FrontierWorldState state, ScheduledAction action) {
-                return Math.max(action.weight(), state.bootstrap().ruleset().execution().policyReviewWeight());
+                int units = workUnits.applyAsInt(state, action);
+                if (units < 1) throw new IllegalArgumentException("review owner declared nonpositive work");
+                var policy = state.bootstrap().ruleset().execution();
+                // An indivisible review must fit one full turn. This bounds
+                // admission only; it never drops alternatives or changes consent.
+                int cost = (int) Math.min(policy.maxWeight(), (long) units * policy.policyReviewWeight());
+                return Math.max(Math.max(action.weight(), delegate.admissionWeight(state, action)), cost);
             }
             @Override public boolean acceptsReconsideration() { return coalescible; }
             @Override public Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) { return delegate.wakeDependencies(state, action); }
