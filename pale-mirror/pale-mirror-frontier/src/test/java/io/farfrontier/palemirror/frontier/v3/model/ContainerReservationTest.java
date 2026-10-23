@@ -81,6 +81,8 @@ class ContainerReservationTest {
         ResourceSiteHarvestJob harvest = (ResourceSiteHarvestJob) state.resourceSites()
                 .site(new SubjectId("site:1-wheat-field")).harvestJobs().values().stream().reduce(HarvestFixtureOwners::rejectMultiple).orElseThrow();
         SubjectId depot = harvest.outputSlot().containerId();
+        var available = state;
+        assertTrue(available.canReceiveFungible(depot, "minecraft:bread", 64));
         int added = 0;
         while (state.firstFreeContainerSlot(depot).isPresent()) {
             int slot = state.firstFreeContainerSlot(depot).orElseThrow();
@@ -89,6 +91,8 @@ class ContainerReservationTest {
                     "minecraft:stone", 1, new InventoryCustody.ContainerSlot(depot, slot))));
         }
         assertFalse(state.canReceiveFungible(depot, "minecraft:bread", 64));
+        assertTrue(available.canReceiveFungible(depot, "minecraft:bread", 64), "a rejected draft must not poison earlier immutable advice");
+        assertFalse(state.canReceiveFungible(depot, "minecraft:bread", 64), "returning to a full draft must not reuse another draft's admission");
         assertTrue(state.inventory().canReceiveFungible(depot, "minecraft:bread", 64),
                 "the unreserved inventory alone still sees the last slot; the world must fence it");
         assertTrue(ReferenceContainerCustody.expectedFungibleSlot(state, depot, harvest.outputSlot().slot()).isEmpty());

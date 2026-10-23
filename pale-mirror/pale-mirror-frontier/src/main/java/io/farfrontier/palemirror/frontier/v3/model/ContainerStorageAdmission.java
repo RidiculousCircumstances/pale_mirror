@@ -7,6 +7,18 @@ import java.util.function.Predicate;
 /** Shared storage admission. Future-demand ownership is declared by the composition, not discovered here. */
 final class ContainerStorageAdmission {
     private ContainerStorageAdmission() { }
+    private record ReceiveQuery(SubjectId container, String kind, int quantity, Optional<SubjectId> completing, boolean individual) { }
+    private static final ImmutableInputView<Map<ReceiveQuery, Boolean>> RECEIVING = new ImmutableInputView<>();
+    private static synchronized boolean receiving(FrontierWorldState state, ReceiveQuery query, java.util.function.BooleanSupplier assess) {
+        // Only identical immutable drafts share an admission answer. A player change,
+        // competing claim, custody transition or station mutation always rechecks it.
+        var cache = RECEIVING.get(List.of(state), HashMap::new);
+        var existing = cache.get(query);
+        if (existing != null) return existing;
+        boolean result = assess.getAsBoolean();
+        if (cache.size() >= 512) cache.clear();
+        cache.put(query, result); return result;
+    }
     private record IncomingQuery(SubjectId container, Optional<SubjectId> completing) { }
     private static final ImmutableKeyedInputView<IncomingQuery, ContainerIncomingStock> INCOMING = new ImmutableKeyedInputView<>(512);
 
@@ -21,6 +33,10 @@ final class ContainerStorageAdmission {
         });
     }
     static boolean receive(FrontierWorldState state, SubjectId container, String kind, int quantity, Optional<SubjectId> completing) {
+        return receiving(state, new ReceiveQuery(container, kind, quantity, completing, false),
+                () -> assessReceive(state, container, kind, quantity, completing));
+    }
+    private static boolean assessReceive(FrontierWorldState state, SubjectId container, String kind, int quantity, Optional<SubjectId> completing) {
         var record = state.inventory().containers().get(container);
         if (record == null || ReferenceContainerCustody.blocksCanonicalUse(state, container)
                 || record.storage().filter(policy -> !policy.filter().accepts(kind)).isPresent()) return false;
@@ -30,6 +46,10 @@ final class ContainerStorageAdmission {
                 inbound(state, container, completing));
     }
     static boolean receiveIndividuals(FrontierWorldState state, SubjectId container, String kind, int quantity, Optional<SubjectId> completing) {
+        return receiving(state, new ReceiveQuery(container, kind, quantity, completing, true),
+                () -> assessIndividuals(state, container, kind, quantity, completing));
+    }
+    private static boolean assessIndividuals(FrontierWorldState state, SubjectId container, String kind, int quantity, Optional<SubjectId> completing) {
         var record = state.inventory().containers().get(container);
         if (quantity < 1 || record == null || ReferenceContainerCustody.blocksCanonicalUse(state, container)
                 || record.storage().filter(policy -> !policy.filter().accepts(kind)).isPresent()) return false;

@@ -10,6 +10,7 @@ final class FungibleResourceReadIndex {
                          Map<SubjectId, CustodyAccount> accounts,
                          Map<SubjectId, Map<Balance, Integer>> available,
                          Map<SubjectId, CustodyAccount> containers) { }
+    private static final ImmutableInputView<Map<SubjectId, List<CustodyAccount>>> CONTAINERS = new ImmutableInputView<>();
     // Retain one immutable image per owner thread, not accumulated world revisions.
     private static final ThreadLocal<Image> CURRENT = new ThreadLocal<>();
     private FungibleResourceReadIndex() { }
@@ -24,6 +25,19 @@ final class FungibleResourceReadIndex {
 
     static Optional<CustodyAccount> container(FungibleResourceLedger ledger, SubjectId container) {
         return Optional.ofNullable(image(ledger).containers().get(Objects.requireNonNull(container)));
+    }
+
+    /** All retained accounts, not a first-account shortcut for physical capacity. */
+    static List<CustodyAccount> containerAccounts(FungibleResourceLedger ledger, SubjectId container) {
+        return CONTAINERS.get(List.of(ledger.accounts()), () -> {
+            var grouped = new HashMap<SubjectId, List<CustodyAccount>>();
+            for (var account : ledger.accounts().values()) {
+                if (account.custody() instanceof ResourceCustody.Container holder)
+                    grouped.computeIfAbsent(holder.containerId(), ignored -> new ArrayList<>()).add(account);
+            }
+            grouped.replaceAll((id, accounts) -> accounts.stream().sorted(Comparator.comparing(CustodyAccount::id)).toList());
+            return Map.copyOf(grouped);
+        }).getOrDefault(container, List.of());
     }
 
     private static Image image(FungibleResourceLedger ledger) {

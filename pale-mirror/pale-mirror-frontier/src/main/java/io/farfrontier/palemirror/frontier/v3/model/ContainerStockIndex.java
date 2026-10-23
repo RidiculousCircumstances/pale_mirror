@@ -22,9 +22,7 @@ final class ContainerStockIndex {
                 .getOrDefault(container, EMPTY_SLOTS);
         // A draft can replace claims/accounts without changing physical stock. Only
         // this receiver's quantities and item definitions feed its capacity view.
-        var accounts = ledger.accounts().values().stream()
-                .filter(account -> account.custody() instanceof ResourceCustody.Container holder
-                        && holder.containerId().equals(container)).sorted(Comparator.comparing(CustodyAccount::id)).toList();
+        var accounts = FungibleResourceReadIndex.containerAccounts(ledger, container);
         var inputs = new ArrayList<Object>();
         inputs.add(slots.occupied()); inputs.add(slots.bound()); inputs.add(ledger.lots());
         for (var account : accounts) { inputs.add(account.id()); inputs.add(account.lotQuantities()); }
