@@ -8,24 +8,24 @@ const WorldMap = (() => {
   const itemName = (x) => String(x ?? "").replace(/^minecraft:/, "");
   const phases = {PREPARING:"Подготовка",TO_SOURCE:"К поставщику",LOADING:"Погрузка",OUTBOUND:"Доставка",UNLOADING:"Разгрузка",RETURNING:"Возвращение",RECOVERING:"Восстановление",COMPLETE:"Завершён"};
   let root, data, filters, world, view, initial, selected = null, hovered = null, drag = null;
-  let showTrade = true, showCaravans = true, paintUnits = 1;
+  let showTrade = true, showCaravans = true, paintUnits = 1, height = null, resizeObserver;
   let objects = new Map(), towns = new Map(), missions = [];
   const name = (id) => towns.get(id)?.name || id;
   const valid = (p) => p && Number.isFinite(p.x) && Number.isFinite(p.z);
   const summary = (rows) => rows.length ? rows.map(([k,v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("") : "";
-  const shell = () => `<div class="map-toolbar">
+  const shell = () => `<section class="map-panel"><div class="map-toolbar">
     <button data-map="zoom-in" aria-label="Приблизить карту">＋</button><button data-map="zoom-out" aria-label="Отдалить карту">−</button>
-    <button data-map="fit">Весь мир</button><button data-map="focus">К выбранному</button>
+    <button data-map="fit">Весь мир</button><button data-map="expand" aria-pressed="false">Развернуть карту</button><button data-map="focus">К выбранному</button>
     <label class="check"><input type="checkbox" data-layer="trade" ${showTrade?"checked":""}>Торговые связи</label>
     <label class="check"><input type="checkbox" data-layer="caravans" ${showCaravans?"checked":""}>Караваны</label>
     <span class="map-clock"></span></div>
     <div class="map-layout"><div class="map-viewport">
     <svg class="world-map-svg" tabindex="0" role="group" aria-label="Интерактивная карта поселений. Колесо — масштаб, перетаскивание — перемещение, стрелки — сдвиг."></svg>
-    <div class="map-tooltip" role="tooltip" hidden></div>
+    <svg class="map-grid-labels" aria-hidden="true" preserveAspectRatio="none"></svg><div class="map-tooltip" role="tooltip" hidden></div>
     <div class="map-axis">Север −Z ↑ · Восток +X →</div></div>
     <aside class="map-sidebar"><div class="map-details"></div><h3>Караваны сейчас</h3><div class="map-missions"></div></aside></div>
-    <p class="map-note muted"></p><div class="map-legend"><span>● Поселение</span><span class="map-warning">● Есть голодные</span>
-    <span class="map-gold">◆ Караван — центр группы</span><span>→ Оплаченные поставки за период; толщина — стоимость товара</span></div>`;
+    <div class="map-resize" role="separator" tabindex="0" aria-label="Высота карты: перетащите или используйте стрелки" aria-orientation="horizontal"></div><p class="map-note muted"></p><div class="map-legend"><span>● Поселение</span><span class="map-warning">● Есть голодные</span>
+    <span class="map-gold">◆ Караван — центр группы</span><span>→ Оплаченные поставки за период; толщина — стоимость товара</span></div></section>`;
   function mount(host, value, options) {
     data = value; filters = options; root = host;
     const map = data.latest?.map;
@@ -56,20 +56,35 @@ const WorldMap = (() => {
   }
   function paint() {
     if (!root?.isConnected) return;
-    const svg = root.querySelector("svg");
+    const svg = root.querySelector(".world-map-svg");
+    if (!svg || !svg.clientWidth || !svg.clientHeight) return;
     svg.setAttribute("viewBox", `${view.x} ${view.z} ${view.w} ${view.h}`);
-    paintUnits = Math.max(view.w / Math.max(300,svg.clientWidth), view.h / Math.max(300,svg.clientHeight));
-    const u = paintUnits; objects = new Map();
+    const box = svg.getBoundingClientRect(), transform = svg.getScreenCTM();
+    paintUnits = 1 / transform.a;
+    const u = paintUnits, left = (box.left - transform.e) * u, top = (box.top - transform.f) * u;
+    const right = left + box.width * u, bottom = top + box.height * u;
+    objects = new Map();
     let out = `<defs><marker id="map-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#62afad"/></marker></defs>`;
     const b = data.latest.map.bounds;
     out += `<rect x="${b.minX}" y="${b.minZ}" width="${b.width}" height="${b.depth}" fill="#10252c" stroke="#34505b" stroke-width="${u}"/>`;
-    const target = Math.max(view.w / 6, u * 90);
+    // SVG meet letterboxing changes the visible world bounds. Grid lines use
+    // those bounds; labels live in a separate pixel overlay, fixed to the viewport.
+    const target = Math.max((right-left) / 8, u * 90);
     const magnitude = Math.pow(10, Math.floor(Math.log10(target)));
     const grid = [1,2,5,10].find(step => step*magnitude >= target)*magnitude;
-    for(let x=Math.ceil(Math.max(view.x,b.minX)/grid)*grid; x<=Math.min(view.x+view.w,b.minX+b.width); x+=grid)
-      out += `<path d="M${x} ${b.minZ} V${b.minZ+b.depth}" stroke="#243b43" stroke-width="${u*.6}"/><text x="${x+3*u}" y="${Math.max(view.z,b.minZ)+14*u}" font-size="${10*u}" fill="#738e98">${num(x)}</text>`;
-    for(let z=Math.ceil(Math.max(view.z,b.minZ)/grid)*grid; z<=Math.min(view.z+view.h,b.minZ+b.depth); z+=grid)
-      out += `<path d="M${b.minX} ${z} H${b.minX+b.width}" stroke="#243b43" stroke-width="${u*.6}"/><text x="${Math.max(view.x,b.minX)+3*u}" y="${z-4*u}" font-size="${10*u}" fill="#738e98">${num(z)}</text>`;
+    let labels = `<rect width="${box.width}" height="23" fill="#0d1c23"/><rect width="55" height="${box.height}" fill="#0d1c23"/>`;
+    for(let x=Math.ceil(left/grid)*grid; x<=right; x+=grid) {
+      out += `<path d="M${x} ${top} V${bottom}" stroke="#243b43" stroke-width="${u*.6}"/>`;
+      const px = (x-left)/u;
+      if(px >= 62 && px <= box.width-32) labels += `<text class="map-grid-x" x="${px}" y="16" text-anchor="middle">${num(x)}</text>`;
+    }
+    for(let z=Math.ceil(top/grid)*grid; z<=bottom; z+=grid) {
+      out += `<path d="M${left} ${z} H${right}" stroke="#243b43" stroke-width="${u*.6}"/>`;
+      const py = (z-top)/u;
+      if(py >= 36 && py <= box.height-40) labels += `<text class="map-grid-z" x="6" y="${py}" dominant-baseline="middle">${num(z)}</text>`;
+    }
+    const axes = root.querySelector(".map-grid-labels");
+    axes.setAttribute("viewBox", `0 0 ${box.width} ${box.height}`); axes.innerHTML = labels;
     if (showTrade) {
       const links = new Map();
       for (const r of data.matrix || []) {
@@ -166,9 +181,28 @@ const WorldMap = (() => {
     const w=Math.max(initial.w/80,Math.min(initial.w*2,view.w*factor)),scale=w/view.w;
     view={x:p.x-(p.x-view.x)*scale,z:p.y-(p.y-view.z)*scale,w,h:view.h*scale}; hideTooltip();paint();
   }
-  function select(key) {selected=objects.has(key)?key:null;hideTooltip();paint();}
+  function select(key) {selected=objects.has(key)?key:null;hideTooltip();paint();root.querySelector(".world-map-svg").focus({preventScroll:true});}
   function bind() {
-    const svg=root.querySelector("svg");
+    const svg=root.querySelector(".world-map-svg"), panel=root.querySelector(".map-panel"), handle=root.querySelector(".map-resize");
+    const setHeight=(value)=>{
+      height=Math.round(Math.max(240,Math.min(window.innerHeight-24,value)));
+      panel.style.setProperty("--map-height",`${height}px`);
+      handle.setAttribute("aria-valuemin","240"); handle.setAttribute("aria-valuemax",String(window.innerHeight-24));
+      handle.setAttribute("aria-valuenow",String(height));
+    };
+    setHeight(height ?? window.innerHeight*.72);
+    let resizing=null;
+    handle.onpointerdown=(e)=>{if(e.button!==0)return;e.preventDefault();resizing={y:e.clientY,height};handle.setPointerCapture(e.pointerId);};
+    handle.onpointermove=(e)=>{if(resizing)setHeight(resizing.height+e.clientY-resizing.y);};
+    handle.onpointerup=handle.onpointercancel=()=>{resizing=null;};
+    handle.onkeydown=(e)=>{if(["ArrowUp","ArrowDown","Home","End"].includes(e.key)){e.preventDefault();setHeight(e.key==="Home"?240:e.key==="End"?window.innerHeight-24:height+(e.key==="ArrowDown"?40:-40));}};
+    const expand=(active)=>{
+      panel.classList.toggle("expanded",active);
+      const button=panel.querySelector('[data-map="expand"]');button.setAttribute("aria-pressed",String(active));
+      button.textContent=active?"Свернуть карту":"Развернуть карту"; hideTooltip();
+    };
+    panel.onkeydown=(e)=>{if(e.key==="Escape" && panel.classList.contains("expanded")){expand(false);e.stopPropagation();}};
+    resizeObserver?.disconnect();resizeObserver=new ResizeObserver(()=>{if(svg.isConnected)paint();});resizeObserver.observe(svg);
     root.onclick=(event)=> {
       const selection=event.target.closest("[data-select],[data-object]");
       if(selection) {select(selection.dataset.select||selection.dataset.object);return;}
@@ -176,6 +210,7 @@ const WorldMap = (() => {
       const action=event.target.closest("[data-map]")?.dataset.map;
       if(action==="zoom-in") zoom(.7); if(action==="zoom-out") zoom(1/.7);
       if(action==="fit") {view={...initial};paint();}
+      if(action==="expand") expand(!panel.classList.contains("expanded"));
       if(action==="focus") {const p=objects.get(selected)||towns.get(filters.town);if(p){view={...view,x:p.x-view.w/2,z:p.z-view.h/2};paint();}}
     };
     root.onchange=(event)=>{if(event.target.dataset.layer==="trade")showTrade=event.target.checked;if(event.target.dataset.layer==="caravans")showCaravans=event.target.checked;paint();};

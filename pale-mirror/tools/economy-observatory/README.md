@@ -87,3 +87,9 @@ preserves viewport/selection across5-second refreshes and does not animate missi
 updates. Snapshot freshness/gaps still apply. The period filter changes trade
 arrows, not the current positions. Old snapshots without spatial fields display
 unavailable instead of invented coordinates. No CDN or new browser dependency.
+
+Coordinate labels are a pixel overlay on the visible viewport edges, independent
+of world bounds, pan/zoom and SVG aspect-ratio letterboxing. The bottom separator
+resizes map height (drag, arrow keys, Home/End); size survives data refresh and tab
+changes. Expand fills the browser window while retaining the details panel;
+Collapse or Escape returns to the normal page. These controls are local UI only.
