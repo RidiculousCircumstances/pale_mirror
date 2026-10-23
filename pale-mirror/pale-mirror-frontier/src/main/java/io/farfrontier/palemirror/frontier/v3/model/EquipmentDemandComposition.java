@@ -6,6 +6,7 @@ import java.util.*;
 
 /** One declared adapter per enabled equipment consumer. No producer policy or mutation here. */
 public final class EquipmentDemandComposition {
+    private static final ImmutableKeyedInputView<SubjectId, List<EquipmentWorkDemand>> VIEWS = new ImmutableKeyedInputView<>(256);
     private static final Map<EquipmentDemandPort.Key, EquipmentDemandPort> PORTS = register(List.of(
             new FieldEquipmentDemand(), new ExtractionEquipmentDemand()));
     private static Map<EquipmentDemandPort.Key, EquipmentDemandPort> register(List<EquipmentDemandPort> values) {
@@ -15,7 +16,9 @@ public final class EquipmentDemandComposition {
         return Map.copyOf(result);
     }
     public static List<EquipmentWorkDemand> read(FrontierWorldState state, SubjectId home) {
-        return Arrays.stream(EquipmentDemandPort.Key.values()).flatMap(key -> PORTS.get(key).read(state, home).stream()).toList();
+        var parts = Arrays.stream(EquipmentDemandPort.Key.values()).map(key -> PORTS.get(key).read(state, home)).toList();
+        return VIEWS.get(state.bootstrap(), home, new ArrayList<Object>(parts),
+                () -> parts.stream().flatMap(List::stream).toList());
     }
     private EquipmentDemandComposition() { }
 }

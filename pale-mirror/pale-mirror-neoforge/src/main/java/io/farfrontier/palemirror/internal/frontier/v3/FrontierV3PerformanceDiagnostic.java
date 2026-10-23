@@ -124,6 +124,7 @@ final class FrontierV3PerformanceDiagnostic {
                 .append(",\"fastForwardRequests\":").append(requests(requests))
                 .append(",\"fastForwardSlice\":").append(sliceTelemetry == null ? "null" : sliceTelemetry(sliceTelemetry))
                 .append(",\"worstSpan\":").append(worstSpan(metrics.stages()))
+                .append(",\"costlyStages\":").append(costlyStages(metrics.stages()))
                 .append(",\"hostTurn\":").append(hostTiming(metrics.stages(), FrontierExecutionMetrics.Stage.HOST_TURN))
                 .append(",\"hostTickThroughPmPost\":").append(hostTiming(metrics.stages(), FrontierExecutionMetrics.Stage.HOST_TICK))
                 .append(",\"scheduleQueue\":").append(queuePressure(metrics, checkpoint.instant().ticks()));
@@ -201,6 +202,15 @@ final class FrontierV3PerformanceDiagnostic {
                 + ",\"totalNanos\":" + value.totalNanos() + ",\"maxNanos\":" + value.maxNanos()
                 + ",\"safetyNanos\":" + value.safetyNanos() + ",\"maxSafetyNanos\":" + value.maxSafetyNanos()
                 + ",\"advanceNanos\":" + value.advanceNanos() + ",\"maxAdvanceNanos\":" + value.maxAdvanceNanos() + "}";
+    }
+
+    /** A bounded attribution survives the detail budget even when the full stage table does not. */
+    private static String costlyStages(List<FrontierExecutionMetrics.StageSample> samples) {
+        var selected = samples.stream().filter(sample -> sample.stage() != FrontierExecutionMetrics.Stage.HOST_TICK
+                        && sample.stage() != FrontierExecutionMetrics.Stage.HOST_TURN)
+                .sorted(java.util.Comparator.comparingLong(FrontierExecutionMetrics.StageSample::recentMaxNanos).reversed())
+                .limit(8).toList();
+        var result = new StringBuilder("["); appendStages(result, selected); return result.append(']').toString();
     }
 
     private static String worstSpan(List<FrontierExecutionMetrics.StageSample> samples) {

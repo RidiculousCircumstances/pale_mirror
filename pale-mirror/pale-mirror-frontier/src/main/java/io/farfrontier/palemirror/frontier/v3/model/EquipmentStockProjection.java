@@ -6,11 +6,20 @@ import java.util.*;
 
 /** Read-only equipment coverage includes retained production promises exactly once. Inventory owns reality. */
 public final class EquipmentStockProjection {
+    private static final ImmutableKeyedInputView<SubjectId, List<Unit>> UNITS = new ImmutableKeyedInputView<>(256);
+    private static final ImmutableKeyedInputView<SubjectId, List<Deficit>> DEFICITS = new ImmutableKeyedInputView<>(256);
+    private static final ImmutableKeyedInputView<SubjectId, Set<SubjectId>> RETAINED = new ImmutableKeyedInputView<>(256);
     public record Unit(SubjectId id, String kind, ItemCondition condition) { }
     public record Deficit(EquipmentWorkDemand demand, int missingUnits, long missingWear) {
         public boolean immediate() { return missingUnits > 0; }
     }
     public static List<Unit> units(FrontierWorldState state, SubjectId home) {
+        return UNITS.get(state.bootstrap(), home, List.of(state.inventory().items(), state.inventory().containers(),
+                state.inventory().surfaces(), state.humanPopulation().residents(), state.actorLocations(),
+                state.companies().goodsTrade().contracts(), state.productionJobs(), state.shipments().shipments()),
+                () -> projectUnits(state, home));
+    }
+    private static List<Unit> projectUnits(FrontierWorldState state, SubjectId home) {
         var units = new TreeMap<SubjectId, Unit>(); var catalog = state.bootstrap().ruleset().tools();
         var sold = state.companies().goodsTrade().contracts().values().stream()
                 .filter(c -> !c.terminal() && c.seller().id().equals(home))
@@ -60,6 +69,12 @@ public final class EquipmentStockProjection {
     }
     /** Select the actual productive units to retain. Market quality and storage filtering remain in the trade adapter. */
     public static Set<SubjectId> retainedItems(FrontierWorldState state, SubjectId home) {
+        var demands = EquipmentDemandComposition.read(state, home);
+        return RETAINED.get(state.bootstrap(), home, List.of(state.inventory().items(), state.inventory().containers(),
+                state.inventory().surfaces(), state.humanPopulation().residents(), state.actorLocations(), demands),
+                () -> projectRetained(state, home, demands));
+    }
+    private static Set<SubjectId> projectRetained(FrontierWorldState state, SubjectId home, List<EquipmentWorkDemand> demands) {
         var retained = new HashSet<SubjectId>(); var catalog = state.bootstrap().ruleset().tools();
         var units = state.inventory().items().values().stream()
                 .filter(item -> item.economicOwnerId().equals(home) && catalog.find(item.itemKind()).isPresent())
@@ -75,7 +90,7 @@ public final class EquipmentStockProjection {
                         && state.inventory().items().get(unit.id()).custody() instanceof InventoryCustody.ContainerSlot)
                 .thenComparing(Comparator.comparingInt((Unit unit) -> unit.condition().remaining()).reversed())
                 .thenComparing(Unit::id)).toList();
-        for (var demand : EquipmentDemandComposition.read(state, home)) {
+        for (var demand : demands) {
             int count = 0; long wear = 0;
             for (var unit : units) {
                 if (count >= demand.concurrentUnits() && wear >= demand.plannedWear()) break;
@@ -87,9 +102,13 @@ public final class EquipmentStockProjection {
         return Set.copyOf(retained);
     }
     public static List<Deficit> deficits(FrontierWorldState state, SubjectId home) {
-        var catalog = state.bootstrap().ruleset().tools(); var units = units(state, home); var used = new HashSet<SubjectId>();
+        var units = units(state, home); var demands = EquipmentDemandComposition.read(state, home);
+        return DEFICITS.get(state.bootstrap(), home, List.of(units, demands), () -> projectDeficits(state, units, demands));
+    }
+    private static List<Deficit> projectDeficits(FrontierWorldState state, List<Unit> units, List<EquipmentWorkDemand> demands) {
+        var catalog = state.bootstrap().ruleset().tools(); var used = new HashSet<SubjectId>();
         var result = new ArrayList<Deficit>();
-        for (var demand : EquipmentDemandComposition.read(state, home)) {
+        for (var demand : demands) {
             int count = 0; long wear = 0;
             for (var unit : units) {
                 if (count >= demand.concurrentUnits() && wear >= demand.plannedWear()) break;
