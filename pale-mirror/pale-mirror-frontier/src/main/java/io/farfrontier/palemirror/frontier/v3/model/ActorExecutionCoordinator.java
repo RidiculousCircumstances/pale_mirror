@@ -146,8 +146,7 @@ public final class ActorExecutionCoordinator {
     }
 
     private static boolean carriesResource(FrontierWorldState state, SubjectId actorId) {
-        return state.inventory().fungibleResources().accounts().values().stream().anyMatch(account ->
-                account.custody().equals(new ResourceCustody.Actor(actorId)) && !account.claimQuantities().isEmpty());
+        return FungibleResourceReadIndex.carriesClaim(state.inventory().fungibleResources(), new ResourceCustody.Actor(actorId));
     }
 
     /** Switch presentation scopes after common inspection; never transfer the physical body or write its pose. */

@@ -11,6 +11,7 @@ final class FungibleResourceReadIndex {
                          Map<SubjectId, Map<Balance, Integer>> available,
                          Map<SubjectId, CustodyAccount> containers) { }
     private static final ImmutableInputView<Map<SubjectId, List<CustodyAccount>>> CONTAINERS = new ImmutableInputView<>();
+    private static final ImmutableInputView<Set<ResourceCustody>> CLAIMED = new ImmutableInputView<>();
     // Retain one immutable image per owner thread, not accumulated world revisions.
     private static final ThreadLocal<Image> CURRENT = new ThreadLocal<>();
     private FungibleResourceReadIndex() { }
@@ -38,6 +39,12 @@ final class FungibleResourceReadIndex {
             grouped.replaceAll((id, accounts) -> accounts.stream().sorted(Comparator.comparing(CustodyAccount::id)).toList());
             return Map.copyOf(grouped);
         }).getOrDefault(container, List.of());
+    }
+
+    static boolean carriesClaim(FungibleResourceLedger ledger, ResourceCustody holder) {
+        return CLAIMED.get(List.of(ledger.accounts()), () -> ledger.accounts().values().stream()
+                .filter(account -> !account.claimQuantities().isEmpty()).map(CustodyAccount::custody)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet())).contains(holder);
     }
 
     private static Image image(FungibleResourceLedger ledger) {
