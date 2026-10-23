@@ -131,7 +131,18 @@ final class FrontierV3ActorCarrierComposition {
     }
 
     private static java.util.Optional<Declaration> decodeDeclaration(Entity entity) {
-        var tag = entity.getPersistentData();
+        return decodeDeclaration(entity.getPersistentData(), entity.getUUID()).filter(declaration -> matchesDeclaration(entity, declaration));
+    }
+
+    /** Saved bodies carry the same complete declaration; UUID/type never fill in missing authority. */
+    static java.util.Optional<Declaration> declaredBySaved(net.minecraft.nbt.CompoundTag entity) {
+        if (entity == null || !entity.hasUUID("UUID") || !entity.contains("NeoForgeData", net.minecraft.nbt.Tag.TAG_COMPOUND))
+            return java.util.Optional.empty();
+        return decodeDeclaration(entity.getCompound("NeoForgeData"), entity.getUUID("UUID"))
+                .filter(declaration -> FrontierV3ActorCarrierFactory.entityType(declaration.kind()).equals(entity.getString("id")));
+    }
+
+    private static java.util.Optional<Declaration> decodeDeclaration(net.minecraft.nbt.CompoundTag tag, UUID entityId) {
         if (!tag.contains(ACTOR_KEY, net.minecraft.nbt.Tag.TAG_STRING)
                 || !tag.contains(KIND_KEY, net.minecraft.nbt.Tag.TAG_STRING)
                 || !tag.contains(OWNER_KEY, net.minecraft.nbt.Tag.TAG_STRING)
@@ -140,9 +151,9 @@ final class FrontierV3ActorCarrierComposition {
                 || !tag.contains(EPOCH_KEY, net.minecraft.nbt.Tag.TAG_LONG)) return java.util.Optional.empty();
         try {
             var declaration = new Declaration(new SubjectId(tag.getString(ACTOR_KEY)), ActorKind.valueOf(tag.getString(KIND_KEY)),
-                    Owner.valueOf(tag.getString(OWNER_KEY)), entity.getUUID(), Representation.valueOf(tag.getString(REPRESENTATION_KEY)),
+                    Owner.valueOf(tag.getString(OWNER_KEY)), entityId, Representation.valueOf(tag.getString(REPRESENTATION_KEY)),
                     tag.getLong(REVISION_KEY), tag.getLong(EPOCH_KEY));
-            return matchesDeclaration(entity, declaration) ? java.util.Optional.of(declaration) : java.util.Optional.empty();
+            return java.util.Optional.of(declaration);
         } catch (IllegalArgumentException invalid) { return java.util.Optional.empty(); }
     }
 

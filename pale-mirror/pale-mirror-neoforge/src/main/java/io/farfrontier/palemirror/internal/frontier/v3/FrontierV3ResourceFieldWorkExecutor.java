@@ -177,8 +177,8 @@ final class FrontierV3ResourceFieldWorkExecutor {
             return Result.pending();
         if (review.disposition() == FrontierV3ResourceFieldObservation.Disposition.OWNED_DRIFT) {
             var projection = FrontierV3ResourceFieldGrowthProjector.projectCurrentOne(level, runtime, job.siteId(), id);
-            if (projection == FrontierV3ResourceFieldGrowthProjector.Result.CURRENT
-                    || projection == FrontierV3ResourceFieldGrowthProjector.Result.ADVANCED) return Result.pending();
+            if (projection != FrontierV3ResourceFieldGrowthProjector.Result.PHYSICAL_CONFLICT
+                    && projection != FrontierV3ResourceFieldGrowthProjector.Result.NEEDS_WORK) return Result.pending();
         }
         if (review.disposition() == FrontierV3ResourceFieldObservation.Disposition.FOREIGN
                 && FrontierV3ResourceFieldForeignChangeExecutor.observeOne(level, runtime, job.siteId(), id))

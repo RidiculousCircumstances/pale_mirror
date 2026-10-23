@@ -159,6 +159,21 @@ public final class FrontierV3ResourceFieldObservationGameTests {
                             && level.getBlockState(first.above()).getValue(CropBlock.AGE) == 2
                             && level.getBlockState(second.above()).getValue(CropBlock.AGE) == 2,
                     "saved per-cell witnesses recover a split batch without duplicate growth");
+            var single = new FrontierCanonicalState<>(accepted.worldId(), new Revision(7), new SimInstant(7),
+                    next.advanceGrowth(ids.getFirst()));
+            var singleResult = FrontierV3ResourceFieldGrowthProjector.Result.RETRY;
+            for (int attempt = 0; attempt < 8 && singleResult == FrontierV3ResourceFieldGrowthProjector.Result.RETRY; attempt++) {
+                singleResult = FrontierV3ResourceFieldGrowthProjector.projectAccepted(level, site, single, ids.getFirst(), true);
+                ledger.persist(level); FrontierV3OperationLedger.get(level).persist(level);
+            }
+            helper.assertTrue(singleResult == FrontierV3ResourceFieldGrowthProjector.Result.CURRENT
+                            || singleResult == FrontierV3ResourceFieldGrowthProjector.Result.ADVANCED,
+                    "single-cell admission must resume through the same durable operation permissions");
+            helper.assertTrue(level.getBlockState(first.above()).getValue(CropBlock.AGE) == 3
+                            && level.getBlockState(second.above()).getValue(CropBlock.AGE) == 2
+                            && ((FrontierV3ResourceSiteLedger.FieldOwnership) persistedField(level, siteId))
+                                    .witness().cell(ids.getFirst()).pending().isEmpty(),
+                    "deferred single-cell result is durable and does not rewrite its neighbour");
             helper.succeed();
             });
         });

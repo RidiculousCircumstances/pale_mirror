@@ -607,3 +607,32 @@ physical scars and current contamination remain uncached live facts. Full-plan
 callers can still explicitly request all footprints. No stale text or visibility
 shortcut. Focused39readability/graybox +7architecture tests andguardrailsPASS
 (build/r239t-gates.log), including removal/restoration against a reused footprint.
+
+R239t live pilot fa6e8173-ec92-431f-8be7-286e7c4e737d completed both visits,
+canonical instant reached619506. It explicitly retains/checks the one historical
+R239r incident (revision2257046, occurrence1); this is an observational latency
+probe, not zero-conflict/full-cycle acceptance. First login max76.98ms; later
+transition peaks90.91ms and96.59ms remain above target. JFR identified a global
+first-admission history sort during native chunk save and ~50ms of synchronous
+field-projection journal waits during farmer admission. Profiles were stopped
+before subsequent Gradle work. Receipts: r239t-hot-result.json, r239t-profile.tsv,
+r239t-wall.tsv in build/.
+
+R239u replaces three evidenced repeated/blocking paths:
+- Queue pressure maintains an exact derived due-prefix count, updating only
+  deadlines crossed and actual schedule mutations. Canonical order/time is
+  unchanged; diagnostic backward-time reads remain exact. Next deadline uses
+  the existing ordered deadline index.
+- Native adoption observation starts with actual bodies serialized in that
+  chunk and directly looks up each full declared identity. It no longer sorts
+  all first-admission history worldwide. Foreign UUID/type/owner/epoch evidence
+  cannot acknowledge or duplicate a genuine candidate.
+- Production single-cell growth projection uses the same deferred operation
+  protocol as batch projection: durable predecessor, durable operation
+  permission, real effect, durable result. Admission waits for the field receipt;
+  interrupted crop work treats pending durability as pending rather than a
+  conflict. Other cells and independent simulation work continue.
+Focused queue/kernel/adoption/composition/first-admission checks and guardrails
+PASS (r239u-gates.log). All20 native field-turn tests PASS, including partial
+physical application recovery followed by deferred single-cell projection
+(r239u-native.log). Live measurements follow; target is not yet achieved.

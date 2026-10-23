@@ -123,7 +123,9 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             return FrontierV3LoadedWorld.ready(level, new BlockPos(candidate.cropSlot().x(),
                 candidate.cropSlot().y(), candidate.cropSlot().z()));
         var cycle = state.resourceSites().cycle(site.id());
-        var siteClaim = FrontierV3ResourceSiteLedger.get(level).siteClaim(site.id());
+        var fieldLedger = FrontierV3ResourceSiteLedger.get(level);
+        if (!fieldLedger.prepareFieldDurable(level, site.id())) return false;
+        var siteClaim = fieldLedger.siteClaim(site.id());
         if (siteClaim instanceof FrontierV3ResourceSiteLedger.CellSiteClaim cellClaim) {
             if (!(cellClaim.claim() instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
                     || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE

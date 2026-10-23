@@ -28,6 +28,8 @@ public final class ScheduledActionQueue {
     private final Map<ScheduleId, ScheduledAction> byId = new HashMap<>();
     private final Map<ReviewKey, NavigableSet<ScheduledAction>> byOwnerKind = new HashMap<>();
     private final NavigableMap<Long, Integer> deadlines = new TreeMap<>();
+    private long countedThrough = Long.MIN_VALUE;
+    private int countedDue;
     private List<ScheduledAction> immutableSnapshot;
 
     private record ReviewKey(SubjectId owner, String kind) {
@@ -46,6 +48,7 @@ public final class ScheduledActionQueue {
         execution.created(action);
         byOwnerKind.computeIfAbsent(ReviewKey.of(action), ignored -> new TreeSet<>()).add(action);
         deadlines.merge(action.dueAt().ticks(), 1, Integer::sum);
+        if (action.dueAt().ticks() <= countedThrough) countedDue++;
         immutableSnapshot = null;
     }
 
@@ -182,12 +185,19 @@ public final class ScheduledActionQueue {
         long tick = action.dueAt().ticks();
         int count = deadlines.get(tick);
         if (count == 1) deadlines.remove(tick); else deadlines.put(tick, count - 1);
+        if (tick <= countedThrough) countedDue--;
     }
 
-    /** Reads indexed due work only; future schedules are counted by distinct deadline buckets. */
+    /** Read-only derived prefix: repeated observation does not rescan all overdue buckets. */
     public FrontierExecutionMetrics.QueuePressure pressure(SimInstant instant) {
         long now = instant.ticks();
-        int due = deadlines.headMap(now, true).values().stream().mapToInt(Integer::intValue).sum();
+        if (now > countedThrough) {
+            for (int count : deadlines.subMap(countedThrough, false, now, true).values()) countedDue += count;
+        } else if (now < countedThrough) {
+            for (int count : deadlines.subMap(now, false, countedThrough, true).values()) countedDue -= count;
+        }
+        countedThrough = now;
+        int due = countedDue;
         int ready = execution.readyCount(), held = execution.heldCount();
         return new FrontierExecutionMetrics.QueuePressure(now, size(), ready, held, size() - due,
                 due - ready - held, execution.oldestReadyLag(now), execution.oldestReadyDeadlineLag(now));
@@ -215,7 +225,7 @@ public final class ScheduledActionQueue {
     /** First queued due instant strictly after the caller's canonical instant. */
     public Optional<SimInstant> nextDueAfter(SimInstant instant) {
         Objects.requireNonNull(instant, "instant");
-        return ordered.stream().map(ScheduledAction::dueAt).filter(value -> value.compareTo(instant) > 0).findFirst();
+        return Optional.ofNullable(deadlines.higherKey(instant.ticks())).map(SimInstant::new);
     }
 
     /** Small copy-on-write overlay for exactly one canonical transaction. */

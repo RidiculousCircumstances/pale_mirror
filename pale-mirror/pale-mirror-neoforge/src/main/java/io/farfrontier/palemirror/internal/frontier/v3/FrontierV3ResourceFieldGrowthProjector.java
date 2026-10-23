@@ -21,6 +21,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
     enum Result { CURRENT, ADVANCED, UNLOADED, PENDING_WORK, PENDING_PLAYER, NEEDS_WORK,
         STALE_CANONICAL, PHYSICAL_CONFLICT, RETRY }
 
+    private enum Publication { SYNCHRONOUS, DEFERRED, BATCH }
     private FrontierV3ResourceFieldGrowthProjector() { }
 
     /** Production entry: authority is the live engine revision in the one physical Frontier world. */
@@ -42,14 +43,19 @@ final class FrontierV3ResourceFieldGrowthProjector {
         ResourceFieldCycle cycle = current.state().resourceSites().cycle(siteId);
         if (current.state().resourceSites().hasPendingCellMutation(siteId, cellId)) return Result.PENDING_WORK;
         return projectAccepted(level, site,
-                new FrontierCanonicalState<>(current.worldId(), current.revision(), current.instant(), cycle), cellId);
+                new FrontierCanonicalState<>(current.worldId(), current.revision(), current.instant(), cycle), cellId, true);
     }
 
     /** Internal executor core; production admission must enter through the live-runtime boundary above. */
     static Result projectAccepted(ServerLevel level, ResourceSite site,
                              FrontierCanonicalState<ResourceFieldCycle> accepted,
                              ResourceFieldLayout.CellId cellId) {
-        return projectAccepted(level, site, accepted, cellId, true, null);
+        return projectAccepted(level, site, accepted, cellId, false);
+    }
+
+    static Result projectAccepted(ServerLevel level, ResourceSite site, FrontierCanonicalState<ResourceFieldCycle> accepted,
+                                  ResourceFieldLayout.CellId cellId, boolean deferred) {
+        return projectAccepted(level, site, accepted, cellId, deferred ? Publication.DEFERRED : Publication.SYNCHRONOUS, null);
     }
 
     /** One prepared publication, then individual effects, then one result publication. */
@@ -144,7 +150,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
                 for (var id : requests.keySet()) results.put(id, completed.get(index++));
             }
             for (var id : admitted) {
-                var result = projectAccepted(level, site, accepted, id, false, results.get(id));
+                var result = projectAccepted(level, site, accepted, id, Publication.BATCH, results.get(id));
                 progressed |= result != Result.RETRY;
             }
         } finally {
@@ -158,7 +164,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
 
     private static Result projectAccepted(ServerLevel level, ResourceSite site,
                              FrontierCanonicalState<ResourceFieldCycle> accepted,
-                             ResourceFieldLayout.CellId cellId, boolean persistAcknowledgement,
+                             ResourceFieldLayout.CellId cellId, Publication publication,
                              FrontierV3MinecraftOperation.Result batchResult) {
         Objects.requireNonNull(level, "growth projection world");
         Objects.requireNonNull(site, "growth projection site");
@@ -173,6 +179,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
         if (!(ledger.fieldClaim(site.id()) instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner))
             throw new IllegalStateException("growth projection has no active cell-owned field");
         if (owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE) return Result.PHYSICAL_CONFLICT;
+        if (publication == Publication.DEFERRED && !ledger.prepareFieldDurable(level, site.id())) return Result.RETRY;
         FrontierV3ResourceFieldWitness witness = owner.witness();
         if (!witness.matchesCycle(cycle)) return Result.STALE_CANONICAL;
         if (cycle.pendingPlayerBreaks().containsKey(cellId)) return Result.PENDING_PLAYER;
@@ -198,7 +205,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
                 try { witness = witness.acknowledgeObservedGrowth(accepted, cellId, observed); }
                 catch (IllegalArgumentException unrelatedDrift) { return Result.PHYSICAL_CONFLICT; }
                 ledger.replaceFieldClaim(owner, owner.withWitness(witness));
-                ledger.persist(level);
+                if (!publish(level, ledger, site.id(), publication)) return Result.RETRY;
                 owner = (FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(site.id());
                 cell = witness.cell(cellId);
                 observed = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, cellId,
@@ -213,7 +220,8 @@ final class FrontierV3ResourceFieldGrowthProjector {
                     "projection:growth:" + site.id().value() + ':' + cycle.epoch() + ':' + cellId.value()
                             + ':' + accepted.revision().value(), observed);
             ledger.replaceFieldClaim(owner, owner.withWitness(witness));
-            ledger.persist(level); // Accepted canonical authority and predecessor precede the block write.
+            // Accepted canonical authority and predecessor precede the block write.
+            if (!publish(level, ledger, site.id(), publication)) return Result.RETRY;
             owner = (FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(site.id());
         }
         witness = owner.witness();
@@ -225,8 +233,13 @@ final class FrontierV3ResourceFieldGrowthProjector {
                 || review.disposition() == FrontierV3ResourceFieldObservation.Disposition.CURRENT) {
             var pending = witness.cell(cellId).pending().orElseThrow();
             if (pending.completedSteps() < pending.transition().steps().size()) {
-                if (!persistAcknowledgement && batchResult == null) return Result.RETRY;
-                var applied = persistAcknowledgement ? FrontierV3FieldProjectionOperation.apply(level, site.id(), geometry, pending) : batchResult;
+                if (publication == Publication.BATCH && batchResult == null) return Result.RETRY;
+                var applied = switch (publication) {
+                    case BATCH -> batchResult;
+                    case SYNCHRONOUS -> FrontierV3FieldProjectionOperation.apply(level, site.id(), geometry, pending);
+                    case DEFERRED -> FrontierV3MinecraftOperation.applyBatchDeferred(level,
+                            java.util.List.of(FrontierV3FieldProjectionOperation.request(level, site.id(), geometry, pending))).getFirst();
+                };
                 if (applied.status() == FrontierV3MinecraftOperation.Status.WAITING_DURABILITY) return Result.RETRY;
                 if (!applied.complete()) return Result.PHYSICAL_CONFLICT;
                 operation = applied.ticket();
@@ -241,15 +254,27 @@ final class FrontierV3ResourceFieldGrowthProjector {
         if (pending.completedSteps() != pending.transition().steps().size()) {
             ledger.replaceFieldClaim(owner, owner.withWitness(witness));
             if (operation != null) ledger.operationCompleted(level, operation);
-            if (persistAcknowledgement) { ledger.persist(level); ledger.completeOperations(level); }
-            return Result.ADVANCED;
+            return finish(level, ledger, site.id(), publication);
         }
         var finalReview = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, cellId,
                 "projection:growth-final");
         witness = witness.acknowledgeCanonicalProjection(accepted, cellId, pending.causationId(), finalReview);
         ledger.replaceFieldClaim(owner, owner.withWitness(witness));
         if (operation != null) ledger.operationCompleted(level, operation);
-        if (persistAcknowledgement) { ledger.persist(level); ledger.completeOperations(level); }
+        return finish(level, ledger, site.id(), publication);
+    }
+
+    private static boolean publish(ServerLevel level, FrontierV3ResourceSiteLedger ledger, SubjectId site, Publication publication) {
+        if (publication == Publication.DEFERRED) return ledger.prepareFieldDurable(level, site);
+        ledger.persist(level);
+        return true;
+    }
+    private static Result finish(ServerLevel level, FrontierV3ResourceSiteLedger ledger, SubjectId site, Publication publication) {
+        if (publication == Publication.SYNCHRONOUS) { ledger.persist(level); ledger.completeOperations(level); }
+        else if (publication == Publication.DEFERRED) {
+            ledger.persistAsync(level); ledger.completeOperationsDeferred(level);
+            if (!ledger.prepareFieldDurable(level, site)) return Result.RETRY;
+        }
         return Result.ADVANCED;
     }
 

@@ -96,9 +96,18 @@ final class FrontierV3ActorAdoptionPersistence {
             if (overflowed || writes.overflowed() || !FrontierV3StoredEntityInventory.matchesStoredChunk(data, chunk)) return;
             var entities = FrontierV3StoredEntityInventory.serializedEntities(data).orElse(null);
             if (entities == null) return;
-            var transfers = ledger.pendingAdoptions().stream().map(AdoptionCandidate::new).map(value -> (SaveCandidate) value);
-            var births = ledger.firstAdmissions().stream()
-                    .filter(value -> value.phase() == FrontierV3ActorFirstAdmission.Phase.PENDING)
+            // Observe exactly the bodies in this native chunk. Looking up their
+            // complete declared identities avoids scanning/sorting the lifetime
+            // admission history of the entire world on every chunk write.
+            var declarations = entities.values().stream().map(FrontierV3ActorCarrierComposition::declaredBySaved)
+                    .flatMap(Optional::stream).sorted(java.util.Comparator.comparing(
+                            FrontierV3ActorCarrierComposition.Declaration::actorId)).toList();
+            var transfers = declarations.stream().flatMap(declaration -> ledger.pendingAdoption(declaration.actorId())
+                            .filter(value -> value.admitted().equals(declaration)).stream())
+                    .map(AdoptionCandidate::new).map(value -> (SaveCandidate) value);
+            var births = declarations.stream().flatMap(declaration -> ledger.firstAdmission(declaration.actorId())
+                            .filter(value -> value.phase() == FrontierV3ActorFirstAdmission.Phase.PENDING
+                                    && value.attempt().orElseThrow().declaration().equals(declaration)).stream())
                     .map(FirstCandidate::new);
             var selected = java.util.stream.Stream.concat(transfers, births)
                     .filter(value -> value.matchesSaved(entities.get(value.declaration().entityId())))

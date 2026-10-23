@@ -153,9 +153,11 @@ class FrontierV3ActorAdoptionPersistenceTest {
     @Test void storedDeclarationNeedsEveryExactDimension() {
         var pending = ledger().pendingAdoption(ACTOR).orElseThrow();
         assertTrue(FrontierV3ActorAdoptionPersistence.matchesSaved(pending, entity()));
+        assertEquals(java.util.Optional.of(LIVE), declaredBySaved(entity()));
         for (String key : java.util.List.of(ACTOR_KEY, KIND_KEY, OWNER_KEY, REPRESENTATION_KEY, REVISION_KEY, EPOCH_KEY)) {
             var missing = entity(); missing.getCompound("NeoForgeData").remove(key);
             assertFalse(FrontierV3ActorAdoptionPersistence.matchesSaved(pending, missing));
+            assertTrue(declaredBySaved(missing).isEmpty());
         }
         var foreign = entity(); foreign.putUUID("UUID", new UUID(0, 1));
         assertFalse(FrontierV3ActorAdoptionPersistence.matchesSaved(pending, foreign));
@@ -163,6 +165,17 @@ class FrontierV3ActorAdoptionPersistenceTest {
         assertFalse(FrontierV3ActorAdoptionPersistence.matchesSaved(pending, wrongEntity));
         var stale = entity(); stale.getCompound("NeoForgeData").putLong(EPOCH_KEY, 2L);
         assertFalse(FrontierV3ActorAdoptionPersistence.matchesSaved(pending, stale));
+    }
+
+    @Test void foreignBodyCannotDuplicateTheExactStoredAdoptionCandidate() {
+        var ledger = ledger(); var batch = new FrontierV3ActorAdoptionPersistence.Batch();
+        var saved = column(CHUNK, entity());
+        var foreign = entity(); foreign.putUUID("UUID", new UUID(0, 1));
+        saved.getList("Entities", Tag.TAG_COMPOUND).add(foreign);
+        batch.observe(CHUNK, saved, CompletableFuture.completedFuture(null), ledger);
+        var ticket = batch.complete(true, () -> CompletableFuture.completedFuture(null)).orElseThrow();
+        assertEquals(1, batch.acknowledge(ticket, ledger, LIVE::equals, ignored -> true));
+        assertTrue(ledger.pendingAdoption(ACTOR).isEmpty());
     }
 
     @Test void exactSavedIncarnationCanConfirmAfterNativeUnloadButNotAfterResidenceChanges() {

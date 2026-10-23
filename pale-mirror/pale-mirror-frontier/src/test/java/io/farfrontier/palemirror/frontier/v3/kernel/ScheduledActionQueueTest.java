@@ -6,6 +6,7 @@ import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -158,6 +159,29 @@ class ScheduledActionQueueTest {
         assertEquals(3, after.oldestReadyLagTicks());
         assertEquals(102, after.oldestDeadlineLagTicks(), "held time is semantic deadline lateness, not ready service delay");
         assertEquals(0, after.held());
+    }
+
+    @Test void pressureRemainsExactAcrossQueueMutationsAndHistoricalReadTimes() {
+        var queue = new ScheduledActionQueue();
+        queue.schedule(action("schedule:early", 10, 0, "settlement:a", 1));
+        var later = action("schedule:later", 50, 0, "settlement:a", 1);
+        queue.schedule(later);
+        assertEquals(1, queue.pressure(new SimInstant(20)).future());
+        var mutation = queue.beginMutation(); mutation.cancel(later.id());
+        mutation.schedule(action("schedule:later", 15, 0, "settlement:a", 1));
+        assertEquals(1, queue.pressure(new SimInstant(20)).future());
+        mutation.commit();
+        queue.schedule(action("schedule:future", 40, 0, "settlement:a", 1));
+        assertEquals(1, queue.pressure(new SimInstant(20)).future());
+        assertEquals(0, queue.pressure(new SimInstant(40)).future());
+        queue.cancel(new ScheduleId("schedule:early"));
+        var snapshot = queue.snapshot();
+        assertEquals(2, queue.pressure(new SimInstant(5)).future());
+        assertEquals(1, queue.pressure(new SimInstant(15)).future());
+        assertEquals(0, queue.pressure(new SimInstant(40)).future());
+        assertEquals(snapshot, queue.snapshot(), "diagnostic time does not alter canonical deadlines");
+        assertEquals(Optional.of(new SimInstant(40)), queue.nextDueAfter(new SimInstant(15)));
+        assertEquals(Optional.empty(), queue.nextDueAfter(new SimInstant(40)));
     }
 
     @Test void registeredAdmissionCostBoundsTheSameStableDueOrder() {
