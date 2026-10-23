@@ -11,6 +11,7 @@ import net.minecraft.world.level.chunk.storage.SimpleRegionStorage;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -26,6 +27,8 @@ import java.util.Optional;
 /** Observes vanilla's actual write future, including the empty-chunk deletion branch. */
 @Mixin(EntityStorage.class)
 abstract class FrontierV3EntityStorageMixin implements FrontierV3EntitySaveBoundary, FrontierV3StoredEntityInventoryAccess {
+    @Unique private final io.farfrontier.palemirror.internal.frontier.v3.FrontierV3OrderedStorageSubmission frontierV3$submissions =
+            new io.farfrontier.palemirror.internal.frontier.v3.FrontierV3OrderedStorageSubmission();
     @Shadow @Final private ServerLevel level;
     @Shadow @Final private SimpleRegionStorage simpleRegionStorage;
     @Shadow @Final private LongSet emptyChunks;
@@ -51,11 +54,11 @@ abstract class FrontierV3EntityStorageMixin implements FrontierV3EntitySaveBound
     }
 
     @Override public void frontierV3$completeSavePass(boolean complete) {
-        FrontierV3ServerLifecycle.completeEntitySavePass(level, complete, () -> simpleRegionStorage.synchronize(true));
+        FrontierV3ServerLifecycle.completeEntitySavePass(level, complete, this::frontierV3$synchronizeStoredEntities);
     }
 
     @Override public void frontierV3$storedChunk() {
-        FrontierV3ServerLifecycle.persistRawEntityDepartures(level, () -> simpleRegionStorage.synchronize(true));
+        FrontierV3ServerLifecycle.persistRawEntityDepartures(level, this::frontierV3$synchronizeStoredEntities);
     }
 
     @Override public CompletableFuture<Optional<CompoundTag>> frontierV3$readStoredEntityChunk(ChunkPos chunk) {
@@ -65,11 +68,11 @@ abstract class FrontierV3EntityStorageMixin implements FrontierV3EntitySaveBound
     }
 
     @Override public CompletableFuture<Void> frontierV3$synchronizeStoredEntities() {
-        return simpleRegionStorage.synchronize(true);
+        return frontierV3$submissions.submit(() -> simpleRegionStorage.synchronize(true));
     }
 
     @Override public CompletableFuture<Optional<CompoundTag>> frontierV3$readOrderedEntityChunk(ChunkPos chunk) {
-        return simpleRegionStorage.read(chunk)
+        return frontierV3$submissions.submit(() -> simpleRegionStorage.read(chunk))
                 .thenApply(value -> value.map(CompoundTag::copy));
     }
 
@@ -78,7 +81,8 @@ abstract class FrontierV3EntityStorageMixin implements FrontierV3EntitySaveBound
     private CompletableFuture<Void> frontierV3$observeWrite(SimpleRegionStorage storage, ChunkPos chunk, CompoundTag data) {
         var image = io.farfrontier.palemirror.internal.frontier.v3.FrontierV3OperationEntityColumns.decorate(level, chunk, data);
         if (image != null) emptyChunks.remove(chunk.toLong());
-        var written = FrontierV3ServerLifecycle.writeEntityChunkWithFootprint(level, chunk, image, () -> storage.write(chunk, image));
+        var written = FrontierV3ServerLifecycle.writeEntityChunkWithFootprint(level, chunk, image,
+                frontierV3$submissions, () -> storage.write(chunk, image));
         written.whenComplete((ignored, failure) -> {
             if (failure != null) level.getServer().execute(() -> emptyChunks.remove(chunk.toLong()));
         });
@@ -89,6 +93,18 @@ abstract class FrontierV3EntityStorageMixin implements FrontierV3EntitySaveBound
     @Redirect(method = "loadEntities", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/world/level/chunk/storage/SimpleRegionStorage;read(Lnet/minecraft/world/level/ChunkPos;)Ljava/util/concurrent/CompletableFuture;"), require = 1)
     private CompletableFuture<Optional<CompoundTag>> frontierV3$observeRead(SimpleRegionStorage storage, ChunkPos chunk) {
-        return FrontierV3ServerLifecycle.observeEntityChunkRead(level, chunk, storage.read(chunk), entityDeserializerQueue::tell);
+        return FrontierV3ServerLifecycle.observeEntityChunkRead(level, chunk, frontierV3$submissions.submit(() -> storage.read(chunk)), entityDeserializerQueue::tell);
     }
+
+    @Redirect(method = "flush", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/level/chunk/storage/SimpleRegionStorage;synchronize(Z)Ljava/util/concurrent/CompletableFuture;"), require = 1)
+    private CompletableFuture<Void> frontierV3$flushOrdered(SimpleRegionStorage storage, boolean sync) {
+        return frontierV3$submissions.submit(() -> storage.synchronize(sync));
+    }
+
+    @Inject(method = "close", at = @At("HEAD"), require = 1)
+    private void frontierV3$closeAfterSubmission(CallbackInfo callback) {
+        frontierV3$submissions.submittedPrefix().join(); // Native shutdown only; all producers have stopped.
+    }
+
 }

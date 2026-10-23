@@ -14,6 +14,13 @@ final class FrontierV3EntityPersistenceObservers {
     private static boolean active(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime) {
         return FrontierV3PhysicalWorld.isPhysical(level) && runtime != null && runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE;
     }
+    static CompletableFuture<?> writePrerequisite(ServerLevel level) {
+        if (!FrontierV3PhysicalWorld.isPhysical(level)) return CompletableFuture.completedFuture(null);
+        // Captured on the native writer's thread. An entity image cannot reach
+        // disk before its residence/history, including immediately after joining.
+        return FrontierV3AmbientCarrierLedger.get(level, FrontierV3PhysicalWorld.WORLD_ID)
+                .persistAsync(level, FrontierV3PhysicalWorld.WORLD_ID);
+    }
     static void write(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             ChunkPos chunk, CompoundTag data, CompletableFuture<Void> written) {
         if (!active(level, runtime)) return;

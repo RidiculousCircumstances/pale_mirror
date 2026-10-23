@@ -25,7 +25,15 @@ final class FrontierV3ActorBodyController {
     private static final java.util.Map<Mob, String> INSPECTION_WAITS = new java.util.WeakHashMap<>();
     static final String RESIDENCE_KEY = "pm_v3_body_residence_generation";
     /** Source firewall and the Forge join event may observe the same object twice. */
-    private static final java.util.Map<Mob, Long> JOINED_RESIDENCES = new java.util.WeakHashMap<>();
+    private static final java.util.Map<Mob, JoinedResidence> JOINED_RESIDENCES = new java.util.WeakHashMap<>();
+    private record JoinedResidence(long generation, java.util.concurrent.CompletableFuture<Long> durable) { }
+    private static boolean residenceReady(Mob body) {
+        var joined = JOINED_RESIDENCES.get(body);
+        // This fences only this join, not unrelated later owner-journal changes.
+        // Other insertion paths already hold their own durable admission ticket.
+        return joined == null || joined.generation() == body.getPersistentData().getLong(RESIDENCE_KEY)
+                && joined.durable().getNow(null) != null;
+    }
     enum Result { APPLIED, DEFERRED, CONFLICT }
     enum Admission { FIRST, RECONSTRUCTION, DEFERRED, CONFLICT }
 
@@ -220,7 +228,8 @@ final class FrontierV3ActorBodyController {
                 || !hasKnownResidence(ledger, body, declaration.actorId())) return;
         ensureOrdinaryPhysics(body);
         long residence = body.getPersistentData().getLong(RESIDENCE_KEY);
-        if (java.util.Objects.equals(JOINED_RESIDENCES.get(body), residence)) return;
+        var joined = JOINED_RESIDENCES.get(body);
+        if (joined != null && joined.generation() == residence) return;
         var receipt = ledger.bodyDeparture(declaration.actorId()).orElse(null);
         if (receipt != null) {
             var actual = captureReturnedBody(level, state, body).orElse(null);
@@ -243,13 +252,15 @@ final class FrontierV3ActorBodyController {
                 || ledger.firstAdmission(declaration.actorId()).filter(value ->
                     value.phase() == FrontierV3ActorFirstAdmission.Phase.PENDING).isPresent()) {
             if (!ledger.currentBodyResidence(declaration.actorId(), residence)) return;
-            JOINED_RESIDENCES.put(body, residence); return;
+            JOINED_RESIDENCES.put(body, new JoinedResidence(residence, java.util.concurrent.CompletableFuture.completedFuture(0L))); return;
         }
         if (!recognizesRecordedBody(level, state, body)) return;
         long next = ledger.beginBodyResidence(FrontierV3ActorOwnerBinding.from(body).orElseThrow().declaration());
         body.getPersistentData().putLong(RESIDENCE_KEY, next);
-        ledger.persist(level, state.bootstrap().worldId());
-        JOINED_RESIDENCES.put(body, next);
+        // Native entity writes await this journal prefix at the storage boundary;
+        // execution/inspection polls the actor receipt instead of stalling each join.
+        var durable = ledger.persistAsync(level, state.bootstrap().worldId());
+        JOINED_RESIDENCES.put(body, new JoinedResidence(next, durable));
     }
 
     private static boolean hasKnownResidence(FrontierV3AmbientCarrierLedger ledger, net.minecraft.world.entity.Entity body,
@@ -394,6 +405,7 @@ final class FrontierV3ActorBodyController {
         var declaration = FrontierV3ActorCarrierComposition.declaredBy(body).orElseThrow();
         if (!FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).currentBodyResidence(
                 declaration.actorId(), body.getPersistentData().getLong(RESIDENCE_KEY))) return;
+        if (!residenceReady(body)) return;
         ensureOrdinaryPhysics(body);
         var id = ActorBodyAuthority.current(state, declaration.actorId());
         if (ActorBodyAuthority.require(state, id).phase() == FencedRecoveryPhase.RUNNING) return;
@@ -435,6 +447,7 @@ final class FrontierV3ActorBodyController {
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
         if (!ledger.currentBodyResidence(declaration.actorId(), body.getPersistentData().getLong(RESIDENCE_KEY)))
             return inspectionDeferred(body, "RESIDENCE_GENERATION");
+        if (!residenceReady(body)) return inspectionDeferred(body, "RESIDENCE_DURABILITY");
         ensureOrdinaryPhysics(body);
         var id = ActorBodyAuthority.current(state, declaration.actorId());
         var phase = ActorBodyAuthority.require(state, id).phase();

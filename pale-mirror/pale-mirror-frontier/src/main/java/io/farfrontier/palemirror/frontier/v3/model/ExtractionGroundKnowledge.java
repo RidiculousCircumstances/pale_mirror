@@ -13,8 +13,8 @@ final class ExtractionGroundKnowledge implements KnownBlockGeometry<BlockExtract
     private final Map<BlockPosition, ExtractionLayout.Cell> sources;
     private final ExtractionDeposit deposit;
     private record Protection(Set<TerrainColumn> columns, Set<BlockPosition> blocks) { }
-    private static final ImmutableInputView<Protection> VIEW = new ImmutableInputView<>();
-    private static final Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ImmutableInputView<Protection>> SITE_VIEWS = new LinkedHashMap<>();
+    private static final ImmutableResultView<Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId>, Protection> PROTECTION =
+            new ImmutableResultView<>(64);
     private ExtractionGroundKnowledge(FrontierWorldState state, Set<TerrainColumn> protectedColumns, Set<BlockPosition> declared,
                                       ExtractionDeposit deposit) {
         this.state = state; this.protectedColumns = protectedColumns; this.declared = declared;
@@ -26,20 +26,14 @@ final class ExtractionGroundKnowledge implements KnownBlockGeometry<BlockExtract
         var protection = cachedProtection(state, Optional.empty());
         return new ExtractionGroundKnowledge(state, protection.columns(), protection.blocks(), null);
     }
-    private static synchronized Protection cachedProtection(FrontierWorldState state,
+    private static Protection cachedProtection(FrontierWorldState state,
             Optional<io.farfrontier.palemirror.frontier.v3.api.SubjectId> localSite) {
         var inputs = new ArrayList<Object>(List.of(state.bootstrap(), state.routeTopology(), state.hiveColony().addedOrgans(),
                 state.physicalDeltas(), state.extractionSites().geologicalExclusions()));
         inputs.add(LandUseExclusions.columns(state));
         state.extractionSites().deposits().entrySet().stream().sorted(Map.Entry.comparingByKey())
                 .forEach(entry -> { inputs.add(entry.getKey()); inputs.add(entry.getValue().site().layout()); });
-        var view = VIEW;
-        if (localSite.isPresent()) {
-            if (!SITE_VIEWS.containsKey(localSite.orElseThrow()) && SITE_VIEWS.size() >= AdjacentExcavationPlanner.MAX_COLUMNS)
-                SITE_VIEWS.clear();
-            view = SITE_VIEWS.computeIfAbsent(localSite.orElseThrow(), ignored -> new ImmutableInputView<>());
-        }
-        return view.get(inputs, () -> protection(state, localSite));
+        return PROTECTION.get(inputs, localSite, () -> protection(state, localSite));
     }
     static ExtractionGroundKnowledge forSite(FrontierWorldState state, ExtractionDeposit deposit) {
         var other = cachedProtection(state, Optional.of(deposit.site().id()));

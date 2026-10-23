@@ -5,7 +5,7 @@ import java.util.*;
 
 /** Shared read-only land-development view. Observed uncertainty overrides the authored terrain baseline. */
 public final class DevelopmentGroundKnowledge implements KnownBlockGeometry<NavigationBlockState> {
-    private static final ImmutableInputView<Set<TerrainColumn>> PROTECTED = new ImmutableInputView<>();
+    private static final ImmutableResultView<String, Set<TerrainColumn>> PROTECTED = new ImmutableResultView<>(16);
     private final FrontierWorldState state;
     private final Set<TerrainColumn> protectedColumns;
     public DevelopmentGroundKnowledge(FrontierWorldState state) {
@@ -14,7 +14,7 @@ public final class DevelopmentGroundKnowledge implements KnownBlockGeometry<Navi
         var layouts = state.extractionSites().deposits().values().stream()
                 .sorted(Comparator.comparing(deposit -> deposit.site().id())).map(deposit -> deposit.site().layout()).toList();
         var inputs = new ArrayList<Object>(); inputs.add(land); inputs.addAll(layouts);
-        protectedColumns = PROTECTED.get(inputs, () -> {
+        protectedColumns = PROTECTED.get(inputs, "columns", () -> {
             var protectedLand = new HashSet<>(land);
             for (var layout : layouts) {
                 layout.cells().forEach(cell -> add(protectedLand, cell.source()));

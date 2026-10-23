@@ -81,16 +81,17 @@ public final class FrontierV3BodyReturnGameTests {
             helper.assertFalse(ledger.hasBodyDeparture(actor), "accepted return consumes only its exact departure");
             helper.assertTrue(level.addFreshEntity(returned), "returned body must enter native index");
             helper.assertTrue(level.getEntity(body.getUUID()) == returned, "one exact returned body remains indexed");
-            FrontierV3ActorBodyController.confirmPresent(level, runtime, returned);
-            helper.assertValueEqual(io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.require(
-                    runtime.decodedState().orElseThrow(), io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(
-                        runtime.decodedState().orElseThrow(), actor)).phase(),
-                    io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPhase.RUNNING,
-                    "only the indexed supported physical observation grants execution readiness");
-            returned.discard();
-            FrontierV3AmbientActorExecutor.forget(runtime);
-            runtime.shutdown();
-            helper.succeed();
+            helper.succeedWhen(() -> {
+                FrontierV3ActorBodyController.confirmPresent(level, runtime, returned);
+                helper.assertValueEqual(io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.require(
+                        runtime.decodedState().orElseThrow(), io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(
+                            runtime.decodedState().orElseThrow(), actor)).phase(),
+                        io.farfrontier.palemirror.frontier.v3.model.FencedRecoveryPhase.RUNNING,
+                        "indexed supported observation and the durable residence grant execution readiness");
+                returned.discard();
+                FrontierV3AmbientActorExecutor.forget(runtime);
+                runtime.shutdown();
+            });
         });
     }
 }

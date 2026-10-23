@@ -843,14 +843,15 @@ public final class FrontierV3ServerLifecycle {
                 && FrontierV3ActorBodyController.observeLeave(level, runtime, entity);
     }
 
-    /** Observes the exact vanilla entity-storage write; never requests a save or a chunk. */
+    /** Invalidates exact absence proofs at admission, even while the write waits on disk. */
     public static java.util.concurrent.CompletableFuture<Void> writeEntityChunkWithFootprint(ServerLevel level,
             net.minecraft.world.level.ChunkPos chunk, net.minecraft.nbt.CompoundTag data,
+            FrontierV3OrderedStorageSubmission submissions,
             java.util.function.Supplier<java.util.concurrent.CompletableFuture<Void>> write) {
         if (FrontierV3PhysicalWorld.isPhysical(level)) {
             FrontierV3EntityWriteEpochs.began(level, chunk);
         }
-        return write.get();
+        return submissions.submit(FrontierV3EntityPersistenceObservers.writePrerequisite(level), write);
     }
 
     public static void observeEntityChunkWrite(ServerLevel level, net.minecraft.world.level.ChunkPos chunk,
@@ -873,8 +874,7 @@ public final class FrontierV3ServerLifecycle {
             ServerLevel level, net.minecraft.world.level.ChunkPos chunk,
             java.util.concurrent.CompletableFuture<java.util.Optional<net.minecraft.nbt.CompoundTag>> read,
             java.util.concurrent.Executor deserializer) {
-        var fenced = FrontierV3DepartureReturnReadFence.observeRead(level, chunk, read, deserializer);
-        return fenced;
+        return FrontierV3DepartureReturnReadFence.observeRead(level, chunk, read, deserializer);
     }
     private static boolean stopping(MinecraftServer server) {
         return STOPPING.containsKey(server);

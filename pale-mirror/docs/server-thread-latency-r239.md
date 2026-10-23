@@ -704,3 +704,48 @@ worksite witness/recovery and asynchronous block-journal failure/receipt checks,
 plus guardrails. Receipts r239x-gates.log (one invalid out-of-bounds fixture,
 corrected) and r239x-final-gates.log (all affected final checks pass). No new
 wall-clock tests. Deployment measurement remains required; no completion claim.
+
+R239x live retained-world probe records source custody2→0 across the Stonefield
+HOT→COLD transition, unchanged historical incident, and no new inventory/scene
+conflicts. During initial COLD, an81.005502ms ready turn at04:34:07.889+05
+(extraction_area_extended.v3) remains above target. JFR samples show repeated
+LandUseExclusions road footprint collection and ExtractionGroundKnowledge
+protection construction on the reducer; the preparation worker's immutable
+results were isolated in thread-local caches. This is CPU work, not a disk wait.
+
+R239y shares those completed immutable protected-land views through the existing
+bounded ImmutableResultView. Extraction protection no longer holds a global
+monitor while collecting geometry. Current native/geological observations still
+come from the current state, and protection inputs retain the exact physical
+deltas, source layouts and local site. Land exclusion validity now also includes
+the actual producer-supplied storage boundaries, not only endpoint identities.
+No new cache authority, arbitrary expiry, weaker exclusion or changed planner
+policy is introduced. Validation and live measurement pending.
+
+
+R239y also closes the exact 147.219694ms return tick at04:36:33.081822
+(R239x sample3326). JFR r239x-mid.tsv shows serial4–6ms actor residence
+journal forces in ActorBodyController.observeJoin during native entity insertion.
+The previous diagnostic attributed the tick only to an unmeasured host stage;
+the full stack establishes the PM join hook as its source.
+
+Returning bodies now submit their existing actor journal asynchronously.
+Common inspection/admission polls the exact join receipt, never later owner changes. One ordered native
+storage submission prefix holds entity images behind that receipt; native reads,
+explicit saved-inventory reads, sync/flush and close cannot overtake the held
+write. Only submission is serialized, retaining Minecraft's own write coalescing.
+The prefix uses no server callback and can drain during native flush. Failed
+journal publication fails the dependent write/read/sync; it never fabricates
+absence. Native write failures retain the ordinary Minecraft error path.
+Existing durable read-before-return and exact residence/epoch rules remain.
+This is not a new body owner or a second storage worker.
+
+The first native25-case run caught an overly broad durability gate: four
+existing indexed-body tests were delayed by later unrelated owner metadata.
+The gate now retains the exact join prefix with the existing weak object/residence
+entry, not every subsequent actor update. Their assertions remain unchanged.
+
+R239y verification:50focused geometry/replay/ledger/storage checks PASS
+(build/r239y-final-gates.log);25native body-lifetime cases andguardrails PASS
+(build/r239y-native-final.log), including ordinary saved return and returned
+PREPARED insertion. Runtime peak/debt validation follows deployment.
