@@ -19,7 +19,10 @@ import java.util.function.Supplier;
  * drift separately.</p>
  */
 public final class FrontierGrayboxPlan {
-    private static final int MAX_CELLS = 65_536;
+    // World-wide immutable declared fabric, indexed by region before HOT use.
+    // The distant 4096x4096 profile has longer roads, not larger loaded scenes.
+    // Native per-tick/region projection budgets are deliberately independent.
+    private static final int MAX_CELLS = 262_144;
     // Exact immutable organ declarations, not current damage or cocoon occupancy.
     // Keep the few recurring seed/expanded views without recompiling their cells
     // on every colony validation or navigation query. Failed derivations never enter.

@@ -25,6 +25,11 @@ class DistantWorldLayoutTest {
         }
         assertTrue(ratios.size() > 10);
         var state = FrontierWorldState.initial(bootstrap); var codec = new FrontierWorldStateCodec();
-        assertEquals(state, codec.decode(codec.encode(state)));
+        var restored = codec.decode(codec.encode(state));
+        assertEquals(state, restored);
+        var fabric = FrontierGrayboxPlan.compileInitialSettlementFabric(bootstrap);
+        assertTrue(fabric.cells().size() > 65536, "distant roads exceed the former compact-world envelope");
+        assertEquals(FrontierGrayboxPlan.compileStableStructuralBaseline(state).cells(),
+                FrontierGrayboxPlan.compileStableStructuralBaseline(restored).cells());
     }
 }

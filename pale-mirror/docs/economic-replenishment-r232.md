@@ -73,3 +73,15 @@ unloaded geometry. GuardrailsPASS. No full game-test suite or long-run economy
 balance acceptance is claimed by these focused checks.
 
 Next: clean-ref package, fresh R26 deployment and live HOT/COLD diagnostics.
+
+### Distant-world startup correction
+
+The first live startup exposed the compact world fabric ceiling of65536cells.
+The immutable, region-indexed world declaration now allows262144; active chunk
+and tick budgets are unchanged. Static full-fabric compilation also detected a
+road/building overlap with per-town coordinate jitter. The authored orthogonal
+road layout now uses aligned rows/columns with unequal gaps (880,1040,1160 along X;
+1360,1480 along Z), preserving the requested3–5x distance ratios without crossing
+buildings. A new recovery check compiles both initial and stable native fabric;
+28layout/fabric/architecture checks and guardrailsPASS. No server-start success
+is claimed for the failed first attempt. The partially initialized world is reset.

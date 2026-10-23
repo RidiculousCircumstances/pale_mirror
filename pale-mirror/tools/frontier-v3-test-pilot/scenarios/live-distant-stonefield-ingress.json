@@ -21,14 +21,14 @@
       "position": {
         "x": -601,
         "y": 68,
-        "z": -1397
+        "z": -1317
       },
       "settleMs": 1000
     },
     {
       "type": "wait_until_diagnostic",
       "view": "first_visibility",
-      "id": "-38,-88",
+      "id": "-38,-83",
       "expect": {
         "presentationReady": true,
         "dynamicReady": true,
@@ -41,7 +41,7 @@
       "at": {
         "x": -600,
         "y": 61,
-        "z": -1394
+        "z": -1314
       }
     },
     {
@@ -83,14 +83,14 @@
       "position": {
         "x": -601,
         "y": 68,
-        "z": -1397
+        "z": -1317
       },
       "settleMs": 1000
     },
     {
       "type": "wait_until_diagnostic",
       "view": "first_visibility",
-      "id": "-38,-88",
+      "id": "-38,-83",
       "expect": {
         "presentationReady": true,
         "dynamicReady": true,
