@@ -44,6 +44,26 @@ class ExtractionGeometryIncrementalTest {
         assertEquals(result, provider.project(after));
         assertEquals(state.inventory(), after.inventory(), "the geometry view owns no yield or custody");
     }
+    @Test void aNewComputingThreadForksPreparedRegionsWithoutRebuildingUnchangedSites() throws Exception {
+        var state = initial(); var original = deposit(state); var cell = original.site().layout().cells().getFirst();
+        var changed = replace(state, original.extracted(cell.id(), 1, "effect:forked-geometry"));
+        var provider = new ExtractionKnownGeometry();
+        KnownSiteGeometry.View prepared;
+        try (var worker = java.util.concurrent.Executors.newSingleThreadExecutor()) {
+            prepared = worker.submit(() -> provider.project(state)).get();
+        }
+        var owner = provider.project(changed);
+        var remote = state.extractionSites().deposits().values().stream()
+                .filter(value -> !value.site().id().equals(original.site().id())).findFirst().orElseThrow();
+        var region = Region.at(remote.site().layout().entrance().support());
+        assertSame(RegionalBlockMap.copyOf(prepared.retainedBlocks()).in(region),
+                RegionalBlockMap.copyOf(owner.retainedBlocks()).in(region));
+        assertTrue(prepared.obstacles().contains(cell.source()));
+        assertFalse(owner.obstacles().contains(cell.source()));
+        assertEquals(new ExtractionKnownGeometry().project(changed), owner);
+        assertEquals(prepared, provider.project(state));
+    }
+
     @Test void preparationAndOwnerShareOnlyCompletedImmutableViewsAcrossBranches() throws Exception {
         var state = initial(); var original = deposit(state); var cell = original.site().layout().cells().getFirst();
         var changed = replace(state, original.extracted(cell.id(), 1, "effect:parallel-geometry"));

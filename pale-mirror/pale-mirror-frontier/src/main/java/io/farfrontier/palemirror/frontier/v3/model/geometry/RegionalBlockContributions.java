@@ -10,6 +10,10 @@ public final class RegionalBlockContributions<K> {
     private RegionalBlockSet snapshot = RegionalBlockSet.copyOf(Set.of());
 
     /** Each producer supplies its exact indexed contribution; only affected regional unions are rebuilt. */
+    public RegionalBlockContributions() { }
+    private RegionalBlockContributions(RegionalBlockContributions<K> source) { sources.putAll(source.sources); snapshot = source.snapshot; }
+    public RegionalBlockContributions<K> fork() { return new RegionalBlockContributions<>(this); }
+
     public RegionalBlockSet replace(K owner, RegionalBlockSet contribution) {
         Objects.requireNonNull(owner); Objects.requireNonNull(contribution);
         var prior = sources.getOrDefault(owner, RegionalBlockSet.copyOf(Set.of()));

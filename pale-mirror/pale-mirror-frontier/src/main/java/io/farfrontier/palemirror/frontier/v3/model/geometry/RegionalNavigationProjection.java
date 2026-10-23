@@ -16,6 +16,15 @@ public final class RegionalNavigationProjection {
     private View view = new View(new KnownBlockNavigationProjection.View(Map.of(), Set.of(), Set.of(), Set.of()),
             RegionalBlockMap.copyOf(Map.of()));
 
+    public RegionalNavigationProjection() { }
+    private RegionalNavigationProjection(RegionalNavigationProjection source) {
+        previous = source.previous; definitions = source.definitions; view = source.view;
+        regionalTypes.putAll(source.regionalTypes); classifications.putAll(source.classifications);
+        source.typeRegions.forEach((type, regions) -> typeRegions.put(type, new HashSet<>(regions)));
+    }
+    /** Independent writer indexes, shared immutable spatial parts. Source must be quiescent. */
+    public RegionalNavigationProjection fork() { return new RegionalNavigationProjection(this); }
+
     public View read(RegionalBlockMap<Optional<NavigationBlockState>> facts, NavigationGeometryState knowledge) {
         var changed = new HashSet<>(facts.changesFrom(previous));
         // A catalog update matters here only where a used type changes its

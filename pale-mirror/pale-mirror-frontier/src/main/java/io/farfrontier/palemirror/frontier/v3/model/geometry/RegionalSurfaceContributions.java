@@ -12,6 +12,10 @@ public final class RegionalSurfaceContributions<K> {
     private RegionalSurfaceMap snapshot = RegionalSurfaceMap.copyOf(Map.of());
     public RegionalSurfaceContributions() { this(false); }
     public RegionalSurfaceContributions(boolean disjointOwners) { this.disjointOwners = disjointOwners; }
+    private RegionalSurfaceContributions(RegionalSurfaceContributions<K> source) {
+        disjointOwners = source.disjointOwners; sources.putAll(source.sources); snapshot = source.snapshot;
+    }
+    public RegionalSurfaceContributions<K> fork() { return new RegionalSurfaceContributions<>(this); }
     public RegionalSurfaceMap replace(K owner, RegionalSurfaceMap contribution) {
         Objects.requireNonNull(owner); Objects.requireNonNull(contribution);
         var previous = sources.getOrDefault(owner, RegionalSurfaceMap.copyOf(Map.of()));

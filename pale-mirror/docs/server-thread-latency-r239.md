@@ -292,3 +292,29 @@ LinearMapCodec establishes uniqueness with a hash index and preserves the native
 compound wire representation. GeneratedGeology now uses this adapter codec.
 Focused NBT format round-trip, malformed value and colliding decoded-key cases
 pass; actual chunk-loading timing is measured on the same retained world.
+
+### Prepared geometry handover, not a second full reconstruction
+
+The 2e23e350f run no longer exhibited the initial admission reproject spike,
+but a 356.8ms first scene pass constructed the server thread's independent
+extraction projection from scratch. Completed-result identity misses may follow
+ordinary non-geometric state changes. Each computing thread now forks a private,
+quiescent prepared seed: only small mutable owner/type indexes are copied;
+immutable regional facts and projections remain shared. No live mutable builder
+is published or modified by another thread. Seeds are bounded to the last
+prepared view and have no authority over domain state. The common regional
+composition/projection fork operations support other geometry providers.
+A worker-then-owner branch test proves unchanged remote regions retain object
+identity while a depleted local cell changes and predecessor facts stay intact.
+
+The common all-service-points geometry calculation also runs outside the
+ServiceBoundaryComposition declaration/column monitor. Its completed immutable
+list is shared by exact captured inputs; preparing every service apron can no
+longer hold local admission behind the registry monitor (58ms measured in r239i).
+
+r239j retained a 513.6ms first-login tick (native distance-ticket processing,
+first-use class loading and chunk attachment restoration), 95.6/112.5ms other
+host ticks, and GC pause maximum88.9ms. Thus <=80ms is still NOT achieved.
+Next measurement compares the prepared-seed change and the pinned Java22
+Generational ZGC collector with the same4–12GiB heap/world. Collector flags were
+validated on the actual runtime; throughput/pauses remain to be measured.

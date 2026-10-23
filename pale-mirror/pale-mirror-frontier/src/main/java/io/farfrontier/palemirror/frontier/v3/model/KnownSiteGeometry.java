@@ -34,7 +34,11 @@ final class KnownSiteGeometry {
             throw new IllegalArgumentException("missing or duplicate known-site geometry provider");
     }
     private static final ImmutableResultView<String, View> COMPLETED = new ImmutableResultView<>(4);
-    private static final ThreadLocal<Projection> WORKING = ThreadLocal.withInitial(Projection::new);
+    private static volatile Projection preparedSeed;
+    private static final ThreadLocal<Projection> WORKING = ThreadLocal.withInitial(() -> {
+        var seed = preparedSeed;
+        return seed == null ? new Projection() : new Projection(seed);
+    });
     private static final ImmutableResultView<String, Set<NavigationBlockState>> PALETTES = new ImmutableResultView<>(2);
     private KnownSiteGeometry() { }
     /** Block type discovery must not construct spatial contacts or acquire the projection lock. */
@@ -49,7 +53,13 @@ final class KnownSiteGeometry {
     static View forState(FrontierWorldState state) {
         var parts = PROVIDERS.stream().map(provider -> provider.project(state)).toList();
         var inputs = new ArrayList<Object>(); inputs.add(state.bootstrap()); inputs.addAll(parts);
-        return COMPLETED.get(inputs, "geometry", () -> WORKING.get().compose(state.bootstrap(), parts));
+        return COMPLETED.get(inputs, "geometry", () -> {
+            var builder = WORKING.get();
+            var result = builder.compose(state.bootstrap(), parts);
+            var seed = preparedSeed;
+            if (seed == null || seed.cachedView != result) preparedSeed = new Projection(builder);
+            return result;
+        });
     }
     private static final class Projection {
         private FrontierBootstrap cachedBootstrap;
@@ -60,6 +70,14 @@ final class KnownSiteGeometry {
         private RegionalBlockContributions<Owner> withdrawnParts = new RegionalBlockContributions<>();
         private RegionalBlockContributions<Owner> unknownParts = new RegionalBlockContributions<>();
         private List<View> previous = List.of();
+        Projection() { }
+        /** Published only as a quiescent seed; each consumer owns its mutable copy. */
+        Projection(Projection source) {
+            cachedBootstrap = source.cachedBootstrap; cachedView = source.cachedView; previous = source.previous;
+            blockParts = source.blockParts.fork(); surfaceParts = source.surfaceParts.fork();
+            obstacleParts = source.obstacleParts.fork(); withdrawnParts = source.withdrawnParts.fork();
+            unknownParts = source.unknownParts.fork();
+        }
         View compose(FrontierBootstrap bootstrap, List<View> parts) {
             if (cachedBootstrap != bootstrap) {
                 surfaceParts = new RegionalSurfaceContributions<>(true); obstacleParts = new RegionalBlockContributions<>();

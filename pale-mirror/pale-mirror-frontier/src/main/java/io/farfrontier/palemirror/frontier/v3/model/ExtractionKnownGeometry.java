@@ -10,14 +10,24 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
         DepositView() { this(new ExtractionGeometryFacts(), new RegionalNavigationProjection()); }
     }
     private final ImmutableResultView<String, KnownSiteGeometry.View> completed = new ImmutableResultView<>(4);
-    private final ThreadLocal<Projection> working = ThreadLocal.withInitial(Projection::new);
+    private volatile Projection preparedSeed;
+    private final ThreadLocal<Projection> working = ThreadLocal.withInitial(() -> {
+        var seed = preparedSeed;
+        return seed == null ? new Projection() : new Projection(seed);
+    });
     private final ExtractionNavigationPalette palette = new ExtractionNavigationPalette();
     @Override public Set<NavigationBlockState> palette(FrontierWorldState state) { return palette.read(state); }
     @Override public KnownSiteGeometry.Owner owner() { return KnownSiteGeometry.Owner.EXTRACTION; }
     @Override public KnownSiteGeometry.View project(FrontierWorldState state) {
         return completed.get(List.of(state.bootstrap(), state.extractionSites().deposits(), state.extractionSites().geologicalExclusions(),
                 state.extractionSites().geology(), state.extractionSites().knowledge(), state.navigationGeometry().definitions()),
-                "geometry", () -> working.get().refresh(state));
+                "geometry", () -> {
+                    var builder = working.get();
+                    var result = builder.refresh(state);
+                    var seed = preparedSeed;
+                    if (seed == null || seed.view != result) preparedSeed = new Projection(builder);
+                    return result;
+                });
     }
     /** Mutable incremental builders belong to their computing thread. Only completed,
      * immutable views cross the preparation/owner boundary. No projection lock. */
@@ -30,6 +40,16 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
         private RegionalBlockContributions<SubjectId> unknownParts = new RegionalBlockContributions<>();
         private RegionalBlockMapContributions<SubjectId, NavigationBlockState> blockParts = new RegionalBlockMapContributions<>();
         private KnownSiteGeometry.View view;
+        Projection() { }
+        /** Private frozen seeds are never refreshed; fork before any mutation. */
+        Projection(Projection source) {
+            projectedBootstrap = source.projectedBootstrap; view = source.view;
+            source.deposits.forEach((id, part) -> deposits.put(id,
+                    new DepositView(new ExtractionGeometryFacts(part.facts()), part.projection().fork())));
+            surfaceParts = source.surfaceParts.fork(); obstacleParts = source.obstacleParts.fork();
+            withdrawnParts = source.withdrawnParts.fork(); unknownParts = source.unknownParts.fork();
+            blockParts = source.blockParts.fork();
+        }
         private KnownSiteGeometry.View refresh(FrontierWorldState state) {
             if (projectedBootstrap != state.bootstrap()) {
                 deposits.clear(); surfaceParts = new RegionalSurfaceContributions<>();

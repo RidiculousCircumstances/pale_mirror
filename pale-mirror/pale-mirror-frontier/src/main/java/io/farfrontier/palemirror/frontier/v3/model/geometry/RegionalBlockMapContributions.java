@@ -9,6 +9,10 @@ public final class RegionalBlockMapContributions<K, V> {
     private final Map<K, RegionalBlockMap<V>> sources = new HashMap<>();
     private RegionalBlockMap<V> snapshot = RegionalBlockMap.copyOf(Map.of());
 
+    public RegionalBlockMapContributions() { }
+    private RegionalBlockMapContributions(RegionalBlockMapContributions<K, V> source) { sources.putAll(source.sources); snapshot = source.snapshot; }
+    public RegionalBlockMapContributions<K, V> fork() { return new RegionalBlockMapContributions<>(this); }
+
     public RegionalBlockMap<V> replace(K owner, RegionalBlockMap<V> contribution) {
         Objects.requireNonNull(owner); Objects.requireNonNull(contribution);
         var prior = sources.getOrDefault(owner, RegionalBlockMap.copyOf(Map.of()));

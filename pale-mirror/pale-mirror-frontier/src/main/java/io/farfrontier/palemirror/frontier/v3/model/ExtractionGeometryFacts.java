@@ -22,6 +22,14 @@ final class ExtractionGeometryFacts {
     private Set<io.farfrontier.palemirror.frontier.v3.api.SubjectId> minerals = Set.of();
     private RegionalBlockMap<Optional<NavigationBlockState>> facts = RegionalBlockMap.copyOf(Map.of());
 
+    ExtractionGeometryFacts() { }
+    ExtractionGeometryFacts(ExtractionGeometryFacts source) {
+        layout = source.layout; declared = source.declared; overrides = source.overrides;
+        cells = source.cells; observations = source.observations; footprint = source.footprint;
+        excluded = source.excluded; basis = source.basis; settlement = source.settlement;
+        minerals = source.minerals; facts = source.facts;
+    }
+
     RegionalBlockMap<Optional<NavigationBlockState>> read(FrontierWorldState state, ExtractionDeposit deposit) {
         var changed = new HashSet<Region>();
         var nextLayout = deposit.site().layout();

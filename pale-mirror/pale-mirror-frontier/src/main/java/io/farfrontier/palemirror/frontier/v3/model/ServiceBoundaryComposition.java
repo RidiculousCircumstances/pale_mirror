@@ -20,9 +20,7 @@ public final class ServiceBoundaryComposition {
     private static Object activeDeclarations;
     private static Map<SubjectId, ServiceBoundaryProvider.Declaration> active;
     /** Explicit all-points view; ordinary local turnover uses the declaration-only column index. */
-    private record TurnoverIndex(Map<SubjectId, ServiceBoundaryProvider.Declaration> declarations,
-            Object providerVersions, KnownPedestrianRouteKnowledge knowledge, Object residents, List<ServiceAccessPoint> points) { }
-    private static TurnoverIndex turnoverIndex;
+    private static final ImmutableResultView<String, List<ServiceAccessPoint>> TURNOVER = new ImmutableResultView<>(4);
     private record ColumnIndex(Object declarations, Object providerVersions, Object residents,
             Map<TerrainColumn, List<ServiceBoundaryProvider.Declaration>> candidates) { }
     private static ColumnIndex columnIndex;
@@ -70,7 +68,7 @@ public final class ServiceBoundaryComposition {
         return provider(point.kind()).geometry(state, declared);
     }
     public static List<ServiceAccessPoint> geometries(FrontierWorldState state) {
-        return turnoverIndex(state).points();
+        return turnoverPoints(state);
     }
     /** Retained identities remain resolvable for draining work; retired facilities impose no new spatial restrictions. */
     static synchronized Map<SubjectId, ServiceBoundaryProvider.Declaration> operationalDeclarations(FrontierWorldState state) {
@@ -120,32 +118,18 @@ public final class ServiceBoundaryComposition {
         columnIndex = new ColumnIndex(declared, versions, residents, Map.copyOf(byColumn));
         return columnIndex;
     }
-    private static synchronized TurnoverIndex turnoverIndex(FrontierWorldState state) {
+    private static List<ServiceAccessPoint> turnoverPoints(FrontierWorldState state) {
         var declared = operationalDeclarations(state);
-        var knowledge = KnownPedestrianRouteKnowledge.forFrontier(state);
-        var residents = state.humanPopulation().residents();
-        if (turnoverIndex != null && turnoverIndex.declarations() == declared
-                && turnoverIndex.providerVersions() == versions
-                && turnoverIndex.knowledge() == knowledge && turnoverIndex.residents() == residents) return turnoverIndex;
-        var points = new ArrayList<ServiceAccessPoint>();
-        var ordered = declared.values().stream().sorted(Comparator.comparing(ServiceBoundaryProvider.Declaration::pointId)).toList();
-        ordered.forEach(value -> {
-            var point = geometry(state, value.identity());
-            points.add(point);
-        });
-        // A broad input version can change without changing any local access
-        // geometry. Keep the spatial index instead of copying every apron.
-        if (turnoverIndex != null && turnoverIndex.declarations() == declared
-                && points.size() == turnoverIndex.points().size()) {
-            boolean unchanged = true;
-            for (int i = 0; unchanged && i < points.size(); i++) unchanged = points.get(i) == turnoverIndex.points().get(i);
-            if (unchanged) {
-                turnoverIndex = new TurnoverIndex(declared, versions, knowledge, residents,
-                        turnoverIndex.points());
-                return turnoverIndex;
-            }
-        }
-        turnoverIndex = new TurnoverIndex(declared, versions, knowledge, residents, List.copyOf(points));
-        return turnoverIndex;
+        // Capture exact immutable inputs, then resolve geometry outside the
+        // declaration/index monitor. An all-points diagnostic or clearance view
+        // cannot hold local admission behind terrain preparation for every site.
+        var inputs = new ArrayList<Object>();
+        inputs.add(state.bootstrap()); inputs.add(declared);
+        inputs.add(KnownPedestrianRouteKnowledge.forFrontier(state));
+        inputs.add(state.humanPopulation().residents());
+        PROVIDERS.forEach(provider -> inputs.add(provider.version(state)));
+        return TURNOVER.get(inputs, "points", () -> declared.values().stream()
+                .sorted(Comparator.comparing(ServiceBoundaryProvider.Declaration::pointId))
+                .map(value -> geometry(state, value.identity())).toList());
     }
 }
