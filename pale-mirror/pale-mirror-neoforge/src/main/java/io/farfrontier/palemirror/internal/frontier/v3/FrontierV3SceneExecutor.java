@@ -219,6 +219,15 @@ final class FrontierV3SceneExecutor {
             if (!owned(entity, state, lease, member) || !(entity instanceof Mob body) || body.getHealth() <= 0.0F) return false;
         }
         SceneLeaseStatus recoveredStatus = FrontierSceneBehaviors.recoveredStatus(state, lease);
+        if (recoveredStatus == SceneLeaseStatus.HOT) {
+            var expected = lease.members().stream().map(member ->
+                    io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, member.actorId())).toList();
+            // Recognition of a restored object is not its durable admission. The
+            // common body owner completes confirmation; recovery uses the same
+            // execution gate as first materialization instead of racing that owner.
+            if (runtime.decodedState().filter(current ->
+                    FrontierV3ActorBodyController.readyForExecution(level, current, expected)).isEmpty()) return false;
+        }
         return submit(runtime, recoveredStatus == SceneLeaseStatus.DRAINING ? "scene-recovery-draining" : "scene-reclaimed",
                 lease.id().value(), new SceneLeaseTransition(lease.id(), recoveredStatus))
                 instanceof CommandResult.Accepted;

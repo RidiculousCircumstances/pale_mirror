@@ -165,6 +165,16 @@ class FrontierV3HiveFoundryAuditTest {
                         .map(cell -> new ChunkPos(cell.position().x() >> 4, cell.position().z() >> 4))
                         .anyMatch(packageChunks::contains),
                 "the package must retain a locally reachable authored road chunk");
+        var owners = new java.util.HashSet<SubjectId>(); owners.add(settlement.id());
+        settlement.structures().forEach(structure -> owners.add(structure.id()));
+        var fabric = plan.cells().values().stream().filter(cell -> owners.contains(cell.ownerId()))
+                .map(cell -> new ChunkPos(cell.position().x() >> 4, cell.position().z() >> 4)).collect(java.util.stream.Collectors.toSet());
+        var fields = state.resourceSiteDescriptors().values().stream().filter(site -> site.settlementId().equals(settlement.id()))
+                .flatMap(site -> site.managedSlots().stream()).map(cell -> new ChunkPos(cell.x() >> 4, cell.z() >> 4))
+                .collect(java.util.stream.Collectors.toSet());
+        assertTrue(packageChunks.stream().allMatch(chunk -> fields.contains(chunk) || fabric.stream()
+                        .anyMatch(local -> Math.abs(chunk.x - local.x) <= 1 && Math.abs(chunk.z - local.z) <= 1)),
+                "local roads cannot recursively recruit remote road chunks into the settlement package");
         assertTrue(cursor.settlementVisibilityChunks(new ChunkPos(20_000, -20_000)).isEmpty(),
                 "remote generated chunks must not create a settlement ingress package");
     }

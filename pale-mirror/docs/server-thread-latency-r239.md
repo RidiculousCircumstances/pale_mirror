@@ -441,3 +441,26 @@ Verification: runtime/carrier/adoption/recognition focused checks and guardrails
 PASS r239n-gates.log;24 native body-lifetime tests and physical-store/field-witness
 checks PASS r239n-body.log. Existing record dirty-successor test is retained with
 two focused receipt isolation/failure checks. Live peak acceptance remains open.
+
+R239n live candidate b797746e6 passed startup verification but failed subsequent
+player entry at03:28:01. The server saved all dimensions and stopped on rejected
+`scene-reclaimed`: HOT requires independently confirmed physical participants.
+`reclaimObservedBodies` checked identity/ownership but bypassed the common body
+execution-readiness gate used by first materialization. Recovered object presence
+can precede canonical admission. Recovery now uses that same readiness gate for
+HOT, preserving separate DRAINING behavior and the common owner of confirmation.
+No catch-and-ignore, forced RUNNING state or new recovery executor is introduced.
+Receipt: r239n-server-failure.log and failed pilot840b58e0-b331-431c-98ed-59307171448f.
+The short-wait JFR attempt used a relative settings path resolved by the target
+JVM and did not start. No timing attribution is claimed from that missing capture;
+use an absolute JFC path on the next candidate.
+
+The startup visibility index also performed two whole-plan scans per settlement
+and mutated its search set while admitting roads. One road could recruit the
+next, so a local package depended on map iteration order and could spread along
+remote roads. Build one owner/chunk index, probe the fixed settlement halo, then
+append managed field chunks. Package order is stable and no remote road inherits
+local ingress permission. Existing whole-settlement visibility coverage now also
+rejects road expansion beyond the local footprint. Focused index/actuation checks
+PASS r239o-local-index.log; guardrails and native first-admission PASS
+r239o-scene-gate.log. This is not yet live recovery or latency acceptance.
