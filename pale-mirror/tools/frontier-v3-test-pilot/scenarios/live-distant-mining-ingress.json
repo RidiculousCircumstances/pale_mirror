@@ -1,0 +1,141 @@
+{
+  "schema": 1,
+  "id": "live_distant_mining_ingress",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode spectator"
+    },
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -601,
+        "y": 68,
+        "z": -1317
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "first_visibility",
+      "id": "-38,-83",
+      "expect": {
+        "presentationReady": true,
+        "dynamicReady": true,
+        "worksitePendingCells": 0
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": -600,
+        "y": 61,
+        "z": -1314
+      }
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "extraction:quarry-828cabe0-1f27-3001-8431-6ea55030e627"
+    },
+    {
+      "type": "wait",
+      "ms": 60000
+    },
+    {
+      "type": "inspect",
+      "view": "resident_life",
+      "id": "resident:2-1"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": 2500,
+        "y": 76,
+        "z": 2500
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "wait",
+      "ms": 15000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -601,
+        "y": 68,
+        "z": -1317
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "first_visibility",
+      "id": "-38,-83",
+      "expect": {
+        "presentationReady": true,
+        "dynamicReady": true,
+        "worksitePendingCells": 0
+      },
+      "timeoutMs": 60000
+    },
+    {
+      "type": "wait",
+      "ms": 60000
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "extraction:quarry-828cabe0-1f27-3001-8431-6ea55030e627"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 14,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "requiredConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 4,
+      "name": "stonefield-distant-mine"
+    },
+    {
+      "after": 11,
+      "name": "stonefield-mine-after-reentry"
+    }
+  ]
+}

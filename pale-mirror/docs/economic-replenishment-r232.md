@@ -94,3 +94,25 @@ whole route. Explicit engineering/physical-loss graphs retain their own finite
 distant-layout recovery test also blocks and reopens an exact road support for
 every settlement. Focused route/layout tests and guardrailsPASS
 (`build/r232-distant-roads.log`). This does not claim arbitrary-world graph scale.
+
+### Live distant search correction
+
+At57599–62403 the distant lane grew from42 to100 waiting requests, with an
+oldest wait above1300planning turns; trade remained unadmitted. Static inspection
+found `prepareReuse` restarted macro/corridor attempts whenever other searches
+published another cache image. Failed reuse was repeatedly placed ahead of the
+primary regional search. A controlled cooperative-slice regression fails before
+the correction: the stable-cache search reaches ESTIMATED while the equivalent
+search exposed to unrelated hint publications stays PLANNING.
+
+Each search now captures its finite reuse hints once. A failed hint resumes
+ordinary complete exploration; it never means NO_PATH. Fresh queries can use
+new hints; changed terrain still follows existing dependency rejection/rebase.
+The obsolete cache-publication counter is removed. Focused hierarchy, worker,
+regional invalidation, incremental and churn tests plus guardrailsPASS.
+Native pre-correction mining diagnostic `r232-native-mining.json` passes loaded
+Stonefield, away, return, zero required/inventory/scene conflicts at56931. Rosa
+retains exactwork15, delivers batch3 and returns toward coal. Frames show mine
+geology; this is not a full visual harvest/food cycle acceptance. Native shutdown
+logs CAPTURE_UNAVAILABLE at unloaded actor handoff; subsequent continuation is
+checked, not reclassified as successful capture.

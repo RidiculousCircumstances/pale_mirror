@@ -54,11 +54,10 @@ public final class HierarchicalPedestrianSearch {
     private PedestrianLocalSearch destinationProbe;
     private PedestrianCorridorJoin corridorJoin;
     private final PedestrianCorridorCache corridors;
-    private PedestrianCorridorCache.Corridor attemptedCorridor;
     private final PedestrianRouteExtent extent;
     private final PedestrianItineraryCache itineraries;
     private PedestrianMacroSearch itineraryJoin;
-    private long attemptedItineraryRevision = -1;
+    private boolean reusePrepared;
     private boolean destinationChecked;
     private int endpointsChecked;
     private int destinationNode, destinationEdge, destinationDirection = -1, destinationOffset, destinationExit, destinationEntrance;
@@ -353,21 +352,19 @@ public final class HierarchicalPedestrianSearch {
     /** Called by the planning owner between slices, never against a running worker.
      * Workers receive a fixed candidate, not a race against other workers' publications. */
     synchronized void prepareReuse() {
-        if (terminal != null || itinerary != null || rewind != null) return;
-        if (!extent.estimateOnly() && corridorJoin == null && corridors != null) {
+        if (reusePrepared || terminal != null || itinerary != null || rewind != null) return;
+        // Capture one bounded hint set for this calculation. Publications by other
+        // searches cannot repeatedly preempt its primary regional exploration.
+        // Hints still validate current dependencies; failure resumes full search.
+        reusePrepared = true;
+        if (!extent.estimateOnly() && corridors != null) {
             var candidate = corridors.find(geometry, start, target);
-            if (candidate != null && candidate != attemptedCorridor) {
-                attemptedCorridor = candidate;
+            if (candidate != null)
                 corridorJoin = new PedestrianCorridorJoin(candidate, geometry, regionCache, start, target, dependencies::put, extent);
-            }
         }
-        if (itineraryJoin == null && itineraries != null) {
-            long revision = itineraries.revision();
-            if (revision != attemptedItineraryRevision) {
-                attemptedItineraryRevision = revision;
-                var candidates = itineraries.snapshot(geometry);
-                if (!candidates.isEmpty()) itineraryJoin = new PedestrianMacroSearch(candidates, geometry, regionCache, start, target, dependencies::put);
-            }
+        if (itineraries != null) {
+            var candidates = itineraries.snapshot(geometry);
+            if (!candidates.isEmpty()) itineraryJoin = new PedestrianMacroSearch(candidates, geometry, regionCache, start, target, dependencies::put);
         }
     }
     /** Server publication after generation/dependency checks; never called from a worker. */

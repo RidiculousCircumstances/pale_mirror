@@ -22,9 +22,7 @@ final class PedestrianItineraryCache {
     private record Key(Object geometryScope, WorldBounds bounds, PedestrianRegion.Tile target) { }
     private final Map<Key, Itinerary> entries = new LinkedHashMap<>(16, 0.75f, true);
     private int portals, dependencies;
-    private long revision;
 
-    synchronized long revision() { return revision; }
     synchronized List<Itinerary> snapshot(PedestrianRouteGeometry geometry) {
         var scope = geometry.regionalRevision().map(PedestrianGeometryRevision::geometryScope).orElse(null);
         if (scope == null) return List.of();
@@ -52,12 +50,12 @@ final class PedestrianItineraryCache {
         }
         graph.replaceAll((node, arcs) -> List.copyOf(arcs));
         var value = new Itinerary(target, List.copyOf(route), Map.copyOf(proof), Map.copyOf(graph));
-        entries.put(key, value); portals += route.size(); dependencies += proof.size(); revision++;
+        entries.put(key, value); portals += route.size(); dependencies += proof.size();
     }
     private static Key key(PedestrianRouteGeometry geometry, SurfaceAnchor target) {
         return geometry.regionalRevision().map(revision -> new Key(revision.geometryScope(), geometry.bounds(),
                 PedestrianRegion.Tile.at(target))).orElse(null);
     }
     private void subtract(Itinerary value) { portals -= value.portals().size(); dependencies -= value.dependencies().size(); }
-    synchronized void clear() { entries.clear(); portals = dependencies = 0; revision++; }
+    synchronized void clear() { entries.clear(); portals = dependencies = 0; }
 }
