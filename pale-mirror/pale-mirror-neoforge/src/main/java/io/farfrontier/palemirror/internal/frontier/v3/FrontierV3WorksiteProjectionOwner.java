@@ -3,13 +3,16 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import net.minecraft.server.level.ServerLevel;
 import java.util.List;
+import java.util.Map;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region;
 import java.util.Optional;
 
 /** Owning family supplies cells and authority; the common adapter owns only physical writes. */
 interface FrontierV3WorksiteProjectionOwner {
     CellMutationKey.OwnerFamily family();
     List<WorksiteBlock> declarations(FrontierWorldState state);
-    io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockMap<WorksiteBlock> currentBlocks(FrontierWorldState state);
+    Map<Region, List<WorksiteBlock>> currentRegions(FrontierWorldState state);
+    Optional<WorksiteBlock> point(FrontierWorldState state, BlockPosition position);
     WorksiteBlock current(FrontierWorldState state, WorksiteBlock declared);
     Optional<WorksiteBlock> initialGeology(FrontierWorldState state, WorksiteBlock current,
             io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block generated);

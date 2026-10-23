@@ -20,9 +20,9 @@ class ExtractionWorksiteViewTest {
         assertPointDeclarations(changed);
         var next = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(changed)));
         var after = view.current(next);
-        assertEquals(Set.of(Region.at(cell.source())), after.changesFrom(before));
-        assertEquals("minecraft:air", after.get(cell.source()).block().kind());
-        for (var region : before.regions()) if (!region.equals(Region.at(cell.source()))) assertSame(before.in(region), after.in(region));
+        assertEquals(Set.of(Region.at(cell.source())), changed(after, before));
+        assertEquals("minecraft:air", point(after, cell.source()).block().kind());
+        for (var region : before.keySet()) if (!region.equals(Region.at(cell.source()))) assertSame(before.get(region), after.get(region));
         assertEquals(new ExtractionWorksiteView().current(next), after);
         assertEquals(before, view.current(state));
         var position = site.site().layout().terrainSupports().keySet().stream()
@@ -45,8 +45,15 @@ class ExtractionWorksiteViewTest {
         var extension = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().extend(site, extended)));
         assertPointDeclarations(extended);
         var extendedView = view.current(extension);
-        assertEquals(Set.of(Region.at(source)), extendedView.changesFrom(before));
+        assertEquals(Set.of(Region.at(source)), changed(extendedView, before));
         assertEquals(new ExtractionWorksiteView().current(extension), extendedView);
+    }
+    private static Set<Region> changed(Map<Region, List<WorksiteBlock>> current, Map<Region, List<WorksiteBlock>> before) {
+        var result = new HashSet<>(current.keySet()); result.addAll(before.keySet());
+        result.removeIf(region -> Objects.equals(current.get(region), before.get(region))); return result;
+    }
+    private static WorksiteBlock point(Map<Region, List<WorksiteBlock>> regions, BlockPosition position) {
+        return regions.get(Region.at(position)).stream().filter(cell -> cell.position().equals(position)).findFirst().orElseThrow();
     }
     private static void assertPointDeclarations(ExtractionDeposit deposit) {
         for (var cell : ExtractionWorksiteBlocks.declared(deposit)) {

@@ -186,3 +186,33 @@ Final source gates: guardrails,47kernel/activity tests,12queue/worker tests,
 10journaltests,9nativephysical-turn and24nativebody-lifetimetestsPASS.
 Receipts: build/r239f-gates.log (initial physical-turn assertion failed as
 documented), r239f-physical-turn.log, r239f-body-journal.log.
+
+
+## Region-demanded worksite facts
+
+ce475c494 removed the redundant post-admission body-link waits from the next
+120s startup/HOT JFR (r239f-startup-hot). First login was253ms versus574ms in
+the preceding observed run; this is an observation, not a guaranteed bound.
+Worksite projection still consumed100ms: discovery eagerly constructed every
+cell even though the final physical queue was already regional.
+
+The projection owner now exposes immutable region lists and exact point lookup.
+ExtractionLayout indexes declaration addresses once. The common WorksiteRegionIndex
+composes captured immutable sources lazily per requested region; it does not
+inspect unrelated cell contents. Unchanged regions retain object identity.
+Extraction remains the owner of depletion, overrides and revision semantics.
+Duplicate positions fail before a requested region returns any facts. Rollback,
+player edits and extensions use the same view, without a parallel legacy path.
+
+The scheduled-subject existence view also retains its union when changed maps
+only change values. Nested machine operations and field jobs remain explicit
+identity inputs; retirement still fails validation. Physical-store lookups reuse
+the exact bound owner and resolve filesystem paths only during hydration.
+
+Focused region/cell, queue, scheduled-subject and storage checks passed. The
+region rollback check initially compared identities after returning to an older
+branch; corrected to semantic differences while retaining the unchanged-region
+identity assertion. Two native block-extraction tests passed (r239g-extraction-gates).
+These do not establish live performance or complete end-to-end mine acceptance.
+Saved-body causal fences, native canonical WAL waits, global navigation geometry
+monitor contention and GC remain separately measured leads. The80ms target is open.

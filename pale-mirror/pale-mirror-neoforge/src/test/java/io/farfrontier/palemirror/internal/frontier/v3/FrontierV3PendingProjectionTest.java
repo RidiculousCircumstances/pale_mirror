@@ -89,15 +89,27 @@ class FrontierV3PendingProjectionTest {
     @Test void currentIndexRetainsUnchangedChunkVersionsAndDropsRemovedSources() {
         var index = new FrontierV3WorksiteCurrentIndex();
         var a = cell(1, 1); var b = cell(33, 1);
-        var facts = io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockMap.copyOf(Map.of(a.position(), a, b.position(), b));
+        var regionA = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region.at(a.position());
+        var regionB = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region.at(b.position());
+        var facts = Map.of(regionA, List.of(a), regionB, List.of(b));
         var original = index.update(List.of(facts));
         assertSame(original, index.update(List.of(facts)));
-        var revised = index.update(List.of(facts.with(Map.of(b.position(), cell(33, 2)))));
+        var revised = index.update(List.of(Map.of(regionA, facts.get(regionA), regionB, List.of(cell(33, 2)))));
         assertSame(original.get(0L), revised.get(0L));
         assertEquals(List.of(cell(33, 2)), revised.get(net.minecraft.world.level.ChunkPos.asLong(2, 0)));
         assertEquals(original, index.update(List.of(facts)), "branch rollback is an exact view, not monotonic version guessing");
         assertTrue(index.update(List.of()).isEmpty());
-        assertThrows(IllegalStateException.class, () -> index.update(List.of(facts, facts)));
+        assertThrows(IllegalStateException.class, () -> index.update(List.of(facts, facts)).get(0L).size(),
+                "requested region rejects overlap before returning physical facts");
+    }
+    @Test void regionalCompositionDoesNotMaterializeUnrequestedRegions() {
+        var index = new FrontierV3WorksiteCurrentIndex(); var a = cell(1, 1);
+        var regionA = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region.at(a.position());
+        var regionB = new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region(2, 0);
+        var unseen = new DeferredImmutableList<WorksiteBlock>(() -> { throw new AssertionError("unrequested region"); });
+        var current = index.update(List.of(Map.of(regionA, List.of(a), regionB, unseen)));
+        assertEquals(List.of(a), current.get(0L));
+        assertSame(unseen, current.get(net.minecraft.world.level.ChunkPos.asLong(2, 0)));
     }
     @Test void oneMissingCellDoesNotWaitForThousandsOfSettledCells() {
         var queue = new FrontierV3PendingProjection(); var old = new FrontierV3IndexedProbeCursor<WorksiteBlock>();

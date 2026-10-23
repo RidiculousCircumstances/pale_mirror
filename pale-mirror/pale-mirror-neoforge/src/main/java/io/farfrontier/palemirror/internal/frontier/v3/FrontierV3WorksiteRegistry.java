@@ -24,13 +24,13 @@ final class FrontierV3WorksiteRegistry {
     }
     static Map<Long, List<WorksiteBlock>> chunks(FrontierWorldState state) { index(state); return chunks; }
     static Map<Long, List<WorksiteBlock>> currentChunks(FrontierWorldState state) {
-        return CURRENT.update(OWNERS.stream().map(owner -> owner.currentBlocks(state)).toList());
+        return CURRENT.update(OWNERS.stream().map(owner -> owner.currentRegions(state)).toList());
     }
     static Optional<WorksiteBlock> point(FrontierWorldState state, BlockPos position) {
         var address = new BlockPosition(position.getX(), position.getY(), position.getZ());
         WorksiteBlock found = null;
         for (var owner : OWNERS) {
-            var cell = owner.currentBlocks(state).get(address);
+            var cell = owner.point(state, address).orElse(null);
             if (cell == null) continue;
             if (cell.key().family() != owner.family()) throw new IllegalStateException("worksite provider returned a foreign declaration");
             if (found != null) throw new IllegalStateException("overlapping worksite declarations");

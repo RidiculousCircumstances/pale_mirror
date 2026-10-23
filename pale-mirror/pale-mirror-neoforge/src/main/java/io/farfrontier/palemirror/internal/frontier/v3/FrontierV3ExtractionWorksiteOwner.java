@@ -6,12 +6,23 @@ import io.farfrontier.palemirror.frontier.v3.model.extraction.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import java.util.*;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region;
 
 /** Finite-source policy behind the common worksite projection SPI. */
 final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProjectionOwner {
     private final ExtractionWorksiteView currentView = new ExtractionWorksiteView();
-    @Override public io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockMap<WorksiteBlock> currentBlocks(FrontierWorldState state) {
+    @Override public Map<Region, List<WorksiteBlock>> currentRegions(FrontierWorldState state) {
         return currentView.current(state);
+    }
+    @Override public Optional<WorksiteBlock> point(FrontierWorldState state, BlockPosition position) {
+        WorksiteBlock found = null;
+        for (var deposit : state.extractionSites().deposits().values()) {
+            var declared = ExtractionWorksiteBlocks.declaredAt(deposit, position);
+            if (declared.isEmpty()) continue;
+            if (found != null) throw new IllegalStateException("overlapping worksite declarations");
+            found = ExtractionWorksiteBlocks.current(deposit, declared.orElseThrow());
+        }
+        return Optional.ofNullable(found);
     }
     private FrontierBootstrap bootstrap;
     private List<WorksiteBlock> declarations = List.of();
@@ -128,8 +139,8 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
                         && witness.declaration().revision() == current.revision()
                         && FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position)).equals(current.knownBlock());
             });
-            if (complete) complete = currentBlocks(state).in(new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region(
-                    region.chunkX(), region.chunkZ())).values().stream().filter(cell -> cell.key().owner().equals(region.siteId())
+            if (complete) complete = currentRegions(state).getOrDefault(new Region(
+                    region.chunkX(), region.chunkZ()), List.of()).stream().filter(cell -> cell.key().owner().equals(region.siteId())
                     && cell.key().role() == WorksiteBlock.Role.NATURAL_TERRAIN && region.contains(cell.position()))
                     .allMatch(cell -> {
                         var position = FrontierV3WorksiteProjection.position(cell);
@@ -226,8 +237,8 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
         }
     }
     private List<WorksiteBlock> regionBlocks(FrontierWorldState state, ExtractionRegion region) {
-        return currentBlocks(state).in(new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region(
-                region.chunkX(), region.chunkZ())).values().stream().filter(cell -> cell.key().owner().equals(region.siteId())
+        return currentRegions(state).getOrDefault(new Region(
+                region.chunkX(), region.chunkZ()), List.of()).stream().filter(cell -> cell.key().owner().equals(region.siteId())
                 && (cell.key().role() == WorksiteBlock.Role.RESOURCE || cell.key().role() == WorksiteBlock.Role.NATURAL_TERRAIN))
                 .toList();
     }

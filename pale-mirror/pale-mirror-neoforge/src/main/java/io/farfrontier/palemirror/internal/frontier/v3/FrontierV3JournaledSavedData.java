@@ -119,8 +119,8 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
 
     static <T extends FrontierV3JournaledSavedData> T get(ServerLevel level, FrontierV3PhysicalStoreKind kind,
             Supplier<T> fresh, BiFunction<CompoundTag, HolderLookup.Provider, T> decode) {
-        Path path = storageFile(level, kind);
         Supplier<T> recover = () -> {
+            Path path = storageFile(level, kind);
             try {
                 T composition = fresh.get();
                 var store = composition.openJournal(path);
@@ -133,10 +133,17 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
         // Both paths use complete recovery. Vanilla's failed-load fallback cannot invent empty state.
         T ledger = level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(recover,
                 (ignored, registries) -> recover.get(), DataFixTypes.SAVED_DATA_COMMAND_STORAGE), kind.fileName);
-        ledger.attachLevel(level, path);
+        // Vanilla storage retains this exact already-attached owner. Resolve its
+        // filesystem binding once at hydration, not on every block/actor lookup.
+        ledger.requireLevel(level, kind);
         FrontierV3PhysicalStores.register(level, kind, ledger);
         ledger.checkHealthy();
         return ledger;
+    }
+
+    final void requireLevel(ServerLevel expected, FrontierV3PhysicalStoreKind declaredKind) {
+        if (level != expected || kind != declaredKind || path == null || store == null)
+            throw new IllegalStateException("physical store lookup has a foreign or incomplete binding");
     }
 
     final void attach(ServerLevel level, Path path, FrontierV3PhysicalJournal store) {

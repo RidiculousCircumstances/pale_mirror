@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model.extraction;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 import java.util.*;
+import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region;
 
 /** A finite authored 3D deposit. Dependencies open safe fronts, not a per-actor route cursor. */
 public final class ExtractionLayout {
@@ -18,6 +19,7 @@ public final class ExtractionLayout {
     private final Map<BlockPosition, Long> terrainIds;
     // Derived once from this immutable declaration; not durable state or a history cache.
     private final Map<Long, Cell> cellsById;
+    private final Map<Region, Set<BlockPosition>> worksitePositions;
     private final Map<BlockPosition, Cell> cellsByPosition;
     private final Set<String> outputKinds;
     private final Map<BlockExtraction.Definition, List<Long>> materialCells;
@@ -127,6 +129,12 @@ public final class ExtractionLayout {
         this.terrainIds = terrainIds;
         this.cellsById = cells.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(Cell::id, cell -> cell));
         this.cellsByPosition = sourcesByPosition;
+        var regions = new HashMap<Region, Set<BlockPosition>>();
+        java.util.stream.Stream.of(fixedBlocks.keySet(), sourcesByPosition.keySet(), terrainSupports.keySet())
+                .flatMap(Set::stream).forEach(position ->
+                        regions.computeIfAbsent(Region.at(position), ignored -> new HashSet<>()).add(position));
+        regions.replaceAll((region, positions) -> Collections.unmodifiableSet(positions));
+        this.worksitePositions = Collections.unmodifiableMap(regions);
         var grouped = new LinkedHashMap<BlockExtraction.Definition, List<Long>>();
         for (var cell : cells) grouped.computeIfAbsent(cell.definition(), ignored -> new ArrayList<>()).add(cell.id());
         grouped.replaceAll((definition, idsForMaterial) -> List.copyOf(idsForMaterial));
@@ -140,6 +148,8 @@ public final class ExtractionLayout {
         return cell;
     }
     public List<Cell> cells() { return cells; }
+    /** Declaration addresses only; current material/revision belongs to the deposit. */
+    public Map<Region, Set<BlockPosition>> worksitePositions() { return worksitePositions; }
     public Map<BlockPosition, Cell> cellsByPosition() { return cellsByPosition; }
     /** Read-only products of this exact immutable source declaration, compiled once. */
     public Set<String> outputKinds() { return outputKinds; }
