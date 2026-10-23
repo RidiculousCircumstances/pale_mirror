@@ -79,7 +79,7 @@ class Handler(BaseHTTPRequestHandler):
                         writer=csv.DictWriter(output,fieldnames=list(rows[0])); writer.writeheader(); writer.writerows(rows)
                     self.send(output.getvalue().encode(),'text/csv; charset=utf-8')
                 else: self.send(json.dumps(data,separators=(',',':')).encode(),'application/json')
-            elif url.path in ('/','/index.html','/app.js','/style.css'):
+            elif url.path in ('/','/index.html','/app.js','/map.js','/style.css'):
                 name='index.html' if url.path=='/' else url.path[1:]
                 self.send((WEB/name).read_bytes(),{'html':'text/html; charset=utf-8','js':'text/javascript; charset=utf-8','css':'text/css; charset=utf-8'}[name.split('.')[-1]])
             else: self.send(b'Not found','text/plain',404)

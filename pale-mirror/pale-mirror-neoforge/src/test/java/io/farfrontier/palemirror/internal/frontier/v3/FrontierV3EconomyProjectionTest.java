@@ -19,6 +19,21 @@ class FrontierV3EconomyProjectionTest {
                 +inventory.items().values().stream().mapToLong(ExactItemStack::count).sum();
         assertEquals(expected,actual);assertSame(inventory,state.inventory());
         assertTrue(new Gson().toJson(snapshot).contains("availableRaw"));
+        var first = (Map<?,?>)((List<?>)snapshot.get("settlements")).getFirst();
+        assertEquals(state.bootstrap().settlements().getFirst().anchor().x(), first.get("x"));
+        assertEquals(state.bootstrap().settlements().getFirst().anchor().z(), first.get("z"));
+        var map = (Map<?,?>)snapshot.get("map");
+        assertEquals(state.bootstrap().bounds().width(), ((Map<?,?>)map.get("bounds")).get("width"));
+        assertEquals(List.of(), map.get("missions"), "no invented caravans in an empty mission registry");
+    }
+    @Test void distantDisplayRouteIsBoundedAndRetainsBothEndpointsWithoutExpandingGeometry() {
+        var route = java.util.stream.IntStream.range(0, 100_000).mapToObj(x -> SurfaceAnchor.at(x, 63, -x)).toList();
+        var projected = FrontierV3EconomyMapProjection.route(route);
+        assertEquals(FrontierV3EconomyMapProjection.MAX_ROUTE_POINTS, projected.size());
+        assertEquals(0, projected.getFirst().get("x")); assertEquals(99_999, projected.getLast().get("x"));
+        assertEquals(-99_999, projected.getLast().get("z"));
+        assertTrue(FrontierV3EconomyMapProjection.route(List.of()).isEmpty());
+        assertEquals(1, FrontierV3EconomyMapProjection.route(List.of(SurfaceAnchor.at(2, 64, 3))).size());
     }
     @Test void onlyNewConfirmedSalesAreExportedWithSeparateDeliveryAndStableReceiptIdentity() {
         var before=FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:analytics-sales"),126));

@@ -68,3 +68,22 @@ it. Missing samples never become zero-valued queue or latency measurements.
 Displayed tick duration is the existing host-through-PM portion, not full Minecraft
 MSPT. Observed tick frequency uses counter deltas/wall intervals and is unavailable
 on the first sample or across a failed poll, not inferred from processing duration.
+
+The Map tab draws an interactive X/Z schematic with pan, zoom, hover details and
+pinned selection. Settlement positions, stocks and finances are from the latest
+snapshot; trade arrows aggregate paid receipts for the selected period/resource/
+town. They are commercial connections, not Minecraft roads. Active caravan
+markers are member-position centroids, not a designated leader. Selecting a group
+shows its members and current retained journey. Incoming, returning and preparing
+stages remain distinct; a retained route or cargo declaration is not delivery.
+
+Map projection uses the existing off-thread immutable-cut export. HOT positions
+are last confirmed canonical observations; COLD uses the shared as-of movement
+projection including known barriers. No chunk load, native entity lookup, route
+request, new game polling or browser-driven simulation query. Route export samples
+at most128 points including endpoints per group, and at most256 active missions;
+truncation is explicit. Simplified lines are never executable paths. The UI
+preserves viewport/selection across5-second refreshes and does not animate missing
+updates. Snapshot freshness/gaps still apply. The period filter changes trade
+arrows, not the current positions. Old snapshots without spatial fields display
+unavailable instead of invented coordinates. No CDN or new browser dependency.

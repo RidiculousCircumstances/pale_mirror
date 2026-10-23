@@ -21,7 +21,7 @@ const n = (x) =>
   short = (x) => String(x ?? "").replace(/^minecraft:/, "");
 let performanceData = null;
 let data = null,
-  tab = "towns",
+  tab = "map",
   busy = false,
   refreshPending = false;
 const sorts = new Map();
@@ -30,6 +30,7 @@ const collator = new Intl.Collator("ru", {
   sensitivity: "base",
 });
 const tabs = {
+  map: "Карта",
   towns: "Поселения",
   stocks: "Запасы",
   market: "Заявки",
@@ -196,6 +197,14 @@ function render() {
         `<div class="card"><strong>${esc(v)}</strong><span>${k}</span></div>`,
     )
     .join("");
+  if (tab === "map") {
+    if (!$("content").querySelector(".world-map")) setContent('<div class="world-map"></div>');
+    WorldMap.mount($("content").firstElementChild, data, {
+      town: $("town").value, item: $("item").value,
+      selectTown: (id) => { $("town").value = id; refresh(); },
+    });
+    return;
+  }
   let html = "";
   if (tab === "towns")
     html = table("Текущее состояние", towns, [

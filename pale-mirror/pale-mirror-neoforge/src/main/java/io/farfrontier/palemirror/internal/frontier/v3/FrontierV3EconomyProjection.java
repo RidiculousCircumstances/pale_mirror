@@ -25,7 +25,7 @@ final class FrontierV3EconomyProjection {
                 if (nutrition.wantsFood(s.bootstrap().ruleset().residentLife())) hungry++;
             }
             var finance=FinancialAccountReport.read(s.inventory().economics(),town.id());
-            towns.add(row("id",town.id(),"name",town.displayName(),"residents",residents,"hungry",hungry,
+            towns.add(row("id",town.id(),"name",town.displayName(),"x",town.anchor().x(),"y",town.anchor().y(),"z",town.anchor().z(),"residents",residents,"hungry",hungry,
                     "balanceRaw",finance.balance().raw(),"reservedRaw",finance.reservedPayments().raw(),
                     "budgetsRaw",finance.unusedBudgets().raw(),"availableRaw",finance.availableToCommit().raw(),
                     "receivedRaw",finance.turnover().received().raw(),"paidRaw",finance.turnover().paid().raw()));
@@ -56,7 +56,7 @@ final class FrontierV3EconomyProjection {
             jobs.add(row("id",work.id(),"town",s.humanPopulation().resident(work.workerId()).settlementId(),
                     "kind","HARVEST","item","minecraft:wheat","phase",work.progress().completedCropSlots()+"/"+work.progress().totalCropSlots(),"actor",work.workerId()));
         return row("id","snapshot:"+revision,"kind","snapshot","tick",tick,"revision",revision,"status",status,
-                "settlements",towns,"stocks",stocks,"orders",orders,"contracts",contracts,"missions",missions,"jobs",jobs);
+                "map",FrontierV3EconomyMapProjection.snapshot(s,tick),"settlements",towns,"stocks",stocks,"orders",orders,"contracts",contracts,"missions",missions,"jobs",jobs);
     }
     record StockKey(SubjectId owner,String item) { }
     private record AccountBalance(SubjectId account,StockKey stock) { }
