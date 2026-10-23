@@ -574,3 +574,17 @@ No search breadth, route correctness, canonical timing or durability is weakened
 Verification r239r:36frontier +10adapter checks andguardrails PASS
 (build/r239r-gates.log);2native block-extraction checks PASS andall dimensions
 saved (r239r-native.log). Next step is same-world live peak/progress measurement.
+
+R239r deployment rejected at startup on the retained world: `review ID collision`
+from the first COLD extraction at instant609746. The review registry is explicitly
+coalescible, but the generic queue incorrectly treated a changed deadline at the
+same stable owner/kind address as an identity collision. No mined-block transaction
+was committed: validation rejected its queue overlay before publication. Server
+saved all dimensions and stopped. Client attempt was cancelled; no performance
+acceptance is claimed for this deployment.
+
+R239s corrects the common coalescing boundary: same ID + same declared owner/kind
+may request an earlier/later deadline; priority/cost must still match. Earliest
+wins, foreign owner/kind/cost stays rejected. Ordinary `Created` exact facts remain
+strict. Queue tests cover both directions and atomicity; the existing kernel WAL
+replay test now checks stable-address replacement as well as distinct causal IDs.

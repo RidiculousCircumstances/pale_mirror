@@ -159,10 +159,16 @@ class InMemoryFrontierEngineTest {
     private static final SubjectId SUBJECT = new SubjectId("settlement:test");
 
     @Test void reviewHintsRetainTheirCausalWalFactsAndRecoverTheCoalescedQueue() {
+        assertReviewHintReplay(false);
+        assertReviewHintReplay(true);
+    }
+
+    private static void assertReviewHintReplay(boolean stableAddress) {
         var engine = engine(List.of(), false);
         var codecs = KernelPayloadCodecs.scheduleEffects();
         for (int i = 0; i < 5; i++) {
-            var requested = new ScheduleEffect.ReconsiderationRequested(scheduled("schedule:review-" + i, SUBJECT.value(), 10 + i, 1));
+            var requested = new ScheduleEffect.ReconsiderationRequested(scheduled(
+                    "schedule:review-" + (stableAddress ? "stable" : i), SUBJECT.value(), stableAddress ? 14 - i : 10 + i, 1));
             assertEquals(requested, codecs.decode(requested.type(), codecs.encode(requested)));
             assertInstanceOf(CommandResult.Accepted.class, engine.submit(command("command:review-" + i, new Revision(i), requested)));
         }

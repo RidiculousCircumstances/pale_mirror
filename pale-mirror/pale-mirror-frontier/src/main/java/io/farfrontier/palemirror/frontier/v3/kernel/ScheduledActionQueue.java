@@ -243,8 +243,12 @@ public final class ScheduledActionQueue {
         void requestReconsideration(ScheduledAction requested) {
             requireOpen(); Objects.requireNonNull(requested, "requested review");
             ScheduledAction exactId = find(requested.id());
-            if (exactId != null && !exactId.equals(requested)) throw new IllegalArgumentException("review ID collision");
             ReviewKey key = ReviewKey.of(requested);
+            // Some owners retain one stable review address. A new deadline for
+            // that same declared review is a normal hint, not an ID collision.
+            // Owner/kind, priority and cost must still agree before coalescing.
+            if (exactId != null && !ReviewKey.of(exactId).equals(key))
+                throw new IllegalArgumentException("review ID collision: " + requested.id().value());
             List<ScheduledAction> pending = new ArrayList<>();
             for (ScheduledAction action : base.byOwnerKind.getOrDefault(key, java.util.Collections.emptyNavigableSet()))
                 if (!removed.contains(action.id())) pending.add(action);

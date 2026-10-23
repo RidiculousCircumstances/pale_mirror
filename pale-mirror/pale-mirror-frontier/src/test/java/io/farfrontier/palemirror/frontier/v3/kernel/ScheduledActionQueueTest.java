@@ -117,6 +117,31 @@ class ScheduledActionQueueTest {
                 action("schedule:successor", 11, 0, "settlement:foreign", 1)));
     }
 
+    @Test void stableReviewAddressKeepsEarliestDeadlineWithoutChangingItsOwnerOrCost() {
+        var queue = new ScheduledActionQueue();
+        var original = action("schedule:stable-review", 100, 0, "settlement:a", 1);
+        queue.schedule(original);
+        var later = queue.beginMutation();
+        later.requestReconsideration(action("schedule:stable-review", 150, 0, "settlement:a", 1));
+        later.commit();
+        assertEquals(List.of(original), queue.snapshot());
+        var requested = action("schedule:stable-review", 20, 0, "settlement:a", 1);
+        var earlier = queue.beginMutation(); earlier.requestReconsideration(requested);
+        assertTrue(queue.containsExact(original), "pending transaction cannot mutate the live deadline");
+        earlier.commit();
+        assertEquals(List.of(requested), queue.snapshot());
+        var invalid = queue.beginMutation();
+        assertThrows(IllegalArgumentException.class, () -> invalid.requestReconsideration(
+                action("schedule:stable-review", 10, 0, "settlement:foreign", 1)));
+        assertThrows(IllegalArgumentException.class, () -> invalid.requestReconsideration(
+                new ScheduledAction(requested.id(), new SimInstant(10), 0, requested.subject(), "foreign.kind", 1)));
+        assertThrows(IllegalArgumentException.class, () -> invalid.requestReconsideration(
+                action("schedule:stable-review", 10, 1, "settlement:a", 1)));
+        assertThrows(IllegalArgumentException.class, () -> invalid.requestReconsideration(
+                action("schedule:stable-review", 10, 0, "settlement:a", 2)));
+        assertEquals(List.of(requested), queue.snapshot());
+    }
+
     @Test void pressureSeparatesReadyHeldFutureAndExcludesParkedTimeAfterWake() {
         var queue = new ScheduledActionQueue();
         var held = action("schedule:held-pressure", 1, 0, "resident:a", 1);
