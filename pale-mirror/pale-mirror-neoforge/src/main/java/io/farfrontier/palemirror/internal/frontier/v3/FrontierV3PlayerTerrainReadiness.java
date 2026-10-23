@@ -15,4 +15,15 @@ public final class FrontierV3PlayerTerrainReadiness {
         // completed LevelChunks: hasChunksAt can merely see pending holders.
         return FrontierV3LoadedWorld.ready(level, player.getBoundingBox().inflate(1.0D));
     }
+
+    /** Preserve absMoveTo's interpolation bookkeeping without invoking setPosRaw's
+     * NeoForge chunk demand. Real moves, corrections and teleports keep native authority.
+     */
+    public static boolean resetUnchangedPosition(ServerPlayer player, double x, double y, double z,
+            float yaw, float pitch) {
+        if (player.getX() != x || player.getY() != y || player.getZ() != z || ready(player)) return false;
+        player.xo = x; player.yo = y; player.zo = z;
+        player.absRotateTo(yaw, pitch);
+        return true;
+    }
 }

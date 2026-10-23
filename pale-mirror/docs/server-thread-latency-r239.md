@@ -502,3 +502,39 @@ Focused kernel/runtime/mailbox checks+guardrails PASS r239p-gates.log;25 native
 body-lifetime/readiness tests PASS r239p-native.log. No80ms claim before live
 measurements with actual ordinary time progression. JFR/async-profiler receipts
 r239o-profile.tsv and ~/.local/state/pale-mirror/profiles/r239o-transition-wall.jfr.
+
+## R239q: stationary player re-anchor and native save acknowledgements
+
+R239p live test (same world, pilot afb7cff0-c273-48cd-9968-d98138b0b3e6)
+restored progress: instant 595114/debt46 then596640/debt3. Both visits completed;
+no retained conflict, but this is not gameplay-cycle acceptance. Peak205.8ms
+at login,128.6ms on first transition; target80ms still not achieved.
+
+The exact login interval22:39:12.459–.664UTC contains
+ServerGamePacketListenerImpl.tick → absMoveTo → Entity.setPosRaw →
+NeoForge's unconditional getChunk → managedBlock. All three wall samples inside
+the interval run queued chunk restoration below that same blocking demand.
+The previous base-player-tick guard did not cover this independent native
+re-anchor. Same-position resets now preserve interpolation/rotation bookkeeping
+without calling setPosRaw while PM terrain is incomplete. Actual position
+changes, corrections and teleports still use native code; network ticks continue.
+Source receipts: build/r239p-packet-tick-source.json, r239p-setpos-source.json;
+profile: r239p-wall.tsv, r239p-profile.tsv.
+
+The transition interval22:39:42.914–43.043UTC includes30.17ms of repeated
+EntityPersistenceObservers.departed journal waits. Raw observations now submit
+to the same ordered journal asynchronously. Positive saved-departure publication
+and per-actor durable release checkpoints remain gates, as do return-read fences.
+NativeOperationSaves likewise submits acknowledgements after native data is
+already saved. Marker pruning still requires durable retirement; a pending or
+failed journal cannot discard the native recovery marker.
+
+An attempted extra native reset test required the PM dimension absent from the
+focused vanilla GameTest fixture; removed this invalid fixture, not a product
+assertion. Existing loaded-terrain GameTest plus actual packet/client login are
+the appropriate evidence. Async-retirement test explicitly controls the writer
+and checks marker retention before completion and recovery after completion.
+
+Verification: build/r239q-verification.log — focused operation-ledger/retirement
+checks, guardrails and25native body-lifetime tests PASS, all dimensions saved.
+Live effect must still be measured; no <=80ms claim from these checks.

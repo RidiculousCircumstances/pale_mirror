@@ -33,7 +33,11 @@ final class FrontierV3EntityPersistenceObservers {
         if (!active(level, runtime)) return;
         var state = runtime.decodedState().orElse(null); if (state == null) return;
         var world = state.bootstrap().worldId();
-        try { FrontierV3AmbientCarrierLedger.get(level, world).persist(level, world); }
+        // Raw departure is only an observation. Saved-departure publication and
+        // the body's own durable checkpoint still fence release/reconstruction.
+        // Queue this prefix in the same journal instead of stalling every native
+        // chunk departure (including passes with no new PM actor observation).
+        try { FrontierV3AmbientCarrierLedger.get(level, world).persistAsync(level, world); }
         catch (RuntimeException failure) {
             io.farfrontier.palemirror.PaleMirrorMod.LOGGER.error("Scene raw departure publication failed; custody remains unresolved", failure);
         }

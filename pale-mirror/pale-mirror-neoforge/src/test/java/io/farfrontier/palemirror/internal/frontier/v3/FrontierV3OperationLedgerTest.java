@@ -12,6 +12,30 @@ import static org.junit.jupiter.api.Assertions.*;
 class FrontierV3OperationLedgerTest {
     @BeforeAll static void version() { net.minecraft.SharedConstants.tryDetectVersion(); }
     @TempDir Path directory;
+    @Test void nativeSaveAcknowledgementCannotEraseMarkersBeforeItsAsyncRetirementIsDurable() throws Exception {
+        var tasks = new ArrayDeque<Runnable>();
+        var path = directory.resolve("async-retirement.dat");
+        var ledger = FrontierV3OperationLedger.inMemory();
+        ledger.attachJournal(path, WORLD, DIMENSION,
+                FrontierV3JournalStore.open(path, tasks::add, FrontierV3JournalStore.PHYSICAL));
+        var operation = ledger.prepare(declaration("async-retirement"));
+        ledger.persistAsync(); tasks.remove().run();
+        var markers = new CompoundTag();
+        FrontierV3NativeOperationMarkers.stamp(markers, operation.nativeReceipt(BODY));
+        for (var participant : operation.declaration().participants()) {
+            ledger.applied(operation.nativeReceipt(participant)); ledger.saved(operation.nativeReceipt(participant));
+        }
+        ledger.closeOwner(operation.ticket()); ledger.retire(operation.ticket());
+        var receipt = ledger.persistAsync();
+        assertFalse(receipt.isDone());
+        assertFalse(FrontierV3NativeOperationMarkers.prune(markers, ledger));
+        assertTrue(FrontierV3NativeOperationMarkers.contains(markers, operation.nativeReceipt(BODY)),
+                "native saved evidence survives until the journal acknowledges retirement");
+        tasks.remove().run();
+        assertTrue(FrontierV3NativeOperationMarkers.prune(markers, ledger));
+        ledger.finish();
+        assertTrue(reopen(path).prunable(operation.nativeReceipt(BODY)));
+    }
     @Test void conditionalCancellationRetainsTheLivingCommandAndNeedsPositiveParentOutcomeAfterRestart() throws Exception {
         conditionalCancellation(true);
         conditionalCancellation(false);

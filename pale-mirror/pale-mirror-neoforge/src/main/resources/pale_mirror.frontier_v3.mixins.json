@@ -34,6 +34,7 @@
     "FrontierV3EntitySavePassMixin",
     "FrontierV3PlayerActionMixin",
     "FrontierV3PlayerTerrainTickMixin",
+    "FrontierV3PlayerPositionResetMixin",
     "FrontierV3PlayerOperationSaveMixin",
     "FrontierV3DepotMenuClickMixin",
     "FrontierV3HorseMenuAccessor",

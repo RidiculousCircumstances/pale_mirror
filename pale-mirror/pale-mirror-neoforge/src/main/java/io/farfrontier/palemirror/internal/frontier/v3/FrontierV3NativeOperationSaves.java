@@ -37,7 +37,11 @@ final class FrontierV3NativeOperationSaves {
                     ledger.saved(receipt);
                     if (ledger.require(receipt.ticket()).retirable()) ledger.retire(receipt.ticket());
                 }
-                ledger.persist(level);
+                // Native data is already durable. Submit its acknowledgement without
+                // blocking the owner; marker pruning still requires durableReady().
+                // A crash before this receipt leaves the saved native marker available
+                // for recovery, not permission to replay the physical operation.
+                ledger.persistAsync(level);
             }
             batch.accept(ticket);
         }));
