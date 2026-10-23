@@ -24,14 +24,14 @@
       "position": {
         "diagnostic": {
           "view": "container",
-          "id": "container:structure-1-forge-station",
+          "id": "container:1-depot",
           "field": "position"
         }
       },
       "offset": {
-        "x": -7,
+        "x": -20,
         "y": -1,
-        "z": -5
+        "z": -20
       },
       "settleMs": 1000
     },
@@ -71,9 +71,9 @@
       "type": "look",
       "at": {
         "diagnostic": {
-          "view": "container",
-          "id": "container:structure-1-forge-station",
-          "field": "position"
+          "view": "scene",
+          "id": "job:production-tool-test",
+          "field": "productionCurrent"
         }
       }
     },
@@ -143,14 +143,14 @@
         "position": {
           "diagnostic": {
             "view": "container",
-            "id": "container:structure-1-forge-station",
+            "id": "container:1-depot",
             "field": "position"
           }
         },
         "offset": {
-          "x": -7,
+          "x": -20,
           "y": -1,
-          "z": -5
+          "z": -20
         },
         "settleMs": 1000
       }
@@ -176,10 +176,6 @@
     }
   ],
   "frames": [
-    {
-      "after": 3,
-      "name": "forge-entrance-before-restart"
-    },
     {
       "after": 7,
       "name": "same-repaired-tool-in-warehouse",

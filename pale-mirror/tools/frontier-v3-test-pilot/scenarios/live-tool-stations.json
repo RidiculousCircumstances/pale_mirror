@@ -1,0 +1,181 @@
+{
+  "schema": 1,
+  "id": "live_tool_stations",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:7-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -2,
+        "y": -1,
+        "z": 0
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:7-depot",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "close_container"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-7-forge-station",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -3,
+        "y": 0,
+        "z": -2
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-7-forge-station",
+          "field": "position"
+        }
+      }
+    },
+    {
+      "type": "wait",
+      "ms": 3000
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-7-forge-station",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "close_container"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-8-smeltery-metals",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -2,
+        "y": -1,
+        "z": 0
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "container",
+      "id": "container:structure-8-smeltery-metals",
+      "expect": {
+        "status": "ok",
+        "surface": "ACTIVE"
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:structure-8-smeltery-metals",
+          "field": "position"
+        }
+      }
+    },
+    {
+      "type": "wait",
+      "ms": 3000
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 13,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "requiredConflicts": 0,
+        "inventoryConflicts": 0,
+        "sceneConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 2,
+      "name": "warehouse-equipment",
+      "presentation": "player"
+    },
+    {
+      "after": 6,
+      "name": "forge-entrance",
+      "presentation": "player"
+    },
+    {
+      "after": 7,
+      "name": "forge-menu",
+      "presentation": "player"
+    },
+    {
+      "after": 12,
+      "name": "metal-warehouse-on-authored-ground",
+      "presentation": "player"
+    }
+  ]
+}

@@ -1,8 +1,8 @@
 # R228 — tools as productive equipment
 
-Status: accepted scope; implementation in progress. Main alone; no subagents or
-push. Complete the connected feature, verify, commit and deploy a clean ref.
-Fresh disposable world is authorized. R227 remains live until a verified release.
+Status: implemented, verified and deployed (2026-10-23). Main alone; no push.
+Production source: 4c2d740123ac8ce18740d90bfd711b8bf2619e5c.
+Fresh live world: frontier-v3-r228-tools-20261023, schema301 / ruleset r25.
 
 ## Product result and decisions
 
@@ -143,11 +143,47 @@ Evidence retained under implementation `build/`:
   restart, same worn stone pick (damage100→35), real material consumption and
   worker delivery to its warehouse; the exact production order retires. Final
   chest frame reviewed. The early frame was occluded and is not visual evidence
-  of working at the forge. The scenario camera was corrected for the subsequent
-  run; full-pack release/deployment observation remains to be recorded.
+  of working at the forge. A later camera outside the station excluded the depot
+  from physical interaction range and left the scene PREPARED; the scenario now
+  retains the successful midpoint, with only the meaningful final chest frame.
 
 COLD worker manufacture/repair survives snapshot recovery at every phase;
 interruption preserves the target; external removal cancels the exact order.
 Individual trade verifies reserve/pickup/delivery/acceptance/payment, HOT
 before-effect recovery/replay and external withdrawal. This does not establish
 long-run market balance or demonstrate an autonomous tool caravan in the client.
+
+
+## Deployment and full-pack observation
+
+Clean detached source `/home/rd/proj/pm-r228-release/pale-mirror` built and passed
+packaged-JAR verification. Root pack publish/install scripts published the mod
+and retained unchanged Visuals; manifest validation, deployment preflight and
+post-start deployment verification passed. Java22, seed126, r25 and exact world
+path were verified. Server artifact SHA512:
+`a244c139e586955e029c39aef529e58fafa919de3bd3c29fd3221ed8e73247b3c98d1f67cf233cedbab6023bea7b44f452038a822abc8de848b348b607743b69`.
+Client update is required for the new forge block and matching tool behavior.
+
+`build/r228-live-tools-pack.json`, run
+`716c558b-9407-444c-9420-1cdd62a87f35`, passed using the full client modpack,
+private Xvfb and 20 FPS. Checked-in scenario `live-tool-stations.json` opened
+Clearwater storage and forge, then checked Ironmeadow's metal warehouse ACTIVE.
+All four captured frames were reviewed: equipment in the chest, visible forge,
+forge menu and warehouse on authored ground. This is station presentation and
+container access evidence, not an autonomous production/market throughput proof.
+The client stopped after the run. Its disconnect coincided with a Netty
+connection-reset-by-peer message; the server continued running.
+
+Final read-only receipts `build/r228-final-live-summary.json` and
+`build/r228-final-live-performance.json`, instant7342/revision17569: 12 settlements,
+347 residents; required/inventory/scene conflicts0, incident index0, route waits0,
+ready schedule backlog0, fast-forward0. Recent64 observed host-tick portions
+average16.16ms/max147.92ms; PM turns average5.16ms/max31.46ms. Startup peak1.63s
+remains recorded; these bounded observations are neither a whole-server TPS
+benchmark nor proof of long-run economic balance. A human player was connected
+at the final observation; no reset or forced time advance was performed.
+
+Source and pack histories remain separate. Production implementation was committed;
+this follow-up only records evidence and scenario camera/setup corrections. Pack
+tracked files remain clean; existing untracked `.f0v-baseline/` was preserved.
+No push performed.
