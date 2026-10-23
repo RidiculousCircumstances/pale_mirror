@@ -54,6 +54,10 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
      * canonical byte snapshot for every read without creating any new canonical evidence.
      */
     private CheckpointImage cachedCheckpoint;
+    private java.util.concurrent.Future<CheckpointImage> checkpointEncoding;
+    private FrontierFileStore.SnapshotSubmission checkpointPublication;
+    private long checkpointSequence;
+    private int capturedCheckpointTicks;
 
     private FrontierV3ServerRuntime(
             FrontierEngineConfiguration<S, P> configuration, FrontierStore store, TransactionCommitter committer, int checkpointIntervalTicks, RecoveryImage recovered,
@@ -349,6 +353,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
                 if (!publishDurability()) {
                     engine.failureCause().ifPresent(this::quarantine); return;
                 }
+                pollCheckpoint();
                 cachedCheckpoint = null;
                 turn.run();
             }
@@ -446,7 +451,19 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     Optional<SnapshotReceipt> checkpoint() {
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
         if (engine.hasPendingCommit()) return Optional.empty();
+        if (store instanceof FrontierFileStore files && files.inTurn()) {
+            if (checkpointEncoding == null) {
+                if (engine.hasPendingCalculation()) return Optional.empty();
+                var encoding = preparations.prepareValue(engine.prepareCheckpoint());
+                if (encoding.isEmpty()) return Optional.empty();
+                checkpointEncoding = encoding.orElseThrow();
+                checkpointSequence = files.checkpointSequence(engine.canonicalState().revision(), configuration.worldId());
+                capturedCheckpointTicks = ticksSinceCheckpoint;
+            }
+            return pollCheckpoint();
+        }
         try {
+            finishCheckpoint();
             CheckpointImage checkpoint = checkpointImage().orElseThrow();
             RecoveryImage durable = store instanceof FrontierFileStore fileStore
                     ? fileStore.recoverOwned(configuration.worldId()) : store.recover(configuration.worldId());
@@ -474,9 +491,41 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         }
     }
 
+    private Optional<SnapshotReceipt> pollCheckpoint() {
+        if (checkpointEncoding == null || !checkpointEncoding.isDone()) return Optional.empty();
+        try {
+            var files = (FrontierFileStore) store;
+            if (checkpointPublication == null)
+                checkpointPublication = files.prepareSnapshot(new SnapshotRecord(checkpointEncoding.get(), checkpointSequence));
+            var receipt = checkpointPublication.poll();
+            if (receipt.isEmpty()) return Optional.empty();
+            if (receipt.orElseThrow().snapshotSequence() != checkpointSequence
+                    || !receipt.orElseThrow().revision().equals(checkpointEncoding.get().revision()))
+                throw new IllegalStateException("async checkpoint returned a foreign prefix receipt");
+            engine.compact(receipt.orElseThrow().revision());
+            ticksSinceCheckpoint = Math.max(0, ticksSinceCheckpoint - capturedCheckpointTicks);
+            checkpointEncoding = null; checkpointPublication = null;
+            return receipt;
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt(); throw new IllegalStateException("checkpoint encoding interrupted", error);
+        } catch (java.util.concurrent.ExecutionException error) {
+            throw new IllegalStateException("checkpoint encoding failed", error.getCause());
+        }
+    }
+    /** Explicit shutdown/save boundary only; ordinary turns never wait for snapshot work. */
+    private void finishCheckpoint() {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(30);
+        while (checkpointEncoding != null) {
+            ((FrontierFileStore) store).finishRequiredWrites();
+            pollCheckpoint();
+            if (checkpointEncoding == null) break;
+            if (System.nanoTime() >= deadline) throw new IllegalStateException("checkpoint shutdown durability bound exceeded");
+            java.util.concurrent.locks.LockSupport.parkNanos(1_000_000L);
+        }
+    }
+
     void shutdown() {
         if (engine != null) engine.cancelPendingCalculation();
-        preparations.close();
         try {
             if (status.kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
                 if (store instanceof FrontierFileStore files) {
@@ -489,6 +538,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
                 if (status.kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) status = FrontierV3RuntimeStatus.stopped();
             }
         } finally {
+            preparations.close();
             if (store instanceof FrontierFileStore files) files.close();
         }
     }

@@ -21,6 +21,12 @@ public interface FrontierEngine<P extends FrontierProjection> {
 
     CheckpointImage checkpoint();
 
+    /** Capture immutable inputs on the owner; encoding may run independently of later transitions. */
+    default java.util.function.Supplier<CheckpointImage> prepareCheckpoint() {
+        var captured = checkpoint();
+        return () -> captured;
+    }
+
     /** Ordinary execution reads must not request serialized persistence state. */
     FrontierExecutionView executionView();
 

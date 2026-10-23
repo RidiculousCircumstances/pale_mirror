@@ -10,6 +10,7 @@ public final class PedestrianRoutePlanning {
     private static final PedestrianRoutePlanner DIRECT = new CachedDirectPlanner();
     private static PedestrianRoutePlanner current = DIRECT;
     private static final ThreadLocal<java.util.LinkedHashSet<PedestrianRouteRequest>> observations = new ThreadLocal<>();
+    private static final ThreadLocal<PedestrianRoutePlanner> readBinding = new ThreadLocal<>();
     private static final ThreadLocal<Inspection> inspection = new ThreadLocal<>();
     private static final ThreadLocal<PedestrianPlanningService> service = new ThreadLocal<>();
     private static final ThreadLocal<java.util.LinkedHashSet<PedestrianRouteRequest>> acquired = new ThreadLocal<>();
@@ -41,7 +42,7 @@ public final class PedestrianRoutePlanning {
             return result;
         }
         PedestrianRoutePlanner planner;
-        synchronized (PedestrianRoutePlanning.class) { planner = current; }
+        synchronized (PedestrianRoutePlanning.class) { planner = readBinding.get() == null ? current : readBinding.get(); }
         var acquisition = acquired.get();
         boolean created = acquisition != null && !planner.hasCalculation(geometry, start, target, extent);
         var result = planner.query(geometry, start, target, extent,
@@ -49,6 +50,43 @@ public final class PedestrianRoutePlanning {
         if (created && result.status() == PedestrianRouteResult.Status.PLANNING)
             acquisition.add(PedestrianRouteRequest.of(geometry, start, target, extent));
         return result;
+    }
+
+    /** Capture on the owner thread; run advice without acquiring live route work. */
+    public static synchronized PedestrianRoutePlanner readView() { return current.readView(); }
+    public static <T> Prepared<T> prepare(PedestrianRoutePlanner view, java.util.function.Supplier<T> calculation) {
+        var demands = new LinkedHashMap<PedestrianRouteRequest, PedestrianPlanningService>();
+        var previous = readBinding.get();
+        readBinding.set(new PedestrianRoutePlanner() {
+            @Override public PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
+                return query(geometry, start, target, PedestrianRouteExtent.COMPLETE, PedestrianPlanningService.ORDINARY);
+            }
+            @Override public PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target,
+                    PedestrianRouteExtent extent, PedestrianPlanningService requirement) {
+                demands.put(PedestrianRouteRequest.of(geometry, start, target, extent), requirement);
+                return view.query(geometry, start, target, extent);
+            }
+            @Override public java.util.Optional<PedestrianRouteResult> peek(PedestrianRouteGeometry geometry,
+                    SurfaceAnchor start, SurfaceAnchor target, PedestrianRouteExtent extent) {
+                return view.peek(geometry, start, target, extent);
+            }
+        });
+        try { return new Prepared<>(observe(calculation), Map.copyOf(demands)); }
+        finally { if (previous == null) readBinding.remove(); else readBinding.set(previous); }
+    }
+    public record Prepared<T>(Observation<T> observation, Map<PedestrianRouteRequest, PedestrianPlanningService> demands) {
+        public Prepared { Objects.requireNonNull(observation); demands = Map.copyOf(demands); }
+        /** Accepted advice alone may request retained dependencies. Cancelled advice has no effects. */
+        public java.util.List<PedestrianPlanningChange> acquire() {
+            var ready = new java.util.ArrayList<PedestrianPlanningChange>();
+            for (var request : observation.requests()) {
+                var result = withService(demands.getOrDefault(request, PedestrianPlanningService.ORDINARY),
+                        () -> query(request.geometry(), request.start(), request.target(), request.extent()));
+                if (result.status() != PedestrianRouteResult.Status.PLANNING)
+                    ready.add(new PedestrianPlanningChange(request, PedestrianPlanningChange.Kind.RESULT_AVAILABLE));
+            }
+            return java.util.List.copyOf(ready);
+        }
     }
 
     /** Lexically scoped operational requirement. Does not alter the calculation/cache identity. */
@@ -95,7 +133,7 @@ public final class PedestrianRoutePlanning {
         try { return new Observation<>(calculation.get(), java.util.List.copyOf(requests)); }
         finally {
             PedestrianRoutePlanner planner;
-            synchronized (PedestrianRoutePlanning.class) { planner = current; }
+            synchronized (PedestrianRoutePlanning.class) { planner = readBinding.get() == null ? current : readBinding.get(); }
             // A newly launched alternative which the selector did not retain
             // has no other caller yet. Never cancel pre-existing/shared demand.
             for (var request : created) if (!requests.contains(request)) planner.discardUnobserved(request);
@@ -116,7 +154,7 @@ public final class PedestrianRoutePlanning {
     public static java.util.Optional<PedestrianRouteResult> peek(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target,
                                                                 PedestrianRouteExtent extent) {
         PedestrianRoutePlanner planner;
-        synchronized (PedestrianRoutePlanning.class) { planner = current; }
+        synchronized (PedestrianRoutePlanning.class) { planner = readBinding.get() == null ? current : readBinding.get(); }
         return planner.peek(geometry, start, target, extent);
     }
 

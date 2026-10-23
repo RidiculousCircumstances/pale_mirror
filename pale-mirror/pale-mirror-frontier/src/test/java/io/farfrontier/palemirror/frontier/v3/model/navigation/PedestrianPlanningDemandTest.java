@@ -20,6 +20,27 @@ class PedestrianPlanningDemandTest {
             assertEquals(0, planner.completedCount()); assertTrue(planner.peek(next, start, goal).isEmpty());
         }
     }
+    @Test void detachedAdviceNeverEnqueuesAndAcceptedAdviceObservesAlreadyCompletedRoute() throws Exception {
+        var geometry = ground(PedestrianGeometryRevision.initial());
+        var start = SurfaceAnchor.at(1, 63, 1); var goal = SurfaceAnchor.at(5, 63, 1);
+        try (var planner = new CooperativePedestrianPlanner(); var binding = PedestrianRoutePlanning.bind(planner)) {
+            var snapshot = PedestrianRoutePlanning.readView();
+            var advice = PedestrianRoutePlanning.prepare(snapshot, () -> {
+                var result = PedestrianRoutePlanning.query(geometry, start, goal);
+                PedestrianRoutePlanning.await(PedestrianRouteRequest.of(geometry, start, goal));
+                return result;
+            });
+            assertEquals(0, planner.pendingCount(), "abandoning this advice must leave no live work");
+            planner.query(geometry, start, goal);
+            for (int n = 0; n < 100 && planner.pendingCount() > 0; n++) planner.advance(HierarchicalPedestrianSearch.MIN_SLICE_WORK * 2);
+            assertEquals(PedestrianRouteResult.Status.FOUND, planner.peek(geometry, start, goal).orElseThrow().status());
+            assertEquals(PedestrianRouteResult.Status.PLANNING, snapshot.query(geometry, start, goal).status(), "view is frozen");
+            assertEquals(List.of(new PedestrianPlanningChange(PedestrianRouteRequest.of(geometry, start, goal),
+                    PedestrianPlanningChange.Kind.RESULT_AVAILABLE)), advice.acquire(), "completion before publication must not lose wake");
+            var current = PedestrianRoutePlanning.readView();
+            assertEquals(PedestrianRouteResult.Status.FOUND, current.query(geometry, start, goal).status());
+        }
+    }
     private static PedestrianRouteGeometry ground(PedestrianGeometryRevision revision) {
         return new PedestrianRouteGeometry() {
             public Object version() { return revision; }

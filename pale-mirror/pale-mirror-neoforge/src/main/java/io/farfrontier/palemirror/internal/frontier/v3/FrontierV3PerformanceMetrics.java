@@ -25,11 +25,27 @@ final class FrontierV3PerformanceMetrics implements FrontierExecutionMetrics {
     private long droppedAttributions;
     private long auditReadyWithoutWake;
     private QueuePressure pressure;
+    private long hostSamples, longestWorkNanos;
+    private Key longestWork;
 
     @Override
     public Span begin(Stage stage, String kind, String owner) {
         Key key = new Key(stage, kind, owner); long started = System.nanoTime();
-        return () -> timing(key).record(Math.max(0L, System.nanoTime() - started));
+        if (stage == Stage.HOST_TICK) { longestWork = null; longestWorkNanos = 0L; }
+        return () -> {
+            long elapsed = Math.max(0L, System.nanoTime() - started);
+            timing(key).record(elapsed);
+            if (stage != Stage.HOST_TICK && stage != Stage.HOST_TURN && elapsed > longestWorkNanos) {
+                longestWork = key; longestWorkNanos = elapsed;
+            }
+            if (stage == Stage.HOST_TICK) {
+                hostSamples++;
+                // Exact outliers, not a sampled recent-64 window: diagnostic only.
+                if (elapsed > 80_000_000L) io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info(
+                        "PMV3_SLOW_TICK sample={} durationNanos={} longestStage={} longestNanos={}",
+                        hostSamples, elapsed, longestWork, longestWorkNanos);
+            }
+        };
     }
 
     @Override

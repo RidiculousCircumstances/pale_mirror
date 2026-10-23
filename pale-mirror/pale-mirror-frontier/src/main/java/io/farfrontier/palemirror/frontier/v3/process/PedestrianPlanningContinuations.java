@@ -31,6 +31,27 @@ public final class PedestrianPlanningContinuations {
         var index = current;
         if (index == null) return planning.get();
         var observation = PedestrianRoutePlanning.observe(planning);
+        return publish(index, action, observation);
+    }
+    /** Detached advice captures route evidence; only accepted owner completion publishes dependencies. */
+    static io.farfrontier.palemirror.frontier.v3.kernel.ScheduledPreparation prepare(
+            ScheduledAction action, Supplier<List<ProposedEvent>> planning) {
+        var index = current;
+        var view = PedestrianRoutePlanning.readView();
+        return () -> {
+            var prepared = PedestrianRoutePlanning.prepare(view, planning);
+            return () -> {
+                if (current != index) throw new IllegalStateException("prepared planning lost its runtime owner");
+                var ready = prepared.acquire();
+                if (index == null) return prepared.observation().result();
+                var result = publish(index, action, prepared.observation());
+                index.changed(ready);
+                return result;
+            };
+        };
+    }
+    private static List<ProposedEvent> publish(PedestrianPlanningWakeIndex index, ScheduledAction action,
+            PedestrianRoutePlanning.Observation<List<ProposedEvent>> observation) {
         ScheduledAction successor = null;
         for (var event : observation.result()) {
             if (event.payload() instanceof ScheduleEffect.Rescheduled replacement && replacement.scheduleId().equals(action.id()))

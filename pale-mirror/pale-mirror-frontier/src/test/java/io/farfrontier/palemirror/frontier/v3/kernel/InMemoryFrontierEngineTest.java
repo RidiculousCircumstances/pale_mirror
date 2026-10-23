@@ -37,6 +37,18 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class InMemoryFrontierEngineTest {
+    @Test void detachedCheckpointKeepsItsCapturedRevision() {
+        var first = scheduled("schedule:yield-a", SUBJECT.value(), 1, 1);
+        var second = scheduled("schedule:yield-b", SUBJECT.value(), 1, 1);
+        var engine = engine(List.of(first, second), false);
+        var before = engine.checkpoint(); var capture = engine.prepareCheckpoint();
+        var partial = engine.advanceTo(new SimInstant(1), new WorkBudget(1, 16));
+        assertEquals(1, partial.transactions().size());
+        assertEquals(before, capture.get(), "encoding later must not include later state or schedule mutations");
+        var remaining = engine.advanceTo(new SimInstant(1), new WorkBudget(8, 16));
+        assertEquals(1, remaining.transactions().size());
+        assertEquals(2, engine.projection(ProjectionQuery.summary()).value());
+    }
     @Test void maximumLegalScheduleCanCommitWithoutOverflowingItsCausalIdentity() {
         var action = scheduled("n".repeat(32) + ":" + "a".repeat(128), SUBJECT.value(), 1, 1);
         var engine = engine(List.of(action), false);

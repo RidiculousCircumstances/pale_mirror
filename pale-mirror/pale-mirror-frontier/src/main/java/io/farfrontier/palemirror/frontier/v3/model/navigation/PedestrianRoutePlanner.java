@@ -5,6 +5,8 @@ import io.farfrontier.palemirror.frontier.v3.model.SurfaceAnchor;
 /** Calculation port. Its readiness/result does not transfer execution or award arrival. */
 @FunctionalInterface
 public interface PedestrianRoutePlanner {
+    /** Detached read capability. Live queues override this with an immutable retained-result view. */
+    default PedestrianRoutePlanner readView() { return this; }
     /** Retire only a calculation acquired and abandoned by its current selection scope. */
     default void discardUnobserved(PedestrianRouteRequest request) { }
     /** Conservative ownership inquiry, independent of whether a worker result is currently reusable. */

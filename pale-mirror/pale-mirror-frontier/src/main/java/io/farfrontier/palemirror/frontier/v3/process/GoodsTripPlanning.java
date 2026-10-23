@@ -16,7 +16,7 @@ final class GoodsTripPlanning {
     static Result plan(FrontierWorldState initial, GoodsParticipant reviewer, long now) {
         return ImmutablePlanningScope.within(() -> prepare(initial, reviewer, now).get());
     }
-    /** Snapshot-only alternatives. Exact navigation and mission admission stay in completion. */
+    /** Snapshot-only alternatives; only the selected candidate requests navigation evidence. */
     static java.util.function.Supplier<Result> prepare(FrontierWorldState initial, GoodsParticipant reviewer, long now) {
         var retirement = ShipmentRetention.collect(initial, ShipmentRetention.MAX_RETIREMENTS, now);
         var completion = prepareInScope(retirement.state(), reviewer, now);

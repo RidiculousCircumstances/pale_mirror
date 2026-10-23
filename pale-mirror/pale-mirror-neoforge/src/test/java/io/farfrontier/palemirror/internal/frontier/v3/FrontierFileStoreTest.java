@@ -50,6 +50,34 @@ class FrontierFileStoreTest {
     private static final WorldId WORLD = new WorldId("frontier:file-store");
     private static final SubjectId SUBJECT = new SubjectId("settlement:file-store");
 
+    @Test void asyncSnapshotPreservesAppendsAfterItsCapturedPrefix(@TempDir Path directory) {
+        var work = new java.util.ArrayDeque<Runnable>(); var paused = new java.util.concurrent.atomic.AtomicBoolean();
+        java.util.concurrent.Executor writer = task -> { if (paused.get()) work.add(task); else task.run(); };
+        try (var store = new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects(), writer)) {
+            store.append(transaction(1), Durability.DURABLE_BEFORE_EFFECT);
+            var snapshot = new SnapshotRecord(new CheckpointImage(WORLD, new Revision(1), new SimInstant(1),
+                    new byte[]{7}, List.of(), List.of()), 1);
+            var pending = store.prepareSnapshot(snapshot); paused.set(true);
+            assertTrue(pending.poll().isEmpty());
+            assertTrue(store.tryBeginTurn());
+            assertTrue(store.prepareAppend(transaction(2), Durability.BATCHABLE).poll().isPresent());
+            store.endTurnAsync();
+            assertTrue(pending.poll().isEmpty(), "submission cannot release history before durability");
+            while (!work.isEmpty()) work.remove().run();
+            assertEquals(new Revision(1), pending.poll().orElseThrow().revision());
+            paused.set(false); store.finishRequiredWrites();
+            assertEquals(List.of(transaction(2)), store.recoverOwned(WORLD).walTail());
+            assertEquals(new Revision(1), store.recoverOwned(WORLD).checkpoint().orElseThrow().checkpoint().revision());
+            assertThrows(IllegalArgumentException.class, () -> store.prepareSnapshot(new SnapshotRecord(
+                    new CheckpointImage(WORLD, new Revision(2), new SimInstant(2), new byte[]{9}, List.of(), List.of()), 1)));
+        }
+        try (var recovered = new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects())) {
+            var image = recovered.recover(WORLD);
+            assertEquals(new Revision(1), image.checkpoint().orElseThrow().checkpoint().revision());
+            assertEquals(List.of(transaction(2)), image.walTail());
+        }
+    }
+
     @Test void ownedTailReadsRemainImmutableWhileAppendChecksOnlyTheNewBoundary(@TempDir Path directory) {
         try (var store = new FrontierFileStore(directory, KernelPayloadCodecs.scheduleEffects())) {
             store.beginTurn();

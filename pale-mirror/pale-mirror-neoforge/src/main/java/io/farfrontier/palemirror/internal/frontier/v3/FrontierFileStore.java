@@ -245,6 +245,66 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
         };
     }
 
+    synchronized long checkpointSequence(Revision revision, WorldId world) {
+        var head = head(world);
+        if (!head.revision().equals(revision)) throw new IllegalArgumentException("checkpoint lost its exact WAL predecessor");
+        return head.lastSequence();
+    }
+    @FunctionalInterface interface SnapshotSubmission { java.util.Optional<SnapshotReceipt> poll(); }
+    /** Publish a captured prefix while later WAL appends continue on the same ordered writer. */
+    synchronized SnapshotSubmission prepareSnapshot(SnapshotRecord snapshot) {
+        var world = snapshot.checkpoint().worldId();
+        long covered = snapshot.coveredWalSequence(); var revision = snapshot.checkpoint().revision();
+        var head = head(world);
+        if (covered < head.snapshotSequence() || covered > head.lastSequence()
+                || head.lastSequence() - covered != head.revision().value() - revision.value())
+            throw new IllegalArgumentException("snapshot is not an exact retained WAL prefix");
+        return new SnapshotSubmission() {
+            private java.util.concurrent.CompletableFuture<Void> write;
+            private SnapshotReceipt receipt;
+            private long submittedAt;
+            @Override public java.util.Optional<SnapshotReceipt> poll() {
+                synchronized (FrontierFileStore.this) {
+                    checkHealthy();
+                    if (receipt != null) return java.util.Optional.of(receipt);
+                    if (write == null) {
+                        finishPendingFlush(false);
+                        if (head(world).flushedSequence() < covered) {
+                            if (pendingFlush == null) startPendingFlush(false);
+                            return java.util.Optional.empty();
+                        }
+                        var result = new java.util.concurrent.CompletableFuture<Void>();
+                        if (!submitIo(() -> { try {
+                            ensureFormat(worldDirectory(world));
+                            writeAtomically(worldDirectory(world).resolve(fileName("snapshot", covered)),
+                                    FrontierPersistenceCodec.encodeSnapshot(snapshot), true);
+                            closeSegment(world);
+                            compactFiles(world, covered);
+                            result.complete(null);
+                        } catch (Throwable failure) { result.completeExceptionally(failure); } }, false)) return java.util.Optional.empty();
+                        write = result; submittedAt = System.nanoTime();
+                    }
+                    if (!write.isDone()) {
+                        if (System.nanoTime() - submittedAt > java.util.concurrent.TimeUnit.SECONDS.toNanos(REQUIRED_IO_SAFETY_SECONDS))
+                            throw new IllegalStateException("snapshot publication exceeded its durable progress bound");
+                        return java.util.Optional.empty();
+                    }
+                    try { awaitIo(write); }
+                    catch (java.util.concurrent.CompletionException failure) {
+                        ioFailure = new IllegalStateException("ordered Frontier snapshot publication failed", failure.getCause());
+                        throw ioFailure;
+                    }
+                    var current = head(world);
+                    durableHeads.put(world, new DurableHead(current.lastSequence(), current.revision(), covered, revision, current.flushedSequence()));
+                    var retained = recoveredImages.get(world).tail.stream().filter(tx -> tx.revision().compareTo(revision) > 0).toList();
+                    recoveredImages.put(world, new OwnedRecovery(new RecoveryImage(world, java.util.Optional.of(snapshot), retained)));
+                    receipt = new SnapshotReceipt(revision, covered);
+                    return java.util.Optional.of(receipt);
+                }
+            }
+        };
+    }
+
     @Override public synchronized SnapshotReceipt installSnapshot(SnapshotRecord snapshot) {
         flushPendingBlocking();
         WorldId worldId = snapshot.checkpoint().worldId(); DurableHead head = head(worldId);
@@ -268,19 +328,22 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
         DurableHead head = head(worldId);
         if (head.snapshotSequence() != head.lastSequence() || !head.snapshotRevision().equals(coveredRevision)
                 || !head.revision().equals(coveredRevision)) throw new IllegalStateException("snapshot does not cover all retained WAL");
-        runIoBlocking(() -> { try {
+        runIoBlocking(() -> compactFiles(worldId, head.snapshotSequence()));
+        return new CompactionReceipt(coveredRevision, 0L);
+    }
+
+    private void compactFiles(WorldId worldId, long covered) {
+        try {
             var segments = entries(worldDirectory(worldId), WAL);
             for (int index = 0; index < segments.size(); index++) {
                 var entry = segments.get(index);
                 var image = FrontierWalSegment.read(entry.path(), entry.sequence(), index == segments.size() - 1);
-                if (image.frames().isEmpty() || image.frames().getLast().sequence() <= head.snapshotSequence()) Files.delete(entry.path());
+                if (image.frames().isEmpty() || image.frames().getLast().sequence() <= covered) Files.delete(entry.path());
             }
             for (var entry : entries(worldDirectory(worldId), SNAPSHOT))
-                if (entry.sequence() < head.snapshotSequence()) Files.delete(entry.path());
+                if (entry.sequence() < covered) Files.delete(entry.path());
             forceDirectory(worldDirectory(worldId));
         } catch (IOException error) { throw new IllegalStateException("unable to compact Frontier v3 WAL", error); }
-        });
-        return new CompactionReceipt(coveredRevision, 0L);
     }
 
     private DurableHead head(WorldId worldId) {

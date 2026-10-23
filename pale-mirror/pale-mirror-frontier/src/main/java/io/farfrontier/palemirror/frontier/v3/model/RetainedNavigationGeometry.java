@@ -23,14 +23,17 @@ final class RetainedNavigationGeometry {
         if (cells.isEmpty()) return base;
         var index = projection.index();
         return new BoundedPedestrianApproach.SurveyedSurface() {
-            private final Map<TerrainColumn, List<SurfaceAnchor>> columns = new LinkedHashMap<>(128, 0.75f, true);
+            private final Map<TerrainColumn, List<SurfaceAnchor>> columns = new LinkedHashMap<>(128, 0.75f, true) {
+                @Override protected boolean removeEldestEntry(Map.Entry<TerrainColumn, List<SurfaceAnchor>> eldest) {
+                    return size() > 8192;
+                }
+            };
             @Override public SurfaceAnchor at(int x, int z) { var all = surfacesAt(x, z); return all.isEmpty() ? null : all.getLast(); }
             @Override public List<SurfaceAnchor> surfacesAt(int x, int z) {
                 var column = new TerrainColumn(x, z);
                 synchronized (columns) { var cached = columns.get(column); if (cached != null) return cached; }
                 var result = readSurfaces(x, z);
                 synchronized (columns) {
-                    if (columns.size() >= 8192 && !columns.containsKey(column)) columns.remove(columns.keySet().iterator().next());
                     columns.put(column, result);
                 }
                 return result;

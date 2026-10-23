@@ -545,11 +545,11 @@ public final class FrontierWorldProcessCatalog {
         if (planner == null) throw new IllegalStateException("registered scheduled kind has no planner: " + action.kind());
         return planner.preparation(state, action, instant).map(preparation -> () -> {
             var completion = preparation.prepare();
-            return () -> PedestrianPlanningContinuations.plan(action, () -> {
+            return () -> {
                 var events = completion.get();
                 return registry.validateEmissions(processId, events.isEmpty()
                         ? List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id()))) : events);
-            });
+            };
         });
     }
 

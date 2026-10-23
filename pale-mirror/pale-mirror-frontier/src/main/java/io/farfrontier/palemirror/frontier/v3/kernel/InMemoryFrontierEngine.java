@@ -378,6 +378,15 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         return new CheckpointImage(worldId, revision, instant, currentEncodedState(), schedules.snapshot(), receipts.snapshot());
     }
 
+    @Override public java.util.function.Supplier<CheckpointImage> prepareCheckpoint() {
+        requireOwnerThread();
+        var capturedState = state; var capturedRevision = revision; var capturedInstant = instant;
+        var capturedSchedules = schedules.snapshot(); var capturedReceipts = receipts.snapshot();
+        var bytes = encodedState;
+        return () -> new CheckpointImage(worldId, capturedRevision, capturedInstant,
+                bytes == null ? stateCodec.encode(capturedState) : bytes, capturedSchedules, capturedReceipts);
+    }
+
     @Override
     public io.farfrontier.palemirror.frontier.v3.api.FrontierExecutionView executionView() {
         requireOwnerThread();

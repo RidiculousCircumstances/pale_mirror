@@ -306,6 +306,29 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         }
         return java.util.Optional.empty();
     }
+    /** Snapshot publication does not expose or mutate the live calculation queue. */
+    @Override public synchronized PedestrianRoutePlanner readView() {
+        var retained = java.util.List.copyOf(completed.entrySet().stream()
+                .map(entry -> Map.entry(entry.getKey(), entry.getValue())).toList());
+        return new PedestrianRoutePlanner() {
+            @Override public PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
+                return query(geometry, start, target, PedestrianRouteExtent.COMPLETE);
+            }
+            @Override public PedestrianRouteResult query(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target,
+                    PedestrianRouteExtent extent) {
+                return peek(geometry, start, target, extent).orElseGet(() -> waiting("PLANNING_NOT_REQUESTED"));
+            }
+            @Override public java.util.Optional<PedestrianRouteResult> peek(PedestrianRouteGeometry geometry,
+                    SurfaceAnchor start, SurfaceAnchor target, PedestrianRouteExtent extent) {
+                var request = PedestrianRouteRequest.of(geometry, start, target, extent);
+                for (var entry : retained) if (entry.getKey().equals(request)
+                        || entry.getKey().sameDemand(request) && entry.getValue().dependencies().matches(geometry))
+                    return java.util.Optional.of(entry.getValue().result());
+                return java.util.Optional.empty();
+            }
+        };
+    }
+
     public synchronized int pendingCount() { return pending.size(); }
     public synchronized int inFlightCount() { return inFlight.size(); }
     public synchronized int deferredCount() { return deferred.size(); }

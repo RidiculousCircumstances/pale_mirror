@@ -16,10 +16,6 @@ public final class GoodsParticipantProcess {
                     io.farfrontier.palemirror.frontier.v3.api.SimInstant instant) {
                 return GoodsParticipantProcess.plan(state, action, instant);
             }
-            @Override public java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledPreparation> preparation(
-                    FrontierWorldState state, ScheduledAction action, io.farfrontier.palemirror.frontier.v3.api.SimInstant instant) {
-                return java.util.Optional.of(() -> GoodsParticipantProcess.prepare(state, action, instant));
-            }
         };
     }
     private record QuoteKey(GoodsTradeParty counterparty, String itemKind, GoodsTradeOrder.Side side, SubjectId container) { }

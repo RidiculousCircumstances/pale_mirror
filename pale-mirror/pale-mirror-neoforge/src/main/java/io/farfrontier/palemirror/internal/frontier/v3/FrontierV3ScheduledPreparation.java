@@ -19,10 +19,18 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
                 + ",\"cancelled\":" + cancelled + ",\"totalNanos\":" + totalNanos.get() + ",\"maxNanos\":" + maxNanos.get() + "}";
     }
     private final ThreadPoolExecutor worker = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
-            new ArrayBlockingQueue<>(1), task -> {
+            new ArrayBlockingQueue<>(2), task -> { // one exact review and one captured checkpoint
                 var thread = new Thread(task, "PMV3-scheduled-preparation"); thread.setDaemon(true); return thread;
             });
     FrontierV3ScheduledPreparation(ScheduledActionPlanner<S> delegate) { this.delegate = Objects.requireNonNull(delegate); }
+    <T> java.util.Optional<java.util.concurrent.Future<T>> prepareValue(Supplier<T> value) {
+        var task = new FutureTask<T>(value::get);
+        try { worker.execute(task); return java.util.Optional.of(task); }
+        catch (java.util.concurrent.RejectedExecutionException busy) {
+            if (worker.isShutdown()) throw busy;
+            return java.util.Optional.empty();
+        }
+    }
     @Override public ScheduledCalculation begin(S state, ScheduledAction action, SimInstant instant) {
         var preparation = delegate.preparation(state, action, instant);
         if (preparation.isEmpty()) return delegate.begin(state, action, instant);
