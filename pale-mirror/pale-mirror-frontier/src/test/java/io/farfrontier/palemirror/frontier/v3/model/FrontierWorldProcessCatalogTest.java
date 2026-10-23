@@ -45,8 +45,8 @@ class FrontierWorldProcessCatalogTest {
         var review = io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantProcess.review(home, 1);
         int weight = FrontierWorldProcessCatalog.scheduledAdmissionWeight(registry, state, review);
         int allowance = state.bootstrap().ruleset().execution().maxWeight();
-        assertTrue(weight <= allowance && weight * 2 > allowance,
-                "whole-market reviews must fit individually without a burst of full peer scans");
+        assertTrue(weight < allowance && weight * 2 > allowance,
+                "one full review leaves room for light work but cannot batch with another full peer scan");
         var request = (ScheduleEffect.ReconsiderationRequested) io.farfrontier.palemirror.frontier.v3.process.GoodsParticipantWakeup
                 .party(state, home, "stock-changed", 0).getFirst().payload();
         assertEquals(weight, FrontierWorldProcessCatalog.scheduledAdmissionWeight(registry, state, request.action()));

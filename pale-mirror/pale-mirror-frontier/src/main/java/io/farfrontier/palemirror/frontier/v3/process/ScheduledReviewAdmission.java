@@ -38,10 +38,13 @@ final class ScheduledReviewAdmission {
                 int units = workUnits.applyAsInt(state, action);
                 if (units < 1) throw new IllegalArgumentException("review owner declared nonpositive work");
                 var policy = state.bootstrap().ruleset().execution();
-                // An indivisible review must fit one full turn. This bounds
-                // admission only; it never drops alternatives or changes consent.
-                int cost = (int) Math.min(policy.maxWeight(), (long) units * policy.policyReviewWeight());
-                return Math.max(Math.max(action.weight(), delegate.admissionWeight(state, action)), cost);
+                // Saturate just above half a turn: two largest reviews cannot
+                // batch together, while cheap independent actions retain headroom.
+                // Admission never drops alternatives or changes consent.
+                int largestReview = policy.maxWeight() / 2 + 1;
+                int cost = (int) Math.min(largestReview, (long) units * policy.policyReviewWeight());
+                return Math.max(Math.max(action.weight(), delegate.admissionWeight(state, action)),
+                        Math.max(policy.policyReviewWeight(), cost));
             }
             @Override public boolean acceptsReconsideration() { return coalescible; }
             @Override public Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) { return delegate.wakeDependencies(state, action); }
