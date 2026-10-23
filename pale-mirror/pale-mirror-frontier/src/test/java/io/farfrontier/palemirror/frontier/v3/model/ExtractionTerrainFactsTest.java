@@ -7,6 +7,14 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ExtractionTerrainFactsTest {
+    @Test void declaredPaletteCoversSpatialFactsWithoutGrantingPositionKnowledge() {
+        var state = FrontierWorldState.initial(bootstrap("frontier-v3-quarry-graybox-r21"));
+        var palette = KnownNavigationBlocks.palette(state);
+        assertSame(palette, KnownNavigationBlocks.palette(state));
+        assertTrue(palette.containsAll(KnownNavigationBlocks.forState(state).values()));
+        assertTrue(state.navigationGeometry().definitions().isEmpty(), "discovery does not fabricate native shape evidence");
+    }
+
     @Test void cultivationReadsTheAuthoredNativeSurfaceRatherThanUniformGrass() {
         var bootstrap = bootstrap("frontier-v3-quarry-graybox-r21");
         var state = FrontierWorldState.initial(bootstrap);

@@ -93,3 +93,22 @@ initial native test incorrectly treated partial batch progress as complete;
 its terminal per-cell check now awaits both actual cell outcomes. This correction
 did not weaken the terminal assertion. Live measurement of this next correction
 is still required;80ms is not yet established.
+
+Third candidate b7aeb741d live: startup844ms (navigation definitions333ms),
+versus3.394s previously. HOT run1d969332-b594-4c40-9524-c494b021c6c9 completed
+with zero retained conflicts. First login511ms remains, settled windows are not
+acceptance. JFR r239c-hot.jfr:647 server CPU samples,35 non-idle PM blocking
+spans>=10ms, native geometry invalidation up to28ms, body confirmation34ms,
+saved-body checkpoint22ms. GC90ms also exceeds target. Local client startup and
+focused verification overlap this exploratory recording; it is attribution,
+not an isolated capacity benchmark. Canonical debt419 during one HOT sample.
+
+Next correction separates declared block palettes from spatial site geometry:
+provider-owned immutable type sets include terrain, geological materials and
+current layout/cell/observed blocks. Native definitions do not reveal positions
+or grant traversal through unknown terrain. Rejected domain commands no longer
+cancel unchanged scheduled preparation; accepted commands still invalidate it.
+Diagnostic cancelledReady distinguishes discarded completed work. Focused
+kernel/palette tests, guardrails and43 native navigation/shape tests PASS
+(r239d-gates.log). Remaining synchronous native/confirmation boundaries and
+canonical throughput require further work; no80ms completion claim.

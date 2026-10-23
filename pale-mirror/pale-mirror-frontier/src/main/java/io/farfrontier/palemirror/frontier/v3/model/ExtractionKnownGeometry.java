@@ -18,6 +18,8 @@ final class ExtractionKnownGeometry implements KnownSiteGeometry.Provider {
     private RegionalBlockContributions<SubjectId> unknownParts = new RegionalBlockContributions<>();
     private RegionalBlockMapContributions<SubjectId, NavigationBlockState> blockParts = new RegionalBlockMapContributions<>();
     private KnownSiteGeometry.View view;
+    private final ExtractionNavigationPalette palette = new ExtractionNavigationPalette();
+    @Override public Set<NavigationBlockState> palette(FrontierWorldState state) { return palette.read(state); }
     @Override public KnownSiteGeometry.Owner owner() { return KnownSiteGeometry.Owner.EXTRACTION; }
     @Override public Object version(FrontierWorldState state) { return project(state); }
     @Override public KnownSiteGeometry.View project(FrontierWorldState state) {

@@ -137,11 +137,11 @@ final class FrontierV3NavigationObservation {
     }
     private static boolean registerDefinitions(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                                FrontierWorldState state, Window window) {
-        var declarations = KnownNavigationBlocks.forState(state);
+        var declarations = KnownNavigationBlocks.palette(state);
         if (window.declarations == declarations) return false;
         var additions = new LinkedHashMap<NavigationBlockState, NavigationObservation>();
         var checked = new HashSet<NavigationBlockState>();
-        for (var block : declarations.values()) {
+        for (var block : declarations) {
             // Definitions are adapter-produced facts. Revalidate once per runtime,
             // including retained UNKNOWN from an older adapter, without loading land.
             if (window.checkedDefinitions.contains(block) || !checked.add(block)) continue;

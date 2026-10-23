@@ -10,6 +10,7 @@ final class KnownSiteGeometry {
         Owner owner();
         Object version(FrontierWorldState state);
         View project(FrontierWorldState state);
+        Set<NavigationBlockState> palette(FrontierWorldState state);
     }
     record View(Map<TerrainColumn, List<SurfaceAnchor>> supports, Set<BlockPosition> obstacles,
                 Set<BlockPosition> withdrawnSupports, Set<BlockPosition> unknown,
@@ -41,7 +42,17 @@ final class KnownSiteGeometry {
     private static RegionalBlockContributions<Owner> obstacleParts = new RegionalBlockContributions<>();
     private static RegionalBlockContributions<Owner> withdrawnParts = new RegionalBlockContributions<>();
     private static RegionalBlockContributions<Owner> unknownParts = new RegionalBlockContributions<>();
+    private static final ImmutableResultView<String, Set<NavigationBlockState>> PALETTES = new ImmutableResultView<>(2);
     private KnownSiteGeometry() { }
+    /** Block type discovery must not construct spatial contacts or acquire the projection lock. */
+    static Set<NavigationBlockState> palette(FrontierWorldState state) {
+        var parts = PROVIDERS.stream().map(provider -> provider.palette(state)).toList();
+        return PALETTES.get(new ArrayList<Object>(parts), "types", () -> {
+            var blocks = new HashSet<NavigationBlockState>();
+            parts.forEach(blocks::addAll);
+            return Set.copyOf(blocks);
+        });
+    }
     static synchronized View forState(FrontierWorldState state) {
         var versions = PROVIDERS.stream().map(provider -> provider.version(state)).toList();
         boolean same = cachedBootstrap == state.bootstrap() && cachedView != null && versions.size() == cachedVersions.size();

@@ -231,7 +231,6 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
         if (transactions.size() == limits.maxTransactions()) {
             return rejected(command, RejectionCode.TRANSACTION_CAPACITY_EXHAUSTED, "transaction retention capacity is full");
         }
-        cancelPendingCalculation();
         try {
             CommandPlan plan;
             try (FrontierExecutionMetrics.Span ignored = measure(FrontierExecutionMetrics.Stage.COMMAND_PLAN, command.payload().type(), command.actor().value())) {
@@ -240,6 +239,8 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
             if (plan instanceof CommandPlan.Rejected rejected) {
                 return new CommandResult.Rejected(command.id(), revision, rejected.rejection());
             }
+            // A rejected command changes no input of the retained calculation.
+            cancelPendingCalculation();
             CommandPlan.Accepted accepted = (CommandPlan.Accepted) plan;
             TransactionId transactionId = new TransactionId("transaction:revision-" + revision.next().value());
             CommandReceipt receipt = new CommandReceipt(command.id(), command.submittedAt(), transactionId, revision.next());
@@ -248,6 +249,7 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 return new CommandResult.Pending(command.id(), revision, CommandResult.Pending.Reason.DURABILITY);
             return new CommandResult.Accepted(command.id(), transactionId, revision);
         } catch (RuntimeException error) {
+            cancelPendingCalculation();
             return quarantine(command, error);
         }
     }

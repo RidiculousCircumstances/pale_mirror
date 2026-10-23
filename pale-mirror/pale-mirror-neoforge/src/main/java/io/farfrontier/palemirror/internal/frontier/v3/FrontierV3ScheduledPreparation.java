@@ -13,10 +13,11 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
     private final java.util.concurrent.atomic.AtomicLong totalNanos = new java.util.concurrent.atomic.AtomicLong();
     private final java.util.concurrent.atomic.AtomicLong maxNanos = new java.util.concurrent.atomic.AtomicLong();
     private long cancelled;
+    private long cancelledReady;
     String diagnostic(boolean pending) {
         return "{\"pending\":" + pending + ",\"running\":" + worker.getActiveCount()
                 + ",\"queued\":" + worker.getQueue().size() + ",\"completed\":" + completed.get()
-                + ",\"cancelled\":" + cancelled + ",\"totalNanos\":" + totalNanos.get() + ",\"maxNanos\":" + maxNanos.get() + "}";
+                + ",\"cancelled\":" + cancelled + ",\"cancelledReady\":" + cancelledReady + ",\"totalNanos\":" + totalNanos.get() + ",\"maxNanos\":" + maxNanos.get() + "}";
     }
     private final ThreadPoolExecutor worker = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
             new ArrayBlockingQueue<>(2), task -> { // one exact review and one captured checkpoint
@@ -53,7 +54,11 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
                     throw new IllegalStateException("scheduled preparation failed for " + action.id().value(), error.getCause());
                 }
             }
-            @Override public void cancel() { cancelled++; task.cancel(true); worker.remove(task); }
+            @Override public void cancel() {
+                cancelled++;
+                if (task.isDone() && !task.isCancelled()) cancelledReady++;
+                task.cancel(true); worker.remove(task);
+            }
         };
     }
     @Override public List<ProposedEvent> plan(S state, ScheduledAction action) { return delegate.plan(state, action); }

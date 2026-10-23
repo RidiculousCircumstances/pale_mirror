@@ -89,6 +89,20 @@ class ScheduledCalculationTest {
         assertEquals(2, starts.get());
     }
 
+    @Test void policyRejectionRetainsUnchangedPreparedWork() {
+        var ready = new java.util.concurrent.atomic.AtomicBoolean();
+        var starts = new AtomicInteger(); var cancelled = new AtomicInteger();
+        var engine = preparingEngine(scheduled("schedule:retained", SUBJECT.value(), 1, 1), ready, starts, cancelled);
+        engine.advanceTo(new SimInstant(1), new WorkBudget(2, 10));
+        assertRejected(engine.submit(command("command:rejected", Revision.ZERO, -1)), RejectionCode.REJECTED_BY_POLICY);
+        assertEquals(0, cancelled.get());
+        assertTrue(engine.hasPendingCalculation());
+        ready.set(true);
+        engine.advanceTo(new SimInstant(1), new WorkBudget(2, 10));
+        assertEquals(1, starts.get());
+        assertEquals(1, engine.canonicalState().state().value());
+    }
+
     private static InMemoryFrontierEngine<Counter, CounterProjection> preparingEngine(ScheduledAction action,
             java.util.concurrent.atomic.AtomicBoolean ready, AtomicInteger starts, AtomicInteger cancelled) {
         ScheduledActionPlanner<Counter> planner = new ScheduledActionPlanner<>() {
@@ -104,7 +118,10 @@ class ScheduledCalculationTest {
             }
         };
         return new InMemoryFrontierEngine<>(WORLD, new Counter(0), SimInstant.ZERO,
-                (state, command) -> new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
+                (state, command) -> ((Delta) command.payload()).value() < 0
+                        ? new CommandPlan.Rejected(new io.farfrontier.palemirror.frontier.v3.api.CommandRejection(
+                            RejectionCode.REJECTED_BY_POLICY, "negative counter input"))
+                        : new CommandPlan.Accepted(List.of(new ProposedEvent(SUBJECT, command.payload()))),
                 planner, (state, event) -> reduce(state, event, false),
                 state -> ByteBuffer.allocate(4).putInt(state.value()).array(),
                 (state, world, revision, instant, query) -> new CounterProjection(world, revision, instant, state.value()),
