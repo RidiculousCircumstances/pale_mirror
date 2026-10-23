@@ -636,3 +636,22 @@ Focused queue/kernel/adoption/composition/first-admission checks and guardrails
 PASS (r239u-gates.log). All20 native field-turn tests PASS, including partial
 physical application recovery followed by deferred single-cell projection
 (r239u-native.log). Live measurements follow; target is not yet achieved.
+
+R239u live1853a7e0-21ea-4649-a948-ec89ad5174c2 passed both HOT visits and exact
+retained-incident check; max70.140378ms over3341hostticks, readyturnmax45.475288ms.
+No new quarantine. This reaches the tick target for this window, not a universal
+latency guarantee. HOWEVER canonical debt grew90→944ticks during the probe, then
+1075afterlogout. Keep the task open. JFR stopped before subsequent compilation.
+Profiles show repeated work in PMV3-scheduled-preparation: scoped immutable-view
+linear lookups, rebuilding land-protection columns and repeated order-book scans.
+
+R239v uses exact identity-tuple hashing within the existing bounded planning
+scope (hash collisions still compare every input by identity); indexes immutable
+market sales per purchaser and retains the stable buyer set once per book; reuses
+protected development columns only across identical land exclusions and deposit
+layouts. Actual block knowledge, physical deltas and uncertainty stay live in
+each view. Removes global monitor locks from two functions whose only mutable
+cache was already thread-local. No market limits, prices, event timing or work
+selection policy are changed. No new timing tests. Focused semantic validation
+PASS, including actual mixed-trip loading, settlement and return after kernel
+recovery; guardrails PASS (r239v-gates.log). Live throughput measurements pending.

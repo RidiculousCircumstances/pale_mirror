@@ -7,7 +7,7 @@ import java.util.*;
 /** Matches explicit mutual consent. It cannot invent targets, change limits or read unknown stocks. */
 final class GoodsOrderMatching {
     private static final ImmutableInputView<Map<Long, io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook>> BOOKS = new ImmutableInputView<>();
-    private static synchronized io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook book(FrontierWorldState state, long now) {
+    private static io.farfrontier.palemirror.frontier.v3.model.market.MarketOfferBook book(FrontierWorldState state, long now) {
         var orders = state.companies().goodsTrade().orders();
         var times = BOOKS.get(List.of(orders), HashMap::new);
         if (times.size() >= 8 && !times.containsKey(now)) times.clear();

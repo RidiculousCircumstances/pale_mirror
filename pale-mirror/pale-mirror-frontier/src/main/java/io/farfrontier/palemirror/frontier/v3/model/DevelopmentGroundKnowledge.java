@@ -5,19 +5,27 @@ import java.util.*;
 
 /** Shared read-only land-development view. Observed uncertainty overrides the authored terrain baseline. */
 public final class DevelopmentGroundKnowledge implements KnownBlockGeometry<NavigationBlockState> {
+    private static final ImmutableInputView<Set<TerrainColumn>> PROTECTED = new ImmutableInputView<>();
     private final FrontierWorldState state;
     private final Set<TerrainColumn> protectedColumns;
     public DevelopmentGroundKnowledge(FrontierWorldState state) {
         this.state = Objects.requireNonNull(state);
-        var protectedLand = new HashSet<>(LandUseExclusions.columns(state));
-        for (var deposit : state.extractionSites().deposits().values()) {
-            deposit.site().layout().cells().forEach(cell -> add(protectedLand, cell.source()));
-            deposit.site().layout().terrainSupports().keySet().forEach(p -> add(protectedLand, p));
-            deposit.site().layout().fixedBlocks().keySet().forEach(p -> add(protectedLand, p));
-            deposit.site().layout().accessSurfaces().forEach(surface -> add(protectedLand, surface.support()));
-        }
-        protectedColumns = Collections.unmodifiableSet(protectedLand);
+        var land = LandUseExclusions.columns(state);
+        var layouts = state.extractionSites().deposits().values().stream()
+                .sorted(Comparator.comparing(deposit -> deposit.site().id())).map(deposit -> deposit.site().layout()).toList();
+        var inputs = new ArrayList<Object>(); inputs.add(land); inputs.addAll(layouts);
+        protectedColumns = PROTECTED.get(inputs, () -> {
+            var protectedLand = new HashSet<>(land);
+            for (var layout : layouts) {
+                layout.cells().forEach(cell -> add(protectedLand, cell.source()));
+                layout.terrainSupports().keySet().forEach(p -> add(protectedLand, p));
+                layout.fixedBlocks().keySet().forEach(p -> add(protectedLand, p));
+                layout.accessSurfaces().forEach(surface -> add(protectedLand, surface.support()));
+            }
+            return Collections.unmodifiableSet(protectedLand);
+        });
     }
+
     @Override public Optional<Sample<NavigationBlockState>> at(BlockPosition position) {
         if (!state.bootstrap().bounds().contains(position) || state.physicalDeltas().containsKey(position)
                 || state.extractionSites().geologicalExclusions().positions().contains(position)) return Optional.empty();

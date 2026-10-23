@@ -39,6 +39,12 @@ class ExtractionTerrainFactsTest {
         assertEquals(Set.of("minecraft:stone", "minecraft:coarse_dirt"), seen);
         assertEquals("minecraft:grass_block", ExtractionTerrainFacts.at(bootstrap, new BlockPosition(150, y, 50))
                 .orElseThrow().block().kind());
+        var changed = new BlockPosition(150, y, 50);
+        assertTrue(knowledge.at(changed).isPresent());
+        var invalidated = new ExtractionGeologyInvalidated(java.util.List.of(
+                new ExtractionGeologyInvalidated.Observation(changed, 1))).apply(state, ExtractionGeologyInvalidated.OWNER);
+        assertTrue(new DevelopmentGroundKnowledge(invalidated).at(changed).isEmpty(),
+                "reused land protection cannot hide newer physical uncertainty");
     }
     @Test void boundedGeologyFenceIsAllOrNothingAndRetainsEveryPositionThroughRecovery() throws Exception {
         var before = FrontierWorldState.initial(bootstrap("frontier-v3-quarry-graybox-r7"));

@@ -5,7 +5,7 @@ import java.util.*;
 /** Shared protected land for development owners. Crop work never recompiles this geometry. */
 public final class LandUseExclusions {
     private static final ImmutableInputView<Set<TerrainColumn>> VIEW = new ImmutableInputView<>();
-    public static synchronized Set<TerrainColumn> columns(FrontierWorldState state) {
+    public static Set<TerrainColumn> columns(FrontierWorldState state) {
         var inputs = new ArrayList<Object>(List.of(state.bootstrap(), state.routeTopology(), state.hiveColony().addedOrgans()));
         state.resourceSites().cycles().entrySet().stream().sorted(Map.Entry.comparingByKey())
                 .forEach(entry -> inputs.add(entry.getValue().layout()));
