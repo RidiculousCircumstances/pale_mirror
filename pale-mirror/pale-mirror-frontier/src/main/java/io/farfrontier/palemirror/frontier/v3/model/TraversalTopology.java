@@ -20,8 +20,10 @@ import java.util.Set;
  */
 public record TraversalTopology(TraversalTopologyId id, long revision, SubjectId provenance,
                                 Map<TraversalNodeId, SurfaceAnchor> nodes, List<Edge> edges) {
-    public static final int MAX_NODES = 4_096;
-    public static final int MAX_EDGES = 8_192;
+    // Explicit inspection/engineering graphs, not the shared navigator's search budget.
+    // A declared distant-world road may be longer than one old 4096-node corridor.
+    public static final int MAX_NODES = 16_384;
+    public static final int MAX_EDGES = 32_768;
 
     public TraversalTopology {
         id = Objects.requireNonNull(id, "traversal topology id");

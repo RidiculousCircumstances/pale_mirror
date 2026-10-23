@@ -124,8 +124,11 @@ public record RouteTopology(Map<SubjectId, List<BlockPosition>> replacementRoute
     }
 
     public boolean routePassable(FrontierBootstrap bootstrap, SubjectId settlementId) {
-        return settlementTraversalTopology(bootstrap, settlementId).edges().stream()
-                .allMatch(edge -> edge.traversableBy(TraversalCapability.PEDESTRIAN));
+        settlementWaypoints(bootstrap, settlementId); // Validate the exact declared owner.
+        // The sparse owner ledger is already validated against the declaration on
+        // observation/recovery. A policy read must not expand every metre of road.
+        return routeAvailability.getOrDefault(settlementId, Map.of()).values().stream()
+                .allMatch(availability -> availability == TraversalAvailability.OPEN);
     }
 
     /** A caller must already have constructed every physical replacement cell before acceptance. */

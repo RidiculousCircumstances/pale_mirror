@@ -85,3 +85,12 @@ road layout now uses aligned rows/columns with unequal gaps (880,1040,1160 along
 buildings. A new recovery check compiles both initial and stable native fabric;
 28layout/fabric/architecture checks and guardrailsPASS. No server-start success
 is claimed for the failed first attempt. The partially initialized world is reset.
+
+A second startup exposed a separate4096-node inspection topology ceiling on
+distant declared roads. Ordinary settlement infrastructure assessment now reads
+the validated sparse road-availability ledger directly, without expanding the
+whole route. Explicit engineering/physical-loss graphs retain their own finite
+16384-node/32768-edge envelope; native navigation budgets are unchanged. The
+distant-layout recovery test also blocks and reopens an exact road support for
+every settlement. Focused route/layout tests and guardrailsPASS
+(`build/r232-distant-roads.log`). This does not claim arbitrary-world graph scale.

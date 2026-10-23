@@ -27,6 +27,13 @@ class DistantWorldLayoutTest {
         var state = FrontierWorldState.initial(bootstrap); var codec = new FrontierWorldStateCodec();
         var restored = codec.decode(codec.encode(state));
         assertEquals(state, restored);
+        for (var settlement : bootstrap.settlements()) {
+            assertTrue(state.routeTopology().routePassable(bootstrap, settlement.id()));
+            var route = state.routeTopology().settlementTraversalTopology(bootstrap, settlement.id());
+            var blocked = state.routeTopology().blockAffectedRouteEdges(bootstrap, route.linearCorridorSurfaces().get(1).support());
+            assertFalse(blocked.routePassable(bootstrap, settlement.id()));
+            assertEquals(state.routeTopology(), blocked.reconcileRouteAvailability(bootstrap, java.util.Map.of()));
+        }
         var fabric = FrontierGrayboxPlan.compileInitialSettlementFabric(bootstrap);
         assertTrue(fabric.cells().size() > 65536, "distant roads exceed the former compact-world envelope");
         assertEquals(FrontierGrayboxPlan.compileStableStructuralBaseline(state).cells(),
