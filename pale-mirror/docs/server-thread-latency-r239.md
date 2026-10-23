@@ -258,3 +258,17 @@ local-navigation testsPASS (r239h-geometry-gates, r239h-field-gates, r239h-nav-g
 The expected unavailable-writer quarantine in the navigation negative fixture is
 not a live-server fault. Common readiness uses block coordinates explicitly;
 the former two-int hasChunkAt call was migrated to readyAtBlockColumn.
+
+### Independent geometry snapshots: exact equality reuse
+
+The d9844caa9 deployment exposed a regression: scout-triggered common geometry
+refreshes reached 2.52 seconds. `r239h-regression.jfr` attributes 298/443 server
+CPU samples in the selected spike window to `RegionalBlockMap.Part.equals`;
+independent preparation/owner builders repeatedly compared equal regional maps.
+This is shared geometry cost, not a reason to alter scout business behaviour.
+Immutable regional parts now weakly remember their last exactly equal peer,
+symmetrically. Only an actual content comparison establishes the proof. Hash
+collisions still require comparison, new regional contents have no inherited
+proof, and weak references cannot retain a chain of obsolete world snapshots.
+The focused regression checks these properties without an elapsed-time budget.
+Runtime improvement and the overall 80ms target still require measurement.

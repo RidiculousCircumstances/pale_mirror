@@ -3,18 +3,30 @@ package io.farfrontier.palemirror.frontier.v3.model.geometry;
 import io.farfrontier.palemirror.frontier.v3.model.BlockPosition;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometryRevision.Region;
 import java.util.*;
+import java.lang.ref.WeakReference;
 
 /** Immutable block facts with structural sharing and exact, cached regional fingerprints. */
 public final class RegionalBlockMap<V> extends AbstractMap<BlockPosition, V> {
     private static final class Part<V> {
         final Map<BlockPosition, V> values;
         final int hash;
+        // Exact equality of immutable parts remains true forever. Retain only a
+        // weak peer: comparisons between independent worker/owner snapshots must
+        // not rescan every block, or keep old geometry alive through cache chains.
+        private volatile WeakReference<Part<?>> equalPeer;
         Part(Map<BlockPosition, V> values) {
             this.values = Collections.unmodifiableMap(new HashMap<>(values)); hash = values.hashCode();
         }
         @Override public int hashCode() { return hash; }
         @Override public boolean equals(Object other) {
-            return this == other || other instanceof Part<?> part && hash == part.hash && values.equals(part.values);
+            if (this == other) return true;
+            if (!(other instanceof Part<?> part) || hash != part.hash) return false;
+            var known = equalPeer;
+            if (known != null && known.get() == part) return true;
+            if (!values.equals(part.values)) return false;
+            equalPeer = new WeakReference<>(part);
+            part.equalPeer = new WeakReference<>(this);
+            return true;
         }
     }
     private final Map<Region, Part<V>> parts;

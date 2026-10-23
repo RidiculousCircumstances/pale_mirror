@@ -7,6 +7,31 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class RegionalNavigationProjectionTest {
+    @Test void independentSnapshotsReuseExactEqualityWithoutHidingHashCollisionsOrEdits() {
+        var position = new BlockPosition(1, 60, 1);
+        var comparisons = new java.util.concurrent.atomic.AtomicInteger();
+        var first = RegionalBlockMap.copyOf(Map.of(position, new CountedValue("Aa", comparisons)));
+        var same = RegionalBlockMap.copyOf(Map.of(position, new CountedValue("Aa", comparisons)));
+        assertTrue(first.changesFrom(same).isEmpty());
+        assertTrue(comparisons.get() > 0, "first comparison must inspect actual facts");
+        comparisons.set(0);
+        assertTrue(same.changesFrom(first).isEmpty());
+        assertTrue(first.changesFrom(same).isEmpty());
+        assertEquals(0, comparisons.get(), "already proven immutable pair must not rescan blocks");
+        var collision = same.with(Map.of(position, new CountedValue("BB", comparisons)));
+        assertEquals(first.hashCode(), collision.hashCode());
+        assertEquals(Set.of(Region.at(position)), collision.changesFrom(first));
+        assertEquals(Set.of(Region.at(position)), first.changesFrom(collision));
+        assertTrue(first.changesFrom(same).isEmpty(), "successor cannot mutate the proven snapshots");
+        assertEquals(Set.of(Region.at(position)), same.changesFrom(same.replace(Map.of(Region.at(position), Map.of()))));
+    }
+    private record CountedValue(String text, java.util.concurrent.atomic.AtomicInteger comparisons) {
+        @Override public int hashCode() { return text.hashCode(); }
+        @Override public boolean equals(Object other) {
+            comparisons.incrementAndGet();
+            return other instanceof CountedValue value && text.equals(value.text);
+        }
+    }
     @Test void layeredContactsRegionRemovalUnknownAndCatalogChangesUseOneProjectionContract() {
         var stone = new NavigationBlockState("minecraft:stone", Map.of());
         var air = new NavigationBlockState("minecraft:air", Map.of());
