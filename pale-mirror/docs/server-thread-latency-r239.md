@@ -749,3 +749,23 @@ R239y verification:50focused geometry/replay/ledger/storage checks PASS
 (build/r239y-final-gates.log);25native body-lifetime cases andguardrails PASS
 (build/r239y-native-final.log), including ordinary saved return and returned
 PREPARED insertion. Runtime peak/debt validation follows deployment.
+
+
+R239y live first run:21read-only samples plus all >80ms logs, Clearwater →
+Stonefield → Clearwater, native unload and periodic save; max75.42ms host /
+55.69msreadyturn. HOT debt549 drained to2COLD. JFR contains no join-path wait.
+Pilot48f4b754-98d7-401a-8eb4-163b6fcb3fabPASS, shutdown04:51:13 saved all dimensions.
+Same-build/world restart pilot12f112dc-a2ec-4ce4-beeb-93af5fa5f6c1PASS; no new
+body/departure/scene/inventory errors. BUT first tick102.498218ms at04:51:49.800565
+failed the80ms target. CPU stack is Zeta1.1-40 RecipeCrawlHandler.load/onTick;
+JFR confirms digest compilation, no long GC/safepoint/park in that tick.
+
+R239z optional integration calls only the pinned public Zeta recipe owner at
+ServerStarted, using its read-only getServer context. It does not dispatch a tick
+to either event bus, advance time, force flags or duplicate recipe digestion.
+Its original mutex/readiness/one-time flags and subsequent reload handler remain
+owned by Zeta. Absent Zeta is a no-op; an unverified version visibly retains its
+native path. Initialization failures retain their cause and fail startup.
+Actual installed bytecode:build/r239y-zeta-bytecode.txt. The ModLens compile
+snapshot does not contain Zeta; the installed1.1-40artifact is the inspected source.
+This is real startup initialization, not hiding first-tick metrics or a warmup world.

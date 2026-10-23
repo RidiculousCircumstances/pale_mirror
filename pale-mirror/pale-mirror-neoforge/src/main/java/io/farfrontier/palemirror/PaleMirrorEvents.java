@@ -79,6 +79,7 @@ public final class PaleMirrorEvents {
 
     @SubscribeEvent
     public static void onServerStarted(ServerStartedEvent event) {
+        io.farfrontier.palemirror.internal.integration.zeta.ZetaRecipeStartup.finishPending(event.getServer());
         if (PaleMirrorRuntime.availableForSelectedLaunch()) PaleMirrorRuntime.forServer(event.getServer());
         else io.farfrontier.palemirror.internal.frontier.v3.FrontierV3SharedServerServices.start(event.getServer());
         io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ServerLifecycle.start(event.getServer());
