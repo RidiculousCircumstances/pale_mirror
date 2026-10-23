@@ -1,6 +1,7 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
+import io.farfrontier.palemirror.frontier.v3.model.geometry.RegionalBlockSet;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -122,7 +123,7 @@ public final class FrontierRouteNetwork {
                 if (!surfaces.contains(footing)) foundations.add(footing);
             }
         }
-        var footprint = new RouteFootprint(surfaces, Set.copyOf(foundations));
+        var footprint = new RouteFootprint(surfaces, foundations);
         cachedFootprint = footprint;
         return footprint;
     }
@@ -145,7 +146,9 @@ public final class FrontierRouteNetwork {
             List<BlockPosition> settlementRoute = topology.settlementWaypoints(bootstrap, settlement.id());
             for (int index = 1; index < settlementRoute.size(); index++) addCarriagewaySegment(cells, settlementRoute.get(index - 1), settlementRoute.get(index));
         }
-        return Set.copyOf(cells);
+        // Long parallel roads cluster coordinate hashes in a flat Set.copyOf table.
+        // Keep the immutable footprint in the shared spatial representation instead.
+        return RegionalBlockSet.copyOf(cells);
     }
 
     /**
@@ -161,7 +164,7 @@ public final class FrontierRouteNetwork {
     /** Exact immutable route layers from one deterministic topology compilation. */
     record RouteFootprint(Set<BlockPosition> surfaceCells, Set<BlockPosition> foundationCells) {
         RouteFootprint {
-            surfaceCells = Set.copyOf(surfaceCells); foundationCells = Set.copyOf(foundationCells);
+            surfaceCells = RegionalBlockSet.copyOf(surfaceCells); foundationCells = RegionalBlockSet.copyOf(foundationCells);
         }
     }
 

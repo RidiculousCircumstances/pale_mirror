@@ -262,3 +262,6 @@ svg.world-map-svg:active { cursor: grabbing; }
 .map-panel.expanded .world-map-svg { height: 100%; }
 .map-panel.expanded .map-note, .map-panel.expanded .map-legend, .map-panel.expanded .map-resize { display: none; }
 @media (max-width: 1100px) { .map-panel.expanded .map-layout { grid-template-rows: minmax(0, 1fr) 180px; } }
+
+/* The map is a gesture surface; details outside it remain copyable. */
+.map-viewport, .map-resize { -webkit-user-select: none; user-select: none; }

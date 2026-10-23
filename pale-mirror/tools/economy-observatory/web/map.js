@@ -215,7 +215,7 @@ const WorldMap = (() => {
     };
     root.onchange=(event)=>{if(event.target.dataset.layer==="trade")showTrade=event.target.checked;if(event.target.dataset.layer==="caravans")showCaravans=event.target.checked;paint();};
     svg.addEventListener("wheel",(event)=>{event.preventDefault();zoom(Math.exp(Math.max(-1,Math.min(1,event.deltaY*.002))),point(event));},{passive:false});
-    svg.onpointerdown=(event)=>{if(event.button!==0||event.target.closest("[data-object]"))return;drag={point:point(event),view:{...view}};svg.setPointerCapture(event.pointerId);hideTooltip();};
+    svg.onpointerdown=(event)=>{if(event.button!==0||event.target.closest("[data-object]"))return;event.preventDefault();svg.focus({preventScroll:true});drag={point:point(event),view:{...view}};svg.setPointerCapture(event.pointerId);hideTooltip();};
     svg.onpointermove=(event)=>{
       if(drag){const p=point(event);view={...view,x:view.x+drag.point.x-p.x,z:view.z+drag.point.y-p.y};paint();return;}
       const hit=event.target.closest("[data-object]");if(hit)tooltip(hit.dataset.object,event);else hideTooltip();
