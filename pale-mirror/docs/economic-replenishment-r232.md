@@ -116,3 +116,27 @@ retains exactwork15, delivers batch3 and returns toward coal. Frames show mine
 geology; this is not a full visual harvest/food cycle acceptance. Native shutdown
 logs CAPTURE_UNAVAILABLE at unloaded actor handoff; subsequent continuation is
 checked, not reclassified as successful capture.
+
+
+### Quote route fan-out
+
+Even after hint reuse stopped starving primary searches, current distant-world
+queues included roughly90 regional estimates. `GoodsTripPlanning` requested both
+route directions for every feasible peer/warehouse before choosing an offer.
+Quote comparison now uses the shared endpoint travel forecast (retained exact
+journey length when available, otherwise declared provisional distance). It is
+cost advice only: it never proves arrival, creates incoming stock or authorizes
+travel. Only the selected trip requests physical route/provision/crew admission;
+actual journey cost, deadline, offer ranking and shared funding are rechecked
+before the immutable draft is committed. Pending admission publishes neither
+reservations nor actor assignments. Rulesets with sourcing disabled use the
+geometric lower-bound distance, without inventing a sourcing policy.
+
+The previous test asserting all-quote regional requests now checks the intended
+boundary: one selected pending proof, no speculative regional searches, and no
+published cargo/crew/cash reservation. Existing mixed shipment completion and
+in-flight recovery coverage remains in place.
+
+Verification of the quote-admission change:63focused trade, sourcing, dispatch,
+lot and mixed recovery testsPASS; guardrailsPASS
+(`build/r232-selected-route-tests.log`).

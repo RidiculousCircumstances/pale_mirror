@@ -1,57 +1,53 @@
 package io.farfrontier.palemirror.frontier.v3.model;
 
 import java.util.*;
+import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionTiming;
 
 /** Quote cost/timing advice, never arrival coverage or route authority. No asynchronous cache dependency. */
-final class ProcurementTravelForecast {
-    record Estimate(long deliveryTicks, long labourTicks, long journeyTicks) { }
+public final class ProcurementTravelForecast {
+    public record Estimate(long deliveryTicks, long labourTicks, long journeyTicks) { }
     static Optional<Estimate> read(FrontierWorldState state, GoodsTradeOrder offer, GoodsParticipant buyer) {
         return read(state, offer.containerId(), offer.itemKind(), buyer);
     }
-    static Optional<Estimate> read(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId source,
-                                   String item, GoodsParticipant buyer) {
+    static Optional<Estimate> read(FrontierWorldState state, SubjectId source, String item, GoodsParticipant buyer) {
         return read(state, source, item, buyer, TransportOrganization.Itinerary.SOURCE_DELIVERY);
     }
-    static Optional<Estimate> read(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId source,
-                                   String item, GoodsParticipant buyer, TransportOrganization.Itinerary itinerary) {
-        var destinations = GoodsParticipantStorage.containers(state, buyer, item);
-        for (var mission : state.shipments().missions().values().stream().sorted(Comparator.comparing(TransportMission::id)).toList()) {
-            if (!mission.sender().containerId().equals(source)
-                    || !destinations.contains(mission.receiver().containerId()) || mission.supplies().isEmpty()
-                    || mission.supplies().orElseThrow().needsReplan() || !state.unitGroups().groups().containsKey(mission.groupId())
-                    || !GoodsTradeStateSupport.receivingCapacity(state, mission.receiver().containerId(), item, 1)) continue;
-            var proof = mission.supplies().orElseThrow().journey();
-            // This retained trip length is cost advice, not a fresh traversability
-            // proof. Rewalking every physical edge here multiplies route validation
-            // by every economic/worker query. Admission and movement still validate
-            // their own current geometry; no quote becomes promised delivery here.
-            var rules = state.bootstrap().ruleset().expedition();
-            boolean sameDirection = mission.organization().itinerary() == itinerary;
-            var timing = ExpeditionTiming.assess(rules,
-                    sameDirection ? proof.outward().edges() : proof.returning().edges(),
-                    sameDirection ? proof.returning().edges() : proof.outward().edges(), itinerary);
-            long labour = Math.addExact(Math.multiplyExact(Math.addExact(proof.outward().edges(), proof.returning().edges()),
-                    rules.ticksPerRouteEdge()), rules.destinationWorkTicks());
-            return Optional.of(new Estimate(timing.deliveryTicks(), labour, timing.durationTicks()));
-        }
-        // A first quote still needs a cost estimate. Endpoint distance is explicitly
-        // provisional: this may rank a BUY intention, never create incoming stock,
-        // accept a route or fund deadline-backed production. Matching must acquire
-        // the real itinerary and supplies before admitting a contract/expedition.
-        var origin = state.inventory().surfaces().get(source).position(state);
-        long distance = destinations.stream()
+    static Optional<Estimate> read(FrontierWorldState state, SubjectId source, String item, GoodsParticipant buyer,
+                                   TransportOrganization.Itinerary itinerary) {
+        return GoodsParticipantStorage.containers(state, buyer, item).stream()
                 .filter(id -> GoodsTradeStateSupport.receivingCapacity(state, id, item, 1))
-                .map(id -> state.inventory().surfaces().get(id).position(state))
-                .mapToLong(target -> Math.abs((long) target.x() - origin.x()) + Math.abs((long) target.y() - origin.y())
-                        + Math.abs((long) target.z() - origin.z())).min().orElse(-1);
-        if (distance < 0) return Optional.empty();
-        var rules = state.bootstrap().ruleset().expedition();
+                .map(id -> between(state, source, id, itinerary))
+                .min(Comparator.comparingLong(Estimate::journeyTicks));
+    }
+    /** Exact endpoints, provisional journey. Comparison must not acquire detailed
+     * routes for every quotation; selected transport admission owns that proof. */
+    public static Estimate between(FrontierWorldState state, SubjectId source, SubjectId receiver,
+                                   TransportOrganization.Itinerary itinerary) {
+        for (var mission : state.shipments().missions().values().stream().sorted(Comparator.comparing(TransportMission::id)).toList()) {
+            if (!mission.sender().containerId().equals(source) || !mission.receiver().containerId().equals(receiver)
+                    || mission.supplies().isEmpty() || mission.supplies().orElseThrow().needsReplan()
+                    || !state.unitGroups().groups().containsKey(mission.groupId())) continue;
+            var proof = mission.supplies().orElseThrow().journey();
+            // Retained length is cost advice, not fresh traversability evidence.
+            boolean sameDirection = mission.organization().itinerary() == itinerary;
+            return estimate(state, sameDirection ? proof.outward().edges() : proof.returning().edges(),
+                    sameDirection ? proof.returning().edges() : proof.outward().edges(), itinerary);
+        }
+        var origin = state.inventory().surfaces().get(source).position(state);
+        var target = state.inventory().surfaces().get(receiver).position(state);
+        long distance = Math.abs((long) target.x() - origin.x()) + Math.abs((long) target.y() - origin.y())
+                + Math.abs((long) target.z() - origin.z());
         long edges = Math.max(1, Math.ceilDiv(Math.multiplyExact(distance,
-                state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().orElseThrow().provisionalDistancePermille()), 1000));
-        var timing = ExpeditionTiming.assess(rules, edges, edges, itinerary);
-        long labour = Math.addExact(Math.multiplyExact(Math.multiplyExact(edges, 2), rules.ticksPerRouteEdge()), rules.destinationWorkTicks());
-        return Optional.of(new Estimate(timing.deliveryTicks(), labour, timing.durationTicks()));
+                state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().map(rules -> rules.provisionalDistancePermille()).orElse(1000)), 1000));
+        return estimate(state, edges, edges, itinerary);
+    }
+    private static Estimate estimate(FrontierWorldState state, long outward, long returning,
+                                     TransportOrganization.Itinerary itinerary) {
+        var rules = state.bootstrap().ruleset().expedition();
+        var timing = ExpeditionTiming.assess(rules, outward, returning, itinerary);
+        long labour = Math.addExact(Math.multiplyExact(Math.addExact(outward, returning), rules.ticksPerRouteEdge()), rules.destinationWorkTicks());
+        return new Estimate(timing.deliveryTicks(), labour, timing.durationTicks());
     }
     private ProcurementTravelForecast() { }
 }

@@ -10,7 +10,6 @@ import java.util.*;
 /** One transaction publishes sales only after exact logistics admission has succeeded on an immutable draft. */
 final class GoodsTripPlanning {
     record Result(FrontierWorldState state, List<ProposedEvent> events, String decision) { }
-    private record RouteEdges(long sourceToReceiver, long receiverToSource) { }
     private record Candidate(FrontierWorldState draft, List<ProposedEvent> reservations,
             GoodsParticipant seller, List<GoodsTripAssembly.Parcel> parcels, GoodsTradeFulfillment.Mode mode,
             ProcurementSelection.Offer offer, List<FrontierWorldState> prefixes, ExpeditionTiming timing) { }
@@ -49,17 +48,9 @@ final class GoodsTripPlanning {
             var feasible = GoodsOrderMatching.first(initial, reviewer, now,
                     Optional.of(other.party()), Optional.of(buyer.party()), Set.of(), Optional.of(endpoints));
             if (feasible.match().isEmpty()) { decision = feasible.disposition(); continue; }
-            RouteEdges edges;
-            try { edges = routeEdges(initial, endpoints); }
-            catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
-                decision = "WAITING_FOR_REGIONAL_ESTIMATE; status=" + unavailable.status() + "; reserved=0";
-                continue;
-            }
             for (var mode : GoodsTradeFulfillment.Mode.values()) {
-                var timing = ExpeditionTiming.assess(initial.bootstrap().ruleset().expedition(),
-                        mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? edges.sourceToReceiver() : edges.receiverToSource(),
-                        mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? edges.receiverToSource() : edges.sourceToReceiver(),
-                        itinerary(mode));
+                var forecast = ProcurementTravelForecast.between(initial, endpoints.source(), endpoints.receiver(), itinerary(mode));
+                var timing = new ExpeditionTiming(forecast.deliveryTicks(), forecast.journeyTicks());
                 long estimate = timing.durationTicks();
                 var seller = other;
                 var state = initial; var reservations = new ArrayList<ProposedEvent>(); var parcels = new ArrayList<GoodsTripAssembly.Parcel>();
@@ -195,14 +186,6 @@ final class GoodsTripPlanning {
             case SELLER_DELIVERY -> TransportOrganization.Itinerary.SOURCE_DELIVERY;
             case BUYER_COLLECTION -> TransportOrganization.Itinerary.DESTINATION_COLLECTION;
         };
-    }
-    private static RouteEdges routeEdges(FrontierWorldState state, GoodsOrderMatching.Endpoints endpoints) {
-        var source = GoodsParticipantStorage.endpoint(state, endpoints.source());
-        var receiver = GoodsParticipantStorage.endpoint(state, endpoints.receiver());
-        var knowledge = ShipmentEndpointComposition.knowledge(state, List.of(source, receiver));
-        var outward = knowledge.estimateBetween(source.station(), receiver.station());
-        var returning = knowledge.estimateBetween(receiver.station(), source.station());
-        return new RouteEdges(outward.estimatedEdges(), returning.estimatedEdges());
     }
     private static ProcurementSelection.Offer offer(FrontierWorldState state, GoodsParticipant buyer, GoodsParticipant organizer,
             SubjectId id, List<GoodsTripAssembly.Parcel> parcels, ExpeditionTiming timing, long now) {
