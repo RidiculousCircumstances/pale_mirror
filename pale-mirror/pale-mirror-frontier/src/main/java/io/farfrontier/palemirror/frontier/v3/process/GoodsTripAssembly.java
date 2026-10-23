@@ -34,6 +34,22 @@ final class GoodsTripAssembly {
     }
     static Optional<TransportMissionStarted> prepare(FrontierWorldState state, GoodsParticipant seller,
                                                     GoodsParticipant buyer, List<Parcel> parcels, GoodsTradeFulfillment.Mode mode, long now) {
+        if (parcels.isEmpty()) throw new IllegalArgumentException("empty manifest");
+        var contract = parcels.getFirst().contract();
+        var source = GoodsParticipantStorage.endpoint(state, contract.sourceContainerId());
+        var destination = GoodsParticipantStorage.endpoint(state, contract.receiverContainerId());
+        var knowledge = ShipmentEndpointComposition.knowledge(state, List.of(source, destination));
+        long outward = knowledge.estimateBetween(source.station(), destination.station()).estimatedEdges();
+        long returning = knowledge.estimateBetween(destination.station(), source.station()).estimatedEdges();
+        var timing = ExpeditionTiming.assess(state.bootstrap().ruleset().expedition(),
+                mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? outward : returning,
+                mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? returning : outward,
+                mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? TransportOrganization.Itinerary.SOURCE_DELIVERY
+                        : TransportOrganization.Itinerary.DESTINATION_COLLECTION);
+        return prepare(state, seller, buyer, parcels, mode, now, timing.durationTicks());
+    }
+    static Optional<TransportMissionStarted> prepare(FrontierWorldState state, GoodsParticipant seller,
+            GoodsParticipant buyer, List<Parcel> parcels, GoodsTradeFulfillment.Mode mode, long now, long forecastDuration) {
         var organizer = switch (mode) { case SELLER_DELIVERY -> seller; case BUYER_COLLECTION -> buyer; };
         if (parcels.isEmpty() || parcels.size() > 32) throw new IllegalArgumentException("unbounded trade manifest");
         for (var parcel : parcels) if (!parcel.contract().seller().equals(seller.party()) || !parcel.contract().buyer().equals(buyer.party())
@@ -54,16 +70,10 @@ final class GoodsTripAssembly {
                 available.add(person);
         }
         if (available.isEmpty()) return Optional.empty();
-        // A person carries one stack. Do not add support people to a walking load.
-        if (parcels.size() <= available.size()) {
-            var walking = declaration(state, seller, buyer, parcels, mode, available.subList(0, parcels.size()), Optional.empty(), now);
-            if (walking.isPresent()) return walking;
-        }
-        for (var animal : state.transportFleet().assets().values().stream().filter(a ->
-                TransportAssetAdmission.available(state, a, organizer.settlementId())).sorted(Comparator.comparing(TransportAsset::actorId)).toList()) {
-            if (parcels.size() > Math.min(animal.stackSlots(), state.bootstrap().ruleset().expedition().packAnimalStackSlots())) continue;
-            var packed = declaration(state, seller, buyer, parcels, mode, List.of(available.getFirst()), Optional.of(animal), now);
-            if (packed.isPresent()) return packed;
+        for (var option : GoodsTransportOptions.forLoad(state, organizer, forecastDuration, parcels.size(), available.size())) {
+            var prepared = declaration(state, seller, buyer, parcels, mode,
+                    available.subList(0, option.workers()), option.animal(), now);
+            if (prepared.isPresent()) return prepared;
         }
         return Optional.empty();
     }

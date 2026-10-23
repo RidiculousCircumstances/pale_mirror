@@ -58,9 +58,10 @@ public final class GrayboxQuarryPlan {
                 // quarries in towns where that material was never distributed.
                 if (installationIndex > 0 && producerIndex % siteRules.pocket().orElseThrow().producerPeriod() != 0) continue;
                 ExtractionSite selected = null;
-                for (FacilityFacing facing : List.of(FacilityFacing.EAST, FacilityFacing.SOUTH, FacilityFacing.WEST, FacilityFacing.NORTH)) {
-                    int distance = extent + rules.width() + rules.exteriorClearance();
-                    BlockPosition anchor = home.anchor().offset(facing.x() * distance, 0, facing.z() * distance);
+                int distance = extent + rules.width() + rules.exteriorClearance();
+                for (var candidate : exteriorCandidates(home.anchor(), distance, rules.width() + rules.exteriorClearance())) {
+                    FacilityFacing facing = candidate.facing();
+                    BlockPosition anchor = candidate.anchor();
                     int supportY = bootstrap.terrain().supportYAt(anchor.x(), anchor.z());
                     anchor = new BlockPosition(anchor.x(), supportY - rules.pitDepth(), anchor.z());
                     ExtractionLayout layout = layout(anchor, facing, siteRules, producerIndex);
@@ -94,6 +95,18 @@ public final class GrayboxQuarryPlan {
         return new Installation(new ExtractionSiteState(deposits, Map.of(), 1,
                 io.farfrontier.palemirror.frontier.v3.model.geometry.KnownBlockExclusions.empty(),
                 new MineralGeology(minerals), new GeologicalKnowledge(surveys)), containers);
+    }
+    private record ExteriorCandidate(BlockPosition anchor, FacilityFacing facing) { }
+    /** Finite authored-site search, not excavation planning. Roads in an irregular
+     * layout may cross all four centre lines; examine neighboring exterior ground
+     * while retaining the same exact bounds/owner-overlap checks for every site. */
+    private static List<ExteriorCandidate> exteriorCandidates(BlockPosition home, int distance, int spacing) {
+        var result = new ArrayList<ExteriorCandidate>();
+        for (int sideways : List.of(0, spacing, -spacing, 2 * spacing, -2 * spacing, 3 * spacing, -3 * spacing))
+            for (var facing : List.of(FacilityFacing.EAST, FacilityFacing.SOUTH, FacilityFacing.WEST, FacilityFacing.NORTH))
+                result.add(new ExteriorCandidate(home.offset(facing.x() * distance - facing.z() * sideways, 0,
+                        facing.z() * distance + facing.x() * sideways), facing));
+        return List.copyOf(result);
     }
     private static Optional<MineralDeposit> mineral(BlockPosition anchor, FacilityFacing facing, ExtractionRules rules,
             int producerIndex, SubjectId id) {

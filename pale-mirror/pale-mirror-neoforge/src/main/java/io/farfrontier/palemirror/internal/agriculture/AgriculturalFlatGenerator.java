@@ -35,6 +35,9 @@ public final class AgriculturalFlatGenerator extends ChunkGenerator {
                 || !settings.getLayers().getLast().isSolid())
             throw new IllegalArgumentException("agricultural graybox requires a solid top layer");
     }
+    public io.farfrontier.palemirror.frontier.v3.model.agriculture.TerritoryAgriculture agriculture() {
+        return ((AgriculturalBiomeSource) biomeSource).agriculture();
+    }
     @Override protected MapCodec<? extends ChunkGenerator> codec() { return CODEC; }
     @Override public ChunkGeneratorStructureState createState(HolderLookup<StructureSet> lookup, RandomState random, long seed) {
         return ChunkGeneratorStructureState.createForFlat(random, seed, biomeSource, java.util.stream.Stream.empty());
@@ -45,7 +48,7 @@ public final class AgriculturalFlatGenerator extends ChunkGenerator {
             var cursor = new BlockPos.MutableBlockPos();
             for (int x = 0; x < 16; x++) for (int z = 0; z < 16; z++) {
                 int worldX = filled.getPos().getMinBlockX() + x, worldZ = filled.getPos().getMinBlockZ() + z;
-                var surface = AgriculturalSurface.at(worldX, worldZ);
+                var surface = AgriculturalSurface.at(agriculture(), worldX, worldZ);
                 filled.setBlockState(cursor.set(worldX, y, worldZ), surface, false);
                 filled.getOrCreateHeightmapUnprimed(Heightmap.Types.OCEAN_FLOOR_WG).update(x, y, z, surface);
                 filled.getOrCreateHeightmapUnprimed(Heightmap.Types.WORLD_SURFACE_WG).update(x, y, z, surface);
@@ -67,7 +70,7 @@ public final class AgriculturalFlatGenerator extends ChunkGenerator {
     }
     @Override public NoiseColumn getBaseColumn(int x, int z, LevelHeightAccessor height, RandomState random) {
         var column = flat.getBaseColumn(x, z, height, random);
-        column.setBlock(surfaceY(height), AgriculturalSurface.at(x, z));
+        column.setBlock(surfaceY(height), AgriculturalSurface.at(agriculture(), x, z));
         return column;
     }
     private int surfaceY(LevelHeightAccessor height) {
@@ -77,7 +80,7 @@ public final class AgriculturalFlatGenerator extends ChunkGenerator {
     @Override public int getGenDepth() { return flat.getGenDepth(); }
     @Override public int getSeaLevel() { return flat.getSeaLevel(); }
     @Override public void addDebugScreenInfo(List<String> text, RandomState random, BlockPos position) {
-        text.add("Pale Mirror agriculture: " + io.farfrontier.palemirror.frontier.v3.model.agriculture.GrayboxAgriculture.rules()
+        text.add("Pale Mirror agriculture: " + agriculture()
                 .biomeAt(position.getX(), position.getZ()));
     }
 }

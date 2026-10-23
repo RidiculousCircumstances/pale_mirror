@@ -11,18 +11,11 @@ import java.util.Locale;
 
 /** Deterministic generator for the single supported fresh-world Frontier v3 profile. */
 public final class FrontierBootstrapper {
-    private static final WorldBounds BOUNDS = new WorldBounds(-512, -512, 1024, 1024);
     private static final String[] NAMES = {
             "Northwatch", "Stonefield", "Dawnbridge", "Redwillow",
             "Ashcross", "Hearthvale", "Clearwater", "Ironmeadow",
             "Southgate", "Mossbrook", "Westhaven", "Sunreach"
     };
-    private static final int[][] ANCHORS = {
-            {-360, -340}, {-120, -340}, {120, -340}, {360, -340},
-            {-360, 0}, {-120, 0}, {120, 0}, {360, 0},
-            {-360, 340}, {-120, 340}, {120, 340}, {360, 340}
-    };
-
     private FrontierBootstrapper() { }
 
     public static FrontierBootstrap create(WorldId worldId, long seed) {
@@ -74,13 +67,13 @@ public final class FrontierBootstrapper {
         List<Bioform> bioforms = new ArrayList<>();
         for (int nestIndex = 0; nestIndex < nests.size(); nestIndex++) {
             HiveNest nest = nests.get(nestIndex);
-            List<BlockPosition> placements = FrontierHiveActorSlots.slots(BOUNDS, terrain, nest, organs, 24);
+            List<BlockPosition> placements = FrontierHiveActorSlots.slots(ruleset.worldLayout().bounds(), terrain, nest, organs, 24);
             for (int ordinal = 0; ordinal < 24; ordinal++) {
                 bioforms.add(new Bioform(new SubjectId("bioform:" + (nestIndex == 0 ? "west-" : "east-") + ordinal), hiveId,
                         nest.id(), chassis(ordinal), mutations(ordinal), assignment(ordinal), placements.get(ordinal)));
             }
         }
-        return new FrontierBootstrap(worldId, seed, BOUNDS, settlements, new Hive(hiveId, nests, organs, bioforms), ruleset, terrain);
+        return new FrontierBootstrap(worldId, seed, ruleset.worldLayout().bounds(), settlements, new Hive(hiveId, nests, organs, bioforms), ruleset, terrain);
     }
 
     private static BioformChassis chassis(int ordinal) {
@@ -111,7 +104,7 @@ public final class FrontierBootstrapper {
 
     private static Settlement settlement(long seed, int index, FrontierRuleset ruleset, TerrainSurfacePlan terrain) {
         SubjectId settlementId = new SubjectId("settlement:" + (index + 1));
-        BlockPosition horizontalAnchor = new BlockPosition(ANCHORS[index][0], 0, ANCHORS[index][1]);
+        BlockPosition horizontalAnchor = ruleset.worldLayout().settlements().get(index);
         List<SettlementStructure> structures = new ArrayList<>();
         for (StructureKind kind : StructureKind.values()) {
             if (kind == StructureKind.SMELTERY && ruleset.production().recipes().stream()
@@ -135,7 +128,7 @@ public final class FrontierBootstrapper {
         int residents = 20 + KeyedRandom.nextInt(new DecisionKey(seed, "bootstrap", settlementId, "resident-count", 0L), 21);
         // Compile exact future bed surfaces from the same immutable deck geometry before
         // attaching the initial residents; no temporary invalid Settlement exists.
-        List<BlockPosition> placements = SettlementResidentIngressPlan.compile(BOUNDS, terrain, settlementId, anchor, structures,
+        List<BlockPosition> placements = SettlementResidentIngressPlan.compile(ruleset.worldLayout().bounds(), terrain, settlementId, anchor, structures,
                 ruleset.facilityCapacity().intactHousingBeds()).homeSlots().subList(0, residents);
         List<Resident> people = new ArrayList<>(residents);
         for (int ordinal = 0; ordinal < residents; ordinal++) {

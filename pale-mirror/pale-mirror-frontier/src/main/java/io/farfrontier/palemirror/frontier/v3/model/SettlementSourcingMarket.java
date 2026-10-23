@@ -27,18 +27,15 @@ final class SettlementSourcingMarket {
             if (seller == null || !GoodsParticipantStorage.eligible(state, seller, order.containerId(), order.itemKind())) continue;
             String pool = order.party().id().value() + "|" + order.containerId().value() + "|" + order.itemKind();
             if (offers.containsKey(pool)) continue; // One physical stock pool, not duplicate quotes of it.
-            int quantity = Math.min(tradeRules.maximumBatch(), Math.min(order.availableQuantity(),
+            int quantity = Math.min(GoodsTransportOptions.maximumQuantity(state, order.itemKind()), Math.min(order.availableQuantity(),
                     GoodsParticipantStorage.unclaimed(state, seller, order.containerId(), order.itemKind())));
             if (quantity == 0) continue;
-            var timing = ProcurementTravelForecast.read(state, order, buyer);
+            var timing = ProcurementTravelForecast.read(state, order.containerId(), order.itemKind(), buyer,
+                    TransportOrganization.Itinerary.DESTINATION_COLLECTION);
             if (timing.isEmpty()) continue;
-            // The actual organizer/escrow remain contract-owned. This conservative comparison
-            // charges one carrier's round trip even when the seller ultimately organizes it.
-            var cost = GoodsTransportValuation.estimate(state, buyer, timing.orElseThrow().journeyTicks(), 1);
-            long transport = Math.addExact(cost.resourceExpense().raw(),
-                    Math.multiplyExact(timing.orElseThrow().labourTicks(), policy.labourValuePerTick()));
+            var transport = GoodsTransportOptions.costCurve(state, buyer, timing.orElseThrow().journeyTicks(), order.itemKind());
             offers.put(pool, new SourcingMarket.Offer(pool, order.itemKind(), quantity, order.unitPriceLimit().raw(),
-                    order.unitPriceLimit().raw(), timing.orElseThrow().deliveryTicks(), transport, cost.resourceExpense().raw()));
+                    order.unitPriceLimit().raw(), timing.orElseThrow().deliveryTicks(), transport));
         }
         var available = List.copyOf(offers.values());
         return new SourcingMarket(state.inventory().economics().availableToReserve(buyer.party().id()).raw(),

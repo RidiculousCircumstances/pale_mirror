@@ -39,7 +39,8 @@ public record FrontierBootstrap(WorldId worldId, long seed, WorldBounds bounds, 
             if (!entry.getKey().value().startsWith("site:") || entry.getValue().revision() != 1)
                 throw new IllegalArgumentException("initial field layout requires an exact site and first revision");
         }
-        if (bounds.width() != 1024 || bounds.depth() != 1024) throw new IllegalArgumentException("Frontier v3 bootstrap is exactly 1024 by 1024 blocks");
+        if (bounds.width() != ruleset.worldLayout().bounds().width() || bounds.depth() != ruleset.worldLayout().bounds().depth())
+            throw new IllegalArgumentException("bootstrap bounds disagree with declared world layout");
         if (settlements.size() != 12) throw new IllegalArgumentException("Frontier v3 bootstrap requires exactly 12 settlements");
         Set<SubjectId> ids = new HashSet<>();
         for (Settlement settlement : settlements) {

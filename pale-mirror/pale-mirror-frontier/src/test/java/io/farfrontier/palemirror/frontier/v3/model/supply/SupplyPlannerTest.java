@@ -190,18 +190,18 @@ class SupplyPlannerTest {
     @Test void reserveRemaindersWaitForConsolidationButUsefulLoadsAndCriticalFoodDepart() {
         var ordinary = new SupplyPlanner.Demand(2, 0, 0, Long.MAX_VALUE, Set.of(SupplyPlanner.Reason.STOCK_REPLENISHMENT), Optional.empty());
         assertEquals(TripDispatchPolicy.Cause.ACCUMULATING,
-                TripDispatchPolicy.assess(List.of(new TripDispatchPolicy.Goods(2, FOOD, ordinary, false)), 23225, 400));
+                TripDispatchPolicy.assess(List.of(new TripDispatchPolicy.Goods(2, 100, ordinary, false)), 23225, 400));
         var urgent = new SupplyPlanner.Demand(2, 0, 0, 10, Set.of(SupplyPlanner.Reason.CONSUMPTION_DEADLINE), Optional.empty());
         assertEquals(TripDispatchPolicy.Cause.SUPPLY_DEADLINE,
-                TripDispatchPolicy.assess(List.of(new TripDispatchPolicy.Goods(2, FOOD, urgent, true)), 100, 10));
-        assertEquals(TripDispatchPolicy.Cause.PREFERRED_LOAD,
-                TripDispatchPolicy.assess(List.of(new TripDispatchPolicy.Goods(100, FOOD, ordinary, false)), 100, 10));
+                TripDispatchPolicy.assess(List.of(new TripDispatchPolicy.Goods(2, 100, urgent, true)), 100, 10));
+        assertEquals(TripDispatchPolicy.Cause.ECONOMIC_LOT,
+                TripDispatchPolicy.assess(List.of(new TripDispatchPolicy.Goods(100, 100, ordinary, false)), 100, 10));
     }
     @Test void routeForecastNotFixedLeadDeterminesTheLastSafeReviewForSmallFuelLoads() {
         var fuel = new SupplyPlanner.Demand(1, 0, 0, 23663,
                 Set.of(SupplyPlanner.Reason.PRODUCTION_FUEL), Optional.empty());
         assertFalse(fuel.urgent(MATERIAL.leadTicks()), "not classified urgent by the old fixed lead");
-        var manifest = List.of(new TripDispatchPolicy.Goods(1, MATERIAL, fuel, true));
+        var manifest = List.of(new TripDispatchPolicy.Goods(1, 80, fuel, true));
         assertEquals(TripDispatchPolicy.Cause.ACCUMULATING, TripDispatchPolicy.assess(manifest, 23262, 400));
         assertEquals(TripDispatchPolicy.Cause.SUPPLY_DEADLINE, TripDispatchPolicy.assess(manifest, 23263, 400));
         assertEquals(TripDispatchPolicy.Cause.SUPPLY_DEADLINE, TripDispatchPolicy.assess(manifest, 50000, 400),
@@ -212,10 +212,10 @@ class SupplyPlannerTest {
     @Test void mixedManifestCanConsolidateSmallNeedsWithoutInventingSupply() {
         var ordinary = new SupplyPlanner.Demand(100, 0, 0, Long.MAX_VALUE,
                 Set.of(SupplyPlanner.Reason.STOCK_REPLENISHMENT), Optional.empty());
-        var a = new TripDispatchPolicy.Goods(FOOD.preferredTripLoad() / 2, FOOD, ordinary, false);
-        var b = new TripDispatchPolicy.Goods(MATERIAL.preferredTripLoad() / 2, MATERIAL, ordinary, false);
+        var a = new TripDispatchPolicy.Goods(50, 100, ordinary, false);
+        var b = new TripDispatchPolicy.Goods(100, 200, ordinary, false);
         assertEquals(TripDispatchPolicy.Cause.ACCUMULATING, TripDispatchPolicy.assess(List.of(a), 100, 10));
-        assertEquals(TripDispatchPolicy.Cause.PREFERRED_LOAD, TripDispatchPolicy.assess(List.of(a, b), 100, 10));
+        assertEquals(TripDispatchPolicy.Cause.ECONOMIC_LOT, TripDispatchPolicy.assess(List.of(a, b), 100, 10));
         assertThrows(IllegalArgumentException.class, () -> TripDispatchPolicy.assess(List.of(a), -1, 10));
         assertEquals(TripDispatchPolicy.Cause.ACCUMULATING, TripDispatchPolicy.assess(List.of(a), Long.MAX_VALUE, 400));
     }
@@ -227,7 +227,7 @@ class SupplyPlannerTest {
                 List.of(new SupplyPlanner.Arrival(105, 0)), 23000, 400);
         assertFalse(uncovered);
         assertEquals(TripDispatchPolicy.Cause.ACCUMULATING, TripDispatchPolicy.assess(
-                List.of(new TripDispatchPolicy.Goods(3, FOOD, demand, uncovered)), 23000, 400));
+                List.of(new TripDispatchPolicy.Goods(3, 100, demand, uncovered)), 23000, 400));
         assertTrue(TripDispatchPolicy.uncovered(demand, need, 21, List.of(), 23000, 400),
                 "a long actual journey can be urgent even outside the initial lead window");
         assertTrue(TripDispatchPolicy.uncovered(demand, need, 21,

@@ -29,6 +29,17 @@ public final class GrayboxAgriculture {
                     ROCKY, new io.farfrontier.palemirror.frontier.v3.model.geometry.TerrainSurfacePalette(3, 31, 17,
                         List.of(new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationBlockState(
                             "minecraft:coarse_dirt", Map.of()), STONE, STONE, STONE, STONE))));
+    public static TerritoryAgriculture forLayout(io.farfrontier.palemirror.frontier.v3.model.FrontierWorldLayout layout) {
+        var compact = io.farfrontier.palemirror.frontier.v3.model.FrontierWorldLayout.compact();
+        if (layout.equals(compact)) return RULES;
+        var regions = new java.util.ArrayList<Region>();
+        for (int i = 0; i < layout.settlements().size(); i++) {
+            var previous = compact.settlements().get(i); var current = layout.settlements().get(i);
+            regions.add(new Region(current.x() - 320, current.z() - 320, current.x() + 320, current.z() + 320,
+                    RULES.biomeAt(previous.x(), previous.z())));
+        }
+        return new TerritoryAgriculture(RULES.defaultBiome(), RULES.biomes(), RULES.crops(), regions, RULES.surfaces());
+    }
     private GrayboxAgriculture() { }
     public static TerritoryAgriculture rules() { return RULES; }
 }

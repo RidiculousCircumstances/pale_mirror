@@ -10,7 +10,10 @@ import net.minecraft.world.level.block.state.BlockState;
 final class AgriculturalSurface {
     private AgriculturalSurface() { }
     static BlockState at(int x, int z) {
-        return STATES.computeIfAbsent(GrayboxAgriculture.rules().surfaceAt(x, z).orElseThrow(), fact -> {
+        return at(GrayboxAgriculture.rules(), x, z);
+    }
+    static BlockState at(io.farfrontier.palemirror.frontier.v3.model.agriculture.TerritoryAgriculture agriculture, int x, int z) {
+        return STATES.computeIfAbsent(agriculture.surfaceAt(x, z).orElseThrow(), fact -> {
             var tag = new CompoundTag(); tag.putString("Name", fact.kind());
             var properties = new CompoundTag(); fact.properties().forEach(properties::putString);
             tag.put("Properties", properties);

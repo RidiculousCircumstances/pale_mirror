@@ -23,7 +23,20 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                               io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionRules expedition,
                               io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRules extraction,
                               Execution execution, ProductionCatalog production, FieldBalance fields,
-                              io.farfrontier.palemirror.frontier.v3.model.tooling.ToolCatalog tools) {
+                              io.farfrontier.palemirror.frontier.v3.model.tooling.ToolCatalog tools, FrontierWorldLayout worldLayout) {
+    public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
+                           FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
+                           ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog,
+                           GoodsTradeRules goodsTrade, java.util.List<InitialSettlementStock> initialSettlementStocks,
+                           SettlementLabourRules labour,
+                           io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionRules expedition,
+                           io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRules extraction,
+                           Execution execution, ProductionCatalog production, FieldBalance fields,
+                           io.farfrontier.palemirror.frontier.v3.model.tooling.ToolCatalog tools) {
+        this(id, schemaVersion, cadence, spatial, rates, facilityCapacity, combat, hiveCommand, residentLife,
+                resourceHarvestColdTravelTicksPerEdge, workCatalog, goodsTrade, initialSettlementStocks, labour,
+                expedition, extraction, execution, production, fields, tools, FrontierWorldLayout.compact());
+    }
     public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
                            FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
                            ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog,
@@ -149,6 +162,7 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
     }
 
     public FrontierRuleset {
+        Objects.requireNonNull(worldLayout);
         java.util.Objects.requireNonNull(tools);
         java.util.Objects.requireNonNull(fields);
         if (schemaVersion < 25 && (!fields.equals(FieldBalance.uniform()) || extraction.pocket().isPresent()))
@@ -226,7 +240,8 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                 + (schemaVersion >= 18 ? "|" + extraction.canonicalText() : "")
                 + (schemaVersion >= 19 ? "|" + execution.canonicalText() : "")
                 + (schemaVersion >= 25 ? "|" + production.canonicalText() + "|fields=" + fields.canonicalText() : "")
-                + (tools.definitions().isEmpty() ? "" : "|tools=" + tools.canonicalText());
+                + (tools.definitions().isEmpty() ? "" : "|tools=" + tools.canonicalText())
+                + (worldLayout.equals(FrontierWorldLayout.compact()) ? "" : "|layout=" + worldLayout.canonicalText());
     }
 
     /** Balance and settlement policy for exact resident activities. No competing due-time queue. */

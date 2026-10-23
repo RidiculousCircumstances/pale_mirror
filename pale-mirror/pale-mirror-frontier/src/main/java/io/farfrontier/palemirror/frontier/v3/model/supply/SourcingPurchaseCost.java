@@ -39,7 +39,7 @@ public final class SourcingPurchaseCost {
         return Math.addExact(quote.cash(), Math.multiplyExact(wanted - quote.quantity(), referencePrice));
     }
     private static long cost(SourcingMarket.Offer offer, long quantity) {
-        return Math.addExact(Math.multiplyExact(quantity, offer.cashPerItem()), offer.tripCashCost());
+        return Math.addExact(Math.multiplyExact(quantity, offer.cashPerItem()), offer.transport().quote(quantity).cash());
     }
     private SourcingPurchaseCost() { }
 }

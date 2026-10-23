@@ -28,12 +28,12 @@ final class GoodsAcquisitionPricing {
                     || buyer.known().stream().noneMatch(known -> known.party().equals(order.party()))) continue;
             var seller = trade.participants().participants().get(order.party().id());
             if (seller == null || !GoodsParticipantStorage.eligible(state, seller, order.containerId(), item)) continue;
-            int quantity = (int) Math.min(shortage, Math.min(rules.maximumBatch(), Math.min(order.availableQuantity(),
+            int quantity = (int) Math.min(shortage, Math.min(GoodsTransportOptions.maximumQuantity(state, item), Math.min(order.availableQuantity(),
                     GoodsParticipantStorage.unclaimed(state, seller, order.containerId(), item))));
             if (quantity == 0) continue;
-            var timing = ProcurementTravelForecast.read(state, order, buyer);
+            var timing = ProcurementTravelForecast.read(state, order.containerId(), item, buyer,
+                    TransportOrganization.Itinerary.DESTINATION_COLLECTION);
             if (timing.isEmpty()) continue;
-            var cost = GoodsTransportValuation.estimate(state, buyer, timing.orElseThrow().journeyTicks(), 1);
             // Buyer collection spends owned provisions; only goods require a cash payment.
             // Their economic cost still contributes to the landed acquisition quote below.
             if (funding.isPresent()) {
@@ -41,6 +41,8 @@ final class GoodsAcquisitionPricing {
                         0, funding.orElseThrow().raw());
                 if (quantity == 0) continue;
             }
+            var cost = GoodsTransportOptions.forecast(state, buyer, timing.orElseThrow().journeyTicks(),
+                    Math.ceilDiv(quantity, GoodsTransportOptions.parcelSize(state, item))).orElseThrow().cost();
             var candidate = new AcquisitionQuote(order.unitPriceLimit(),
                     new FixedScalar(Math.ceilDiv(cost.resourceExpense().raw(), quantity)));
             if (best == null || candidate.total().compareTo(best.total()) < 0) best = candidate;

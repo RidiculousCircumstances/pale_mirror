@@ -97,7 +97,8 @@ class SettlementSourcingMarketTest {
                 "a stale low bid must not censor a live alternative before source selection");
         assertTrue(SettlementSourcingMarket.read(state, buyer, List.of(process), 10000L).offers().isEmpty(),
                 "expiry uses the evaluation instant, not the buyer's last review");
-        var timing = ProcurementTravelForecast.read(state, offer, buyer).orElseThrow();
+        var timing = ProcurementTravelForecast.read(state, offer.containerId(), offer.itemKind(), buyer,
+                TransportOrganization.Itinerary.DESTINATION_COLLECTION).orElseThrow();
         var provisions = GoodsTransportValuation.estimate(state, buyer, timing.journeyTicks(), 1);
         assertTrue(provisions.resourceExpense().raw() > 0);
         var acquisition = GoodsAcquisitionPricing.estimate(state, buyer, "minecraft:bread", 32, 0).orElseThrow();
@@ -108,16 +109,16 @@ class SettlementSourcingMarketTest {
         assertTrue(GoodsAcquisitionPricing.estimate(state, buyer, "minecraft:bread", 1, 0).orElseThrow().delivery()
                 .compareTo(acquisition.delivery()) > 0, "a small requirement cannot amortize freight over nonexistent cargo");
         long freight = provisions.resourceExpense().raw(), unit = offer.unitPriceLimit().raw();
-        var smallBudget = new FixedScalar(freight + 3 * unit);
+        var smallBudget = new FixedScalar(3 * unit);
         var small = GoodsAcquisitionPricing.purchase(state, buyer, "minecraft:bread", 32, 0, smallBudget).orElseThrow();
         assertEquals(Math.ceilDiv(freight, 3), small.delivery().raw(),
                 "price advice must amortize only over cargo the buyer can actually finance");
         assertTrue(small.total().compareTo(acquisition.total()) > 0);
         assertTrue(GoodsAcquisitionPricing.purchase(state, buyer, "minecraft:bread", 32, 0,
-                new FixedScalar(freight + unit - 1)).isEmpty(), "cash must cover both goods and the trip");
+                new FixedScalar(unit - 1)).isEmpty(), "owned provisions are not a cash invoice, but goods must be financed");
         assertEquals(acquisition, GoodsAcquisitionPricing.purchase(state, buyer, "minecraft:bread", 32, 0,
-                new FixedScalar(freight + 32 * unit)).orElseThrow());
-        assertEquals(provisions.resourceExpense().raw() + timing.labourTicks()
+                new FixedScalar(32 * unit)).orElseThrow());
+        assertEquals(provisions.resourceExpense().raw() + provisions.workerTicks()
                 * state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().orElseThrow().labourValuePerTick(),
                 market.offers().getFirst().tripCost(), "make-or-buy must include the same provisions as actual procurement");
         assertEquals(32, market.allocate().preferPurchase("minecraft:bread", 32, Long.MAX_VALUE, Optional.of(process)));

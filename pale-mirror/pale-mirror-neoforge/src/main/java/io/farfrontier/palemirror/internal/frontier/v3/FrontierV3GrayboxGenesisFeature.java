@@ -28,6 +28,8 @@ public final class FrontierV3GrayboxGenesisFeature extends Feature<NoneFeatureCo
 
     private synchronized Plan plan(ChunkGenerator generator, long seed) {
         var rules = FrontierV3WorldgenSettings.ruleset();
+        if (generator instanceof AgriculturalFlatGenerator flat && !rules.fields().agriculture().orElseThrow().equals(flat.agriculture()))
+            throw new IllegalStateException("graybox generator and canonical agriculture configurations disagree");
         var retained = plans.get(generator);
         if (retained != null) {
             if (retained.seed() != seed || retained.rules() != rules)
