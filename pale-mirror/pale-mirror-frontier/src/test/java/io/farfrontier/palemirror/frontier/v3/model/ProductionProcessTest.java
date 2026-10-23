@@ -590,14 +590,21 @@ class ProductionProcessTest {
     }
 
     @Test
-    void productionRefusesToStartWithoutAnExactInputStack() {
+    void productionRefusesToStartWithoutAnExactInputStack() throws Exception {
         FrontierWorldState initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:input"), 91L));
         FrontierWorldState withoutInput = productionTask(initial.withInventory(initial.inventory().withFungibleResources(
                 initial.inventory().fungibleResources().destroy(new SubjectId("custody:container-1-depot"),
                         Map.of(new SubjectId("lot:bootstrap-1-wheat"), 64), Map.of()))), StrategicTaskStatus.PENDING);
         StrategicTask task = withoutInput.strategicPlans().tasks().values().iterator().next();
 
-        List<ProposedEvent> planned = FrontierWorldRuntimeDefinition.planScheduled(withoutInput, ProductionProcess.start(task, 200L));
+        var action = ProductionProcess.start(task, 200L);
+        var preparation = FrontierWorldProcessCatalog.prepareScheduled(FrontierWorldRuntimeDefinition.processRegistry(),
+                withoutInput, action, action.dueAt()).orElseThrow();
+        java.util.function.Supplier<List<ProposedEvent>> completion;
+        try (var worker = java.util.concurrent.Executors.newSingleThreadExecutor()) {
+            completion = worker.submit(preparation::prepare).get();
+        }
+        List<ProposedEvent> planned = completion.get();
 
         ProductionBlocked event = assertInstanceOf(ProductionBlocked.class, planned.getFirst().payload());
         assertEquals(ProductionBlockReason.INPUT_UNAVAILABLE, event.reason());

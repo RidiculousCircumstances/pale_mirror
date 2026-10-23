@@ -224,8 +224,8 @@ public final class FrontierWorldProcessCatalog {
                 }
             }),
             Map.entry("frontier.hive.infection.task", (state, action) -> HiveInfectionProcess.plan(state, action)),
-            Map.entry("frontier.settlement.production.task.start", withPlanningRecovery(atExecutionTime(
-                    (state, action, instant) -> ProductionProcess.planStart(state, action, instant.ticks())))),
+            Map.entry("frontier.settlement.production.task.start", detached(withPlanningRecovery(atExecutionTime(
+                    (state, action, instant) -> ProductionProcess.planStart(state, action, instant.ticks()))))),
             Map.entry("frontier.settlement.production.task.complete", withPlanningRecovery(new FrontierScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ProductionProcess.planCompletion(state, action);

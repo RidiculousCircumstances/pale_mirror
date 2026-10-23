@@ -769,3 +769,20 @@ native path. Initialization failures retain their cause and fail startup.
 Actual installed bytecode:build/r239y-zeta-bytecode.txt. The ModLens compile
 snapshot does not contain Zeta; the installed1.1-40artifact is the inspected source.
 This is real startup initialization, not hiding first-tick metrics or a warmup world.
+
+
+R239z actual full pack startup: Zeta completed43ms recipe initialization before
+runtime admission (04:56:35); hostmax72.83ms over the retained measured window.
+Another independent86.357289ms readyturn at04:56:49.555782 remains: production
+start spent63.003746ms in BakeryBatchSelection.admissible → ProductionStockDemand
+→ full domestic/export assessment → sourcing/transport valuation. No IO wait.
+R239aa registers common production-task start with the existing detached advice
+capability, as for harvest admission. Bread/company/equipment start planners read
+only immutable state and navigation advice; canonical completion retains exact
+state/revision/action/instant and owns selected dependencies. Priority, weight,
+rescheduling and atomic stock/worker/facility reservation are unchanged.
+Existing missing-input negative test now traverses actual worker preparation and
+owner completion before checking the blocked task/objective. No new timing test.
+
+R239aa affected production lifecycle/negative input and kernel scheduled-advice
+checks plusguardrails PASS(build/r239aa-gates.log). No timing assertion.
