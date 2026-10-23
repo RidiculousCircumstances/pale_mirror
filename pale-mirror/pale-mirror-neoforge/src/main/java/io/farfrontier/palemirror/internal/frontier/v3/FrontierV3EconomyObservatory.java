@@ -33,7 +33,7 @@ final class FrontierV3EconomyObservatory implements CanonicalPublicationObserver
     }
     static void attach(FrontierV3ServerRuntime<FrontierWorldState,?> runtime,Path world) {
         if(!Boolean.getBoolean(PROPERTY)) return;
-        var observer=new FrontierV3EconomyObservatory(world.resolve("economy-analytics"));
+        var observer=new FrontierV3EconomyObservatory(world.toAbsolutePath().normalize().resolve("economy-analytics"));
         runtime.canonicalState().ifPresent(c->observer.latest.set(new Cut(c.state(),c.instant().ticks(),c.revision().value(),runtime.status().kind().name())));
         ACTIVE.put(runtime,observer);runtime.observePublications(observer);observer.worker.start();
     }
