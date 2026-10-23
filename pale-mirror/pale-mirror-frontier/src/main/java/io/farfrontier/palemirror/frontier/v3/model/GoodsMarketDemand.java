@@ -31,7 +31,7 @@ final class GoodsMarketDemand {
                         other.unitPriceLimit().raw(), demand.budget().raw(), now);
                 if (freight.isEmpty()) continue;
                 var offer = new SellerPriceDiscovery.Offer(provider.party().id(), freight.orElseThrow().quantity(),
-                        other.unitPriceLimit().plus(new FixedScalar(freight.orElseThrow().deliveryPerItem())));
+                        other.unitPriceLimit().plus(new FixedScalar(freight.orElseThrow().deliveryPerItem())), other.unitPriceLimit());
                 competitors.merge(provider.party().id(), offer, (a, b) -> {
                     int price = a.landedPrice().compareTo(b.landedPrice());
                     return price < 0 || price == 0 && a.quantity() >= b.quantity() ? a : b;
@@ -39,7 +39,7 @@ final class GoodsMarketDemand {
             }
             result.add(new SellerPriceDiscovery.Demand(buyer.party().id(), quantity, demand.budget(), order.unitPriceLimit(),
                     FixedScalar.ZERO, List.copyOf(competitors.values()), new FixedScalar(delivery.orElseThrow().tripExpense()),
-                    delivery.orElseThrow().minimumDispatchQuantity()));
+                    delivery.orElseThrow().minimumDispatchQuantity(), FixedScalar.ZERO));
         }
         return new SellerPriceDiscovery.Market(result);
     }

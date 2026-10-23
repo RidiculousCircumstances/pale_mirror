@@ -5,7 +5,7 @@ import io.farfrontier.palemirror.frontier.v3.model.market.FundedCargoLot;
 import io.farfrontier.palemirror.frontier.v3.model.supply.TripDispatchPolicy;
 import java.util.*;
 
-/** Shared provisional cash freight and dispatch eligibility; no route or trip admission.
+/** Buyer collection: provisions have economic value but are not a cash freight invoice; no route or trip admission.
  * Future output may use a current eligible warehouse but is never reported as stored stock. */
 final class GoodsDeliveryAdvice {
     enum Supply { STORED, CONDITIONAL_PRODUCTION }
@@ -40,7 +40,7 @@ final class GoodsDeliveryAdvice {
                     timing.orElseThrow().journeyTicks(), 1).resourceExpense().raw();
         }
         int carried = FundedCargoLot.quantity(Math.min(quantity, state.bootstrap().ruleset().goodsTrade().maximumBatch()),
-                goodsPrice, expense, budget);
+                goodsPrice, 0, budget);
         if (carried == 0) return Optional.empty();
         var cause = GoodsDispatchAdvice.assess(state, buyer, Map.of(item, carried), delivery, atTick);
         if (cause == TripDispatchPolicy.Cause.ACCUMULATING) return Optional.empty();

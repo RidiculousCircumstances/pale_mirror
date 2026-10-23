@@ -34,9 +34,11 @@ final class GoodsAcquisitionPricing {
             var timing = ProcurementTravelForecast.read(state, order, buyer);
             if (timing.isEmpty()) continue;
             var cost = GoodsTransportValuation.estimate(state, buyer, timing.orElseThrow().journeyTicks(), 1);
+            // Buyer collection spends owned provisions; only goods require a cash payment.
+            // Their economic cost still contributes to the landed acquisition quote below.
             if (funding.isPresent()) {
                 quantity = FundedCargoLot.quantity(quantity, order.unitPriceLimit().raw(),
-                        cost.resourceExpense().raw(), funding.orElseThrow().raw());
+                        0, funding.orElseThrow().raw());
                 if (quantity == 0) continue;
             }
             var candidate = new AcquisitionQuote(order.unitPriceLimit(),

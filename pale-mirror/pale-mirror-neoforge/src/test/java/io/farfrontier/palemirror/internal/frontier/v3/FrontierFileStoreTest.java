@@ -115,15 +115,12 @@ class FrontierFileStoreTest {
     @Test
     void fileStoreRecoversReplicaCustodySnapshotAndFencedWalTransition(@TempDir Path directory) {
         WorldId world = new WorldId("frontier:replica-file-store");
-        SubjectId object = new SubjectId("container:file-store-a"), scope = new SubjectId("scope:file-store-a"), provider = new SubjectId("provider:file-store-a");
-        PhysicalReplicaCustodyState custody = PhysicalReplicaCustodyState.empty()
-                .declare(PhysicalReplicaRecord.expected(object, "container.depot", 10L, "sha256:a", "owned:genesis"))
-                .observe(object, 10L, 1L, "sha256:a", "owned:genesis", 10L)
-                .acquire(new PhysicalCustodyLease(scope, object, provider, 1L, 10L, 2L, PhysicalCustodyLeaseStatus.ACQUIRED, null));
-        FrontierWorldState snapshotState = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L))
-                .withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody));
+        SubjectId object = new SubjectId("container:1-depot");
+        SubjectId scope = io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody.scopeId(object);
+        FrontierWorldState snapshotState = io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustodyFixtures
+                .observedAndHeld(FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L)), object);
         TransactionId transactionId = new TransactionId("transaction:replica-file-store");
-        CustodyReleased released = new CustodyReleased(scope, 1L, 10L, 2L);
+        CustodyReleased released = new CustodyReleased(scope, 1L, 1L, 2L);
         TransactionRecord transaction = new TransactionRecord(transactionId, world, new Revision(1L), new SimInstant(1L), List.of(
                 new FrontierEvent(1, new EventId("event:replica-file-store"), transactionId, world, new Revision(1L), new SimInstant(1L),
                         scope, CauseChain.root(new CommandId("command:replica-file-store")), released)));

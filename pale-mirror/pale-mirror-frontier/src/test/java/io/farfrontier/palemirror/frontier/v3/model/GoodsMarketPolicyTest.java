@@ -25,6 +25,27 @@ class GoodsMarketPolicyTest {
         assertTrue(state.companies().goodsTrade().contracts().isEmpty());
         assertTrue(state.companies().goodsTrade().priceHistory().commodities().isEmpty());
     }
+    @Test void forecastCashShortfallDoesNotEraseTheValueOfUsefulSurplus() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:retention"),
+                125L, FrontierRulesets.dynamicFarmingGraybox()));
+        var participant = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:5"));
+        var view = GoodsParticipantAssessment.view(state, participant, 2400L);
+        var supply = view.supplyPlan().orElseThrow(); var old = supply.economy().orElseThrow();
+        var saleable = new TreeMap<>(old.saleableStock()); saleable.put("minecraft:bread", 41L);
+        var economy = new io.farfrontier.palemirror.frontier.v3.model.economy.EconomicPlan(old.horizonTicks(),
+                old.domesticTargets(), old.additionalProduction(), old.purchaseBudgets(), old.retainedLiquidity(),
+                100_000_000, old.contractReceivables(), old.checkpoints(), old.exports(), old.constraints(),
+                old.purchasePrices(), old.fundedRestarts(), saleable);
+        var plan = new io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Plan(supply.demands(),
+                supply.reserves(), supply.preferredPurchaseSpending(), supply.preferredPurchaseQuantities(),
+                supply.inputRequirements(), Optional.of(economy), supply.backedRecipes());
+        var stressed = new GoodsParticipantView(participant, view.residents(), view.availableMoney(), view.stocks(),
+                view.purchaseLimits(), Optional.of(plan));
+        var references = new TreeMap<String, FixedScalar>(); view.stocks().keySet().forEach(item -> references.put(item, FixedScalar.ONE));
+        var production = new GoodsProductionPricing.Assessment(Map.of("minecraft:bread", FixedScalar.whole(4)), Map.of(), List.of());
+        assertEquals(FixedScalar.whole(4), GoodsEconomicPricing.assess(state, stressed, "minecraft:bread",
+                references, production, Optional.empty(), 2400).retained());
+    }
     @Test void immediateConsumptionFundingDoesNotLeakIntoInheritedIngredientDeadlines() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:funding-alternative"),
                 125L, FrontierRulesets.dynamicFarmingGraybox()));

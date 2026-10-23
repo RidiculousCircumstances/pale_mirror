@@ -42,11 +42,11 @@ final class ContainerPlayerEditProcess {
         // Validate every predecessor against the same incoming state before publishing any successor.
         for (var member : edit.members()) validate(state, member);
         var next = state;
-        if (edit.exactIngress().isPresent()) {
-            switch (edit.exactIngress().orElseThrow()) {
-                case ExactItemIngress.Contribution contribution -> next = FrontierWorldPhysicalObservationProcess.reduceResourceDeposit(
+        if (edit.exactChange().isPresent()) {
+            switch (edit.exactChange().orElseThrow()) {
+                case ExactItemContainerChange.Contribution contribution -> next = FrontierWorldPhysicalObservationProcess.reduceResourceDeposit(
                         next, contribution.after().economicOwnerId(), new ResourceDeposited(contribution.after()));
-                case ExactItemIngress.Returned returned -> {
+                case ExactItemContainerChange.Transfer returned -> {
                     if (!returned.before().equals(state.inventory().items().get(returned.before().id())))
                         throw new IllegalArgumentException("exact ingress differs from its retained canonical predecessor");
                     var transfer = returned.transfer();

@@ -22,7 +22,7 @@ class MarketPricingTest {
         assertEquals(new FixedScalar(2_399_999), SellerPriceDiscovery.ask(FixedScalar.whole(9), 10, market(competed)),
                 "competition includes fixed freight at the selected lot, not an arbitrary liquidation floor");
     }
-    @Test void recurringProductionValuesRetentionAndCanTradeAtBreakEvenWithoutASeedFloor() {
+    @Test void recurringProductionValuesRetentionAndDoesNotLiquidateWithoutGain() {
         var cost = new FixedScalar(1_340_000);
         var rival = new SellerPriceDiscovery.Offer(new SubjectId("seller:rival"), 8, new FixedScalar(400));
         var demand = new SellerPriceDiscovery.Demand(new SubjectId("buyer:one"), 2, FixedScalar.whole(10),
@@ -30,8 +30,8 @@ class MarketPricingTest {
         assertEquals(cost, SellerPriceDiscovery.ask(new FixedScalar(398), 8, market(demand), cost),
                 "a tiny rival liquidation is not authority to discard recurring production value");
         var atCost = new SellerPriceDiscovery.Demand(demand.buyer(), 2, FixedScalar.whole(10), cost, FixedScalar.ZERO, List.of());
-        assertEquals(cost, SellerPriceDiscovery.ask(FixedScalar.whole(20), 8, market(atCost), cost),
-                "equal net gain prefers a feasible exchange to an unfillable old ask");
+        assertEquals(FixedScalar.whole(20), SellerPriceDiscovery.ask(FixedScalar.whole(20), 8, market(atCost), cost),
+                "without additional benefit retaining useful stock is an admissible choice");
         var cheapHistory = new FixedScalar(2420);
         var context = new MarketPricePolicy.Context(FixedScalar.ZERO, Optional.empty(), 1000, market(atCost), Optional.empty(),
                 Optional.of(new ResourceEconomicValue(cost, FixedScalar.whole(3))));
@@ -109,8 +109,8 @@ class MarketPricingTest {
                 quote.lastSale(), Optional.of(quote), 96001, rules));
     }
     @Test void budgetStockAndAlternativeWarehouseIdentityAreFinite() {
-        assertEquals(FixedScalar.ONE, SellerPriceDiscovery.ask(FixedScalar.ONE, 100, market(demand(1, 100, 3, 10))),
-                "equal revenue retains the current quote; the buyer cannot spend ten when it owns three");
+        assertEquals(FixedScalar.whole(3), SellerPriceDiscovery.ask(FixedScalar.ONE, 100, market(demand(1, 100, 3, 10))),
+                "equal revenue prefers selling one item for three over three items for one");
         var same = demand(1, 100, 3, 10);
         assertThrows(IllegalArgumentException.class, () -> market(same, same));
         assertEquals(FixedScalar.whole(10), SellerPriceDiscovery.ask(FixedScalar.ONE, 1, market(demand(1, 100, 100, 10))));
@@ -126,6 +126,19 @@ class MarketPricingTest {
         assertTrue(history.reference("grain", 1000).orElseThrow().raw() > 3_900_000);
         for (int i = 4; i <= 60; i++) history = history.record("grain", sale(i, 1100 + i, 1, 4));
         assertEquals(MarketPriceHistory.MAX_SALES, history.commodities().get("grain").size());
+    }
+    @Test void buyerCollectionDoesNotDeductOwnedProvisionsFromItsCashBudget() {
+        var buyer = new SellerPriceDiscovery.Demand(new SubjectId("settlement:9"), 41,
+                new FixedScalar(4_000_008), FixedScalar.whole(4), FixedScalar.ZERO, List.of(),
+                FixedScalar.whole(4), 1, FixedScalar.ZERO);
+        var ask = SellerPriceDiscovery.ask(new FixedScalar(11_642_314), 41, market(buyer), FixedScalar.ZERO);
+        assertTrue(ask.raw() >= 90_000, "existing supplies must not turn four coins into microcoins");
+        int bought = (int) Math.min(41, 4_000_008 / ask.raw());
+        assertTrue(bought > 0 && ask.raw() * bought <= 4_000_008);
+        assertTrue(ask.raw() + Math.ceilDiv(4_000_000, bought) <= buyer.landedLimit().raw(),
+                "noncash supplies still contribute to the buyer's economic valuation");
+        assertEquals(new FixedScalar(11_642_314), SellerPriceDiscovery.ask(new FixedScalar(11_642_314),
+                41, market(buyer), FixedScalar.whole(5)), "useful food need not be sold to an underfunded buyer");
     }
     private static SellerPriceDiscovery.Market market(SellerPriceDiscovery.Demand... buyers) {
         return new SellerPriceDiscovery.Market(List.of(buyers));

@@ -86,7 +86,9 @@ final class FrontierV3ContainerClickExecutor {
             return refused(player, target, slot, kind, "PHYSICAL_EFFECT_PENDING");
         if (!exactSlotsCurrent(state, containerId, chest))
             return refused(player, target, slot, kind, "EXACT_ITEM_LAYOUT_CHANGED");
-        if (cargoSlot >= 0 && state.inventory().itemAt(containerId, cargoSlot).isPresent()) return null;
+        if (cargoSlot >= 0 && state.inventory().itemAt(containerId, cargoSlot).isPresent()
+                && (kind != ClickType.PICKUP && kind != ClickType.QUICK_MOVE || !menu.getCarried().isEmpty()))
+            return refused(player, target, slot, kind, "UNSUPPORTED_INDIVIDUAL_EXCHANGE");
         if (kind == ClickType.PICKUP_ALL && !menu.getCarried().isEmpty()
                 && state.inventory().items().values().stream().anyMatch(item ->
                     item.custody() instanceof InventoryCustody.ContainerSlot source

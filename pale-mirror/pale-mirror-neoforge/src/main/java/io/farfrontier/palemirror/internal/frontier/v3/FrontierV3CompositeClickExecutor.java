@@ -20,7 +20,7 @@ final class FrontierV3CompositeClickExecutor {
             FrontierV3ContainerClickExecutor.conflict(runtime, transaction.members().getFirst(), "native click has no captured outcome");
             return false;
         }
-        boolean unchanged = outcome.exactIngress().isEmpty()
+        boolean unchanged = outcome.exactChange().isEmpty()
                 && outcome.members().stream().allMatch(member -> member.before().equals(member.after()))
                 && outcome.returning().map(source -> source.quantity() == source.remaining()).orElse(true);
         if (unchanged) {

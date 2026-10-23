@@ -24,13 +24,13 @@ final class ContainerPlayerEditPayloadCodec implements PayloadCodec {
             out.writeLong(source.epoch()); out.writeInt(source.slot()); writeString(out, source.itemKind());
             out.writeInt(source.quantity()); out.writeInt(source.remaining());
         }
-        out.writeBoolean(edit.exactIngress().isPresent());
-        if (edit.exactIngress().isPresent()) {
-            switch (edit.exactIngress().orElseThrow()) {
-                case ExactItemIngress.Contribution contribution -> {
+        out.writeBoolean(edit.exactChange().isPresent());
+        if (edit.exactChange().isPresent()) {
+            switch (edit.exactChange().orElseThrow()) {
+                case ExactItemContainerChange.Contribution contribution -> {
                     out.writeByte(1); ExactItemStateCodec.write(out, contribution.after());
                 }
-                case ExactItemIngress.Returned returned -> {
+                case ExactItemContainerChange.Transfer returned -> {
                     out.writeByte(2); ExactItemStateCodec.write(out, returned.before()); ExactItemStateCodec.write(out, returned.after());
                 }
             }
@@ -49,9 +49,9 @@ final class ContainerPlayerEditPayloadCodec implements PayloadCodec {
         Optional<ContainerPlayerEditObserved.PlayerReturn> source = in.readBoolean()
                 ? Optional.of(new ContainerPlayerEditObserved.PlayerReturn(readSubject(in).value(), readSubject(in).value(),
                     in.readLong(), in.readInt(), readString(in), in.readInt(), in.readInt())) : Optional.empty();
-        Optional<ExactItemIngress> exact = in.readBoolean() ? Optional.of(switch (in.readUnsignedByte()) {
-            case 1 -> new ExactItemIngress.Contribution(ExactItemStateCodec.read(in));
-            case 2 -> new ExactItemIngress.Returned(ExactItemStateCodec.read(in), ExactItemStateCodec.read(in));
+        Optional<ExactItemContainerChange> exact = in.readBoolean() ? Optional.of(switch (in.readUnsignedByte()) {
+            case 1 -> new ExactItemContainerChange.Contribution(ExactItemStateCodec.read(in));
+            case 2 -> new ExactItemContainerChange.Transfer(ExactItemStateCodec.read(in), ExactItemStateCodec.read(in));
             default -> throw new IllegalArgumentException("unknown exact ingress provenance");
         }) : Optional.empty();
         return new ContainerPlayerEditObserved(player, interaction, members, source, exact);
