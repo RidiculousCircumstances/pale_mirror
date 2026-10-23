@@ -14,7 +14,7 @@ const $ = (id) => document.getElementById(id),
     );
 const n = (x) =>
     Number(x || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 }),
-  money = (x) => n(Number(x || 0) / 1e6),
+  money = (x) => (Number(x || 0) / 1e6).toLocaleString("ru-RU", { maximumFractionDigits: 6 }),
   short = (x) => String(x ?? "").replace(/^minecraft:/, "");
 let data = null,
   tab = "towns",
