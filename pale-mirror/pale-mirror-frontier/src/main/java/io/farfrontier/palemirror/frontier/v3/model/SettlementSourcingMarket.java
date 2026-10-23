@@ -5,13 +5,28 @@ import java.util.*;
 
 /** Canonical economic facts -> pure sourcing advice; no recursive participant views or ledger writes. */
 final class SettlementSourcingMarket {
-    private static final ImmutableInputView<List<GoodsTradeOrder>> ORDERED = new ImmutableInputView<>();
+    private record Query(GoodsParticipant buyer, long now) { }
+    private record Facts(Map<String, Long> references, List<SourcingMarket.Offer> offers) {
+        private Facts { references = Map.copyOf(references); offers = List.copyOf(offers); }
+    }
+    private static final ImmutableInputView<BoundedValueMemo<Query, Facts>> FACTS = new ImmutableInputView<>();
     static SourcingMarket read(FrontierWorldState state, GoodsParticipant buyer, List<SupplyPlanner.Process> capacities, long now) {
         if (now < 0) throw new IllegalArgumentException("negative sourcing instant");
         var tradeRules = state.bootstrap().ruleset().goodsTrade();
         var selection = tradeRules.supplyPlanning().sourcing();
         if (selection.isEmpty()) return SourcingMarket.none();
         var policy = selection.orElseThrow();
+        // Equipment and production compare different capacities against the same
+        // current market. Share only observed offers, never their allocation or
+        // the resulting make-or-buy decision. A draft reservation changes state.
+        var facts = FACTS.get(List.of(state), () -> new BoundedValueMemo<Query, Facts>(256))
+                .get(new Query(buyer, now), () -> observe(state, buyer, now));
+        return new SourcingMarket(state.inventory().economics().availableToReserve(buyer.party().id()).raw(),
+                policy.switchingSavingsPermille(), SourcingValuation.processes(capacities, facts.references(), facts.offers(),
+                        policy.labourValuePerTick()), facts.offers());
+    }
+    private static Facts observe(FrontierWorldState state, GoodsParticipant buyer, long now) {
+        var tradeRules = state.bootstrap().ruleset().goodsTrade();
         var trade = state.companies().goodsTrade();
         var references = new TreeMap<String, Long>();
         tradeRules.policies().get(buyer.policy()).forEach(commodity -> {
@@ -19,11 +34,8 @@ final class SettlementSourcingMarket {
                     .orElse(commodity.minimumSellPrice()).raw());
         });
         var offers = new TreeMap<String, SourcingMarket.Offer>();
-        var ordered = ORDERED.get(List.of(trade.orders()), () -> trade.orders().values().stream()
-                .sorted(Comparator.comparing(GoodsTradeOrder::unitPriceLimit).thenComparing(GoodsTradeOrder::id)).toList());
-        for (var order : ordered) {
-            if (order.side() != GoodsTradeOrder.Side.SELL || !order.counterparty().equals(buyer.party())
-                    || order.expiresAtTick() <= now || order.availableQuantity() == 0 || !references.containsKey(order.itemKind())
+        for (var order : GoodsSaleQuotes.forBuyer(trade, buyer.party())) {
+            if (order.expiresAtTick() <= now || order.availableQuantity() == 0 || !references.containsKey(order.itemKind())
                     || buyer.known().stream().noneMatch(known -> known.party().equals(order.party()))) continue;
             var seller = trade.participants().participants().get(order.party().id());
             if (seller == null || !GoodsParticipantStorage.eligible(state, seller, order.containerId(), order.itemKind())) continue;
@@ -39,10 +51,7 @@ final class SettlementSourcingMarket {
             offers.put(pool, new SourcingMarket.Offer(pool, order.itemKind(), quantity, order.unitPriceLimit().raw(),
                     order.unitPriceLimit().raw(), timing.orElseThrow().deliveryTicks(), transport));
         }
-        var available = List.copyOf(offers.values());
-        return new SourcingMarket(state.inventory().economics().availableToReserve(buyer.party().id()).raw(),
-                policy.switchingSavingsPermille(), SourcingValuation.processes(capacities, references, available,
-                        policy.labourValuePerTick()), available);
+        return new Facts(references, List.copyOf(offers.values()));
     }
     private SettlementSourcingMarket() { }
 }

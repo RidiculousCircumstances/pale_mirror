@@ -667,3 +667,40 @@ loading. R239w resolves that closed provider registry during existing recovery
 composition, before ordinary ticks. No scene effects, fake ticks or hidden work
 are executed to initialize it. Existing physical-executor/scene-registration
 checks andguardrails PASS (r239w-gates.log). Further live measurement required.
+
+R239w live pilot d98cca8d-c16e-4704-ba05-a1032a46b55b passed both visits and
+unchanged historical-incident assertions. Canonical debt reached241 in HOT,
+recovered to0 before logout, then fluctuated0–68 in the retained COLD window.
+Host max69.29ms before logout; logout produced82.074298ms at04:28:00.695+05.
+JFR proves four native extraction-region RELEASE commands waiting4–6ms each
+for canonical WAL, in addition to ordinary unload CPU. No new quarantine.
+The116.64ms ready-turn sample at04:23:46.514 overlaps JFR start04:23:46.494;
+its source remains unconfirmed (recording contains no useful stack for that
+interval), so it is not erased or represented as a fixed product defect.
+Measurement stopped before the next Gradle run. Receipts: r239w-short-waits.jfr,
+r239w-autosave.tsv, r239w-throughput.log, r239w-hot-result.json. R239w registry
+verification additionally uses r239w-registry-gates.log (actual scene test class).
+
+R239x separates final native worksite observation from canonical release. Unload
+captures the exact physical witnesses and submits their journal image; ordinary
+beforeTurn uses the existing whole-region durability gate to release custody.
+Inactive cached chunks and unloaded/recovered chunks share that same release
+rule. A changed block converts its exact settled witness to EXTERNAL, preventing
+an old positive observation from releasing a divergent region; unresolved effect
+receipts retain their own recovery owner. No timer, invented observation, new
+canonical queue or independent authority registry is introduced.
+
+Worker profiles also identify repeated global order scans and repeated market
+observation during equipment/production comparison. GoodsSaleQuotes indexes
+immutable SELL orders by their explicitly declared buyer; sourcing and logistics
+share it while retaining their own expiry/stock rules. Sourcing shares observed
+quotes only for exact state/buyer/instant and independently values each producer's
+capacity. Travel-length advice depends on exact rules, missions, groups, surfaces
+and actor locations rather than invalidating for a stock-only candidate draft;
+receiving-capacity selection still uses the complete current state. This changes
+neither commercial consent, prices, budget allocation nor delivery authority.
+Verification PASS: sourcing, equipment purchase, consolidated trade/recovery,
+worksite witness/recovery and asynchronous block-journal failure/receipt checks,
+plus guardrails. Receipts r239x-gates.log (one invalid out-of-bounds fixture,
+corrected) and r239x-final-gates.log (all affected final checks pass). No new
+wall-clock tests. Deployment measurement remains required; no completion claim.

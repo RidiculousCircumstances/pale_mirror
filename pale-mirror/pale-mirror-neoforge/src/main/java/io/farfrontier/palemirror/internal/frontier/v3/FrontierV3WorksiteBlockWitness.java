@@ -38,6 +38,13 @@ record FrontierV3WorksiteBlockWitness(WorksiteBlock declaration, BlockExtraction
     boolean settledCurrent(WorksiteBlock current, BlockExtraction.Block actual) {
         return phase == Phase.SETTLED && declaration.equals(current) && current.block().equals(actual);
     }
+    /** A final observation cannot retain old settled authority over a changed block.
+     * Unresolved effects keep their exact operation/recovery owner, never get reclassified here. */
+    java.util.Optional<FrontierV3WorksiteBlockWitness> departure(WorksiteBlock current, BlockExtraction.Block actual) {
+        if (phase != Phase.SETTLED || !declaration.equals(current)) return java.util.Optional.empty();
+        return java.util.Optional.of(current.block().equals(actual) ? this
+                : new FrontierV3WorksiteBlockWitness(current, actual, Phase.EXTERNAL));
+    }
     /** No unresolved native write, resource effect or foreign observation may cross a withdrawal. */
     static boolean permitsProjectionWithdrawal(FrontierV3WorksiteBlockWitness witness, WorksiteBlock current) {
         return witness == null || witness.phase == Phase.SETTLED && witness.declaration.key().equals(current.key())

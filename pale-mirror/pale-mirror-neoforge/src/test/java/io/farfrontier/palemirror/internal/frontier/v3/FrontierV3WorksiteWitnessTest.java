@@ -130,6 +130,17 @@ class FrontierV3WorksiteWitnessTest {
         assertTrue(settled.settledCurrent(before, stone));
         assertFalse(settled.settledCurrent(after, stone), "COLD depletion must project even at a non-ticking view border");
         assertFalse(settled.settledCurrent(before, air), "player changes are not already-current presentation");
+        assertEquals(Optional.of(settled), settled.departure(before, stone));
+        assertTrue(settled.departure(after, air).isEmpty(), "old observation cannot certify another source revision");
+        var changed = settled.departure(before, air).orElseThrow();
+        var recovered = FrontierV3WorksiteBlockWitness.read(changed.write());
+        assertEquals(FrontierV3WorksiteBlockWitness.Phase.EXTERNAL, recovered.phase());
+        assertEquals(air, recovered.before());
+        assertFalse(recovered.settledCurrent(before, stone), "unload cannot reuse old authority after a physical change");
+        assertFalse(FrontierV3WorksiteBlockWitness.permitsProjectionWithdrawal(recovered, before));
+        var pending = new FrontierV3WorksiteBlockWitness(before, stone,
+                FrontierV3WorksiteBlockWitness.Phase.EFFECT_BLOCK_APPLIED, Optional.of("effect:pending-departure"));
+        assertTrue(pending.departure(before, air).isEmpty(), "departure cannot overwrite an unresolved effect receipt");
         assertFalse(new FrontierV3WorksiteBlockWitness(after, stone, FrontierV3WorksiteBlockWitness.Phase.PREPARED)
                 .settledCurrent(after, air), "a matching block alone is not settled custody evidence");
     }

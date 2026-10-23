@@ -205,7 +205,20 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
     }
     @Override public void departure(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             net.minecraft.world.level.chunk.LevelChunk chunk) {
-        departure(level, runtime, chunk, true);
+        var state = runtime.decodedState().orElse(null);
+        if (state == null) return;
+        var regions = geometry(state).regions(new ExtractionGeometryIndex.Chunk(chunk.getPos().x, chunk.getPos().z));
+        if (regions.isEmpty()) return;
+        var ledger = FrontierV3GrayboxLedger.get(level);
+        for (var region : regions) {
+            var lease = state.replicaCustody().custodyByScope().get(region.scopeId());
+            if (lease != null && lease.status() == PhysicalCustodyLeaseStatus.ACQUIRED)
+                captureDeparture(level, state, chunk, region, ledger);
+        }
+        // Native unload has the last physical image, but is not a transaction
+        // drain. beforeTurn withdraws the exact retained lease only after these
+        // witnesses are durable, including after restart or a pending operation.
+        ledger.persistAsync(level);
     }
     private void departure(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             net.minecraft.world.level.chunk.LevelChunk chunk, boolean withdrawPreparing) {
@@ -220,26 +233,21 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
                 continue;
             }
             if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED) continue;
-            var currentState = state;
             // Preserve generated block facts before the chunk disappears. Pending
             // work may delay canonical release, but may not erase departure evidence.
             var ledger = FrontierV3GrayboxLedger.get(level);
-            for (var declaration : regionBlocks(state, region)) {
-                var position = FrontierV3WorksiteProjection.position(declaration);
-                var witness = FrontierV3WorksiteEvidence.at(level, ledger, state, position);
-                if (witness != null && witness.settledCurrent(declaration,
-                        FrontierV3MinecraftBlockExtraction.describe(chunk.getBlockState(position)))) ledger.worksite(witness);
-            }
-            ledger.persist(level);
-            if (currentState.extractionSites().work().values().stream().anyMatch(job -> job.siteId().equals(region.siteId())
-                    && job.pending().isPresent() && job.target().filter(target ->
-                    region.contains(currentState.extractionSites().deposits().get(region.siteId()).site().layout().require(target.key().cell()).source())).isPresent())) continue;
-            boolean matches = index.cells(region).stream().allMatch(cell ->
-                    FrontierV3MinecraftBlockExtraction.describe(chunk.getBlockState(new BlockPos(cell.source().x(), cell.source().y(), cell.source().z())))
-                            .equals(currentState.extractionSites().deposits().get(region.siteId()).cells().get(cell.id()).knownBlock()));
-            if (matches) submit(runtime, new ExtractionSourceBoundary(region, ExtractionSourceBoundary.Operation.RELEASE,
-                    lease.authorityEpoch(), lease.expectedReplicaRevision(), ExtractionSourceCustody.fingerprint(state.extractionSites(), region)));
+            captureDeparture(level, state, chunk, region, ledger);
+            withdrawProjection(level, runtime, region);
             state = runtime.decodedState().orElseThrow();
+        }
+    }
+    private void captureDeparture(ServerLevel level, FrontierWorldState state, net.minecraft.world.level.chunk.LevelChunk chunk,
+            ExtractionRegion region, FrontierV3GrayboxLedger ledger) {
+        for (var declaration : regionBlocks(state, region)) {
+            var position = FrontierV3WorksiteProjection.position(declaration);
+            var witness = FrontierV3WorksiteEvidence.at(level, ledger, state, position);
+            if (witness != null) witness.departure(declaration,
+                    FrontierV3MinecraftBlockExtraction.describe(chunk.getBlockState(position))).ifPresent(ledger::worksite);
         }
     }
     private List<WorksiteBlock> regionBlocks(FrontierWorldState state, ExtractionRegion region) {
@@ -254,7 +262,7 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
         for (var region : geometry(state).regions()) {
             afterProjection(level, runtime); // Complete a fully observed successor before releasing its saved region.
             var chunk = level.getChunkSource().getChunkNow(region.chunkX(), region.chunkZ());
-            if (chunk != null) departure(level, runtime, chunk);
+            if (chunk != null) departure(level, runtime, chunk, true);
         }
     }
 }

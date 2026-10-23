@@ -25,9 +25,8 @@ final class LogisticsReserveSupply implements ReserveSupplyPort {
         if (participant != null && state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().isPresent()) {
             // Quotes extend the planning horizon before the first caravan. They
             // remain estimates, never dated incoming stock or promised delivery.
-            for (var order : state.companies().goodsTrade().orders().values()) {
-                if (order.side() != GoodsTradeOrder.Side.SELL || !order.counterparty().equals(participant.party())
-                        || order.availableQuantity() == 0) continue;
+            for (var order : GoodsSaleQuotes.forBuyer(state.companies().goodsTrade(), participant.party())) {
+                if (order.availableQuantity() == 0) continue;
                 ProcurementTravelForecast.read(state, order.containerId(), order.itemKind(), participant,
                         TransportOrganization.Itinerary.DESTINATION_COLLECTION).ifPresent(estimate -> {
                     long lead = Math.addExact(estimate.journeyTicks(), state.bootstrap().ruleset().goodsTrade().reviewInterval());

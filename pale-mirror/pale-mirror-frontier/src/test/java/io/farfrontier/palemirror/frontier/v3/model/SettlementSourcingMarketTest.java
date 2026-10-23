@@ -7,6 +7,27 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SettlementSourcingMarketTest {
+    @Test void provisionalTravelTracksMovingContainersAcrossAlternativePlanningStates() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:mobile-quote-distance"),
+                125L, FrontierRulesets.marketQuarryGraybox()));
+        var asset = state.transportFleet().assets().values().stream().min(Comparator.comparing(a -> a.actorId())).orElseThrow();
+        var target = FrontierWorldState.depotId(asset.homeSettlementId());
+        var actors = new HashMap<>(state.actorLocations());
+        var location = actors.get(asset.actorId());
+        var bounds = state.bootstrap().bounds();
+        actors.put(asset.actorId(), location.withBody(new BodyPosition(bounds.minX() + 1, location.body().y(), bounds.minZ() + 1)));
+        var moved = state.withChanges(FrontierWorldStateUpdate.begin().actorLocations(actors));
+        ImmutablePlanningScope.within(() -> {
+            var initial = ProcurementTravelForecast.between(state, asset.containerId(), target,
+                    TransportOrganization.Itinerary.DESTINATION_COLLECTION);
+            var later = ProcurementTravelForecast.between(moved, asset.containerId(), target,
+                    TransportOrganization.Itinerary.DESTINATION_COLLECTION);
+            assertTrue(later.journeyTicks() > initial.journeyTicks(), "stock-only reuse cannot freeze mobile endpoint positions");
+            assertEquals(initial, ProcurementTravelForecast.between(state, asset.containerId(), target,
+                    TransportOrganization.Itinerary.DESTINATION_COLLECTION));
+            return true;
+        });
+    }
     @Test void emptyDemandDrivenRosterDoesNotErasePotentialSourceCapacityOrGrantPermission() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:potential-capacity"),
                 20260918065L, FrontierRulesets.marketQuarryGraybox()));
@@ -122,6 +143,17 @@ class SettlementSourcingMarketTest {
                 * state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().orElseThrow().labourValuePerTick(),
                 market.offers().getFirst().tripCost(), "make-or-buy must include the same provisions as actual procurement");
         assertEquals(32, market.allocate().preferPurchase("minecraft:bread", 32, Long.MAX_VALUE, Optional.of(process)));
+        var cheapProcess = new SupplyPlanner.Process(process.id(), "minecraft:bread", 1, Map.of(),
+                0, Map.of(), 0, 1, 1, 32, 1);
+        var alternative = SettlementSourcingMarket.read(state, buyer, List.of(cheapProcess), 0L);
+        assertEquals(market.offers(), alternative.offers());
+        assertTrue(alternative.processUnitCosts().get(process.id()) < market.processUnitCosts().get(process.id()),
+                "sharing current quotes cannot reuse another producer's cost decision");
+        var withdrawn = state.withCompanies(state.companies().withGoodsTrade(state.companies().goodsTrade()
+                .withdraw(seller.party().id(), new GoodsTradeOrderWithdrawn(offer.id(), 0))));
+        assertTrue(SettlementSourcingMarket.read(withdrawn, buyer, List.of(process), 0L).offers().isEmpty(),
+                "a candidate draft must not reuse withdrawn consent from its predecessor");
+        assertEquals(market, SettlementSourcingMarket.read(state, buyer, List.of(process), 0L));
         var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
         var restored = codec.decode(codec.encode(state));
         assertEquals(market, SettlementSourcingMarket.read(restored, buyer, List.of(process), 0L));

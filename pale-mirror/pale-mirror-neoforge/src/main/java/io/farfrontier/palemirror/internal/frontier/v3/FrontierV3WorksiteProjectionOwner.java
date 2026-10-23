@@ -24,6 +24,8 @@ interface FrontierV3WorksiteProjectionOwner {
     boolean beforeProjection(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             FrontierWorldState state, WorksiteBlock declared);
     void afterProjection(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime);
+    /** Capture final physical evidence without draining canonical transactions in the native unload callback.
+     * beforeTurn owns durability-gated release; missing evidence never grants COLD authority. */
     void departure(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, net.minecraft.world.level.chunk.LevelChunk chunk);
     void shutdown(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime);
 }

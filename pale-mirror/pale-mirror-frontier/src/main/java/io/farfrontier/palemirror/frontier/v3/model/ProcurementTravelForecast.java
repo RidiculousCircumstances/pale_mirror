@@ -34,7 +34,11 @@ public final class ProcurementTravelForecast {
      * routes for every quotation; selected transport admission owns that proof. */
     public static Estimate between(FrontierWorldState state, SubjectId source, SubjectId receiver,
                                    TransportOrganization.Itinerary itinerary) {
-        return JOURNEYS.get(List.of(state), () -> new BoundedValueMemo<Endpoints, Estimate>(256))
+        // Reservations and quote drafts change stock/funding, not journey length.
+        // Mobile surfaces still invalidate on the exact actor locations; retained
+        // mission proof remains conditional on its live group and immutable rules.
+        return JOURNEYS.get(List.of(state.bootstrap(), state.shipments().missions(), state.unitGroups().groups(),
+                        state.inventory().surfaces(), state.actorLocations()), () -> new BoundedValueMemo<Endpoints, Estimate>(256))
                 .get(new Endpoints(source, receiver, itinerary), () -> calculate(state, source, receiver, itinerary));
     }
     private static Estimate calculate(FrontierWorldState state, SubjectId source, SubjectId receiver,
