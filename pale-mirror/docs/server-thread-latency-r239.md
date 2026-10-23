@@ -318,3 +318,36 @@ host ticks, and GC pause maximum88.9ms. Thus <=80ms is still NOT achieved.
 Next measurement compares the prepared-seed change and the pinned Java22
 Generational ZGC collector with the same4–12GiB heap/world. Collector flags were
 validated on the actual runtime; throughput/pauses remain to be measured.
+
+### Local worksite lookup and ordinary field receipts
+
+The r239j profile attributed73 server CPU samples to point lookup probing every
+extraction deposit. ExtractionGeometryIndex now separately indexes complete
+worksite-region candidates (including natural terrain and infrastructure), while
+its source-custody regions retain their narrower meaning. Exact lookup and overlap
+validation still belong to the selected producer. The physical owner reuses the
+index for unchanged immutable deposit input rather than rebuilding the declaration
+map on each queried block. Retirement coverage prevents stale owner candidates.
+
+Road support maps were also thread-local although immutable. A 94.7ms allocation
+spike in r239k included their reconstruction; exact bootstrap/topology-keyed
+completed results are now shared across preparation and server threads.
+
+Ordinary field work confirmation and retirement acknowledgement now await the
+existing exact per-field durable receipt without blocking the server. Native
+pre-loot fatality retains its synchronous effect AND retirement barriers. The
+first native check caught the effect becoming deferred; after preserving that
+barrier, its next assertion caught deferred final retirement. Both causal paths
+were repaired, with no relaxed assertions: all20field-turns native testsPASS
+r239l-field-final.log. Initial failures retained r239l-gates/field-recheck.
+
+R239k ZGC:280recorded pauses, maximum0.03788ms, versus G1 maximum88.9ms in r239j.
+Prepared-seed scene reconstruction spike was not reproduced in this short run;
+startup193.1/login191.2/transition108.8ms and extraction-extension93.5ms remain.
+Time debt851→1459ticks during twoHOTvisits; prior G1r239j1191→1796, r239i81→284.
+Changing accumulated world state prevents attribution of throughput differences
+to the collector alone. Investigate scheduled preparation/owner completion rate;
+low host-tick time cannot substitute for timely simulation progress.
+Pack commit f631234 adds explicit reversible Java22 --gc profile support; runtime
+uses its managed generational-z profile with the same4–12GiB heap. No client JVM
+change or implicit installer-wide collector switch.

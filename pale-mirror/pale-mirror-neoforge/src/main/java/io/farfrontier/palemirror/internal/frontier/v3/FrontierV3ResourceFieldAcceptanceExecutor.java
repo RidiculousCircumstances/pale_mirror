@@ -14,13 +14,18 @@ final class FrontierV3ResourceFieldAcceptanceExecutor {
                 .sorted(java.util.Comparator.comparing(ResourceSiteLifecycle::siteId)).toList()) {
             for (var job : site.harvestJobs().values().stream()
                     .sorted(java.util.Comparator.comparing(ResourceSiteHarvestJob::id)).toList()) {
-                if (acknowledge(level, runtime, job)) return true;
+                if (acknowledge(level, runtime, job, ledger -> ledger.prepareFieldDurable(level, job.siteId()))) return true;
             }
         }
         return false;
     }
     /** Exact owner path for fatality/recovery; never scans unrelated workers. */
     static boolean acknowledge(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ResourceSiteHarvestJob job) {
+        // Native fatality must finish this owner's retirement before loot proceeds.
+        return acknowledge(level, runtime, job, ledger -> { ledger.persist(level); return true; });
+    }
+    private static boolean acknowledge(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            ResourceSiteHarvestJob job, java.util.function.Predicate<FrontierV3ResourceSiteLedger> sealDurable) {
         if (job.progress().acceptance().isEmpty()) return false;
         var checkpoint = runtime.canonicalState().orElseThrow();
         if (!checkpoint.state().resourceSites().site(job.siteId()).harvestJob(job.id()).filter(job::equals).isPresent())
@@ -35,8 +40,8 @@ final class FrontierV3ResourceFieldAcceptanceExecutor {
         if (retired != owner.witness()) {
             ledger.replaceFieldClaim(owner, owner.withWitness(retired));
             // The exact seal must survive a crash before the canonical acknowledgement.
-            ledger.persist(level);
         }
+        if (!sealDurable.test(ledger)) return false;
         CommandId id = new CommandId("executor:field-work-ack-r" + checkpoint.revision().value());
         var result = runtime.submit(new FrontierCommand(1, id, checkpoint.worldId(), checkpoint.revision(),
                 checkpoint.instant(), FrontierWorldRuntimeDefinition.PHYSICAL_EXECUTOR, CauseChain.root(id),

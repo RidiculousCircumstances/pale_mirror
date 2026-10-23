@@ -36,7 +36,7 @@ public final class KnownPedestrianRouteKnowledge {
     private record WitnessedScope(Object view, SurfaceAnchor departure) { }
     private static final java.util.Map<ViewKey, KnownPedestrianRouteKnowledge> VIEWS = new java.util.LinkedHashMap<>();
     private static KnownPedestrianRouteKnowledge frontierView;
-    private static final ImmutableInputView<java.util.Map<TerrainColumn, List<SurfaceAnchor>>> ROAD_SUPPORTS = new ImmutableInputView<>();
+    private static final ImmutableResultView<String, java.util.Map<TerrainColumn, List<SurfaceAnchor>>> ROAD_SUPPORTS = new ImmutableResultView<>(4);
     private static final ImmutableInputView<Set<BlockPosition>> RAISED_SUPPORTS = new ImmutableInputView<>();
     private enum GroundSource { ROADS, SITES }
     private static RegionalSurfaceContributions<GroundSource> groundSupports = new RegionalSurfaceContributions<>();
@@ -225,8 +225,8 @@ public final class KnownPedestrianRouteKnowledge {
             obstacleIndex.refresh(state, sites, storage, () -> retainedStaticOccupancy(state.bootstrap()));
             VIEWS.clear();
             FIELDS.clear();
-            var roadCells = FrontierRouteNetwork.surfaceCells(state.bootstrap(), state.routeTopology());
-            var roads = ROAD_SUPPORTS.get(List.of(state.bootstrap(), roadCells), () -> {
+            var roads = ROAD_SUPPORTS.get(List.of(state.bootstrap(), state.routeTopology()), "road-supports", () -> {
+                var roadCells = FrontierRouteNetwork.surfaceCells(state.bootstrap(), state.routeTopology());
                 var supports = new java.util.LinkedHashMap<TerrainColumn, List<SurfaceAnchor>>();
                 for (var position : roadCells) {
                     var column = new TerrainColumn(position.x(), position.z());

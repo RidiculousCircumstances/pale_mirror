@@ -14,6 +14,7 @@ public final class ExtractionGeometryIndex {
     private final Map<ExtractionRegion, List<ExtractionLayout.Cell>> cells;
     private final Map<Chunk, List<ExtractionRegion>> chunks;
     private final Map<Chunk, Set<BlockPosition>> owned;
+    private final Map<Chunk, List<SubjectId>> worksiteOwners;
 
     /** Keys only immutable site declarations, not depletion, work or geological exclusions. */
     public static ExtractionGeometryIndex forDeposits(Map<SubjectId, ExtractionDeposit> deposits) {
@@ -28,10 +29,13 @@ public final class ExtractionGeometryIndex {
     public ExtractionGeometryIndex(Map<SubjectId, ExtractionSite> declarations) {
         this.declarations = Map.copyOf(declarations);
         var sources = new HashSet<BlockPosition>();
+        var worksiteCandidates = new HashMap<Chunk, List<SubjectId>>();
         var positions = new HashMap<Chunk, Set<BlockPosition>>();
         Map<ExtractionRegion, List<ExtractionLayout.Cell>> grouped = new HashMap<>();
         this.declarations.forEach((id, site) -> {
             if (!id.equals(site.id())) throw new IllegalArgumentException("geometry has a foreign declaration key");
+            site.layout().worksitePositions().keySet().forEach(region ->
+                    worksiteCandidates.computeIfAbsent(new Chunk(region.x(), region.z()), ignored -> new ArrayList<>()).add(id));
             site.layout().fixedBlocks().keySet().forEach(position -> add(positions, position));
             for (var cell : site.layout().cells()) {
                 if (!sources.add(cell.source())) throw new IllegalArgumentException("competing extraction source ownership");
@@ -40,6 +44,8 @@ public final class ExtractionGeometryIndex {
                 grouped.computeIfAbsent(region, ignored -> new ArrayList<>()).add(cell);
             }
         });
+        worksiteCandidates.replaceAll((chunk, owners) -> owners.stream().sorted().toList());
+        worksiteOwners = Map.copyOf(worksiteCandidates);
         regions = grouped.keySet().stream().sorted(Comparator.comparing(ExtractionRegion::siteId)
                 .thenComparingInt(ExtractionRegion::chunkX).thenComparingInt(ExtractionRegion::chunkZ)).toList();
         Map<ExtractionRegion, List<ExtractionLayout.Cell>> immutableCells = new HashMap<>();
@@ -57,6 +63,9 @@ public final class ExtractionGeometryIndex {
     private static void add(Map<Chunk, Set<BlockPosition>> positions, BlockPosition position) {
         positions.computeIfAbsent(new Chunk(position.x() >> 4, position.z() >> 4), ignored -> new HashSet<>()).add(position);
     }
+    /** Candidates include natural terrain and infrastructure, not only resource custody cells.
+     * The producer still resolves the exact position and rejects overlapping declarations. */
+    public List<SubjectId> worksiteOwners(Chunk chunk) { return worksiteOwners.getOrDefault(chunk, List.of()); }
     public boolean owns(BlockPosition position) {
         return owned.getOrDefault(new Chunk(position.x() >> 4, position.z() >> 4), Set.of()).contains(position);
     }

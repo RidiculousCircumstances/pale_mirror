@@ -20,6 +20,21 @@ class ExtractionGeometryIncrementalTest {
     private static FrontierWorldState replace(FrontierWorldState state, ExtractionDeposit deposit) {
         return state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(deposit)));
     }
+    @Test void pointCandidatesIncludeNaturalTerrainAndDisappearWithTheDeclaration() {
+        var state = initial(); var original = deposit(state);
+        var sites = ExtractionGeometryIndex.declarations(state.extractionSites());
+        var index = new ExtractionGeometryIndex(sites);
+        for (var region : original.site().layout().worksitePositions().keySet()) {
+            var chunk = new ExtractionGeometryIndex.Chunk(region.x(), region.z());
+            assertTrue(index.worksiteOwners(chunk).contains(original.site().id()));
+            for (var id : index.worksiteOwners(chunk)) assertTrue(sites.get(id).layout().worksitePositions().containsKey(region));
+        }
+        var removed = new HashMap<>(sites); removed.remove(original.site().id());
+        var next = new ExtractionGeometryIndex(removed);
+        for (var region : original.site().layout().worksitePositions().keySet())
+            assertFalse(next.worksiteOwners(new ExtractionGeometryIndex.Chunk(region.x(), region.z())).contains(original.site().id()));
+    }
+
     @Test void oneMinedBlockUpdatesOnlyItsRegionAndPreservesOtherMinesAndHistoricalViews() {
         var state = initial(); var original = deposit(state); var cell = original.site().layout().cells().getFirst();
         var facts = new ExtractionGeometryFacts(); var prior = facts.read(state, original);

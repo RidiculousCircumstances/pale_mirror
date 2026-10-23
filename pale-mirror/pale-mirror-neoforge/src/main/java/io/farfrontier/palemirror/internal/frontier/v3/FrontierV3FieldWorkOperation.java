@@ -53,15 +53,18 @@ final class FrontierV3FieldWorkOperation {
                             && hand.get().matchesQuantity(beforeCount)
                             && toolMatches(worker, job, false)
                             && pending.handEffect().map(hand.get()::matches).orElse(true));
-        if (applied && retained.isPresent()) confirmWitness(level, state, job, cell.id(), hand.get());
+        // Native pre-loot observation cannot defer its exact effect into a later
+        // tick: the entity is about to die. Preserve this irreversible barrier.
+        if (applied && retained.isPresent()) confirmWitness(level, state, job, cell.id(), hand.get()).persist(level);
         return retained;
     }
     /** Called only after the common operation proves the complete native outcome. */
-    static void confirmWitness(ServerLevel level, FrontierWorldState state, SceneLease lease,
+    static boolean confirmWitness(ServerLevel level, FrontierWorldState state, SceneLease lease,
             ResourceSiteHarvestJob job, ResourceFieldLayout.CellId id) {
-        confirmWitness(level, state, job, id, FrontierV3ActorHandObservation.observe(level, state, lease, job));
+        return confirmWitness(level, state, job, id, FrontierV3ActorHandObservation.observe(level, state, lease, job))
+                .prepareFieldDurable(level, job.siteId());
     }
-    private static void confirmWitness(ServerLevel level, FrontierWorldState state,
+    private static FrontierV3ResourceSiteLedger confirmWitness(ServerLevel level, FrontierWorldState state,
             ResourceSiteHarvestJob job, ResourceFieldLayout.CellId id, FrontierV3ActorHandObservation.Review hand) {
         var ledger = FrontierV3ResourceSiteLedger.get(level);
         var owner = (FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(job.siteId());
@@ -71,7 +74,10 @@ final class FrontierV3FieldWorkOperation {
                     state.resourceSites().cycle(job.siteId()), witness, id, pending.causationId()));
         if (pending.handEffect().isPresent() && !pending.handConfirmed())
             witness = witness.confirmHand(id, hand);
-        if (!witness.equals(owner.witness())) { ledger.replaceFieldClaim(owner, owner.withWitness(witness)); ledger.persist(level); }
+        if (!witness.equals(owner.witness())) ledger.replaceFieldClaim(owner, owner.withWitness(witness));
+        // The caller owns its physical boundary: ordinary work waits without
+        // parking the tick; native pre-loot capture must force the exact record.
+        return ledger;
     }
     static FrontierV3MinecraftOperation.Result apply(ServerLevel level, FrontierWorldState state, SceneLease lease,
             ResourceSiteHarvestJob job, Mob worker, ResourceFieldLayout.Cell cell,

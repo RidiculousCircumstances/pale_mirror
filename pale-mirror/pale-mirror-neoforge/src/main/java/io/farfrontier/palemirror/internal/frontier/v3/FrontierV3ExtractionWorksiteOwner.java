@@ -16,7 +16,9 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
     }
     @Override public Optional<WorksiteBlock> point(FrontierWorldState state, BlockPosition position) {
         WorksiteBlock found = null;
-        for (var deposit : state.extractionSites().deposits().values()) {
+        var index = geometry(state);
+        for (var owner : index.worksiteOwners(new ExtractionGeometryIndex.Chunk(position.x() >> 4, position.z() >> 4))) {
+            var deposit = state.extractionSites().deposits().get(owner);
             var declared = ExtractionWorksiteBlocks.declaredAt(deposit, position);
             if (declared.isEmpty()) continue;
             if (found != null) throw new IllegalStateException("overlapping worksite declarations");
@@ -28,9 +30,13 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
     private List<WorksiteBlock> declarations = List.of();
     private ExtractionGeometryIndex geometry;
     private ExtractionGeometryIndex declarationGeometry;
+    private Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, ExtractionDeposit> geometryDeposits;
     private ExtractionGeometryIndex geometry(FrontierWorldState state) {
+        var deposits = state.extractionSites().deposits();
+        if (geometry != null && geometryDeposits == deposits) return geometry;
         var declared = ExtractionGeometryIndex.declarations(state.extractionSites());
         if (geometry == null || !geometry.matches(declared)) geometry = new ExtractionGeometryIndex(declared);
+        geometryDeposits = deposits;
         return geometry;
     }
     @Override public CellMutationKey.OwnerFamily family() { return CellMutationKey.OwnerFamily.EXTRACTIVE_SITE; }
