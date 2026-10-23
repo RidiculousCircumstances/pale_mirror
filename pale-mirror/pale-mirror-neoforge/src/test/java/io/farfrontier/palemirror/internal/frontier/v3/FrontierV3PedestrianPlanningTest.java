@@ -196,7 +196,8 @@ class FrontierV3PedestrianPlanningTest {
         do {
             FrontierV3PedestrianPlanning.tick(runtime, 3_000_000L);
             var status = com.google.gson.JsonParser.parseString(FrontierV3PedestrianPlanning.diagnostic(runtime)).getAsJsonObject();
-            if (status.get("activeSearches").getAsInt() == 0 && status.get("deferredSearches").getAsInt() == 0) return;
+            if (FrontierV3PedestrianPlanning.recovered(runtime) && status.get("activeSearches").getAsInt() == 0
+                    && status.get("deferredSearches").getAsInt() == 0) return;
             assertTrue(System.nanoTime() < deadline, () -> "navigation workers did not finish: " + status);
             java.util.concurrent.locks.LockSupport.parkNanos(100_000L);
         } while (true);

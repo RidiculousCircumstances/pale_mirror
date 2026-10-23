@@ -363,8 +363,8 @@ final class FrontierV3AmbientCarrierLedger extends SavedData {
         try { if (ledger.journal != null) ledger.journal.checkHealthy(); }
         catch (java.io.IOException failure) { throw new java.io.UncheckedIOException("carrier journal writer failed", failure); }
         FrontierV3PhysicalStores.register(level, worldId, FrontierV3PhysicalStoreKind.ACTORS, ledger,
-                () -> { if (ledger.isDirty()) ledger.persist(level, worldId); else if (ledger.journal != null) { try { ledger.journal.checkHealthy();
-            } catch (java.io.IOException failure) { throw new java.io.UncheckedIOException(failure); } } }, () -> { ledger.persist(level, worldId); ledger.finishCheckpoints(); }, ledger::journalDiagnostic);
+                () -> ledger.persistAsync(level, worldId), () -> ledger.persist(level, worldId),
+                () -> { ledger.persist(level, worldId); ledger.finishCheckpoints(); }, ledger::journalDiagnostic);
         return ledger;
     }
     private CompoundTag actorImage(SubjectId actor) {

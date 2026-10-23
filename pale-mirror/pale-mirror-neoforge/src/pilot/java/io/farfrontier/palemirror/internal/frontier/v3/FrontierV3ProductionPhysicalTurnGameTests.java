@@ -56,7 +56,7 @@ public final class FrontierV3ProductionPhysicalTurnGameTests {
             helper.assertTrue(FrontierV3GrayboxLedger.get(level).claim(target) == null,
                     "the real SavedData ledger begins untouched at the unavailable target");
 
-            FrontierV3ServerLifecycle.runPhysicalTurn(level, runtime);
+            FrontierV3PhysicalTurn.run(level, runtime);
             DeferredAftermath pending = runtime.decodedState().orElseThrow().deferredAftermath().entries().get(aftermath.id());
             helper.assertValueEqual(pending.cellAt(0).status(), DeferredAftermathCellStatus.PENDING,
                     "the complete production registry leaves unavailable work pending without force-loading or replay");
@@ -65,7 +65,7 @@ public final class FrontierV3ProductionPhysicalTurnGameTests {
             helper.assertTrue(hasWal(level.getServer().getWorldPath(LevelResource.ROOT)),
                     "the ordinary due action is durably appended below the disposable GameTest world root");
             long revision = runtime.canonicalState().orElseThrow().revision().value();
-            FrontierV3ServerLifecycle.runPhysicalTurn(level, runtime);
+            FrontierV3PhysicalTurn.run(level, runtime);
             helper.assertValueEqual(runtime.canonicalState().orElseThrow().revision().value(), revision,
                     "a repeated unavailable physical turn does not manufacture an aftermath revision");
         } finally {
@@ -94,7 +94,7 @@ public final class FrontierV3ProductionPhysicalTurnGameTests {
                 "a just-loaded chunk remains ineligible until the registered physical projection turn completes");
 
         helper.startSequence().thenWaitUntil(() -> {
-            runtime.runPersistenceTurn(() -> FrontierV3ServerLifecycle.runPhysicalTurn(level, runtime));
+            runtime.runPersistenceTurn(() -> FrontierV3PhysicalTurn.run(level, runtime));
             var completed = FrontierV3GrayboxExecutor.firstVisibility(runtime, loaded.x + "," + loaded.z);
             helper.assertValueEqual(completed.status(), "READY",
                     "ordinary bounded projection turns complete visibility after exact durability, not necessarily in one call");
@@ -166,7 +166,7 @@ public final class FrontierV3ProductionPhysicalTurnGameTests {
                     player.getYRot(), player.getXRot());
             helper.assertValueEqual(FrontierV3GrayboxExecutor.firstVisibility(runtime, destination.x + "," + destination.z).status(),
                     "UNOBSERVED", "the player destination has no synthetic prior projection record");
-            FrontierV3ServerLifecycle.runObservedPhysicalTurn(level, runtime);
+            FrontierV3PhysicalTurn.observeAndRun(level, runtime);
             helper.assertValueEqual(FrontierV3GrayboxExecutor.firstVisibility(runtime, destination.x + "," + destination.z).status(),
                     "READY", "the registered production turn fences and projects an already-present destination before scene consumption");
         } finally {

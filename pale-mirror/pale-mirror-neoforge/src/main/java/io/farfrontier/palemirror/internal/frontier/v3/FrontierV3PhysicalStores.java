@@ -13,14 +13,14 @@ final class FrontierV3PhysicalStores {
     private static final Map<ServerLevel, Map<Key,Entry>> STORES = new IdentityHashMap<>();
     private FrontierV3PhysicalStores() { }
     static void register(ServerLevel level, FrontierV3PhysicalStoreKind kind, FrontierV3JournaledSavedData ledger) {
-        register(level, FrontierV3PhysicalWorld.WORLD_ID, kind, ledger, () -> ledger.persistAsync(level),
+        register(level, FrontierV3PhysicalWorld.WORLD_ID, kind, ledger, () -> ledger.advance(level),
                 () -> ledger.persist(level), ledger::finish, ledger::journalDiagnostic);
     }
     static void register(ServerLevel level, WorldId world, FrontierV3PhysicalStoreKind kind, Object owner,
             Runnable flush, Runnable finish, Supplier<String> diagnostic) {
         register(level, world, kind, owner, flush, flush, finish, diagnostic);
     }
-    private static void register(ServerLevel level, WorldId world, FrontierV3PhysicalStoreKind kind, Object owner,
+    static void register(ServerLevel level, WorldId world, FrontierV3PhysicalStoreKind kind, Object owner,
             Runnable advance, Runnable flush, Runnable finish, Supplier<String> diagnostic) {
         Objects.requireNonNull(world); Objects.requireNonNull(kind); Objects.requireNonNull(owner);
         var entries = STORES.computeIfAbsent(level, ignored -> new LinkedHashMap<>());

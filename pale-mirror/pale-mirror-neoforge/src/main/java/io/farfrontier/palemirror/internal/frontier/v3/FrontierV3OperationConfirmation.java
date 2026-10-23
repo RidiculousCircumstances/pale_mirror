@@ -8,7 +8,7 @@ import java.util.UUID;
 /** Joins the canonical command receipt to the physical journal without treating their
  * two independent WAL writes as one transaction. Neither payload nor job is interpreted. */
 final class FrontierV3OperationConfirmation {
-    enum Outcome { CONFIRMED, AWAITING_NATIVE_EVIDENCE, AWAITING_CANONICAL_COMMIT, REJECTED }
+    enum Outcome { CONFIRMED, AWAITING_NATIVE_EVIDENCE, AWAITING_PHYSICAL_DURABILITY, AWAITING_CANONICAL_COMMIT, REJECTED }
     interface Canonical {
         void pin(CommandId id);
         void release(CommandId id);
@@ -17,6 +17,27 @@ final class FrontierV3OperationConfirmation {
         default void afterCommit(CommandResult result, Runnable continuation) {
             if (result instanceof CommandResult.Accepted) continuation.run();
         }
+    }
+    interface Durability {
+        boolean prepared(UUID ticket);
+        void closed(Runnable release);
+    }
+    private static Durability synchronous(Runnable force) {
+        return new Durability() {
+            public boolean prepared(UUID ticket) { force.run(); return true; }
+            public void closed(Runnable release) { force.run(); release.run(); }
+        };
+    }
+    private static Durability durability(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime,
+            FrontierV3OperationLedger ledger) {
+        if (!runtime.inOrdinaryPersistenceTurn()) return synchronous(() -> ledger.persist(level));
+        return new Durability() {
+            public boolean prepared(UUID ticket) {
+                ledger.persistAsync(level);
+                return ledger.durableOperation(ticket);
+            }
+            public void closed(Runnable release) { ledger.afterDurable(ledger.persistAsync(level), release); }
+        };
     }
     private FrontierV3OperationConfirmation() { }
     static boolean submit(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime, UUID ticket, FrontierPayload consequence) {
@@ -41,18 +62,21 @@ final class FrontierV3OperationConfirmation {
             java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> binding) {
         var ledger = FrontierV3OperationLedger.get(level);
         if (!FrontierV3MinecraftOperation.recoverOutcome(level, ticket)) return false;
-        return submit(ledger, () -> ledger.persist(level), canonical(level, runtime, binding), ticket, consequence);
+        return submitOutcome(ledger, durability(level, runtime, ledger), canonical(level, runtime, binding), ticket, consequence) == Outcome.CONFIRMED;
     }
     /** Waiting is not a rejected consequence or permission to replay the native effect. */
     static Outcome submitOutcome(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime, UUID ticket, FrontierPayload consequence) {
         var ledger = FrontierV3OperationLedger.get(level);
         if (!FrontierV3MinecraftOperation.recoverOutcome(level, ticket)) return Outcome.AWAITING_NATIVE_EVIDENCE;
-        return submitOutcome(ledger, () -> ledger.persist(level), canonical(level, runtime, java.util.Optional.empty()), ticket, consequence);
+        return submitOutcome(ledger, durability(level, runtime, ledger), canonical(level, runtime, java.util.Optional.empty()), ticket, consequence);
     }
     static boolean submit(FrontierV3OperationLedger ledger, Runnable force, Canonical canonical, UUID ticket, FrontierPayload consequence) {
         return submitOutcome(ledger, force, canonical, ticket, consequence) == Outcome.CONFIRMED;
     }
     static Outcome submitOutcome(FrontierV3OperationLedger ledger, Runnable force, Canonical canonical, UUID ticket, FrontierPayload consequence) {
+        return submitOutcome(ledger, synchronous(force), canonical, ticket, consequence);
+    }
+    static Outcome submitOutcome(FrontierV3OperationLedger ledger, Durability durability, Canonical canonical, UUID ticket, FrontierPayload consequence) {
         var operation = ledger.require(ticket);
         if (!ledger.nativeOutcomeAvailable(ticket)) return Outcome.AWAITING_NATIVE_EVIDENCE;
         if (operation.ownerClosed()) return Outcome.CONFIRMED;
@@ -61,14 +85,15 @@ final class FrontierV3OperationConfirmation {
                 new CommandId("physical-operation:" + ticket), consequence));
         if (!command.fingerprint().equals(fingerprint(consequence)))
             throw new IllegalArgumentException("changed physical consequence requires explicit owner recovery");
-        ledger.bindOwnerCommand(ticket, command); force.run();
+        ledger.bindOwnerCommand(ticket, command);
+        if (!durability.prepared(ticket)) return Outcome.AWAITING_PHYSICAL_DURABILITY;
         canonical.pin(command.id());
         if (canonical.receipt(command.id()).isEmpty()) {
             var result = canonical.submit(command.id(), operation.declaration().owner(), consequence);
             if (!(result instanceof CommandResult.Accepted)) {
                 if (result instanceof CommandResult.Pending pending && pending.reason() == CommandResult.Pending.Reason.DURABILITY
                         && command.closure() == FrontierV3OperationLedger.OwnerCommand.Closure.AUTOMATIC)
-                    canonical.afterCommit(result, () -> close(ledger, force, canonical, ticket, command));
+                    canonical.afterCommit(result, () -> close(ledger, durability, canonical, ticket, command));
                 // Synchronous rejection owns no canonical receipt. Retaining an absent
                 // command here would let unrelated waiting operations exhaust the pin pool.
                 if (result instanceof CommandResult.Rejected
@@ -78,7 +103,7 @@ final class FrontierV3OperationConfirmation {
             }
         }
         if (command.closure() == FrontierV3OperationLedger.OwnerCommand.Closure.AUTOMATIC)
-            close(ledger, force, canonical, ticket, command);
+            close(ledger, durability, canonical, ticket, command);
         return Outcome.CONFIRMED;
     }
     /** Canonical acceptance does not discharge an owner's retained aftermath.
@@ -101,9 +126,13 @@ final class FrontierV3OperationConfirmation {
             FrontierPayload consequence, java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> binding) {
         var ledger = FrontierV3OperationLedger.get(level);
         if (!FrontierV3MinecraftOperation.recoverOutcome(level, ticket)) return false;
-        return submitRecovery(ledger, () -> ledger.persist(level), canonical(level, runtime, binding), ticket, consequence);
+        return submitRecovery(ledger, durability(level, runtime, ledger), canonical(level, runtime, binding), ticket, consequence);
     }
     static boolean submitRecovery(FrontierV3OperationLedger ledger, Runnable force, Canonical canonical,
+            UUID ticket, FrontierPayload consequence) {
+        return submitRecovery(ledger, synchronous(force), canonical, ticket, consequence);
+    }
+    static boolean submitRecovery(FrontierV3OperationLedger ledger, Durability durability, Canonical canonical,
             UUID ticket, FrontierPayload consequence) {
         if (!ledger.nativeOutcomeAvailable(ticket)) return false;
         if (ledger.require(ticket).ownerClosed()) return true;
@@ -112,20 +141,21 @@ final class FrontierV3OperationConfirmation {
             var previous = retained.orElseThrow(); canonical.pin(previous.id());
             if (canonical.receipt(previous.id()).isPresent()) {
                 if (previous.closure() == FrontierV3OperationLedger.OwnerCommand.Closure.AUTOMATIC)
-                    close(ledger, force, canonical, ticket, previous);
+                    close(ledger, durability, canonical, ticket, previous);
                 return true;
             }
+            canonical.release(previous.id()); // No accepted history to pin while waiting for the physical binding.
             String digest = fingerprint(consequence);
             if (!previous.fingerprint().equals(digest)) {
                 var successor = new FrontierV3OperationLedger.OwnerCommand(
                         new CommandId("physical-operation:" + ticket + "/recovery/" + digest), consequence,
                         previous.closure(), previous.context());
                 ledger.replaceUnacceptedOwnerCommand(ticket, previous, successor);
-                force.run(); // Crash recovery restores the successor pin from this durable binding.
-                canonical.pin(successor.id()); canonical.release(previous.id());
+                // The predecessor has no receipt, so it owns no committed history.
+                // The successor cannot submit until its exact binding is durable below.
             }
         }
-        return submit(ledger, force, canonical, ticket, consequence);
+        return submitOutcome(ledger, durability, canonical, ticket, consequence) == Outcome.CONFIRMED;
     }
     /** Must run before the first startup command/advance can expire canonical receipts. */
     static void recover(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime) {
@@ -143,10 +173,13 @@ final class FrontierV3OperationConfirmation {
     }
     private static void close(FrontierV3OperationLedger ledger, Runnable force, Canonical canonical,
             UUID ticket, FrontierV3OperationLedger.OwnerCommand command) {
+        close(ledger, synchronous(force), canonical, ticket, command);
+    }
+    private static void close(FrontierV3OperationLedger ledger, Durability durability, Canonical canonical,
+            UUID ticket, FrontierV3OperationLedger.OwnerCommand command) {
         ledger.closeOwner(ticket);
         if (ledger.require(ticket).retirable()) ledger.retire(ticket);
-        force.run(); // A failed force must keep the canonical receipt pinned.
-        canonical.release(command.id());
+        durability.closed(() -> canonical.release(command.id())); // Failure keeps the receipt pinned.
     }
     private static Canonical canonical(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime,
             java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> binding) {

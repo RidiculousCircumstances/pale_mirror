@@ -383,11 +383,14 @@ public final class FrontierV3ServerLifecycle {
             runtime.runPersistenceTurn(() -> io.farfrontier.palemirror.frontier.v3.model.ImmutablePlanningScope.within(() -> {
                 boolean active = runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE;
                 if (active) FrontierV3PedestrianPlanning.tick(runtime);
+                // Recovery establishes disposable route waits before producers can
+                // consume them. Host time remains queued while native ticks continue.
+                if (active && !FrontierV3PedestrianPlanning.recovered(runtime)) return null;
                 boolean initialHold = INITIAL_CANONICAL_HOLDS.containsKey(server);
                 boolean absoluteTargetPresent = FAST_FORWARD_TARGETS.containsKey(server);
                 boolean fastForwardRemaining = FAST_FORWARD_REMAINING.containsKey(server);
                 if (active && runsObservedPhysicalTurnWhileCanonicalProgressIsHeld(initialHold, absoluteTargetPresent, fastForwardRemaining)) {
-                    runObservedPhysicalTurn(FrontierV3PhysicalWorld.require(server), runtime);
+                    FrontierV3PhysicalTurn.observeAndRun(FrontierV3PhysicalWorld.require(server), runtime);
                 } else if (active && advancesOnlyQueuedCanonicalTime(fastForwardRemaining)) {
                     // A relative request owns exactly its admitted canonical interval. Advancing
                     // one ordinary tick beside each server slice would make wall-clock delivery
@@ -397,7 +400,7 @@ public final class FrontierV3ServerLifecycle {
                     advanceQueuedCanonicalTime(server, runtime);
                 } else if (active) {
                     ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
-                    runObservedPhysicalTurn(physicalWorld, runtime);
+                    FrontierV3PhysicalTurn.observeAndRun(physicalWorld, runtime);
                     runtime.advanceOrdinaryTime(FrontierV3RuntimeBudgets.ordinaryTick(runtime.decodedState().orElseThrow().bootstrap().ruleset()));
                     if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) advanceQueuedCanonicalTime(server, runtime);
                 }
@@ -446,23 +449,6 @@ public final class FrontierV3ServerLifecycle {
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
         FrontierV3GrayboxExecutor.observePlayerIngress(runtime, chunk);
         return FrontierV3GeneratedIngress.presentationReady(level, runtime, chunk);
-    }
-    static void runPhysicalTurn(ServerLevel physicalWorld, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
-        FrontierV3NativeBodyResidence.restore(physicalWorld);
-        FrontierV3PhysicalExecutors.registry().tick(Objects.requireNonNull(physicalWorld, "physical world"),
-                Objects.requireNonNull(runtime, "runtime"));
-        FrontierV3PhysicalStores.advance(physicalWorld);
-    }
-    static void runObservedPhysicalTurn(ServerLevel physicalWorld,
-                                        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
-        // Regain causal batch headroom before a physical turn. Canonical time still advances
-        // in the ordinary tick branch, so recovered receipt pressure can expire naturally.
-        if (!runtime.commandAdmissionCapacity().orElseThrow().hasCausalHeadroom()) return;
-        for (ServerPlayer player : physicalWorld.players()) {
-            FrontierV3GrayboxExecutor.observePlayerIngress(runtime,
-                    new net.minecraft.world.level.ChunkPos(player.blockPosition()));
-        }
-        runPhysicalTurn(physicalWorld, runtime);
     }
     public static void stop(MinecraftServer server) {
         try {

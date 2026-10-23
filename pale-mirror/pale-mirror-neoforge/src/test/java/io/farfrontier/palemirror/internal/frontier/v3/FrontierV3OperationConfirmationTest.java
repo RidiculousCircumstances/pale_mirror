@@ -14,6 +14,62 @@ import static org.junit.jupiter.api.Assertions.*;
 class FrontierV3OperationConfirmationTest {
     @BeforeAll static void version() { net.minecraft.SharedConstants.tryDetectVersion(); }
     @TempDir Path directory;
+    @Test void deferredPhysicalBindingAndClosureNeverBlockOrReleaseReceiptEarly() {
+        var ledger = FrontierV3OperationLedger.inMemory();
+        var participant = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.CHUNK_BLOCKS, "1", 9);
+        var operation = ledger.prepare(new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.FIELD_WORK,
+                new SubjectId("owner:test"), "effect", "exact", Set.of(participant)));
+        ledger.saved(operation.nativeReceipt(participant));
+        var consequence = new PhysicalDeltaObserved(new PhysicalDelta(new BlockPosition(1, 64, 1), PhysicalDeltaKind.UNKNOWN_SCAR,
+                Optional.empty(), Optional.empty(), "test:async-confirmation"));
+        var ready = new java.util.concurrent.atomic.AtomicBoolean();
+        var closed = new java.util.concurrent.CompletableFuture<Long>();
+        var delivery = new FrontierV3DurableContinuations();
+        var durability = new FrontierV3OperationConfirmation.Durability() {
+            public boolean prepared(UUID ticket) { assertEquals(operation.ticket(), ticket); return ready.get(); }
+            public void closed(Runnable release) { delivery.add(closed, release); }
+        };
+        var pins = new HashSet<CommandId>(); var receipts = new HashMap<CommandId, CommandReceipt>();
+        var submissions = new AtomicInteger();
+        var canonical = new FrontierV3OperationConfirmation.Canonical() {
+            public void pin(CommandId id) { pins.add(id); }
+            public void release(CommandId id) { pins.remove(id); }
+            public Optional<CommandReceipt> receipt(CommandId id) { return Optional.ofNullable(receipts.get(id)); }
+            public CommandResult submit(CommandId id, SubjectId owner, FrontierPayload payload) {
+                submissions.incrementAndGet();
+                var result = new CommandResult.Accepted(id, new TransactionId("test:async"), new Revision(1));
+                receipts.put(id, new CommandReceipt(id, SimInstant.ZERO, result.transactionId(), result.revision()));
+                return result;
+            }
+        };
+        assertEquals(FrontierV3OperationConfirmation.Outcome.AWAITING_PHYSICAL_DURABILITY,
+                FrontierV3OperationConfirmation.submitOutcome(ledger, durability, canonical, operation.ticket(), consequence));
+        assertEquals(0, submissions.get()); assertTrue(pins.isEmpty());
+        // Crash before the later closure flush recovers this exact open owner binding.
+        var beforeClosure = ledger.save(new net.minecraft.nbt.CompoundTag(), null);
+        ready.set(true);
+        assertEquals(FrontierV3OperationConfirmation.Outcome.CONFIRMED,
+                FrontierV3OperationConfirmation.submitOutcome(ledger, durability, canonical, operation.ticket(), consequence));
+        delivery.advance(); assertEquals(1, pins.size()); assertEquals(1, submissions.get());
+        closed.complete(1L);
+        assertEquals(1, pins.size(), "the writer cannot run owner callbacks");
+        delivery.advance(); assertTrue(pins.isEmpty());
+        var recovered = FrontierV3OperationLedger.load(beforeClosure, null);
+        FrontierV3OperationConfirmation.recover(recovered, () -> { }, canonical);
+        assertTrue(recovered.find(operation.ticket()).isEmpty());
+        assertEquals(1, submissions.get(), "recovery must never submit the accepted consequence twice");
+    }
+    @Test void failedClosureReceiptRetainsProtection() {
+        var delivery = new FrontierV3DurableContinuations();
+        var receipt = new java.util.concurrent.CompletableFuture<Long>();
+        var released = new java.util.concurrent.atomic.AtomicBoolean();
+        delivery.add(receipt, () -> released.set(true));
+        delivery.advance(); assertFalse(released.get());
+        receipt.completeExceptionally(new java.io.IOException("disk failed"));
+        assertThrows(java.util.concurrent.CompletionException.class, delivery::advance);
+        assertFalse(released.get());
+    }
+
     @Test void deferredCanonicalDurabilityKeepsTheOwnerOpenAndPinnedUntilPublication() {
         var ledger = FrontierV3OperationLedger.inMemory();
         var participant = new FrontierV3OperationReceipt.Participant(FrontierV3OperationReceipt.Medium.ENTITIES, UUID.randomUUID().toString(), 1);

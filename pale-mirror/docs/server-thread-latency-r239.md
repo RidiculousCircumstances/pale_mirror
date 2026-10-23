@@ -112,3 +112,22 @@ Diagnostic cancelledReady distinguishes discarded completed work. Focused
 kernel/palette tests, guardrails and43 native navigation/shape tests PASS
 (r239d-gates.log). Remaining synchronous native/confirmation boundaries and
 canonical throughput require further work; no80ms completion claim.
+
+Fourth candidatee0bc246e6: firsttick126ms andnativecatalog32ms, butsecondtick
+3.15s withscheduleallocation2.89s. This is NOT a win againstthe80ms criterion.
+The detachedstartupreconstruction had no matchingexecution-readiness barrier:
+owner readiness could enter spatialgeometry whiletheworker was rebuilding it.
+Startup now preserves original recovery-before-execution ordering cooperatively;
+host ticks accumulate and are not discarded. Remaining first-ingress cost still
+needs an isolated profile.
+
+Ordinary operation confirmation now uses the same protocol with a pluggable
+receipt wait: exact physical owner binding durable beforecanonical submission;
+canonical receipt remains pinned until physicalclosure durable. Sharedphysical
+storage delivers bounded owner callbacks, including whenadmissionlackscapacity.
+No writer-thread callback, noearlypinrelease, no second business queue. Native
+required/non-replayable boundaries remain synchronous. Carrier journal ordinary
+lifecycle now actually calls its existingasyncwriteAPI. Focusednegative/crash
+checks and24nativebody-lifetimetestsPASS (r239e-gates.log). Explicit saved-body
+checkpoint andnative-world canonicalwrite barriers are remaining synchronous
+sources, not silently waived. Source is not yet proof of80msliveperformance.

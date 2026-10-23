@@ -77,6 +77,11 @@ final class FrontierV3PedestrianPlanning {
             throw new IllegalStateException("planning recovery failed", error.getCause());
         }
     }
+    /** Startup hints used to be rebuilt synchronously before the first execution.
+     * Detached reconstruction retains that ordering without parking the server thread. */
+    static boolean recovered(FrontierV3ServerRuntime<?, ?> runtime) {
+        return owner == runtime && recoveryPlan == null && recovery == null;
+    }
     static void admitReady(FrontierV3ServerRuntime<?, ?> runtime, PedestrianPlanningWakeIndex index) {
         if (index.waitingCount() == 0 || runtime.awaitingCanonicalPredecessor()) return;
         var ready = index.ready(runtime.canonicalState().orElseThrow().instant(), runtime::retainsScheduledAction);
@@ -127,6 +132,7 @@ final class FrontierV3PedestrianPlanning {
                 + ",\"suspendedSearches\":" + (owner == runtime ? planner.suspendedCount() : 0)
                 + ",\"serviceQueues\":" + serviceDiagnostic(runtime)
                 + ",\"oldestWaitPlanningTurns\":" + (owner == runtime ? planner.oldestWaitTurns() : 0)
+                + ",\"recovering\":" + !recovered(runtime)
                 + ",\"searchWorkUnits\":" + (owner == runtime ? planner.workUnits() : 0)
                 + ",\"completedSearches\":" + (owner == runtime ? planner.completedCount() : 0)
                 + ",\"searchProgressRevision\":" + (owner == runtime ? planner.progressRevision() : 0)

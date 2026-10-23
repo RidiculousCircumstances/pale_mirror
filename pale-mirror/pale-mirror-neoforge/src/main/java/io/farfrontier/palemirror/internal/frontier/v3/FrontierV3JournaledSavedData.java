@@ -252,8 +252,17 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
                 + ",\"forcedGroups\":" + p.forcedGroups() + ",\"appendedBytes\":" + p.appendedBytes()
                 + "," + store.layoutDiagnostic() + ",\"owner\":" + ownerDiagnostic() + "}";
     }
+    private final FrontierV3DurableContinuations durableContinuations = new FrontierV3DurableContinuations();
+    final void afterDurable(java.util.concurrent.CompletableFuture<Long> receipt, Runnable continuation) {
+        durableContinuations.add(receipt, continuation);
+    }
+    final void advance(ServerLevel level) {
+        persistAsync(level);
+        durableContinuations.advance();
+    }
     final void finish() {
         if (level == null) save(path.toFile(), null); else persist(level);
+        durableContinuations.finish();
         try { if (store != null) store.awaitCheckpoint(); }
         catch (IOException failure) { throw new UncheckedIOException("physical checkpoint failed: " + kind, failure); }
     }

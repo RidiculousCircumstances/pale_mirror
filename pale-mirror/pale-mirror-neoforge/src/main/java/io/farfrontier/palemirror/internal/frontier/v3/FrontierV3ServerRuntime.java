@@ -189,7 +189,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     boolean awaitingCanonicalPredecessor() {
         return engine.hasPendingCommit() || engine.hasPendingCalculation() && inOrdinaryPersistenceTurn();
     }
-    private boolean inOrdinaryPersistenceTurn() {
+    boolean inOrdinaryPersistenceTurn() {
         return store instanceof FrontierFileStore files && files.inTurn();
     }
 
