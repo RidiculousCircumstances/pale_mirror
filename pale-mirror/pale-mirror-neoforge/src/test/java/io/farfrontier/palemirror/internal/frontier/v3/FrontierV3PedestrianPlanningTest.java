@@ -13,6 +13,68 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3PedestrianPlanningTest {
+    @Test void readyWakeWaitsForCalculationAndExactDurablePublication(@TempDir Path directory) {
+        var base = FrontierV3FixtureCatalog.autonomousGoodsConfiguration(new WorldId("frontier:planner-predecessor"), 41);
+        var release = new java.util.concurrent.atomic.AtomicBoolean();
+        var planner = new ScheduledActionPlanner<FrontierWorldState>() {
+            public java.util.List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
+                return base.scheduledPlanner().plan(state, action);
+            }
+            public ScheduledCalculation begin(FrontierWorldState state, ScheduledAction action, SimInstant instant) {
+                return () -> release.get() ? java.util.Optional.of(base.scheduledPlanner().plan(state, action, instant))
+                        : java.util.Optional.empty();
+            }
+        };
+        var tasks = new java.util.ArrayDeque<Runnable>();
+        var delayDisk = new java.util.concurrent.atomic.AtomicBoolean();
+        var store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs(),
+                task -> { if (delayDisk.get()) tasks.add(task); else task.run(); });
+        var delegate = new FrontierStoreTransactionCommitter(store);
+        TransactionCommitter durable = new TransactionCommitter() {
+            public void commit(TransactionRecord record, io.farfrontier.palemirror.frontier.v3.persistence.Durability durability) {
+                delegate.commit(record, io.farfrontier.palemirror.frontier.v3.persistence.Durability.DURABLE_BEFORE_EFFECT);
+            }
+            public Confirmation prepare(TransactionRecord record, io.farfrontier.palemirror.frontier.v3.persistence.Durability durability) {
+                return delegate.prepare(record, io.farfrontier.palemirror.frontier.v3.persistence.Durability.DURABLE_BEFORE_EFFECT);
+            }
+        };
+        var runtime = FrontierV3ServerRuntime.startRecovered(base.withScheduledPlanner(planner), store,
+                store.recover(base.worldId()), 1000, DiagnosticRuntimeIdentity.unavailable(), durable);
+        try {
+            var action = runtime.executionView().orElseThrow().schedules().stream().sorted().reduce((a, b) -> b).orElseThrow();
+            var index = new io.farfrontier.palemirror.frontier.v3.process.PedestrianPlanningWakeIndex();
+            PedestrianRouteGeometry ground = new PedestrianRouteGeometry() {
+                public WorldBounds bounds() { return new WorldBounds(0, 0, 32, 32); }
+                public SurfaceAnchor supportAt(int x, int z) { return SurfaceAnchor.at(x, 63, z); }
+                public boolean blocked(SurfaceAnchor surface) { return false; }
+            };
+            var request = PedestrianRouteRequest.of(ground, SurfaceAnchor.at(1, 63, 1), SurfaceAnchor.at(3, 63, 1));
+            index.replace(action, java.util.List.of(request));
+            index.changed(java.util.List.of(new PedestrianPlanningChange(request, PedestrianPlanningChange.Kind.RESULT_AVAILABLE)));
+            runtime.runPersistenceTurn(() -> runtime.tick(new WorkBudget(128, 1024)));
+            assertTrue(runtime.pendingCalculation());
+            var before = runtime.checkpointImage().orElseThrow();
+            runtime.runPersistenceTurn(() -> FrontierV3PedestrianPlanning.admitReady(runtime, index));
+            assertEquals(before, runtime.checkpointImage().orElseThrow());
+            assertEquals(1, index.readyCount(), "a computed route remains ready while its canonical predecessor is pending");
+            release.set(true);
+            runtime.tick(new WorkBudget(1, 1024));
+            assertFalse(runtime.pendingCalculation());
+            delayDisk.set(true);
+            runtime.runPersistenceTurn(() -> FrontierV3PedestrianPlanning.admitReady(runtime, index));
+            assertEquals(1, index.readyCount(), "submission alone must not acknowledge the route wake");
+            assertFalse(tasks.isEmpty());
+            delayDisk.set(false);
+            while (!tasks.isEmpty()) tasks.remove().run();
+            runtime.runPersistenceTurn(() -> { });
+            assertEquals(0, index.readyCount());
+            assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind());
+            var continuation = new PedestrianPlanningReady(action).continuationAt(runtime.canonicalState().orElseThrow().instant());
+            assertTrue(runtime.retainsScheduledAction(continuation));
+        } finally {
+            delayDisk.set(false); while (!tasks.isEmpty()) tasks.remove().run(); runtime.shutdown();
+        }
+    }
     @Test void fullRecoveredReceiptsDeferRatherThanLoseWakeOrQuarantine(@TempDir Path directory) {
         var base = FrontierV3FixtureCatalog.autonomousGoodsConfiguration(new WorldId("frontier:planner-pressure"), 41);
         var configuration = new FrontierEngineConfiguration<>(base.worldId(), base.initialState(), base.initialInstant(),

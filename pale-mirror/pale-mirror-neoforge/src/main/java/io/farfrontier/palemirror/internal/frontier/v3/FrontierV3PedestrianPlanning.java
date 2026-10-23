@@ -60,7 +60,7 @@ final class FrontierV3PedestrianPlanning {
         deferredReady = continuations.readyCount();
     }
     static void admitReady(FrontierV3ServerRuntime<?, ?> runtime, PedestrianPlanningWakeIndex index) {
-        if (index.waitingCount() == 0) return;
+        if (index.waitingCount() == 0 || runtime.awaitingCanonicalPredecessor()) return;
         var ready = index.ready(runtime.canonicalState().orElseThrow().instant(), runtime::retainsScheduledAction);
         if (ready.isEmpty()) return;
         int budget = runtime.commandAdmissionCapacity().orElseThrow().optionalCommands(MAX_WAKE_COMMANDS_PER_TURN);
@@ -77,10 +77,15 @@ final class FrontierV3PedestrianPlanning {
                         || code == io.farfrontier.palemirror.frontier.v3.api.RejectionCode.TRANSACTION_CAPACITY_EXHAUSTED) break;
                 throw new IllegalStateException("addressed planning wake rejected: " + result);
             }
-            if (!runtime.retainsScheduledAction(continuation))
-                throw new IllegalStateException("accepted planning wake lost its exact runnable generation");
-            index.resumed(action, continuation);
+            if (result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Pending pending
+                    && pending.reason() == io.farfrontier.palemirror.frontier.v3.api.CommandResult.Pending.Reason.PREDECESSOR) break;
+            runtime.afterCommand(result, () -> {
+                if (!runtime.retainsScheduledAction(continuation))
+                    throw new IllegalStateException("accepted planning wake lost its exact runnable generation");
+                index.resumed(action, continuation);
+            });
             admitted++;
+            if (result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Pending) break;
         }
     }
     static synchronized java.util.Set<io.farfrontier.palemirror.frontier.v3.model.BlockPosition> knowledgeDemands(FrontierV3ServerRuntime<?, ?> runtime) {
