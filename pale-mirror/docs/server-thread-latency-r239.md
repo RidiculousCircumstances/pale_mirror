@@ -588,3 +588,22 @@ may request an earlier/later deadline; priority/cost must still match. Earliest
 wins, foreign owner/kind/cost stays rejected. Ordinary `Created` exact facts remain
 strict. Queue tests cover both directions and atomicity; the existing kernel WAL
 replay test now checks stable-address replacement as well as distinct causal IDs.
+
+R239s same-world runtime progressed609746→613128, final debt5; no new quarantine.
+Pilot e3344c26-1ee6-4a8c-a198-a84e098219ec visited both towns. Its zero-conflict
+assertion FAILED: retained incident revision2257046 is exactly the prior R239r
+queue rejection (one occurrence at609746), not a fresh failure. `why
+FRONTIER_INSTANCE/frontier:graybox` receipt build/r239s-conflict.txt. Do not erase
+this history or report the pilot as passed. Post-start peaks:89.1ms at first login,
+including46.8ms object-board preparation. Both subsequent transitions stayed<=80ms.
+Startup136.9ms sampled vanilla Raids.tick class transformation, outside PM work.
+
+R239t addresses the board's eager geometry: previously index initialization built
+cells for every structure and bootstrap organ worldwide before checking loaded
+recipients. StableObjectGeometry now indexes exact immutable declarations and
+materializes/caches only requested object footprints from the SAME shared grammar.
+Cache is bounded by that geometry's declared owners, discarded with the geometry;
+physical scars and current contamination remain uncached live facts. Full-plan
+callers can still explicitly request all footprints. No stale text or visibility
+shortcut. Focused39readability/graybox +7architecture tests andguardrailsPASS
+(build/r239t-gates.log), including removal/restoration against a reused footprint.

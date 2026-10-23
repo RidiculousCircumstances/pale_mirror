@@ -343,6 +343,19 @@ public final class FrontierGrayboxPlan {
         return objectCellsByOwner(cells);
     }
 
+    /** Exact local footprint from the shared structure grammar, without world compilation. */
+    static Set<BlockPosition> objectCells(TerrainSurfacePlan terrain, SettlementStructure structure, StructureCondition condition) {
+        var positions = new LinkedHashSet<BlockPosition>();
+        visitStructureCells(terrain, structure, condition, (position, part) -> { positions.add(position); return false; });
+        return Set.copyOf(positions);
+    }
+
+    static Set<BlockPosition> objectCells(TerrainSurfacePlan terrain, HiveOrgan organ) {
+        Map<BlockPosition, GrayboxCell> cells = new LinkedHashMap<>();
+        addOrgan(cells, terrain, organ);
+        return Set.copyOf(cells.keySet());
+    }
+
     /**
      * The expandable hive's object cells are a bounded overlay.  Local presentation may use
      * this exact grammar when an added organ changes without rebuilding the settlement and

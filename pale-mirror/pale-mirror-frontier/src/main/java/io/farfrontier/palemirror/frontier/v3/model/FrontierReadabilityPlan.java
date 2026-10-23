@@ -37,15 +37,36 @@ public final class FrontierReadabilityPlan {
     }
 
     /** Geometry is independent of stock, job, nutrition and actor-motion revisions. */
-    public record StableObjectGeometry(FrontierBootstrap bootstrap,
-            Map<SubjectId, StructureCondition> conditions,
-            Map<SubjectId, ResourceFieldLayout> fields,
-            Map<SubjectId, java.util.Set<BlockPosition>> cells) {
+    public static final class StableObjectGeometry {
+        private final FrontierBootstrap bootstrap;
+        private final Map<SubjectId, StructureCondition> conditions;
+        private final Map<SubjectId, ResourceFieldLayout> fields;
+        private final Map<SubjectId, java.util.function.Supplier<java.util.Set<BlockPosition>>> footprints;
+        private final Map<SubjectId, java.util.Set<BlockPosition>> resolved = new java.util.concurrent.ConcurrentHashMap<>();
+
+        private StableObjectGeometry(FrontierWorldState state) {
+            bootstrap = state.bootstrap(); conditions = state.structureConditions();
+            fields = state.resourceSites().cycles().entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(
+                    Map.Entry::getKey, entry -> entry.getValue().layout()));
+            var factories = new LinkedHashMap<SubjectId, java.util.function.Supplier<java.util.Set<BlockPosition>>>();
+            bootstrap.settlements().forEach(settlement -> settlement.structures().forEach(structure -> factories.put(structure.id(),
+                    () -> FrontierGrayboxPlan.objectCells(bootstrap.terrain(), structure, conditions.get(structure.id())))));
+            bootstrap.hive().organs().forEach(organ -> factories.put(organ.id(), () -> FrontierGrayboxPlan.objectCells(bootstrap.terrain(), organ)));
+            footprints = Map.copyOf(factories);
+        }
+
         public static StableObjectGeometry compile(FrontierWorldState state) {
-            return new StableObjectGeometry(state.bootstrap(), state.structureConditions(),
-                    state.resourceSites().cycles().entrySet().stream().collect(java.util.stream.Collectors.toUnmodifiableMap(
-                            Map.Entry::getKey, entry -> entry.getValue().layout())),
-                    FrontierGrayboxPlan.stableObjectCellsByOwner(state));
+            return new StableObjectGeometry(state);
+        }
+        /** Only requested object cells are materialized; cache lifetime/bounds are this immutable geometry. */
+        java.util.Set<BlockPosition> cells(SubjectId owner) {
+            var factory = footprints.get(owner);
+            return factory == null ? java.util.Set.of() : resolved.computeIfAbsent(owner, ignored -> factory.get());
+        }
+        Map<SubjectId, java.util.Set<BlockPosition>> cells() {
+            var result = new LinkedHashMap<SubjectId, java.util.Set<BlockPosition>>();
+            footprints.keySet().forEach(owner -> result.put(owner, cells(owner)));
+            return Map.copyOf(result);
         }
         public boolean matches(FrontierWorldState state) {
             return bootstrap == state.bootstrap() && conditions == state.structureConditions()
@@ -108,8 +129,8 @@ public final class FrontierReadabilityPlan {
         }
 
         private InfectionOverlayStage stage(FrontierWorldState state, SubjectId owner) {
-            var cells = geometry.cells().get(owner);
-            return cells == null ? null : contamination(state, Map.of(owner, cells)).get(owner);
+            if (state.infection().isEmpty()) return null;
+            return contamination(state, Map.of(owner, geometry.cells(owner))).get(owner);
         }
 
         public FrontierObjectBoard render(FrontierWorldState state, SubjectId owner, long atTick) {

@@ -133,6 +133,19 @@ class FrontierReadabilityPlanTest {
         assertTrue(board.text().endsWith("INFECTED\nSATURATED"));
         assertTrue(!board.text().contains(ganglion.id().value()));
         assertEquals(FrontierObjectBoard.Scope.LANDMARK, board.scope());
+        var geometry = FrontierReadabilityPlan.StableObjectGeometry.compile(state);
+        var index = new FrontierReadabilityPlan.StableBoardIndex(state, geometry);
+        assertEquals(board, index.render(state, ganglion.id(), 0L));
+        var deltas = new LinkedHashMap<BlockPosition, PhysicalDelta>();
+        var physicalPlan = FrontierGrayboxPlan.compileStableStructuralBaseline(state);
+        for (var position : geometry.cells(ganglion.id())) deltas.put(position,
+                new PhysicalDelta(position, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,
+                        java.util.Optional.of(new PhysicalDeltaSemanticTarget(PhysicalDeltaSemanticTargetKind.HIVE_ORGAN, ganglion.id())),
+                        java.util.Optional.of(physicalPlan.cells().get(position).semanticPart()), "removed infected object cells"));
+        var cleared = state.withChanges(FrontierWorldStateUpdate.begin().physicalDeltas(deltas));
+        assertTrue(geometry.matches(cleared));
+        assertFalse(index.render(cleared, ganglion.id(), 0L).text().contains("INFECTED"), "cached footprint must read current scars");
+        assertEquals(board, index.render(state, ganglion.id(), 0L), "restoration must reuse geometry without stale contamination");
     }
 
     @Test
