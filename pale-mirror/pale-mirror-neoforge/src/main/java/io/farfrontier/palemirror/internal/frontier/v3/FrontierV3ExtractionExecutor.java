@@ -197,7 +197,7 @@ final class FrontierV3ExtractionExecutor {
                 var participants = List.of(FrontierV3OperationChunks.current(level, source),
                         FrontierV3OperationEntityParticipant.current(worker, actuation.id().body().physicalEpoch()));
                 var declaration = FrontierV3MinecraftOperation.declaration(FrontierV3OperationReceipt.Protocol.EXTRACTION_BLOCK, job.id(), new ExtractionHotPrepared(job.id(), step), participants);
-                var operation = FrontierV3MinecraftOperation.apply(level, declaration, participants,
+                var operation = FrontierV3MinecraftOperation.applyDeferred(level, declaration, participants,
                     () -> FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(source)).equals(block.extraction().definition().before())
                             && FrontierV3ToolUse.before(worker.getMainHandItem(), block.toolUse())
                             && plain(worker.getOffhandItem(), job.outputKind(), block.carriedBefore()),
@@ -230,7 +230,7 @@ final class FrontierV3ExtractionExecutor {
                 var declaration = FrontierV3MinecraftOperation.declaration(FrontierV3OperationReceipt.Protocol.EXTRACTION_EQUIPMENT, job.id(), new ExtractionHotPrepared(job.id(), step), participants);
                 var adapter = new FrontierV3EquipmentItemTransfer(chest, worker, expected, equipment.slot(), take
                         ? ActorContainerItemOrder.Direction.TAKE : ActorContainerItemOrder.Direction.PLACE);
-                var operation = FrontierV3MinecraftOperation.apply(level, declaration, participants, adapter::before, adapter::apply, adapter::after);
+                var operation = FrontierV3MinecraftOperation.applyDeferred(level, declaration, participants, adapter::before, adapter::apply, adapter::after);
                 return operation.complete() ? new Applied(operation.ticket(), new ExtractionHotObserved(job.id(), step, List.of(), List.of())) : null;
             }
             case ExtractionPhysicalStep.Cargo cargo -> {
@@ -242,7 +242,7 @@ final class FrontierV3ExtractionExecutor {
                         transfer.source(), transfer.destinationSlot(), transfer.destinationBefore());
                 var participants = List.of(physical.persistence().get(), FrontierV3OperationEntityParticipant.current(worker, actuation.id().body().physicalEpoch()));
                 var declaration = FrontierV3MinecraftOperation.declaration(FrontierV3OperationReceipt.Protocol.EXTRACTION_CARGO, job.id(), new ExtractionHotPrepared(job.id(), step), participants);
-                var operation = FrontierV3MinecraftOperation.apply(level, declaration, participants, adapter::before, adapter::apply, adapter::after);
+                var operation = FrontierV3MinecraftOperation.applyDeferred(level, declaration, participants, adapter::before, adapter::apply, adapter::after);
                 return operation.complete() ? new Applied(operation.ticket(), new ExtractionHotObserved(job.id(), step, List.of(),
                         FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(physical.inventory(), state, container))) : null;
             }

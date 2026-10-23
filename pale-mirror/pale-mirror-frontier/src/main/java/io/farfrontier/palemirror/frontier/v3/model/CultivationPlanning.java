@@ -11,11 +11,9 @@ public final class CultivationPlanning {
         public Plan { Objects.requireNonNull(sites); declared = List.copyOf(declared); }
     }
     private record Key(SubjectId home, long atTick) { }
-    private static final ImmutableInputView<Map<Key, Plan>> CACHE = new ImmutableInputView<>();
-    public static synchronized Plan read(FrontierWorldState state, SubjectId home, long atTick) {
-        var cache = CACHE.get(List.of(state), HashMap::new);
-        if (cache.size() >= 64) cache.clear();
-        return cache.computeIfAbsent(new Key(home, atTick), ignored -> plan(state, home, atTick));
+    private static final ImmutableResultView<Key, Plan> CACHE = new ImmutableResultView<>(8);
+    public static Plan read(FrontierWorldState state, SubjectId home, long atTick) {
+        return CACHE.get(List.of(state), new Key(home, atTick), () -> plan(state, home, atTick));
     }
     private static Plan plan(FrontierWorldState state, SubjectId home, long atTick) {
         var rules = state.bootstrap().ruleset().fields().cultivation().orElseThrow();

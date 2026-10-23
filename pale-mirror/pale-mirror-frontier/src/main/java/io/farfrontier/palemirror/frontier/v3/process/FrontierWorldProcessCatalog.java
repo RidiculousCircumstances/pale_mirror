@@ -18,6 +18,7 @@ import static io.farfrontier.palemirror.frontier.v3.process.ProcessTypeSets.type
 import static io.farfrontier.palemirror.frontier.v3.process.ProcessTypeSets.union;
 import static io.farfrontier.palemirror.frontier.v3.process.ScheduledReviewAdmission.coalescedReview;
 import static io.farfrontier.palemirror.frontier.v3.process.ScheduledReviewAdmission.policyReview;
+import static io.farfrontier.palemirror.frontier.v3.process.ScheduledReviewAdmission.detached;
 import static io.farfrontier.palemirror.frontier.v3.process.ScheduledPlanningRecovery.withPlanningRecovery;
 
 /**
@@ -203,8 +204,8 @@ public final class FrontierWorldProcessCatalog {
             Map.entry(CultivationProcessModule.REVIEW, coalescedReview(atExecutionTime(CultivationProcessModule::plan))),
             Map.entry(ProductionStationProcessModule.REVIEW, atExecutionTime(ProductionStationProcessModule::plan)),
             Map.entry(ResourceHaulingPolicy.REVIEW, coalescedReview(withPlanningRecovery(atExecutionTime(ResourceHaulingPolicy::plan)))),
-            Map.entry(ExtractionContinuation.REVIEW, withPlanningRecovery(atExecutionTime((state, action, instant) -> ExtractionWorkProcess.review(state, action, instant.ticks())))),
-            Map.entry(ExtractionContinuation.PROGRESS, withPlanningRecovery(new FrontierScheduledPlanner() {
+            Map.entry(ExtractionContinuation.REVIEW, detached(withPlanningRecovery(atExecutionTime((state, action, instant) -> ExtractionWorkProcess.review(state, action, instant.ticks()))))),
+            Map.entry(ExtractionContinuation.PROGRESS, detached(withPlanningRecovery(new FrontierScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ExtractionWorkProcess.progress(state, action, action.dueAt().ticks());
                 }
@@ -212,7 +213,7 @@ public final class FrontierWorldProcessCatalog {
                     return ExtractionWorkProcess.progress(state, action, instant.ticks());
                 }
                 @Override public boolean held(FrontierWorldState state, ScheduledAction action) { return ExtractionWorkProcess.held(state, action); }
-            })),
+            }))),
             Map.entry(HivePresenceProcess.INITIALIZE, new FrontierScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return HivePresenceProcess.planInitialization(state, action);
@@ -338,8 +339,8 @@ public final class FrontierWorldProcessCatalog {
                 }
             }),
             Map.entry("frontier.resource_site.prepare", (state, action) -> ResourceSiteProcess.planPreparation(state, action)),
-            Map.entry("frontier.resource_site.harvest", withPlanningRecovery(atExecutionTime(
-                    (state, action, instant) -> ResourceSiteHarvestProcess.plan(state, action, instant.ticks())))),
+            Map.entry("frontier.resource_site.harvest", detached(withPlanningRecovery(atExecutionTime(
+                    (state, action, instant) -> ResourceSiteHarvestProcess.plan(state, action, instant.ticks()))))),
             Map.entry("frontier.resource_site.harvest.cold_progress", withPlanningRecovery(new FrontierScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ResourceSiteHarvestProcess.planColdProgress(state, action);

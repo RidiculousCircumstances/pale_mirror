@@ -38,3 +38,23 @@ abandoned/read-only route advice. The existing body-lifetime native slice passed
 all 24 cases. Receipts: build/r239-affected2.log, r239-runtime-final.log,
 r239-runtime-frozen.log and r239-native.log. Runtime deployment/measurement follows
 this candidate; no numerical improvement or achieved 80ms limit is asserted yet.
+
+
+First live candidate fa0caeb41 recovered the existing world without conflicts.
+COLD recent windows initially max31–71ms, but this was not terminal acceptance.
+The HOT profile found cultivation recomputed in the reducer (135 server CPU
+samples), synchronous extraction review/progress and harvest admission, and
+physical journal waits (roughly10–33ms). HOT canonical debt reached440ticks and
+later drained; therefore cheap host windows alone are insufficient. Full-pack
+pilot run4dc8eb73 completed, with17managed bodies inStonefield; first visit140/-2
+was outsideClearwater (center440/0), not evidence of a second loaded settlement.
+Startup first tick3.16s and later612ms ingress remain explicit unresolved peaks.
+
+Follow-up: immutable completed-results cache reuses exact input identities across
+preparation/reduction, without sharing mutable per-thread memo maps. Cultivation
+and economic assessment use it. Extraction review/progress and harvest admission
+explicitly opt into detached preparation without changing scheduler priority,
+weight or coalescing. Ordinary retained mining/field/food/production/shipment
+physical steps use existing asynchronous before-effect receipts. Native player,
+death and other non-repeatable callbacks retain their explicit synchronous API.
+This does not yet claim elimination of every physical confirmation force.

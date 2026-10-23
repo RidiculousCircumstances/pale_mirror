@@ -20,11 +20,30 @@ final class ScheduledReviewAdmission {
     }
     static FrontierScheduledPlanner policyReview(FrontierScheduledPlanner delegate,
             ToIntBiFunction<FrontierWorldState, ScheduledAction> workUnits) {
-        return decorate(delegate, false, workUnits);
+        return decorate(delegate, false, reviewWeight(delegate, workUnits));
     }
     static FrontierScheduledPlanner coalescedReview(FrontierScheduledPlanner delegate,
             ToIntBiFunction<FrontierWorldState, ScheduledAction> workUnits) {
-        return decorate(delegate, true, workUnits);
+        return decorate(delegate, true, reviewWeight(delegate, workUnits));
+    }
+    /** Preparation capability without changing semantic priority, weight or coalescing. */
+    static FrontierScheduledPlanner detached(FrontierScheduledPlanner delegate) {
+        return decorate(delegate, delegate.acceptsReconsideration(), delegate::admissionWeight);
+    }
+    private static ToIntBiFunction<FrontierWorldState, ScheduledAction> reviewWeight(FrontierScheduledPlanner delegate,
+            ToIntBiFunction<FrontierWorldState, ScheduledAction> workUnits) {
+        return (state, action) -> {
+            int units = workUnits.applyAsInt(state, action);
+            if (units < 1) throw new IllegalArgumentException("review owner declared nonpositive work");
+            var policy = state.bootstrap().ruleset().execution();
+            // Saturate just above half a turn: two largest reviews cannot
+            // batch together, while cheap independent actions retain headroom.
+            // Admission never drops alternatives or changes consent.
+            int largestReview = policy.maxWeight() / 2 + 1;
+            int cost = (int) Math.min(largestReview, (long) units * policy.policyReviewWeight());
+            return Math.max(Math.max(action.weight(), delegate.admissionWeight(state, action)),
+                    Math.max(policy.policyReviewWeight(), cost));
+        };
     }
     private static FrontierScheduledPlanner decorate(FrontierScheduledPlanner delegate, boolean coalescible,
             ToIntBiFunction<FrontierWorldState, ScheduledAction> workUnits) {
@@ -39,16 +58,7 @@ final class ScheduledReviewAdmission {
             @Override public java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledHold<FrontierWorldState>>
                     holdProof(FrontierWorldState state, ScheduledAction action) { return delegate.holdProof(state, action); }
             @Override public int admissionWeight(FrontierWorldState state, ScheduledAction action) {
-                int units = workUnits.applyAsInt(state, action);
-                if (units < 1) throw new IllegalArgumentException("review owner declared nonpositive work");
-                var policy = state.bootstrap().ruleset().execution();
-                // Saturate just above half a turn: two largest reviews cannot
-                // batch together, while cheap independent actions retain headroom.
-                // Admission never drops alternatives or changes consent.
-                int largestReview = policy.maxWeight() / 2 + 1;
-                int cost = (int) Math.min(largestReview, (long) units * policy.policyReviewWeight());
-                return Math.max(Math.max(action.weight(), delegate.admissionWeight(state, action)),
-                        Math.max(policy.policyReviewWeight(), cost));
+                return workUnits.applyAsInt(state, action);
             }
             @Override public boolean acceptsReconsideration() { return coalescible; }
             @Override public Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) { return delegate.wakeDependencies(state, action); }

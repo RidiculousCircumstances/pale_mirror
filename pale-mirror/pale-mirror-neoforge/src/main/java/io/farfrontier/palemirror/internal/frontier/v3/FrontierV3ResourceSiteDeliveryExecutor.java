@@ -277,7 +277,7 @@ final class FrontierV3ResourceSiteDeliveryExecutor {
         var transfer = new FrontierV3ActorItemTransfer.FungibleStep(order, chest, farmer, witness.entityId(),
                 MaterialSourceSelection.select(resources, order), witness.slot(), 0);
         var binding = FrontierV3HarvestDeliveryOperation.binding(state, witness, farmer, chest);
-        var operation = FrontierV3MinecraftOperation.apply(level, binding.declaration(), binding.participants(),
+        var operation = FrontierV3MinecraftOperation.applyDeferred(level, binding.declaration(), binding.participants(),
                 transfer::before, transfer::apply, transfer::after);
         if (!operation.complete()) return false;
         List<FungiblePhysicalObservation.Stack> stacks = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(

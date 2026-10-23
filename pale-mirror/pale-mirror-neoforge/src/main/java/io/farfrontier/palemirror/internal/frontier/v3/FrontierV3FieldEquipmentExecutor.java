@@ -69,7 +69,7 @@ final class FrontierV3FieldEquipmentExecutor {
                 FrontierV3OperationEntityParticipant.current(worker, actuation.id().body().physicalEpoch()));
         var declaration = FrontierV3MinecraftOperation.declaration(FrontierV3OperationReceipt.Protocol.FIELD_EQUIPMENT,
                 job.id(), prepare, participants);
-        var result = FrontierV3MinecraftOperation.apply(level, declaration, participants, adapter::before, adapter::apply, adapter::after);
+        var result = FrontierV3MinecraftOperation.applyDeferred(level, declaration, participants, adapter::before, adapter::apply, adapter::after);
         if (result.complete()) FrontierV3OperationConfirmation.submit(level, runtime, result.ticket(),
                 new FieldEquipmentChanged(job.siteId(), job.id(), job.equipment().stage(), FieldEquipmentChanged.Action.CONFIRM, Optional.of(step)),
                 () -> FrontierV3ActorCarryProjection.rememberConfirmed(runtime.decodedState().orElseThrow(), job.workerId(), worker));

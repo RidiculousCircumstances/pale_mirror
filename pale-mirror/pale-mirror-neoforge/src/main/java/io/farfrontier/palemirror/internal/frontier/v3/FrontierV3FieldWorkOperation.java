@@ -77,7 +77,7 @@ final class FrontierV3FieldWorkOperation {
             ResourceSiteHarvestJob job, Mob worker, ResourceFieldLayout.Cell cell,
             FrontierV3ResourceFieldWitness.Pending pending, BlockExtractionPort extraction) {
         var binding = binding(level, state, job, worker, cell, pending);
-        return FrontierV3MinecraftOperation.apply(level, binding.declaration(), binding.participants(),
+        return FrontierV3MinecraftOperation.applyDeferred(level, binding.declaration(), binding.participants(),
                 () -> condition(level, cell, pending).equals(new FrontierV3ResourceFieldObservation.Owned(pending.transition().before()))
                         && toolMatches(worker, job, false)
                         && pending.handEffect().map(effect -> FrontierV3ActorHandObservation.observe(level, state, lease, job).matchesBefore(effect)).orElse(true),

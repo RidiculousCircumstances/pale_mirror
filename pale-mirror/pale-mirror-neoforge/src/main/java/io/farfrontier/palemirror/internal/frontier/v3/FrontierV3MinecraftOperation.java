@@ -124,6 +124,10 @@ final class FrontierV3MinecraftOperation {
     static Result applyDeferred(ServerLevel level, Request request) {
         return applyBatch(level, List.of(request), true).getFirst();
     }
+    static Result applyDeferred(ServerLevel level, FrontierV3OperationReceipt.Declaration declaration,
+            List<Participant> participants, BooleanSupplier before, BooleanSupplier mutation, BooleanSupplier after) {
+        return applyDeferred(level, new Request(declaration, participants, before, mutation, after));
+    }
     private static List<Result> applyBatch(ServerLevel level, List<Request> requests, boolean deferred) {
         if (!level.getServer().isSameThread()) throw new IllegalStateException("native operation outside server thread");
         if (requests.isEmpty() || requests.size() > 256) throw new IllegalArgumentException("unbounded native operation batch");

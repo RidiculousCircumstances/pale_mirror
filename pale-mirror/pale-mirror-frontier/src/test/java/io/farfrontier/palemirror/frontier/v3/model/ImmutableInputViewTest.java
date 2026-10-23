@@ -6,6 +6,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ImmutableInputViewTest {
+    @Test void completedImmutableResultCanCrossThreadsButCannotCrossAnInputRevision() throws Exception {
+        var view = new ImmutableResultView<String, Integer>(2); var calls = new AtomicInteger();
+        var input = new String("basis");
+        var result = new java.util.concurrent.FutureTask<Integer>(() -> view.get(List.of(input), "plan", calls::incrementAndGet));
+        new Thread(result).start();
+        assertEquals(1, result.get());
+        assertEquals(1, view.get(List.of(input), "plan", calls::incrementAndGet));
+        assertEquals(2, view.get(List.of(new String("basis")), "plan", calls::incrementAndGet));
+        assertEquals(3, view.get(List.of(input), "other-plan", calls::incrementAndGet));
+        assertEquals(4, view.get(List.of(input), "plan", calls::incrementAndGet), "bounded eviction recomputes, never supplies another result");
+    }
     @Test void mutableDerivedMemoIsConfinedToItsCalculationThread() throws Exception {
         var view = new ImmutableInputView<java.util.Map<String, Integer>>(); var input = new Object();
         var main = view.get(List.of(input), java.util.HashMap::new); main.put("value", 1);

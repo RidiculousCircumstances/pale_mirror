@@ -95,7 +95,7 @@ final class FrontierV3ShipmentPhysicalExecutor {
             if (!step.observation().actuation().equals(actuation.id()) || step.observation().scopeRevision() != lease.revision())
                 return conflict(runtime, shipment, container, "retained physical effect has a stale body/scope fence");
             var participants = transfer.participants();
-            var operation = FrontierV3MinecraftOperation.apply(level, FrontierV3MinecraftOperation.declaration(
+            var operation = FrontierV3MinecraftOperation.applyDeferred(level, FrontierV3MinecraftOperation.declaration(
                     FrontierV3OperationReceipt.Protocol.SHIPMENT_TRANSFER, shipment.id(), new ShipmentHotPrepared(shipment.id(), step), participants),
                     participants, transfer::before, transfer::apply, transfer::after);
             if (!operation.complete()) return false;

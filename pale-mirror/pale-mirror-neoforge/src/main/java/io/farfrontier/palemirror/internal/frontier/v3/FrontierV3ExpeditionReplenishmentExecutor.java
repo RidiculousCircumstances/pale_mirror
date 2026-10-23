@@ -47,7 +47,7 @@ final class FrontierV3ExpeditionReplenishmentExecutor {
             throw new IllegalStateException("prepared expedition replenishment lost exact actuation " + transfer.claimId());
         var participants = List.of(source.persistence().get(),
                 FrontierV3OperationEntityParticipant.current(actor, actuation.id().body().physicalEpoch()));
-        var operation = FrontierV3MinecraftOperation.apply(level, FrontierV3MinecraftOperation.declaration(
+        var operation = FrontierV3MinecraftOperation.applyDeferred(level, FrontierV3MinecraftOperation.declaration(
                 FrontierV3OperationReceipt.Protocol.EXPEDITION_REPLENISHMENT, mission.id(), new ExpeditionReplenishmentHotPrepared(mission.id(), transfer.claimId(), step), participants),
                 participants, effect::before, effect::apply, effect::after);
         if (!operation.complete()) return false;

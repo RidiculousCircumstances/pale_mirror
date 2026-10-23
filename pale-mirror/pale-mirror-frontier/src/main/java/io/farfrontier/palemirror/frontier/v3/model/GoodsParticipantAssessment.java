@@ -17,6 +17,7 @@ public final class GoodsParticipantAssessment {
     }
     private record Key(GoodsParticipant participant, long atTick, boolean exports) { }
     private static final ImmutableInputView<Map<Key, Assessment>> CACHE = new ImmutableInputView<>();
+    private static final ImmutableResultView<Key, Assessment> COMPLETED = new ImmutableResultView<>(64);
     private static final EconomicPlanner ECONOMY = new EconomicPlanner();
     private GoodsParticipantAssessment() { }
 
@@ -44,7 +45,8 @@ public final class GoodsParticipantAssessment {
         if (existing != null) return existing;
         // Explicit put: evaluation may populate other domestic entries in the same
         // cache; HashMap.computeIfAbsent forbids those nested structural changes.
-        var result = exports ? complete(state, domestic(state, participant, atTick)) : evaluateDomestic(state, participant, atTick);
+        var result = COMPLETED.get(List.of(state), key, () -> exports
+                ? complete(state, domestic(state, participant, atTick)) : evaluateDomestic(state, participant, atTick));
         if (cache.size() >= 256) cache.clear();
         cache.put(key, result);
         return result;

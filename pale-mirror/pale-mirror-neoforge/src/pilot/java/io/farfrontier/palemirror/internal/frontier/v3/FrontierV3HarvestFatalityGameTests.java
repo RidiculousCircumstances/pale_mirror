@@ -64,6 +64,12 @@ public final class FrontierV3HarvestFatalityGameTests {
             // Tilling changes terrain and the retained hoe condition in one operation.
             var operation = FrontierV3FieldWorkOperation.apply(level, state, lease, job, body, cell,
                     witness.cell(cell.id()).pending().orElseThrow(), null);
+            if (operation.status() == FrontierV3MinecraftOperation.Status.WAITING_DURABILITY) {
+                helper.assertTrue(level.getBlockState(target.below()).is(Blocks.DIRT), "pending permission cannot till early");
+                FrontierV3OperationLedger.get(level).persist(level);
+                operation = FrontierV3FieldWorkOperation.apply(level, state, lease, job, body, cell,
+                        witness.cell(cell.id()).pending().orElseThrow(), null);
+            }
             helper.assertTrue(operation.complete() && level.getBlockState(target.below()).is(Blocks.FARMLAND),
                     "actual tilling precedes the native death, without canonical completion yet");
             body.setHealth(0);

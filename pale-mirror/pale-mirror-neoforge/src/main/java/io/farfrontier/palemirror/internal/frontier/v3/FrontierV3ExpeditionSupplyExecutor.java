@@ -72,7 +72,7 @@ final class FrontierV3ExpeditionSupplyExecutor {
             participants.add(physical.persistence().get());
             participants.add(attached == null ? FrontierV3OperationEntityParticipant.current(worker, actuation.id().body().physicalEpoch())
                     : attached.persistence().get());
-            var operation = FrontierV3MinecraftOperation.apply(level, FrontierV3MinecraftOperation.declaration(
+            var operation = FrontierV3MinecraftOperation.applyDeferred(level, FrontierV3MinecraftOperation.declaration(
                     FrontierV3OperationReceipt.Protocol.EXPEDITION_SUPPLY, mission.id(), new ExpeditionSupplyHotPrepared(mission.id(), a.claimId(), step), participants),
                     participants, transfer::before, transfer::apply, transfer::after);
             if (!operation.complete()) return false;

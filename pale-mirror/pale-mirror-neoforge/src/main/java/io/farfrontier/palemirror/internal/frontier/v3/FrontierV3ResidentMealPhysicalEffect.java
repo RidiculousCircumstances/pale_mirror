@@ -125,7 +125,7 @@ final class FrontierV3ResidentMealPhysicalEffect {
                 ActorBodyAuthority.current(state, meal.residentId()).physicalEpoch());
         var containerParticipant = FrontierV3OperationBlockEntityParticipant.current(chest);
         var declaration = FrontierV3ResidentMealNativeOperation.take(meal, pending, actorParticipant, containerParticipant);
-        var operation = FrontierV3MinecraftOperation.apply(level, declaration, List.of(actorParticipant, containerParticipant),
+        var operation = FrontierV3MinecraftOperation.applyDeferred(level, declaration, List.of(actorParticipant, containerParticipant),
                 transfer::before, transfer::apply, transfer::after);
         if (!operation.complete()) return false;
         List<FungiblePhysicalObservation.Stack> remaining =
@@ -170,7 +170,7 @@ final class FrontierV3ResidentMealPhysicalEffect {
         var participant = FrontierV3OperationEntityParticipant.current(worker,
                 ActorBodyAuthority.current(state, meal.residentId()).physicalEpoch());
         var declaration = FrontierV3ResidentMealNativeOperation.consume(meal, pending, held, participant);
-        var operation = FrontierV3MinecraftOperation.apply(level, declaration, List.of(participant),
+        var operation = FrontierV3MinecraftOperation.applyDeferred(level, declaration, List.of(participant),
                 () -> FrontierV3ResidentMealItems.matches(FrontierV3ActorResourceSlots.get(worker, meal.inventorySlot()), held),
                 () -> {
                     var remainder = FrontierV3ActorResourceSlots.get(worker, meal.inventorySlot()).copy(); remainder.shrink(meal.portion().quantity());

@@ -33,7 +33,7 @@ final class FrontierV3ProductionStationFuelExecutor {
             var participants = List.of(physical.persistence().get());
             var declaration = FrontierV3MinecraftOperation.declaration(FrontierV3OperationReceipt.Protocol.STATION_FUEL, machine.stationId(),
                     new ProductionStationFuelChanged(ProductionStationFuelChanged.Stage.HOT_PREPARED, burn, List.of()), participants);
-            var effect = FrontierV3MinecraftOperation.apply(level, declaration, participants,
+            var effect = FrontierV3MinecraftOperation.applyDeferred(level, declaration, participants,
                     () -> plain(physical.inventory().getItem(slot), new ItemStack(item, before)),
                     () -> { physical.inventory().setItem(slot, before == 1 ? ItemStack.EMPTY : new ItemStack(item, before - 1));
                         physical.inventory().setChanged(); return true; },
