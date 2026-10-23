@@ -38,3 +38,23 @@ Frozen saved-state economic assessment produced identical results before/after
 (hash 5214651023786492103); warm samples overlap (~32–40ms). No measured overall
 assessment speedup is claimed from that comparison. Early unavailable-tool
 rejection addresses a different, work-admission caller path.
+
+## Live-discovered renewal defect
+
+The creative-player probe on bd6d0baf8 traversed 26.60 blocks / 400 client turns
+before leaving. After return, a second 400-turn sample traversed only 17.53 blocks
+and contained 91 consecutive stationary samples. Actor diagnostics stayed in the
+same group and exact goal, with no route blocker, but native state became IDLE.
+The bounded ambient probe can defer a resident; native control expired after
+20 physical ticks without that probe renewing it. Scheduler delay therefore
+revoked an otherwise current order. This is independent of donkey geometry.
+
+Explicit retained-movement permissions now validate the current canonical order
+and execution at each native boundary rather than expiring by probe age. Body
+custody/incarnation, ambient capability, profile and absence of a COLD writer
+remain mandatory. Removed/replaced orders revoke immediately. Orderless local
+commands retain their existing renewal requirement. No timeout is increased;
+only the already accepted bounded local leg continues between owner reviews.
+Focused actuation coverage rejects same-target revision replacement, removed
+orders and unavailable runtime authority. Live follow-up must measure motion
+again; the earlier probe's successful completion alone did not prove smoothness.

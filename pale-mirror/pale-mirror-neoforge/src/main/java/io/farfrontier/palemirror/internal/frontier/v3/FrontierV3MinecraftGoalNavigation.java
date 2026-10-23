@@ -258,7 +258,7 @@ final class FrontierV3MinecraftGoalNavigation {
         }
         if (!control.permission().current(actor)) { stop(actor); return false; }
         if (!(actor.level() instanceof ServerLevel level) || actor.isRemoved() || !actor.isAlive()
-                || level.getGameTime() - control.refreshedAt() > RETRY_TICKS) {
+                || control.permission().requiresPeriodicRefresh() && level.getGameTime() - control.refreshedAt() > RETRY_TICKS) {
             stop(actor);
             return true;
         }
@@ -335,7 +335,7 @@ final class FrontierV3MinecraftGoalNavigation {
         var control = ACTIVE.get(actor);
         return control != null && actor.isAlive() && !actor.isRemoved()
                 && actor.level() instanceof ServerLevel level && control.permission().current(actor)
-                && level.getGameTime() - control.refreshedAt() <= RETRY_TICKS
+                && (!control.permission().requiresPeriodicRefresh() || level.getGameTime() - control.refreshedAt() <= RETRY_TICKS)
                 && !FrontierV3SemanticMovement.arrived(level, actor, control.target());
     }
 

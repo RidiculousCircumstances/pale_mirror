@@ -131,6 +131,41 @@ class FrontierV3ActorActuationTest {
         assertFalse(next.current(declaration), "stopped or quarantined runtime grants no motion");
     }
 
+    @Test void retainedMovementAuthorityRejectsReplacedGoalAndRemovalWithoutReauthorizingTheBody() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:retained-motion"), 71L));
+        var actor = state.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
+        var execution = state.actorExecutions().next(actor, ActorActivityKind.PRESENCE, actor);
+        state = ActorExecutionComposition.LIFECYCLE.prepareVacant(state, execution).commit(state, FrontierWorldStateUpdate.begin());
+        state = ActorBodyAuthority.demand(state, actor);
+        var body = ActorBodyAuthority.current(state, actor);
+        state = ActorBodyAuthority.running(state, body);
+        var owner = state.humanPopulation().residents().get(actor).settlementId();
+        var container = state.inventory().containers().values().stream()
+                .filter(value -> value.ownerId().equals(owner) && value.storage().isPresent()).findFirst().orElseThrow();
+        var point = new ServicePointId(ServicePointId.Kind.SETTLEMENT_DEPOT, owner, container.id());
+        var order = new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(actor, actor, 0, 1,
+                java.util.List.of(state.actorLocations().get(actor).supportingSurface()), TraversalCapability.PEDESTRIAN,
+                io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION);
+        var movement = new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement(order, 0,
+                new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ResourceAccessExit(point, actor), execution);
+        var source = new AtomicReference<>(Optional.of(state));
+        var permit = new FrontierV3ActorActuation(new ActorActuationId(body, execution), source::get);
+        assertFalse(permit.currentMovement(order));
+        state = state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(java.util.Map.of(actor, movement)));
+        source.set(Optional.of(state));
+        assertTrue(permit.currentMovement(order));
+        var replacement = new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(actor, actor, 0, 2,
+                order.legalStations(), order.capability(), order.arrivalPolicy());
+        source.set(Optional.of(state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(java.util.Map.of(actor,
+                new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement(replacement, 1, movement.context(), execution))))));
+        assertFalse(permit.currentMovement(order), "same owner, actor and target do not preserve a superseded order");
+        assertTrue(permit.currentMovement(replacement));
+        source.set(Optional.of(state.withChanges(FrontierWorldStateUpdate.begin().actorMovements(java.util.Map.of()))));
+        assertFalse(permit.currentMovement(order), "retirement revokes motion immediately without an elapsed-time timeout");
+        source.set(Optional.empty());
+        assertFalse(permit.currentMovement(order));
+    }
+
     @Test void bodyDeclarationCannotSubstituteUuidKindRepresentationOrEpochForExactAuthority() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:actuation-tuple"), 71L));
         var actor = state.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();

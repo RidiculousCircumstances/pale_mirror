@@ -52,6 +52,17 @@ record FrontierV3ActorActuation(ActorActuationId id, Supplier<Optional<FrontierW
         return true;
     }
 
+    /** A retained navigation order is revoked by its owner, not by scheduler age. */
+    boolean currentMovement(io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder order) {
+        var state = currentState.get();
+        if (state.isEmpty()) return false;
+        try { ActorBodyAuthority.requireActuation(state.orElseThrow(), id); }
+        catch (IllegalArgumentException stale) { return false; }
+        var movement = state.orElseThrow().actorMovements().get(id.body().actorId());
+        return movement != null && movement.executionId().equals(id.execution())
+                && movement.order().equals(order) && movement.coldTravel().isEmpty();
+    }
+
     private static void requireEnvelope(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId actorId, Mob body) {
         var profile = state.actorLocations().get(actorId).navigationProfile();
         if (!profile.matchesDimensions(body.getBbWidth(), body.getBbHeight()))
