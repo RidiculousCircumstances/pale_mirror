@@ -317,8 +317,23 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     long pendingOrdinaryTicks() { return pendingOrdinaryTicks; }
     String preparationDiagnostic() { return preparations.diagnostic(engine != null && engine.hasPendingCalculation()); }
 
+    void onReady(Runnable listener) {
+        preparations.onReady(listener);
+        if (store instanceof FrontierFileStore files) files.onReady(listener);
+    }
+    private Optional<WorkBudget> ordinaryTurnBudget = Optional.empty();
+    private boolean ordinaryDeferred;
+    /** One allowance per observed host tick, shared by all ready continuations. */
+    void beginOrdinaryTurn(WorkBudget budget) { ordinaryTurnBudget = Optional.of(Objects.requireNonNull(budget)); }
+    void resumeOrdinaryTurn() {
+        if (ordinaryTurnBudget.isEmpty()) return;
+        var budget = ordinaryTurnBudget.orElseThrow();
+        var result = advanceOrdinaryTime(budget);
+        if (result.isPresent()) ordinaryTurnBudget = result.orElseThrow().consumed().remaining(budget);
+    }
+
     Optional<AdvanceResult> advanceOrdinaryTime(WorkBudget budget) {
-        if (pendingOrdinaryTicks == 0) return Optional.empty();
+        if (pendingOrdinaryTicks == 0 && !ordinaryDeferred) return Optional.empty();
         // Preserve each causal readiness/audit boundary, but permit several in
         // one durability turn. All share the original execution AND assessment
         // allowance; physical executors are not replayed and checkpoint debt is
@@ -329,7 +344,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         var remaining = Optional.of(budget);
         var transactions = new java.util.ArrayList<io.farfrontier.palemirror.frontier.v3.api.TransactionId>();
         int actions = 0, weight = 0, classifications = 0, executions = 0;
-        while (instant.ticks() < target && remaining.isPresent()) {
+        while ((instant.ticks() < target || ordinaryDeferred) && remaining.isPresent()) {
             long before = instant.ticks();
             long boundary = engine.nextExecutionBoundary().map(value -> Math.max(1L, value.ticks() - before))
                     .orElse(target - before);
@@ -337,6 +352,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             pendingOrdinaryTicks = Math.subtractExact(pendingOrdinaryTicks, instant.ticks() - before);
             if (result.isEmpty()) return Optional.empty();
             latest = result.orElseThrow(); transactions.addAll(latest.transactions());
+            ordinaryDeferred = latest.deferredAction().isPresent();
             var used = latest.consumed();
             actions += used.actions(); weight += used.weight(); classifications += used.classifications(); executions += used.executions();
             remaining = used.remaining(remaining.orElseThrow());
@@ -411,6 +427,13 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             // Reserve the entire bounded turn, or narrow an oversized budget to the actual
             // retention ceiling. Only a confirmed snapshot/WAL compaction releases history.
             int actions = Math.min(budget.maxActions(), configuration.limits().maxTransactions());
+            // A previously admitted calculation already owns a place in this
+            // retained prefix. It must finish before checkpoint capture; asking
+            // for a fresh whole-turn reservation here deadlocks both owners.
+            if (engine.hasPendingCalculation()) {
+                actions = Math.min(actions, engine.commandAdmissionCapacity().availableTransactions());
+                if (actions == 0) throw new IllegalStateException("admitted calculation lost its retained transaction slot");
+            }
             if (!ensureTransactionHeadroom(actions)) return Optional.empty();
             WorkBudget retainedBudget = actions == budget.maxActions() ? budget : new WorkBudget(actions, budget.maxWeight(),
                     budget.maxClassificationEvaluations(), Math.min(actions, budget.maxExecutionEvaluations()), budget.maxActionWeight());

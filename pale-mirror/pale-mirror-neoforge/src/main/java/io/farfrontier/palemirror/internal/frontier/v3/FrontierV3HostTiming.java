@@ -9,6 +9,7 @@ import java.util.Map;
 public final class FrontierV3HostTiming {
     private static final Map<MinecraftServer, FrontierExecutionMetrics.Span> TICKS = new IdentityHashMap<>();
     private FrontierV3HostTiming() { }
+    static boolean inHostTick(MinecraftServer server) { return TICKS.containsKey(server); }
     /** Native work through our Post handler, excluding later listeners and the idle tick wait. */
     public static void beginHostTick(MinecraftServer server) {
         var runtime = FrontierV3ServerLifecycle.runtimeFor(server);
@@ -24,5 +25,9 @@ public final class FrontierV3HostTiming {
     static FrontierExecutionMetrics.Span beginPmTurn(FrontierExecutionMetrics metrics) {
         return FrontierExecutionMetrics.safelyBegin(metrics, FrontierExecutionMetrics.Stage.HOST_TURN,
                 "pm-turn-including-durability", "world");
+    }
+    static FrontierExecutionMetrics.Span beginReadyTurn(FrontierExecutionMetrics metrics) {
+        return FrontierExecutionMetrics.safelyBegin(metrics, FrontierExecutionMetrics.Stage.HOST_TURN,
+                "pm-ready-continuation", "world");
     }
 }

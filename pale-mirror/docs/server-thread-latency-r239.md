@@ -351,3 +351,64 @@ low host-tick time cannot substitute for timely simulation progress.
 Pack commit f631234 adds explicit reversible Java22 --gc profile support; runtime
 uses its managed generational-z profile with the same4–12GiB heap. No client JVM
 change or implicit installer-wide collector switch.
+
+## R239m — readiness-driven canonical resumption
+
+R239l (02f23781a), same world, managed Generational ZGC: the two-visit pilot
+74f6adda-80f2-4c92-901b-d22f2a67ccf9 completed. JFR240s has291 GC pauses,
+max0.036327ms. Host outliers remain: first login304.1ms, transition113.3ms,
+ordinary103.1ms, departure92.5ms. No80ms acceptance. The ordinary field barriers
+are absent from >=10ms journal waits; saved-body fencing remains (8 waits,
+81.3ms total). Eight unresolved historical field-projection tickets were logged
+on Stonefield admission (source revision2081274); green retained-conflict summary
+does not prove those projection operations healthy. Diagnose separately; do not
+replay an uncertain physical operation merely to suppress the warning.
+
+Worker JFR from R239k attributes1825/3025 samples to GoodsParticipantProcess,
+including market-book construction and repeated supply-policy projections.
+A separate structural throughput limit is confirmed in the caller chain:
+ScheduledPreparation and FrontierFileStore had no owner wake on completion;
+a ready result waited for the next host tick. R239l ordinary time debt reached
+2817ticks with4858 completed preparations averaging33.8ms. CPU relocation alone
+therefore did not meet the product performance goal.
+
+FrontierV3CanonicalResumption now binds coalesced readiness from the preparation
+worker and ordered WAL/snapshot writer to Minecraft's existing task queue.
+No second canonical executor: runtime remains the sole publication owner.
+Ready tasks recheck runtime identity, lifecycle/operator holds and recovery;
+they cannot reenter a native tick, repeat physical execution, accrue host time
+or renew the observed tick's deterministic work allowance. Cancellation/closed
+runtime notifications cannot revive a session. A calculation already captured
+at the current instant may finish with zero remaining elapsed-time debt.
+`pm-ready-continuation` is separately measured, with exact >80ms outlier logs;
+it must not be hidden by reporting only the native through-Post span.
+
+Pinned engine source: BlockableEventLoop.tell always queues and unparks;
+execute may run inline on the owner and is deliberately not used. Existing
+Minecraft TickTask scheduling retains event-loop fairness. Core kernel event
+ordering/commit protocol and captured execution instant are unchanged.
+
+Focused readiness/runtime/file-store checks PASS (r239m-tests-recheck.log).
+The old host-debt test counted polling calls as elapsed progress, which depends
+on worker completion timing; it now checks actual multi-tick canonical advance
+and retains exact final checkpoint equivalence. One new fixture initially
+omitted kernel schedule codecs; corrected fixture, no product workaround.
+Guardrails PASS after keeping new resumption logic outside the large lifecycle
+class. End-to-end single-host-tick asynchronous completion/restart and live
+throughput measurement follow before an improvement claim.
+
+The single-tick asynchronous test exposed a real retention deadlock: after one
+of two retained slots was used, the second preparation was ready, but runtime
+requested two free slots before accepting it. Checkpoint capture correctly
+refused while that same calculation remained pending. The failure receipt shows
+value=1,pending=true,completed=2,running=0,queued=0,awaitingDurability=false.
+Runtime now bounds a retained calculation by actually available slots; it does
+not demand a fresh full-turn reservation or cancel/recompute its exact input.
+Also retain the explicit deferred ordinary boundary when elapsed-time debt
+reaches zero, so completion and checkpoint notifications can drain that boundary
+without manufacturing another host tick.
+
+R239m final41 focused tests PASS, including six asynchronous scheduled actions,
+WAL forces and capacity checkpoints completed at instant1 after exactly one
+observed host tick, followed by exact restart. Guardrails PASS:
+`build/r239m-acceptance.log`. No elapsed-speed acceptance is inferred from tests.

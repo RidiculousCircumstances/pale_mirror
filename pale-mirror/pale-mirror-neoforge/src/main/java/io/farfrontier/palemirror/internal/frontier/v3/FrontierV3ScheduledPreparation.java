@@ -14,6 +14,8 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
     private final java.util.concurrent.atomic.AtomicLong maxNanos = new java.util.concurrent.atomic.AtomicLong();
     private long cancelled;
     private long cancelledReady;
+    private volatile Runnable ready = () -> { };
+    void onReady(Runnable listener) { ready = Objects.requireNonNull(listener); }
     String diagnostic(boolean pending) {
         return "{\"pending\":" + pending + ",\"running\":" + worker.getActiveCount()
                 + ",\"queued\":" + worker.getQueue().size() + ",\"completed\":" + completed.get()
@@ -25,7 +27,9 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
             });
     FrontierV3ScheduledPreparation(ScheduledActionPlanner<S> delegate) { this.delegate = Objects.requireNonNull(delegate); }
     <T> java.util.Optional<java.util.concurrent.Future<T>> prepareValue(Supplier<T> value) {
-        var task = new FutureTask<T>(value::get);
+        var task = new FutureTask<T>(value::get) {
+            @Override protected void done() { if (!isCancelled()) ready.run(); }
+        };
         try { worker.execute(task); return java.util.Optional.of(task); }
         catch (java.util.concurrent.RejectedExecutionException busy) {
             if (worker.isShutdown()) throw busy;
@@ -42,7 +46,9 @@ final class FrontierV3ScheduledPreparation<S> implements ScheduledActionPlanner<
                 long elapsed = System.nanoTime() - began;
                 totalNanos.addAndGet(elapsed); maxNanos.accumulateAndGet(elapsed, Math::max); completed.incrementAndGet();
             }
-        });
+        }) {
+            @Override protected void done() { if (!isCancelled()) ready.run(); }
+        };
         worker.execute(task);
         return new ScheduledCalculation() {
             @Override public Optional<List<ProposedEvent>> poll() {

@@ -53,6 +53,8 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
     private long flushingBytes, flushGroups, lastFlushNanos, maxFlushNanos, pendingSinceNanos;
     private RuntimeException ioFailure;
     private boolean closed;
+    private volatile Runnable ready = () -> { };
+    void onReady(Runnable listener) { ready = Objects.requireNonNull(listener); }
     /**
      * The server owns one store on one thread.  Retaining its already-verified image avoids a
      * directory scan and full snapshot decode at every periodic checkpoint; a new store created
@@ -283,6 +285,7 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
                             result.complete(null);
                         } catch (Throwable failure) { result.completeExceptionally(failure); } }, false)) return java.util.Optional.empty();
                         write = result; submittedAt = System.nanoTime();
+                        result.whenComplete((ignored, failure) -> ready.run());
                     }
                     if (!write.isDone()) {
                         if (System.nanoTime() - submittedAt > java.util.concurrent.TimeUnit.SECONDS.toNanos(REQUIRED_IO_SAFETY_SECONDS))
@@ -441,6 +444,7 @@ public final class FrontierFileStore implements FrontierStore, AutoCloseable {
         pendingFlush = future; flushingRecords = records.size(); flushingBytes = pendingBytes;
         pendingRecords.clear(); pendingBytes = 0;
         if (pendingSinceNanos == 0L) pendingSinceNanos = System.nanoTime();
+        future.whenComplete((ignored, failure) -> ready.run());
     }
     private boolean submitIo(Runnable task, boolean required) {
         try { writer.execute(task); return true; }

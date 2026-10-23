@@ -25,11 +25,13 @@ class FrontierV3ScheduledPreparationTest {
             }
         };
         try (var host = new FrontierV3ScheduledPreparation<>(planner)) {
+            var ready = new CountDownLatch(1); host.onReady(ready::countDown);
             var calculation = host.begin(3, action, new SimInstant(1));
             entered.await();
             assertTrue(calculation.poll().isEmpty()); assertNull(completedOn.get());
             assertNotSame(owner, preparedOn.get());
             release.countDown();
+            ready.await(); assertNull(completedOn.get(), "readiness cannot publish events on the worker");
             Optional<List<ProposedEvent>> result;
             do { result = calculation.poll(); if (result.isEmpty()) Thread.yield(); } while (result.isEmpty());
             assertEquals(1, result.orElseThrow().size()); assertSame(owner, completedOn.get());

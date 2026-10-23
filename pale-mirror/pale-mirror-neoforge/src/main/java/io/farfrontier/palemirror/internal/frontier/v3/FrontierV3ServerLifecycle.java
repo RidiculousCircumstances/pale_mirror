@@ -220,6 +220,10 @@ public final class FrontierV3ServerLifecycle {
             runtime = FrontierV3ServerRuntime.failedStart(configuration.withExecutionMetrics(metrics), store, 200, error, diagnosticIdentity);
         }
         RUNTIMES.put(server, runtime);
+        var readyRuntime = runtime;
+        FrontierV3CanonicalResumption.bind(server, runtime,
+                () -> !stopping(server) && RUNTIMES.get(server) == readyRuntime && ordinaryTime(server),
+                () -> stopQuarantined(server, readyRuntime));
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE && Boolean.getBoolean(PILOT_INITIAL_CANONICAL_HOLD_PROPERTY)) {
             INITIAL_CANONICAL_HOLDS.put(server, Boolean.TRUE);
         }
@@ -370,16 +374,21 @@ public final class FrontierV3ServerLifecycle {
         return initialHold || (absoluteTargetPresent && !fastForwardRemaining);
     }
     static boolean advancesOnlyQueuedCanonicalTime(boolean fastForwardRemaining) { return fastForwardRemaining; }
+    private static boolean ordinaryTime(MinecraftServer server) {
+        return !INITIAL_CANONICAL_HOLDS.containsKey(server) && !FAST_FORWARD_TARGETS.containsKey(server)
+                && !FAST_FORWARD_REMAINING.containsKey(server);
+    }
     public static void tick(MinecraftServer server) {
         if (stopping(server)) return;
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(server);
         if (runtime == null) return;
         try (var hostTurn = FrontierV3HostTiming.beginPmTurn(runtime.executionMetrics())) {
-            if (!INITIAL_CANONICAL_HOLDS.containsKey(server) && !FAST_FORWARD_TARGETS.containsKey(server)
-                    && !FAST_FORWARD_REMAINING.containsKey(server)) runtime.observeOrdinaryHostTick();
-            // Planning and canonical validation revisit the same immutable input.
-            // Keep bounded derived views through this whole turn, not just one planner;
-            // changed drafts still use distinct keys and no view survives as authority.
+            if (ordinaryTime(server)) {
+                runtime.observeOrdinaryHostTick();
+                if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE)
+                    runtime.beginOrdinaryTurn(FrontierV3RuntimeBudgets.ordinaryTick(runtime.decodedState().orElseThrow().bootstrap().ruleset()));
+            }
+            // Planning and validation share bounded views; changed inputs invalidate them.
             runtime.runPersistenceTurn(() -> io.farfrontier.palemirror.frontier.v3.model.ImmutablePlanningScope.within(() -> {
                 boolean active = runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE;
                 if (active) FrontierV3PedestrianPlanning.tick(runtime);
@@ -401,7 +410,7 @@ public final class FrontierV3ServerLifecycle {
                 } else if (active) {
                     ServerLevel physicalWorld = FrontierV3PhysicalWorld.require(server);
                     FrontierV3PhysicalTurn.observeAndRun(physicalWorld, runtime);
-                    runtime.advanceOrdinaryTime(FrontierV3RuntimeBudgets.ordinaryTick(runtime.decodedState().orElseThrow().bootstrap().ruleset()));
+                    runtime.resumeOrdinaryTurn();
                     if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) advanceQueuedCanonicalTime(server, runtime);
                 }
                 return null;
@@ -410,6 +419,10 @@ public final class FrontierV3ServerLifecycle {
             PaleMirrorMod.LOGGER.error("Frontier v3 server tick failed before quarantine", error);
             runtime.quarantine(error);
         }
+        stopQuarantined(server, runtime);
+    }
+    private static void stopQuarantined(MinecraftServer server,
+            FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.QUARANTINED) {
             PaleMirrorMod.LOGGER.error("Frontier v3 development runtime quarantined: {}", runtime.status().detail().orElse("unknown"));
             try { releaseRuntime(server, runtime); }
@@ -465,6 +478,7 @@ public final class FrontierV3ServerLifecycle {
     }
     private static void releaseRuntime(MinecraftServer server,
                                        FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
+        FrontierV3CanonicalResumption.forget(server);
         var physicalWorld = server.getLevel(FrontierV3PhysicalWorld.DIMENSION);
         if (physicalWorld != null) {
             for (var owner : FrontierV3WorksiteRegistry.OWNERS) owner.shutdown(physicalWorld, runtime);

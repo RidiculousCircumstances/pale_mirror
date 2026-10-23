@@ -45,6 +45,9 @@ final class FrontierV3PerformanceMetrics implements FrontierExecutionMetrics {
                         "PMV3_SLOW_TICK sample={} durationNanos={} longestStage={} longestNanos={}",
                         hostSamples, elapsed, longestWork, longestWorkNanos);
             }
+            if (stage == Stage.HOST_TURN && kind.equals("pm-ready-continuation") && elapsed > 80_000_000L)
+                io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info(
+                        "PMV3_SLOW_READY_TURN durationNanos={} longestStage={} longestNanos={}", elapsed, longestWork, longestWorkNanos);
         };
     }
 
