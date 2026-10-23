@@ -285,8 +285,9 @@ final class FrontierV3GrayboxExecutor {
         return false;
     }
     static boolean resourceSiteProjectionDemanded(FrontierV3ServerRuntime<?, ?> runtime, ServerLevel level, ResourceSite site) {
+        // Spectators also receive chunks. Presentation cannot require an
+        // interactive player; work/body admission remains separately owned.
         boolean currentPlayerDemand = level.players().stream()
-                .filter(player -> !player.isSpectator())
                 .anyMatch(player -> site.occupiedChunks().stream().anyMatch(column ->
                         player.getChunkTrackingView().contains(column.x(), column.z())));
         // Current presentation demand is wider than physical work eligibility. Holding a
