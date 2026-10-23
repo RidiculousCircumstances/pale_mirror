@@ -9,7 +9,7 @@ final class ContainerStorageAdmission {
     private ContainerStorageAdmission() { }
     private record ReceiveQuery(SubjectId container, String kind, int quantity, Optional<SubjectId> completing, boolean individual) { }
     private static final ImmutableInputView<Map<ReceiveQuery, Boolean>> RECEIVING = new ImmutableInputView<>();
-    private static synchronized boolean receiving(FrontierWorldState state, ReceiveQuery query, java.util.function.BooleanSupplier assess) {
+    private static boolean receiving(FrontierWorldState state, ReceiveQuery query, java.util.function.BooleanSupplier assess) {
         // Only identical immutable drafts share an admission answer. A player change,
         // competing claim, custody transition or station mutation always rechecks it.
         var cache = RECEIVING.get(List.of(state), HashMap::new);

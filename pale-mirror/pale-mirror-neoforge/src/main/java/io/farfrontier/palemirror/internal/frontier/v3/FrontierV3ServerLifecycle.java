@@ -135,7 +135,7 @@ public final class FrontierV3ServerLifecycle {
                 FrontierV3PedestrianPlanning.diagnostic(runtime),
                 FrontierV3ActorProbeSchedule.diagnostic(runtime, FrontierV3PhysicalWorld.require(server).getGameTime()),
                 FrontierV3PhysicalStores.diagnostic(FrontierV3PhysicalWorld.require(server)), runtime.persistencePressure().orElse(null),
-                runtime.pendingOrdinaryTicks());
+                runtime.pendingOrdinaryTicks(), runtime.preparationDiagnostic());
     }
     static FrontierV3PilotSceneDemandSnapshot pilotSceneDemandSnapshot(ServerLevel level, SubjectId assaultId) {
         Objects.requireNonNull(level, "pilot demand level");

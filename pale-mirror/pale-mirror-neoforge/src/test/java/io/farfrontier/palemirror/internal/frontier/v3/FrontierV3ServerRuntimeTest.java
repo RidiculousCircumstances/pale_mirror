@@ -150,21 +150,20 @@ class FrontierV3ServerRuntimeTest {
         var delayed = FrontierV3ServerRuntime.start(definition,
                 new FrontierFileStore(directory.resolve("delayed"), FrontierWorldRuntimeDefinition.payloadCodecs()), 37);
         var budget = new WorkBudget(64, 512);
-        for (int i = 0; i < 120; i++) {
-            ordinary.tick(budget).orElseThrow();
-            delayed.observeOrdinaryHostTick();
-        }
+        advanceLogicalTicks(ordinary, 120, budget);
+        for (int i = 0; i < 120; i++) delayed.observeOrdinaryHostTick();
         assertEquals(120, delayed.pendingOrdinaryTicks());
         int turns = 0;
         while (delayed.pendingOrdinaryTicks() > 0) {
             var result = delayed.advanceOrdinaryTime(budget).orElseThrow();
             assertDoesNotThrow(() -> result.consumed().remaining(budget));
-            turns++;
+            if (result.consumed().actions() > 0 || !delayed.pendingCalculation()) turns++;
+            awaitPreparationTurn(delayed);
         }
         assertTrue(turns < 120, "unused turn capacity must repay more than one elapsed tick");
         assertEquals(ordinary.checkpointImage().orElseThrow(), delayed.checkpointImage().orElseThrow());
         delayed.observeOrdinaryHostTick();
-        delayed.advance(3, budget).orElseThrow();
+        advanceLogicalTicks(delayed, 123, budget);
         assertEquals(123, delayed.canonicalState().orElseThrow().instant().ticks());
         assertEquals(1, delayed.pendingOrdinaryTicks(), "operator time neither consumes nor duplicates ordinary debt");
         delayed.advanceOrdinaryTime(budget).orElseThrow();
@@ -182,10 +181,11 @@ class FrontierV3ServerRuntimeTest {
         var store = new FrontierFileStore(directory.resolve("interval"), FrontierWorldRuntimeDefinition.payloadCodecs());
         var interval = FrontierV3ServerRuntime.start(definition, store, 37);
         var budget = new WorkBudget(4, 64);
-        for (int tick = 0; tick < 120; tick++) ordinary.tick(budget).orElseThrow();
+        advanceLogicalTicks(ordinary, 120, budget);
         while (interval.canonicalState().orElseThrow().instant().ticks() < 120) {
             int remaining = Math.toIntExact(120 - interval.canonicalState().orElseThrow().instant().ticks());
             interval.advanceColdInterval(remaining, budget).orElseThrow();
+            awaitPreparationTurn(interval);
         }
         assertEquals(ordinary.checkpointImage().orElseThrow(), interval.checkpointImage().orElseThrow(),
                 "skipping only empty intervals must preserve exact events, due/backlog order and current state");
@@ -486,14 +486,24 @@ class FrontierV3ServerRuntimeTest {
         WorkBudget budget = FrontierV3RuntimeBudgets.fastForwardTick(
                 io.farfrontier.palemirror.frontier.v3.model.FrontierRulesets.production());
 
-        for (int tick = 0; tick < FrontierV3ServerLifecycle.MAX_FAST_FORWARD_TICKS; tick++) {
-            var advanced = runtime.advance(1, budget);
-            assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind(), "cold interval quarantined at tick " + (tick + 1) + ": " + runtime.status());
-            assertTrue(advanced.isPresent(), "cold interval could not advance: " + runtime.status());
-        }
+        advanceLogicalTicks(runtime, FrontierV3ServerLifecycle.MAX_FAST_FORWARD_TICKS, budget);
 
         assertEquals(new SimInstant(FrontierV3ServerLifecycle.MAX_FAST_FORWARD_TICKS), runtime.checkpointImage().orElseThrow().instant());
         assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind());
+        runtime.shutdown();
+    }
+
+    private static void advanceLogicalTicks(FrontierV3ServerRuntime<?, ?> runtime, long target, WorkBudget budget) {
+        while (runtime.canonicalState().orElseThrow().instant().ticks() < target) {
+            runtime.tick(budget).orElseThrow();
+            assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind(), runtime.status().toString());
+            awaitPreparationTurn(runtime);
+        }
+    }
+    private static void awaitPreparationTurn(FrontierV3ServerRuntime<?, ?> runtime) {
+        // Yield to the actual host worker. Call count is no longer simulation time;
+        // the assertions above compare canonical instants and exact durable state.
+        if (runtime.pendingCalculation()) java.util.concurrent.locks.LockSupport.parkNanos(1_000_000);
     }
 
     @Test

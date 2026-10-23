@@ -65,6 +65,11 @@ public record FrontierEngineConfiguration<S, P extends FrontierProjection>(
                 initialSchedules, transactionCommitter, stateValidator, executionMetrics, KernelQuarantineReporter.disabled());
     }
 
+    public FrontierEngineConfiguration<S, P> withScheduledPlanner(ScheduledActionPlanner<S> replacement) {
+        return new FrontierEngineConfiguration<>(worldId, initialState, initialInstant, commandPlanner, replacement,
+                reducer, stateCodec, projectionMapper, limits, initialSchedules, transactionCommitter, stateValidator, executionMetrics, kernelQuarantineReporter);
+    }
+
     /** Rebinds the pure aggregate to the owning server host's mandatory write-ahead boundary. */
     public FrontierEngineConfiguration<S, P> withTransactionCommitter(TransactionCommitter replacement) {
         return new FrontierEngineConfiguration<>(worldId, initialState, initialInstant, commandPlanner, scheduledPlanner,

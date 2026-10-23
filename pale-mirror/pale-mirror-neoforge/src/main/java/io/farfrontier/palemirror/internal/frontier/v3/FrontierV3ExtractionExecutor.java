@@ -28,7 +28,7 @@ final class FrontierV3ExtractionExecutor {
     }
     private static boolean progress(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             FrontierWorldState state, ExtractionWork job) {
-        if (runtime.awaitingCanonicalDurability()) return false;
+        if (runtime.awaitingCanonicalPredecessor()) return false;
         var actor = job.execution().actorId();
         var entity = level.getEntity(ActorBodyId.entityId(state.bootstrap().worldId(), actor));
         if (entity == null) return savedDeparture(level, runtime, state, job);

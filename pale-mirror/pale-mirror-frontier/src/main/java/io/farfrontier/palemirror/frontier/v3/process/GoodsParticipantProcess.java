@@ -7,6 +7,21 @@ import java.util.*;
 
 /** Registered bounded economic reviews. Each participant supplies consent; matching and delivery remain separate. */
 public final class GoodsParticipantProcess {
+    static FrontierScheduledPlanner planner() {
+        return new FrontierScheduledPlanner() {
+            @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
+                throw new IllegalArgumentException("economic review requires its execution instant");
+            }
+            @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
+                    io.farfrontier.palemirror.frontier.v3.api.SimInstant instant) {
+                return GoodsParticipantProcess.plan(state, action, instant);
+            }
+            @Override public java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledPreparation> preparation(
+                    FrontierWorldState state, ScheduledAction action, io.farfrontier.palemirror.frontier.v3.api.SimInstant instant) {
+                return java.util.Optional.of(() -> GoodsParticipantProcess.prepare(state, action, instant));
+            }
+        };
+    }
     private record QuoteKey(GoodsTradeParty counterparty, String itemKind, GoodsTradeOrder.Side side, SubjectId container) { }
     public static final String REVIEW = "frontier.goods.participant.review";
     public static ScheduledAction review(SubjectId party, long due) {
@@ -24,9 +39,9 @@ public final class GoodsParticipantProcess {
     }
     /** Due time orders the queue; only the supplied execution instant authorizes current trades. */
     public static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, SimInstant executionInstant) {
-        return ImmutablePlanningScope.within(() -> planInScope(state, action, executionInstant));
+        return ImmutablePlanningScope.within(() -> prepare(state, action, executionInstant).get());
     }
-    private static List<ProposedEvent> planInScope(FrontierWorldState state, ScheduledAction action, SimInstant executionInstant) {
+    static java.util.function.Supplier<List<ProposedEvent>> prepare(FrontierWorldState state, ScheduledAction action, SimInstant executionInstant) {
         Objects.requireNonNull(executionInstant, "goods review execution instant");
         if (executionInstant.compareTo(action.dueAt()) < 0)
             throw new IllegalArgumentException("goods participant review cannot execute before its due time");
@@ -115,9 +130,20 @@ public final class GoodsParticipantProcess {
             events.add(new ProposedEvent(participant.party().id(), new GoodsTradeOrderPlaced(order))); published++;
             }
         }
+        var trip = rules.supplyPlanning().enabled() ? Optional.of(GoodsTripPlanning.prepare(state, participant, now))
+                : Optional.<java.util.function.Supplier<GoodsTripPlanning.Result>>empty();
+        var preparedState = state; int preparedPublished = published;
+        return () -> finish(preparedState, action, participant, now, events, commitments, preparedPublished, trip);
+    }
+    private static List<ProposedEvent> finish(FrontierWorldState state, ScheduledAction action, GoodsParticipant participant,
+            long now, List<ProposedEvent> preparedEvents, GoodsCommitmentReview.Result commitments, int published,
+            Optional<java.util.function.Supplier<GoodsTripPlanning.Result>> preparedTrip) {
+        var events = new ArrayList<>(preparedEvents);
+        var rules = state.bootstrap().ruleset().goodsTrade();
+        boolean periodic = action.kind().equals(REVIEW);
         String decision;
         if (rules.supplyPlanning().enabled()) {
-            var trip = GoodsTripPlanning.plan(state, participant, now);
+            var trip = preparedTrip.orElseThrow().get();
             state = trip.state(); events.addAll(trip.events()); decision = trip.decision() + "; published=" + published;
         } else {
         var search = state.companies().goodsTrade().contracts().size() < GoodsTradeState.MAX_CONTRACTS

@@ -35,7 +35,7 @@ public final class GoodsParticipantAssessment {
     public static Assessment domestic(FrontierWorldState state, GoodsParticipant participant, long atTick) {
         return cached(state, participant, atTick, false);
     }
-    private static synchronized Assessment cached(FrontierWorldState state, GoodsParticipant participant,
+    private static Assessment cached(FrontierWorldState state, GoodsParticipant participant,
             long atTick, boolean exports) {
         if (atTick < 0) throw new IllegalArgumentException("negative economic assessment instant");
         var cache = CACHE.get(List.of(state), HashMap::new);

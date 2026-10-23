@@ -14,18 +14,23 @@ final class GoodsTripPlanning {
             GoodsParticipant seller, List<GoodsTripAssembly.Parcel> parcels, GoodsTradeFulfillment.Mode mode,
             ProcurementSelection.Offer offer, List<FrontierWorldState> prefixes, ExpeditionTiming timing) { }
     static Result plan(FrontierWorldState initial, GoodsParticipant reviewer, long now) {
-        return ImmutablePlanningScope.within(() -> {
-            var retirement = ShipmentRetention.collect(initial, ShipmentRetention.MAX_RETIREMENTS, now);
-            var planned = planInScope(retirement.state(), reviewer, now);
+        return ImmutablePlanningScope.within(() -> prepare(initial, reviewer, now).get());
+    }
+    /** Snapshot-only alternatives. Exact navigation and mission admission stay in completion. */
+    static java.util.function.Supplier<Result> prepare(FrontierWorldState initial, GoodsParticipant reviewer, long now) {
+        var retirement = ShipmentRetention.collect(initial, ShipmentRetention.MAX_RETIREMENTS, now);
+        var completion = prepareInScope(retirement.state(), reviewer, now);
+        return () -> {
+            var planned = completion.get();
             var events = new ArrayList<>(retirement.events()); events.addAll(planned.events());
             return new Result(planned.state(), List.copyOf(events), planned.decision());
-        });
+        };
     }
-    private static Result planInScope(FrontierWorldState initial, GoodsParticipant reviewer, long now) {
+    private static java.util.function.Supplier<Result> prepareInScope(FrontierWorldState initial, GoodsParticipant reviewer, long now) {
         if (initial.unitGroups().groups().size() >= io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState.MAX_GROUPS
                 || initial.shipments().missions().size() >= io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupState.MAX_GROUPS
                 || initial.shipments().shipments().size() >= ShipmentState.MAX_SHIPMENTS)
-            return new Result(initial, List.of(), "WAITING_FOR_TRANSPORT_RETENTION; reserved=0");
+            return () -> new Result(initial, List.of(), "WAITING_FOR_TRANSPORT_RETENTION; reserved=0");
         String decision = "NO_MUTUAL_KNOWN_QUOTE";
         var candidates = new ArrayList<Candidate>();
         var buyer = reviewer;
@@ -35,7 +40,7 @@ final class GoodsTripPlanning {
                 .map(intent -> new ProcurementSelection.Requirement(intent.itemKind(), intent.quantity(),
                         demand.supplyPlan().map(plan -> plan.require(intent.itemKind()).deadlineTicks()).orElse(Long.MAX_VALUE),
                         GoodsParticipantFunding.fundsRestart(demand, initial.bootstrap().ruleset().goodsTrade(), intent.itemKind()))).toList();
-        if (requirements.isEmpty()) return new Result(initial, List.of(), "NO_CURRENT_PURCHASE_REQUIREMENT");
+        if (requirements.isEmpty()) return () -> new Result(initial, List.of(), "NO_CURRENT_PURCHASE_REQUIREMENT");
         for (var peer : reviewer.known()) {
             var other = initial.companies().goodsTrade().participants().participants().get(peer.party().id());
             if (other == null || !other.party().equals(peer.party()) || !other.settlementId().equals(peer.settlementId())) continue;
@@ -103,6 +108,12 @@ final class GoodsTripPlanning {
             }
             }
         }
+        String preparedDecision = decision;
+        return () -> finish(initial, buyer, now, requirements, candidates, preparedDecision);
+    }
+    private static Result finish(FrontierWorldState initial, GoodsParticipant buyer, long now,
+            List<ProcurementSelection.Requirement> requirements, List<Candidate> preparedCandidates, String decision) {
+        var candidates = new ArrayList<>(preparedCandidates);
         while (!candidates.isEmpty()) {
             var selected = new ProcurementSelection().select(requirements, candidates.stream().map(Candidate::offer).toList(),
                     initial.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().map(SourcingRules::labourValuePerTick).orElse(0L));

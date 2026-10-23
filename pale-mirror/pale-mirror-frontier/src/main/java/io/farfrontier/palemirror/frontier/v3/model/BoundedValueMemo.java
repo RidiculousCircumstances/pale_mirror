@@ -13,13 +13,19 @@ public final class BoundedValueMemo<K, V> {
         if (capacity < 1) throw new IllegalArgumentException("positive memo capacity required");
         this.capacity = capacity;
     }
-    public synchronized V get(K input, Supplier<V> compute) {
+    public V get(K input, Supplier<V> compute) {
         Objects.requireNonNull(input); Objects.requireNonNull(compute);
-        V existing = values.get(input);
-        if (existing != null) return existing;
+        synchronized (values) {
+            V existing = values.get(input);
+            if (existing != null) return existing;
+        }
         V result = Objects.requireNonNull(compute.get());
-        if (values.size() >= capacity) values.remove(values.keySet().iterator().next());
-        values.put(input, result);
-        return result;
+        synchronized (values) {
+            V existing = values.get(input);
+            if (existing != null) return existing;
+            if (values.size() >= capacity) values.remove(values.keySet().iterator().next());
+            values.put(input, result);
+            return result;
+        }
     }
 }

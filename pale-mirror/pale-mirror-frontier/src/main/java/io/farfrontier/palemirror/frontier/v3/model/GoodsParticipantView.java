@@ -43,7 +43,7 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
         if (residents < 0 || availableMoney.raw() < 0) throw new IllegalArgumentException("invalid participant economic view");
     }
     /** Facts only. Economic evaluation belongs to GoodsParticipantAssessment. */
-    public static synchronized GoodsParticipantView observe(FrontierWorldState state, GoodsParticipant participant) {
+    public static GoodsParticipantView observe(FrontierWorldState state, GoodsParticipant participant) {
         // Repeated matching, reserve and production-policy questions share one
         // immutable input. Never reuse a projection after even a draft mutation.
         var views = VIEWS.get(List.of(state), HashMap::new);

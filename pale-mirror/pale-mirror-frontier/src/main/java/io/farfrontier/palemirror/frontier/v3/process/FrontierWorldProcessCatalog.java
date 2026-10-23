@@ -18,6 +18,7 @@ import static io.farfrontier.palemirror.frontier.v3.process.ProcessTypeSets.type
 import static io.farfrontier.palemirror.frontier.v3.process.ProcessTypeSets.union;
 import static io.farfrontier.palemirror.frontier.v3.process.ScheduledReviewAdmission.coalescedReview;
 import static io.farfrontier.palemirror.frontier.v3.process.ScheduledReviewAdmission.policyReview;
+import static io.farfrontier.palemirror.frontier.v3.process.ScheduledPlanningRecovery.withPlanningRecovery;
 
 /**
  * Closed ownership catalog for the installed Frontier world processes.
@@ -198,25 +199,6 @@ public final class FrontierWorldProcessCatalog {
             }
         };
     }
-    /** Explicit producer capability; recovery does not preview unrelated growth/birth/recipe clocks. */
-    private static FrontierScheduledPlanner withPlanningRecovery(FrontierScheduledPlanner delegate) {
-        return new FrontierScheduledPlanner() {
-            @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) { return delegate.plan(state, action); }
-            @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
-                    io.farfrontier.palemirror.frontier.v3.api.SimInstant instant) { return delegate.plan(state, action, instant); }
-            @Override public boolean held(FrontierWorldState state, ScheduledAction action) { return delegate.held(state, action); }
-            @Override public java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledHold<FrontierWorldState>>
-                    holdProof(FrontierWorldState state, ScheduledAction action) { return delegate.holdProof(state, action); }
-            @Override public Set<SubjectId> wakeDependencies(FrontierWorldState state, ScheduledAction action) { return delegate.wakeDependencies(state, action); }
-            @Override public void restorePlanningWait(FrontierWorldState state, ScheduledAction action,
-                    io.farfrontier.palemirror.frontier.v3.api.SimInstant instant) {
-                // This is a read-only owner preview; its events never enter the engine.
-                PedestrianPlanningContinuations.restore(action, () -> delegate.plan(state, action,
-                        new io.farfrontier.palemirror.frontier.v3.api.SimInstant(Math.max(instant.ticks(), action.dueAt().ticks()))));
-            }
-        };
-    }
-
     private static final Map<String, FrontierScheduledPlanner> SCHEDULED_PLANNERS = Map.ofEntries(
             Map.entry(CultivationProcessModule.REVIEW, coalescedReview(atExecutionTime(CultivationProcessModule::plan))),
             Map.entry(ProductionStationProcessModule.REVIEW, atExecutionTime(ProductionStationProcessModule::plan)),
@@ -304,8 +286,8 @@ public final class FrontierWorldProcessCatalog {
             })),
             Map.entry(GoodsTradeReceiptProcess.REVIEW, atExecutionTime(GoodsTradeReceiptProcess::plan)),
             Map.entry(InternalShipmentReceipts.RECEIVE, atExecutionTime(InternalShipmentReceipts::receive)),
-            Map.entry(GoodsParticipantProcess.REVIEW, policyReview(withPlanningRecovery(atExecutionTime(GoodsParticipantProcess::plan)), GoodsParticipantProcess::reviewWorkUnits)),
-            Map.entry(GoodsParticipantWakeup.OPPORTUNITY, coalescedReview(withPlanningRecovery(atExecutionTime(GoodsParticipantProcess::plan)), GoodsParticipantProcess::reviewWorkUnits)),
+            Map.entry(GoodsParticipantProcess.REVIEW, policyReview(withPlanningRecovery(GoodsParticipantProcess.planner()), GoodsParticipantProcess::reviewWorkUnits)),
+            Map.entry(GoodsParticipantWakeup.OPPORTUNITY, coalescedReview(withPlanningRecovery(GoodsParticipantProcess.planner()), GoodsParticipantProcess::reviewWorkUnits)),
             Map.entry(ShipmentProcess.PROGRESS, withPlanningRecovery(new FrontierScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                     return ShipmentProcess.plan(state, action, action.dueAt().ticks());
@@ -552,6 +534,22 @@ public final class FrontierWorldProcessCatalog {
             List<ProposedEvent> result = planned.isEmpty()
                     ? List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id()))) : planned;
             return registry.validateEmissions(processId, result);
+        });
+    }
+
+    public static java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledPreparation> prepareScheduled(
+            DeterministicProcessRegistry registry, FrontierWorldState state, ScheduledAction action,
+            io.farfrontier.palemirror.frontier.v3.api.SimInstant instant) {
+        String processId = registry.requireScheduledOwner(action.kind());
+        var planner = SCHEDULED_PLANNERS.get(action.kind());
+        if (planner == null) throw new IllegalStateException("registered scheduled kind has no planner: " + action.kind());
+        return planner.preparation(state, action, instant).map(preparation -> () -> {
+            var completion = preparation.prepare();
+            return () -> PedestrianPlanningContinuations.plan(action, () -> {
+                var events = completion.get();
+                return registry.validateEmissions(processId, events.isEmpty()
+                        ? List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Cancelled(action.id()))) : events);
+            });
         });
     }
 

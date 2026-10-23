@@ -106,6 +106,16 @@ final class FrontierV3PerformanceDiagnostic {
                          List<FrontierV3ServerLifecycle.FastForwardRequestOutcome> requests, String planningPressure,
                          String departurePressure, String journalPressure, FrontierFileStore.Pressure persistence,
                          long pendingOrdinaryTicks) {
+        return render(checkpoint, metrics, state, fastForwardRemaining, fastForwardTarget, fastForwardFailure,
+                outcome, sliceTelemetry, requests, planningPressure, departurePressure, journalPressure, persistence, pendingOrdinaryTicks, "null");
+    }
+    static String render(FrontierScheduleView checkpoint, FrontierExecutionMetrics.Snapshot metrics, FrontierWorldState state,
+                         int fastForwardRemaining, Long fastForwardTarget, String fastForwardFailure,
+                         FrontierV3ServerLifecycle.FastForwardTargetOutcome outcome,
+                         FrontierV3ServerLifecycle.FastForwardSliceTelemetry sliceTelemetry,
+                         List<FrontierV3ServerLifecycle.FastForwardRequestOutcome> requests, String planningPressure,
+                         String departurePressure, String journalPressure, FrontierFileStore.Pressure persistence,
+                         long pendingOrdinaryTicks, String preparation) {
         if (fastForwardRemaining < 0 || fastForwardRemaining > FrontierV3ServerLifecycle.MAX_FAST_FORWARD_TICKS) {
             throw new IllegalArgumentException("bounded fast-forward remainder");
         }
@@ -117,6 +127,7 @@ final class FrontierV3PerformanceDiagnostic {
                 .append(metrics.queues().size()).append(",\"fastForwardRemaining\":").append(fastForwardRemaining)
                 .append(",\"instant\":").append(checkpoint.instant().ticks())
                 .append(",\"pendingOrdinaryTicks\":").append(pendingOrdinaryTicks)
+                .append(",\"scheduledPreparation\":").append(preparation)
                 .append(",\"fastForwardTarget\":").append(fastForwardTarget == null ? "null" : fastForwardTarget)
                 .append(",\"fastForwardTargetStatus\":\"").append(fastForwardFailure == null ? (fastForwardTarget == null ? "NONE" : (fastForwardRemaining == 0 ? "HELD" : "ADVANCING")) : "REJECTED")
                 .append("\",\"fastForwardFailure\":").append(fastForwardFailure == null ? "null" : "\"" + quote(fastForwardFailure) + "\"")

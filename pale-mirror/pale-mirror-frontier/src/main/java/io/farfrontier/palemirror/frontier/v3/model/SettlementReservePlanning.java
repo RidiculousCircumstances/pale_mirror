@@ -24,7 +24,7 @@ public final class SettlementReservePlanning {
         return Map.copyOf(result);
     }
     public static boolean enabled(FrontierWorldState state) { return state.bootstrap().ruleset().goodsTrade().supplyPlanning().reserves().isPresent(); }
-    public static synchronized Map<String, Target> retainedTargets(FrontierWorldState state, SubjectId home) {
+    public static Map<String, Target> retainedTargets(FrontierWorldState state, SubjectId home) {
         var views = CACHE.get(List.of(state), HashMap::new);
         return views.computeIfAbsent(home, ignored -> project(state, home));
     }
@@ -34,10 +34,10 @@ public final class SettlementReservePlanning {
         var basis = retainedBasis(state, home);
         return new SupplyReservePlanner().plan(basis.needs(), basis.flows(), basis.timing(), policy);
     }
-    public static synchronized Basis retainedBasis(FrontierWorldState state, SubjectId home) {
+    public static Basis retainedBasis(FrontierWorldState state, SubjectId home) {
         return BASIS.get(List.of(state), HashMap::new).computeIfAbsent(home, ignored -> collect(state, home, OptionalLong.empty()));
     }
-    public static synchronized Basis basis(FrontierWorldState state, SubjectId home, long atTick) {
+    public static Basis basis(FrontierWorldState state, SubjectId home, long atTick) {
         if (atTick < 0) throw new IllegalArgumentException("negative reserve forecast instant");
         var cache = DATED.get(List.of(state), HashMap::new);
         var key = new InstantKey(home, atTick);

@@ -31,6 +31,10 @@ final class ScheduledReviewAdmission {
         return new FrontierScheduledPlanner() {
             @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) { return delegate.plan(state, action); }
             @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, SimInstant instant) { return delegate.plan(state, action, instant); }
+            @Override public java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledPreparation> preparation(
+                    FrontierWorldState state, ScheduledAction action, SimInstant instant) {
+                return delegate.preparation(state, action, instant);
+            }
             @Override public boolean held(FrontierWorldState state, ScheduledAction action) { return delegate.held(state, action); }
             @Override public java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledHold<FrontierWorldState>>
                     holdProof(FrontierWorldState state, ScheduledAction action) { return delegate.holdProof(state, action); }

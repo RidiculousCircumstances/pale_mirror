@@ -23,6 +23,17 @@ public interface ScheduledActionPlanner<S> {
         return plan(state, action);
     }
 
+    default java.util.Optional<ScheduledPreparation> preparation(S state, ScheduledAction action, SimInstant instant) {
+        return java.util.Optional.empty();
+    }
+
+    /** The default host executes inline; asynchronous hosts may isolate explicitly declared preparation. */
+    default ScheduledCalculation begin(S state, ScheduledAction action, SimInstant instant) {
+        var preparation = preparation(state, action, instant);
+        return ScheduledCalculation.immediate(() -> preparation.map(value -> value.prepare().get())
+                .orElseGet(() -> plan(state, action, instant)));
+    }
+
     /** Canonical owner-declared hold; excludes work before budget admission without changing its deadline. */
     default boolean held(S state, ScheduledAction action) { return false; }
 

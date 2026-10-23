@@ -11,7 +11,7 @@ public final class ImmutableKeyedInputView<K, V> {
         if (capacity < 1) throw new IllegalArgumentException("positive view capacity required");
         this.capacity = capacity;
     }
-    public synchronized V get(Object generation, K key, List<Object> inputs, Supplier<V> compute) {
+    public V get(Object generation, K key, List<Object> inputs, Supplier<V> compute) {
         Objects.requireNonNull(generation); Objects.requireNonNull(key); Objects.requireNonNull(compute);
         var views = generations.get(List.of(generation), () -> new LinkedHashMap<>(16, 0.75f, true));
         var view = views.get(key);

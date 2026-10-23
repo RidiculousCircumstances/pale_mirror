@@ -12,7 +12,7 @@ public final class EquipmentProductionPlanning {
     private record Key(SubjectId home, long tick) { }
     private static final ImmutableInputView<Map<Key, List<Request>>> REQUESTS = new ImmutableInputView<>();
     private static final ImmutableInputView<Map<Key, Acquisition>> PLANS = new ImmutableInputView<>();
-    public static synchronized List<Request> requests(FrontierWorldState state, SubjectId home, long tick) {
+    public static List<Request> requests(FrontierWorldState state, SubjectId home, long tick) {
         return REQUESTS.get(List.of(state), HashMap::new).computeIfAbsent(new Key(home, tick), ignored -> calculateRequests(state, home, tick));
     }
     private static List<Request> calculateRequests(FrontierWorldState state, SubjectId home, long tick) {
@@ -82,7 +82,7 @@ public final class EquipmentProductionPlanning {
         return acquisition(state, home, tick).production();
     }
     /** One decision covers work pools, purchase funds, available offers and repair targets without double allocation. */
-    public static synchronized Acquisition acquisition(FrontierWorldState state, SubjectId home, long tick) {
+    public static Acquisition acquisition(FrontierWorldState state, SubjectId home, long tick) {
         return PLANS.get(List.of(state), HashMap::new).computeIfAbsent(new Key(home, tick), ignored -> calculatePlan(state, home, tick));
     }
     private static Acquisition calculatePlan(FrontierWorldState state, SubjectId home, long tick) {

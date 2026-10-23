@@ -43,8 +43,18 @@ final class FrontierWorldConfigurationFactory {
         return registry;
     }
 
+    private static java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledPreparation> prepareScheduled(
+            DeterministicProcessRegistry registry, FrontierWorldState state, ScheduledAction action, io.farfrontier.palemirror.frontier.v3.api.SimInstant instant) {
+        return FrontierWorldProcessCatalog.prepareScheduled(registry, state, action, instant).map(preparation -> () -> {
+            var completion = FrontierWorldState.duringUnpublishedTransition(() ->
+                    io.farfrontier.palemirror.frontier.v3.model.ImmutablePlanningScope.within(preparation::prepare));
+            return () -> FrontierWorldState.duringUnpublishedTransition(() ->
+                    io.farfrontier.palemirror.frontier.v3.model.ImmutablePlanningScope.within(completion));
+        });
+    }
     static FrontierEngineConfiguration<FrontierWorldState, FrontierWorldProjection> create(FrontierBootstrap bootstrap) {
         FrontierWorldState initial = FrontierWorldState.initial(bootstrap);
+        var registry = FrontierWorldRuntimeDefinition.processRegistry();
         ScheduledActionPlanner<FrontierWorldState> scheduler = new ScheduledActionPlanner<>() {
             @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
                 return FrontierWorldRuntimeDefinition.planScheduled(state, action);
@@ -52,6 +62,10 @@ final class FrontierWorldConfigurationFactory {
             @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action,
                                                       SimInstant currentInstant) {
                 return FrontierWorldRuntimeDefinition.planScheduled(state, action, currentInstant);
+            }
+            @Override public Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledPreparation> preparation(
+                    FrontierWorldState state, ScheduledAction action, SimInstant instant) {
+                return prepareScheduled(registry, state, action, instant);
             }
             @Override public boolean held(FrontierWorldState state, ScheduledAction action) {
                 return FrontierWorldRuntimeDefinition.scheduledHeld(state, action);

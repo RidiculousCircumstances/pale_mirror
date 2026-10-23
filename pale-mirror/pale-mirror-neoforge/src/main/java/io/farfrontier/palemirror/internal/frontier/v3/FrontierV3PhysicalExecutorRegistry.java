@@ -87,7 +87,7 @@ final class FrontierV3PhysicalExecutorRegistry {
             var capacity = runtime.commandAdmissionCapacity();
             // A predecessor can quarantine the runtime. Preserve that primary trace and
             // stop this turn instead of throwing a second missing-Optional exception.
-            return capacity.isPresent() && capacity.orElseThrow().hasCausalHeadroom() && !runtime.awaitingCanonicalDurability();
+            return capacity.isPresent() && capacity.orElseThrow().hasCausalHeadroom() && !runtime.awaitingCanonicalPredecessor();
         }, index -> {
             Definition definition = ordered.get(index);
             // Definitions presently represent one invocation.  A future multi-slice executor must

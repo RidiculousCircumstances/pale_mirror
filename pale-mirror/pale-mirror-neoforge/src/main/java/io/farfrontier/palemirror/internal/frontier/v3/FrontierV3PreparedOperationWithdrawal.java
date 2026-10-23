@@ -13,7 +13,7 @@ final class FrontierV3PreparedOperationWithdrawal {
     static boolean submit(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime,
             FrontierV3OperationReceipt.Protocol protocol, SubjectId owner, FrontierPayload prepared, FrontierPayload cancelled) {
         if (!level.getServer().isSameThread()) throw new IllegalStateException("withdrawal outside server thread");
-        if (runtime.awaitingCanonicalDurability()) return false;
+        if (runtime.awaitingCanonicalPredecessor()) return false;
         var ledger = FrontierV3OperationLedger.get(level);
         var operation = ledger.find(protocol, owner, FrontierV3OperationConfirmation.fingerprint(prepared));
         if (operation.isEmpty()) return FrontierV3CommandSubmission.submit(runtime,

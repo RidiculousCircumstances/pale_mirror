@@ -37,7 +37,7 @@ public final class FrontierV3ContainerHandoffGameTests {
             fixture.delayed.set(true);
             runtime.runPersistenceTurn(() -> helper.assertTrue(!FrontierV3ReferenceContainerCustodyExecutor
                     .reconcilePreparedProjection(helper.getLevel(), runtime, prepared, lease, chest), "confirmation awaits the exact disk receipt"));
-            helper.assertTrue(runtime.awaitingCanonicalDurability(), "the regression must exercise Pending, not synchronous acceptance");
+            helper.assertTrue(runtime.awaitingCanonicalPredecessor(), "the regression must exercise Pending, not synchronous acceptance");
             fixture.flush();
             runtime.runPersistenceTurn(() -> { });
             var confirmed = runtime.decodedState().orElseThrow();
@@ -88,7 +88,7 @@ public final class FrontierV3ContainerHandoffGameTests {
                 fixture.delayed.set(true);
                 runtime.runPersistenceTurn(() -> FrontierV3ReferenceContainerCustodyExecutor.reconcile(level, runtime,
                         missing, missing.inventory().surfaces().get(depot)));
-                helper.assertTrue(runtime.awaitingCanonicalDurability(), "missing surface transition is pending, not failed: "
+                helper.assertTrue(runtime.awaitingCanonicalPredecessor(), "missing surface transition is pending, not failed: "
                         + runtime.status() + " replica=" + missing.replicaCustody().replicas().get(depot)
                         + " fence=" + FrontierV3ContainerEffectFence.pending(level, missing, depot));
                 fixture.flush(); runtime.runPersistenceTurn(() -> { });

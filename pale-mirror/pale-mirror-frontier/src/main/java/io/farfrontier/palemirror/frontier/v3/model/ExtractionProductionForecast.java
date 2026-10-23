@@ -34,10 +34,8 @@ final class ExtractionProductionForecast {
         // speculative cash reservations cannot change this finite work graph.
         var inputs = new ArrayList<Object>();
         inputs.add(state.bootstrap().ruleset()); inputs.add(deposit); inputs.add(availability); inputs.addAll(workers);
-        synchronized (ESTIMATES) {
-            var estimates = ESTIMATES.get(state.bootstrap(), deposit.site().id(), inputs, HashMap::new);
-            return estimates.computeIfAbsent(product, ignored -> project(state, deposit, product, workers, availability));
-        }
+        var estimates = ESTIMATES.get(state.bootstrap(), deposit.site().id(), inputs, HashMap::new);
+        return estimates.computeIfAbsent(product, ignored -> project(state, deposit, product, workers, availability));
     }
     private static FiniteWorkForecast.Estimate project(FrontierWorldState state, ExtractionDeposit deposit,
             BlockExtraction.Definition product, List<ResidentProfile> workers, Availability availability) {

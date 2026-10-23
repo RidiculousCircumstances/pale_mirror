@@ -11,6 +11,9 @@ public interface FrontierEngine<P extends FrontierProjection> {
     /** Publishes an exact prepared transaction only after its host confirms durability. */
     boolean advanceDurability();
     boolean hasPendingCommit();
+    default boolean hasPendingCalculation() { return false; }
+    /** An external intervention invalidates unpublished advice, never committed effects. */
+    default void cancelPendingCalculation() { }
 
     AdvanceResult advanceTo(SimInstant target, WorkBudget budget);
 

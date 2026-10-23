@@ -35,6 +35,7 @@ import java.util.Optional;
 final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     private final FrontierEngineConfiguration<S, P> configuration;
     private final FrontierStore store;
+    private final FrontierV3ScheduledPreparation<S> preparations;
     private final int checkpointIntervalTicks;
     /** Explicit host-owned identity, deliberately carried across every reducer entry. */
     private final DiagnosticRuntimeIdentity diagnosticRuntimeIdentity;
@@ -58,7 +59,8 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             FrontierEngineConfiguration<S, P> configuration, FrontierStore store, TransactionCommitter committer, int checkpointIntervalTicks, RecoveryImage recovered,
             RuntimeException startupFailure, DiagnosticRuntimeIdentity diagnosticRuntimeIdentity
     ) {
-        this.configuration = Objects.requireNonNull(configuration, "configuration")
+        this.preparations = new FrontierV3ScheduledPreparation<>(Objects.requireNonNull(configuration, "configuration").scheduledPlanner());
+        this.configuration = configuration.withScheduledPlanner(preparations)
                 .withTransactionCommitter(Objects.requireNonNull(committer, "transaction committer"));
         this.store = Objects.requireNonNull(store, "store");
         this.diagnosticRuntimeIdentity = Objects.requireNonNull(diagnosticRuntimeIdentity, "diagnostic runtime identity");
@@ -174,7 +176,13 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
         return Optional.of(engine.commandAdmissionCapacity());
     }
-    boolean awaitingCanonicalDurability() { return engine.hasPendingCommit(); }
+    boolean pendingCalculation() { return engine.hasPendingCalculation(); }
+    boolean awaitingCanonicalPredecessor() {
+        return engine.hasPendingCommit() || engine.hasPendingCalculation() && inOrdinaryPersistenceTurn();
+    }
+    private boolean inOrdinaryPersistenceTurn() {
+        return store instanceof FrontierFileStore files && files.inTurn();
+    }
 
     /** Returns the exact immutable state/revision/instant for an owning server-thread adapter. */
     Optional<FrontierCanonicalState<S>> canonicalState() {
@@ -217,7 +225,9 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     Optional<CommandResult> submit(FrontierCommand command) {
         Objects.requireNonNull(command, "command");
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return Optional.empty();
-        if (engine.hasPendingCommit()) return Optional.of(new CommandResult.Pending(command.id(),
+        // Native callbacks run outside the ordinary persistence turn. A real command
+        // invalidates unpublished preparation in the kernel; mere native reads do not.
+        if (awaitingCanonicalPredecessor()) return Optional.of(new CommandResult.Pending(command.id(),
                 engine.canonicalState().revision(), CommandResult.Pending.Reason.PREDECESSOR));
         if (!ensureTransactionHeadroom(1)) return Optional.empty();
         CommandResult result;
@@ -296,6 +306,7 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             pendingOrdinaryTicks = Math.addExact(pendingOrdinaryTicks, 1L);
     }
     long pendingOrdinaryTicks() { return pendingOrdinaryTicks; }
+    String preparationDiagnostic() { return preparations.diagnostic(engine != null && engine.hasPendingCalculation()); }
 
     Optional<AdvanceResult> advanceOrdinaryTime(WorkBudget budget) {
         if (pendingOrdinaryTicks == 0) return Optional.empty();
@@ -464,6 +475,8 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     }
 
     void shutdown() {
+        if (engine != null) engine.cancelPendingCalculation();
+        preparations.close();
         try {
             if (status.kind() == FrontierV3RuntimeStatus.Kind.ACTIVE) {
                 if (store instanceof FrontierFileStore files) {
@@ -482,6 +495,8 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
 
     void quarantine(RuntimeException error) {
         if (status.kind() == FrontierV3RuntimeStatus.Kind.QUARANTINED) return;
+        if (engine != null) engine.cancelPendingCalculation();
+        preparations.close();
         status = FrontierV3RuntimeStatus.quarantined(error);
     }
 }
