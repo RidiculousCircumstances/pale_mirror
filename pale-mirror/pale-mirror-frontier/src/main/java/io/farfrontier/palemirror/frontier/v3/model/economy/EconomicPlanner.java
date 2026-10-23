@@ -5,6 +5,9 @@ import java.util.*;
 
 /** Settlement-level coordination; the supply solver owns recipe feasibility and source selection. */
 public final class EconomicPlanner {
+    private record Input(EconomicSnapshot facts, EconomicPlanningRules policy) { }
+    private final io.farfrontier.palemirror.frontier.v3.model.BoundedValueMemo<Input, Domestic> domesticViews =
+            new io.farfrontier.palemirror.frontier.v3.model.BoundedValueMemo<>(32);
     /** An assessed plan cannot be paired with another state's facts or policy. */
     public static final class Domestic {
         private final EconomicSnapshot facts;
@@ -23,6 +26,9 @@ public final class EconomicPlanner {
     /** Independent of neighbours' plans: the funded domestic envelope is reusable
      * by quotation and export evaluation without recursive settlement planning. */
     public Domestic domestic(EconomicSnapshot facts, EconomicPlanningRules policy) {
+        return domesticViews.get(new Input(facts, policy), () -> evaluateDomestic(facts, policy));
+    }
+    private Domestic evaluateDomestic(EconomicSnapshot facts, EconomicPlanningRules policy) {
         var selected = evaluate(facts, policy, facts.market());
         var economy = selected.plan.economy().orElseThrow();
         if (economy.unfundedRequirements() == 0 || selected.plan.preferredPurchaseQuantities().isEmpty()) return selected;

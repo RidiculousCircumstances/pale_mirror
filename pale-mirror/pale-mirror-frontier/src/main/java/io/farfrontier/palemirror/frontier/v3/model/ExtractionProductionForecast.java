@@ -16,6 +16,8 @@ final class ExtractionProductionForecast {
         var inputs = new ArrayList<Object>();
         inputs.add(state.bootstrap().ruleset()); inputs.add(state.extractionSites().work()); inputs.add(deposit);
         inputs.add(state.inventory().items()); inputs.add(state.inventory().surfaces());
+        inputs.add(state.inventory().containers()); inputs.add(state.replicaCustody());
+        inputs.add(state.actorLocations());
         inputs.add(WorkEquipmentClaimComposition.reserved(state));
         inputs.addAll(workers);
         synchronized (ESTIMATES) {

@@ -10,12 +10,14 @@ public final class GoodsParticipantStorage {
 
     public static Set<SubjectId> declared(FrontierWorldState state, GoodsParticipant participant) {
         var result = new HashSet<>(ResourceStorageSelection.declaredContainers(state.inventory(), participant.settlementId(), ROLES));
-        result.addAll(ResourceStorageSelection.declaredContainers(state.inventory(), participant.party().id(), ROLES));
+        if (!participant.party().id().equals(participant.settlementId()))
+            result.addAll(ResourceStorageSelection.declaredContainers(state.inventory(), participant.party().id(), ROLES));
         return Set.copyOf(result);
     }
     public static Set<SubjectId> containers(FrontierWorldState state, GoodsParticipant participant, String kind) {
         var result = new HashSet<>(ResourceStorageSelection.containers(state, participant.settlementId(), kind, ROLES));
-        result.addAll(ResourceStorageSelection.containers(state, participant.party().id(), kind, ROLES));
+        if (!participant.party().id().equals(participant.settlementId()))
+            result.addAll(ResourceStorageSelection.containers(state, participant.party().id(), kind, ROLES));
         return Set.copyOf(result);
     }
     /** Resolve an exact previously selected container declaration, including a retired one needed for disposition. */

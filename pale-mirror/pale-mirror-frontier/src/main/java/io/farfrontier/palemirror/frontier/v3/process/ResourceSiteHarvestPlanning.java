@@ -71,6 +71,7 @@ final class ResourceSiteHarvestPlanning {
         if (state.structureConditions().get(site.facilityId()) != StructureCondition.INTACT) return List.of();
         var candidates = ResidentWorkComposition.SELECTION.eligible(state, settlement.id(),
                 ResidentWorkKind.AGRICULTURE, HumanCapability.AGRICULTURE, atTick);
+        if (candidates.isEmpty()) return List.of();
         var events = new java.util.ArrayList<ProposedEvent>();
         boolean activate = task.status() == StrategicTaskStatus.PENDING;
         FrontierWorldState projected = activate ? state.withStrategicPlans(
@@ -152,10 +153,10 @@ final class ResourceSiteHarvestPlanning {
 
     private static java.util.Optional<ResourceSiteHarvestStarted> offer(FrontierWorldState state, StrategicTask task,
             ResourceSite site, ResidentProfile farmer, long tick) {
-        if (!FieldWorkDemand.requested(state, site, tick))
-            return java.util.Optional.empty();
         if (!ResidentActivityCoordinator.mayStartOrdinaryWork(state, farmer.id(), tick)
                 || !ActorExecutionCoordinator.ordinaryWorkAdmission(state, farmer.id()).permitted())
+            return java.util.Optional.empty();
+        if (!FieldWorkDemand.requested(state, site, tick))
             return java.util.Optional.empty();
         ActorLocation worker = state.actorLocations().get(farmer.id());
         if (worker == null) throw new IllegalArgumentException("resource-site harvest worker has no canonical body");

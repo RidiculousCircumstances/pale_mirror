@@ -8,6 +8,8 @@ import java.util.function.Predicate;
 public final class ResourceStorageSelection {
     private record DeclarationImage(Map<SubjectId, ContainerRecord> source,
                                     Map<SubjectId, List<ContainerRecord>> owners) { }
+    private record Scope(SubjectId owner, String item, Set<ResourceStorageRole> roles) { }
+    private static final ImmutableKeyedInputView<Scope, Set<SubjectId>> ELIGIBLE = new ImmutableKeyedInputView<>(512);
     private static final ThreadLocal<DeclarationImage> DECLARATIONS = new ThreadLocal<>();
 
     private static List<ContainerRecord> owned(ExactInventory inventory, SubjectId owner) {
@@ -85,9 +87,11 @@ public final class ResourceStorageSelection {
     }
     /** Read-only stock scope uses the same declared ownership/filter/tier as admission. */
     public static Set<SubjectId> containers(FrontierWorldState state, SubjectId owner, String kind, Set<ResourceStorageRole> roles) {
-        return declared(state, owner, kind, Set.copyOf(roles))
-                .filter(policy -> !ReferenceContainerCustody.blocksCanonicalUse(state, policy.endpoint().containerId()))
-                .map(policy -> policy.endpoint().containerId()).collect(java.util.stream.Collectors.toUnmodifiableSet());
+        var scope = new Scope(owner, kind, Set.copyOf(roles));
+        return ELIGIBLE.get(state.bootstrap(), scope, List.of(state.inventory().containers(), state.inventory().surfaces(),
+                state.replicaCustody(), state.actorLocations()), () -> declared(state, owner, kind, scope.roles())
+                    .filter(policy -> !ReferenceContainerCustody.blocksCanonicalUse(state, policy.endpoint().containerId()))
+                    .map(policy -> policy.endpoint().containerId()).collect(java.util.stream.Collectors.toUnmodifiableSet()));
     }
     public static List<ShipmentEndpoint> declaredCandidates(FrontierWorldState state, SubjectId owner, String kind,
             SurfaceAnchor origin, Set<ResourceStorageRole> roles) {

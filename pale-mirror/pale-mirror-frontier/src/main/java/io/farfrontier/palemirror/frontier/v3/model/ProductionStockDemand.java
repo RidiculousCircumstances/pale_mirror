@@ -32,8 +32,6 @@ public final class ProductionStockDemand {
         var commodity = state.bootstrap().ruleset().goodsTrade().policies().get(participant.policy()).stream()
                 .filter(value -> value.itemKind().equals(itemKind)).findFirst().orElseThrow(
                         () -> new IllegalArgumentException("production output has no declared stock target: " + itemKind));
-        int residents = LivingResidentStockView.counts(state).getOrDefault(settlement, 0);
-        int minimum = PublicStockProtection.minimum(state, settlement, itemKind, atTick);
         long incoming = 0, outgoing = 0;
         for (var commitment : StockSupplyComposition.pending(state)) {
             if (!commitment.economicOwner().equals(settlement) || !commitment.itemKind().equals(itemKind)
@@ -42,19 +40,21 @@ public final class ProductionStockDemand {
             outgoing = Math.addExact(outgoing, commitment.outgoing());
         }
         long stock = held(state.inventory()).getOrDefault(new Resource(settlement, itemKind), 0L);
+        var planning = state.bootstrap().ruleset().goodsTrade().supplyPlanning();
+        // The economic plan owns the incremental production decision. Its caller
+        // does not need a second legacy reserve calculation whose result is discarded.
+        if (planning.economics().isPresent()) {
+            var plan = GoodsParticipantAssessment.view(state, participant, atTick).supplyPlan().orElseThrow();
+            long covered = new StockTargetDemand(0, stock, incoming, outgoing).covered();
+            return new StockTargetDemand(Math.addExact(covered, plan.economy().orElseThrow()
+                    .additionalProduction().get(itemKind)), stock, incoming, outgoing);
+        }
         long target = SettlementReservePlanning.enabled(state) ? SettlementReservePlanning.read(state, settlement, atTick).get(itemKind).quantity()
-                : StockTargetDemand.target(commodity, residents, minimum);
-        if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().enabled()) {
+                : StockTargetDemand.target(commodity, LivingResidentStockView.counts(state).getOrDefault(settlement, 0),
+                    PublicStockProtection.minimum(state, settlement, itemKind, atTick));
+        if (planning.enabled()) {
             var plan = GoodsParticipantAssessment.view(state, participant, atTick).supplyPlan().orElseThrow();
             var demand = plan.require(itemKind);
-            if (plan.economy().isPresent()) {
-                // The planner has already netted usable stock and accepted output.
-                // Its incremental order must not be compared again with total title
-                // (which also includes personal provisions and work-in-progress).
-                long covered = new StockTargetDemand(0, stock, incoming, outgoing).covered();
-                target = Math.addExact(covered, plan.economy().orElseThrow().additionalProduction().get(itemKind));
-                return new StockTargetDemand(target, stock, incoming, outgoing);
-            }
             // Existing export demand remains in outgoing. Replenishment advice alone
             // must not restart production for every one-item drop above the lower mark.
             if (demand.production() == 0 && demand.purchase() == 0) target = Math.min(target, Math.addExact(stock, incoming));

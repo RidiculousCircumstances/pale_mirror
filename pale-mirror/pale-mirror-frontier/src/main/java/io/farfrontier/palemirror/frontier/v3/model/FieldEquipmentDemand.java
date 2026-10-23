@@ -7,7 +7,11 @@ import java.util.*;
 /** Current planted crop and admitted sowing area, not hypothetical market expansion. */
 final class FieldEquipmentDemand implements EquipmentDemandPort {
     @Override public Key key() { return Key.FIELD; }
+    private static final ImmutableKeyedInputView<SubjectId, List<EquipmentWorkDemand>> VIEWS = new ImmutableKeyedInputView<>(256);
     @Override public List<EquipmentWorkDemand> read(FrontierWorldState state, SubjectId home) {
+        return VIEWS.get(state.bootstrap(), home, List.of(state.resourceSites().sites(), state.resourceSites().cycles()), () -> project(state, home));
+    }
+    private static List<EquipmentWorkDemand> project(FrontierWorldState state, SubjectId home) {
         long wear = 0; long cells = 0;
         for (var site : state.resourceSites().sites().values()) {
             if (!state.resourceSite(site.siteId()).settlementId().equals(home)

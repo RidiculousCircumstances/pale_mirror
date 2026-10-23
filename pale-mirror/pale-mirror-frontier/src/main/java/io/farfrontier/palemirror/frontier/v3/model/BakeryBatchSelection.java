@@ -40,10 +40,11 @@ public record BakeryBatchSelection(Optional<ExactItemStack> exactInput,
 
     /** Strategic demand and staffing use stock facts, not executable route admission. */
     public static Optional<BakeryBatchSelection> admissibleStock(FrontierWorldState state, ProductionRights rights, long atTick) {
-        if (rights.mode() == ProductionRights.Mode.PUBLIC_PRODUCTION
-                && !ProductionStockDemand.read(state, rights.resourceOwner().id(), SettlementFoodPolicy.BREAD, atTick).requested())
-            return Optional.empty();
-        return select(state, rights, (source, quantity) -> ProductionOutputCapacity.stockDestination(state, rights, quantity, source).isPresent(), false);
+        var available = select(state, rights, (source, quantity) -> ProductionOutputCapacity.stockDestination(state, rights, quantity, source).isPresent(), false);
+        if (available.isEmpty()) return available;
+        return rights.mode() == ProductionRights.Mode.PUBLIC_PRODUCTION
+                && !ProductionStockDemand.read(state, rights.resourceOwner().id(), SettlementFoodPolicy.BREAD, atTick).requested()
+                ? Optional.empty() : available;
     }
 
     public static Optional<BakeryBatchSelection> admissible(FrontierWorldState state, SubjectId settlementId, long atTick) {

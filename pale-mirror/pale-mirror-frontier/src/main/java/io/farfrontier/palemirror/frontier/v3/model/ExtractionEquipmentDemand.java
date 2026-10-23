@@ -8,7 +8,11 @@ import java.util.*;
 /** Known deposit access requires ready equipment; only opened, actively requested fronts forecast wear. */
 final class ExtractionEquipmentDemand implements EquipmentDemandPort {
     @Override public Key key() { return Key.EXTRACTION; }
+    private static final ImmutableKeyedInputView<SubjectId, List<EquipmentWorkDemand>> VIEWS = new ImmutableKeyedInputView<>(256);
     @Override public List<EquipmentWorkDemand> read(FrontierWorldState state, SubjectId home) {
+        return VIEWS.get(state.bootstrap(), home, List.of(state.extractionSites().deposits(), state.extractionSites().work()), () -> project(state, home));
+    }
+    private static List<EquipmentWorkDemand> project(FrontierWorldState state, SubjectId home) {
         var staffing = state.bootstrap().ruleset().labour().entries().get(ResidentWorkKind.EXTRACTION);
         if (staffing == null || staffing.targetWorkers() == 0) return List.of();
         var labour = new HashMap<ToolRequirement, Long>();

@@ -27,6 +27,17 @@ class ExtractionProductionForecastTest {
             ExtractionProductionForecast.assess(state, other, definition, workers);
         assertSame(forecast, ExtractionProductionForecast.assess(state, deposit, definition, workers),
                 "querying another mine must not recompile this unchanged forecast");
+        var removed = state.inventory();
+        for (var item : List.copyOf(removed.items().values())) {
+            if (item.economicOwnerId().equals(deposit.site().settlementId())
+                    && state.bootstrap().ruleset().tools().find(item.itemKind()).isPresent())
+                removed = removed.moveObservedItem(item.id(), item.custody(),
+                        new InventoryCustody.Player(new UUID(0, 234)));
+        }
+        var withoutEquipment = state.withInventory(removed);
+        assertEquals(0, ExtractionProductionForecast.assess(withoutEquipment, deposit, definition, workers).outputs(),
+                "withdrawing equipment must invalidate cached productive capacity immediately");
+        assertEquals(forecast, ExtractionProductionForecast.assess(state, deposit, definition, workers));
         var cell = deposit.site().layout().cells().stream().filter(c -> c.definition().equals(definition)).findFirst().orElseThrow();
         var changed = deposit.observe(cell.id(), deposit.cells().get(cell.id()).revision(), cell.definition().after());
         var successor = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(changed)));

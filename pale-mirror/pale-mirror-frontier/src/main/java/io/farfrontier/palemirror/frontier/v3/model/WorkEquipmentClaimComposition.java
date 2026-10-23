@@ -17,8 +17,14 @@ public final class WorkEquipmentClaimComposition {
                     .map(ShipmentCargo.Individual.class::cast).map(ShipmentCargo.Individual::itemId),
             state -> state.companies().goodsTrade().contracts().values().stream()
                     .flatMap(contract -> contract.individualAllocations().values().stream()).map(IndividualResourceAllocation::itemId));
+    private static final ImmutableInputView<Set<SubjectId>> CLAIMS = new ImmutableInputView<>();
     public static Set<SubjectId> reserved(FrontierWorldState state) {
-        return OWNERS.stream().flatMap(owner -> owner.apply(state)).collect(java.util.stream.Collectors.toUnmodifiableSet());
+        // These are the complete inputs read by the registered claim producers.
+        // A new view of the same claims must not invalidate downstream forecasts.
+        return CLAIMS.get(List.of(state.bootstrap(), state.extractionSites().work(),
+                state.resourceSites().sites(), state.productionJobs(), state.shipments().shipments(),
+                state.companies().goodsTrade().contracts()), () -> OWNERS.stream()
+                    .flatMap(owner -> owner.apply(state)).collect(java.util.stream.Collectors.toUnmodifiableSet()));
     }
     private WorkEquipmentClaimComposition() { }
 }

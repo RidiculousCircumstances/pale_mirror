@@ -8,7 +8,11 @@ import java.util.*;
 /** Finite-source owner declares present products. Owning a mine never creates demand for its output. */
 final class ExtractionReserveSupply implements ReserveSupplyPort {
     @Override public Key key() { return Key.EXTRACTION; }
+    private static final ImmutableKeyedInputView<SubjectId, Facts> VIEWS = new ImmutableKeyedInputView<>(256);
     @Override public Facts read(FrontierWorldState state, SubjectId home) {
+        return VIEWS.get(state.bootstrap(), home, List.of(state.extractionSites().deposits(), state.humanPopulation().schedule(home)), () -> project(state, home));
+    }
+    private static Facts project(FrontierWorldState state, SubjectId home) {
         var timing = new TreeMap<String, Timing>();
         for (var deposit : state.extractionSites().deposits().values()) {
             if (!deposit.site().settlementId().equals(home)) continue;

@@ -7,7 +7,14 @@ import java.util.*;
 /** Renewable-source owner estimates a complete crop cycle, not the near-complete current crop. */
 final class FieldReserveSupply implements ReserveSupplyPort {
     @Override public Key key() { return Key.FIELD; }
+    private static final ImmutableKeyedInputView<SubjectId, Facts> VIEWS = new ImmutableKeyedInputView<>(256);
     @Override public Facts read(FrontierWorldState state, SubjectId home) {
+        return VIEWS.get(state.bootstrap(), home, List.of(state.resourceSites(), state.inventory().items(), state.inventory().containers(),
+                state.inventory().surfaces(), state.replicaCustody(), state.actorLocations(),
+                state.humanPopulation().residents(), state.humanPopulation().schedule(home),
+                state.strategicPlans().decisionAuthorities(), WorkEquipmentClaimComposition.reserved(state)), () -> project(state, home));
+    }
+    private static Facts project(FrontierWorldState state, SubjectId home) {
         boolean usable = state.resourceSites().sites().values().stream()
                 .filter(site -> state.resourceSite(site.siteId()).settlementId().equals(home))
                 .filter(site -> site.phase() != ResourceSitePhase.DESTROYED && site.phase() != ResourceSitePhase.CONFLICT)

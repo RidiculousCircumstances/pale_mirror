@@ -25,8 +25,9 @@ public record ResourceStorageFilter(boolean allItems, Set<String> items, Map<Str
         requireKey(itemKind);
         return allItems || items.contains(itemKind) || categories.values().stream().anyMatch(values -> values.contains(itemKind));
     }
+    private static final java.util.regex.Pattern KEY = java.util.regex.Pattern.compile("[a-z][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9_./-]{0,127}");
     private static void requireKey(String key) {
-        if (key == null || !key.matches("[a-z][a-z0-9_-]{0,31}:[a-z0-9][a-z0-9_./-]{0,127}"))
+        if (key == null || !KEY.matcher(key).matches())
             throw new IllegalArgumentException("storage filter requires a namespaced resource/category key");
     }
 }

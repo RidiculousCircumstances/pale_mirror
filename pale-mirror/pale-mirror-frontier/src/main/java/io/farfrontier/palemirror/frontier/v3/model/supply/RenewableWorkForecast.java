@@ -13,10 +13,20 @@ public final class RenewableWorkForecast {
         }
     }
     private record Task(int source, boolean harvest, long readyAt, long work) { }
+    private record Input(List<Source> sources, int workers, long day, long dailyWork, long horizon) {
+        Input { sources = List.copyOf(sources); }
+    }
+    private static final io.farfrontier.palemirror.frontier.v3.model.BoundedValueMemo<Input,
+            List<SupplyPlanner.OutputRelease>> FORECASTS = new io.farfrontier.palemirror.frontier.v3.model.BoundedValueMemo<>(32);
     public static List<SupplyPlanner.OutputRelease> assess(List<Source> sources, int workers, long day,
             long workPerDay, long horizon) {
         if (sources.size() > 4096 || workers < 1 || workers > 256 || day < 1 || workPerDay < 1
                 || workPerDay > day || horizon < 1) throw new IllegalArgumentException("invalid renewable work calendar");
+        var input = new Input(sources, workers, day, workPerDay, horizon);
+        return FORECASTS.get(input, () -> calculate(input.sources(), workers, day, workPerDay, horizon));
+    }
+    private static List<SupplyPlanner.OutputRelease> calculate(List<Source> sources, int workers, long day,
+            long workPerDay, long horizon) {
         var waiting = new PriorityQueue<Task>(Comparator.comparingLong(Task::readyAt)
                 .thenComparing(Task::harvest, Comparator.reverseOrder()).thenComparingInt(Task::source));
         var ready = new PriorityQueue<Task>(Comparator.comparing(Task::harvest, Comparator.reverseOrder())
