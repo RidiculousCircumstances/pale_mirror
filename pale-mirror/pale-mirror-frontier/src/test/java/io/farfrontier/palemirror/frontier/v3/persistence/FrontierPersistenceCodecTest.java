@@ -29,7 +29,7 @@ class FrontierPersistenceCodecTest {
         assertEquals(FrontierStateSchema.VERSION, Byte.toUnsignedInt(encoded[4]) * 256 + Byte.toUnsignedInt(encoded[5]));
         assertEquals(state.bootstrap().worldId(), FrontierWorldSnapshotHeader.read(encoded).worldId());
         assertArrayEquals(encoded, codec.encode(codec.decode(encoded)));
-        for (int legacy = 177; legacy < 301; legacy++) {
+        for (int legacy = 177; legacy < FrontierStateSchema.VERSION; legacy++) {
             var old = encoded.clone(); old[4] = (byte) (legacy >>> 8); old[5] = (byte) legacy;
             var before = old.clone();
             org.junit.jupiter.api.Assertions.assertTrue(assertThrows(IllegalArgumentException.class,

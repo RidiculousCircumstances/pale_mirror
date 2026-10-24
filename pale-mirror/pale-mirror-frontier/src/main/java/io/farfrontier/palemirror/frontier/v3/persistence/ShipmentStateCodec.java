@@ -108,7 +108,10 @@ final class ShipmentStateCodec {
             }
             case ShipmentEndpoint.ProductionPort machine -> {
                 ProductionStationSpecCodec.write(out, machine.spec());
-                out.writeByte(machine.port() == ActorContainerItemOrder.StationPort.INPUT ? 1 : 2);
+                out.writeByte(switch (machine.port()) {
+                    case INPUT -> 1; case FUEL -> 2; case OUTPUT -> 3;
+                    case MAINTENANCE_TARGET -> throw new IllegalArgumentException("maintenance is not a logistics resource port");
+                });
                 FrontierWorldStateCodec.writePosition(out, machine.exteriorApproach().support());
             }
         }
@@ -143,6 +146,7 @@ final class ShipmentStateCodec {
             var spec = ProductionStationSpecCodec.read(in);
             var port = switch (in.readUnsignedByte()) {
                 case 1 -> ActorContainerItemOrder.StationPort.INPUT; case 2 -> ActorContainerItemOrder.StationPort.FUEL;
+                case 3 -> ActorContainerItemOrder.StationPort.OUTPUT;
                 default -> throw new IllegalArgumentException("unknown shipment machine port tag");
             };
             var exterior = new SurfaceAnchor(FrontierWorldStateCodec.readPosition(in));

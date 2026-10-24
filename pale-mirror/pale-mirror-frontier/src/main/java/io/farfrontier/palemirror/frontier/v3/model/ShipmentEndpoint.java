@@ -51,6 +51,8 @@ public sealed interface ShipmentEndpoint extends ResourceSourceEndpoint permits 
         public ProductionPort {
             Objects.requireNonNull(settlementId); Objects.requireNonNull(spec); Objects.requireNonNull(port);
             Objects.requireNonNull(exteriorApproach);
+            if (port == ActorContainerItemOrder.StationPort.MAINTENANCE_TARGET)
+                throw new IllegalArgumentException("maintenance target is not a shipment resource port");
         }
         @Override public Kind kind() { return Kind.PRODUCTION_PORT; }
         @Override public SubjectId containerId() { return spec.containerId(); }

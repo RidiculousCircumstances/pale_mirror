@@ -51,7 +51,6 @@ public final class FrontierEngines {
             throw new IllegalStateException("recovery WAL tail exceeds bounded engine transaction retention");
         }
         SnapshotRecord snapshot = image.checkpoint().orElse(null);
-        if (snapshot != null) configuration.stateCodec().validateRecovery(snapshot.checkpoint().canonicalState(), !image.walTail().isEmpty());
         S state = snapshot == null ? configuration.initialState() : configuration.stateCodec().decode(snapshot.checkpoint().canonicalState());
         Revision revision = snapshot == null ? Revision.ZERO : snapshot.checkpoint().revision();
         SimInstant instant = snapshot == null ? configuration.initialInstant() : snapshot.checkpoint().instant();

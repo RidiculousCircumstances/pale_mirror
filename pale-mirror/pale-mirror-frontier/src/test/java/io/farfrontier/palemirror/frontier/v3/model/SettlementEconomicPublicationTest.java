@@ -126,12 +126,14 @@ class SettlementEconomicPublicationTest {
         assertEquals(engine.canonicalState().state().inventory(), recovered.canonicalState().state().inventory());
         assertEquals(engine.checkpoint().schedules(), recovered.checkpoint().schedules());
     }
-    @Test void previousSchemaNeedsACompleteCheckpointBeforeNewEventSemantics() {
+    @Test void ambiguousStationPortSchemasAreRejectedWithoutGuessingTheirDirection() {
         var codec = new FrontierWorldStateCodec();
-        byte[] header = java.nio.ByteBuffer.allocate(6).putInt(0x4656334D).putShort((short) 301).array();
-        assertDoesNotThrow(() -> codec.validateRecovery(header, false));
-        assertThrows(IllegalArgumentException.class, () -> codec.validateRecovery(header, true));
-        assertDoesNotThrow(() -> codec.validateRecovery(codec.encode(initial()), true));
+        for (int schema : List.of(301, 302)) {
+            byte[] header = java.nio.ByteBuffer.allocate(6).putInt(0x4656334D).putShort((short) schema).array();
+            assertThrows(IllegalArgumentException.class, () -> codec.decode(header));
+        }
+        var current = initial();
+        assertEquals(current, codec.decode(codec.encode(current)));
     }
     @Test void additionalOutputUsesOneRetainedCoverageBaseline() {
         var state = AcceptedEconomyFixture.publish(initial(), HOME, 10);
