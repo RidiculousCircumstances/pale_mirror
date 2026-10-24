@@ -19,7 +19,7 @@ final class FrontierV3ManagedBlockWrites {
         CellMutationKey.OwnerFamily family();
         boolean preparePlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                 List<PlannedWrite> writes);
-        void observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+        boolean observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                 BlockPos position, BlockState replacement, boolean committed);
     }
     private static final List<Owner> OWNERS = List.of(new Owner() {
@@ -30,9 +30,10 @@ final class FrontierV3ManagedBlockWrites {
             // Planned static projection neither acquires field authority nor acknowledges work.
             return true;
         }
-        public void observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+        public boolean observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                 BlockPos position, BlockState replacement, boolean committed) {
             FrontierV3ResourceFieldWorldChangeExecutor.observeBlockWrite(level, runtime, position, replacement, committed);
+            return true;
         }
     }, new FrontierV3ExtractionBlockWrites());
     static {
@@ -58,7 +59,7 @@ final class FrontierV3ManagedBlockWrites {
     static boolean observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             BlockPos position, BlockState replacement, boolean committed) {
         if (!FrontierV3NavigationObservation.blockWrite(level, runtime, position, replacement, committed)) return false;
-        for (var owner : OWNERS) owner.observe(level, runtime, position, replacement, committed);
+        for (var owner : OWNERS) if (!owner.observe(level, runtime, position, replacement, committed)) return false;
         return true;
     }
 }

@@ -46,6 +46,8 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     private long pendingOrdinaryTicks;
     private CommandId pendingCommand;
     private long commandPreparationInvalidations;
+    private long environmentalSamples;
+    private long yieldedEnvironmentalSamples;
     private String lastPreparationInvalidator = "none";
     enum CommandCompletion { PROTOCOL, OWNER }
     private final java.util.EnumMap<CommandCompletion, Runnable> commandContinuations =
@@ -330,7 +332,8 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     String preparationDiagnostic() {
         String base = preparations.diagnostic(engine != null && engine.hasPendingCalculation());
         return base.substring(0, base.length() - 1) + ",\"commandInvalidations\":" + commandPreparationInvalidations
-                + ",\"lastInvalidatingPayload\":" + new com.google.gson.Gson().toJson(lastPreparationInvalidator) + "}";
+                + ",\"lastInvalidatingPayload\":" + new com.google.gson.Gson().toJson(lastPreparationInvalidator)
+                + ",\"environmentalSamples\":" + environmentalSamples + ",\"yieldedEnvironmentalSamples\":" + yieldedEnvironmentalSamples + "}";
     }
 
     void onReady(Runnable listener) {
@@ -397,6 +400,16 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         return Optional.of(new AdvanceResult(latest.revision(), latest.instant(), transactions, latest.deferredAction(),
                 latest.simulationLagTicks(), latest.status(), new io.farfrontier.palemirror.frontier.v3.kernel.WorkConsumption(
                         actions, weight, classifications, executions)));
+    }
+
+    /** Random environmental samples have no retained player intent. Yield them before
+     * any effect while an exact calculation owns publication; Minecraft samples again.
+     * Explicit player/entity interactions keep their ordinary native boundary. */
+    void runEnvironmentalSample(Runnable sample) {
+        if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE || engine.hasPendingCalculation()) {
+            yieldedEnvironmentalSamples++; return;
+        }
+        runPersistenceTurn(() -> { environmentalSamples++; sample.run(); });
     }
 
     /** The runtime owns pairing and gating; host callers cannot acknowledge a queued prefix. */

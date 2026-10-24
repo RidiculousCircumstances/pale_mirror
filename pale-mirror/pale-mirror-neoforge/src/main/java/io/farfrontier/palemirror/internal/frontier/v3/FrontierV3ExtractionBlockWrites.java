@@ -32,10 +32,10 @@ final class FrontierV3ExtractionBlockWrites implements FrontierV3ManagedBlockWri
         // WAL prefix is forced. Per-block ingress below still owns indexed witnesses/effects.
         return true;
     }
-    @Override public void observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    @Override public boolean observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             BlockPos position, BlockState replacement, boolean committed) {
         var state = runtime.passiveOwnershipState().orElse(null);
-        if (state == null || !state.bootstrap().ruleset().extraction().enabled() || !FrontierV3LoadedWorld.ready(level, position)) return;
+        if (state == null || !state.bootstrap().ruleset().extraction().enabled() || !FrontierV3LoadedWorld.ready(level, position)) return true;
         var indexed = FrontierV3WorksiteRegistry.point(state, position).orElse(null);
         if (indexed == null) {
             var raw = new BlockPosition(position.getX(), position.getY(), position.getZ());
@@ -43,31 +43,31 @@ final class FrontierV3ExtractionBlockWrites implements FrontierV3ManagedBlockWri
             if (!committed && fact.isPresent()
                     && !state.extractionSites().geologicalExclusions().positions().contains(raw)
                     && !level.getBlockState(position).equals(replacement))
-                FrontierV3CommandSubmission.submit(runtime, "extraction-geology-invalidated", ExtractionGeologyInvalidated.OWNER.value(),
-                        new ExtractionGeologyInvalidated(raw, fact.orElseThrow().revision()));
-            return;
+                return FrontierV3CommandSubmission.submit(runtime, "extraction-geology-invalidated", ExtractionGeologyInvalidated.OWNER.value(),
+                        new ExtractionGeologyInvalidated(raw, fact.orElseThrow().revision())) instanceof CommandResult.Accepted;
+            return true;
         }
-        if (FrontierV3WorksiteWrites.owns(indexed.key())) return;
+        if (FrontierV3WorksiteWrites.owns(indexed.key())) return true;
         var ledger = FrontierV3GrayboxLedger.get(level); var prior = FrontierV3WorksiteEvidence.at(level, ledger, state, position);
         // The container owner owns this socket after creation, not the block projector.
-        if (indexed.key().role() == WorksiteBlock.Role.CONTAINER_SOCKET && ledger.claim(position) != null) return;
+        if (indexed.key().role() == WorksiteBlock.Role.CONTAINER_SOCKET && ledger.claim(position) != null) return true;
         if (prior != null && prior.phase() == FrontierV3WorksiteBlockWitness.Phase.EFFECT_BLOCK_APPLIED) {
             if (committed) {
                 ledger.worksite(new FrontierV3WorksiteBlockWitness(prior.declaration(), prior.before(), prior.phase(),
                         prior.effectOperation(), Optional.of(FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position)))));
                 ledger.persist(level);
             }
-            return; // Original production receipt closes before this ordinary external successor.
+            return true; // Original production receipt closes before this ordinary external successor.
         }
         var declaration = FrontierV3WorksiteRegistry.owner(indexed.key().family()).current(state, indexed);
         var actual = FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position));
-        if (!committed && actual.equals(FrontierV3MinecraftBlockExtraction.describe(replacement))) return;
+        if (!committed && actual.equals(FrontierV3MinecraftBlockExtraction.describe(replacement))) return true;
         if (!committed && declaration.key().role() == WorksiteBlock.Role.NATURAL_TERRAIN) {
             var fact = ExtractionTerrainFacts.at(state.bootstrap(), declaration.position());
             if (fact.isPresent() && !state.extractionSites().geologicalExclusions().positions().contains(declaration.position())
                     && !(FrontierV3CommandSubmission.submit(runtime, "extraction-geology-invalidated", ExtractionGeologyInvalidated.OWNER.value(),
                         new ExtractionGeologyInvalidated(declaration.position(), fact.orElseThrow().revision())) instanceof CommandResult.Accepted))
-                throw new IllegalStateException("external natural-ground write lacks its before-write knowledge fence");
+                return false;
         }
         if (declaration.key().role() == WorksiteBlock.Role.RESOURCE) {
             var region = new ExtractionRegion(declaration.key().owner(), position.getX() >> 4, position.getZ() >> 4);
@@ -77,7 +77,7 @@ final class FrontierV3ExtractionBlockWrites implements FrontierV3ManagedBlockWri
                 if (!FrontierV3ExtractionWorksiteOwner.submit(runtime, new ExtractionSourceBoundary(region,
                         ExtractionSourceBoundary.Operation.PREPARE, lease == null ? 0 : lease.authorityEpoch(),
                         replica == null ? 0 : replica.replicaRevision(), ExtractionSourceCustody.fingerprint(state.extractionSites(), region))))
-                    throw new IllegalStateException("external extraction write lacks its canonical before-write fence");
+                    return false;
             }
         }
         var preimage = prior != null && (prior.phase() == FrontierV3WorksiteBlockWitness.Phase.EXTERNAL_PENDING
@@ -85,6 +85,7 @@ final class FrontierV3ExtractionBlockWrites implements FrontierV3ManagedBlockWri
         ledger.worksite(new FrontierV3WorksiteBlockWitness(declaration, preimage, committed
                 ? FrontierV3WorksiteBlockWitness.Phase.EXTERNAL : FrontierV3WorksiteBlockWitness.Phase.EXTERNAL_PENDING));
         ledger.persist(level);
+        return true;
     }
     static void reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         var state = runtime.decodedState().orElseThrow(); var ledger = FrontierV3GrayboxLedger.get(level);

@@ -5,6 +5,7 @@
   "mixins": [
     "FrontierV3NbtOutputMixin",
     "FrontierV3ServerTickTimingMixin",
+    "FrontierV3EnvironmentalSampleMixin",
     "FrontierV3AutomationTransfersMixin",
     "FrontierV3GroundInventoryPickupMixin",
     "FrontierV3AutomationEjectionMixin",

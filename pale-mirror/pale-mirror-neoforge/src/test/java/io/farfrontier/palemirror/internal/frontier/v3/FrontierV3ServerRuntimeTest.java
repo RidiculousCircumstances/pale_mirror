@@ -92,6 +92,7 @@ class FrontierV3ServerRuntimeTest {
     @org.junit.jupiter.api.Timeout(10)
     void readyCalculationAndDurabilityRetainCapturedInstantAcrossElapsedBacklog(int observedTicks, @TempDir Path directory) throws Exception {
         var base = denseConfiguration(); var delegate = base.scheduledPlanner();
+        var releasePreparation = new java.util.concurrent.CompletableFuture<Void>();
         var detached = new io.farfrontier.palemirror.frontier.v3.kernel.ScheduledActionPlanner<Counter>() {
             public List<ProposedEvent> plan(Counter state, io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction action) {
                 return delegate.plan(state, action);
@@ -99,6 +100,7 @@ class FrontierV3ServerRuntimeTest {
             public java.util.Optional<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledPreparation> preparation(
                     Counter state, io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction action, SimInstant at) {
                 return java.util.Optional.of(() -> {
+                    releasePreparation.join();
                     var result = delegate.plan(state, action, at); return () -> result;
                 });
             }
@@ -111,6 +113,12 @@ class FrontierV3ServerRuntimeTest {
             for (int tick = 0; tick < observedTicks; tick++) runtime.observeOrdinaryHostTick();
             runtime.beginOrdinaryTurn(new WorkBudget(64, 128));
             runtime.runPersistenceTurn(runtime::resumeOrdinaryTurn);
+            assertTrue(runtime.pendingCalculation());
+            for (int sample = 0; sample < 32; sample++) runtime.runEnvironmentalSample(() -> {
+                throw new AssertionError("a sampled native update must not cancel the retained calculation");
+            });
+            assertTrue(runtime.pendingCalculation());
+            releasePreparation.complete(null);
             while (runtime.decodedState().orElseThrow().value() < 6) {
                 var next = owner.poll(2, java.util.concurrent.TimeUnit.SECONDS);
                 org.junit.jupiter.api.Assertions.assertNotNull(next, () -> "missing readiness: value="
@@ -124,7 +132,10 @@ class FrontierV3ServerRuntimeTest {
             assertTrue(runtime.executionView().orElseThrow().schedules().isEmpty());
             while (runtime.pendingOrdinaryTicks() > 0) owner.take().run();
             assertEquals(observedTicks, runtime.canonicalState().orElseThrow().instant().ticks());
-        } finally { runtime.shutdown(); }
+            var resumed = new java.util.concurrent.atomic.AtomicBoolean();
+            runtime.runEnvironmentalSample(() -> resumed.set(true));
+            assertTrue(resumed.get(), "background samples resume after their predecessor is published");
+        } finally { releasePreparation.complete(null); runtime.shutdown(); }
         var recovered = FrontierV3ServerRuntime.start(base, new FrontierFileStore(directory, payloads), 100);
         assertEquals(6, recovered.decodedState().orElseThrow().value());
         assertEquals(observedTicks, recovered.canonicalState().orElseThrow().instant().ticks()); recovered.shutdown();

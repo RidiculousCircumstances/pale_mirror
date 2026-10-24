@@ -70,4 +70,44 @@ public final class FrontierV3TerrainAdmissionGameTests {
         }
         helper.succeed();
     }
+    @GameTest(batch = "pm-frontier-v3-block-extraction", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 80)
+    public static void environmentalGeologyWriteWaitsForItsDurableFence(GameTestHelper helper) throws Exception {
+        var level = helper.getLevel(); var pos = helper.absolutePos(new BlockPos(2, 2, 2));
+        var point = new BlockPosition(pos.getX(), pos.getY(), pos.getZ());
+        var bootstrap = FrontierV3AmbientPhysicsGameTests.translatedBootstrap(FrontierBootstrapper.create(
+                new WorldId("frontier:environmental-geology"), 41, FrontierRulesets.fuelledQuarryGraybox()), pos.getX(), pos.getY() - 63, pos.getZ());
+        var writes = new ArrayDeque<Runnable>(); var delay = new java.util.concurrent.atomic.AtomicBoolean(false);
+        var directory = java.nio.file.Files.createTempDirectory(java.nio.file.Path.of("."), "environmental-geology-");
+        var disk = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs(),
+                action -> { if (delay.get()) writes.add(action); else action.run(); });
+        var runtime = FrontierV3ServerRuntime.start(FrontierWorldRuntimeDefinition.configuration(bootstrap), disk, 10_000);
+        var owner = new FrontierV3ExtractionBlockWrites();
+        try {
+            level.setBlock(pos, Blocks.STONE.defaultBlockState(), 2);
+            helper.assertTrue(ExtractionTerrainFacts.at(bootstrap, point).isPresent()
+                    && FrontierV3WorksiteRegistry.point(runtime.decodedState().orElseThrow(), pos).isEmpty(),
+                    "fixture must exercise unowned declared terrain");
+            delay.set(true);
+            runtime.runEnvironmentalSample(() -> {
+                if (owner.observe(level, runtime, pos, Blocks.DIRT.defaultBlockState(), false))
+                    level.setBlock(pos, Blocks.DIRT.defaultBlockState(), 2);
+            });
+            helper.assertTrue(!writes.isEmpty() && level.getBlockState(pos).is(Blocks.STONE),
+                    "pending geology durability must not admit the physical write");
+            delay.set(false); while (!writes.isEmpty()) writes.remove().run();
+            runtime.runEnvironmentalSample(() -> {
+                helper.assertTrue(owner.observe(level, runtime, pos, Blocks.DIRT.defaultBlockState(), false),
+                        "published predecessor permits the next native sample");
+                level.setBlock(pos, Blocks.DIRT.defaultBlockState(), 2);
+            });
+            helper.assertTrue(level.getBlockState(pos).is(Blocks.DIRT)
+                    && runtime.decodedState().orElseThrow().extractionSites().geologicalExclusions().positions().contains(point),
+                    "the actual change retains its exact canonical exclusion");
+        } finally {
+            delay.set(false); while (!writes.isEmpty()) writes.remove().run();
+            runtime.shutdown(); level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2);
+        }
+        helper.succeed();
+    }
 }

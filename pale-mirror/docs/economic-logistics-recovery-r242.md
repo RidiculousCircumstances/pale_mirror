@@ -175,3 +175,27 @@ preparation outside a persistence turn. Attribution to a particular callback
 is still unconfirmed; bounded invalidating-command diagnostics will resolve it.
 A global pending-calculation rejection is unsafe for non-replayable native
 observations, so it is not applied as an assumed fix.
+
+The diagnostic deployment `ac19979ec` and native run
+`ab589295-7b29-4dc2-a41f-3a2f781993f5` attributed the repeated cancellations to
+`frontier.extraction_geology_invalidated.v2`. All 826 newly excluded positions
+in the copied comparison were at surface Y=63. The native sampled environmental
+write path had no cooperative admission and forced unrelated preparation to
+restart. The nonindexed geology callback also discarded a Pending command
+result and allowed the physical write.
+
+Correction: explicitly sampled native block/fluid updates yield before invocation
+when a preparation owns publication, then use the ordinary nonblocking persistence
+turn. Player actions and native scheduled work are not intercepted. Every managed
+block owner now returns its before-write admission; pending geology/custody rejects
+the physical attempt until the exact receipt is durable. The sampled update may
+run on a subsequent Minecraft sample, so vanilla background growth cadence under
+load is not claimed unchanged. This avoids a broad, unsafe rejection of native
+commands and does not disable geology invalidation or subsidize the economy.
+
+R242e verification: full adapter suite and guardrails passed
+(`build/r242e-adapter-tests.log`); all three block-extraction GameTests passed
+(`build/r242e-terrain-tests.log`), including a delayed durable geology write.
+The runtime regression holds preparation explicitly, rejects 32 environmental
+samples, then proves readiness resumption and recovered canonical state. Native
+GameTest startup also verifies both exact Minecraft random-tick injection sites.
