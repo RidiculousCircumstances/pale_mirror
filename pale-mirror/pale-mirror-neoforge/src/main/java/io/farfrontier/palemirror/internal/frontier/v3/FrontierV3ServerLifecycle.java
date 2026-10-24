@@ -569,12 +569,12 @@ public final class FrontierV3ServerLifecycle {
     private static boolean requiresPhysicalStep(ServerLevel physicalWorld,
                                                 FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
         return FrontierV3FastForwardSafety.requiresPhysicalStep(
-                FrontierV3FastForwardSafety.requiresPhysicalStep(physicalWorld, runtime.decodedState().orElseThrow()),
+                FrontierV3FastForwardSafety.requiresPhysicalStep(physicalWorld, runtime.decodedState().orElseThrow(), runtime.canonicalState().orElseThrow().instant().ticks()),
                 unheldFieldWorldChange(physicalWorld, runtime) != null);
     }
     private static String physicalBlocker(ServerLevel physicalWorld,
                                           FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
-        String canonical = FrontierV3FastForwardSafety.blockingDescription(physicalWorld, runtime.decodedState().orElseThrow());
+        String canonical = FrontierV3FastForwardSafety.blockingDescription(physicalWorld, runtime.decodedState().orElseThrow(), runtime.canonicalState().orElseThrow().instant().ticks());
         String projection = "";
         var unheldWorld = unheldFieldWorldChange(physicalWorld, runtime);
         if (unheldWorld != null) projection += (projection.isBlank() ? "" : ";") + "field-world-change="

@@ -29,6 +29,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3FastForwardSafetyTest {
     @Test
+    void commonBodyAdmissionAndRecoveryBlockAccelerationWithoutLegacySceneOrIntent() {
+        var state = io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState.initial(
+                io.farfrontier.palemirror.frontier.v3.model.FrontierBootstrapper.create(new WorldId("frontier:fast-body"), 91L));
+        var actor = state.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
+        assertTrue(FrontierV3FastForwardActorBoundary.retainedBody(state).isEmpty());
+        var prepared = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.demand(state, actor);
+        assertTrue(FrontierV3FastForwardActorBoundary.retainedBody(prepared).orElseThrow().contains(actor.value()));
+        assertTrue(FrontierV3FastForwardActorBoundary.retainedBody(prepared).orElseThrow().contains("PREPARED"));
+        var body = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(prepared, actor);
+        var running = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.running(prepared, body);
+        assertTrue(FrontierV3FastForwardActorBoundary.retainedBody(running).orElseThrow().contains("RUNNING"));
+        var released = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.released(prepared, body);
+        assertTrue(FrontierV3FastForwardActorBoundary.retainedBody(released).isEmpty(),
+                "a fenced absent body must not block ordinary COLD acceleration");
+    }
+
+    @Test
     void unloadedPhysicalIntentDoesNotFreezeColdTimeButLoadedIntentDoes() {
         PhysicalIntent pending = new PhysicalIntent(new PhysicalIntentId("intent:fast-forward-safety"), PhysicalIntentKind.PRODUCTION_TRANSFORMATION,
                 PhysicalIntentStatus.PREPARED, new SubjectId("job:1-2"), io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentRoleBinding.production(new SubjectId("job:1-2"), new SubjectId("item:input"), new SubjectId("item:output")),

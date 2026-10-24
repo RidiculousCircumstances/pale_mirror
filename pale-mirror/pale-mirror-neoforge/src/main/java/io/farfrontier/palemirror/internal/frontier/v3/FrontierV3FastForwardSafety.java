@@ -27,9 +27,10 @@ final class FrontierV3FastForwardSafety {
      * COLD intents outside naturally loaded chunks cannot physically execute, so they do not
      * obstruct operator time. A loaded effect or an active scene stops at its next exact tick.
      */
-    static boolean requiresPhysicalStep(ServerLevel level, FrontierWorldState state) {
+    static boolean requiresPhysicalStep(ServerLevel level, FrontierWorldState state, long tick) {
         Objects.requireNonNull(level, "physical level"); Objects.requireNonNull(state, "frontier state");
-        return requiresPhysicalStep(state.physicalIntents().values(), state.sceneLeases().values(), intent -> affectedAreaLoaded(level, intent))
+        return FrontierV3FastForwardActorBoundary.blocker(level, state, tick).isPresent()
+                || requiresPhysicalStep(state.physicalIntents().values(), state.sceneLeases().values(), intent -> affectedAreaLoaded(level, intent))
                 || preparedHarvestHasPresentObserver(state.physicalIntents().values(), intent -> presentationDemandExists(level, intent));
     }
 
@@ -60,8 +61,10 @@ final class FrontierV3FastForwardSafety {
      * exact owned physical boundary which stopped it; a generic busy state is not enough for an
      * operator to distinguish a normal live effect from a stale scene lease.
      */
-    static String blockingDescription(ServerLevel level, FrontierWorldState state) {
+    static String blockingDescription(ServerLevel level, FrontierWorldState state, long tick) {
         Objects.requireNonNull(level, "physical level"); Objects.requireNonNull(state, "frontier state");
+        var actor = FrontierV3FastForwardActorBoundary.blocker(level, state, tick);
+        if (actor.isPresent()) return actor.orElseThrow();
         String canonical = blockingDescription(state.physicalIntents().values(), state.sceneLeases().values(), intent -> affectedAreaLoaded(level, intent));
         String presentHarvest = state.physicalIntents().values().stream()
                 .filter(intent -> intent.kind() == PhysicalIntentKind.RESOURCE_SITE_HARVEST
