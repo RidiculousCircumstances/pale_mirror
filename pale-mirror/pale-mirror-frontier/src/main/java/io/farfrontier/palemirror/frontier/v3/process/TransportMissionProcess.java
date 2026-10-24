@@ -163,8 +163,7 @@ public final class TransportMissionProcess {
         var group = state.unitGroups().groups().get(mission.groupId()); var events = new ArrayList<ProposedEvent>();
         if (mission.replenishment().isPresent()) {
             var transfer = mission.replenishment().orElseThrow();
-            if (!io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.current(state, transfer)
-                    || !io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.accessAvailable(state, mission, transfer))
+            if (!io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.current(state, transfer))
                 return List.of(new ProposedEvent(mission.id(), new ScheduleEffect.Rescheduled(action.id(), progress(mission.id(), now + state.bootstrap().ruleset().cadence().transportReviewInterval()))));
             if (transfer.pending().isEmpty() && !state.actorMovements().containsKey(transfer.actorId())
                     && !state.actorLocations().get(transfer.actorId()).supportingSurface().equals(transfer.station())) {
@@ -178,6 +177,7 @@ public final class TransportMissionProcess {
                     // Keep the exact instruction and expose shared navigation evidence; no invented receipt.
                 }
             } else if (transfer.pending().isEmpty() && !state.actorMovements().containsKey(transfer.actorId())
+                    && io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.accessAvailable(state, mission, transfer)
                     && ActorExecutionCoordinator.coldAvailable(state, transfer.actorId())
                     && !ReferenceContainerCustody.hasLiveCustody(state, transfer.containerId())
                     && !ReferenceContainerCustody.blocksCanonicalUse(state, transfer.containerId())) {

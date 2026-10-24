@@ -78,7 +78,7 @@ fixture timeout) and `ordinaryDemandLossReturnsTheUnchangedFormationAndCursorToC
 patrol fixtures outside the economic repair; no new code for those owners was
 introduced. The full native gate is RED, not waived or described as passed.
 These scenarios remain separate investigation debt. Active economics/custody/
-field/station GameTests in that aggregate pass. Full frontier unit run ongoing.
+field/station GameTests in that aggregate pass. Full frontier unit run was stopped after a superseding live access defect was established; it is incomplete, not passed.
 
 ## Additional live access blockage
 
@@ -94,3 +94,30 @@ boundary, then request time and stable identity. Occupants, exit clearance,
 committed entrances and meal priority retain their existing protection. The
 common coordinator reads only spatial/commitment facts; it does not reinterpret
 production, food or trade jobs. No arbitrary search radius or depot special case.
+
+
+## Staged approach, not a journey-long entrance reservation
+
+Copied checkpoint 438k exposed the remaining Hearthvale lock: resident 6-6 had
+retained a 3167-surface provisioning route ending at the depot. Its departure was
+at 378217 and arrival at 441537. That retained journey outranked a courier three
+steps from service. ExpeditionSupplyMovementProvider published no service
+approach and bypassed the shared segment boundary. Waiting for this journey to
+finish could eventually clear the lock, but did not make the protocol correct.
+
+All declared service approaches now split before first entry even when the
+point is presently free. At the exterior boundary a separately admitted final
+entry retains its turn. Provisioning and replenishment use the same boundary
+policy as shipments and mining; assembly has no service transaction. Existing
+unsplit routes checkpoint their actual progress before entry rather than replay
+an unadmitted arrival. The activity owner still owns loading/consumption.
+
+On the same copied Hearthvale state the internal courier's access changes from
+false to true and its first leg reaches the exterior boundary. This is an
+actual-state counterfactual, not a deployed recovery claim.
+
+Observed live receipts at 436076–436194 paid Sunreach 153.270890 coins for 210
+wheat after its cash had been zero; it then contracted a five-coal import. Ashcross
+resumed baking and meals. Attribution limit: its old wheat mission completed
+before the second access deployment, so that completion alone does not prove
+the new arbitration. Southgate/Mossbrook fuel recovery remains unconfirmed.

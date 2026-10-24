@@ -15,6 +15,9 @@ final class ExpeditionSupplyProcess {
         var load = mission.supplies().orElseThrow();
         if (load.needsReplan() || load.next().isEmpty()) return false;
         var allocation = load.next().orElseThrow();
+        if (!state.actorMovements().containsKey(allocation.actorId())
+                && !state.actorLocations().get(allocation.actorId()).supportingSurface().equals(load.order(mission.id(), allocation).station()))
+            return false; // Reaching the boundary does not require an entrance turn.
         if (allocation.pending().isPresent() || ServiceAccessCoordinator.available(state,
                 ExpeditionSupplyServiceAccess.identity(mission, allocation))) return false;
         return !assemblyWorkPending(state, mission);
@@ -94,8 +97,7 @@ final class ExpeditionSupplyProcess {
             long now, List<ProposedEvent> events) {
         var order = load.order(mission.id(), a);
         var execution = ExpeditionSupplyAuthority.execution(state, mission, a);
-        boolean permitted = a.pending().isEmpty() && execution.isPresent() && !state.actorMovements().containsKey(a.actorId())
-                && ServiceAccessCoordinator.available(state, ExpeditionSupplyServiceAccess.identity(mission, a));
+        boolean permitted = a.pending().isEmpty() && execution.isPresent() && !state.actorMovements().containsKey(a.actorId());
         if (permitted && !state.actorLocations().get(a.actorId()).supportingSurface().equals(order.station())) {
             var movement = new ActorMovement(order.movementOrder(), now,
                     new ActorMovementContext.ExpeditionSupply(mission.id(), a.claimId()), execution.orElseThrow());
@@ -104,7 +106,8 @@ final class ExpeditionSupplyProcess {
                 events.add(new ProposedEvent(a.actorId(), new ActorMovementStarted(movement)));
                 events.add(new ProposedEvent(a.actorId(), new ScheduleEffect.Created(ActorMovementProcess.progress(movement, now + 1))));
             } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) { /* Retain named load; common navigation owns reconsideration. */ }
-        } else if (permitted && ActorExecutionCoordinator.coldAvailable(state, a.actorId())
+        } else if (permitted && ServiceAccessCoordinator.available(state, ExpeditionSupplyServiceAccess.identity(mission, a))
+                && ActorExecutionCoordinator.coldAvailable(state, a.actorId())
                 && !ReferenceContainerCustody.hasLiveCustody(state, a.source().containerId())
                 && !ReferenceContainerCustody.blocksCanonicalUse(state, a.source().containerId())) {
             var received = ExpeditionSupplyAuthority.coldLoaded(state, mission.id(), a.claimId());

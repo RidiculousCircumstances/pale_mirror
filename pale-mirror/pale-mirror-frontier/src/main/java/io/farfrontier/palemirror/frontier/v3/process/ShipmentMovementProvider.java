@@ -45,15 +45,7 @@ public final class ShipmentMovementProvider implements ActorMovementProvider {
     }
     @Override public List<SurfaceAnchor> coldSegment(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
         validate(state, movement);
-        var access = serviceApproach(state, movement).orElse(null);
-        int end = Math.min(route.size(), TimedKnownRoute.MAX_SURFACES);
-        if (access != null && !ServiceAccessCoordinator.available(state, access)) {
-            var boundary = ServiceAccessCoordinator.boundary(state, access.pointId());
-            for (int index = 1; index < end; index++) {
-                if (boundary.occupied(route.get(index).standingBody())) { end = index; break; }
-            }
-        }
-        return List.copyOf(route.subList(0, end));
+        return ServiceApproachSegments.bounded(state, serviceApproach(state, movement), route);
     }
     @Override public java.util.Optional<ServiceAccessDemand.Identity> serviceApproach(FrontierWorldState state, ActorMovement movement) {
         validate(state, movement);
@@ -64,13 +56,7 @@ public final class ShipmentMovementProvider implements ActorMovementProvider {
         validate(state, movement);
         var shipment = state.shipments().shipments().get(movement.order().ownerId());
         ResourceSourceComposition.knowledge(state, shipment.sender(), shipment.receiver()).forActor(state, movement.order().actorId()).requireRoute(route);
-        var access = serviceApproach(state, movement).orElse(null);
-        boolean waitingOutside = access != null && !ServiceAccessCoordinator.available(state, access)
-                && ServiceAccessCoordinator.boundary(state, access.pointId()).cleared(route.getLast().standingBody())
-                && ServiceAccessCoordinator.boundary(state, access.pointId()).allowsWaitingRoute(route);
-        if (route.size() > TimedKnownRoute.MAX_SURFACES || !waitingOutside
-                && !movement.order().arrivedAt(route.getLast()) && route.size() != TimedKnownRoute.MAX_SURFACES)
-            throw new IllegalArgumentException("shipment COLD segment lacks its bounded goal or service-wait boundary");
+        ServiceApproachSegments.require(state, movement.order(), serviceApproach(state, movement), route);
     }
     @Override public ActorExecutionState arrivalAuthority(FrontierWorldState state, ActorMovement movement) {
         validate(state, movement);

@@ -51,6 +51,13 @@ class ExpeditionServiceWaitTest {
         assertFalse(ExpeditionSupplyProcess.serviceHeld(assemblyReady, assemblyReady.shipments().missions().get(mission.id())),
                 "another loading wait must not park the already provisioned member's independent assembly");
         var action = TransportMissionProcess.progress(mission.id(), now + 1);
+        assertFalse(FrontierWorldRuntimeDefinition.scheduledHeld(state, action),
+                "a busy service point does not block starting the independent approach");
+        var approach = ExpeditionSupplyProcess.plan(state, mission, action, now).stream().map(ProposedEvent::payload)
+                .filter(ActorMovementStarted.class::isInstance).map(ActorMovementStarted.class::cast).findFirst().orElseThrow();
+        state = ActorMovementProcess.reduceStarted(state, allocation.actorId(), approach);
+        ServiceAccessCoordinator.requireDeclared(state, ActorMovementProviders.require(approach.movement())
+                .serviceApproach(state, approach.movement()).orElseThrow());
         assertTrue(FrontierWorldRuntimeDefinition.scheduledHeld(state, action));
         assertTrue(FrontierWorldProcessCatalog.holdWakeKeys(state, action).containsAll(Set.of(
                 mission.sender().containerId(), allocation.actorId(), mission.id(), mission.groupId())));
@@ -61,6 +68,7 @@ class ExpeditionServiceWaitTest {
         var schedules = new ArrayList<>(initialEngine.checkpoint().schedules());
         schedules.removeIf(a -> a.id().equals(action.id())); schedules.add(action);
         schedules.add(ActorMovementProcess.progress(movement, now + 1));
+        schedules.add(ActorMovementProcess.progress(approach.movement(), now + 1));
         var config = new FrontierEngineConfiguration<>(base.worldId(), state, new SimInstant(now), base.commandPlanner(),
                 base.scheduledPlanner(), base.reducer(), base.stateCodec(), base.projectionMapper(), base.limits(), schedules,
                 base.transactionCommitter(), base.stateValidator(), base.executionMetrics(), base.kernelQuarantineReporter());

@@ -99,7 +99,7 @@ public final class ActorMovementProcess {
             if (held(state, action)) throw new IllegalArgumentException("movement has no current COLD boundary");
             // No known legal route is presently available. Retain the exact order and retry
             // without falsely completing or quarantining an otherwise healthy settlement.
-            long retryAt = movement.coldTravel().filter(travel -> firstKnownBarrier(state, travel) < 0
+            long retryAt = movement.coldTravel().filter(travel -> firstKnownBarrier(state, movement, travel) < 0
                             && !travel.arrivedBy(now))
                     .map(TimedKnownRoute::arrivalTick).orElse(Math.addExact(now, 20L));
             return List.of(new ProposedEvent(action.subject(), new ScheduleEffect.Rescheduled(action.id(),
@@ -140,7 +140,7 @@ public final class ActorMovementProcess {
             return Optional.empty();
         if (movement.coldTravel().isPresent()) {
             TimedKnownRoute travel = movement.coldTravel().orElseThrow();
-            if (firstKnownBarrier(state, travel) >= 0)
+            if (firstKnownBarrier(state, movement, travel) >= 0)
                 return Optional.of(new ActorMovementColdAdvanced(actorId, movement.order().goalRevision(), now, movement.executionId()));
             if (!travel.arrivedBy(now)) return Optional.empty();
             return Optional.of(new ActorMovementColdAdvanced(actorId, movement.order().goalRevision(), now,
@@ -201,7 +201,7 @@ public final class ActorMovementProcess {
         TimedKnownRoute travel = movement.coldTravel().orElseThrow();
         SurfaceAnchor arrived = step.arrivedSurface().orElse(null);
         int safeIndex = travel.indexAt(Math.min(step.atTick(), travel.arrivalTick() - 1L));
-        int barrier = firstKnownBarrier(state, travel);
+        int barrier = firstKnownBarrier(state, movement, travel);
         if (barrier >= 0) safeIndex = Math.min(safeIndex, barrier - 1);
         BodyPosition body = arrived == null
                 ? BodyPosition.above(travel.route().get(safeIndex))
@@ -296,8 +296,14 @@ public final class ActorMovementProcess {
                 now, ActorMovementProviders.require(movement).ticksPerEdge(state, movement), epoch);
     }
 
-    private static int firstKnownBarrier(FrontierWorldState state, TimedKnownRoute travel) {
-        return ActorMovementProjection.firstKnownBarrier(state, travel);
+    private static int firstKnownBarrier(FrontierWorldState state, ActorMovement movement, TimedKnownRoute travel) {
+        int physical = ActorMovementProjection.firstKnownBarrier(state, travel);
+        // A retained route can predate a service declaration or this entry protocol.
+        // Checkpoint it before the boundary; never replay its final entrance without a turn.
+        int service = ActorMovementProviders.require(movement).serviceApproach(state, movement)
+                .map(access -> ServiceAccessCoordinator.boundary(state, access.pointId()).firstEntry(travel.route()))
+                .filter(index -> index > 1).orElse(-1);
+        return physical < 0 ? service : service < 0 ? physical : Math.min(physical, service);
     }
 
     public static boolean travelIntersects(ActorMovement movement, BlockPosition cell) {

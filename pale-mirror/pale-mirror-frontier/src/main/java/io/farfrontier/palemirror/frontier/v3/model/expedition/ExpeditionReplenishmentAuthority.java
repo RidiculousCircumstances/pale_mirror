@@ -256,8 +256,12 @@ public final class ExpeditionReplenishmentAuthority {
         });
     }
     public static boolean accessAvailable(FrontierWorldState state, TransportMission mission, UnitResourceTransfer transfer) {
+        return serviceAccess(state, mission, transfer).map(access -> ServiceAccessCoordinator.available(state, access)).orElse(true);
+    }
+    public static Optional<ServiceAccessDemand.Identity> serviceAccess(FrontierWorldState state,
+            TransportMission mission, UnitResourceTransfer transfer) {
         return state.inventory().surfaces().get(transfer.containerId()).location() instanceof ContainerLocation.Mobile
-                || ServiceAccessCoordinator.available(state, ExpeditionSupplyServiceAccess.identity(mission, transfer));
+                ? Optional.empty() : Optional.of(ExpeditionSupplyServiceAccess.identity(mission, transfer));
     }
     public static boolean current(FrontierWorldState state, UnitResourceTransfer transfer) {
         var execution = state.actorExecutions().actors().get(transfer.actorId());

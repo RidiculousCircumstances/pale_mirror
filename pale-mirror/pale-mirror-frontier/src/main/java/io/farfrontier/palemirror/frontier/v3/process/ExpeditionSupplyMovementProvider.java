@@ -66,7 +66,25 @@ public final class ExpeditionSupplyMovementProvider implements ActorMovementProv
             throw new IllegalArgumentException("supply route is neither a bounded prefix nor its declared station");
     }
     @Override public List<SurfaceAnchor> coldSegment(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route) {
-        validate(state, movement); return List.copyOf(route.subList(0, Math.min(route.size(), TimedKnownRoute.MAX_SURFACES)));
+        validate(state, movement);
+        return ServiceApproachSegments.bounded(state, serviceApproach(state, movement), route);
+    }
+    @Override public Optional<ServiceAccessDemand.Identity> serviceApproach(FrontierWorldState state, ActorMovement movement) {
+        var mission = mission(state, movement);
+        return switch (movement.context()) {
+            case ActorMovementContext.ExpeditionSupply supply -> Optional.of(ExpeditionSupplyServiceAccess.identity(mission,
+                    mission.supplies().orElseThrow().allocations().stream()
+                            .filter(a -> a.claimId().equals(supply.claimId())).findFirst().orElseThrow()));
+            case ActorMovementContext.ExpeditionReplenishment ignored ->
+                    io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionReplenishmentAuthority.serviceAccess(
+                            state, mission, mission.replenishment().orElseThrow());
+            case ActorMovementContext.ExpeditionAssembly ignored -> Optional.empty();
+            default -> throw new IllegalArgumentException("foreign supply movement context");
+        };
+    }
+    @Override public void requireColdRoute(FrontierWorldState state, ActorMovement movement, List<SurfaceAnchor> route, long tick) {
+        placementKnowledge(state, movement).requireRoute(route);
+        ServiceApproachSegments.require(state, movement.order(), serviceApproach(state, movement), route);
     }
     @Override public ActorExecutionState arrivalAuthority(FrontierWorldState state, ActorMovement movement) { validate(state, movement); return state.actorExecutions(); }
     @Override public Optional<BodyPosition> interruptionCheckpoint(FrontierWorldState state, ActorMovement movement, long tick) {

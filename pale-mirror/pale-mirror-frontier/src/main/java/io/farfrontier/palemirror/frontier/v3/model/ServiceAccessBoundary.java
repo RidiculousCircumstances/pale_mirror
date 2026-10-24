@@ -26,6 +26,13 @@ public record ServiceAccessBoundary(Set<SurfaceAnchor> occupiedSurfaces) {
                         + Math.abs((long) target.z() - body.z())).min().orElseThrow();
     }
 
+    /** First entry after departure; an approach is distinct from the final admitted entry. */
+    public int firstEntry(java.util.List<SurfaceAnchor> route) {
+        for (int index = 1; index < route.size(); index++)
+            if (occupied(route.get(index).standingBody())) return index;
+        return -1;
+    }
+
     /** An unauthorized occupant may leave the throat, but may not re-enter it en route to waiting. */
     public boolean allowsWaitingRoute(java.util.List<SurfaceAnchor> route) {
         boolean outside = false;

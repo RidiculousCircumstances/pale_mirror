@@ -410,6 +410,15 @@ class GoodsTradeTest {
                     "COLD approach cannot enter another visitor's occupied service station");
             state = atStation(blocked, visitor, unprepared.actorLocations().get(visitor).supportingSurface());
             assertTrue(port.accessBoundary().cleared(state.actorLocations().get(visitor).body()));
+            var outside = port.facing().step(port.exteriorApproach(), 1);
+            var remote = port.facing().step(outside, 1);
+            var incoming = atStation(state, actor, remote);
+            var distantRoute = List.of(remote, outside, port.exteriorApproach(), shipment.sender().station());
+            assertEquals(List.of(remote, outside), provider.coldSegment(incoming, movement, distantRoute),
+                    "even a free door is reserved only after the visitor reaches its exterior boundary");
+            var atEntrance = atStation(state, actor, outside);
+            assertEquals(List.of(outside, port.exteriorApproach(), shipment.sender().station()), provider.coldSegment(atEntrance, movement,
+                    List.of(outside, port.exteriorApproach(), shipment.sender().station())), "the selected local visitor can enter");
             assertEquals(ShipmentPhysicalStateSupport.PreparationAdmission.READY,
                     ShipmentPhysicalStateSupport.preparationAdmission(state, shipment));
             // Continue the existing fully valid receipt/recovery fixture; the isolated
@@ -470,67 +479,11 @@ class GoodsTradeTest {
     static final SubjectId SELLER = id("settlement:1"), BUYER = id("settlement:2");
     private static final SubjectId SOURCE = FrontierWorldState.depotId(SELLER), RECEIVER = FrontierWorldState.depotId(BUYER);
     private static final SubjectId SOURCE_ACCOUNT = ReferenceContainerCustody.scopeId(SOURCE), RECEIVER_ACCOUNT = ReferenceContainerCustody.scopeId(RECEIVER);
-    private static final SubjectId LOT = id("lot:bootstrap-1-wheat"), CLAIM = id("claim:goods-wheat"), CONTRACT = id("contract:goods-wheat");
+    static final SubjectId LOT = id("lot:bootstrap-1-wheat"), CLAIM = id("claim:goods-wheat"), CONTRACT = id("contract:goods-wheat");
     static final SubjectId HOLD = id("reservation:goods-wheat"), SELL_ORDER = id("order:goods-sell"), BUY_ORDER = id("order:goods-buy");
     private static final GoodsTradeParty SELLER_PARTY = new GoodsTradeParty(SELLER, EconomicOwnerKind.SETTLEMENT_TREASURY);
     private static final GoodsTradeParty BUYER_PARTY = new GoodsTradeParty(BUYER, EconomicOwnerKind.SETTLEMENT_TREASURY);
     static final FixedScalar PRICE = FixedScalar.whole(1);
-
-    @Test void courierActuallyWalksBothColdLegsWithTheCommonClockAndDoesNotSellOnArrival() {
-        FrontierWorldState state = reserved(); Shipment shipment = shipment(state);
-        var actor = shipment.execution().actorId(); var beforeBuyer = state.inventory().economics().require(BUYER).balance();
-        state = shipmentFact(state, SELLER, new ShipmentDispatched(shipment));
-        long now = 1;
-        for (int leg = 0; leg < 2; leg++) {
-            var action = io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.progress(shipment.id(), now);
-            var start = io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.plan(state, action, now);
-            assertTrue(start.stream().anyMatch(event -> event.payload()
-                    instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementStarted),
-                    "leg=" + leg + " start=" + state.actorLocations().get(actor).body() + " goal=" + state.shipments().shipments().get(shipment.id()).movementOrder());
-            state = applyEvents(state, start, now, "shipments");
-            var movement = state.actorMovements().get(actor);
-            assertEquals(shipment.execution(), movement.executionId());
-            now++;
-            state = applyEvents(state, io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.plan(state,
-                    io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.progress(movement, now), now), now, "actor-movement");
-            movement = state.actorMovements().get(actor);
-            var travel = movement.coldTravel().orElseThrow();
-            assertTrue(travel.route().size() > 1);
-            long middle = travel.departedAtTick() + (travel.arrivalTick() - travel.departedAtTick()) / 2;
-            var expectedBody = io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.bodyAt(state, actor, middle);
-            var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
-            assertEquals(expectedBody, io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.bodyAt(state, actor, middle));
-            now = travel.arrivalTick();
-            state = applyEvents(state, io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.plan(state,
-                    io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.progress(movement, now), now), now, "actor-movement");
-            assertFalse(state.actorMovements().containsKey(actor));
-            state.actorExecutions().requireCurrent(shipment.execution());
-            assertEquals(leg == 0 ? shipment.sender().station() : shipment.receiver().station(), state.actorLocations().get(actor).supportingSurface());
-            assertEquals(beforeBuyer, state.inventory().economics().require(BUYER).balance());
-            now++;
-            state = applyEvents(state, io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.plan(state,
-                    io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.progress(shipment.id(), now), now), now, "shipments");
-            assertEquals(leg == 0 ? Shipment.Status.CARRYING : Shipment.Status.DELIVERED, state.shipments().shipments().get(shipment.id()).status());
-            now++;
-        }
-        assertEquals(beforeBuyer, state.inventory().economics().require(BUYER).balance());
-        assertEquals(SELLER, state.inventory().fungibleResources().lots().get(LOT).economicOwnerId());
-        long executedAt = Math.max(now + 59, state.companies().goodsTrade().orders().get(SELL_ORDER).expiresAtTick() + 1);
-        var receiptReview = io.farfrontier.palemirror.frontier.v3.process.GoodsTradeReceiptProcess.review(CONTRACT,
-                state.shipments().shipments().get(shipment.id()).reception().orElseThrow().id(), now);
-        var receiptEvents = FrontierWorldRuntimeDefinition.planScheduled(state, receiptReview, new SimInstant(executedAt));
-        assertTrue(receiptEvents.stream().map(ProposedEvent::payload)
-                .filter(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class::isInstance)
-                .map(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Rescheduled.class::cast)
-                .allMatch(rescheduled -> rescheduled.replacement().dueAt().ticks() == executedAt + 1));
-        assertTrue(receiptEvents.stream().map(ProposedEvent::payload)
-                .filter(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class::isInstance)
-                .map(io.farfrontier.palemirror.frontier.v3.kernel.ScheduleEffect.Created.class::cast)
-                .allMatch(created -> created.action().dueAt().ticks() == executedAt + 1));
-        state = applyEvents(state, receiptEvents, executedAt, "goods-trade");
-        assertEquals(beforeBuyer.minus(FixedScalar.whole(60)), state.inventory().economics().require(BUYER).balance());
-        assertTrue(state.companies().goodsTrade().contracts().get(CONTRACT).fulfilled());
-    }
 
     static FrontierWorldState applyEvents(FrontierWorldState state, List<ProposedEvent> events, long tick, String family) {
         FrontierWorldRuntimeDefinition.processRegistry().validateEmissions(family, events);
@@ -911,7 +864,7 @@ class GoodsTradeTest {
                 SOURCE_ACCOUNT, id("custody:shipment-carried"), RECEIVER_ACCOUNT, "minecraft:wheat", Map.of(LOT, 60),
                 Shipment.Status.AWAITING_LOAD, 1);
     }
-    private static FrontierWorldState shipmentFact(FrontierWorldState state, SubjectId subject, FrontierPayload payload) {
+    static FrontierWorldState shipmentFact(FrontierWorldState state, SubjectId subject, FrontierPayload payload) {
         if (payload instanceof ShipmentHotTransferred transferred) return ShipmentConfirmationFixture.apply(state, transferred);
         return factForFamily(state, subject, payload, 0, "shipments");
     }

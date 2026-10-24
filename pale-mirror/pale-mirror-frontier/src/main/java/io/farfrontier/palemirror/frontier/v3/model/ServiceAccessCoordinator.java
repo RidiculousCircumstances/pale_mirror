@@ -115,11 +115,18 @@ public final class ServiceAccessCoordinator {
                 .thenComparing(demand -> {
                     var movement = state.actorMovements().get(demand.identity().actorId());
                     return movement == null || movement.coldTravel().filter(travel ->
-                            access.occupied(travel.route().getLast().standingBody())).isEmpty();
+                            access.firstEntry(travel.route()) == 1).isEmpty();
                 })
                 .thenComparingLong(demand -> access.distanceFrom(currentBody(state, demand.identity().actorId())))
                 .thenComparingLong(ServiceAccessDemand::requestedAtTick)
                 .thenComparing(demand -> demand.identity().ownerId());
+    }
+
+    /** The registered owner may delegate an access claim distinct from its movement owner. */
+    public static void requireDeclared(FrontierWorldState state, ServiceAccessDemand.Identity requested) {
+        if (ServiceAccessCapabilities.current(state, requested.pointId()).stream()
+                .noneMatch(demand -> demand.identity().equals(requested)))
+            throw new IllegalArgumentException("service approach has no exact current owner declaration");
     }
 
     /** COLD transit is shared; only entry into the service boundary needs a turn. */
@@ -127,9 +134,7 @@ public final class ServiceAccessCoordinator {
                                      SurfaceAnchor destination) {
         Objects.requireNonNull(destination, "service approach destination");
         Objects.requireNonNull(requested, "complete service approach identity");
-        if (ServiceAccessCapabilities.current(state, requested.pointId()).stream()
-                .noneMatch(demand -> demand.identity().equals(requested)))
-            throw new IllegalArgumentException("service approach has no exact current owner declaration");
+        requireDeclared(state, requested);
         return boundary(state, requested.pointId()).cleared(destination.standingBody()) || available(state, requested);
     }
 

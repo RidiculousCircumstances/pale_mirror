@@ -43,8 +43,8 @@ final class FrontierV3ActorMovementNavigation {
         var service = provider.serviceApproach(state, movement);
         if (service.isPresent()) {
             var identity = service.orElseThrow();
-            if (!identity.actorId().equals(movement.order().actorId())
-                    || !identity.ownerId().equals(movement.order().ownerId()))
+            ServiceAccessCoordinator.requireDeclared(state, identity);
+            if (!identity.actorId().equals(movement.order().actorId()))
                 throw new IllegalArgumentException("movement service approach lost its exact actor/owner declaration");
         }
         boolean waitingForService = service.isPresent() && !ServiceAccessCoordinator.available(state, service.orElseThrow());
@@ -53,7 +53,7 @@ final class FrontierV3ActorMovementNavigation {
             var identity = service.orElseThrow();
             var point = ServiceBoundaryComposition.declaration(state, identity.pointId());
             var waiting = FrontierV3ServiceClearanceNavigation.waitForAccess(level, runtime, body, state,
-                    point.settlementId(), point.pointId(), identity.ownerId(), identity.actorId(),
+                    point.settlementId(), point.pointId(), movement.order().ownerId(), identity.actorId(),
                     Math.toIntExact(movement.order().goalOrdinal()), movement.executionId().generation(), actuation);
             blocked(body, movement, "service-access:" + waiting.reason());
             return; // Local clearance is not arrival at the retained service/work goal.

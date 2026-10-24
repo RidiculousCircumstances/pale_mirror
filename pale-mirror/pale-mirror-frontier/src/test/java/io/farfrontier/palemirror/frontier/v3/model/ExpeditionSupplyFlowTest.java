@@ -26,6 +26,19 @@ class ExpeditionSupplyFlowTest {
         SubjectId missionId = null; boolean recovered = false, delivered = false, completed = false;
         for (int boundary = 0; boundary < 4096; boundary++) {
             var state = engine.canonicalState().state();
+            for (var movement : state.actorMovements().values()) {
+                if (!(movement.context() instanceof io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ExpeditionSupply)) continue;
+                var access = new io.farfrontier.palemirror.frontier.v3.process.ExpeditionSupplyMovementProvider()
+                        .serviceApproach(state, movement).orElseThrow();
+                assertEquals(movement.order().actorId(), access.actorId());
+                ServiceAccessCoordinator.requireDeclared(state, access);
+                assertNotEquals(movement.order().ownerId(), access.ownerId(), "the mission delegates its exact stock claim");
+                assertThrows(IllegalArgumentException.class, () -> ServiceAccessCoordinator.requireDeclared(state,
+                        new ServiceAccessDemand.Identity(access.kind(), movement.order().ownerId(), access.actorId(), access.pointId())));
+                var service = ServiceAccessCoordinator.boundary(state, access.pointId());
+                movement.coldTravel().ifPresent(travel -> assertTrue(service.firstEntry(travel.route()) <= 1,
+                        "provisioning must stage outside the service point before retaining an entry turn"));
+            }
             if (missionId == null && !state.shipments().missions().isEmpty()) {
                 var mission = state.shipments().missions().values().iterator().next();
                 missionId = mission.id();
