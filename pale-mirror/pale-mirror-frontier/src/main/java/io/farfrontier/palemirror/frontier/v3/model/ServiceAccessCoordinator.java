@@ -81,9 +81,7 @@ public final class ServiceAccessCoordinator {
                 .min(Comparator.comparingLong(ServiceAccessDemand::requestedAtTick)
                         .thenComparing(demand -> demand.identity().actorId()));
         var workers = demands.stream().filter(demand -> demand.priority() == ServiceAccessDemand.Priority.WORK)
-                .sorted(Comparator.<ServiceAccessDemand, Boolean>comparing(demand ->
-                        demand.presence() != ServiceAccessDemand.Presence.OCCUPIED)
-                        .thenComparing(demand -> demand.identity().ownerId())).toList();
+                .sorted(approachOrder(state, access)).toList();
         boolean requestingSelfCare = ServiceAccessCapabilities.priority(requested) == ServiceAccessDemand.Priority.SELF_CARE;
         boolean departing = state.actorMovements().values().stream().anyMatch(movement ->
                 movement.context().clearancePoint().equals(Optional.of(requested.pointId()))
@@ -106,6 +104,22 @@ public final class ServiceAccessCoordinator {
             return entering.map(demand -> demand.identity().equals(requested)).orElse(true);
         return entering.isEmpty() && workers.stream().findFirst()
                 .filter(demand -> demand.identity().equals(requested)).isPresent();
+    }
+
+    /** A future request cannot hold the door ahead of a visitor already waiting
+     * there. Preserve a granted COLD entrance until its witnessed arrival; only
+     * uncommitted approaches compete by distance. This does not plan a route. */
+    static Comparator<ServiceAccessDemand> approachOrder(FrontierWorldState state, ServiceAccessBoundary access) {
+        return Comparator.<ServiceAccessDemand, Boolean>comparing(demand ->
+                        demand.presence() != ServiceAccessDemand.Presence.OCCUPIED)
+                .thenComparing(demand -> {
+                    var movement = state.actorMovements().get(demand.identity().actorId());
+                    return movement == null || movement.coldTravel().filter(travel ->
+                            access.occupied(travel.route().getLast().standingBody())).isEmpty();
+                })
+                .thenComparingLong(demand -> access.distanceFrom(currentBody(state, demand.identity().actorId())))
+                .thenComparingLong(ServiceAccessDemand::requestedAtTick)
+                .thenComparing(demand -> demand.identity().ownerId());
     }
 
     /** COLD transit is shared; only entry into the service boundary needs a turn. */

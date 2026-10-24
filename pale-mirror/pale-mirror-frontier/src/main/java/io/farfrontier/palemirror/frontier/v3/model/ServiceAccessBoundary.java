@@ -18,6 +18,14 @@ public record ServiceAccessBoundary(Set<SurfaceAnchor> occupiedSurfaces) {
         return body != null && !occupied(body);
     }
 
+    /** Spatial ordering only, not a reachability or route-length claim. */
+    public long distanceFrom(BodyPosition body) {
+        Objects.requireNonNull(body, "service visitor position");
+        return occupiedSurfaces.stream().map(SurfaceAnchor::standingBody).mapToLong(target ->
+                Math.abs((long) target.x() - body.x()) + Math.abs((long) target.y() - body.y())
+                        + Math.abs((long) target.z() - body.z())).min().orElseThrow();
+    }
+
     /** An unauthorized occupant may leave the throat, but may not re-enter it en route to waiting. */
     public boolean allowsWaitingRoute(java.util.List<SurfaceAnchor> route) {
         boolean outside = false;

@@ -8,6 +8,40 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ServiceAccessCapabilitiesTest {
+    @Test void aRemoteRequestCannotBlockAWaitingVisitorButCommittedEntranceIsNotRevoked() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(
+                new io.farfrontier.palemirror.frontier.v3.api.WorldId("frontier:service-arrival-order"), 91L));
+        var people = state.bootstrap().settlements().getFirst().residents();
+        var remote = people.get(0).id(); var waiting = people.get(1).id();
+        var station = SurfaceAnchor.at(0, 63, 0);
+        var boundary = new ServiceAccessBoundary(java.util.Set.of(station));
+        var point = new SubjectId("container:service-order-fixture");
+        var first = new ServiceAccessDemand(new ServiceAccessDemand.Identity(ServiceAccessDemand.Kind.EXPEDITION_SUPPLY,
+                new SubjectId("claim:a-remote"), remote, point), ServiceAccessDemand.Priority.WORK,
+                ServiceAccessDemand.Presence.APPROACH, 1L, false);
+        var second = new ServiceAccessDemand(new ServiceAccessDemand.Identity(ServiceAccessDemand.Kind.COURIER,
+                new SubjectId("shipment:z-waiting"), waiting, point), ServiceAccessDemand.Priority.WORK,
+                ServiceAccessDemand.Presence.APPROACH, 2L, false);
+        state = state.withActorBody(remote, station.standingBody().offset(200, 0, 0))
+                .withActorBody(waiting, station.standingBody().offset(1, 0, 0));
+        assertEquals(second, List.of(first, second).stream().min(ServiceAccessCoordinator.approachOrder(state, boundary)).orElseThrow(),
+                "request age and lexical identity do not reserve the door during a distant approach");
+        var mission = new SubjectId("transport-mission:service-order-fixture");
+        var order = new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(mission, remote,
+                0, 1, List.of(station), TraversalCapability.PEDESTRIAN,
+                io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION);
+        var execution = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorExecutionId(remote,
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.GROUP_MEMBER,
+                new SubjectId("unit-group:service-order-fixture"), 1);
+        var movement = new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovement(order, 3,
+                new io.farfrontier.palemirror.frontier.v3.model.navigation.ActorMovementContext.ExpeditionSupply(mission, first.identity().ownerId()), execution)
+                .withColdTravel(new io.farfrontier.palemirror.frontier.v3.model.navigation.TimedKnownRoute(order,
+                        List.of(SurfaceAnchor.at(2, 63, 0), SurfaceAnchor.at(1, 63, 0), station), 3, 20, 1));
+        var admitted = state.withActorBody(remote, SurfaceAnchor.at(2, 63, 0).standingBody()).withChanges(
+                FrontierWorldStateUpdate.begin().actorMovements(java.util.Map.of(remote, movement)));
+        assertEquals(first, List.of(first, second).stream().min(ServiceAccessCoordinator.approachOrder(admitted, boundary)).orElseThrow(),
+                "a granted entrance survives a newly closer visitor until arrival");
+    }
     @Test void coldIncomingWorkCannotDeadlockAnIncumbentsExitButParkingAndPhysicalBodiesRemainExclusive() {
         // This tests service transit, not a full field cycle and its independent work clock.
         var state = ProductionProcessTest.productionTask(FrontierWorldState.initial(FrontierBootstrapper.create(

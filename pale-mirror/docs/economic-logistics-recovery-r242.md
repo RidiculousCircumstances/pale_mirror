@@ -79,3 +79,18 @@ patrol fixtures outside the economic repair; no new code for those owners was
 introduced. The full native gate is RED, not waived or described as passed.
 These scenarios remain separate investigation debt. Active economics/custody/
 field/station GameTests in that aggregate pass. Full frontier unit run ongoing.
+
+## Additional live access blockage
+
+After deploying f2d802fe5, copied checkpoint 417668 showed Ashcross's donkey
+shipment `54988df4d1ee5559b8a6384228d396b2` still carrying wheat: its final approach
+had been retained since tick 349549. Exact route was two surfaces, but service
+arbitration trimmed it to the exterior surface. Another provisioning claim won
+lexical ordering while its resident was still far away. This is a shared service
+queue error, not missing stock or an impossible donkey route.
+
+Uncommitted work approaches now compete by distance to the declared service
+boundary, then request time and stable identity. Occupants, exit clearance,
+committed entrances and meal priority retain their existing protection. The
+common coordinator reads only spatial/commitment facts; it does not reinterpret
+production, food or trade jobs. No arbitrary search radius or depot special case.
