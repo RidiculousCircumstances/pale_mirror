@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "id": "live_published_harvest_terminal",
+  "server": {"host": "127.0.0.1", "port": 25565},
+  "pilot": {"username": "PMTestPilot"},
+  "setup": [
+    {"type": "command", "command": "/gamemode creative"},
+    {"type": "assert_fixture", "timeoutMs": 30000, "checks": [
+      {"view": "site", "id": "site:7-wheat-field", "expect": {"status": "ok"}},
+      {"view": "intent", "id": "intent:site-harvest-7-wheat-field-1", "expect": {"status": "ok"}}
+    ]}
+  ],
+  "actions": [
+    {"type": "visit", "dimension": "pale_mirror:frontier_graybox", "position": {"x": 436, "y": 64, "z": -10}, "settleMs": 0},
+    {"type": "assert_visible_block", "position": {"x": 438, "y": 63, "z": -19}, "timeoutMs": 30000},
+    {"type": "wait_until_harvest_result", "siteId": "site:7-wheat-field", "intentId": "intent:site-harvest-7-wheat-field-1", "itemId": "item:site-harvest-7-wheat-field-1-wheat", "settlementId": "settlement:7", "workerId": "resident:7-13", "timeoutMs": 90000},
+    {"type": "inspect", "view": "field_physical", "id": "site:7-wheat-field"},
+    {"type": "inspect", "view": "actor", "id": "resident:7-13"},
+    {"type": "inspect", "view": "performance", "id": ""}
+  ],
+  "assertions": [
+    {"after": 3, "view": "intent", "id": "intent:site-harvest-7-wheat-field-1", "expect": {"intentStatus": "CONFIRMED"}},
+    {"after": 4, "view": "field_physical", "id": "site:7-wheat-field", "expect": {"mismatchedCells": 0, "worldChangePending": false}}
+  ],
+  "frames": [{"after": 4, "name": "recovered-terminal-field"}]
+}

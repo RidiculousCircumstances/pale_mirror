@@ -103,6 +103,17 @@ Receipts: `r249-before-graceful.txt`, `r249-graceful-stop.log`,
 `r249-after-graceful.txt`, `r249-graceful-verify.log`. This is a runtime recovery smoke,
 not a separate declarative native restart promotion.
 
+A final read-only native re-entry then verified that same retired job's physical
+closure, not merely its absence from active work. Scenario
+`live-published-harvest-terminal.json` passed (`build/r249-harvest-terminal.json`,
+run c19af1d5-c1aa-4a70-afcb-0ae2d064150d): intent CONFIRMED with receipt
+`observation:field-deferred-site-harvest-7-wheat-field-1`; both
+physicalReceiptResolved/Confirmed true and completeForColdHotReceipt true. Field
+mismatch0; linked frame inspected. Current stock was not used as a surrogate for a
+receipt, because subsequent legitimate production can consume that exact output.
+This establishes terminal closure of this job, not harvesting all256 cells or a
+repeat full growth/harvest cycle.
+
 COLD native-tick peak before first visit was41.66ms. In the measured stable HOT
 window native TPS was about20, recent mean about3–4ms, short peaks about9ms,
 ready-action lag0 and ordinary debt returned to0 (5 at the final returned-scene
@@ -111,3 +122,7 @@ or general throughput claim is made. First generation of the previously unvisite
 area produced a1,776.8ms native-tick peak and about19s ingress in the excluded camera
 run. Its cost needs separate attribution; it is not hidden by the subsequent ready
 visit measurements or claimed fixed. No new canonical quarantine was observed.
+
+After the final restart, the subsequent bounded native re-entry sample had a72.93ms
+cumulative peak, recent maximum21.20ms, debt1 and ready lag0. The previous1,776.8ms
+first-generation peak remains recorded above; a restart does not erase that finding.
