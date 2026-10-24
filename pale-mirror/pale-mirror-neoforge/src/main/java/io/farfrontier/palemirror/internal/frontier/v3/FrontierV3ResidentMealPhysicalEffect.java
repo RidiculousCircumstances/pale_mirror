@@ -126,7 +126,7 @@ final class FrontierV3ResidentMealPhysicalEffect {
         var containerParticipant = FrontierV3OperationBlockEntityParticipant.current(chest);
         var declaration = FrontierV3ResidentMealNativeOperation.take(meal, pending, actorParticipant, containerParticipant);
         var operation = FrontierV3MinecraftOperation.applyDeferred(level, declaration, List.of(actorParticipant, containerParticipant),
-                transfer::before, transfer::apply, transfer::after);
+                transfer::before, FrontierV3NativeEffect.observed(transfer::apply), transfer::after);
         if (!operation.complete()) return false;
         List<FungiblePhysicalObservation.Stack> remaining =
                 FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, state, meal.depotId());
@@ -171,13 +171,12 @@ final class FrontierV3ResidentMealPhysicalEffect {
                 ActorBodyAuthority.current(state, meal.residentId()).physicalEpoch());
         var declaration = FrontierV3ResidentMealNativeOperation.consume(meal, pending, held, participant);
         var operation = FrontierV3MinecraftOperation.applyDeferred(level, declaration, List.of(participant),
-                () -> FrontierV3ResidentMealItems.matches(FrontierV3ActorResourceSlots.get(worker, meal.inventorySlot()), held),
-                () -> {
+                () -> FrontierV3ResidentMealItems.matches(FrontierV3ActorResourceSlots.get(worker, meal.inventorySlot()), held), FrontierV3NativeEffect.observed(() -> {
                     var remainder = FrontierV3ActorResourceSlots.get(worker, meal.inventorySlot()).copy(); remainder.shrink(meal.portion().quantity());
                     FrontierV3ActorResourceSlots.set(worker, meal.inventorySlot(), remainder);
                     level.playSound(null, worker.blockPosition(), SoundEvents.GENERIC_EAT, SoundSource.NEUTRAL, 0.8F, 1.0F);
                     return true;
-                }, () -> {
+                }), () -> {
                     var remaining = FrontierV3ActorResourceSlots.get(worker, meal.inventorySlot());
                     return remainingCount == 0 ? remaining.isEmpty() : remaining.getCount() == remainingCount
                             && ItemStack.isSameItemSameComponents(remaining, FrontierV3ResidentMealItems.stack(held));

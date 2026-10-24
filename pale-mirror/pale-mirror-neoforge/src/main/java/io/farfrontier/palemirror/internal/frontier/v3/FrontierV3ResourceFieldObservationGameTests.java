@@ -174,6 +174,34 @@ public final class FrontierV3ResourceFieldObservationGameTests {
                             && ((FrontierV3ResourceSiteLedger.FieldOwnership) persistedField(level, siteId))
                                     .witness().cell(ids.getFirst()).pending().isEmpty(),
                     "deferred single-cell result is durable and does not rewrite its neighbour");
+            var interrupted = new FrontierCanonicalState<>(accepted.worldId(), new Revision(8), new SimInstant(8),
+                    single.state().advanceGrowth(ids.getFirst()).advanceGrowth(ids.getLast()));
+            var latest = (FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(siteId);
+            var prepared = latest.witness();
+            for (var id : ids) {
+                var transition = ResourceFieldCellTransition.between(siteId, 1, layout.revision(), id,
+                        prepared.cell(id).committed(), ResourceFieldPhysicalSurface.Condition.of(interrupted.state().cell(id)));
+                prepared = prepared.beginCanonicalProjection(interrupted, transition, "batch:unknown:" + id.value(),
+                        FrontierV3ResourceFieldObservation.observe(level, interrupted.state(), prepared, id, "batch:unknown-before"));
+            }
+            ledger.replaceFieldClaim(latest, latest.withWitness(prepared)); ledger.persist(level);
+            var request = FrontierV3FieldProjectionOperation.request(level, siteId, layout.requireCell(ids.getFirst()),
+                    prepared.cell(ids.getFirst()).pending().orElseThrow(), () -> { });
+            // Inject an unknown live outcome, not a synthetic physical/canonical success.
+            var unknown = FrontierV3MinecraftOperation.applyBatch(level, List.of(new FrontierV3MinecraftOperation.Request(
+                    request.declaration(), request.participants(), request.before(),
+                    FrontierV3NativeEffect.observed(() -> false), request.after()))).getFirst();
+            helper.assertTrue(unknown.status() == FrontierV3MinecraftOperation.Status.AMBIGUOUS, "unknown is never retried from a matching preimage");
+            var split = FrontierV3ResourceFieldGrowthProjector.projectAcceptedBatch(level, site, interrupted, ids, false);
+            helper.assertTrue(split.cells().get(ids.getFirst()) == FrontierV3ResourceFieldGrowthProjector.Result.PHYSICAL_CONFLICT
+                    && split.advancedCells() == 1, "batch preserves conflict while its independent neighbour progresses");
+            var unresolved = ((FrontierV3ResourceSiteLedger.FieldOwnership) ledger.fieldClaim(siteId)).witness();
+            var check = FrontierV3ResourceFieldHandoff.inspectCells(interrupted.state(), unresolved, layout.cells(),
+                    id -> FrontierV3ResourceFieldObservation.read(level, layout.requireCell(id), "handoff:unknown-test"),
+                    FrontierV3OperationLedger.get(level));
+            var handoff = new FrontierV3HotHandoff.Review(8, List.of(check));
+            helper.assertTrue(check.status() == FrontierV3HotHandoff.Status.CONFLICT && check.reason().contains(unknown.ticket().toString())
+                    && handoff.presentable() && !handoff.ready(), "exact conflict is visible without granting HOT work or hiding the chunk");
             helper.succeed();
             });
         });

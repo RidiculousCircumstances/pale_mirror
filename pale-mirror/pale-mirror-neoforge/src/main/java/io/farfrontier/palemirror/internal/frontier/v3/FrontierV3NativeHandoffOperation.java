@@ -22,8 +22,8 @@ final class FrontierV3NativeHandoffOperation {
         var operation = operations.prepare(declaration); var journal = FrontierV3ResourceHandoffLedger.get(level);
         journal.prepareNative(id, receipt, operation); journal.persist(level);
         operations.persist(level); // Admission/pruning must see the acknowledged common prepare, not merely the owner WAL.
-        var result = FrontierV3MinecraftOperation.apply(level, declaration, ports, before, mutation, after);
-        if (result.status() == FrontierV3MinecraftOperation.Status.WAITING_DURABILITY
+        var result = FrontierV3MinecraftOperation.apply(level, declaration, ports, before, FrontierV3NativeEffect.observed(mutation), after);
+        if (result.pending()
                 || result.status() == FrontierV3MinecraftOperation.Status.NOT_APPLIED) {
             // Only an explicitly unattempted action can be cancelled. Never retire an
             // ambiguous effect merely because its native callback returned no result.

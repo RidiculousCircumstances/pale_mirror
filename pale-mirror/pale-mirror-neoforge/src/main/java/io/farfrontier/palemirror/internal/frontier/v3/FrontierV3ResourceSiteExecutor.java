@@ -256,7 +256,7 @@ final class FrontierV3ResourceSiteExecutor {
             var selection = FrontierV3ResourceFieldProjectionSelection.select(cycle, owner.witness(),
                     cursors.getOrDefault(site.id(), 0));
             if (selection.cells().isEmpty()
-                    || FrontierV3ResourceFieldGrowthProjector.projectCurrentBatch(level, runtime, site.id(), selection.cells()))
+                    || FrontierV3ResourceFieldGrowthProjector.projectCurrentBatch(level, runtime, site.id(), selection.cells()).reviewed())
                 cursors.put(site.id(), selection.nextIndex());
             return;
         }

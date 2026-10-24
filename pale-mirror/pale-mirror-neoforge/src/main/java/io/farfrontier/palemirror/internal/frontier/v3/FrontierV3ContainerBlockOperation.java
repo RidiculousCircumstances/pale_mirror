@@ -62,10 +62,9 @@ public final class FrontierV3ContainerBlockOperation {
         journal.prepareRemoval(witness); journal.persist(level);
         var returned = new BlockState[1];
         var result = FrontierV3MinecraftOperation.apply(level, declaration, List.of(port),
-                () -> chunk.getBlockState(position).equals(before) && chunk.getBlockEntities().get(position) == entity,
-                () -> { returned[0] = mutation.get(); return returned[0] != null; },
+                () -> chunk.getBlockState(position).equals(before) && chunk.getBlockEntities().get(position) == entity, FrontierV3NativeEffect.observed(() -> { returned[0] = mutation.get(); return returned[0] != null; }),
                 () -> chunk.getBlockState(position).equals(replacement) && chunk.getBlockEntities().get(position) != entity);
-        if (result.status() == FrontierV3MinecraftOperation.Status.WAITING_DURABILITY
+        if (result.pending()
                 && operations.sealUnattemptedCancellation(operation.ticket())) {
             operations.persist(level);
             FrontierV3ContainerRemovalExecutor.cancel(level, witness);

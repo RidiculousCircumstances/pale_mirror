@@ -35,13 +35,26 @@ final class FrontierV3ResourceFieldHandoff {
                 } else if (owner.status() == FrontierV3ResourceSiteLedger.Status.ACTIVE
                         && owner.witness().matchesCycle(cycle)) {
                     checks.add(inspectCells(cycle, owner.witness(), cells, id ->
-                            FrontierV3ResourceFieldObservation.read(level, cycle.layout().requireCell(id), "handoff:field")));
+                            FrontierV3ResourceFieldObservation.read(level, cycle.layout().requireCell(id), "handoff:field"),
+                            FrontierV3OperationLedger.get(level)));
                     continue;
                 } else reason = "field_epoch_reconciliation";
             }
             checks.add(new FrontierV3HotHandoff.Check(entry.getKey(), status, reason));
         }
         return List.copyOf(checks);
+    }
+    static FrontierV3HotHandoff.Check inspectCells(ResourceFieldCycle cycle, FrontierV3ResourceFieldWitness witness,
+            List<ResourceFieldLayout.Cell> cells,
+            java.util.function.Function<ResourceFieldLayout.CellId, FrontierV3ResourceFieldObservation.Reading> observation,
+            FrontierV3OperationLedger operations) {
+        var unresolved = cells.stream().flatMap(cell -> witness.cell(cell.id()).pending().stream())
+                .filter(pending -> pending.canonicalSource().isPresent())
+                .flatMap(pending -> operations.find(FrontierV3OperationReceipt.Protocol.FIELD_PROJECTION,
+                        cycle.siteId(), pending.causationId() + "/step/" + pending.completedSteps()).stream())
+                .filter(operation -> operations.unresolvedAttempt(operation.ticket())).findFirst();
+        return unresolved.map(operation -> new FrontierV3HotHandoff.Check(cycle.siteId(), CONFLICT,
+                "field_operation_unresolved:" + operation.ticket())).orElseGet(() -> inspectCells(cycle, witness, cells, observation));
     }
     static FrontierV3HotHandoff.Check inspectCells(ResourceFieldCycle cycle, FrontierV3ResourceFieldWitness witness,
             List<ResourceFieldLayout.Cell> cells,

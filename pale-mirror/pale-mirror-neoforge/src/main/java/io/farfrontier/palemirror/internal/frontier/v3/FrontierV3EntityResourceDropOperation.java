@@ -42,9 +42,10 @@ final class FrontierV3EntityResourceDropOperation {
             throw new IllegalStateException("resource drop cannot discard stock under journal backpressure");
         var transaction = new FrontierV3EntityResourceDropTransaction(source.identity(), destination.identity(), operations.prepare(declaration), outcome);
         journal.prepareEntityDrop(transaction); journal.persist(level); operations.persist(level);
-        var result = FrontierV3MinecraftOperation.applyBatch(level, List.of(new FrontierV3MinecraftOperation.Request(declaration, ports,
+        var result = FrontierV3MinecraftOperation.applyBatch(level, List.of(new FrontierV3MinecraftOperation.Request(declaration,
+                ports,
                 () -> ItemStack.matches(before, FrontierV3ActorResourceSlots.get(body, slot)) && level.getEntity(drop.getUUID()) == null,
-                () -> {
+                FrontierV3NativeEffect.refusing(() -> {
                     // A native join refusal must not eat the source. Admission callbacks
                     // run synchronously; revalidate before clearing after a successful birth.
                     if (!level.addFreshEntity(drop)) return false;
@@ -53,10 +54,10 @@ final class FrontierV3EntityResourceDropOperation {
                         throw new IllegalStateException("resource endpoints changed during native drop admission");
                     FrontierV3ActorResourceSlots.set(body, slot, ItemStack.EMPTY);
                     return true;
-                }, () -> FrontierV3ActorResourceSlots.get(body, slot).isEmpty() && level.getEntity(drop.getUUID()) == drop
-                        && !drop.isRemoved() && ItemStack.matches(after, drop.getItem()),
-                () -> !drop.isAddedToLevel() && level.getEntity(drop.getUUID()) == null
-                        && ItemStack.matches(before, FrontierV3ActorResourceSlots.get(body, slot))))).getFirst();
+                }, () -> !drop.isAddedToLevel() && level.getEntity(drop.getUUID()) == null
+                        && ItemStack.matches(before, FrontierV3ActorResourceSlots.get(body, slot))),
+                () -> FrontierV3ActorResourceSlots.get(body, slot).isEmpty() && level.getEntity(drop.getUUID()) == drop
+                        && !drop.isRemoved() && ItemStack.matches(after, drop.getItem())))).getFirst();
         if (!result.complete()) throw new IllegalStateException("resource drop did not complete: " + result.status() + " ticket=" + transaction.id());
         var applied = transaction.bind(operations.require(result.ticket()));
         journal.updateEntityDrop(transaction, applied); journal.persist(level);

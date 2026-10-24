@@ -165,6 +165,12 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         receipt.join(); return true;
     }
     boolean unattempted(UUID ticket) { require(ticket); return unattempted.contains(ticket); }
+    /** Read-only recovery classification, never permission to retry an unobserved effect. */
+    boolean unresolvedAttempt(UUID ticket) {
+        var value = require(ticket);
+        return !value.cancelled() && !value.ownerClosed() && !value.applied().equals(value.declaration().participants())
+                && !unattempted.contains(ticket) && !attempting.contains(ticket);
+    }
     /** Explicit causal dependency supplied by the owning producer, not inferred
      * from overlapping native media. A body fatality may exclude a terrain-only
      * or station-only action. Capture in the same server turn before either

@@ -739,7 +739,7 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
             ledger.beginFieldHandProjection(expected); ledger.persist(level);
         }
         var result = FrontierV3HarvestHandOperation.apply(level, state, expected, worker);
-        if (result.status() == FrontierV3MinecraftOperation.Status.WAITING_DURABILITY) return true;
+        if (result.pending()) return true;
         if (!result.complete()) {
             conflict(level, runtime, lease, "cold-carried-hand-native-" + result.status().name().toLowerCase(java.util.Locale.ROOT));
             return true;

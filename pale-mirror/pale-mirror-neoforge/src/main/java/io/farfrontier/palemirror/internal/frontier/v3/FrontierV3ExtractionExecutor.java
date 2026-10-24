@@ -73,20 +73,11 @@ final class FrontierV3ExtractionExecutor {
                 return false;
             }
         }
-        // A knowledge fence may need an asynchronous WAL acknowledgement. It must
-        // finish BEFORE the common journal consumes the single native attempt.
-        // Resume through the owner so neither the captured job nor body permission
-        // can outlive a competing canonical transition.
-        if (step instanceof ExtractionPhysicalStep.BlockWork block
-                && !FrontierV3ManagedBlockWrites.preparePlannedWrites(level, runtime, List.of(
-                    new FrontierV3ManagedBlockWrites.PlannedWrite(new BlockPos(block.extraction().target().x(),
-                            block.extraction().target().y(), block.extraction().target().z()),
-                            FrontierV3MinecraftBlockExtraction.block(block.extraction().definition().after()))), () -> {
-                    var current = runtime.decodedState().orElseThrow();
-                    if (job.equals(current.extractionSites().work().get(job.id()))) progress(level, runtime, current, job);
-                })) return false;
         try {
-            var effect = apply(level, runtime.decodedState().orElseThrow(), job, step, worker, actuation);
+            var effect = apply(level, runtime.decodedState().orElseThrow(), job, step, worker, actuation, () -> {
+                var current = runtime.decodedState().orElseThrow();
+                if (job.equals(current.extractionSites().work().get(job.id()))) progress(level, runtime, current, job);
+            });
             if (effect == null) return false;
             var retainedStep = step;
             return FrontierV3OperationConfirmation.submit(level, runtime, effect.ticket(), effect.receipt(), () -> {
@@ -161,7 +152,7 @@ final class FrontierV3ExtractionExecutor {
     }
     private record Applied(UUID ticket, ExtractionHotObserved receipt) { }
     private static Applied apply(ServerLevel level, FrontierWorldState state, ExtractionWork job,
-            ExtractionPhysicalStep step, Villager worker, FrontierV3ActorActuation actuation) {
+            ExtractionPhysicalStep step, Villager worker, FrontierV3ActorActuation actuation, Runnable resume) {
         if (!step.observation().actuation().equals(actuation.id()) || step.observation().scopeRevision() != job.revision())
             throw new IllegalArgumentException("mining retained effect has a stale body/owner fence");
         switch (step) {
@@ -200,8 +191,8 @@ final class FrontierV3ExtractionExecutor {
                 var operation = FrontierV3MinecraftOperation.applyDeferred(level, declaration, participants,
                     () -> FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(source)).equals(block.extraction().definition().before())
                             && FrontierV3ToolUse.before(worker.getMainHandItem(), block.toolUse())
-                            && plain(worker.getOffhandItem(), job.outputKind(), block.carriedBefore()),
-                    () -> {
+                            && plain(worker.getOffhandItem(), job.outputKind(), block.carriedBefore()), FrontierV3ManagedBlockWrites.effect(level, List.of(new FrontierV3ManagedBlockWrites.PlannedWrite(source,
+                            FrontierV3MinecraftBlockExtraction.block(block.extraction().definition().after()))), () -> {
                         var result = new BlockExtractionPort.Result[1];
                         FrontierV3WorksiteWrites.apply(key, () -> {
                             result[0] = adapter.apply(block.extraction());
@@ -214,7 +205,7 @@ final class FrontierV3ExtractionExecutor {
                         ledger.persist(level);
                         worker.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(job.outputKind())), resultCount));
                         return FrontierV3ToolUse.apply(worker.getMainHandItem(), block.toolUse());
-                    }, () -> FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(source)).equals(external.orElse(block.extraction().definition().after()))
+                    }, resume), () -> FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(source)).equals(external.orElse(block.extraction().definition().after()))
                             && FrontierV3ToolUse.after(worker.getMainHandItem(), block.toolUse())
                             && plain(worker.getOffhandItem(), job.outputKind(), resultCount));
                 if (!operation.complete()) return null;
@@ -230,7 +221,7 @@ final class FrontierV3ExtractionExecutor {
                 var declaration = FrontierV3MinecraftOperation.declaration(FrontierV3OperationReceipt.Protocol.EXTRACTION_EQUIPMENT, job.id(), new ExtractionHotPrepared(job.id(), step), participants);
                 var adapter = new FrontierV3EquipmentItemTransfer(chest, worker, expected, equipment.slot(), take
                         ? ActorContainerItemOrder.Direction.TAKE : ActorContainerItemOrder.Direction.PLACE);
-                var operation = FrontierV3MinecraftOperation.applyDeferred(level, declaration, participants, adapter::before, adapter::apply, adapter::after);
+                var operation = FrontierV3MinecraftOperation.applyDeferred(level, declaration, participants, adapter::before, FrontierV3NativeEffect.observed(adapter::apply), adapter::after);
                 return operation.complete() ? new Applied(operation.ticket(), new ExtractionHotObserved(job.id(), step, List.of(), List.of())) : null;
             }
             case ExtractionPhysicalStep.Cargo cargo -> {
@@ -242,7 +233,7 @@ final class FrontierV3ExtractionExecutor {
                         transfer.source(), transfer.destinationSlot(), transfer.destinationBefore());
                 var participants = List.of(physical.persistence().get(), FrontierV3OperationEntityParticipant.current(worker, actuation.id().body().physicalEpoch()));
                 var declaration = FrontierV3MinecraftOperation.declaration(FrontierV3OperationReceipt.Protocol.EXTRACTION_CARGO, job.id(), new ExtractionHotPrepared(job.id(), step), participants);
-                var operation = FrontierV3MinecraftOperation.applyDeferred(level, declaration, participants, adapter::before, adapter::apply, adapter::after);
+                var operation = FrontierV3MinecraftOperation.applyDeferred(level, declaration, participants, adapter::before, FrontierV3NativeEffect.observed(adapter::apply), adapter::after);
                 return operation.complete() ? new Applied(operation.ticket(), new ExtractionHotObserved(job.id(), step, List.of(),
                         FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(physical.inventory(), state, container))) : null;
             }

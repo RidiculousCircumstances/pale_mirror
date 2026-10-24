@@ -24,15 +24,14 @@ final class FrontierV3PlayerClickOperation {
                 FrontierExecutionSubjects.PHYSICAL_EXECUTOR, first.interactionId().toString(),
                 FrontierV3OperationFingerprint.of(transaction.save()),
                 ports.stream().map(FrontierV3MinecraftOperation.Participant::identity).collect(java.util.stream.Collectors.toSet()));
-        var result = FrontierV3MinecraftOperation.apply(level, declaration, ports, () -> true,
-                () -> {
+        var result = FrontierV3MinecraftOperation.apply(level, declaration, ports, () -> true, FrontierV3NativeEffect.observed(() -> {
                     nativeClick.run();
                     owner.capture(transaction, FrontierV3PlayerClickObservation.capture(player, state, transaction)); owner.persist(level);
                     return true;
-                }, () -> owner.transaction(transaction.id()).outcome().isPresent());
+                }), () -> owner.transaction(transaction.id()).outcome().isPresent());
         if (result.complete()) {
             owner.bind(owner.transaction(transaction.id()), FrontierV3OperationLedger.get(level).require(result.ticket())); owner.persist(level);
-        } else if (result.status() == FrontierV3MinecraftOperation.Status.WAITING_DURABILITY
+        } else if (result.pending()
                 || result.status() == FrontierV3MinecraftOperation.Status.NOT_APPLIED) {
             owner.retire(transaction); owner.persist(level);
         }

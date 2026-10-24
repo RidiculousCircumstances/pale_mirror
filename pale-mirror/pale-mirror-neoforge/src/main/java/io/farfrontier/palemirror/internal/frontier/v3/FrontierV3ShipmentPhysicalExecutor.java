@@ -97,7 +97,7 @@ final class FrontierV3ShipmentPhysicalExecutor {
             var participants = transfer.participants();
             var operation = FrontierV3MinecraftOperation.applyDeferred(level, FrontierV3MinecraftOperation.declaration(
                     FrontierV3OperationReceipt.Protocol.SHIPMENT_TRANSFER, shipment.id(), new ShipmentHotPrepared(shipment.id(), step), participants),
-                    participants, transfer::before, transfer::apply, transfer::after);
+                    participants, transfer::before, FrontierV3NativeEffect.observed(transfer::apply), transfer::after);
             if (!operation.complete()) return false;
             var receipt = new ShipmentHotTransferred(shipment.id(), step, transfer.sourceLayout(), transfer.destinationLayout());
             return FrontierV3OperationConfirmation.submit(level, runtime, operation.ticket(), receipt, () -> {

@@ -63,7 +63,7 @@ final class FrontierV3HarvestHandAftermath {
                 job.id(), consequence, ports);
         java.util.function.BooleanSupplier exactCarry = () -> FrontierV3ActorCarryProjection.witnessed(
                 state, job.workerId(), job.actorAccountId(), body);
-        var result = FrontierV3MinecraftOperation.apply(level, declaration, ports, exactCarry, exactCarry, exactCarry);
+        var result = FrontierV3MinecraftOperation.apply(level, declaration, ports, exactCarry, FrontierV3NativeEffect.observed(exactCarry), exactCarry);
         if (!result.complete()) throw new IllegalStateException("retained field carry lacks its exact native receipt: " + result.status());
         return Optional.of(FrontierV3OperationAftermath.capture(level, declaration, ports, consequence, true, exactCarry).orElseThrow());
     }

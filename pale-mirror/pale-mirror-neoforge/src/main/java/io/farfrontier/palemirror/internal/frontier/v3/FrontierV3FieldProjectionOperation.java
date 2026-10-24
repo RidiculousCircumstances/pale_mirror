@@ -12,10 +12,10 @@ final class FrontierV3FieldProjectionOperation {
     private FrontierV3FieldProjectionOperation() { }
     static FrontierV3MinecraftOperation.Result apply(ServerLevel level, SubjectId site,
             ResourceFieldLayout.Cell cell, FrontierV3ResourceFieldWitness.Pending pending) {
-        return FrontierV3MinecraftOperation.applyBatch(level, List.of(request(level, site, cell, pending))).getFirst();
+        return FrontierV3MinecraftOperation.applyBatch(level, List.of(request(level, site, cell, pending, () -> { }))).getFirst();
     }
     static FrontierV3MinecraftOperation.Request request(ServerLevel level, SubjectId site,
-            ResourceFieldLayout.Cell cell, FrontierV3ResourceFieldWitness.Pending pending) {
+            ResourceFieldLayout.Cell cell, FrontierV3ResourceFieldWitness.Pending pending, Runnable resume) {
         if (pending.canonicalSource().isEmpty() || pending.handEffect().isPresent())
             throw new IllegalArgumentException("projection has no canonical source or owns labour cargo");
         int index = pending.completedSteps();
@@ -33,7 +33,8 @@ final class FrontierV3FieldProjectionOperation {
         return new FrontierV3MinecraftOperation.Request(declaration, List.of(port),
                 () -> FrontierV3ResourceFieldObservation.read(level, cell, pending.causationId())
                         .equals(new FrontierV3ResourceFieldObservation.Owned(step.before())),
-                () -> level.setBlock(position, next, 3),
+                FrontierV3ManagedBlockWrites.effect(level, List.of(new FrontierV3ManagedBlockWrites.PlannedWrite(position, next)),
+                        () -> level.setBlock(position, next, 3), resume),
                 () -> FrontierV3ResourceFieldObservation.read(level, cell, pending.causationId())
                         .equals(new FrontierV3ResourceFieldObservation.Owned(step.after())));
     }

@@ -74,7 +74,7 @@ final class FrontierV3ExpeditionSupplyExecutor {
                     : attached.persistence().get());
             var operation = FrontierV3MinecraftOperation.applyDeferred(level, FrontierV3MinecraftOperation.declaration(
                     FrontierV3OperationReceipt.Protocol.EXPEDITION_SUPPLY, mission.id(), new ExpeditionSupplyHotPrepared(mission.id(), a.claimId(), step), participants),
-                    participants, transfer::before, transfer::apply, transfer::after);
+                    participants, transfer::before, FrontierV3NativeEffect.observed(transfer::apply), transfer::after);
             if (!operation.complete()) return false;
             var layout = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(chest, state, a.source().containerId());
             var destinationLayout = attached == null ? List.of(new FungiblePhysicalObservation.Stack(

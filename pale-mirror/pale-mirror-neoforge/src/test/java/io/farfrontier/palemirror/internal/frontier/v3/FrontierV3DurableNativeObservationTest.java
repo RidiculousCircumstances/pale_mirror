@@ -41,6 +41,6 @@ class FrontierV3DurableNativeObservationTest {
         var observation = new FrontierV3OperationReceipt.Declaration(declaration.protocol(), owner, "observation", "image", Set.of(snapshot));
         assertThrows(IllegalArgumentException.class, () -> new FrontierV3MinecraftOperation.Request(observation,
                 List.of(new FrontierV3MinecraftOperation.Participant(snapshot, new CompoundTag(), () -> { })),
-                () -> true, () -> true, () -> true));
+                () -> true, FrontierV3NativeEffect.observed(() -> true), () -> true));
     }
 }

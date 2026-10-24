@@ -18,11 +18,10 @@ final class FrontierV3HarvestHandOperation {
             FrontierV3ResourceSiteHandProjectionWitness witness, Mob body) {
         var binding = binding(state, witness, body);
         return FrontierV3MinecraftOperation.apply(level, binding.declaration(), binding.ports(),
-                () -> before(state, witness, body),
-                () -> switch (witness.mode()) {
+                () -> before(state, witness, body), FrontierV3NativeEffect.observed(() -> switch (witness.mode()) {
                     case BIND_RETAINED -> retained(state, witness, body);
                     case MATERIALIZE_COLD -> FrontierV3VillagerHandMutation.setOffhand(body, stack(witness));
-                }, () -> after(state, witness, body));
+                }), () -> after(state, witness, body));
     }
 
     static Binding binding(FrontierWorldState state, FrontierV3ResourceSiteHandProjectionWitness witness, Mob body) {

@@ -48,14 +48,13 @@ public final class FrontierV3GroundPlayerPickup {
                 ports.stream().map(FrontierV3MinecraftOperation.Participant::identity).collect(java.util.stream.Collectors.toSet()));
         var added = new boolean[1];
         var result = FrontierV3MinecraftOperation.apply(level, declaration, ports,
-                () -> !entity.isRemoved() && entity.getItem() == stack && stack.getCount() == before,
-                () -> {
+                () -> !entity.isRemoved() && entity.getItem() == stack && stack.getCount() == before, FrontierV3NativeEffect.observed(() -> {
                     added[0] = inventory.add(stack);
                     if (stack.getCount() != before - amount) return false;
                     if (stack.isEmpty()) FrontierV3GroundItemDestruction.discardConsumed(entity);
                     return true;
-                }, () -> stack.getCount() == before - amount && (amount != before || entity.isRemoved()));
-        if (result.status() == FrontierV3MinecraftOperation.Status.WAITING_DURABILITY
+                }), () -> stack.getCount() == before - amount && (amount != before || entity.isRemoved()));
+        if (result.pending()
                 || result.status() == FrontierV3MinecraftOperation.Status.NOT_APPLIED) {
             journal.retireLoss(receipt); journal.persist(level); return false;
         }

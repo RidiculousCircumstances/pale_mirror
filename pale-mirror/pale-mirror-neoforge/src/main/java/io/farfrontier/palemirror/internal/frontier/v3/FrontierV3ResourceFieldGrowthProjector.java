@@ -21,6 +21,15 @@ final class FrontierV3ResourceFieldGrowthProjector {
     enum Result { CURRENT, ADVANCED, UNLOADED, PENDING_WORK, PENDING_PLAYER, NEEDS_WORK,
         STALE_CANONICAL, PHYSICAL_CONFLICT, RETRY }
 
+    /** Review/fairness is distinct from successful writes; retain each cell's outcome. */
+    record BatchResult(java.util.Map<ResourceFieldLayout.CellId, Result> cells, boolean preparationPending) {
+        BatchResult { cells = java.util.Map.copyOf(cells); }
+        static BatchResult waiting() { return new BatchResult(java.util.Map.of(), true); }
+        static BatchResult empty() { return new BatchResult(java.util.Map.of(), false); }
+        boolean reviewed() { return !preparationPending && (cells.isEmpty() || cells.values().stream().anyMatch(value -> value != Result.RETRY)); }
+        long advancedCells() { return cells.values().stream().filter(value -> value == Result.ADVANCED).count(); }
+    }
+
     private enum Publication { SYNCHRONOUS, DEFERRED, BATCH }
     private FrontierV3ResourceFieldGrowthProjector() { }
 
@@ -59,7 +68,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
     }
 
     /** One prepared publication, then individual effects, then one result publication. */
-    static boolean projectCurrentBatch(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    static BatchResult projectCurrentBatch(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                     SubjectId siteId, java.util.List<ResourceFieldLayout.CellId> cells) {
         if (!FrontierV3PhysicalWorld.isPhysical(level) || !FrontierV3ServerLifecycle.ownsRuntime(level, runtime))
             throw new IllegalArgumentException("growth batch has a foreign runtime or dimension");
@@ -70,7 +79,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
         var cycle = current.state().resourceSites().cycle(siteId);
         var accepted = new FrontierCanonicalState<>(current.worldId(), current.revision(), current.instant(), cycle);
         var available = cells.stream().filter(id -> !current.state().resourceSites().hasPendingCellMutation(siteId, id)).toList();
-        return available.isEmpty() || projectAcceptedBatch(level, site, accepted, available, true);
+        return available.isEmpty() ? BatchResult.empty() : projectAcceptedBatch(level, site, accepted, available, true);
     }
 
     /** Component seam; production admission is the registered runtime boundary above. */
@@ -78,7 +87,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
             FrontierCanonicalState<ResourceFieldCycle> accepted, java.util.List<ResourceFieldLayout.CellId> cells) {
         projectAcceptedBatch(level, site, accepted, cells, false);
     }
-    static boolean projectAcceptedBatch(ServerLevel level, ResourceSite site,
+    static BatchResult projectAcceptedBatch(ServerLevel level, ResourceSite site,
             FrontierCanonicalState<ResourceFieldCycle> accepted, java.util.List<ResourceFieldLayout.CellId> cells, boolean deferred) {
         if (cells.isEmpty() || cells.size() > FrontierV3ResourceSiteExecutor.projectionWriteBudget()
                 || new java.util.HashSet<>(cells).size() != cells.size())
@@ -89,8 +98,8 @@ final class FrontierV3ResourceFieldGrowthProjector {
             throw new IllegalArgumentException("growth batch has a foreign site or layout");
         var ledger = FrontierV3ResourceSiteLedger.get(level);
         if (!(ledger.fieldClaim(siteId) instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
-                || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE || !owner.witness().matchesCycle(cycle)) return true;
-        if (deferred && !ledger.prepareFieldDurable(level, siteId)) return false;
+                || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE || !owner.witness().matchesCycle(cycle)) return BatchResult.empty();
+        if (deferred && !ledger.prepareFieldDurable(level, siteId)) return BatchResult.waiting();
         var witness = owner.witness();
         var admitted = new java.util.ArrayList<ResourceFieldLayout.CellId>();
         for (var id : cells) {
@@ -128,10 +137,10 @@ final class FrontierV3ResourceFieldGrowthProjector {
             ledger.replaceFieldClaim(owner, owner.withWitness(witness));
             if (deferred) ledger.persistAsync(level); else ledger.persist(level);
         }
-        if (admitted.isEmpty()) return true;
+        if (admitted.isEmpty()) return BatchResult.empty();
         // Exact field intent AND common operation permission must precede effects.
-        if (deferred && !ledger.prepareFieldDurable(level, siteId)) return false;
-        boolean progressed = false;
+        if (deferred && !ledger.prepareFieldDurable(level, siteId)) return BatchResult.waiting();
+        var outcomes = new java.util.LinkedHashMap<ResourceFieldLayout.CellId, Result>();
         try {
             var requests = new java.util.LinkedHashMap<ResourceFieldLayout.CellId, FrontierV3MinecraftOperation.Request>();
             for (var id : admitted) {
@@ -140,7 +149,8 @@ final class FrontierV3ResourceFieldGrowthProjector {
                 if (pending.completedSteps() < pending.transition().steps().size()
                         && (reading.disposition() == FrontierV3ResourceFieldObservation.Disposition.CURRENT
                             || reading.disposition() == FrontierV3ResourceFieldObservation.Disposition.NEXT_STEP_APPLIED))
-                    requests.put(id, FrontierV3FieldProjectionOperation.request(level, siteId, cycle.layout().requireCell(id), pending));
+                    requests.put(id, FrontierV3FieldProjectionOperation.request(level, siteId, cycle.layout().requireCell(id), pending,
+                            () -> resumeCurrent(level, siteId, id)));
             }
             var results = new java.util.HashMap<ResourceFieldLayout.CellId, FrontierV3MinecraftOperation.Result>();
             if (!requests.isEmpty()) {
@@ -151,7 +161,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
             }
             for (var id : admitted) {
                 var result = projectAccepted(level, site, accepted, id, Publication.BATCH, results.get(id));
-                progressed |= result != Result.RETRY;
+                outcomes.put(id, result);
             }
         } finally {
             // A failure may leave some cells applied and others pending. The original persisted
@@ -159,7 +169,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
             if (deferred) { ledger.persistAsync(level); ledger.completeOperationsDeferred(level); }
             else { ledger.persist(level); ledger.completeOperations(level); }
         }
-        return progressed;
+        return new BatchResult(outcomes, false);
     }
 
     private static Result projectAccepted(ServerLevel level, ResourceSite site,
@@ -238,9 +248,10 @@ final class FrontierV3ResourceFieldGrowthProjector {
                     case BATCH -> batchResult;
                     case SYNCHRONOUS -> FrontierV3FieldProjectionOperation.apply(level, site.id(), geometry, pending);
                     case DEFERRED -> FrontierV3MinecraftOperation.applyBatchDeferred(level,
-                            java.util.List.of(FrontierV3FieldProjectionOperation.request(level, site.id(), geometry, pending))).getFirst();
+                            java.util.List.of(FrontierV3FieldProjectionOperation.request(level, site.id(), geometry, pending,
+                                    () -> resumeCurrent(level, site.id(), cellId)))).getFirst();
                 };
-                if (applied.status() == FrontierV3MinecraftOperation.Status.WAITING_DURABILITY) return Result.RETRY;
+                if (applied.pending()) return Result.RETRY;
                 if (!applied.complete()) return Result.PHYSICAL_CONFLICT;
                 operation = applied.ticket();
                 var afterWrite = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, cellId,
@@ -262,6 +273,13 @@ final class FrontierV3ResourceFieldGrowthProjector {
         ledger.replaceFieldClaim(owner, owner.withWitness(witness));
         if (operation != null) ledger.operationCompleted(level, operation);
         return finish(level, ledger, site.id(), publication);
+    }
+
+    /** Resume through the owner and current revision; never replay a captured request. */
+    private static void resumeCurrent(ServerLevel level, SubjectId site, ResourceFieldLayout.CellId cell) {
+        var runtime = FrontierV3ServerLifecycle.runtimeForNativeMutation(level.getServer());
+        if (runtime != null && FrontierV3PhysicalWorld.isPhysical(level))
+            projectCurrentOne(level, runtime, site, cell);
     }
 
     private static boolean publish(ServerLevel level, FrontierV3ResourceSiteLedger ledger, SubjectId site, Publication publication) {

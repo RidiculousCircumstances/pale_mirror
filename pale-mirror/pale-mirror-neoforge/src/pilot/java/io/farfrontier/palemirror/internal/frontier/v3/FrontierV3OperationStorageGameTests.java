@@ -27,7 +27,7 @@ public final class FrontierV3OperationStorageGameTests {
         helper.assertTrue(operations.sealUnattemptedCancellation(operation.ticket()), "cancel only the positively unattempted native effect");
         operations.persist(level); var calls = new java.util.concurrent.atomic.AtomicInteger();
         var result = FrontierV3MinecraftOperation.apply(level, declaration, List.of(port), () -> chest.getItem(0).getCount() == 7,
-                () -> { calls.incrementAndGet(); chest.getItem(0).shrink(1); return true; }, () -> chest.getItem(0).getCount() == 6);
+                FrontierV3NativeEffect.observed(() -> { calls.incrementAndGet(); chest.getItem(0).shrink(1); return true; }), () -> chest.getItem(0).getCount() == 6);
         helper.assertTrue(result.status() == FrontierV3MinecraftOperation.Status.NOT_APPLIED && calls.get() == 0
                 && chest.getItem(0).getCount() == 7 && operations.require(operation.ticket()).applied().isEmpty(),
                 "same matching before-image cannot execute a sealed cancellation");
@@ -70,7 +70,7 @@ public final class FrontierV3OperationStorageGameTests {
     @GameTest(batch = "pm-frontier-v3-shared-storage", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void disjointNativeEffectsShareForcesAndInterruptedBatchCannotReplay(GameTestHelper helper) {
         var level = helper.getLevel(); var ledger = FrontierV3OperationLedger.get(level); ledger.persist(level);
-        var points = List.of(helper.absolutePos(new BlockPos(1, 1, 1)), helper.absolutePos(new BlockPos(1, 2, 1)));
+        var points = List.of(helper.absolutePos(new BlockPos(1, 1, 1)), helper.absolutePos(new BlockPos(1, 2, 1)), helper.absolutePos(new BlockPos(2, 1, 1)));
         var calls = new java.util.concurrent.atomic.AtomicInteger();
         var requests = new ArrayList<FrontierV3MinecraftOperation.Request>();
         for (int i = 0; i < points.size(); i++) {
@@ -79,27 +79,26 @@ public final class FrontierV3OperationStorageGameTests {
             var declaration = new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.FIELD_PROJECTION,
                     new SubjectId("test:batch"), "step-" + i, "stone-to-air", Set.of(port.identity()));
             requests.add(new FrontierV3MinecraftOperation.Request(declaration, List.of(port),
-                    () -> level.getBlockState(point).is(Blocks.STONE),
-                    () -> { calls.incrementAndGet(); return level.setBlockAndUpdate(point, Blocks.AIR.defaultBlockState()); },
+                    () -> level.getBlockState(point).is(Blocks.STONE), FrontierV3NativeEffect.observed(() -> { calls.incrementAndGet(); return level.setBlockAndUpdate(point, Blocks.AIR.defaultBlockState()); }),
                     () -> level.getBlockState(point).isAir()));
         }
         long before = forcedGroups(ledger);
         var applied = FrontierV3MinecraftOperation.applyBatch(level, requests);
-        helper.assertTrue(applied.stream().allMatch(FrontierV3MinecraftOperation.Result::complete) && calls.get() == 2,
+        helper.assertTrue(applied.stream().allMatch(FrontierV3MinecraftOperation.Result::complete) && calls.get() == 3,
                 "all disjoint real effects apply once");
         helper.assertTrue(forcedGroups(ledger) - before == 2, "one prepare and one applied append for the whole batch");
         helper.assertTrue(FrontierV3MinecraftOperation.applyBatch(level, requests).stream().allMatch(result ->
-                result.status() == FrontierV3MinecraftOperation.Status.OBSERVED) && calls.get() == 2, "native receipts prohibit repeat mutations");
+                result.status() == FrontierV3MinecraftOperation.Status.OBSERVED) && calls.get() == 3, "native receipts prohibit repeat mutations");
         var failures = new ArrayList<FrontierV3MinecraftOperation.Request>();
         for (int i = 0; i < requests.size(); i++) {
             var prior = requests.get(i); int index = i;
             level.setBlockAndUpdate(points.get(i), Blocks.STONE.defaultBlockState());
             var declaration = new FrontierV3OperationReceipt.Declaration(prior.declaration().protocol(), prior.declaration().owner(),
                     "interrupted-" + i, "stone-to-air", prior.declaration().participants());
-            failures.add(new FrontierV3MinecraftOperation.Request(declaration, prior.participants(), prior.before(), () -> {
+            failures.add(new FrontierV3MinecraftOperation.Request(declaration, prior.participants(), prior.before(), FrontierV3NativeEffect.observed(() -> {
                 if (index == 1) throw new IllegalStateException("injected mid-batch failure");
-                return prior.mutation().getAsBoolean();
-            }, prior.after()));
+                return prior.effect().mutation().get() == FrontierV3NativeEffect.Outcome.APPLIED;
+            }), prior.after()));
         }
         boolean failed = false;
         try { FrontierV3MinecraftOperation.applyBatch(level, failures); }
@@ -107,8 +106,9 @@ public final class FrontierV3OperationStorageGameTests {
         helper.assertTrue(failed, "the failed effect is visible, never silently committed");
         var recovered = FrontierV3MinecraftOperation.applyBatch(level, failures);
         helper.assertTrue(recovered.getFirst().status() == FrontierV3MinecraftOperation.Status.OBSERVED
-                && recovered.getLast().status() == FrontierV3MinecraftOperation.Status.AMBIGUOUS && calls.get() == 3,
-                "partial batch retains separate outcomes and never retries an interrupted effect");
+                && recovered.get(1).status() == FrontierV3MinecraftOperation.Status.AMBIGUOUS
+                && recovered.getLast().status() == FrontierV3MinecraftOperation.Status.APPLIED && calls.get() == 5,
+                "partial batch retains outcomes, never retries the interrupted effect, and preserves later unused attempts");
         helper.succeed();
     }
     private static long forcedGroups(FrontierV3OperationLedger ledger) {

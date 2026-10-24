@@ -88,9 +88,8 @@ final class FrontierV3StationWorkPhysicalEffect {
         if (work.block().map(value -> value.reason() == BakeryWorkBlock.Reason.AMBIGUOUS_EFFECT).orElse(false)) return;
         var participants = participants(shape);
         var declaration = declaration(shape, participants);
-        var effect = FrontierV3MinecraftOperation.applyDeferred(level, declaration, participants, shape::before,
-                () -> { shape.apply(); return true; }, shape::after);
-        if (effect.status() == FrontierV3MinecraftOperation.Status.WAITING_DURABILITY) return;
+        var effect = FrontierV3MinecraftOperation.applyDeferred(level, declaration, participants, shape::before, FrontierV3NativeEffect.observed(() -> { shape.apply(); return true; }), shape::after);
+        if (effect.pending()) return;
         if (effect.complete()) {
             observe(level, runtime, lease, job, containerId, effect.ticket(), shape.observation());
         } else if (effect.status() == FrontierV3MinecraftOperation.Status.NOT_APPLIED && shape.canAbortUnappliedDelivery()) {

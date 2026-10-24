@@ -34,8 +34,7 @@ final class FrontierV3ProductionStationRecipeExecutor {
             var participants = List.of(physical.persistence().get());
             var declaration = FrontierV3MinecraftOperation.declaration(FrontierV3OperationReceipt.Protocol.STATION_RECIPE, machine.stationId(),
                     new ProductionStationRecipeChanged(ProductionStationRecipeChanged.Stage.HOT_PREPARED, boundary, List.of()), participants);
-            var applied = FrontierV3MinecraftOperation.applyDeferred(level, declaration, participants, effect::before,
-                    () -> { effect.apply(); return true; }, effect::after);
+            var applied = FrontierV3MinecraftOperation.applyDeferred(level, declaration, participants, effect::before, FrontierV3NativeEffect.observed(() -> { effect.apply(); return true; }), effect::after);
             if (!applied.complete()) continue;
             var observed = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(physical.inventory(), state, record.id(),
                     boundary.exactAfter().isPresent() ? Set.of(station.outputSlot()) : Set.of());

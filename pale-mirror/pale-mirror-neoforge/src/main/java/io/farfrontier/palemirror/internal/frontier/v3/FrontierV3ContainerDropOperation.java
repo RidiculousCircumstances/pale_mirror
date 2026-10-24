@@ -60,7 +60,7 @@ final class FrontierV3ContainerDropOperation {
                 context.resources, context.exactItems);
         journal.prepareDrop(transaction); journal.persist(level); operations.persist(level);
         var result = FrontierV3MinecraftOperation.apply(level, declaration, ports, () -> ItemStack.matches(stack, before)
-                && context.spawned.stream().allMatch(e -> level.getEntity(e.getUUID()) == null), () -> {
+                && context.spawned.stream().allMatch(e -> level.getEntity(e.getUUID()) == null), FrontierV3NativeEffect.observed(() -> {
             for (var drop : context.spawned) {
                 var remaining = stack.copy(); var fragment = context.expected.get(drop.getUUID());
                 // Vanilla/mod join hooks may refuse a fragment. Keep every uninserted
@@ -73,7 +73,7 @@ final class FrontierV3ContainerDropOperation {
                 stack.shrink(fragment.getCount()); physical.inventory().setChanged();
             }
             return true;
-        }, () -> stack.isEmpty() && !context.spawned.isEmpty()
+        }), () -> stack.isEmpty() && !context.spawned.isEmpty()
                 && context.spawned.stream().allMatch(e -> !e.isRemoved() && level.getEntity(e.getUUID()) == e
                     && ItemStack.matches(e.getItem(), context.expected.get(e.getUUID()))));
         if (!result.complete()) throw new IllegalStateException("native container drop did not complete: " + result.status() + " ticket=" + transaction.id());

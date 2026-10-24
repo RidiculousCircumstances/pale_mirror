@@ -12,14 +12,8 @@ import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestJob;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestCargo;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceSiteHarvestProgressed;
 import io.farfrontier.palemirror.frontier.v3.model.SceneLease;
-import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.CropBlock;
-import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.Optional;
 
@@ -133,19 +127,15 @@ final class FrontierV3ResourceFieldWorkExecutor {
                     + ";actualCause=" + pending.causationId() + ";cell=" + id.value());
         var review = FrontierV3ResourceFieldObservation.observe(level, cycle, witness, id, cause(job, cycle, id));
         if (review.disposition() == FrontierV3ResourceFieldObservation.Disposition.UNLOADED) return Result.pending();
-        var writes = pending.transition().steps().stream().map(step -> new FrontierV3ManagedBlockWrites.PlannedWrite(
-                minecraft(step.part() == ResourceFieldCellTransition.Part.SOIL ? cell.soil().support() : cell.crop()), block(step))).toList();
-        if (!FrontierV3ManagedBlockWrites.preparePlannedWrites(level, runtime, writes, () -> {
-            var current = runtime.decodedState().orElseThrow();
-            var site = current.resourceSites().sites().get(job.siteId());
-            if (site != null && job.equals(site.harvestJobs().get(job.id()))
-                    && worker.isAlive() && FrontierV3ActorHandObservation.ownsCurrentHarvest(current, lease, job))
-                advance(level, runtime, current, lease, job, worker);
-        })) return Result.pending();
-        var current = runtime.decodedState().orElseThrow();
-        var operation = FrontierV3FieldWorkOperation.apply(level, current, lease, job, worker, cell, pending,
-                extractionPort(level, runtime, current, lease, worker, job));
-        if (operation.status() == FrontierV3MinecraftOperation.Status.WAITING_DURABILITY) return Result.pending();
+        var operation = FrontierV3FieldWorkOperation.apply(level, state, lease, job, worker, cell, pending,
+                extractionPort(level, runtime, state, lease, worker, job), () -> {
+                    var current = runtime.decodedState().orElseThrow();
+                    var site = current.resourceSites().sites().get(job.siteId());
+                    if (site != null && job.equals(site.harvestJobs().get(job.id())) && worker.isAlive()
+                            && FrontierV3ActorHandObservation.ownsCurrentHarvest(current, lease, job))
+                        advance(level, runtime, current, lease, job, worker);
+                });
+        if (operation.pending()) return Result.pending();
         if (!operation.complete()) return Result.conflict("cell-operation-" + operation.status().name().toLowerCase(java.util.Locale.ROOT));
         // The common receipt, not a matching block/count, authorizes advancement of
         // the family's bounded cell witness after a restart.
@@ -197,10 +187,6 @@ final class FrontierV3ResourceFieldWorkExecutor {
         };
     }
 
-    private static BlockPos minecraft(io.farfrontier.palemirror.frontier.v3.model.BlockPosition position) {
-        return new BlockPos(position.x(), position.y(), position.z());
-    }
-
     private static io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtractionPort extractionPort(
             ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             FrontierWorldState state, SceneLease lease, Mob worker, ResourceSiteHarvestJob job) {
@@ -212,12 +198,4 @@ final class FrontierV3ResourceFieldWorkExecutor {
                 FrontierV3ResourceSiteHarvestSceneExecutor.workActuation(state, runtime, lease, job, worker), state.bootstrap().ruleset().tools());
     }
 
-    private static BlockState block(ResourceFieldCellTransition.Step step) {
-        return switch (step.part()) {
-            case SOIL -> FrontierV3FieldBlocks.soil(step.after().soil());
-            case CROP -> step.after().crop() == ResourceFieldCycle.Crop.ABSENT
-                    ? Blocks.AIR.defaultBlockState()
-                    : Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, step.after().growthStage());
-        };
-    }
 }

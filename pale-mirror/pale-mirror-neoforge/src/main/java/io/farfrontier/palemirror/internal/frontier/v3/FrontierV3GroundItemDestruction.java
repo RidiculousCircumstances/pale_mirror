@@ -71,14 +71,14 @@ public final class FrontierV3GroundItemDestruction {
         journal.prepareLoss(loss); journal.persist(level);
         var declaration = new FrontierV3OperationReceipt.Declaration(FrontierV3OperationReceipt.Protocol.GROUND_DESTRUCTION,
                 loss.economicOwner(), loss.witnessId().toString(), FrontierV3OperationConfirmation.fingerprint(loss), Set.of(port.identity()));
-        var result = FrontierV3MinecraftOperation.apply(level, declaration, List.of(port), () -> !entity.isRemoved(), () -> {
+        var result = FrontierV3MinecraftOperation.apply(level, declaration, List.of(port), () -> !entity.isRemoved(), FrontierV3NativeEffect.observed(() -> {
             var parent = NATIVE_REMOVAL.get(); NATIVE_REMOVAL.set(entity.getUUID());
             try { entity.setRemoved(reason); } finally {
                 if (parent == null) NATIVE_REMOVAL.remove(); else NATIVE_REMOVAL.set(parent);
             }
             return entity.isRemoved();
-        }, () -> entity.isRemoved() && entity.getRemovalReason() == reason);
-        if (result.status() == FrontierV3MinecraftOperation.Status.WAITING_DURABILITY
+        }), () -> entity.isRemoved() && entity.getRemovalReason() == reason);
+        if (result.pending()
                 || result.status() == FrontierV3MinecraftOperation.Status.NOT_APPLIED) {
             journal.retireLoss(loss); journal.persist(level);
         } else if (result.complete()) reconcile(level, runtime, loss);

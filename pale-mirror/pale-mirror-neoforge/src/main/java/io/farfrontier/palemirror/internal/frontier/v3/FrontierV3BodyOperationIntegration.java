@@ -17,16 +17,17 @@ final class FrontierV3BodyOperationIntegration {
         if (body.getPersistentData().getLong(FrontierV3NativeOperationMarkers.LIFETIME) != link.participant().incarnation())
             throw new IllegalStateException("body projection changed its native lifetime");
         var port = FrontierV3OperationEntityParticipant.birth(body);
-        return FrontierV3MinecraftOperation.applyDeferred(level, new FrontierV3MinecraftOperation.Request(
-                link.operation().declaration(), List.of(port), () -> ticket.current(carriers) && !body.isRemoved()
+        return FrontierV3MinecraftOperation.applyDeferred(level, new FrontierV3MinecraftOperation.Request(link.operation().declaration(),
+                List.of(port),
+                () -> ticket.current(carriers) && !body.isRemoved()
                         && level.getEntity(body.getUUID()) == null,
-                () -> {
+                FrontierV3NativeEffect.refusing(() -> {
                     if (!FrontierV3BodyInsertionJournal.consume(level, ticket)) throw new IllegalStateException("body insertion lost durable ticket");
                     return level.addFreshEntity(body);
-                }, () -> level.getEntity(body.getUUID()) == body && !body.isRemoved(),
-                // Native addFreshEntity(false) is a positive refusal in this callback,
+                }, // Native addFreshEntity(false) is a positive refusal in this callback,
                 // never a timeout, recovered UUID absence or inferred cancellation.
-                () -> level.getEntity(body.getUUID()) == null && !body.isAddedToLevel()));
+                () -> level.getEntity(body.getUUID()) == null && !body.isAddedToLevel()),
+                () -> level.getEntity(body.getUUID()) == body && !body.isRemoved()));
     }
     static void reject(ServerLevel level, WorldId world, FrontierV3AmbientCarrierLedger carriers,
             FrontierV3BodyAdmissionOperation link) {

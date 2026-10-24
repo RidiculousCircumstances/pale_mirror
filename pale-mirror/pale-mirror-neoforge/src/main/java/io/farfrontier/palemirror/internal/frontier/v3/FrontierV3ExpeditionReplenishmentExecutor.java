@@ -49,7 +49,7 @@ final class FrontierV3ExpeditionReplenishmentExecutor {
                 FrontierV3OperationEntityParticipant.current(actor, actuation.id().body().physicalEpoch()));
         var operation = FrontierV3MinecraftOperation.applyDeferred(level, FrontierV3MinecraftOperation.declaration(
                 FrontierV3OperationReceipt.Protocol.EXPEDITION_REPLENISHMENT, mission.id(), new ExpeditionReplenishmentHotPrepared(mission.id(), transfer.claimId(), step), participants),
-                participants, effect::before, effect::apply, effect::after);
+                participants, effect::before, FrontierV3NativeEffect.observed(effect::apply), effect::after);
         if (!operation.complete()) return false;
         var remainder = FrontierV3ContainerSurfaceExecutor.observedFungibleSlots(source.inventory(), state, source.containerId());
         var destination = List.of(new FungiblePhysicalObservation.Stack(FrontierV3ActorResourceSlots.address(transfer.actorId(), actor, transfer.slot()), transfer.itemKind(), transfer.quantity()));

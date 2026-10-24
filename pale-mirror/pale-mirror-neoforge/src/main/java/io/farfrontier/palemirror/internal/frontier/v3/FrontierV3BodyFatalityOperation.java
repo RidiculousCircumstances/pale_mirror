@@ -33,8 +33,7 @@ final class FrontierV3BodyFatalityOperation {
         snapshot.retain(ledger, operation.ticket());
         ledger.persist(level);
         var result = FrontierV3MinecraftOperation.apply(level, declaration, List.of(participant),
-                () -> !died.getAsBoolean() && !body.isRemoved() && level.getEntity(body.getUUID()) == body,
-                () -> { nativeDeath.run(); return true; }, died);
+                () -> !died.getAsBoolean() && !body.isRemoved() && level.getEntity(body.getUUID()) == body, FrontierV3NativeEffect.observed(() -> { nativeDeath.run(); return true; }), died);
         if (!result.complete()) throw new IllegalStateException("body fatality lacks an exact native outcome: "
                 + operation.ticket() + " " + result.status());
         // The native death is already witnessed. Retained explicit-owner recovery owns

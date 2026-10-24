@@ -4,6 +4,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import java.util.*;
 import java.util.function.BooleanSupplier;
+import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3OperationDiagnostics.Reason.*;
 
 /** Common application boundary. Owners provide an already-admitted intent and physical
  * ports; this class cannot inspect a meal, harvest, recipe, job or cargo phase. */
@@ -11,28 +12,25 @@ final class FrontierV3MinecraftOperation {
     record Participant(FrontierV3OperationReceipt.Participant identity, CompoundTag persistent, Runnable dirty) {
         Participant { Objects.requireNonNull(identity); Objects.requireNonNull(persistent); Objects.requireNonNull(dirty); }
     }
-    enum Status { APPLIED, OBSERVED, NOT_APPLIED, SOURCE_CHANGED, AMBIGUOUS, WAITING_DURABILITY }
+    enum Status { APPLIED, OBSERVED, NOT_APPLIED, SOURCE_CHANGED, AMBIGUOUS, WAITING_DURABILITY, WAITING_PREPARATION }
     record Result(Status status, Optional<UUID> operation) {
         Result {
             Objects.requireNonNull(status); Objects.requireNonNull(operation);
-            if ((status == Status.WAITING_DURABILITY) != operation.isEmpty())
+            if ((status == Status.WAITING_DURABILITY || status == Status.WAITING_PREPARATION) != operation.isEmpty())
                 throw new IllegalArgumentException("physical result has an invalid operation identity");
         }
         Result(Status status, UUID ticket) { this(status, Optional.of(ticket)); }
         UUID ticket() { return operation.orElseThrow(); }
         static Result waiting() { return new Result(Status.WAITING_DURABILITY, Optional.empty()); }
+        static Result preparing() { return new Result(Status.WAITING_PREPARATION, Optional.empty()); }
+        boolean pending() { return status == Status.WAITING_DURABILITY || status == Status.WAITING_PREPARATION; }
         boolean complete() { return status == Status.APPLIED || status == Status.OBSERVED; }
     }
     record Request(FrontierV3OperationReceipt.Declaration declaration, List<Participant> participants,
-            BooleanSupplier before, BooleanSupplier mutation, BooleanSupplier after, BooleanSupplier refusedWithoutEffect) {
-        Request(FrontierV3OperationReceipt.Declaration declaration, List<Participant> participants,
-                BooleanSupplier before, BooleanSupplier mutation, BooleanSupplier after) {
-            this(declaration, participants, before, mutation, after, () -> false);
-        }
+            BooleanSupplier before, FrontierV3NativeEffect effect, BooleanSupplier after) {
         Request {
             Objects.requireNonNull(declaration); participants = List.copyOf(participants);
-            Objects.requireNonNull(before); Objects.requireNonNull(mutation); Objects.requireNonNull(after);
-            Objects.requireNonNull(refusedWithoutEffect);
+            Objects.requireNonNull(before); Objects.requireNonNull(effect); Objects.requireNonNull(after);
             if (participants.stream().anyMatch(p -> p.identity().medium() == FrontierV3OperationReceipt.Medium.ENTITY_SNAPSHOT))
                 throw new IllegalArgumentException("a saved observation is not a mutation port");
             var identities = participants.stream().map(Participant::identity).collect(java.util.stream.Collectors.toSet());
@@ -111,8 +109,8 @@ final class FrontierV3MinecraftOperation {
                 participants.stream().map(Participant::identity).collect(java.util.stream.Collectors.toSet()));
     }
     static Result apply(ServerLevel level, FrontierV3OperationReceipt.Declaration declaration,
-            List<Participant> participants, BooleanSupplier before, BooleanSupplier mutation, BooleanSupplier after) {
-        return applyBatch(level, List.of(new Request(declaration, participants, before, mutation, after))).getFirst();
+            List<Participant> participants, BooleanSupplier before, FrontierV3NativeEffect effect, BooleanSupplier after) {
+        return applyBatch(level, List.of(new Request(declaration, participants, before, effect, after))).getFirst();
     }
     /** Disjoint effects share prepare/result force boundaries, not atomicity. An interrupted
      * batch retains exact per-operation evidence; it can never roll back or replay the batch. */
@@ -128,8 +126,8 @@ final class FrontierV3MinecraftOperation {
         return applyBatch(level, List.of(request), true).getFirst();
     }
     static Result applyDeferred(ServerLevel level, FrontierV3OperationReceipt.Declaration declaration,
-            List<Participant> participants, BooleanSupplier before, BooleanSupplier mutation, BooleanSupplier after) {
-        return applyDeferred(level, new Request(declaration, participants, before, mutation, after));
+            List<Participant> participants, BooleanSupplier before, FrontierV3NativeEffect effect, BooleanSupplier after) {
+        return applyDeferred(level, new Request(declaration, participants, before, effect, after));
     }
     private static List<Result> applyBatch(ServerLevel level, List<Request> requests, boolean deferred) {
         if (!level.getServer().isSameThread()) throw new IllegalStateException("native operation outside server thread");
@@ -156,7 +154,7 @@ final class FrontierV3MinecraftOperation {
             // A replaced/differently saved native incarnation is a local recovery case,
             // not permission to apply the old action to the new body/container/chunk.
             if (retained != null && !retained.declaration().equals(request.declaration())) {
-                results.set(i, FrontierV3OperationDiagnostics.result(level, retained, Status.AMBIGUOUS)); continue;
+                results.set(i, FrontierV3OperationDiagnostics.result(level, retained, Status.AMBIGUOUS, DECLARATION_CHANGED)); continue;
             }
             if (retained != null && retained.cancelled()) {
                 results.set(i, FrontierV3OperationDiagnostics.result(level, retained, Status.NOT_APPLIED)); continue;
@@ -176,33 +174,70 @@ final class FrontierV3MinecraftOperation {
             if (!observed && !request.before().getAsBoolean()) {
                 boolean cancelled = deferred ? ledger.sealUnattemptedCancellation(retained.ticket())
                         : ledger.cancelUnattempted(retained.ticket());
-                results.set(i, FrontierV3OperationDiagnostics.result(level, retained, cancelled ? Status.NOT_APPLIED : Status.AMBIGUOUS));
+                results.set(i, FrontierV3OperationDiagnostics.result(level, retained, cancelled ? Status.NOT_APPLIED : Status.AMBIGUOUS,
+                        PRECONDITION_CHANGED));
             }
         }
         if (deferred) ledger.persistAsync(level); else ledger.persist(level);
         var attempts = new HashSet<Integer>();
-        for (int i = 0; i < requests.size(); i++) if (results.get(i) == null && !markers(requests.get(i), prepared.get(i))) {
-            // A later unrelated append must not postpone an already durable permission.
-            if (deferred && ledger.unattempted(prepared.get(i).ticket()) && !ledger.durableOperation(prepared.get(i).ticket())) {
-                results.set(i, Result.waiting()); continue;
-            }
-            if (ledger.beginAttempt(prepared.get(i).ticket())) attempts.add(i);
-            else results.set(i, FrontierV3OperationDiagnostics.result(level, prepared.get(i), Status.AMBIGUOUS));
-        }
         try {
             for (int i = 0; i < requests.size(); i++) if (results.get(i) == null) {
                 var request = requests.get(i); var retained = prepared.get(i);
-                boolean attempt = attempts.contains(i);
-                if (attempt && !request.before().getAsBoolean()) {
-                    results.set(i, FrontierV3OperationDiagnostics.result(level, retained, Status.AMBIGUOUS)); continue;
+                boolean attempt = !markers(request, retained);
+                if (attempt) {
+                    if (deferred && ledger.unattempted(retained.ticket()) && !ledger.durableOperation(retained.ticket())) {
+                        results.set(i, Result.waiting()); continue;
+                    }
+                    // Earlier effects can change a later precondition. No attempt
+                    // has been consumed for this participant yet, so cancellation is provable.
+                    if (!request.before().getAsBoolean()) {
+                        boolean cancelled = deferred ? ledger.sealUnattemptedCancellation(retained.ticket())
+                                : ledger.cancelUnattempted(retained.ticket());
+                        results.set(i, FrontierV3OperationDiagnostics.result(level, retained,
+                                cancelled ? Status.NOT_APPLIED : Status.AMBIGUOUS, PRECONDITION_CHANGED)); continue;
+                    }
+                    // The journal is durable now. Prepare immediately before the live
+                    // attempt, so asynchronous preparation never spends its permission.
+                    if (ledger.unattempted(retained.ticket())) {
+                        var admission = Objects.requireNonNull(request.effect().preparation().get());
+                        if (!admission.ready()) {
+                            results.set(i, FrontierV3OperationDiagnostics.waiting(level, request.declaration(),
+                                    FrontierV3OperationDiagnostics.Backpressure.EFFECT_PREPARATION, admission.waitingFor().orElseThrow()));
+                            continue;
+                        }
+                    }
+                    // Preparation can admit a competing canonical/native transition.
+                    if (!request.before().getAsBoolean()) {
+                        boolean cancelled = ledger.sealUnattemptedCancellation(retained.ticket());
+                        results.set(i, FrontierV3OperationDiagnostics.result(level, retained,
+                                cancelled ? Status.NOT_APPLIED : Status.AMBIGUOUS, PRECONDITION_CHANGED)); continue;
+                    }
+                    if (!ledger.beginAttempt(retained.ticket())) {
+                        results.set(i, FrontierV3OperationDiagnostics.result(level, retained, Status.AMBIGUOUS,
+                                NO_LIVE_ATTEMPT_PERMISSION)); continue;
+                    }
+                    // Never consume the rest of the batch before this callback runs.
+                    attempts.add(i);
                 }
-                if (attempt && !request.mutation().getAsBoolean()) {
-                    boolean refused = request.refusedWithoutEffect().getAsBoolean() && ledger.rejectCurrentAttempt(retained.ticket());
-                    results.set(i, FrontierV3OperationDiagnostics.result(level, ledger.require(retained.ticket()),
-                            refused ? Status.NOT_APPLIED : Status.AMBIGUOUS)); continue;
+                if (attempt) {
+                    FrontierV3NativeEffect.Outcome outcome;
+                    try { outcome = Objects.requireNonNull(request.effect().mutation().get(), "missing native outcome"); }
+                    catch (RuntimeException | Error failure) {
+                        FrontierV3OperationDiagnostics.result(level, retained, Status.AMBIGUOUS, EFFECT_EXCEPTION);
+                        throw failure;
+                    }
+                    if (outcome != FrontierV3NativeEffect.Outcome.APPLIED) {
+                        boolean refused = outcome == FrontierV3NativeEffect.Outcome.REFUSED_WITHOUT_EFFECT
+                                && ledger.rejectCurrentAttempt(retained.ticket());
+                        results.set(i, FrontierV3OperationDiagnostics.result(level, ledger.require(retained.ticket()),
+                                refused ? Status.NOT_APPLIED : Status.AMBIGUOUS,
+                                refused ? REFUSED_BEFORE_EFFECT : outcome == FrontierV3NativeEffect.Outcome.UNKNOWN
+                                        ? EFFECT_OUTCOME_UNKNOWN : REFUSAL_NOT_SEALED)); continue;
+                    }
                 }
                 if (!request.after().getAsBoolean()) {
-                    results.set(i, FrontierV3OperationDiagnostics.result(level, retained, attempt ? Status.AMBIGUOUS : Status.SOURCE_CHANGED)); continue;
+                    results.set(i, FrontierV3OperationDiagnostics.result(level, retained, attempt ? Status.AMBIGUOUS : Status.SOURCE_CHANGED,
+                            POSTCONDITION_MISMATCH)); continue;
                 }
                 for (var participant : request.participants()) {
                     var receipt = retained.nativeReceipt(participant.identity());
