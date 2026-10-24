@@ -18,6 +18,10 @@ final class FrontierV3ReferenceContainerPresentation {
         if (replica == null || lease != null && (lease.status() == PhysicalCustodyLeaseStatus.PREPARING
                 || lease.status() == PhysicalCustodyLeaseStatus.UNRESOLVED)) return true;
         if (replica.state() == PhysicalReplicaState.CONFLICT) return false;
+        // A matching inventory is not yet an operational custody lease. Finish
+        // declaration/observation/acquisition before falling back to discovery.
+        if (replica.state() == PhysicalReplicaState.EXPECTED || lease == null
+                || lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED) return true;
         var physical = FrontierV3PhysicalContainer.inspect(level, state, surface.containerId()).orElse(null);
         if (physical == null) return surface.fixed();
         var actual = FrontierV3ReferenceContainerCustodyExecutor.observedContainer(state, surface.containerId(), physical);

@@ -76,12 +76,8 @@ public final class FrontierV3ExactContainerIngressGameTests {
         initial = initial.withInventory(initial.inventory().store(storedTool).moveObservedItem(tool.id(), storedTool.custody(), tool.custody())
                 .withSurfaceStatus(container, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(container, ContainerSurfaceStatus.ACTIVE));
-        var replica = PhysicalReplicaRecord.expected(container, ReferenceContainerCustody.semanticKind(initial, container), 0,
-                ReferenceContainerCustody.canonicalFingerprint(initial, container), ReferenceContainerCustody.provenance(container));
-        initial = initial.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(initial.replicaCustody().declare(replica)
-                .observe(container, 0, 1, replica.fingerprint(), replica.provenance(), 0)
-                .acquire(new PhysicalCustodyLease(ReferenceContainerCustody.scopeId(container), container, ReferenceContainerCustody.PROVIDER_ID,
-                        1, 0, 2, PhysicalCustodyLeaseStatus.ACQUIRED, null))));
+        // No replica/lease is pre-installed: the first real interaction must
+        // finish initial custody without requiring a background discovery turn.
         var config = new FrontierEngineConfiguration<>(base.worldId(), initial, base.initialInstant(), base.commandPlanner(), base.scheduledPlanner(), base.reducer(),
                 base.stateCodec(), base.projectionMapper(), base.limits(), base.initialSchedules(), base.transactionCommitter(), base.stateValidator(), base.executionMetrics());
         var runtime = FrontierV3ServerRuntime.start(config, new EphemeralStore(), 10_000);
@@ -96,10 +92,23 @@ public final class FrontierV3ExactContainerIngressGameTests {
         var beforeNoOp = state(runtime);
         helper.assertTrue(FrontierV3ContainerClickExecutor.before(player, menu, 1, 0, net.minecraft.world.inventory.ClickType.PICKUP, runtime)
                 == FrontierV3ContainerClickExecutor.Admission.ACCEPTED, "empty-slot click enters the same native boundary");
+        var checks = FrontierV3ReferenceContainerHandoff.inspect(level, state(runtime), new net.minecraft.world.level.ChunkPos(position));
+        var pending = checks.stream().filter(check -> check.owner().equals(container)).findFirst().orElseThrow();
+        helper.assertValueEqual(pending.status(), FrontierV3HotHandoff.Status.PRESENTABLE_PENDING,
+                "a declared loaded chest remains visible while its exact click is pending");
+        var review = new FrontierV3HotHandoff.Review(0, List.of(pending));
+        helper.assertTrue(review.presentable() && !review.ready(), "visibility cannot authorize concurrent HOT effects");
+        chest.getPersistentData().remove(FrontierV3ReferenceContainerCustodyExecutor.REPLICA_PROVENANCE_KEY);
+        helper.assertValueEqual(FrontierV3ReferenceContainerHandoff.inspect(level, state(runtime), new net.minecraft.world.level.ChunkPos(position))
+                .stream().filter(check -> check.owner().equals(container)).findFirst().orElseThrow().status(),
+                FrontierV3HotHandoff.Status.WAITING, "foreign/unproven native providers cannot borrow pending visibility");
+        chest.getPersistentData().putString(FrontierV3ReferenceContainerCustodyExecutor.REPLICA_PROVENANCE_KEY,
+                ReferenceContainerCustody.provenance(container));
         FrontierV3PlayerClickOperation.perform(player, menu, runtime,
                 () -> menu.clicked(1, 0, net.minecraft.world.inventory.ClickType.PICKUP, player));
         FrontierV3ContainerClickExecutor.after(player, menu, runtime);
-        helper.assertTrue(state(runtime).equals(beforeNoOp) && FrontierV3DepotClickLedger.get(level).pending(container) == null,
+        helper.assertTrue(state(runtime).inventory().equals(beforeNoOp.inventory()) && ReferenceContainerCustody.hasOperationalCustody(state(runtime), container)
+                && FrontierV3DepotClickLedger.get(level).pending(container) == null,
                 "no-op retires locally without inventing stock or releasing the acquired container");
         helper.assertTrue(FrontierV3ContainerClickExecutor.before(player, menu, 27, 0, net.minecraft.world.inventory.ClickType.QUICK_MOVE, runtime)
                 == FrontierV3ContainerClickExecutor.Admission.ACCEPTED, "the exact tool is admitted under a durable click witness");

@@ -9,14 +9,15 @@ import java.util.Objects;
 
 /** Read-only handoff composition. Owners prove current surfaces; this coordinator never writes them. */
 final class FrontierV3HotHandoff {
-    enum Status { READY, WAITING, CONFLICT }
+    enum Status { READY, WAITING, CONFLICT, PRESENTABLE_PENDING }
     record Check(SubjectId owner, Status status, String reason) {
         Check { Objects.requireNonNull(owner); Objects.requireNonNull(status); Objects.requireNonNull(reason); }
     }
     record Review(long revision, List<Check> checks) {
         Review { checks = List.copyOf(checks); }
         boolean ready() { return checks.stream().allMatch(check -> check.status() == Status.READY); }
-        // A classified conflict must remain visible for inspection/repair, but cannot grant HOT authority.
+        // Owners may expose an existing exact native surface during recovery.
+        // Neither a classified conflict nor visible pending work grants HOT authority.
         boolean presentable() { return checks.stream().noneMatch(check -> check.status() == Status.WAITING); }
     }
     interface Participant {

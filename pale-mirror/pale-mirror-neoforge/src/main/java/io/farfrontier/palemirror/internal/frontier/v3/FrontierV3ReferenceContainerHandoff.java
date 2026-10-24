@@ -30,12 +30,18 @@ final class FrontierV3ReferenceContainerHandoff {
                 checks.add(new FrontierV3HotHandoff.Check(surface.containerId(), CONFLICT, "container_custody_conflict"));
                 continue;
             }
+            var physical = FrontierV3PhysicalContainer.inspect(level, state, surface.containerId()).orElse(null);
             if (FrontierV3ContainerEffectFence.pending(level, state, surface.containerId())) {
-                checks.add(new FrontierV3HotHandoff.Check(surface.containerId(), WAITING, "container_effect_recovery"));
+                // A pending stock transaction does not make an already declared
+                // native chest invisible. Keep its execution fence, while allowing
+                // this chunk and adjacent renderer sections to reach the player.
+                boolean visible = physical != null && physical.declared()
+                        && physical.provenance().equals(ReferenceContainerCustody.provenance(surface.containerId()));
+                checks.add(new FrontierV3HotHandoff.Check(surface.containerId(),
+                        visible ? PRESENTABLE_PENDING : WAITING, "container_effect_recovery"));
                 continue;
             }
             var block = new BlockPos(pos.x(), pos.y(), pos.z());
-            var physical = FrontierV3PhysicalContainer.inspect(level, state, surface.containerId()).orElse(null);
             if (physical != null) {
                 var observed = FrontierV3ReferenceContainerCustodyExecutor.observedContainer(state, surface.containerId(), physical);
                 if (observed.fingerprint().equals(ReferenceContainerCustody.canonicalFingerprint(state, surface.containerId()))

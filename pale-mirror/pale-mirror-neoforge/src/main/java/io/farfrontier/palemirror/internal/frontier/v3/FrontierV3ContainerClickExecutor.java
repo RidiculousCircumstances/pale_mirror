@@ -37,6 +37,12 @@ final class FrontierV3ContainerClickExecutor {
         try { targets = FrontierV3ContainerMenuTarget.resolveAll(player, menu, state); }
         catch (IllegalArgumentException unavailable) { return Admission.REJECTED; }
         if (targets.isEmpty()) return Admission.NOT_OWNED;
+        for (var target : targets)
+            FrontierV3ReferenceContainerCustodyExecutor.admitInitialInteraction(level, runtime, target.record().id());
+        // The custody owner may have published an exact initial observation. All
+        // click preconditions and return identities use that successor, not the old image.
+        state = runtime.decodedState().orElseThrow();
+        targets = FrontierV3ContainerMenuTarget.resolveAll(player, menu, state);
         // The native boundary has published prior commits. Retire their exact click
         // receipts now, not on a later round-robin executor turn between UI clicks.
         var ledger = FrontierV3DepotClickLedger.get(level);

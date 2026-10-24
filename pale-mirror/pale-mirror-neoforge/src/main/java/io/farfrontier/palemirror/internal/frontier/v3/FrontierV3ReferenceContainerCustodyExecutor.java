@@ -176,6 +176,24 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
         if (!eligible.isEmpty()) reconcile(level, runtime, state, eligible.getFirst());
     }
 
+    /** A real player interaction addresses this exact loaded provider. Complete
+     * initial declaration -> observation -> acquisition through the existing owner,
+     * rather than requiring UI retries during a global discovery revolution.
+     * No projection, release or ambiguous recovery is accelerated here. */
+    static void admitInitialInteraction(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            SubjectId containerId) {
+        for (int phase = 0; phase < 3; phase++) {
+            var before = runtime.canonicalState().orElseThrow(); var state = before.state();
+            if (state.replicaCustody().custodyByScope().containsKey(ReferenceContainerCustody.scopeId(containerId))) return;
+            var surface = state.inventory().surfaces().get(containerId);
+            if (surface == null || surface.status() != ContainerSurfaceStatus.ACTIVE
+                    || FrontierV3ContainerEffectFence.pending(level, state, containerId)) return;
+            reconcile(level, runtime, state, surface);
+            runtime.settleNativeBoundary();
+            if (runtime.canonicalState().orElseThrow().revision().equals(before.revision())) return;
+        }
+    }
+
     static void reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                                   FrontierWorldState state, ContainerSurface surface) {
         SubjectId containerId = surface.containerId();

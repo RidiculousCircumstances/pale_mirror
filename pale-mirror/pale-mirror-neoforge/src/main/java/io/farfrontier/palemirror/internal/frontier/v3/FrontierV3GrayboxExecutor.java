@@ -61,13 +61,13 @@ final class FrontierV3GrayboxExecutor {
     enum ProjectionResult { APPLIED, CURRENT, CONFLICT, DEFERRED, YIELDED }
     enum BlockBreakObservation { UNMANAGED, ACCEPTED, REJECTED }
     enum FirstVisibility {
-        PENDING, STATIC_CURRENT, READY, BLOCKED, PRESENTABLE_CONFLICT;
+        PENDING, STATIC_CURRENT, READY, BLOCKED, PRESENTABLE_CONFLICT, PRESENTABLE_PENDING;
 
         /** A loaded image is admitted once; later operations cannot hide its terrain. */
         boolean presentable() {
             return switch (this) {
                 case PENDING, STATIC_CURRENT -> false;
-                case READY, BLOCKED, PRESENTABLE_CONFLICT -> true; // Visibility is not execution authority.
+                case READY, BLOCKED, PRESENTABLE_CONFLICT, PRESENTABLE_PENDING -> true; // Visibility is not execution authority.
             };
         }
     }
@@ -235,7 +235,7 @@ final class FrontierV3GrayboxExecutor {
         if (naturalFirstVisibilityCandidate(cursor, chunk)) retainFirstVisibility(runtime, chunk, false);
         FirstVisibilityRecord record = FIRST_VISIBILITY.getOrDefault(runtime, Map.of()).get(chunk);
         if (record != null && record.status() == FirstVisibility.PENDING) firstVisibilityQueue(runtime, true).add(chunk);
-        if (record != null && (record.status() == FirstVisibility.READY || record.status() == FirstVisibility.PRESENTABLE_CONFLICT)) {
+        if (record != null && (record.status() == FirstVisibility.READY || record.status() == FirstVisibility.PRESENTABLE_CONFLICT || record.status() == FirstVisibility.PRESENTABLE_PENDING)) {
             FIRST_VISIBILITY.get(runtime).put(chunk, new FirstVisibilityRecord(
                     FirstVisibility.STATIC_CURRENT, record.revision(), record.cells()));
             DYNAMIC_CATCH_UP.computeIfAbsent(runtime, ignored -> new java.util.LinkedHashSet<>()).add(chunk);
@@ -456,7 +456,7 @@ final class FrontierV3GrayboxExecutor {
         while (attempts-- > 0 && budget.takeRead() && (chunk = pollVisibility(pending, origins, attempts % 2 == 0)) != null) {
             FirstVisibilityRecord record = records.get(chunk);
             if (record != null && (record.status() == FirstVisibility.STATIC_CURRENT
-                    || record.status() == FirstVisibility.PRESENTABLE_CONFLICT)) {
+                    || record.status() == FirstVisibility.PRESENTABLE_CONFLICT || record.status() == FirstVisibility.PRESENTABLE_PENDING)) {
                 if (level.getChunkSource().getChunkNow(chunk.x, chunk.z) == null) {
                     deferred.add(chunk);
                     continue;
@@ -465,7 +465,8 @@ final class FrontierV3GrayboxExecutor {
                 if (review.ready()) records.replace(chunk, record, new FirstVisibilityRecord(FirstVisibility.READY, revision, record.cells()));
                 else {
                     if (review.presentable()) records.replace(chunk, record,
-                            new FirstVisibilityRecord(FirstVisibility.PRESENTABLE_CONFLICT, revision, record.cells()));
+                            new FirstVisibilityRecord(review.checks().stream().anyMatch(check -> check.status() == FrontierV3HotHandoff.Status.CONFLICT)
+                                    ? FirstVisibility.PRESENTABLE_CONFLICT : FirstVisibility.PRESENTABLE_PENDING, revision, record.cells()));
                     deferred.add(chunk);
                 }
             }
@@ -479,7 +480,7 @@ final class FrontierV3GrayboxExecutor {
     static boolean staticVisibilityComplete(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos chunk) {
         FirstVisibilityRecord visibility = FIRST_VISIBILITY.getOrDefault(runtime, Map.of()).get(chunk);
         return visibility == null || visibility.status() == FirstVisibility.STATIC_CURRENT || visibility.status() == FirstVisibility.READY
-                || visibility.status() == FirstVisibility.PRESENTABLE_CONFLICT;
+                || visibility.status() == FirstVisibility.PRESENTABLE_CONFLICT || visibility.status() == FirstVisibility.PRESENTABLE_PENDING;
     }
     static boolean presentationReady(FrontierV3ServerRuntime<?, ?> runtime, ChunkPos chunk) {
         var visibility = FIRST_VISIBILITY.getOrDefault(runtime, Map.of()).get(chunk);

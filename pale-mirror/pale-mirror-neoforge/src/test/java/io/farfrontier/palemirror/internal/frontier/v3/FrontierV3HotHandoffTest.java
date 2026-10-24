@@ -11,6 +11,11 @@ class FrontierV3HotHandoffTest {
                 new SubjectId("container:7-depot"), FrontierV3HotHandoff.Status.WAITING, "container_effect_recovery")));
         assertTrue(FrontierV3GrayboxExecutor.FirstVisibility.READY.presentable());
         assertFalse(waiting.ready(), "terrain admission does not grant a new physical interaction");
+        var visiblePending = new FrontierV3HotHandoff.Review(31L, List.of(new FrontierV3HotHandoff.Check(
+                new SubjectId("container:7-depot"), FrontierV3HotHandoff.Status.PRESENTABLE_PENDING, "container_effect_recovery")));
+        assertTrue(visiblePending.presentable());
+        assertFalse(visiblePending.ready(), "an owner's visible predecessor cannot authorize another effect");
+        assertTrue(FrontierV3GrayboxExecutor.FirstVisibility.PRESENTABLE_PENDING.presentable());
         assertFalse(FrontierV3GrayboxExecutor.FirstVisibility.STATIC_CURRENT.presentable(),
                 "a new native load still needs initial dynamic reconciliation");
         assertFalse(FrontierV3GrayboxExecutor.FirstVisibility.PENDING.presentable());
