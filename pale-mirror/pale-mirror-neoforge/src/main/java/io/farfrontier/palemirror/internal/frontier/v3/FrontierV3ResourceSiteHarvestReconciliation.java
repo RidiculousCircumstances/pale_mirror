@@ -41,7 +41,9 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
             var reviewed = FrontierV3ActorHandObservation.classify(job.workerId(), member.entityId(),
                     hand.is(Items.WHEAT) ? "minecraft:wheat" : "", hand.getCount(),
                     ItemStack.isSameItemSameComponents(hand, new ItemStack(Items.WHEAT, hand.getCount())));
-            if (reviewed.disposition() != FrontierV3ActorHandObservation.Disposition.WHEAT) continue;
+            if (reviewed.disposition() != FrontierV3ActorHandObservation.Disposition.WHEAT) {
+                FrontierV3PhysicalWaitTrace.reconciliation(worker, lease, "hand:" + reviewed.disposition()); continue;
+            }
             boolean unbound = state.inventory().fungibleResources().bindings().values().stream()
                     .noneMatch(binding -> binding.accountId().equals(job.actorAccountId()));
             boolean firstApplied = job.progress().hasPendingCrop() && ResourceSiteHarvestCargo.quantity(state, job) == 0
@@ -49,7 +51,9 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
             if (unbound && !firstApplied && (job.progress().hasPendingCrop()
                     || FrontierV3ResourceSiteLedger.get(level).fieldDelivery(job.siteId()) != null
                     || FrontierV3ResourceSiteLedger.get(level).fieldHandProjection(job.siteId()) != null
-                    || !FrontierV3ActorCarryProjection.witnessed(state, job.workerId(), job.actorAccountId(), worker))) continue;
+                    || !FrontierV3ActorCarryProjection.witnessed(state, job.workerId(), job.actorAccountId(), worker))) {
+                FrontierV3PhysicalWaitTrace.reconciliation(worker, lease, "unbound-hand-without-settled-projection"); continue;
+            }
             // Common body inspection has already committed current physical permission/pose.
             // This family receipt only resumes the inspected process and exact carried batch.
             var recoveryEpoch = recoveryEpoch(state, lease);
@@ -130,7 +134,9 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
         var claim = ledger.fieldClaim(job.siteId());
         if (!(claim instanceof FrontierV3ResourceSiteLedger.FieldOwnership owner)
                 || owner.status() != FrontierV3ResourceSiteLedger.Status.ACTIVE
-                || !owner.witness().matchesCycle(cycle)) return false;
+                || !owner.witness().matchesCycle(cycle)) {
+            FrontierV3PhysicalWaitTrace.admission(level, job.workerId(), "harvest-reconciliation:field-ownership"); return false;
+        }
         for (var cell : cycle.layout().cells()) {
             var retained = owner.witness().cell(cell.id());
             if (job.progress().hasPendingCrop()
@@ -145,8 +151,12 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
             if (retained.pending().isPresent() || retained.foreign().isPresent()
                     || !retained.committed().equals(ResourceFieldPhysicalSurface.Condition.of(cycle.cell(cell.id())))
                     || FrontierV3ResourceFieldObservation.observe(level, cycle, owner.witness(), cell.id(),
-                        "harvest-scene-reconciliation").disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT)
+                        "harvest-scene-reconciliation").disposition() != FrontierV3ResourceFieldObservation.Disposition.CURRENT) {
+                FrontierV3PhysicalWaitTrace.admission(level, job.workerId(), "harvest-reconciliation:cell=" + cell.id()
+                        + ";pending=" + retained.pending().isPresent() + ";foreign=" + retained.foreign().isPresent()
+                        + ";committed=" + retained.committed() + ";canonical=" + ResourceFieldPhysicalSurface.Condition.of(cycle.cell(cell.id())));
                 return false;
+            }
         }
         return true;
     }

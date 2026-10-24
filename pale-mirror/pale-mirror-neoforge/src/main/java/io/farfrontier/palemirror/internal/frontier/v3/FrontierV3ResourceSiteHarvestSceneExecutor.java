@@ -834,6 +834,8 @@ final class FrontierV3ResourceSiteHarvestSceneExecutor {
 
 
     static void conflict(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, SceneLease lease, String reason) {
+        FrontierV3PhysicalWaitTrace.admission(level, lease.members().getFirst().actorId(),
+                "harvest-conflict:" + reason + ";lease=" + lease.id().value() + ";status=" + lease.status());
         FrontierV3DiagnosticTrace.recordScene(level.getServer(), "resource_site_harvest_conflict:" + reason, lease,
                 submit(runtime, "resource-site-harvest-scene-conflict", lease.id().value(),
                         new io.farfrontier.palemirror.frontier.v3.model.SceneLeaseTransition(lease.id(), SceneLeaseStatus.CONFLICT)));
