@@ -41,7 +41,11 @@ abstract class FrontierV3EntitySavePassMixin<T extends EntityAccess> {
 
     @Inject(method = "autoSave", at = @At("RETURN"), require = 1)
     private void frontierV3$endPass(CallbackInfo callback) {
-        if (permanentStorage instanceof FrontierV3EntitySaveBoundary boundary) boundary.frontierV3$completeSavePass(frontierV3$completePass);
+        // A successful chunk already supplies positive exact-write evidence, even
+        // when another chunk still awaits its first native load. Preserve that
+        // former per-chunk admission without treating missing chunks as absence.
+        if (permanentStorage instanceof FrontierV3EntitySaveBoundary boundary)
+            boundary.frontierV3$completeSavePass(frontierV3$storedPass || frontierV3$completePass);
     }
 
     @Inject(method = "saveAll", at = @At("RETURN"), require = 1)

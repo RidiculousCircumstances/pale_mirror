@@ -817,8 +817,9 @@ Native store callers are processUnloads, autoSave and saveAll; no other caller.
 
 R239ac closes publication once at each native pass boundary. Individual native
 writes still retain their journal prerequisites; final unload callbacks are
-captured before proof selection. Partial autosaves retain the incomplete flag;
-ordinary unload batches provide exact positive writes, not world absence.
+captured before proof selection. A successful chunk retains positive exact-write admission even when another
+chunk is pending; a wholly pending pass retains the incomplete flag. Neither
+ordinary unload nor partial autosave batches provide a world absence proof.
 Departure selection now looks up the explicitly saved actor in each receipt
 index and retains exact UUID/owner/epoch/residence/position/health/item matching
 and duplicate-UUID rejection. Journal admission computes the exact modified-UTF
@@ -833,3 +834,13 @@ is NOT acceptance despite Gradle exit0. Correct body-lifetime run is recorded
 separately inbuild/r239ac-native-final.log.
 R239ac native body-lifetime25/25PASS, all dimensions saved and test server exited
 normally(build/r239ac-native-final.log). Full live latency measurement follows.
+
+R239ad static closure review: autoSave may include a visible FRESH/PENDING chunk.
+Coalescing must preserve earlier positive per-chunk admission for other successful
+writes; otherwise a saved birth could await the next five-minute autosave despite
+valid proof. Its final completion now admits `storedAny || completePass`, exactly
+the old positive boundary once per batch; all-waiting passes still fail closed.
+This is a correction before declaring the latency/lifecycle cut complete.
+R239ad compile/guardrailsPASS(build/r239ad-gates.log). R239ac live before this
+closure: pilotb6f5ece6-cc86-4ad4-9bca-b971391f8f47PASS, completehostmax45.82ms,
+ready37.42ms; prior repeattransition now<=45.82ms. HOTdebt110→0, COLD0–4.
