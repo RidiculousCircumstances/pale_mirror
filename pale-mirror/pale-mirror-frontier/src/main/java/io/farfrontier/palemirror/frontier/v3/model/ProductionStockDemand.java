@@ -44,21 +44,35 @@ public final class ProductionStockDemand {
         // The economic plan owns the incremental production decision. Its caller
         // does not need a second legacy reserve calculation whose result is discarded.
         if (planning.economics().isPresent()) {
-            long production = GoodsParticipantAssessment.production(state, participant, itemKind, atTick);
-            long covered = new StockTargetDemand(0, stock, incoming, outgoing).covered();
-            return new StockTargetDemand(Math.addExact(covered, production), stock, incoming, outgoing);
+            var economic = state.companies().goodsTrade().participants().economicState(settlement);
+            var accepted = economic.accepted();
+            if (completingSubject.isEmpty() && economic.awaitingResources(atTick,
+                    state.bootstrap().ruleset().goodsTrade().supplyPlanning().commodities().keySet()).contains(itemKind))
+                return new StockTargetDemand(0, stock, incoming, outgoing);
+            long target = accepted.map(plan -> Objects.requireNonNull(plan.productionCeilings().get(itemKind),
+                    "undeclared accepted production item")).orElse(0L);
+            return new StockTargetDemand(target, stock, incoming, outgoing);
         }
         long target = SettlementReservePlanning.enabled(state) ? SettlementReservePlanning.read(state, settlement, atTick).get(itemKind).quantity()
                 : StockTargetDemand.target(commodity, LivingResidentStockView.counts(state).getOrDefault(settlement, 0),
                     PublicStockProtection.minimum(state, settlement, itemKind, atTick));
         if (planning.enabled()) {
-            var plan = GoodsParticipantAssessment.view(state, participant, atTick).supplyPlan().orElseThrow();
-            var demand = plan.require(itemKind);
+            var published = GoodsParticipantAssessment.view(state, participant, atTick).supplyPlan();
+            if (published.isEmpty()) return new StockTargetDemand(0, stock, incoming, outgoing);
+            var demand = published.orElseThrow().require(itemKind);
             // Existing export demand remains in outgoing. Replenishment advice alone
             // must not restart production for every one-item drop above the lower mark.
             if (demand.production() == 0 && demand.purchase() == 0) target = Math.min(target, Math.addExact(stock, incoming));
         }
         return new StockTargetDemand(target, stock, incoming, outgoing);
+    }
+    public static long coverage(FrontierWorldState state, SubjectId owner, String item) {
+        long incoming = 0, outgoing = 0;
+        for (var commitment : StockSupplyComposition.pending(state)) {
+            if (!commitment.economicOwner().equals(owner) || !commitment.itemKind().equals(item)) continue;
+            incoming = Math.addExact(incoming, commitment.incoming()); outgoing = Math.addExact(outgoing, commitment.outgoing());
+        }
+        return new StockTargetDemand(0, held(state.inventory()).getOrDefault(new Resource(owner, item), 0L), incoming, outgoing).covered();
     }
     private static Map<Resource, Long> held(ExactInventory inventory) {
         return STOCK.get(List.of(inventory), () -> {

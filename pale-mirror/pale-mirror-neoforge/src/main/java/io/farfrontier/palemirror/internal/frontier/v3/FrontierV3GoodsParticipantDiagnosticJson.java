@@ -83,6 +83,7 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                     .map(id -> string(id.value())).collect(Collectors.joining(",")) + "]"
                 + ",\"reviewRevision\":" + participant.reviewRevision() + ",\"reviewedAtTick\":" + participant.reviewedAtTick()
                 + ",\"assessedAtTick\":" + assessment.atTick()
+                + ",\"economicPublication\":" + publication(state, participant, checkpoint.instant().ticks(), view)
                 + ",\"financialReport\":" + FrontierV3FinancialDiagnosticJson.render(
                         FinancialAccountReport.read(state.inventory().economics(), participant.party().id()))
                 + ",\"decision\":" + string(participant.decision()) + ",\"currentPolicy\":" + string(GoodsParticipantPolicies.require(participant)
@@ -108,6 +109,24 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                 new FrontierV3DiagnosticDetailBudget.Section("knownCounterparties", "[" + known + "]"),
                 new FrontierV3DiagnosticDetailBudget.Section("orders", "[" + orders + "]"),
                 new FrontierV3DiagnosticDetailBudget.Section("contracts", "[" + contracts + "]")));
+    }
+    private static String publication(FrontierWorldState state, GoodsParticipant participant, long now, GoodsParticipantView view) {
+        var lifecycle = state.companies().goodsTrade().participants().economicState(participant.party().id());
+        var accepted = lifecycle.accepted();
+        String reasons = lifecycle.affected().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
+                .map(entry -> "{\"reason\":" + string(entry.getKey().name()) + ",\"scope\":"
+                        + string(entry.getValue().isEmpty() ? "PARTICIPANT" : "RESOURCES") + ",\"resources\":["
+                        + entry.getValue().stream().sorted().map(FrontierV3GoodsParticipantDiagnosticJson::string).collect(Collectors.joining(",")) + "]}")
+                .collect(Collectors.joining(","));
+        return "{\"status\":" + string(lifecycle.status(now).name()) + ",\"inputRevision\":" + lifecycle.inputRevision()
+                + ",\"planRevision\":" + accepted.map(value -> Long.toString(value.revision())).orElse("null")
+                + ",\"acceptedInputRevision\":" + accepted.map(value -> Long.toString(value.inputRevision())).orElse("null")
+                + ",\"reviewAtTick\":" + accepted.map(value -> Long.toString(value.reviewAtTick())).orElse("null")
+                + ",\"unpublishedPeerPlans\":[" + accepted.stream().flatMap(plan -> plan.buyerVersions().entrySet().stream())
+                    .filter(entry -> entry.getValue() == 0).map(entry -> entry.getKey().value()).sorted()
+                    .map(FrontierV3GoodsParticipantDiagnosticJson::string).collect(Collectors.joining(",")) + "]"
+                + ",\"reasons\":[" + reasons + "],\"awaitingTrade\":[" + view.awaitingReview().stream().sorted()
+                    .map(FrontierV3GoodsParticipantDiagnosticJson::string).collect(Collectors.joining(",")) + "]}";
     }
     private static String string(String value) { return "\"" + FrontierV3DiagnosticJson.quote(value) + "\""; }
     private FrontierV3GoodsParticipantDiagnosticJson() { }

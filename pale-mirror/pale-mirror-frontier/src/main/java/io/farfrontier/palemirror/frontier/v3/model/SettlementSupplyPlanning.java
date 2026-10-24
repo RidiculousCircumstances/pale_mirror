@@ -39,6 +39,9 @@ public final class SettlementSupplyPlanning {
         var basis = SettlementReservePlanning.basis(state, home, atTick);
         var reserves = SettlementReservePlanning.enabled(state) ? SettlementReservePlanning.targets(state, basis)
                 : Map.<String, io.farfrontier.palemirror.frontier.v3.model.supply.SupplyReservePlanner.Target>of();
+        var retainedProtection = SettlementReservePlanning.enabled(state)
+                ? SettlementReservePlanning.retainedTargets(state, home)
+                : Map.<String, io.farfrontier.palemirror.frontier.v3.model.supply.SupplyReservePlanner.Target>of();
         long metabolism = state.humanPopulation().residents().values().stream()
                 .filter(r -> r.settlementId().equals(home) && state.actorLocations().get(r.id()).condition().status() == ActorLifeStatus.ALIVE)
                 .mapToLong(r -> r.characteristics().effectiveMetabolismPermille(atTick)).sum();
@@ -53,7 +56,8 @@ public final class SettlementSupplyPlanning {
             long period = meal == null ? 1 : Math.multiplyExact(Math.multiplyExact(life.satietyUnitTicks(), 1000L), meal.usefulNutrition());
             var reserve = reserves.get(commodity.itemKind());
             facts.put(commodity.itemKind(), new SupplyPlanner.Stock(stock.unclaimedInStorage(), stock.expectedIncoming(), promised,
-                    reserve == null ? StockTargetDemand.target(commodity, residents, stock.protectedMinimum()) : reserve.quantity(), stock.protectedMinimum(),
+                    reserve == null ? StockTargetDemand.target(commodity, residents, stock.protectedMinimum()) : reserve.quantity(), retainedProtection.containsKey(commodity.itemKind())
+                            ? retainedProtection.get(commodity.itemKind()).protectedQuantity() : stock.protectedMinimum(),
                     meal == null ? 0 : Math.multiplyExact(metabolism, meal.items()), period, trade.supplyPlanning().require(commodity.itemKind()),
                     deliveries.getOrDefault(commodity.itemKind(), List.of()),
                     reserve == null ? OptionalLong.empty() : OptionalLong.of(reserve.reorderPoint())));

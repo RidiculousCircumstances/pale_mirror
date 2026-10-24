@@ -56,6 +56,7 @@ class ResourceSiteColdHarvestReceiptTest {
             state = ResourceSiteProcess.reduceGrowth(state, site, new ResourceSiteGrowthAdvanced(site, cycle.growthEpoch(), cycle.growthStage()));
         }
         assertEquals(76, FieldAgronomy.expectedYield(bootstrap, state.resourceSites().cycle(site)));
+        state = io.farfrontier.palemirror.frontier.v3.process.AcceptedEconomyFixture.publish(state, owner, 5000);
         long before = state.inventory().fungibleResources().totalQuantity(owner, FieldHarvestExtraction.ITEM);
         var opportunity = StrategicObjectiveProcess.planResourceHarvestOpportunity(state,
                 StrategicObjectiveProcess.resourceHarvestOpportunity(state, state.resourceSites().site(site), 5000));

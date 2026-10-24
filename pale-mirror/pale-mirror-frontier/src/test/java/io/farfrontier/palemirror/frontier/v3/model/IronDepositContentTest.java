@@ -60,6 +60,7 @@ class IronDepositContentTest {
         var deposits = new HashMap<>(sites.deposits()); deposits.put(changed.site().id(), changed);
         state = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(new ExtractionSiteState(deposits,
                 sites.work(), sites.nextWorkOrdinal(), sites.geologicalExclusions(), sites.geology(), sites.knowledge())));
+        state = io.farfrontier.palemirror.frontier.v3.process.AcceptedEconomyFixture.publish(state, changed.site().settlementId(), 0);
         assertFalse(ProductionStockDemand.read(state, changed.site().settlementId(), "minecraft:raw_iron", 0).requested());
         assertTrue(ExtractionStockDemand.requiredCells(state, changed, Optional.empty(), 0).contains(upper.id()));
         assertTrue(ExtractionPriorities.read(state, changed, Optional.empty(), 0).require(upper.id()).missing() > 0);

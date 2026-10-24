@@ -18,6 +18,7 @@ class DistributedExtractionGeologyTest {
                 && !deposit.site().layout().outputKinds().contains("minecraft:coal")).toList();
         assertEquals(6, secondary.size());
         for (var deposit : secondary) {
+            state = io.farfrontier.palemirror.frontier.v3.process.AcceptedEconomyFixture.publish(state, deposit.site().settlementId(), 0);
             assertFalse(ProductionStockDemand.read(state, deposit.site().settlementId(), "minecraft:cobblestone", 0L).requested());
             assertTrue(ExtractionStockDemand.requested(state, deposit, Optional.empty(), 0L));
             var extension = ExtractionAreaPlanning.proposal(state, deposit.site().id(), 0L).orElseThrow();

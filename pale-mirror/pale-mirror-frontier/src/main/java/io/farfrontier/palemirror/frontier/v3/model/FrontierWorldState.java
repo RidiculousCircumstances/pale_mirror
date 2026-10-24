@@ -642,19 +642,21 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
                             Map<PhysicalIntentId, PhysicalIntent> intents, Map<PhysicalObservationId, PhysicalEffectObservation> observations,
                             Map<SceneLeaseId, SceneLease> leases, HiveColony colony, Map<SubjectId, StructureDamage> damage,
                             Map<BlockPosition, PhysicalDelta> deltas, Map<SubjectId, AmbientActorLease> ambient) {
-        return new FrontierWorldState(bootstrap, actors, structures, nextInfection, nextInventory, jobs, serviceWorks, intents, observations, leases, colony, damage, deltas, ambient, routeConstructions, routeMaintenances,
+        var result = new FrontierWorldState(bootstrap, actors, structures, nextInfection, nextInventory, jobs, serviceWorks, intents, observations, leases, colony, damage, deltas, ambient, routeConstructions, routeMaintenances,
                 routeTopology, strategicPlans, humanPopulation, companies, resourceSites, replicaCustody, deferredAftermath,
                 fencedRecovery, diagnosticIncidents, actorMovements, actorExecutions, shipments, unitGroups, transportFleet, extractionSites, productionStations, navigationGeometry);
+        return SettlementEconomicInputChanges.retain(this, result);
     }
     public FrontierWorldState withChanges(FrontierWorldStateUpdate change) {
         change = Objects.requireNonNull(change, "state change");
-        return new FrontierWorldState(bootstrap, change.actorLocations(this), change.structureConditions(this), change.infection(this),
+        var next = new FrontierWorldState(bootstrap, change.actorLocations(this), change.structureConditions(this), change.infection(this),
                 change.inventory(this), change.productionJobs(this), change.serviceWorks(this),
                 change.physicalIntents(this), change.physicalObservations(this), change.sceneLeases(this), change.hiveColony(this),
                 change.structureDamage(this), change.physicalDeltas(this), change.ambientLeases(this), change.routeConstructions(this), change.routeMaintenances(this),
                 change.routeTopology(this), change.strategicPlans(this), change.humanPopulation(this), change.companies(this), change.resourceSites(this), change.replicaCustody(this), change.deferredAftermath(this),
                         change.fencedRecovery(this), change.diagnosticIncidents(this), change.actorMovements(this), change.actorExecutions(this),
                         change.shipments(this), change.unitGroups(this), change.transportFleet(this), change.extractionSites(this), change.productionStations(this), change.navigationGeometry(this));
+        return SettlementEconomicInputChanges.retain(this, next);
     }
     public FrontierWorldState withRouteTopology(RouteTopology nextTopology) { return withChanges(FrontierWorldStateUpdate.begin().routeTopology(nextTopology)); }
     public FrontierWorldState withStrategicPlans(StrategicPlanState nextPlans) { return withChanges(FrontierWorldStateUpdate.begin().strategicPlans(nextPlans)); }

@@ -20,7 +20,7 @@ class GoodsMarketPolicyTest {
         var event = new GoodsParticipantPricesReviewed(participant.reviewRevision(), 0, prices);
         state = GoodsParticipantPricing.applyCommitted(state, participant.party().id(), event, 0);
         participant = state.companies().goodsTrade().participants().participants().get(participant.party().id());
-        var quote = GoodsParticipantPricing.review(state, participant, 2400).get("minecraft:coal");
+        var quote = GoodsParticipantPricing.review(state, participant, 2400, SettlementEconomicEvaluation.domestic(state, participant, 2400)).get("minecraft:coal");
         assertTrue(quote.ask().raw() >= 1_000_000, "declared extraction labour must reach the price policy");
         assertTrue(state.companies().goodsTrade().contracts().isEmpty());
         assertTrue(state.companies().goodsTrade().priceHistory().commodities().isEmpty());
@@ -29,6 +29,7 @@ class GoodsMarketPolicyTest {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:retention"),
                 125L, FrontierRulesets.dynamicFarmingGraybox()));
         var participant = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:5"));
+        state = io.farfrontier.palemirror.frontier.v3.process.AcceptedEconomyFixture.publish(state, participant.party().id(), 2400L);
         var view = GoodsParticipantAssessment.view(state, participant, 2400L);
         var supply = view.supplyPlan().orElseThrow(); var old = supply.economy().orElseThrow();
         var saleable = new TreeMap<>(old.saleableStock()); saleable.put("minecraft:bread", 41L);
@@ -51,6 +52,7 @@ class GoodsMarketPolicyTest {
                 125L, FrontierRulesets.dynamicFarmingGraybox()));
         var rules = state.bootstrap().ruleset().goodsTrade();
         var participant = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
+        state = io.farfrontier.palemirror.frontier.v3.process.AcceptedEconomyFixture.publish(state, participant.party().id(), 2400L);
         var original = GoodsParticipantAssessment.view(state, participant, 2400L);
         var zeros = new TreeMap<String, Long>(); var prices = new TreeMap<String, Long>();
         var demands = new TreeMap<String, io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Demand>();
@@ -84,6 +86,7 @@ class GoodsMarketPolicyTest {
         var quote = new GoodsTradeOrder(new SubjectId("order:funded-price-feedback"), buyer.party(), seller.party(),
                 GoodsTradeOrder.Side.BUY, new SubjectId("container:1-depot"), "minecraft:coal", 2, 0, FixedScalar.whole(6), 24000);
         state = GoodsTradeStateSupport.place(state, buyer.party().id(), quote, 0);
+        state = io.farfrontier.palemirror.frontier.v3.process.AcceptedEconomyFixture.publish(state, buyer.party().id(), 2400);
         var market = GoodsMarketDemand.read(state, seller, "minecraft:coal", 8, 2400);
         assertEquals(FixedScalar.whole(6), market.buyers().getFirst().landedLimit());
         assertEquals(2, market.buyers().getFirst().quantity());
@@ -112,6 +115,7 @@ class GoodsMarketPolicyTest {
         // settlement must buy something under every economic policy.
         var state = BakeryPartialBatchTest.fixture(63, FrontierRulesets.marketQuarryGraybox());
         var participant = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
+        state = io.farfrontier.palemirror.frontier.v3.process.AcceptedEconomyFixture.publish(state, participant.party().id(), 2400L);
         var view = GoodsParticipantAssessment.view(state, participant, 2400L);
         var small = new GoodsParticipantView(participant, view.residents(), new FixedScalar(1), view.stocks(), view.purchaseLimits(), view.supplyPlan());
         var intents = GoodsParticipantPolicies.require(participant).decide(small, state.bootstrap().ruleset().goodsTrade());
@@ -176,7 +180,7 @@ class GoodsMarketPolicyTest {
         assertEquals(contract.goodsUnitPrice(), history.reference(contract.itemKind(), 24000).orElseThrow());
         assertEquals(state, new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state)));
     }
-    @Test void ordinaryReviewPersistsCurrentPricesAndRejectsForgedOrRepeatedPolicyEvidence() {
+    @Test void ordinaryReviewPersistsCurrentPricesAndRejectsStaleOrRepeatedEnvelope() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:market-policy"),
                 20260918065L, FrontierRulesets.marketQuarryGraybox()));
         var home = new SubjectId("settlement:1");
@@ -184,15 +188,13 @@ class GoodsMarketPolicyTest {
         var price = events.stream().map(ProposedEvent::payload).filter(GoodsParticipantPricesReviewed.class::isInstance)
                 .map(GoodsParticipantPricesReviewed.class::cast).findFirst().orElseThrow();
         var before = state;
-        assertThrows(IllegalArgumentException.class, () -> GoodsParticipantPricing.apply(before, home,
+        assertThrows(IllegalArgumentException.class, () -> GoodsParticipantPricing.applyCommitted(before, home,
                 new GoodsParticipantPricesReviewed(1, 400, price.prices()), 400));
         var historical = new HashMap<>(price.prices());
         var old = historical.get("minecraft:coal");
         historical.put("minecraft:coal", new io.farfrontier.palemirror.frontier.v3.model.market.MarketPricePolicy.Quote(
                 old.ask().plus(FixedScalar.ONE), old.bid(), old.reference(), old.reviewedAt(), old.surplus(), old.lastSale()));
         var retained = new GoodsParticipantPricesReviewed(0, 400, historical);
-        assertThrows(IllegalArgumentException.class, () -> GoodsParticipantPricing.apply(before, home, retained, 400),
-                "new proposals must still use the current policy");
         assertEquals(historical, GoodsParticipantPricing.applyCommitted(before, home, retained, 400)
                 .companies().goodsTrade().participants().participants().get(home).prices(),
                 "a committed historical decision is not recalculated using a newer strategy");
@@ -200,7 +202,7 @@ class GoodsMarketPolicyTest {
         assertEquals(price.prices(), state.companies().goodsTrade().participants().participants().get(home).prices());
         var recovered = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
         assertEquals(state, recovered);
-        assertThrows(IllegalArgumentException.class, () -> GoodsParticipantPricing.apply(recovered, home, price, 400));
+        assertThrows(IllegalArgumentException.class, () -> GoodsParticipantPricing.applyCommitted(recovered, home, price, 400));
     }
     @Test void withdrawingUnmatchedRemainderCannotChangeReservedGoodsMoneyOrAcceptedTerms() {
         var state = GoodsTradeTest.breadReserved();

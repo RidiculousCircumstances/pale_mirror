@@ -53,6 +53,7 @@ class BuyerCollectionTest {
         state = state.withChanges(FrontierWorldStateUpdate.begin().strategicPlans(state.strategicPlans()
                 .withWorkPermissions(sellerId, new ResidentWorkPermissions(Map.of(ResidentWorkKind.PRODUCTION, Set.of(baker.id()))))));
         long now = engine.checkpoint().instant().ticks();
+        state = AcceptedEconomyFixture.publish(state, sellerId, now);
         assertTrue(TransportPreparationRecovery.needed(state, mission, now));
         var before = state;
         var after = TransportPreparationRecovery.recall(state, mission, now);

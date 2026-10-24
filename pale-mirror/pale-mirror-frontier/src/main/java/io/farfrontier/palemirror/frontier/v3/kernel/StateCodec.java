@@ -5,6 +5,9 @@ package io.farfrontier.palemirror.frontier.v3.kernel;
 public interface StateCodec<S> {
     byte[] encode(S state);
 
+    /** Schema owners may require a complete checkpoint before changing event semantics. */
+    default void validateRecovery(byte[] encoded, boolean hasWalTail) { }
+
     /**
      * Stateful profiles opt into recovery by overriding this operation. Wave 1 encoder-only
      * fixtures remain valid, but a lifecycle must fail closed instead of inventing state when a

@@ -14,13 +14,6 @@ public final class GoodsParticipantPricing {
         var quote = participant.prices().get(commodity.itemKind());
         return quote == null ? commodity.maximumBuyPrice() : quote.bid();
     }
-    public static FrontierWorldState apply(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
-                                           GoodsParticipantPricesReviewed event, long now) {
-        var participant = Objects.requireNonNull(state.companies().goodsTrade().participants().participants().get(subject));
-        if (!event.prices().equals(review(state, participant, event.atTick())))
-            throw new IllegalArgumentException("price proposal differs from its authorized participant policy");
-        return applyCommitted(state, subject, event, now);
-    }
     public static FrontierWorldState applyCommitted(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId subject,
                                                     GoodsParticipantPricesReviewed event, long now) {
         var trade = state.companies().goodsTrade();
@@ -37,7 +30,8 @@ public final class GoodsParticipantPricing {
             throw new IllegalArgumentException("price review has a foreign catalog or time boundary");
         return state.withCompanies(state.companies().withGoodsTrade(trade.withParticipants(trade.participants().prices(subject, event))));
     }
-    public static Map<String, MarketPricePolicy.Quote> review(FrontierWorldState state, GoodsParticipant participant, long now) {
+    public static Map<String, MarketPricePolicy.Quote> review(FrontierWorldState state, GoodsParticipant participant, long now,
+            GoodsParticipantAssessment.Assessment assessment) {
         var rules = state.bootstrap().ruleset().goodsTrade();
         if (!rules.pricing().enabled()) return participant.prices();
         var catalog = rules.policies().get(participant.policy());
@@ -45,7 +39,6 @@ public final class GoodsParticipantPricing {
                 .collect(java.util.stream.Collectors.toUnmodifiableSet()))
                 && participant.prices().values().stream().allMatch(quote -> now >= quote.reviewedAt()
                     && now - quote.reviewedAt() < rules.pricing().reviewTicks())) return participant.prices();
-        var assessment = GoodsParticipantAssessment.domestic(state, participant, now);
         var view = assessment.view();
         var history = state.companies().goodsTrade().priceHistory();
         var next = new TreeMap<String, MarketPricePolicy.Quote>();

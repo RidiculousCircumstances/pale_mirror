@@ -84,6 +84,9 @@ final class FrontierWorldConfigurationFactory {
                                                                  FrontierWorldState next, FrontierEvent event) {
                 return FrontierWorldRuntimeDefinition.wakeKeys(previous, next, event);
             }
+            @Override public List<ScheduledAction> reconsideredBy(FrontierWorldState previous, FrontierWorldState next, SimInstant instant) {
+                return io.farfrontier.palemirror.frontier.v3.process.SettlementEconomicReviewRequests.changed(previous, next, instant.ticks());
+            }
             @Override public List<ScheduledAction> retiredBy(FrontierWorldState previous, FrontierWorldState next,
                                                                FrontierEvent event, Supplier<List<ScheduledAction>> pending) {
                 return FrontierWorldRuntimeDefinition.retiredSchedules(previous, next, event, pending);

@@ -14,6 +14,10 @@ class FrontierV3GoodsParticipantDiagnosticJsonTest {
                 20260918065L, FrontierRulesets.marketQuarryGraybox()));
         var checkpoint = new CheckpointImage(state.bootstrap().worldId(), new Revision(0), new SimInstant(0), new byte[]{1}, List.of(), List.of());
         var participant = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:6"));
+        var awaiting = JsonParser.parseString(FrontierV3GoodsParticipantDiagnosticJson.render(checkpoint, state, participant)).getAsJsonObject();
+        assertEquals("AWAITING_PLAN", awaiting.getAsJsonObject("economicPublication").get("status").getAsString());
+        assertTrue(awaiting.getAsJsonArray("reserves").isEmpty(), "diagnostics cannot manufacture an unpublished plan");
+        state = io.farfrontier.palemirror.frontier.v3.process.AcceptedEconomyFixture.publish(state, participant.party().id(), 0);
         String rendered = FrontierV3GoodsParticipantDiagnosticJson.render(checkpoint, state, participant);
         var parsed = JsonParser.parseString(rendered).getAsJsonObject();
         assertEquals("ok", parsed.get("status").getAsString());

@@ -6,7 +6,9 @@ import java.util.*;
  * its deadline (including selected local production); logistics supplies its
  * conservative journey forecast. Deferral is not a promise of future stock. */
 public final class TripDispatchPolicy {
-    public enum Cause { ECONOMIC_LOT, SUPPLY_DEADLINE, ACCUMULATING }
+    public enum Cause { ECONOMIC_LOT, SUPPLY_DEADLINE, ACCUMULATING, AWAITING_ECONOMIC_PLAN;
+        public boolean permitsDeparture() { return this == ECONOMIC_LOT || this == SUPPLY_DEADLINE; }
+    }
     public record Goods(int quantity, long plannedLot, SupplyPlanner.Demand demand, boolean uncoveredNeed) {
         public Goods { Objects.requireNonNull(demand);
             if (quantity < 1 || plannedLot < 0) throw new IllegalArgumentException("invalid trip demand"); }

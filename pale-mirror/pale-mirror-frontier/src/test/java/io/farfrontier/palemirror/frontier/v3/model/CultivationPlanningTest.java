@@ -26,6 +26,7 @@ class CultivationPlanningTest {
     }
     @Test void economicReviewAdmitsBoundedLandWithoutGrowingPlantsOrAwardingStockAndSurvivesRecovery() {
         var state = prepared(); var home = new SubjectId("settlement:7");
+        state = AcceptedEconomyFixture.publish(state, home, 5000);
         var initialSites = state.resourceSites();
         var beforeInventory = state.inventory();
         var plan = CultivationPlanning.read(state, home, 5000);

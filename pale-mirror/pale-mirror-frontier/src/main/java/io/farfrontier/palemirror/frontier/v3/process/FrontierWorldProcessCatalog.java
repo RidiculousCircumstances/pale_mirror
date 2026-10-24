@@ -287,7 +287,7 @@ public final class FrontierWorldProcessCatalog {
             })),
             Map.entry(GoodsTradeReceiptProcess.REVIEW, atExecutionTime(GoodsTradeReceiptProcess::plan)),
             Map.entry(InternalShipmentReceipts.RECEIVE, atExecutionTime(InternalShipmentReceipts::receive)),
-            Map.entry(GoodsParticipantProcess.REVIEW, policyReview(withPlanningRecovery(GoodsParticipantProcess.planner()), GoodsParticipantProcess::reviewWorkUnits)),
+            Map.entry(GoodsParticipantProcess.REVIEW, coalescedReview(withPlanningRecovery(GoodsParticipantProcess.planner()), GoodsParticipantProcess::reviewWorkUnits)),
             Map.entry(GoodsParticipantWakeup.OPPORTUNITY, coalescedReview(withPlanningRecovery(GoodsParticipantProcess.planner()), GoodsParticipantProcess::reviewWorkUnits)),
             Map.entry(ShipmentProcess.PROGRESS, withPlanningRecovery(new FrontierScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
@@ -494,7 +494,7 @@ public final class FrontierWorldProcessCatalog {
                     cadence.populationBirthInitialReviewTick() + index * cadence.settlementInitialStagger()));
         }
         for (Settlement settlement : bootstrap.settlements()) {
-            actions.add(GoodsParticipantProcess.review(settlement.id(), bootstrap.ruleset().goodsTrade().reviewInterval()));
+            actions.add(GoodsParticipantProcess.review(settlement.id(), bootstrap.ruleset().goodsTrade().supplyPlanning().enabled() ? 1 : bootstrap.ruleset().goodsTrade().reviewInterval()));
             for (Resident resident : settlement.residents()) {
                 int metabolism = ResidentCharacteristics.initial(bootstrap.ruleset().residentLife(),
                         resident.id()).effectiveMetabolismPermille(0L);

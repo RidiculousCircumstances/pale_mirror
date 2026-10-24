@@ -50,6 +50,7 @@ public final class DiagnosticProducerContract {
             diagnostic("frontier.physical_intent_transition", DiagnosticReason.PHYSICAL_CUSTODY_UNRESOLVED, Admission.OWNER_STAMPS_TRANSITION));
 
     private static final Set<String> ORDINARY = Set.of(
+        "frontier.settlement_economic_plan_published",
         "frontier.physical_inventory_transfers_observed",
         "frontier.cultivation_reviewed",
         "frontier.production_station_fuel_changed",

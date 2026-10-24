@@ -20,6 +20,7 @@ public final class GoodsParticipantPolicies {
     /** Both initial policies use target stock; their independently configured catalogs determine their decisions. */
     private record StockTargetPolicy(GoodsPolicyKind kind) implements GoodsParticipantPolicy {
         @Override public String explain(GoodsParticipantView view, GoodsTradeRules rules) {
+            if (kind == GoodsPolicyKind.PUBLIC_SETTLEMENT && rules.supplyPlanning().enabled() && view.supplyPlan().isEmpty()) return "AWAITING_ECONOMIC_PLAN";
             var result = new StringBuilder("moneyRaw=" + view.availableMoney().raw());
             view.supplyPlan().flatMap(plan -> plan.economy()).ifPresent(plan -> result.append("; economyHorizon=")
                     .append(plan.horizonTicks()).append("; liquidityRaw=").append(plan.retainedLiquidity())
@@ -46,6 +47,7 @@ public final class GoodsParticipantPolicies {
         }
         @Override public List<Intent> decide(GoodsParticipantView view, GoodsTradeRules rules) {
             if (view.participant().policy() != kind) throw new IllegalArgumentException("wrong participant policy view");
+            if (kind == GoodsPolicyKind.PUBLIC_SETTLEMENT && rules.supplyPlanning().enabled() && view.supplyPlan().isEmpty()) return List.of();
             var result = new ArrayList<Intent>();
             for (var commodity : rules.policies().get(kind)) {
                 var stock = Objects.requireNonNull(view.stocks().get(commodity.itemKind()));

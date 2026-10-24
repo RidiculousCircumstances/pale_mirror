@@ -561,8 +561,8 @@ public final class ProductionProcess {
         FrontierWorldState released = state.cancelProductionJob(job.id());
         ExactInventory inventory = released.inventory().withEconomics(released.inventory().economics().release(reservation.id()));
         StrategicPlanState plans = released.strategicPlans().transitionTask(production.id(), StrategicTaskStatus.BLOCKED);
-        return released.withInventory(inventory).withCompanies(released.companies().withMarket(
-                released.companies().market().cancel(order.id(), MarketWorkOrderStatus.CANCELLED))).withStrategicPlans(plans);
+        return released.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).companies(released.companies().withMarket(
+                released.companies().market().cancel(order.id(), MarketWorkOrderStatus.CANCELLED))).strategicPlans(plans));
     }
 
     public static FrontierWorldState reduceBlocked(FrontierWorldState state, SubjectId subject, ProductionBlocked blocked) {

@@ -8,7 +8,7 @@ import java.util.Set;
 
 /** The registered commercial owner; no concrete producer, carrier or physical actuator. */
 final class GoodsTradeProcessModule implements FrontierWorldProcessModule {
-    static final Set<String> TYPES = Set.of("frontier.goods_order_placed", "frontier.goods_trade_reserved", "frontier.goods_trade_accepted",
+    static final Set<String> TYPES = Set.of("frontier.settlement_economic_plan_published", "frontier.goods_order_placed", "frontier.goods_trade_reserved", "frontier.goods_trade_accepted",
             "frontier.goods_trade_cancelled", "frontier.goods_trade_claim_partitioned", "frontier.goods_trade_retired", "frontier.goods_participant_reviewed",
             "frontier.goods_participant_prices_reviewed", "frontier.goods_order_withdrawn", "frontier.goods_trade_collected");
     static final DeterministicProcessDescriptor DESCRIPTOR = new DeterministicProcessDescriptor(
@@ -20,6 +20,7 @@ final class GoodsTradeProcessModule implements FrontierWorldProcessModule {
         return apply(state, event.subject(), event.instant().ticks(), event.payload());
     }
     private static FrontierWorldState apply(FrontierWorldState state, SubjectId subject, long now, FrontierPayload payload) {
+        if (payload instanceof SettlementEconomicPlanPublished published) return SettlementEconomicPublication.apply(state, subject, published.plan(), now);
         if (payload instanceof GoodsTradeCollected collected) return GoodsTradeCollectionSupport.accept(state, subject, collected, now);
         if (payload instanceof GoodsParticipantPricesReviewed prices) return GoodsParticipantPricing.applyCommitted(state, subject, prices, now);
         if (payload instanceof GoodsTradeOrderWithdrawn withdrawn) return state.withCompanies(state.companies()

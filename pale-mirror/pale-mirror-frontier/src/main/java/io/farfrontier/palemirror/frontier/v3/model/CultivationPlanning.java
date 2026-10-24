@@ -2,7 +2,6 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.agriculture.*;
-import io.farfrontier.palemirror.frontier.v3.model.economy.EconomicRequirements;
 import java.util.*;
 
 /** Economic/land composition. Only the registry accepts its proposal; this owner never writes blocks or assigns workers. */
@@ -27,40 +26,14 @@ public final class CultivationPlanning {
         int area = state.resourceSiteDescriptors().values().stream().filter(field -> field.settlementId().equals(home))
                 .mapToInt(field -> field.layout().cells().size()).sum();
         var land = FieldDevelopmentLand.read(state, home, fields, Math.max(0, rules.maximumCells() - area));
-        var possible = new ArrayList<FieldSupplyCapacity.Cell>();
-        for (var field : fields) for (var cell : field.layout().cells()) {
-            var condition = sites.cycle(field.id()).cell(cell.id());
-            if (!sites.hasPendingCellMutation(field.id(), cell.id())) possible.add(new FieldSupplyCapacity.Cell(cell.crop(), condition, true));
-        }
-        for (var cell : land) possible.add(new FieldSupplyCapacity.Cell(cell.crop(),
-                new ResourceFieldCycle.CellState(cell.condition(), ResourceFieldCycle.Crop.ABSENT, 0, false, false), true));
-        var participant = state.companies().goodsTrade().participants().participants().get(home);
-        var view = GoodsParticipantView.observe(state, participant);
-        var option = SettlementSupplyPlanning.assessCultivation(state, home, view.residents(), view.stocks(), possible, true, atTick);
-        var economy = option.economy().orElseThrow();
-        // Current funded interest may use already developed soil. Only development
-        // of new land needs a sustained signal, not ordinary sowing or production.
-        var existingCells = possible.subList(0, possible.size() - land.size());
-        var current = SettlementSupplyPlanning.assessCultivation(state, home, view.residents(), view.stocks(), existingCells, atTick);
-        long horizon = economy.horizonTicks();
-        var basis = SettlementReservePlanning.basis(state, home, atTick);
-        var reserves = SettlementReservePlanning.read(state, home, atTick);
-        long restart = reserves.get(FieldHarvestExtraction.ITEM).timing().leadTicks();
-        var arrivals = SettlementDeliveryForecast.read(state, participant);
-        var required = new TreeMap<String, Long>(); var covered = new TreeMap<String, Long>();
-        basis.needs().forEach((item, need) -> {
-            required.put(item, Math.addExact(need.immediate(), Math.addExact(need.consumption().over(restart), reserves.get(item).protectedQuantity())));
-            covered.put(item, Math.addExact(view.stocks().get(item).unclaimedInStorage(), arrivals.getOrDefault(item, List.of()).stream()
-                    .filter(arrival -> arrival.afterTicks() <= restart).mapToLong(arrival -> arrival.quantity()).sum()));
-        });
-        long safety = new EconomicRequirements().net(required, covered, basis.flows(), Map.of()).missing().get(FieldHarvestExtraction.ITEM);
-        boolean safe = basis.needs().entrySet().stream().filter(e -> e.getValue().consumption().numerator().signum() > 0
-                        || e.getValue().immediate() > 0).allMatch(e ->
-                io.farfrontier.palemirror.frontier.v3.model.supply.DatedStockCoverage.assess(
-                        view.stocks().get(e.getKey()).unclaimedInStorage(), e.getValue(), reserves.get(e.getKey()).protectedQuantity(),
-                        arrivals.getOrDefault(e.getKey(), List.of()), restart).covered());
-        // A missing non-food input cannot itself justify erasing the restart crop reserve.
-        if (!safe && safety == 0) safety = Math.max(1, reserves.get(FieldHarvestExtraction.ITEM).consumption().over(restart));
+        var accepted = state.companies().goodsTrade().participants().economicState(home);
+        if (accepted.accepted().isEmpty() || accepted.awaitingResources(atTick,
+                state.bootstrap().ruleset().goodsTrade().supplyPlanning().commodities().keySet()).contains(FieldHarvestExtraction.ITEM))
+            return new Plan(sites, List.of());
+        var economic = accepted.accepted().orElseThrow().cultivation().orElse(null);
+        if (economic == null) return new Plan(sites, List.of());
+        long horizon = economic.horizonTicks(), desired = economic.desiredOutput(), safety = economic.safetyOutput();
+        boolean safe = economic.safe();
         var candidates = new ArrayList<CultivationAreaPlanner.Cell>();
         var estimate = new FieldWorkForecast(state, home, FieldWorkForecast.workers(state, home));
         for (var field : fields) {
@@ -76,10 +49,6 @@ public final class CultivationPlanning {
                         cycle.sowing().cells().contains(cell.id()), !planted && cycle.sowing().cells().contains(cell.id())));
             }
         }
-        long existingOutput = candidates.stream().filter(cell -> cell.harvestAfterTicks() <= horizon)
-                .mapToLong(CultivationAreaPlanner.Cell::yield).sum();
-        long desired = Math.max(economy.additionalProduction().get(FieldHarvestExtraction.ITEM), Math.min(existingOutput,
-                current.economy().orElseThrow().additionalProduction().get(FieldHarvestExtraction.ITEM)));
         for (var cell : land) candidates.add(new CultivationAreaPlanner.Cell(cell.crop(), CultivationAreaPlanner.Land.NEW,
                 FieldAgronomy.yield(state.bootstrap(), cell.crop()), estimate.lead(
                         new FieldSupplyCapacity.Cell(cell.crop(), new ResourceFieldCycle.CellState(cell.condition(),

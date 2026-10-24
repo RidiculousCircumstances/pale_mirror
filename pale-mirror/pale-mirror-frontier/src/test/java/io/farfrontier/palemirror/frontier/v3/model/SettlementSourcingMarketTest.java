@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.supply.*;
+import static io.farfrontier.palemirror.frontier.v3.process.AcceptedEconomyFixture.publish;
 import org.junit.jupiter.api.Test;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -62,6 +63,7 @@ class SettlementSourcingMarketTest {
         ledger = ledger.issue(new ResourceLot(lot, home, "minecraft:bread", 20, "test:personal", List.of()),
                 new CustodyAccount(new SubjectId("custody:test-personal-food"), new ResourceCustody.Actor(actor), Map.of(lot, 20), Map.of()));
         state = state.withInventory(state.inventory().withFungibleResources(ledger));
+        state = publish(state, home, 0);
         var participant = state.companies().goodsTrade().participants().participants().get(home);
         var view = GoodsParticipantAssessment.view(state, participant, 0L);
         assertEquals(0, view.stocks().get("minecraft:bread").unclaimedInStorage());
@@ -76,6 +78,7 @@ class SettlementSourcingMarketTest {
     @Test void activeProfileSharesEconomicPlanAcrossProductionFundingProtectionAndRecovery() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:economic-plan-boundaries"),
                 20260918065L, FrontierRulesets.marketQuarryGraybox()));
+        for (var home : state.bootstrap().settlements()) state = publish(state, home.id(), 0);
         var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
         var restored = codec.decode(codec.encode(state));
         assertEquals(state, restored);
@@ -162,29 +165,19 @@ class SettlementSourcingMarketTest {
         assertEquals(state.inventory(), restored.inventory());
     }
 
-    @Test void datedAssessmentReusesDomesticFactsButCannotReuseAnotherInstant() {
+    @Test void publishedAssessmentDoesNotRecalculateAtAnotherReadInstant() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(
                 new WorldId("frontier:dated-assessment"), 125L, FrontierRulesets.marketQuarryGraybox()));
-        var participant = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:6"));
-        assertTrue(GoodsParticipantView.observe(state, participant).supplyPlan().isEmpty(),
-                "observing current stock must not invoke economic decisions");
-        var domestic = GoodsParticipantAssessment.domestic(state, participant, 100L);
+        var home = new SubjectId("settlement:6");
+        var participant = state.companies().goodsTrade().participants().participants().get(home);
+        assertTrue(GoodsParticipantAssessment.read(state, participant, 100).view().supplyPlan().isEmpty());
+        state = publish(state, home, 100);
         var complete = GoodsParticipantAssessment.read(state, participant, 100L);
-        var trading = GoodsParticipantAssessment.trading(state, participant, 100L);
-        var rules = state.bootstrap().ruleset().goodsTrade();
-        assertSame(domestic.view(), trading);
-        assertEquals(GoodsParticipantPolicies.require(participant).decide(complete.view(), rules),
-                GoodsParticipantPolicies.require(participant).decide(trading, rules),
-                "prospective export production must not change consent to trade current stock");
-        for (var item : trading.stocks().keySet())
-            assertEquals(GoodsParticipantFunding.purchase(complete.view(), rules, item),
-                    GoodsParticipantFunding.purchase(trading, rules, item));
-        assertSame(domestic.domestic().orElseThrow(), complete.domestic().orElseThrow());
-        assertSame(domestic.facts().orElseThrow(), complete.facts().orElseThrow());
-        assertSame(complete, GoodsParticipantAssessment.read(state, participant, 100L));
         var later = GoodsParticipantAssessment.read(state, participant, 101L);
-        assertNotSame(complete, later);
-        assertEquals(101L, later.facts().orElseThrow().atTick());
-        assertThrows(IllegalArgumentException.class, () -> GoodsParticipantAssessment.read(state, participant, -1L));
+        assertEquals(100, later.atTick());
+        assertSame(complete.view().supplyPlan().orElseThrow(), later.view().supplyPlan().orElseThrow());
+        assertTrue(later.facts().isEmpty(), "query must not collect a new economic input graph");
+        var current = state;
+        assertThrows(IllegalArgumentException.class, () -> GoodsParticipantAssessment.read(current, participant, -1L));
     }
 }

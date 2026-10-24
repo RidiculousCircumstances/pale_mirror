@@ -133,8 +133,16 @@ class FrontierV3ServerRuntimeTest {
             while (runtime.pendingOrdinaryTicks() > 0) owner.take().run();
             assertEquals(observedTicks, runtime.canonicalState().orElseThrow().instant().ticks());
             var resumed = new java.util.concurrent.atomic.AtomicBoolean();
-            runtime.runEnvironmentalSample(() -> resumed.set(true));
-            assertTrue(resumed.get(), "background samples resume after their predecessor is published");
+            while (!resumed.get()) {
+                runtime.runEnvironmentalSample(() -> resumed.set(true));
+                if (!resumed.get()) {
+                    // Publication may still leave the persistence turn's flush in flight.
+                    // Random samples yield to that gate; the readiness signal opens it.
+                    var ready = owner.poll(2, java.util.concurrent.TimeUnit.SECONDS);
+                    org.junit.jupiter.api.Assertions.assertNotNull(ready, "persistence must signal sample readiness");
+                    ready.run();
+                }
+            }
         } finally { releasePreparation.complete(null); runtime.shutdown(); }
         var recovered = FrontierV3ServerRuntime.start(base, new FrontierFileStore(directory, payloads), 100);
         assertEquals(6, recovered.decodedState().orElseThrow().value());

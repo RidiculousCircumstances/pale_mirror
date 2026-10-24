@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.market.*;
+import static io.farfrontier.palemirror.frontier.v3.process.AcceptedEconomyFixture.publish;
 import org.junit.jupiter.api.Test;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -60,7 +61,7 @@ class GoodsProcurementTransportTest {
                 currentTrade.contracts(), currentTrade.participants(), cheapHistory, currentTrade.demandHistory())));
         assertEquals(price, GoodsResourceValuation.replacement(cheapPast, owner, "minecraft:bread", 100),
                 "a cheap historical receipt cannot replace the cost of a current local capability");
-        var view = GoodsParticipantAssessment.domestic(state, owner, 100).view();
+        var view = SettlementEconomicEvaluation.domestic(state, owner, 100).view();
         var economic = GoodsEconomicPricing.assess(state, view, "minecraft:bread", Map.of("minecraft:bread", FixedScalar.whole(40)),
                 new GoodsProductionPricing.Assessment(Map.of(), Map.of(), List.of()),
                 Optional.of(new AcquisitionQuote(FixedScalar.ONE, FixedScalar.ONE)), 100);

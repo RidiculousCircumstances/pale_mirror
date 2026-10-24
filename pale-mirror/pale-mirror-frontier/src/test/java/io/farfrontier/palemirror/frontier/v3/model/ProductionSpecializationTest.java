@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.extraction.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
+import static io.farfrontier.palemirror.frontier.v3.process.AcceptedEconomyFixture.publish;
 import org.junit.jupiter.api.Test;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -22,8 +23,8 @@ class ProductionSpecializationTest {
         var account = FungibleResourceCustodySupport.accountAtContainer(state, FrontierWorldState.depotId(home)).orElseThrow();
         var bread = account.lotQuantities().entrySet().stream().filter(entry -> state.inventory().fungibleResources().lots()
                 .get(entry.getKey()).itemKind().equals("minecraft:bread")).findFirst().orElseThrow();
-        var demandedState = state.withInventory(state.inventory().withFungibleResources(state.inventory().fungibleResources()
-                .destroy(account.id(), Map.of(bread.getKey(), bread.getValue() - 64), Map.of())));
+        var demandedState = publish(state.withInventory(state.inventory().withFungibleResources(state.inventory().fungibleResources()
+                .destroy(account.id(), Map.of(bread.getKey(), bread.getValue() - 64), Map.of()))), home, 0);
         var priorities = ExtractionPriorities.read(demandedState, deposit, Optional.empty(), 0L);
         var coalPriority = priorities.products().get("minecraft:coal");
         assertNotNull(coalPriority, "the food deficit requires fuel production");

@@ -66,6 +66,7 @@ public final class ProductionCommercialStateSupport {
     private static FrontierWorldState settle(FrontierWorldState state, ProductionJob job, EmploymentContract contract) {
         EconomicLedger economics = requiresInvoice(job)
                 ? state.inventory().economics().settle(reservation(job, contract).id()) : state.inventory().economics();
-        return state.withInventory(state.inventory().withEconomics(economics)).withCompanies(state.companies().settle(contract.id()));
+        return state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().withEconomics(economics))
+                .companies(state.companies().settle(contract.id())));
     }
 }

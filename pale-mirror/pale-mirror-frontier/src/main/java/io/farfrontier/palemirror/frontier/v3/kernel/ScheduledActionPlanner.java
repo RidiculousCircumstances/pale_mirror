@@ -51,6 +51,10 @@ public interface ScheduledActionPlanner<S> {
     /** Derived wake signals from an accepted domain transition; they are not new canonical events. */
     default Set<SubjectId> wakeKeys(S previous, S next, FrontierEvent event) { return Set.of(); }
 
+    /** Domain-declared review requests recorded in the input-changing transaction.
+     * Called once on the completed batch; replay uses the recorded effects. */
+    default List<ScheduledAction> reconsideredBy(S previous, S next, SimInstant instant) { return List.of(); }
+
     /**
      * Exact pending actions retired by the owning domain transition. The kernel records
      * ordinary cancellation events in the same WAL transaction, before reference validation.

@@ -147,7 +147,7 @@ final class GoodsTripPlanning {
                     exactTiming.deliveryTicks(), exactTiming.durationTicks(), now);
             var cost = GoodsTransportValuation.exact(initial,
                     candidate.mode() == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? candidate.seller() : buyer, declaration.mission(), now);
-            if (departure == TripDispatchPolicy.Cause.ACCUMULATING) {
+            if (!departure.permitsDeparture()) {
                 decision = "DEFERRED_FOR_CONSOLIDATION; exactJourney=SAFE_TO_WAIT; reserved=0";
                 var deferred = new ProcurementSelection.Offer(candidate.offer().id(), candidate.offer().goods(), cost.resourceExpense(),
                         exactTiming.deliveryTicks(), cost.workerTicks(), ProcurementSelection.Departure.DEFERRED);
@@ -212,7 +212,7 @@ final class GoodsTripPlanning {
         var cost = GoodsTransportOptions.forecast(state, organizer, timing.durationTicks(), parcels.size(), now).orElseThrow().cost();
         // Both modes use real resources. Labour remains comparative value, while
         // the exact admitted seller-delivery quote is conserved cash settlement.
-        var departure = dispatchCause(state, buyer, organizer, parcels, timing.deliveryTicks(), timing.durationTicks(), now) == TripDispatchPolicy.Cause.ACCUMULATING
+        var departure = !dispatchCause(state, buyer, organizer, parcels, timing.deliveryTicks(), timing.durationTicks(), now).permitsDeparture()
                 ? ProcurementSelection.Departure.DEFERRED : ProcurementSelection.Departure.READY;
         return new ProcurementSelection.Offer(id, lines, cost.resourceExpense(), timing.deliveryTicks(), cost.workerTicks(), departure);
     }

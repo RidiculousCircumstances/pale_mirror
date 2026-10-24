@@ -6,7 +6,13 @@ import java.util.*;
 /** Read-only economic projection for one participant. A policy receives no mutable world or other stocks. */
 public record GoodsParticipantView(GoodsParticipant participant, int residents, FixedScalar availableMoney,
                                    Map<String, Stock> stocks, Map<String, Integer> purchaseLimits,
-                                   Optional<io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Plan> supplyPlan) {
+                                   Optional<io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Plan> supplyPlan,
+                                   Set<String> awaitingReview) {
+    public GoodsParticipantView(GoodsParticipant participant, int residents, FixedScalar availableMoney,
+            Map<String, Stock> stocks, Map<String, Integer> purchaseLimits,
+            Optional<io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Plan> supplyPlan) {
+        this(participant, residents, availableMoney, stocks, purchaseLimits, supplyPlan, Set.of());
+    }
     private static final ImmutableInputView<Map<GoodsParticipant, GoodsParticipantView>> VIEWS = new ImmutableInputView<>();
     public GoodsParticipantView(GoodsParticipant participant, int residents, FixedScalar availableMoney,
                                 Map<String, Stock> stocks, Map<String, Integer> purchaseLimits) {
@@ -31,22 +37,28 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
         return StockTargetDemand.target(commodity, residents, stocks.get(commodity.itemKind()).protectedMinimum());
     }
     public int saleable(GoodsTradeRules.Commodity commodity) {
+        if (awaitingReview.contains(commodity.itemKind())) return 0;
         return supplyPlan.flatMap(plan -> plan.economy())
-                .map(plan -> Math.toIntExact(plan.saleableStock().get(commodity.itemKind())))
+                .map(plan -> Math.min(Math.toIntExact(plan.saleableStock().get(commodity.itemKind())),
+                        Math.max(0, stocks.get(commodity.itemKind()).unclaimedInStorage() - stocks.get(commodity.itemKind()).protectedMinimum())))
                 .orElseGet(() -> Math.max(0, stocks.get(commodity.itemKind()).unclaimedInStorage() - target(commodity)));
     }
     public GoodsParticipantView {
         Objects.requireNonNull(participant); Objects.requireNonNull(availableMoney); stocks = Map.copyOf(stocks);
-        supplyPlan = Objects.requireNonNull(supplyPlan);
+        supplyPlan = Objects.requireNonNull(supplyPlan); awaitingReview = Set.copyOf(awaitingReview);
         purchaseLimits = Map.copyOf(purchaseLimits);
         if (purchaseLimits.values().stream().anyMatch(value -> value < 0)) throw new IllegalArgumentException("negative purchase limit");
         if (residents < 0 || availableMoney.raw() < 0) throw new IllegalArgumentException("invalid participant economic view");
     }
-    /** Facts only. Economic evaluation belongs to GoodsParticipantAssessment. */
+    /** Facts only. Evaluation belongs to the explicit economic review owner. */
     public static GoodsParticipantView observe(FrontierWorldState state, GoodsParticipant participant) {
-        // Repeated matching, reserve and production-policy questions share one
-        // immutable input. Never reuse a projection after even a draft mutation.
-        var views = VIEWS.get(List.of(state), HashMap::new);
+        // Depend on stock, eligibility and accepted protection, never the world/tick.
+        var inventory = state.inventory();
+        var views = VIEWS.get(List.of(state.bootstrap(), inventory.items(), inventory.containers(), inventory.surfaces(),
+                inventory.fungibleResources().accounts(), inventory.fungibleResources().lots(), inventory.fungibleResources().claims(),
+                inventory.economics(), state.shipments(), state.replicaCustody(), state.fencedRecovery(),
+                state.companies().goodsTrade().contracts(), state.companies().goodsTrade().participants().planning(),
+                LivingResidentStockView.counts(state), WorkEquipmentClaimComposition.reserved(state)), HashMap::new);
         var prior = views.get(participant);
         if (prior != null) return prior;
         var result = project(state, participant);
@@ -83,9 +95,7 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
                     ? PublicStockProtection.initialMinimum(state, participant.party().id(), commodity.itemKind()) : 0;
             result.put(commodity.itemKind(), new Stock(owned, unclaimed, incoming, protectedMinimum));
         }
-        int residents = (int) state.humanPopulation().residents().values().stream()
-                .filter(resident -> resident.settlementId().equals(participant.settlementId())
-                        && state.actorLocations().get(resident.id()).condition().status() == ActorLifeStatus.ALIVE).count();
+        int residents = LivingResidentStockView.counts(state).getOrDefault(participant.settlementId(), 0);
         return new GoodsParticipantView(participant, residents,
                 state.inventory().economics().availableToReserve(participant.party().id()), result);
     }
@@ -95,6 +105,7 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
         var result = new HashMap<>(observed.stocks());
         int residents = observed.residents();
         var advice = plan.isPresent() ? planningAdvice(plan.orElseThrow()) : participant.policy() == GoodsPolicyKind.PUBLIC_SETTLEMENT
+                && !state.bootstrap().ruleset().goodsTrade().supplyPlanning().enabled()
                 ? SettlementFoodPurchases.assess(state, participant.party().id(), residents, result)
                 : new SettlementFoodPurchases.Advice(Map.of(), Map.of());
         advice.protectedInputs().forEach((kind, minimum) -> {

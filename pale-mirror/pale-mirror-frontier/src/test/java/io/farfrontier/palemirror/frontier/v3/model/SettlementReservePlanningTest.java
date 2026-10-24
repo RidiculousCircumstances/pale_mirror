@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec;
 import io.farfrontier.palemirror.frontier.v3.model.supply.SupplyReservePlanner.*;
+import static io.farfrontier.palemirror.frontier.v3.process.AcceptedEconomyFixture.publish;
 import org.junit.jupiter.api.Test;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -12,7 +13,9 @@ class SettlementReservePlanningTest {
         return FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:reserve-test"), 20260918065L, FrontierRulesets.marketQuarryGraybox()));
     }
     @Test void allActiveConsumersShareTheForecastAndRecoveryPreservesIt() {
-        var state = initial(); var codec = new FrontierWorldStateCodec(); var restored = codec.decode(codec.encode(state));
+        var state = initial();
+        for (var home : state.bootstrap().settlements()) state = publish(state, home.id(), 0);
+        var codec = new FrontierWorldStateCodec(); var restored = codec.decode(codec.encode(state));
         for (var home : state.bootstrap().settlements()) {
             var targets = SettlementReservePlanning.read(state, home.id(), 0L);
             var participant = state.companies().goodsTrade().participants().participants().get(home.id());
@@ -59,7 +62,7 @@ class SettlementReservePlanningTest {
         assertSame(dated, SettlementReservePlanning.basis(state, home, now));
         assertSame(retained, SettlementReservePlanning.retainedBasis(state, home));
         var participant = state.companies().goodsTrade().participants().participants().get(home);
-        assertEquals(dated, GoodsParticipantAssessment.domestic(state, participant, now)
+        assertEquals(dated, SettlementEconomicEvaluation.domestic(state, participant, now)
                 .facts().orElseThrow().basis());
     }
     @Test void destroyedMachineWithdrawsItsInputForecastButNotTheResidentsAppetite() {

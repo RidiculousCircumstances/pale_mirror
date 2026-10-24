@@ -16,8 +16,8 @@ public final class SettlementFoodPolicy {
     public static int reserveRequirement(FrontierWorldState state, SubjectId settlementId, long atTick) {
         if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().economics().isPresent()) {
             var participant = state.companies().goodsTrade().participants().participants().get(settlementId);
-            return Math.toIntExact(GoodsParticipantAssessment.domestic(state, participant, atTick).view().supplyPlan().orElseThrow()
-                    .reserves().get(BREAD).reorderPoint());
+            return Math.toIntExact(GoodsParticipantAssessment.domestic(state, participant, atTick).view().supplyPlan()
+                    .map(plan -> plan.reserves().get(BREAD).reorderPoint()).orElseGet(() -> (long) baselineReserveRequirement(state, settlementId)));
         }
         return baselineReserveRequirement(state, settlementId);
     }

@@ -11,7 +11,7 @@ final class CultivationProcessModule implements FrontierWorldProcessModule {
     static final Set<String> TYPES = Set.of(CultivationReviewed.TYPE);
     static final DeterministicProcessDescriptor DESCRIPTOR = new DeterministicProcessDescriptor("cultivation", Set.of(),
             Set.of(REVIEW), TYPES, Set.of(CultivationReviewed.TYPE, "kernel.schedule_created", "kernel.schedule_rescheduled"), TYPES);
-    private static ScheduledAction next(SubjectId home, long atTick) {
+    static ScheduledAction next(SubjectId home, long atTick) {
         return new ScheduledAction(new ScheduleId("schedule:cultivation-" + home.value().replace(':', '-')),
                 new SimInstant(atTick), 0, home, REVIEW, 1);
     }

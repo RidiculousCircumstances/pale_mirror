@@ -39,9 +39,28 @@ grant HOT execution or silently overwrite the unresolved physical state.
 
 Focused delayed preparation: 4/4 native tests passed. Shared storage/field/body
 slice: 50/50 passed, including preserved later permission after interrupted batch.
-The final integrated native, adapter, packaging and guardrail checks are in progress
-in `build/r245-integration.log`. Final candidate and retained-world evidence will be
-recorded after those gates and deployment; no live repair or <5-second claim yet.
+The final native gate passed 406/408: the two previously recorded combat/patrol
+failures remain outside this scope. Field/storage/preparation checks passed.
+Adapter tests passed 858/858 in the earlier run; a later whole-project check exposed
+an intermittent COLD interval equivalence failure (417 versus 418 revisions, one
+production completion due at 124 versus 126). This is retained as unresolved, not
+reported as all-green. The remaining broad unchanged frontier run was stopped when
+work moved to slice B. Packaging and guardrails passed.
+
+Code commit `f1baa8330` was installed as R245 after authenticated graceful stop
+(`All dimensions are saved`). The incident world was retained. Fresh deploy
+verification passed. Receipts: `build/r245-{preflight,publish,install,deploy-verify}.log`.
+
+Real-client scenario `build/r245-field-hot.json` passed on a private display with
+FPS capped at20; the client then exited. The first linked image shows the field rendered. Review of the second image found
+a sky-facing camera, so it does not prove repeated visual visibility. The scenario
+now requires semantic camera/compiled-section checks; this updated scenario awaits rerun.
+The return visit completed in202ms with a frame within~1.4s. Initial scenario launch
+includes54.6s of JVM startup/connection and had the target already present by its
+first action, so this is not a clean cold-start latency measurement. Old operations
+remain explicit `PRESENTABLE_CONFLICT`, `dynamicReady=false`; the full field cycle
+is not repaired by reclassifying those historical unknown effects. No global80ms
+or complete-field-recovery claim.
 
 Checked-in player scenario `live-field-preparation-handoff.json` covers first and
 repeat visits to retained incident chunk 28,-1, physical block reception and frames.

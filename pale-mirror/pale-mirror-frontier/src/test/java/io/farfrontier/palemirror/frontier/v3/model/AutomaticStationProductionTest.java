@@ -2,6 +2,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.*;
+import static io.farfrontier.palemirror.frontier.v3.process.AcceptedEconomyFixture.publish;
 import org.junit.jupiter.api.Test;
 import java.util.*;
 import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog;
@@ -24,7 +25,7 @@ class AutomaticStationProductionTest {
         var ledger = state.inventory().fungibleResources().issue(new ResourceLot(lot, record.ownerId(), kind, count, "fixture", List.of()),
                 new CustodyAccount(staging, new ResourceCustody.Container(record.id()), Map.of(lot, count), Map.of()));
         if (account.isPresent()) ledger = ledger.transfer(staging, account.orElseThrow().id(), Map.of(lot, count), Map.of());
-        return state.withInventory(state.inventory().withFungibleResources(ledger));
+        return publish(state.withInventory(state.inventory().withFungibleResources(ledger)), record.ownerId(), 1);
     }
     @Test void reserveAndInstalledEquipmentAreDeclaredWithoutFreeIron() {
         var state = initial(); var record = station(state);
@@ -73,8 +74,9 @@ class AutomaticStationProductionTest {
         var schedule = FrontierWorldProcessCatalog.initialSchedule(state.bootstrap()).stream()
                 .filter(action -> action.kind().equals("frontier.production_station.review") && action.subject().equals(spec.id()))
                 .findFirst().orElseThrow();
-        var prepared = FrontierWorldProcessCatalog.prepareScheduled(registry, state, schedule, new SimInstant(1)).orElseThrow();
-        assertEquals(FrontierWorldProcessCatalog.planScheduled(registry, state, schedule, new SimInstant(1)), prepared.prepare().get());
+        assertTrue(FrontierWorldProcessCatalog.prepareScheduled(registry, state, schedule, new SimInstant(1)).isEmpty(),
+                "station admission consumes an accepted economic plan without scheduling another solver");
+        assertFalse(FrontierWorldProcessCatalog.planScheduled(registry, state, schedule, new SimInstant(1)).isEmpty());
         var offer = AutomaticStationProduction.offer(state, spec.id(), 1).orElseThrow();
         assertEquals(3, offer.operation().outputQuantity());
         var start = new ProductionStationAutomaticStarted(spec.id(), state.productionStations().require(spec.id()).revision(), offer.operation().recipeId(), 1);
@@ -125,6 +127,7 @@ class AutomaticStationProductionTest {
         var lot = new SubjectId("lot:smelting-reserve-full");
         state = state.withInventory(state.inventory().withFungibleResources(state.inventory().fungibleResources()
                 .destroy(account.id(), Map.of(lot, 3), Map.of())));
+        state = publish(state, home.id(), 2);
         assertEquals(3, AutomaticStationProduction.offer(state, spec.id(), 2).orElseThrow().operation().outputQuantity());
     }
     @Test void finiteIngotReserveCreatesRealIronExtractionDemandThroughSharedPlanner() {
@@ -134,6 +137,7 @@ class AutomaticStationProductionTest {
         assertFalse(deposits.isEmpty());
         for (var deposit : deposits) {
             var home = deposit.site().settlementId();
+            state = publish(state, home, 1);
             assertTrue(ProductionStockDemand.read(state, home, "minecraft:raw_iron", 1).requested(), "iron reserve must reach mining admission");
             assertTrue(ExtractionStockDemand.requested(state, deposit, Optional.empty(), 1));
         }

@@ -59,6 +59,7 @@ class CoalDepositReserveTest {
         for (long cell : next.cells().keySet()) next = next.extracted(cell, 1, "fixture:prior-extraction-" + cell);
         state = state.withChanges(FrontierWorldStateUpdate.begin().extractionSites(state.extractionSites().replace(next)));
         state = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(state));
+        state = io.farfrontier.palemirror.frontier.v3.process.AcceptedEconomyFixture.publish(state, prior.site().settlementId(), 0);
         var exhausted = state.extractionSites().deposits().get(prior.site().id());
         assertFalse(ProductionStockDemand.read(state, prior.site().settlementId(), "minecraft:cobblestone", 0L).requested());
         assertTrue(ProductionStockDemand.read(state, prior.site().settlementId(), "minecraft:coal", 0L).requested());

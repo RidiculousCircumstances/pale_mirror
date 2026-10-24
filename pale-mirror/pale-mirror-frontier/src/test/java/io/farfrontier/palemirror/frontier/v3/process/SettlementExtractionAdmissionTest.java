@@ -46,6 +46,7 @@ class SettlementExtractionAdmissionTest {
                     new io.farfrontier.palemirror.frontier.v3.model.geology.GeologicalKnowledge(surveys)))
                 .inventory(new ExactInventory(containers, items, inventory.cargo(), inventory.playerItems(), inventory.worldCarrierItems(),
                         inventory.conflicts(), inventory.surfaces(), inventory.economics(), inventory.fungibleResources())));
+        state = AcceptedEconomyFixture.publish(state, first.settlementId(), 100);
         var admittedFixture = state;
         var worker = state.humanPopulation().residents().values().stream()
                 .filter(resident -> resident.settlementId().equals(first.settlementId())
@@ -114,6 +115,7 @@ class SettlementExtractionAdmissionTest {
         assertEquals(f.first(), state.extractionSites().deposits().get(f.first().id()).site());
         var restored = state;
         assertThrows(IllegalArgumentException.class, () -> ServiceBoundaryComposition.declaration(restored, removed));
+        state = AcceptedEconomyFixture.publish(state, f.first().settlementId(), 100);
         var selected = new SettlementExtractionAdmission(Set.of()).discover(state, f.worker(), 100).orElseThrow().execution();
         assertEquals(f.first().id(), selected.work().siteId());
         assertNotEquals(removed, selected.work().toolSource().containerId());

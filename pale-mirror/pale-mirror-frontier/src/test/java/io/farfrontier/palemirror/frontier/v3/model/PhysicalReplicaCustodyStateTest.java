@@ -217,19 +217,26 @@ class PhysicalReplicaCustodyStateTest {
     }
 
     @Test
-    void registeredCommandsAndReducersRequireExactVersionsAndProduceNoContainerAuthority() {
-        var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:replica-custody-command"), 91L));
-        submit(engine, new ReplicaDeclared(replica(OBJECT_A)));
-        submit(engine, new ReplicaObserved(OBJECT_A, 10L, 1L, "sha256:a", "owned:genesis", 10L));
-        submit(engine, new CustodyAcquired(lease(SCOPE_A, OBJECT_A, 1L, 10L, 2L)));
-        submit(engine, new CustodyCheckpointed(SCOPE_A, 1L, 10L, 2L));
-        submit(engine, new CustodyReleased(SCOPE_A, 1L, 10L, 2L));
+    void registeredCommandsReleaseAnUnchangedDeclaredContainerWithoutMaterializingIt() {
+        var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:replica-custody-command"), 91L);
+        var engine = FrontierEngines.create(configuration);
+        var container = FrontierWorldState.depotId(new SubjectId("settlement:1"));
+        var scope = ReferenceContainerCustody.scopeId(container);
+        var fingerprint = ReferenceContainerCustody.canonicalFingerprint(configuration.initialState(), container);
+        var provenance = ReferenceContainerCustody.provenance(container);
+        assertInstanceOf(CommandResult.Accepted.class, submit(engine, new ReplicaDeclared(PhysicalReplicaRecord.expected(
+                container, ReferenceContainerCustody.semanticKind(configuration.initialState(), container), 10L, fingerprint, provenance))));
+        assertInstanceOf(CommandResult.Accepted.class, submit(engine, new ReplicaObserved(container, 10L, 1L, fingerprint, provenance, 10L)));
+        assertInstanceOf(CommandResult.Accepted.class, submit(engine, new CustodyAcquired(new PhysicalCustodyLease(scope, container,
+                ReferenceContainerCustody.PROVIDER_ID, 1L, 10L, 2L, PhysicalCustodyLeaseStatus.ACQUIRED, null))));
+        assertInstanceOf(CommandResult.Accepted.class, submit(engine, new CustodyCheckpointed(scope, 1L, 10L, 2L)));
+        assertInstanceOf(CommandResult.Accepted.class, submit(engine, new CustodyReleased(scope, 1L, 10L, 2L)));
 
         FrontierWorldState restored = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        assertEquals(PhysicalCustodyLeaseStatus.RELEASED, restored.replicaCustody().custodyByScope().get(SCOPE_A).status());
-        assertTrue(restored.inventory().surfaces().values().stream().allMatch(surface -> surface.status() == ContainerSurfaceStatus.UNMATERIALIZED),
-                "the kernel does not initialize or reinterpret legacy container surfaces");
-        assertInstanceOf(CommandResult.Rejected.class, submit(engine, new CustodyReleased(SCOPE_A, 1L, 10L, 2L)));
+        assertEquals(PhysicalCustodyLeaseStatus.RELEASED, restored.replicaCustody().custodyByScope().get(scope).status());
+        assertEquals(configuration.initialState().inventory().surfaces(), restored.inventory().surfaces(),
+                "the kernel does not initialize or reinterpret container surfaces");
+        assertInstanceOf(CommandResult.Rejected.class, submit(engine, new CustodyReleased(scope, 1L, 10L, 2L)));
     }
 
     private static PhysicalReplicaRecord replica(SubjectId object) { return PhysicalReplicaRecord.expected(object, "container.depot", 10L, "sha256:a", "owned:genesis"); }

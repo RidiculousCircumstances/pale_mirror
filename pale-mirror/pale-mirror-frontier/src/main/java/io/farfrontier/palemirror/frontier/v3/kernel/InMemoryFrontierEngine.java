@@ -539,6 +539,14 @@ final class InMemoryFrontierEngine<S, P extends FrontierProjection> implements F
                 }
             }
         }
+        for (var action : scheduledPlanner.reconsideredBy(state, nextState, eventInstant)) {
+            var effect = new ScheduleEffect.ReconsiderationRequested(action);
+            stateValidator.validateScheduleEffect(nextState, action.subject(), effect);
+            ScheduleEffectApplier.apply(nextSchedules, effect, eventInstant, action.subject());
+            events.add(new FrontierEvent(FrontierEvent.SCHEMA_VERSION,
+                    new EventId("event:revision-" + nextRevision.value() + "-" + events.size()),
+                    transactionId, worldId, nextRevision, eventInstant, action.subject(), causes, effect));
+        }
         nextSchedules.requireCapacity(limits.maxPendingSchedules());
         // Reducers may construct several transient immutable aggregate snapshots for one
         // transaction. Validate their final state exactly once, before WAL durability and

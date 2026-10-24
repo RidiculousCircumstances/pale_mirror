@@ -9,9 +9,39 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 @AnalyzeClasses(
         packages = "io.farfrontier.palemirror.frontier.v3",
-        importOptions = ImportOption.DoNotIncludeTests.class
+        importOptions = {ImportOption.DoNotIncludeTests.class, FrontierArchitectureTest.ProductionClasses.class}
 )
 final class FrontierArchitectureTest {
+    public static final class ProductionClasses implements ImportOption {
+        @Override public boolean includes(com.tngtech.archunit.core.importer.Location location) {
+            return !location.contains("/testFixtures/") && !location.contains("-test-fixtures.jar");
+        }
+    }
+
+    @ArchTest
+    static final ArchRule economic_solver_has_only_explicit_planning_owners = noClasses()
+            .that().resideOutsideOfPackage("..model.economy..")
+            .and().doNotHaveSimpleName("SettlementEconomicEvaluation")
+            .and().doNotHaveSimpleName("SettlementSupplyPlanning")
+            .should().callMethodWhere(new com.tngtech.archunit.base.DescribedPredicate<com.tngtech.archunit.core.domain.JavaMethodCall>(
+                    "invoke the economic solver") {
+                @Override public boolean test(com.tngtech.archunit.core.domain.JavaMethodCall call) {
+                    return call.getTargetOwner().getSimpleName().equals("EconomicPlanner");
+                }
+            }).because("queries, work admission, diagnostics and replay consume accepted plans; only economic review evaluates policy");
+
+    @ArchTest
+    static final ArchRule only_economic_review_requests_evaluation = noClasses()
+            .that().doNotHaveSimpleName("GoodsParticipantProcess")
+            .and().doNotHaveSimpleName("SettlementEconomicPlanPreparation")
+            .should().callMethodWhere(new com.tngtech.archunit.base.DescribedPredicate<com.tngtech.archunit.core.domain.JavaMethodCall>(
+                    "request economic or cultivation evaluation") {
+                @Override public boolean test(com.tngtech.archunit.core.domain.JavaMethodCall call) {
+                    return java.util.Set.of("SettlementEconomicEvaluation", "CultivationEconomicEvaluation")
+                            .contains(call.getTargetOwner().getSimpleName());
+                }
+            }).because("the participant process is the sole accepted-plan lifecycle owner");
+
     @ArchTest
     static final ArchRule group_coordination_does_not_inspect_mission_business = noClasses()
             .that().haveSimpleName("UnitGroupProcess").or().haveSimpleName("GroupFormation")

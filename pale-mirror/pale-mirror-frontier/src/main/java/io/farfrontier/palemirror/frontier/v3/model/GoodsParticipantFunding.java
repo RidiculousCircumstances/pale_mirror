@@ -9,6 +9,9 @@ import java.util.List;
 public final class GoodsParticipantFunding {
     private GoodsParticipantFunding() { }
     public static FixedScalar purchase(GoodsParticipantView view, GoodsTradeRules rules, String item) {
+        if (view.awaitingReview().contains(item)) return FixedScalar.ZERO;
+        if (view.participant().policy() == GoodsPolicyKind.PUBLIC_SETTLEMENT && rules.supplyPlanning().enabled()
+                && view.supplyPlan().isEmpty()) return FixedScalar.ZERO;
         var economy = view.supplyPlan().flatMap(plan -> plan.economy());
         if (economy.isPresent()) return io.farfrontier.palemirror.frontier.v3.model.economy.EconomicPurchaseFunding.available(
                 economy.orElseThrow(), view.availableMoney(), needs(view, rules), item,
@@ -19,7 +22,7 @@ public final class GoodsParticipantFunding {
                 .reduce(0L, Math::addExact);
         var remainder = new FixedScalar(Math.max(0, view.availableMoney().raw() - other));
         // These are bounded affordable alternatives selected under the shared budget,
-        // not reservations. A changed draft state recomputes the advice before matching.
+        // not reservations. Current money and exact reservations bound every use of the retained advice.
         if (preferred.containsKey(item)) return new FixedScalar(Math.min(remainder.raw(), preferred.get(item)));
         var unselected = needs(view, rules).stream().filter(need -> !preferred.containsKey(need.item())).toList();
         return ProcurementBudget.forPurchase(remainder, unselected, item);
@@ -33,6 +36,7 @@ public final class GoodsParticipantFunding {
                 ? demand.urgentPurchase() : 0;
     }
     public static boolean fundsRestart(GoodsParticipantView view, GoodsTradeRules rules, String item) {
+        if (view.awaitingReview().contains(item) || rules.supplyPlanning().enabled() && view.supplyPlan().isEmpty()) return false;
         var economy = view.supplyPlan().flatMap(plan -> plan.economy());
         if (economy.isPresent()) {
             return economy.orElseThrow().fundedRestarts().contains(item);
@@ -43,6 +47,8 @@ public final class GoodsParticipantFunding {
         var participant = state.companies().goodsTrade().participants().participants().get(sponsor);
         if (participant == null) return state.inventory().economics().availableToReserve(sponsor);
         var view = GoodsParticipantAssessment.domestic(state, participant, atTick).view();
+        if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().enabled()
+                && (view.supplyPlan().isEmpty() || !view.awaitingReview().isEmpty())) return FixedScalar.ZERO;
         var economy = view.supplyPlan().flatMap(plan -> plan.economy());
         if (economy.isPresent()) return new FixedScalar(Math.max(0, view.availableMoney().raw()
                 - economy.orElseThrow().purchaseBudgets().values().stream().reduce(0L, Math::addExact)));

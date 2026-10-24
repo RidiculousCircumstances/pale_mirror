@@ -11,6 +11,9 @@ final class GoodsTradePayloadCodecs {
     private GoodsTradePayloadCodecs() { }
     static PayloadCodecs create() {
         return new PayloadCodecs(List.of(
+                codec("frontier.settlement_economic_plan_published", (out, payload) ->
+                        SettlementEconomicPlanCodec.write(out, ((SettlementEconomicPlanPublished) payload).plan()),
+                        in -> new SettlementEconomicPlanPublished(SettlementEconomicPlanCodec.read(in))),
                 codec("frontier.goods_trade_collected", (out, payload) -> {
                     var value = (GoodsTradeCollected) payload;
                     out.writeUTF(value.shipmentId().value()); out.writeLong(value.expectedShipmentRevision());

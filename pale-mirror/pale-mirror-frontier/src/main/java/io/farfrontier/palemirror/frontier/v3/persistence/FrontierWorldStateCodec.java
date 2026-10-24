@@ -62,6 +62,15 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
      * This never weakens the serialized world/seed boundary: a foreign header fails before its mutable state is read.
     */
     public FrontierWorldStateCodec(FrontierBootstrap pinnedBootstrap) { this.pinnedBootstrap = java.util.Objects.requireNonNull(pinnedBootstrap, "pinnedBootstrap"); }
+    @Override public void validateRecovery(byte[] encoded, boolean hasWalTail) {
+        try (var input = new DataInputStream(new ByteArrayInputStream(encoded))) {
+            int schema = FrontierStateSchema.read(input);
+            if (schema == 301 && hasWalTail) throw new IllegalArgumentException(
+                    "Economic-plan upgrade requires a complete schema-301 checkpoint; stop the previous build gracefully before upgrading");
+        } catch (IOException failure) {
+            throw new IllegalArgumentException("invalid Frontier recovery header", failure);
+        }
+    }
     @Override public byte[] encode(FrontierWorldState state) {
         try {
             verifyPinnedBootstrap(state.bootstrap());
@@ -105,13 +114,14 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 UnitGroupStateCodec.write(output, state.unitGroups());
                 TransportFleetStateCodec.write(output, state.transportFleet());
                 ExtractionSiteStateCodec.write(output, state.extractionSites());
+                SettlementEconomicPlanCodec.writeStates(output, state.companies().goodsTrade().participants().planning());
             }
             return bytes.toByteArray();
         } catch (IOException impossible) { throw new IllegalStateException("in-memory Frontier v3 state encoding failed", impossible); }
     }
     @Override public FrontierWorldState decode(byte[] encoded) {
         try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(encoded))) {
-            FrontierStateSchema.read(input);
+            int schema = FrontierStateSchema.read(input);
             if (!FrontierSnapshotDescriptorInventory.accepts(readString(input))) {
                 throw new IllegalArgumentException("Frontier v3 state has an incompatible process/scene descriptor inventory");
             }
@@ -146,12 +156,21 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             StrategicPlanState plans = StrategicPlanStateCodec.read(input);
             HumanPopulation population = HumanPopulationStateCodec.read(input, true, true, true, true, true, true, true, true);
             ResourceSiteState sites = ResourceSiteStateCodec.read(input); var actorMovements = ActorMovementStateCodec.read(input);
+            var executions = ActorExecutionStateCodec.read(input); var shipments = ShipmentStateCodec.read(input);
+            var groups = UnitGroupStateCodec.read(input); var fleet = TransportFleetStateCodec.read(input);
+            var extraction = ExtractionSiteStateCodec.read(input);
+            if (schema >= 302) {
+                var trade = companies.goodsTrade();
+                companies = companies.withGoodsTrade(trade.withParticipants(new GoodsParticipantState(
+                        trade.participants().participants(), SettlementEconomicPlanCodec.readStates(input))));
+            }
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures,
                     infection, inventory, jobs, serviceWorks, intents, observations, scenes, colony, structureDamage,
                     physicalDeltas, ambient, constructions, maintenances, topology, plans, population, companies,
                     sites, replicaCustody, deferredAftermath, fencedRecovery, diagnosticIncidents, actorMovements,
-                    ActorExecutionStateCodec.read(input), ShipmentStateCodec.read(input), UnitGroupStateCodec.read(input),
-                    TransportFleetStateCodec.read(input), ExtractionSiteStateCodec.read(input), productionStations, navigationGeometry);
+                    executions, shipments, groups, fleet, extraction, productionStations, navigationGeometry);
+            // Schema 301 had no accepted economic decisions. Retain all stock,
+            // cash and obligations; new discretionary work awaits publication.
             FrontierWorldStateCodecValidation.validate(input, state);
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }

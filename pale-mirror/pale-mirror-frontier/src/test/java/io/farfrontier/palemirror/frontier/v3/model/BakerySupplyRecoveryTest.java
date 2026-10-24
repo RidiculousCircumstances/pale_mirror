@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.model.supply.*;
 import io.farfrontier.palemirror.frontier.v3.process.*;
 import io.farfrontier.palemirror.frontier.v3.api.*;
+import static io.farfrontier.palemirror.frontier.v3.process.AcceptedEconomyFixture.publish;
 import org.junit.jupiter.api.Test;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -19,6 +20,7 @@ class BakerySupplyRecoveryTest {
         // scarce heat, as in the saved R178 counterexample. No live resource grant.
         state = state.withChanges(FrontierWorldStateUpdate.begin().productionStations(state.productionStations().with(
                 new ProductionStations.Machine(machine.stationId(), 1680, Optional.empty(), machine.revision(), Optional.empty()))));
+        state = publish(state, task.ownerId(), 200);
         var started = ProductionProcess.planStart(state, ProductionProcess.start(task, 200)).stream()
                 .map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance).map(ProductionStarted.class::cast).findFirst().orElseThrow();
         state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(), new StrategicTaskTransition(task.id(), StrategicTaskStatus.ACTIVE));
@@ -59,6 +61,7 @@ class BakerySupplyRecoveryTest {
         machine = state.productionStations().require(machine.stationId());
         state = state.withChanges(FrontierWorldStateUpdate.begin().productionStations(state.productionStations().with(
                 new ProductionStations.Machine(machine.stationId(), 80, Optional.empty(), machine.revision() + 1, Optional.empty()))));
+        state = publish(state, task.ownerId(), 20000);
         var next = ProductionProcess.planStart(state, ProductionProcess.start(successor, 20000)).stream()
                 .map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance).map(ProductionStarted.class::cast).findFirst().orElseThrow();
         state = StrategicObjectiveProcess.reduceTaskTransition(state, task.ownerId(), new StrategicTaskTransition(successor.id(), StrategicTaskStatus.ACTIVE));
@@ -78,6 +81,7 @@ class BakerySupplyRecoveryTest {
     @Test void retainedBatchDeclaresFuelBeforeArrivalAndStopsDemandingItWhenStationIsSupplied() {
         var state = BakeryPartialBatchTest.fixture(63, FrontierRulesets.marketQuarryGraybox());
         var task = state.strategicPlans().tasks().values().iterator().next();
+        state = publish(state, task.ownerId(), 200);
         var started = ProductionProcess.planStart(state, ProductionProcess.start(task, 200)).stream()
                 .map(ProposedEvent::payload).filter(ProductionStarted.class::isInstance).map(ProductionStarted.class::cast)
                 .findFirst().orElseThrow();
@@ -85,6 +89,7 @@ class BakerySupplyRecoveryTest {
         state = ProductionProcess.reduceStarted(state, task.ownerId(), started);
         var job = started.job(); var station = job.stationWork().orElseThrow().stationId();
         var participant = state.companies().goodsTrade().participants().participants().get(task.ownerId());
+        state = publish(state, task.ownerId(), 200);
         var publicPlan = GoodsParticipantAssessment.view(state, participant, 200L).supplyPlan().orElseThrow();
         assertTrue(publicPlan.require("minecraft:coal").urgent(100));
         assertTrue(publicPlan.require("minecraft:coal").protectedInput() > 0,

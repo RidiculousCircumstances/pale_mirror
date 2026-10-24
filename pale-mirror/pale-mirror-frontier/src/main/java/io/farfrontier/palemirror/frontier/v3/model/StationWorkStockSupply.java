@@ -8,8 +8,8 @@ final class StationWorkStockSupply implements StockSupplyPort {
     @Override public long inputDemand(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId owner, String itemKind, long atTick) {
         if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().enabled()) {
             var participant = state.companies().goodsTrade().participants().participants().get(owner);
-            var plan = GoodsParticipantAssessment.domestic(state, participant, atTick).view().supplyPlan().orElseThrow();
-            return plan.require(itemKind).protectedInput();
+            return GoodsParticipantAssessment.domestic(state, participant, atTick).view().supplyPlan()
+                    .map(plan -> plan.require(itemKind).protectedInput()).orElse(0L);
         }
         var recipe = BakeryRecipes.bread(state);
         return recipe.ingredient().accepts(itemKind) ? Math.multiplyExact(

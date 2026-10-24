@@ -17,6 +17,8 @@ class GoodsDeliveryPricingTest {
         var buy = new GoodsTradeOrder(new SubjectId("order:acquisition-buy"), buyer.party(), seller.party(),
                 GoodsTradeOrder.Side.BUY, FrontierWorldState.depotId(buyer.settlementId()), "minecraft:bread", 16, 0, FixedScalar.whole(3), 10000);
         state = state.withCompanies(state.companies().withGoodsTrade(state.companies().goodsTrade().place(sell).place(buy)));
+        state = AcceptedEconomyFixture.publish(state, seller.party().id(), 400);
+        state = AcceptedEconomyFixture.publish(state, buyer.party().id(), 400);
         var search = GoodsOrderMatching.first(state, buyer, 400, Optional.of(seller.party()), Optional.of(buyer.party()));
         assertTrue(search.match().isPresent(), search.disposition());
         var match = search.match().orElseThrow();

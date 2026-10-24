@@ -35,7 +35,7 @@ final class GoodsDeliveryAdvice {
         var value = quote.orElseThrow();
         var cause = GoodsDispatchAdvice.assess(state, buyer, value.organizer(), value.mode(), Map.of(item, value.quantity()), Map.of(item, goodsPrice),
                 value.deliveryTicks(), value.journeyTicks(), atTick);
-        if (cause == TripDispatchPolicy.Cause.ACCUMULATING) return Optional.empty();
+        if (!cause.permitsDeparture()) return Optional.empty();
         int minimum = cause == TripDispatchPolicy.Cause.SUPPLY_DEADLINE ? 1
                 : Math.toIntExact(Math.max(1, GoodsDispatchAdvice.plannedLot(state, buyer, value.organizer(), value.mode(), item, goodsPrice, value.journeyTicks(), atTick)));
         return Optional.of(new Advice(value.quantity(), value.expense(), minimum, value.cashFreight()));

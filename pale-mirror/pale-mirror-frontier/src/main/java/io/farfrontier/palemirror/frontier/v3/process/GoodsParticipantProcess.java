@@ -49,13 +49,7 @@ public final class GoodsParticipantProcess {
         if (registered == null) throw new IllegalArgumentException("goods review lost its exact declared participant");
         long now = executionInstant.ticks();
         var events = new ArrayList<ProposedEvent>();
-        var prices = GoodsParticipantPricing.review(state, registered, now);
-        if (!prices.equals(registered.prices())) {
-            var review = new GoodsParticipantPricesReviewed(registered.reviewRevision(), now, prices);
-            events.add(new ProposedEvent(registered.party().id(), review));
-            state = GoodsParticipantPricing.apply(state, registered.party().id(), review, now);
-        }
-        var participant = state.companies().goodsTrade().participants().participants().get(action.subject());
+        var previousParticipant = registered;
         // Retire only obligations already terminal in this transaction's pre-state.
         // Newly withdrawn promises must retain their settlement until a later review.
         var retirement = closedRetirement(state, now);
@@ -63,17 +57,10 @@ public final class GoodsParticipantProcess {
             events.add(new ProposedEvent(GoodsTradeMarketIdentity.OWNER, retirement.orElseThrow()));
             state = GoodsTradeStateSupport.retire(state, GoodsTradeMarketIdentity.OWNER, retirement.orElseThrow(), now);
         }
-        var commitments = GoodsCommitmentReview.plan(state, participant, now);
-        state = commitments.state(); events.addAll(commitments.events());
-        for (var withdrawal : commitments.events()) {
-            var disposition = ((GoodsTradeCancelled) withdrawal.payload()).disposition();
-            var contract = state.companies().goodsTrade().contracts().get(disposition.contractId());
-            events.addAll(GoodsParticipantWakeup.party(state, contract.buyer().id(), disposition.id().value(), now));
-        }
         // Same-container purchases transfer title only. Existing exact receiving custody
         // and the buyer's authorized order, not a fake round-trip, justify acceptance.
         for (var contract : state.companies().goodsTrade().contracts().values().stream()
-                .filter(value -> !value.terminal() && value.buyer().equals(participant.party())
+                .filter(value -> !value.terminal() && value.buyer().equals(previousParticipant.party())
                         && value.sourceContainerId().equals(value.receiverContainerId()))
                 .sorted(Comparator.comparing(GoodsTradeContract::id)).toList()) {
             if (ReferenceContainerCustody.blocksCanonicalUse(state, contract.receiverContainerId())) continue;
@@ -82,13 +69,37 @@ public final class GoodsParticipantProcess {
                 if (title.isEmpty()) continue;
                 var receipt = new GoodsTradeAcceptance(new SubjectId("receipt:goods-local/" + contract.id().value().replace(':', '-') + "/" + contract.revision()),
                         contract.id(), contract.revision(), title.orElseThrow());
-                state = GoodsTradeStateSupport.accept(state, participant.party().id(), receipt, now);
-                events.add(new ProposedEvent(participant.party().id(), new GoodsTradeAccepted(receipt)));
+                state = GoodsTradeStateSupport.accept(state, previousParticipant.party().id(), receipt, now);
+                events.add(new ProposedEvent(previousParticipant.party().id(), new GoodsTradeAccepted(receipt)));
                 events.addAll(GoodsParticipantWakeup.party(state, contract.seller().id(), receipt.id().value(), now));
                 break; // One exact reception per contract/review.
             }
         }
         var rules = state.bootstrap().ruleset().goodsTrade();
+        var evaluation = SettlementEconomicEvaluation.domestic(state, previousParticipant, now);
+        var prices = GoodsParticipantPricing.review(state, previousParticipant, now, evaluation);
+        if (!prices.equals(previousParticipant.prices())) {
+            var review = new GoodsParticipantPricesReviewed(previousParticipant.reviewRevision(), now, prices);
+            events.add(new ProposedEvent(previousParticipant.party().id(), review));
+            state = GoodsParticipantPricing.applyCommitted(state, previousParticipant.party().id(), review, now);
+            evaluation = SettlementEconomicEvaluation.domestic(state,
+                    state.companies().goodsTrade().participants().participants().get(action.subject()), now);
+        }
+        var participant = state.companies().goodsTrade().participants().participants().get(action.subject());
+        if (evaluation.view().supplyPlan().isPresent()) {
+            var publication = SettlementEconomicPlanPreparation.prepare(state, participant, evaluation, now);
+            events.add(new ProposedEvent(participant.party().id(), new SettlementEconomicPlanPublished(publication)));
+            state = SettlementEconomicPublication.apply(state, participant.party().id(), publication, now);
+            if (publication.cultivation().isPresent()) events.add(new ProposedEvent(participant.party().id(),
+                    new ScheduleEffect.ReconsiderationRequested(CultivationProcessModule.next(participant.party().id(), Math.addExact(now, 1)))));
+        }
+        var commitments = GoodsCommitmentReview.plan(state, previousParticipant, now);
+        state = commitments.state(); events.addAll(commitments.events());
+        for (var withdrawal : commitments.events()) {
+            var disposition = ((GoodsTradeCancelled) withdrawal.payload()).disposition();
+            var contract = state.companies().goodsTrade().contracts().get(disposition.contractId());
+            events.addAll(GoodsParticipantWakeup.party(state, contract.buyer().id(), disposition.id().value(), now));
+        }
         var intents = GoodsParticipantPolicies.require(participant).decide(GoodsParticipantAssessment.trading(state, participant, now), rules);
         var retainedExpiry = new HashMap<QuoteKey, Long>();
         for (var order : state.companies().goodsTrade().orders().values().stream()
@@ -170,7 +181,10 @@ public final class GoodsParticipantProcess {
                 + "; " + GoodsParticipantPolicies.require(participant).explain(GoodsParticipantAssessment.trading(state, participant, now), rules);
         if (decision.length() > 512) decision = decision.substring(0, 512);
         events.add(new ProposedEvent(participant.party().id(), new GoodsParticipantReviewed(participant.reviewRevision(), decision, now)));
-        if (periodic) events.add(new ProposedEvent(participant.party().id(), new ScheduleEffect.Created(review(participant.party().id(), Math.addExact(now, rules.reviewInterval())))));
+        long nextReview = state.companies().goodsTrade().participants().economicState(participant.party().id()).accepted()
+                .map(SettlementEconomicPlan::reviewAtTick).orElse(Math.addExact(now, rules.reviewInterval()));
+        events.add(new ProposedEvent(participant.party().id(), new ScheduleEffect.ReconsiderationRequested(
+                review(participant.party().id(), Math.max(Math.addExact(now, 1), nextReview)))));
         if (published > 0) for (var peer : participant.known())
             events.addAll(GoodsParticipantWakeup.party(state, peer.party().id(), "quote|" + participant.party().id().value()
                     + "|" + participant.reviewRevision(), now));

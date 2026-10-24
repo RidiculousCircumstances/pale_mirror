@@ -195,8 +195,8 @@ public final class MarketClearingProcess {
         FrontierWorldState restored = state.cancelProductionJob(job.id());
         ExactInventory inventory = restored.inventory().withEconomics(restored.inventory().economics().release(order.reservationId()));
         StrategicPlanState plans = restored.strategicPlans().transitionTask(task.id(), StrategicTaskStatus.BLOCKED);
-        return restored.withInventory(inventory).withCompanies(restored.companies().withMarket(restored.companies().market().cancel(order.id(), MarketWorkOrderStatus.CANCELLED)))
-                .withStrategicPlans(plans);
+        return restored.withChanges(FrontierWorldStateUpdate.begin().inventory(inventory).companies(restored.companies().withMarket(
+                restored.companies().market().cancel(order.id(), MarketWorkOrderStatus.CANCELLED))).strategicPlans(plans));
     }
     public static FrontierWorldState reduceRelationshipIncident(FrontierWorldState state, SubjectId subject, MarketRelationshipIncidentRecorded recorded) {
         MarketWorkOrder order = state.companies().market().workOrders().get(recorded.orderId());

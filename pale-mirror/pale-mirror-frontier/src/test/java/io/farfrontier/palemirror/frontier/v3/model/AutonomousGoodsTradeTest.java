@@ -187,11 +187,11 @@ class AutonomousGoodsTradeTest {
                         .map(GoodsTradeOrderPlaced.class::cast).toList();
                 assertFalse(placedOrders.isEmpty());
                 assertTrue(placedOrders.stream().allMatch(placed -> placed.order().expiresAtTick() == executedAt + rules.orderLifetime()));
-                var nextReviews = events.stream().map(ProposedEvent::payload).filter(ScheduleEffect.Created.class::isInstance)
-                        .map(ScheduleEffect.Created.class::cast).map(ScheduleEffect.Created::action)
-                        .filter(scheduled -> scheduled.kind().equals(GoodsParticipantProcess.REVIEW)).toList();
-                assertEquals(periodic ? 1 : 0, nextReviews.size());
-                if (periodic) assertEquals(executedAt + rules.reviewInterval(), nextReviews.getFirst().dueAt().ticks());
+                var nextReviews = events.stream().map(ProposedEvent::payload).filter(ScheduleEffect.ReconsiderationRequested.class::isInstance)
+                        .map(ScheduleEffect.ReconsiderationRequested.class::cast).map(ScheduleEffect.ReconsiderationRequested::action)
+                        .filter(scheduled -> scheduled.kind().equals(GoodsParticipantProcess.REVIEW) && scheduled.subject().equals(COMPANY)).toList();
+                assertEquals(1, nextReviews.size());
+                assertEquals(executedAt + rules.reviewInterval(), nextReviews.getFirst().dueAt().ticks());
             }
         }
     }

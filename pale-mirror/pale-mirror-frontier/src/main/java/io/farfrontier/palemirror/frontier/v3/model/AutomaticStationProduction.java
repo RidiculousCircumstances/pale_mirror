@@ -30,11 +30,7 @@ public final class AutomaticStationProduction {
     }
     private record Candidate(ContainerRecord record, ProductionCatalog.AutomaticPolicy policy,
                              ProductionRecipe recipe, CustodyAccount account) { }
-    /** Only this branch needs economic planning. Ordinary clock/fuel progress
-     * should not acquire an asynchronous preparation round trip. */
-    public static boolean requiresDemandAssessment(FrontierWorldState state, SubjectId stationId) {
-        return candidate(state, stationId).isPresent();
-    }
+
     private static Optional<Candidate> candidate(FrontierWorldState state, SubjectId stationId) {
         var record = ProductionStationEnergy.record(state, stationId); var spec = record.productionStation().orElseThrow();
         var policy = policy(state, spec).orElse(null);

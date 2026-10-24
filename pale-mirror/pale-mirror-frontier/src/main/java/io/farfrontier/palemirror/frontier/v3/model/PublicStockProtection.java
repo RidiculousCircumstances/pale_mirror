@@ -15,7 +15,9 @@ public final class PublicStockProtection {
     /** Raw owner facts used while composing the economic view, never a competing sale policy. */
     static int initialMinimum(FrontierWorldState state, SubjectId home, String itemKind) {
         if (SettlementReservePlanning.enabled(state)) {
-            var reserve = SettlementReservePlanning.retainedTargets(state, home).get(itemKind);
+            var registry = state.companies().goodsTrade().participants();
+            var reserve = registry.participants().containsKey(home) ? registry.economicState(home).accepted()
+                    .map(plan -> plan.domestic().reserves().get(itemKind)).orElse(null) : null;
             return reserve == null ? 0 : Math.toIntExact(reserve.protectedQuantity());
         }
         return Math.max(itemKind.equals(SettlementFoodPolicy.BREAD) ? SettlementFoodPolicy.baselineReserveRequirement(state, home) : 0,
