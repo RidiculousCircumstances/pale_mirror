@@ -79,6 +79,9 @@ final class GoodsTripAssembly {
     }
     private static Optional<TransportMissionStarted> declaration(FrontierWorldState state, GoodsParticipant seller,
             GoodsParticipant buyer, List<Parcel> parcels, GoodsTradeFulfillment.Mode mode, List<ResidentProfile> people, Optional<TransportAsset> animal, long now) {
+        var sponsor = mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? seller : buyer;
+        if (!ExpeditionCrewAdmission.canFeedBeforeTravel(state, sponsor.settlementId(),
+                people.stream().map(ResidentProfile::id).toList(), animal, now)) return Optional.empty();
         String stem = mode.name().toLowerCase(java.util.Locale.ROOT) + "/" + WorkOpportunityIdentity.digest(parcels.stream().map(p -> p.claimId().value()).collect(java.util.stream.Collectors.joining("|")));
         var missionId = new SubjectId("transport-mission:goods-trip/" + stem);
         var groupId = new SubjectId("unit-group:goods-trip/" + stem);

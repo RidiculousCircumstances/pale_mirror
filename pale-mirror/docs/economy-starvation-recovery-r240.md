@@ -84,3 +84,33 @@ fungible slot bindings, a different provider/epoch/image, or missing evidence.
 No economic rollback, repeated pickup, native rewrite, or fabricated receipt.
 Native verification covers deferral, duplicate/stale deferral rejection and the
 next visit's successful catch-up, alongside the existing projection cases.
+
+Retained-world result after R240c (no reset): at tick 1124617 the exact
+Hearthvale fixed storage became RELEASED with its saved predecessor retained;
+shipment 6-24 left the active registry. The buyer-collection mission
+`fd5197d6ee387f6c7a1045d30f281ce5` loaded coal and became OUTBOUND. Hearthvale
+received 28.554570 currency units; the payer balance fell by the same amount.
+The bakery fuel courier subsequently delivered eight coal, the bakery's
+INSUFFICIENT_HEAT blocker disappeared, and its retained job reached
+DEPOT_DELIVERY at tick 1129809. This is progress, not proof of feeding every town.
+
+A second confirmed inefficiency is logistics preflight ordering. On an immutable
+copy at tick 1125214 Clearwater requested 55 successive distant endpoint searches
+without admitting a mission. Completed requests had connected regional results;
+the eventual material rejection occurred after route selection. The chosen
+starving crew lacked even its current meal requirement, before travel consumption.
+R240d adds a shared provisioning prerequisite before endpoint discovery: current
+nutrition, each member's own unclaimed personal food, usable sponsor warehouse
+food and the selected real asset's stock. Personal excess is not silently shared.
+This is only a necessary condition with zero travel consumption; full duration,
+capacity, route, actual source access and reservation checks remain authoritative.
+On the identical snapshot the decision now completes without any route request:
+WAITING_FOR_AVAILABLE_TRANSPORT_OR_PROVISIONS. No food, money or departure proof
+is invented. The expensive impossible trip no longer competes with executable work.
+
+Stored-container recovery logging also distinguishes a matched image whose
+transition awaits command durability from an actual image mismatch. Previously
+that asynchronous success path could emit SAVED_IMAGE_DIFFERS misleadingly.
+The seven historical absent Stonefield bodies and its pending physical pickup
+remain unresolved; neither absence nor an empty operation receipt is authority
+for recreating bodies, clearing cargo or replaying effects.

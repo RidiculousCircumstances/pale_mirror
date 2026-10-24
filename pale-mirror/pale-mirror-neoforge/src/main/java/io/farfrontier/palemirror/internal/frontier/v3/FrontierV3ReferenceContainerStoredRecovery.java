@@ -43,11 +43,18 @@ final class FrontierV3ReferenceContainerStoredRecovery {
             if (!snapshot.current(level)) return;
             var actual = FrontierV3StoredContainerObservation.read(state, lease.objectId(),
                     snapshot.data().orElse(null), level.registryAccess());
-            if (actual.isPresent() && FrontierV3ReferenceContainerCustodyExecutor.confirmSavedFixedProjection(
-                    level, runtime, state, lease, actual.orElseThrow()))
-                PaleMirrorMod.LOGGER.info("PMV3_CONTAINER_STORED_RECOVERY container={} epoch={} result=SAVED_IMAGE_RECONCILED",
-                        lease.objectId().value(), lease.authorityEpoch());
-            else PaleMirrorMod.LOGGER.warn("PMV3_CONTAINER_STORED_RECOVERY container={} epoch={} reason={}",
+            var replica = state.replicaCustody().replicas().get(lease.objectId());
+            boolean matches = actual.isPresent() && replica != null &&
+                    (replica.fingerprint().equals(actual.orElseThrow().fingerprint())
+                        && replica.provenance().equals(actual.orElseThrow().provenance())
+                    || replica.preparationPreimage().filter(before -> before.matches(
+                        actual.orElseThrow().fingerprint(), actual.orElseThrow().provenance())).isPresent());
+            if (matches) {
+                boolean immediate = FrontierV3ReferenceContainerCustodyExecutor.confirmSavedFixedProjection(
+                        level, runtime, state, lease, actual.orElseThrow());
+                PaleMirrorMod.LOGGER.info("PMV3_CONTAINER_STORED_RECOVERY container={} epoch={} result=SAVED_IMAGE_MATCHED transitionImmediate={}",
+                        lease.objectId().value(), lease.authorityEpoch(), immediate);
+            } else PaleMirrorMod.LOGGER.warn("PMV3_CONTAINER_STORED_RECOVERY container={} epoch={} reason={}",
                     lease.objectId().value(), lease.authorityEpoch(), actual.isEmpty() ? "MISSING_OR_FOREIGN_SAVED_CONTAINER" : "SAVED_IMAGE_DIFFERS");
         } catch (CompletionException | IllegalArgumentException malformed) {
             PaleMirrorMod.LOGGER.warn("PMV3_CONTAINER_STORED_RECOVERY container={} reason={}", lease.objectId().value(), malformed.toString());
