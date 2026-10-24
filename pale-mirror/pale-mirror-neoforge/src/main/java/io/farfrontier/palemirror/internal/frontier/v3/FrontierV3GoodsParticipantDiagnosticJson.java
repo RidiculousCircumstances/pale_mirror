@@ -89,14 +89,17 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                     .explain(view, state.bootstrap().ruleset().goodsTrade())) + ",\"availableMoneyRaw\":" + view.availableMoney().raw()
                 + ",\"nextReviewTick\":" + (reviews.isPresent() ? Long.toString(reviews.orElseThrow()) : "null")
                 + ",\"stocks\":[" + stocks
-                + "],\"supplyPlan\":[" + supply + "],\"reserves\":" + view.supplyPlan().map(FrontierV3ReserveDiagnosticJson::render).orElse("[]")
+                + "]"
                 + ",\"acceptedCommodities\":{" + acceptedCommodities + "}"
-                + ",\"prices\":[" + prices + "],\"completedSales\":[" + completedSales + "]"
+                + ",\"completedSales\":[" + completedSales + "]"
                 + ",\"completedSalesScope\":\"RETAINED_PRICE_HISTORY_NOT_LIFETIME\""
                 + ",\"completedCommodities\":{" + completedCommodities + "}";
         // The common byte budget preserves current stock/planning facts when retained
         // trade history grows. Explicit omissions are not empty orders or no caravans.
         return FrontierV3DiagnosticDetailBudget.finish(essential, java.util.List.of(
+                new FrontierV3DiagnosticDetailBudget.Section("reserves", view.supplyPlan().map(FrontierV3ReserveDiagnosticJson::render).orElse("[]")),
+                new FrontierV3DiagnosticDetailBudget.Section("supplyPlan", "[" + supply + "]"),
+                new FrontierV3DiagnosticDetailBudget.Section("prices", "[" + prices + "]"),
                 new FrontierV3DiagnosticDetailBudget.Section("economy", view.supplyPlan().flatMap(plan -> plan.economy())
                     .map(FrontierV3EconomicDiagnosticJson::render).orElse("null")),
                 new FrontierV3DiagnosticDetailBudget.Section("sourcingInputs", assessment.facts()

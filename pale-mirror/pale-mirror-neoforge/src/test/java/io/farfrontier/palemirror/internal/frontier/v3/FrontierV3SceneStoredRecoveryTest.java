@@ -94,15 +94,15 @@ class FrontierV3SceneStoredRecoveryTest {
                 new FrontierV3StoredEntityInspection.Snapshot(ids,
                         Map.of(first.carrier().identity().entityId(), saved(first),
                                 second.carrier().identity().entityId(), saved(second))), 0L);
-        var exact = new FrontierV3SceneStoredRecovery.UnobservedProof(census,
+        var exact = new FrontierV3StoredBodyEvidence.Proof(census,
                 Map.of(COLUMN, ids), Map.of(COLUMN, snapshot), ids);
         assertTrue(exact.complete());
         assertTrue(exact.body(first.carrier().identity().entityId()).matches(first));
         assertTrue(exact.body(second.carrier().identity().entityId()).matches(second));
-        assertFalse(new FrontierV3SceneStoredRecovery.UnobservedProof(census,
+        assertFalse(new FrontierV3StoredBodyEvidence.Proof(census,
                 Map.of(COLUMN, Set.of(first.carrier().identity().entityId())),
                 Map.of(COLUMN, snapshot), ids).complete(), "one absent worker forbids whole-scene publication");
-        assertFalse(new FrontierV3SceneStoredRecovery.UnobservedProof(new FrontierV3StoredEntityCensus.Result(Map.of(
+        assertFalse(new FrontierV3StoredBodyEvidence.Proof(new FrontierV3StoredEntityCensus.Result(Map.of(
                 first.carrier().identity().entityId(), Set.of(COLUMN, new ChunkPos(1, 0)),
                 second.carrier().identity().entityId(), Set.of(COLUMN)), 0L),
                 Map.of(COLUMN, ids), Map.of(COLUMN, snapshot), ids).complete(),

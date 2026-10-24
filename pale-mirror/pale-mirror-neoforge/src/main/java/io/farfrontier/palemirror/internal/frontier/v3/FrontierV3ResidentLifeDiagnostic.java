@@ -176,13 +176,22 @@ final class FrontierV3ResidentLifeDiagnostic {
     private static String movementKnownRoute(FrontierWorldState state, ActorMovement movement) {
         if (movement == null) return "none";
         if (movement.coldTravel().isPresent()) return "retained";
-        if (!(movement.context() instanceof ActorMovementContext.ServiceExit exit)) return "other_context";
-        try {
-            return "available:" + KnownServiceExitNavigation.retainedPathFrom(state, exit.settlementId(),
-                    exit.depotId(), movement.order(), state.actorLocations().get(movement.order().actorId()).supportingSurface()).size();
-        } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
-            return unavailable.status() + ":" + unavailable.getMessage();
-        }
+        String[] result = {"unavailable"};
+        io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.inspectAvailability(() -> {
+            try {
+                var provider = io.farfrontier.palemirror.frontier.v3.process.ActorMovementProviders.require(movement);
+                var route = provider.nextSegment(state, movement,
+                        state.actorLocations().get(movement.order().actorId()).supportingSurface());
+                var access = provider.serviceApproach(state, movement);
+                result[0] = "available:" + route.size() + access.map(value -> ":service="
+                        + ServiceAccessCoordinator.available(state, value)).orElse("");
+                return true;
+            } catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
+                result[0] = unavailable.status() + ":" + unavailable.getMessage();
+                return false;
+            }
+        });
+        return result[0];
     }
 
     private static String quote(String value) { return FrontierV3DiagnosticJson.quote(value); }

@@ -154,18 +154,18 @@ final class FrontierV3SceneStoredRecovery {
                     || attempt.globalEpoch() == globalEpoch.orElseThrow() && attempt.lease().equals(lease)
                         && attempt.missing().equals(missing)) return;
             pending.put(lease.id(), new UnobservedAttempt(lease, state, missing, globalEpoch.orElseThrow(), level.getGameTime(),
-                    inspectUnobserved(level, missing), attempt.scans() + 1));
+                    FrontierV3StoredBodyEvidence.inspect(level, missing), attempt.scans() + 1));
             return;
         }
         if (attempt == null) {
             if (pending.size() >= MAX_ATTEMPTS || pending.values().stream().anyMatch(value -> !value.future().isDone())) return;
             pending.put(lease.id(), new UnobservedAttempt(lease, state, missing, globalEpoch.orElseThrow(), level.getGameTime(),
-                    inspectUnobserved(level, missing), 1));
+                    FrontierV3StoredBodyEvidence.inspect(level, missing), 1));
             return;
         }
         if (!attempt.future().isDone()) return;
         attempt.decide();
-        UnobservedProof proof;
+        FrontierV3StoredBodyEvidence.Proof proof;
         try { proof = attempt.future().join(); }
         catch (CompletionException | IllegalStateException failure) {
             PaleMirrorMod.LOGGER.warn("PMV3_SCENE_STORED_RECOVERY unobserved lease={} reason={}", lease.id().value(), failure.toString());
@@ -267,66 +267,16 @@ final class FrontierV3SceneStoredRecovery {
         }
     }
 
-    private static CompletableFuture<UnobservedProof> inspectUnobserved(ServerLevel level, Set<UUID> ids) {
-        return FrontierV3StoredEntityCensus.scan(level, ids).thenComposeAsync(census -> {
-            Map<ChunkPos, Set<UUID>> columns = new HashMap<>();
-            for (UUID id : ids) {
-                var matches = census.sightings().getOrDefault(id, Set.of());
-                if (matches.size() != 1) return CompletableFuture.completedFuture(new UnobservedProof(census, Map.of(), Map.of(), ids));
-                columns.computeIfAbsent(matches.iterator().next(), ignored -> new HashSet<>()).add(id);
-            }
-            Map<ChunkPos, CompletableFuture<FrontierV3StoredEntityInspection.StampedSnapshot>> reads = new HashMap<>();
-            columns.forEach((column, selected) -> reads.put(column,
-                    FrontierV3StoredEntityInspection.inspect(level, column, selected)));
-            return CompletableFuture.allOf(reads.values().toArray(CompletableFuture[]::new))
-                    .thenApplyAsync(ignored -> {
-                        Map<ChunkPos, FrontierV3StoredEntityInspection.StampedSnapshot> snapshots = new HashMap<>();
-                        reads.forEach((column, future) -> snapshots.put(column, future.join()));
-                        return new UnobservedProof(census, columns, snapshots, ids);
-                    }, level.getServer());
-        }, level.getServer());
-    }
-
-    static record UnobservedProof(FrontierV3StoredEntityCensus.Result census, Map<ChunkPos, Set<UUID>> columns,
-                                  Map<ChunkPos, FrontierV3StoredEntityInspection.StampedSnapshot> snapshots,
-                                  Set<UUID> ids) {
-        UnobservedProof {
-            Map<ChunkPos, Set<UUID>> copied = new HashMap<>();
-            columns.forEach((column, members) -> copied.put(column, Set.copyOf(members)));
-            columns = Map.copyOf(copied); snapshots = Map.copyOf(snapshots); ids = Set.copyOf(ids);
-        }
-        boolean complete() {
-            if (columns.isEmpty() || !columns.keySet().equals(snapshots.keySet())) return false;
-            Set<UUID> covered = new HashSet<>();
-            for (var entry : columns.entrySet()) {
-                for (UUID id : entry.getValue()) {
-                    if (!covered.add(id) || !census.uniqueAt(id, entry.getKey())) return false;
-                }
-            }
-            return covered.equals(ids);
-        }
-        boolean current(ServerLevel level) {
-            return complete() && census.stillCurrent(level)
-                    && snapshots.entrySet().stream().allMatch(entry -> entry.getValue().stillCurrent(level, entry.getKey()));
-        }
-        FrontierV3SceneDeparturePersistence.SavedBody body(UUID id) {
-            ChunkPos column = census.sightings().getOrDefault(id, Set.of()).stream().findFirst().orElse(null);
-            if (column == null) return null;
-            var snapshot = snapshots.get(column);
-            return census.uniqueAt(id, column) && snapshot != null ? snapshot.snapshot().actors().get(id) : null;
-        }
-    }
-
     private static final class UnobservedAttempt {
         private final SceneLease lease;
         private final FrontierWorldState state;
         private final Set<UUID> missing;
         private final long globalEpoch, startedAtTick;
         private final int scans;
-        private final CompletableFuture<UnobservedProof> future;
+        private final CompletableFuture<FrontierV3StoredBodyEvidence.Proof> future;
         private boolean decided;
         UnobservedAttempt(SceneLease lease, FrontierWorldState state, Set<UUID> missing,
-                          long globalEpoch, long startedAtTick, CompletableFuture<UnobservedProof> future, int scans) {
+                          long globalEpoch, long startedAtTick, CompletableFuture<FrontierV3StoredBodyEvidence.Proof> future, int scans) {
             this.lease = lease; this.state = state; this.missing = Set.copyOf(missing);
             this.globalEpoch = globalEpoch; this.startedAtTick = startedAtTick; this.future = future;
             this.scans = scans;
@@ -337,7 +287,7 @@ final class FrontierV3SceneStoredRecovery {
         long globalEpoch() { return globalEpoch; }
         long startedAtTick() { return startedAtTick; }
         int scans() { return scans; }
-        CompletableFuture<UnobservedProof> future() { return future; }
+        CompletableFuture<FrontierV3StoredBodyEvidence.Proof> future() { return future; }
         boolean decided() { return decided; }
         void decide() { decided = true; }
     }

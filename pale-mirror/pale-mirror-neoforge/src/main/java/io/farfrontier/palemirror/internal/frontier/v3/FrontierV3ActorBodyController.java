@@ -144,6 +144,7 @@ final class FrontierV3ActorBodyController {
                     actor.value(), ActorBodyAuthority.current(state, actor).physicalEpoch(), living.chunkPosition());
             return;
         }
+        FrontierV3BodyStoredRecovery.offer(level, runtime, state, actor);
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
         var receipt = ledger.bodyDeparture(actor).orElse(null);
         if (receipt == null || !receipt.current(state) || !ledger.savedBodyDeparture(receipt)
