@@ -48,6 +48,17 @@ class AutomaticStationProductionTest {
                 "changed facility condition must invalidate the installed-station index");
         assertTrue(AutomaticStationProduction.stations(state, record.ownerId(), recipe).contains(record));
     }
+    @Test void outputReserveWithoutIngredientsNeitherRequestsNorBurnsFuel() {
+        var state = initial(); var record = station(state); var spec = record.productionStation().orElseThrow();
+        state = supply(state, record, "minecraft:coal", 1, "unbacked-fuel");
+        assertEquals(0, StationFuelDemandComposition.heat(state, spec, 1));
+        assertTrue(ProductionStationEnergy.next(state, spec.id()).isEmpty());
+        var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
+        assertTrue(ProductionStationEnergy.next(state, spec.id()).isEmpty(), "recovery must not turn a reserve target into fuel use");
+        state = supply(state, record, "minecraft:raw_iron", 1, "backed-input");
+        assertEquals(200, StationFuelDemandComposition.heat(state, spec, 1));
+        assertTrue(ProductionStationEnergy.next(state, spec.id()).isPresent());
+    }
     @Test void partialInputCompletesWithoutWorkerAndSurvivesRecoveryWithExactFuelCost() {
         var state = initial(); var record = station(state); var spec = record.productionStation().orElseThrow();
         state = supply(state, record, "minecraft:raw_iron", 3, "input");

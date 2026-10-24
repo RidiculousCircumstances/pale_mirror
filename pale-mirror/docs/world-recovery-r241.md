@@ -100,3 +100,32 @@ existing atomic reconciliation, without replaying harvest or creating resources.
 Evidence: `build/r241b-hot-result.json`, `r241b-conflict-snapshot.bin`,
 `r241b-carrier25.json`, `r241b-fields.json`, `r241c-hot-result.json`.
 This finding invalidates a complete HOT/COLD acceptance claim until retested.
+
+## R241e: station fuel was allocated without material backing
+
+The continuing same-world run found a second, independent starvation mechanism.
+At tick 175251, Southgate's smeltery and forge each retained 1600 heat with no
+ingredients or operation; its bakery retained zero heat and an accepted wheat
+order. The first two imported coal were consumed by idle machines. Evidence:
+`build/r241d-machine9.txt`, `build/r241d-station9.txt`, and the read-only copied
+checkpoint probe `build/r241e-fuel-proof.txt`.
+
+`ProductionStationSupply` previously traversed container IDs. The fuel owner
+requested heat from output targets alone, and `ProductionStationEnergy.next`
+preheated every fuelled machine to its maximum recipe load. Thus naming order
+could consume the only fuel before an urgent, materially backed operation.
+
+Fuel demand now requires actual accessible ingredients, an admitted ingredient
+shipment or accepted worker input. The closed station capability composition
+supplies that evidence; the common energy owner does not inspect job phases.
+The same material bound guards fuel burning, including after snapshot recovery.
+Station supply orders candidates by the production plan's output deadline,
+with stable identity only resolving equal deadlines. Logistics still owns
+ordinary claims and transfer; this does not move energy or refund past burns.
+
+The copied live snapshot now yields zero fuel demand for both idle metal
+stations and an urgent supported bakery demand. Tests cover an unbacked output
+reserve through recovery, followed by real ingredient arrival; existing HOT
+fuel decrement/replay and recipe lifecycle checks remain applicable. Empty
+forge fixtures now supply their actual ingredients before requesting heat.
+Economic prices, treasuries and initial stocks are unchanged.

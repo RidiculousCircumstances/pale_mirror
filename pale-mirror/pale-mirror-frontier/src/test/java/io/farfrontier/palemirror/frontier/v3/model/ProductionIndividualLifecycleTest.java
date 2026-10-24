@@ -21,12 +21,15 @@ class ProductionIndividualLifecycleTest {
         var ledger = state.inventory().fungibleResources().issue(new ResourceLot(FUEL, record.ownerId(), "minecraft:coal", 2, "fixture:coal", List.of()),
                 new CustodyAccount(account, new ResourceCustody.Container(record.id()), Map.of(FUEL, 2), Map.of()));
         state = state.withInventory(state.inventory().withFungibleResources(ledger));
-        state = ProductionStationEnergy.apply(state, station.id(), new ProductionStationFuelChanged(
-                ProductionStationFuelChanged.Stage.COLD_CONSUMED, ProductionStationEnergy.next(state, station.id()).orElseThrow(), List.of()));
+        assertTrue(ProductionStationEnergy.next(state, station.id()).isEmpty(), "fuel alone does not authorize preheating an empty forge");
         var staging = new SubjectId("custody:forge-test-staging");
         ledger = state.inventory().fungibleResources().issue(new ResourceLot(MATERIAL, record.ownerId(), "minecraft:iron_ingot", 5, "fixture:metal", List.of()),
                 new CustodyAccount(staging, new ResourceCustody.Container(record.id()), Map.of(MATERIAL, 5), Map.of()))
                 .transfer(staging, account, Map.of(MATERIAL, 5), Map.of());
+        state = state.withInventory(state.inventory().withFungibleResources(ledger));
+        state = ProductionStationEnergy.apply(state, station.id(), new ProductionStationFuelChanged(
+                ProductionStationFuelChanged.Stage.COLD_CONSUMED, ProductionStationEnergy.next(state, station.id()).orElseThrow(), List.of()));
+        ledger = state.inventory().fungibleResources();
         ledger = ledger.rebind(account, 1, FungiblePhysicalObservation.bind(ledger, account, 1, List.of(
                 ProductionStationOperatorTest.stack(station, station.inputSlot(), "minecraft:iron_ingot", 5),
                 ProductionStationOperatorTest.stack(station, station.fuelSlot(), "minecraft:coal", 1))));

@@ -30,11 +30,17 @@ class ProductionStationEnergyTest {
                 "fixture:finite-fuel", List.of()), new CustodyAccount(account, new ResourceCustody.Container(station.containerId()), Map.of(FUEL, 4), Map.of()));
         return state.withInventory(state.inventory().withFungibleResources(ledger));
     }
+    private static FrontierWorldState withIngredients(FrontierWorldState state, ProductionStationSpec station) {
+        var owner = state.inventory().containers().get(station.containerId()).ownerId();
+        var source = ResourceStorageSelection.containers(state, owner, "minecraft:wheat", Set.of(ResourceStorageRole.WAREHOUSE)).stream().sorted().findFirst().orElseThrow();
+        var record = state.inventory().containers().get(source);
+        return AutomaticStationProductionTest.supply(state, record, "minecraft:wheat", 63, "energy-input");
+    }
     @Test void acquiredContainerWithoutMaterialBindingsWaitsBeforeBurningRealFuel() {
         var genesis = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:station-fuel-reacquisition"), 41,
                 FrontierRulesets.fuelledQuarryGraybox()));
         var station = genesis.inventory().containers().values().stream().flatMap(record -> record.productionStation().stream()).findFirst().orElseThrow();
-        var state = ReferenceContainerCustodyFixtures.observedAndHeld(fuel(genesis, station), station.containerId());
+        var state = ReferenceContainerCustodyFixtures.observedAndHeld(fuel(withIngredients(genesis, station), station), station.containerId());
         assertTrue(ReferenceContainerCustody.hasOperationalCustody(state, station.containerId()));
         assertTrue(ProductionStationEnergy.next(state, station.id()).isEmpty(), "custody acquisition is not material binding");
         assertEquals(0, state.productionStations().require(station.id()).storedHeat());
@@ -256,7 +262,7 @@ class ProductionStationEnergyTest {
     @Test void preparedHotBurnRecoversAndRejectsMissingDecrementUnrelatedMutationAndReplay() {
         var genesis = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:hot-station-fuel"), 41, FrontierRulesets.fuelledQuarryGraybox()));
         var station = genesis.inventory().containers().values().stream().flatMap(record -> record.productionStation().stream()).findFirst().orElseThrow();
-        var state = fuel(genesis, station);
+        var state = fuel(withIngredients(genesis, station), station);
         var account = ReferenceContainerCustody.scopeId(station.containerId());
         var address = new PhysicalStackAddress.ContainerSlot(new InventoryCustody.ContainerSlot(station.containerId(), station.fuelSlot()));
         var ledger = state.inventory().fungibleResources();

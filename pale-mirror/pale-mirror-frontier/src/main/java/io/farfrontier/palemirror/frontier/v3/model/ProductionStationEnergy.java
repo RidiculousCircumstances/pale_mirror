@@ -29,8 +29,7 @@ public final class ProductionStationEnergy {
         var machine = state.productionStations().require(stationId);
         var record = record(state, stationId); var station = record.productionStation().orElseThrow();
         var catalog = state.bootstrap().ruleset().production();
-        long target = catalog.recipes().stream().filter(recipe -> recipe.capability() == station.capability())
-                .mapToLong(recipe -> Math.multiplyExact(recipe.heatPerBatch(), ProductionBatchSizing.maximumRecipeBatches(recipe))).max().orElse(0);
+        long target = StationFuelDemandComposition.backedHeat(state, station);
         if (machine.operation().isPresent() || machine.pendingFuel().isPresent() || machine.storedHeat() >= target
                 || ReferenceContainerCustody.blocksCanonicalUse(state, record.id())
                 || ContainerPhysicalAuthorityComposition.pending(state, record.id())) return Optional.empty();

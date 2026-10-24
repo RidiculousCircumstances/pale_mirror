@@ -7,9 +7,14 @@ import java.util.*;
 final class ProductionStationSupply {
     static Optional<InternalShipmentDispatched> offer(FrontierWorldState state, ResidentProfile worker, long tick) {
         var catalog = state.bootstrap().ruleset().production();
-        for (var record : state.inventory().containers().values().stream().sorted(Comparator.comparing(ContainerRecord::id)).toList()) {
-            if (!record.ownerId().equals(worker.settlementId()) || record.productionStation().isEmpty()
-                    || ReferenceContainerCustody.blocksCanonicalUse(state, record.id())) continue;
+        record Candidate(ContainerRecord record, long deadline) { }
+        var candidates = state.inventory().containers().values().stream()
+                .filter(record -> record.ownerId().equals(worker.settlementId()) && record.productionStation().isPresent()
+                        && !ReferenceContainerCustody.blocksCanonicalUse(state, record.id()))
+                .map(record -> new Candidate(record, StationFuelDemandComposition.deadline(state, record.productionStation().orElseThrow(), tick)))
+                .sorted(Comparator.comparingLong(Candidate::deadline).thenComparing(candidate -> candidate.record().id())).toList();
+        for (var candidate : candidates) {
+            var record = candidate.record();
             var station = record.productionStation().orElseThrow();
             var supplied = AutomaticStationSupply.offer(state, worker, record, tick);
             if (supplied.isPresent()) return supplied;
