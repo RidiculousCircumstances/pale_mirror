@@ -170,3 +170,24 @@ without retaining the addressed continuation. Those exact pending branches now
 reuse the same bounded observer queue; missing/stale save evidence and rejected
 commands still do not enter it. Existing queue fairness, departure-consumption
 and body-lifetime negative coverage applies; no timeout or custody rule changed.
+
+## R241h: unload before canonical insertion acknowledgement
+
+The G revisit ended at 261932 without conflicts. Exact resident 10-30 closed
+its ambient scope and body by snapshot 261717, observed 43 seconds after unload.
+A subsequent COLD admission correctly refused resident 6-19 in PREPARED epoch 7.
+Its copied native actor row proves residence 10 was actually inserted and saved:
+current body departure, saved-body marker and retained `body-admission-v1` link.
+The same row retains no unstarted insertion permission or old inactive carrier.
+Both common departure paths accepted only RUNNING/AMBIGUOUS, while insertion
+confirmation required an indexed live mob. Unload before acknowledgement thus
+left a positive saved insertion with no permitted continuation.
+
+The body operation owner now confirms that already completed insertion from
+its exact saved native operation participant plus current saved departure.
+It checks world, declared actor/body/epoch, residence, operation ticket and full
+fingerprint; prepares, applied-only, rejected, stale or foreign evidence cannot
+admit it. The existing canonical admission command and operation receipt closure
+are reused, followed by the ordinary saved departure path. No entity is created,
+no custody check is skipped, and this does not award any activity completion.
+Negative/round-trip assertions extend the existing body admission operation test.

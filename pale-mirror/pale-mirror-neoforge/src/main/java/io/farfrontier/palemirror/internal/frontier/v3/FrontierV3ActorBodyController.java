@@ -154,6 +154,10 @@ final class FrontierV3ActorBodyController {
                 || FrontierV3AmbientPendingAdmissions.get(runtime, receipt.identity().entityId()) != null) return;
         var body = ActorBodyAuthority.current(state, actor);
         var phase = ActorBodyAuthority.require(state, body).phase();
+        if (phase == FencedRecoveryPhase.PREPARED) {
+            FrontierV3BodyOperationIntegration.confirmSavedDeparture(level, runtime, state, receipt);
+            return;
+        }
         if (phase != FencedRecoveryPhase.RUNNING && phase != FencedRecoveryPhase.AMBIGUOUS) return;
         // A process must first settle its own hand/effect/observation obligations.
         // These are explicit projection-scope constraints, never a body owner lookup.

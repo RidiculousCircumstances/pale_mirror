@@ -87,12 +87,43 @@ final class FrontierV3BodyOperationIntegration {
         if (retired(operations, link)) {
             carriers.forgetBodyOperation(link); carriers.persistAsync(level, state.bootstrap().worldId()); return false;
         }
-        if (!operations.durableOperation(link.operation().ticket())) return true;
+        confirmConsequence(level, runtime, carriers, link, consequence);
+        return true;
+    }
+    /** A native body can unload before its insertion acknowledgement. Confirm the
+     * already saved insertion, then let the ordinary departure protocol close it.
+     * This never inserts a body or treats UUID absence as evidence of admission. */
+    static void confirmSavedDeparture(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            FrontierWorldState state, FrontierV3ActorBodyDeparture departure) {
+        var carriers = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        var link = carriers.bodyOperation(departure.identity().actorId()).orElse(null);
+        if (link == null || !link.world().equals(state.bootstrap().worldId())) return;
+        var operation = FrontierV3OperationLedger.get(level).find(link.operation().ticket()).orElse(null);
+        if (operation == null || !savedAdmissionMatches(link, departure, operation)) return;
+        var actor = link.actor(); var location = state.actorLocations().get(actor);
+        var consequence = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyPresent(
+                ActorBodyAuthority.current(state, actor), location.body(), location.condition().health(),
+                departure.observed().body(), departure.observed().health());
+        confirmConsequence(level, runtime, carriers, link, consequence);
+        FrontierV3ActorProbeSchedule.wake(runtime, runtime.decodedState().orElseThrow(), actor, level.getGameTime());
+    }
+    static boolean savedAdmissionMatches(FrontierV3BodyAdmissionOperation link,
+            FrontierV3ActorBodyDeparture departure, FrontierV3OperationReceipt operation) {
+        return !link.rejected() && !operation.cancelled() && !operation.ownerClosed()
+                && link.binding().declaration().inactiveCarrier().equals(departure.identity())
+                && link.residence() == departure.residenceGeneration()
+                && operation.ticket().equals(link.operation().ticket())
+                && operation.declaration().equals(link.operation().declaration())
+                && operation.saved().contains(link.participant());
+    }
+    private static void confirmConsequence(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            FrontierV3AmbientCarrierLedger carriers, FrontierV3BodyAdmissionOperation link, FrontierPayload consequence) {
+        var operations = FrontierV3OperationLedger.get(level);
+        if (!operations.durableOperation(link.operation().ticket())) return;
         if (FrontierV3OperationConfirmation.submitRecovery(level, runtime, link.operation().ticket(), consequence, java.util.Optional.empty())) {
             closeAdmissionOwner(level, carriers, link);
         } else operations.ownerCommand(link.operation().ticket()).ifPresent(command ->
                 runtime.afterCommandReceipt(command.id(), () -> closeAdmissionOwner(level, carriers, link)));
-        return true;
     }
     private static void closeAdmissionOwner(ServerLevel level, FrontierV3AmbientCarrierLedger carriers,
             FrontierV3BodyAdmissionOperation link) {
