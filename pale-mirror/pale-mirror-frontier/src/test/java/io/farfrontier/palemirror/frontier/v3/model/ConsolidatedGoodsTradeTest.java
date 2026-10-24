@@ -11,6 +11,26 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ConsolidatedGoodsTradeTest {
+    @Test void dispatchLotReservesTheSameInvoiceAsSellerTransportButNotOwnedCollectionFood() {
+        var state = initial();
+        var organizer = state.companies().goodsTrade().participants().participants().get(new SubjectId("settlement:1"));
+        assertThrows(NullPointerException.class, () -> GoodsTransportOptions.costCurve(state, organizer, 24000,
+                "minecraft:coal", null, 400), "an undeclared mode cannot inherit free collection");
+        var collection = GoodsTransportOptions.costCurve(state, organizer, 24000, "minecraft:coal",
+                GoodsTradeFulfillment.Mode.BUYER_COLLECTION, 400);
+        var delivered = GoodsTransportOptions.costCurve(state, organizer, 24000, "minecraft:coal",
+                GoodsTradeFulfillment.Mode.SELLER_DELIVERY, 400);
+        assertEquals(collection.quote(1).economic(), delivered.quote(1).economic());
+        assertEquals(0, collection.quote(1).cash());
+        long freight = delivered.quote(1).cash();
+        assertTrue(freight > 0);
+        long price = FixedScalar.whole(1).raw(), budget = freight + 10 * price;
+        long quantity = io.farfrontier.palemirror.frontier.v3.model.supply.ReplenishmentLot.choose(64, budget, price, delivered);
+        assertEquals(10, quantity);
+        assertTrue(quantity * price + delivered.quote(quantity).cash() <= budget);
+        assertTrue(io.farfrontier.palemirror.frontier.v3.model.supply.ReplenishmentLot.choose(64, budget, price, collection) > quantity);
+    }
+
     @Test void storageApproachWaitsForOneDeclaredStationInsteadOfLaunchingAllAlternatives() throws Exception {
         var state = initial(); var home = new SubjectId("settlement:1");
         var endpoint = GoodsParticipantStorage.endpoint(state, FrontierWorldState.depotId(home));
@@ -184,6 +204,16 @@ class ConsolidatedGoodsTradeTest {
         assertEquals(1, state.shipments().missions().size(), "compatible goods must share one admitted trip");
         var mission = state.shipments().missions().values().iterator().next();
         var group = state.unitGroups().groups().get(mission.groupId());
+        long afterQuotes = state.companies().goodsTrade().orders().values().stream()
+                .mapToLong(GoodsTradeOrder::expiresAtTick).max().orElseThrow() + 1;
+        var reserves = new LogisticsReserveSupply().readAt(state, buyer.settlementId(), afterQuotes);
+        var journey = mission.supplies().orElseThrow().journey();
+        long fullLead = io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionTiming.assess(
+                state.bootstrap().ruleset().expedition(), journey.outward().edges(), journey.returning().edges(),
+                mission.organization().itinerary()).durationTicks() + state.bootstrap().ruleset().goodsTrade().reviewInterval();
+        assertFalse(reserves.timing().isEmpty());
+        assertTrue(reserves.timing().values().stream().allMatch(timing -> timing.leadTicks() == fullLead),
+                "admitted delivery retains the same complete-trip margin, without expired alternative quotes");
         var kinds = mission.shipmentIds().stream().map(state.shipments().shipments()::get).map(Shipment::itemKind).collect(java.util.stream.Collectors.toSet());
         assertTrue(kinds.containsAll(Set.of("minecraft:bread", "minecraft:cobblestone", "minecraft:coal")), kinds.toString());
         assertEquals(buyerMoney, state.inventory().economics().require(buyer.party().id()).balance(), "admission is not sale settlement");

@@ -51,7 +51,8 @@ public final class GoodsTransportOptions {
                 state.bootstrap().ruleset().goodsTrade().supplyPlanning().maximumTripCargoStacks(), now).stream().findFirst();
     }
     public static io.farfrontier.palemirror.frontier.v3.model.supply.LotTransportCost costCurve(
-            FrontierWorldState state, GoodsParticipant organizer, long duration, String item, long now) {
+            FrontierWorldState state, GoodsParticipant organizer, long duration, String item, GoodsTradeFulfillment.Mode mode, long now) {
+        Objects.requireNonNull(mode, "declared delivery responsibility");
         int size = parcelSize(state, item), maximum = maximumQuantity(state, item);
         long labour = state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing()
                 .map(io.farfrontier.palemirror.frontier.v3.model.supply.SourcingRules::labourValuePerTick).orElse(0L);
@@ -61,7 +62,8 @@ public final class GoodsTransportOptions {
                     Math.multiplyExact(size, Math.min(asset.stackSlots(), state.bootstrap().ruleset().expedition().packAnimalStackSlots()))))
                     .orElse(maximum);
             return new io.farfrontier.palemirror.frontier.v3.model.supply.LotTransportCost.Option(capacity,
-                    option.animal().isPresent() ? capacity : size, option.economicCost(labour), 0);
+                    option.animal().isPresent() ? capacity : size, option.economicCost(labour),
+                    mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY ? option.cost().resourceExpense().raw() : 0);
         }).toList());
     }
     private static List<Option> forecastOptions(FrontierWorldState state, GoodsParticipant organizer, long duration, long now) {

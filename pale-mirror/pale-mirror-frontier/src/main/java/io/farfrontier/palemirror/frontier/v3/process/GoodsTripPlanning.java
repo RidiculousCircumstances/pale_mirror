@@ -226,7 +226,10 @@ final class GoodsTripPlanning {
         for (var parcel : parcels) amounts.merge(parcel.contract().itemKind(),
                 parcel.contract().goodsUnitPrice().multiply(parcel.quantity()).raw(), Math::addExact);
         amounts.replaceAll((item, total) -> Math.ceilDiv(total, quantities.get(item)));
-        return GoodsDispatchAdvice.assess(state, view, organizer, quantities, amounts, journeyTicks, durationTicks, now);
+        var mode = parcels.getFirst().contract().fulfillment().mode();
+        if (parcels.stream().anyMatch(parcel -> parcel.contract().fulfillment().mode() != mode))
+            throw new IllegalArgumentException("mixed delivery responsibilities in one trip");
+        return GoodsDispatchAdvice.assess(state, view, organizer, mode, quantities, amounts, journeyTicks, durationTicks, now);
     }
     private GoodsTripPlanning() { }
 }

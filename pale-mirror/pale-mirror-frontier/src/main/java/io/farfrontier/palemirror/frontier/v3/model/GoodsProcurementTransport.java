@@ -13,6 +13,7 @@ public final class GoodsProcurementTransport {
     public record Quote(int quantity, long expense, long cashFreight, long deliveryTicks, long journeyTicks,
                         GoodsParticipant organizer, GoodsTradeFulfillment.Mode mode, LotTransportCost transport) {
         public long perItem() { return Math.ceilDiv(expense, quantity); }
+        public long economicPerItem() { return Math.ceilDiv(transport.quote(quantity).economic(), quantity); }
     }
     private record Query(GoodsParticipant seller, SubjectId source, GoodsParticipant buyer, String item, int requested, long price, long budget, long now) { }
     private record Crew(SubjectId home, int count, Optional<TransportAsset> asset, long duration, long now) { }
@@ -65,8 +66,8 @@ public final class GoodsProcurementTransport {
                     var curve = new LotTransportCost(List.of(new LotTransportCost.Option(quantity, quantity,
                             option.economicCost(labour), cash)));
                     var quote = new Quote(quantity, cost, cash, forecast.deliveryTicks(), forecast.journeyTicks(), organizer, mode, curve);
-                    if (best == null || quote.perItem() < best.perItem()
-                            || quote.perItem() == best.perItem() && quote.deliveryTicks() < best.deliveryTicks()) best = quote;
+                    if (best == null || quote.economicPerItem() < best.economicPerItem()
+                            || quote.economicPerItem() == best.economicPerItem() && quote.deliveryTicks() < best.deliveryTicks()) best = quote;
                 }
                 if (smaller == 0) break;
                 quantity = smaller;

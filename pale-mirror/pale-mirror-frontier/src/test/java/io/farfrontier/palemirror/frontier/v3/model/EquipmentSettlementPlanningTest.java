@@ -7,6 +7,23 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class EquipmentSettlementPlanningTest {
+    @Test void admittedRenewableFieldsPlanToolReplacementBeforeTheLastCurrentCrop() {
+        var state = CultivationPlanningTest.prepared();
+        var home = new SubjectId("settlement:7");
+        var demand = new FieldEquipmentDemand().read(state, home).getFirst();
+        long cells = state.resourceSiteDescriptors().values().stream().filter(site -> site.settlementId().equals(home))
+                .mapToLong(site -> site.layout().cells().size()).sum();
+        assertTrue(demand.plannedWear() > cells, "continuing cultivation needs tools for repeated harvests, not one pass");
+        var sites = state.resourceSites();
+        for (var field : state.resourceSiteDescriptors().values()) if (field.settlementId().equals(home))
+            sites = sites.planSowing(field.id(), Set.of());
+        var fallow = new FieldEquipmentDemand().read(state.withResourceSites(sites), home);
+        assertTrue(fallow.isEmpty() || fallow.getFirst().plannedWear() <= cells,
+                "stopping renewal must not reserve future cycles or invent work");
+        var codec = new io.farfrontier.palemirror.frontier.v3.persistence.FrontierWorldStateCodec();
+        assertEquals(List.of(demand), new FieldEquipmentDemand().read(codec.decode(codec.encode(state)), home));
+    }
+
     @Test void missingEquipmentCreatesAnAdmissibleForgeOrderAndMaterialDemandWithoutFixedIngotReserve() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:tool-planning"), 41, FrontierRulesets.toolGraybox()));
         var miningHomes = state.extractionSites().deposits().values().stream().map(d -> d.site().settlementId()).collect(java.util.stream.Collectors.toSet());
