@@ -51,6 +51,13 @@ class GoodsProcurementTransportTest {
         var price = GoodsResourceValuation.replacement(state, owner, "minecraft:bread", 100);
         assertTrue(price.raw() > 0 && price.compareTo(FixedScalar.whole(40)) < 0, price.toString());
         assertEquals(FixedScalar.whole(40), state.companies().goodsTrade().priceHistory().reference("minecraft:bread", 24000).orElseThrow());
+        var cheapHistory = MarketPriceHistory.empty().record("minecraft:bread", new MarketPriceHistory.Sale(
+                new SubjectId("receipt:cheap-food"), seller.party().id(), owner.party().id(), 100, 1, new FixedScalar(1)));
+        var currentTrade = state.companies().goodsTrade();
+        var cheapPast = state.withCompanies(state.companies().withGoodsTrade(new GoodsTradeState(currentTrade.orders(),
+                currentTrade.contracts(), currentTrade.participants(), cheapHistory, currentTrade.demandHistory())));
+        assertEquals(price, GoodsResourceValuation.replacement(cheapPast, owner, "minecraft:bread", 100),
+                "a cheap historical receipt cannot replace the cost of a current local capability");
         var view = GoodsParticipantAssessment.domestic(state, owner, 100).view();
         var economic = GoodsEconomicPricing.assess(state, view, "minecraft:bread", Map.of("minecraft:bread", FixedScalar.whole(40)),
                 new GoodsProductionPricing.Assessment(Map.of(), Map.of(), List.of()),

@@ -61,3 +61,21 @@ performance JSON has a separate costly-stage summary. Tests now assert the
 closed body-owner boundary, actual committed calendar/quarantine state and
 bounded structured telemetry with explicit omissions. No runtime guard was
 relaxed to satisfy those assertions.
+
+Additional checks: final focused pricing/provision/source suite passes. Local
+replacement uses actual capability cost in both directions: a cheap historical
+receipt cannot become a fictional cheap replacement either. Snapshot 365627
+also admits 4 coal to Mossbrook (8.533388 goods + 14.984304 freight); Sunreach's
+zero-cash purchase remains correctly unavailable. At the later live copy 405627,
+Southgate/Mossbrook still require available transport/provisions. The offline
+365627 result does not prove immediate recovery at a later state.
+
+Release aggregate 58448ffc6: 858 NeoForge unit tests, 324 domain tests and 79
+Visuals tests pass. Native aggregate completes 406 tests, 404 pass; failures are
+`fixedSeedSettlementAssaultUsesIndependentColdPlansAndHotReceipts` (admission
+fixture timeout) and `ordinaryDemandLossReturnsTheUnchangedFormationAndCursorToCold`
+(patrol lease not CLOSED at the fixed 277-tick assertion). They exercise combat /
+patrol fixtures outside the economic repair; no new code for those owners was
+introduced. The full native gate is RED, not waived or described as passed.
+These scenarios remain separate investigation debt. Active economics/custody/
+field/station GameTests in that aggregate pass. Full frontier unit run ongoing.

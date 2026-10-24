@@ -29,7 +29,9 @@ public final class GoodsResourceValuation {
             // Replacement by a current local capability does not cost a past
             // emergency buyer's willingness to pay. Inputs without a local
             // capability retain an explicit external price estimate.
-            capacities.forEach(process -> prices.merge(process.product(), costs.get(process.id()), Math::min));
+            var local = new TreeMap<String, Long>();
+            capacities.forEach(process -> local.merge(process.product(), costs.get(process.id()), Math::min));
+            prices.putAll(local); // A cheap historical receipt is not an executable replacement either.
         }
         var result = new TreeMap<String, FixedScalar>();
         prices.forEach((item, price) -> result.put(item, new FixedScalar(price)));
