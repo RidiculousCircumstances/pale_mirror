@@ -115,7 +115,7 @@ public final class ServiceAccessCoordinator {
                 .thenComparing(demand -> {
                     var movement = state.actorMovements().get(demand.identity().actorId());
                     return movement == null || movement.coldTravel().filter(travel ->
-                            access.firstEntry(travel.route()) == 1).isEmpty();
+                            travel.route().size() > 1 && access.occupied(travel.route().get(1).standingBody())).isEmpty();
                 })
                 .thenComparingLong(demand -> access.distanceFrom(currentBody(state, demand.identity().actorId())))
                 .thenComparingLong(ServiceAccessDemand::requestedAtTick)
