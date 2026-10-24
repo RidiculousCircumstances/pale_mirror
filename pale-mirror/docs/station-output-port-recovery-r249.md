@@ -31,4 +31,6 @@ Verification:42 focused frontier tests passed, including actual dispatch WAL rou
 pre-pickup snapshot recovery, normal transfer/delivery, accepted economic plan replay
 and rejection of301/302 (`build/r249-station-port-tests.log`). Runtime recovery tests
 and55 native economy GameTests passed (`build/r249-recovery-native.log`); guardrails
-passed. Fresh-world deployment/native observation remains pending.
+passed. Fresh-world deployment and subsequent recovery verification passed
+(`build/r249-verify.log`, `build/r249-graceful-verify.log`). Native work observation
+and its limits are recorded in `economic-planning-native-recovery-results-r249.md`.

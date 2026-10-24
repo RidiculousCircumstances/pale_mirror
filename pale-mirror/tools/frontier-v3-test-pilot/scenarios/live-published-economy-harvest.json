@@ -19,14 +19,14 @@
       "checks": [
         {
           "view": "site",
-          "id": "site:1-wheat-field",
+          "id": "site:7-wheat-field",
           "expect": {
             "status": "ok"
           }
         },
         {
           "view": "process",
-          "id": "settlement:1",
+          "id": "settlement:7",
           "expect": {
             "status": "ok"
           }
@@ -41,13 +41,13 @@
       "position": {
         "diagnostic": {
           "view": "site",
-          "id": "site:1-wheat-field",
+          "id": "site:7-wheat-field",
           "field": "firstCrop"
         }
       },
       "offset": {
         "x": -2,
-        "y": 6,
+        "y": 0,
         "z": 9
       },
       "settleMs": 0
@@ -57,15 +57,24 @@
       "at": {
         "diagnostic": {
           "view": "site",
-          "id": "site:1-wheat-field",
+          "id": "site:7-wheat-field",
           "field": "firstCrop"
         }
       }
     },
     {
+      "type": "assert_visible_block",
+      "position": {
+        "x": 438,
+        "y": 63,
+        "z": -19
+      },
+      "timeoutMs": 30000
+    },
+    {
       "type": "observe_harvest_semantics",
-      "siteId": "site:1-wheat-field",
-      "durationTicks": 400,
+      "siteId": "site:7-wheat-field",
+      "durationTicks": 2400,
       "sampleEveryTicks": 20,
       "maxCanonicalStallTicks": 1200,
       "timeoutMs": 180000
@@ -73,15 +82,15 @@
     {
       "type": "inspect",
       "view": "site",
-      "id": "site:1-wheat-field"
+      "id": "site:7-wheat-field"
     },
     {
       "type": "visit",
-      "dimension": "pale_mirror:frontier_graybox",
+      "dimension": "minecraft:overworld",
       "position": {
-        "x": 1800,
-        "y": 76,
-        "z": 1800
+        "x": 7,
+        "y": 64,
+        "z": 0
       },
       "settleMs": 0
     },
@@ -95,13 +104,13 @@
       "position": {
         "diagnostic": {
           "view": "site",
-          "id": "site:1-wheat-field",
+          "id": "site:7-wheat-field",
           "field": "firstCrop"
         }
       },
       "offset": {
         "x": -2,
-        "y": 6,
+        "y": 0,
         "z": 9
       },
       "settleMs": 0
@@ -111,28 +120,39 @@
       "at": {
         "diagnostic": {
           "view": "site",
-          "id": "site:1-wheat-field",
+          "id": "site:7-wheat-field",
           "field": "firstCrop"
         }
       }
     },
     {
-      "type": "observe_harvest_semantics",
-      "siteId": "site:1-wheat-field",
-      "durationTicks": 400,
-      "sampleEveryTicks": 20,
-      "maxCanonicalStallTicks": 1200,
-      "timeoutMs": 180000
+      "type": "assert_visible_block",
+      "position": {
+        "x": 438,
+        "y": 63,
+        "z": -19
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "first_visibility",
+      "id": "27,-2",
+      "expect": {
+        "presentationReady": true,
+        "dynamicReady": true
+      },
+      "timeoutMs": 30000
     },
     {
       "type": "inspect",
       "view": "field_physical",
-      "id": "site:1-wheat-field"
+      "id": "site:7-wheat-field"
     },
     {
       "type": "inspect",
       "view": "process",
-      "id": "settlement:1"
+      "id": "settlement:7"
     },
     {
       "type": "inspect",
@@ -142,9 +162,9 @@
   ],
   "assertions": [
     {
-      "after": 11,
+      "after": 13,
       "view": "process",
-      "id": "settlement:1",
+      "id": "settlement:7",
       "expect": {
         "status": "ok"
       }
@@ -152,11 +172,11 @@
   ],
   "frames": [
     {
-      "after": 2,
+      "after": 3,
       "name": "published-plan-field-hot"
     },
     {
-      "after": 8,
+      "after": 10,
       "name": "published-plan-field-returned"
     }
   ]
