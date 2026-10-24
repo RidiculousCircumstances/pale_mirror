@@ -107,9 +107,9 @@ class FrontierV3ActorCarrierCompositionTest {
         assertEquals(Set.of(FrontierV3ActorBodyController.class.getName(), FrontierV3BodyInsertionJournal.class.getName()),
                 methodCallBoundaries(FrontierV3AmbientCarrierLedger.class, "beginBodyResidence"),
                 "only the common body owner may start a new loaded residency; an activity cannot reset unload proof");
-        assertEquals(Set.of(FrontierV3ActorBodyController.class.getName()),
+        assertEquals(Set.of(FrontierV3ActorBodyController.class.getName(), FrontierV3BodyOperationIntegration.class.getName()),
                 methodCallBoundaries(io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyPresent.class, "<init>"),
-                "physical admission/inspection must be reported by the common body boundary, not an activity executor");
+                "only the common body boundary and its exact saved-operation recovery may acknowledge insertion");
         assertEquals(Set.of(FrontierV3ActorBodyController.class.getName()),
                 methodCallBoundaries(io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyDied.class, "<init>"),
                 "physical death must carry exact body/execution evidence from the common boundary");

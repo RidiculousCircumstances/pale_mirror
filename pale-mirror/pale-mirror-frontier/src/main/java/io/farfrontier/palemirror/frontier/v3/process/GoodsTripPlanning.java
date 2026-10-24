@@ -66,7 +66,7 @@ final class GoodsTripPlanning {
                 while (parcels.size() < cargoLimit && state.companies().goodsTrade().contracts().size() < GoodsTradeState.MAX_CONTRACTS
                         && reviews < initial.bootstrap().ruleset().goodsTrade().maximumPairReviews()) {
                     var expense = mode == GoodsTradeFulfillment.Mode.SELLER_DELIVERY
-                            ? GoodsTransportOptions.forecast(initial, seller, estimate, parcels.size() + 1).orElseThrow().cost().resourceExpense() : FixedScalar.ZERO;
+                            ? GoodsTransportOptions.forecast(initial, seller, estimate, parcels.size() + 1, now).orElseThrow().cost().resourceExpense() : FixedScalar.ZERO;
                     var search = GoodsOrderMatching.first(state, reviewer, now, Optional.of(seller.party()), Optional.of(buyer.party()),
                             considered, Optional.of(endpoints), expense);
                     reviews += search.checkedPairs();
@@ -209,7 +209,7 @@ final class GoodsTripPlanning {
         var lines = new TreeMap<String, ProcurementSelection.Line>();
         quantities.forEach((item, quantity) -> lines.put(item, new ProcurementSelection.Line(quantity,
                 new FixedScalar(Math.ceilDiv(amounts.get(item), quantity)))));
-        var cost = GoodsTransportOptions.forecast(state, organizer, timing.durationTicks(), parcels.size()).orElseThrow().cost();
+        var cost = GoodsTransportOptions.forecast(state, organizer, timing.durationTicks(), parcels.size(), now).orElseThrow().cost();
         // Both modes use real resources. Labour remains comparative value, while
         // the exact admitted seller-delivery quote is conserved cash settlement.
         var departure = dispatchCause(state, buyer, organizer, parcels, timing.deliveryTicks(), timing.durationTicks(), now) == TripDispatchPolicy.Cause.ACCUMULATING

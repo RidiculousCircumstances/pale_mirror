@@ -63,16 +63,15 @@ final class GoodsTripAssembly {
             return Optional.empty();
         var people = ResidentWorkComposition.SELECTION.eligible(state, organizer.settlementId(),
                 ResidentWorkKind.LOGISTICS, HumanCapability.LOGISTICS, now);
-        var available = new ArrayList<ResidentProfile>();
-        for (var person : people) {
-            var ids = new ArrayList<>(available.stream().map(ResidentProfile::id).toList()); ids.add(person.id());
-            if (SettlementLabourAllocation.canCommitToMission(state, organizer.settlementId(), ResidentWorkKind.LOGISTICS, ids))
-                available.add(person);
-        }
-        if (available.isEmpty()) return Optional.empty();
-        for (var option : GoodsTransportOptions.forLoad(state, organizer, forecastDuration, parcels.size(), available.size())) {
+        if (people.isEmpty()) return Optional.empty();
+        var candidates = people.stream().map(ResidentProfile::id).toList();
+        for (var option : GoodsTransportOptions.forLoad(state, organizer, forecastDuration, parcels.size(), people.size(), now)) {
+            var selected = ExpeditionCrewAdmission.select(state, organizer.settlementId(), candidates,
+                    option.workers(), option.animal(), forecastDuration, now,
+                    ids -> SettlementLabourAllocation.canCommitToMission(state, organizer.settlementId(), ResidentWorkKind.LOGISTICS, ids));
+            if (selected.isEmpty()) continue;
             var prepared = declaration(state, seller, buyer, parcels, mode,
-                    available.subList(0, option.workers()), option.animal(), now);
+                    selected.stream().map(state.humanPopulation()::resident).toList(), option.animal(), now);
             if (prepared.isPresent()) return prepared;
         }
         return Optional.empty();

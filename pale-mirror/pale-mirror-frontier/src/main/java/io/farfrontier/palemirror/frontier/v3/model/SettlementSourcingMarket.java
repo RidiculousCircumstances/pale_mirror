@@ -44,12 +44,12 @@ final class SettlementSourcingMarket {
             int quantity = Math.min(GoodsTransportOptions.maximumQuantity(state, order.itemKind()), Math.min(order.availableQuantity(),
                     GoodsParticipantStorage.unclaimed(state, seller, order.containerId(), order.itemKind())));
             if (quantity == 0) continue;
-            var timing = ProcurementTravelForecast.read(state, order.containerId(), order.itemKind(), buyer,
-                    TransportOrganization.Itinerary.DESTINATION_COLLECTION);
-            if (timing.isEmpty()) continue;
-            var transport = GoodsTransportOptions.costCurve(state, buyer, timing.orElseThrow().journeyTicks(), order.itemKind());
-            offers.put(pool, new SourcingMarket.Offer(pool, order.itemKind(), quantity, order.unitPriceLimit().raw(),
-                    order.unitPriceLimit().raw(), timing.orElseThrow().deliveryTicks(), transport));
+            var quote = GoodsProcurementTransport.best(state, seller, order.containerId(), buyer, order.itemKind(), quantity,
+                    order.unitPriceLimit().raw(), state.inventory().economics().availableToReserve(buyer.party().id()).raw(), now);
+            if (quote.isEmpty()) continue;
+            var delivery = quote.orElseThrow();
+            offers.put(pool, new SourcingMarket.Offer(pool, order.itemKind(), delivery.quantity(), order.unitPriceLimit().raw(),
+                    order.unitPriceLimit().raw(), delivery.deliveryTicks(), delivery.transport()));
         }
         return new Facts(references, List.copyOf(offers.values()));
     }

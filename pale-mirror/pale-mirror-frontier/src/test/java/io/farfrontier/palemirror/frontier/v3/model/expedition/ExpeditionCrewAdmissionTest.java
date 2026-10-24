@@ -33,6 +33,13 @@ class ExpeditionCrewAdmissionTest {
             state = state.withInventory(state.inventory().withFungibleResources(resources));
             assertTrue(ExpeditionCrewAdmission.canFeedBeforeTravel(state, home, List.of(crew.getFirst()), Optional.empty(), tick));
             assertFalse(ExpeditionCrewAdmission.canFeedBeforeTravel(state, home, crew, Optional.empty(), tick));
+            assertEquals(List.of(crew.getFirst()), ExpeditionCrewAdmission.select(state, home,
+                    List.of(crew.getLast(), crew.getFirst()), 1, Optional.empty(), 12000, tick, ids -> true),
+                    "an unfed first candidate must not hide a provisioned alternative");
+            assertTrue(ExpeditionCrewAdmission.select(state, home, crew, 2, Optional.empty(), 12000, tick, ids -> true).isEmpty(),
+                    "one resident's personal stock cannot silently supply both crew members");
+            assertTrue(ExpeditionCrewAdmission.select(state, home, crew, 1, Optional.empty(), 12000, tick,
+                    ids -> !ids.contains(crew.getFirst())).isEmpty(), "provisions do not override the caller's work permission");
             var shared = new SubjectId("lot:shared-food");
             resources = resources.issue(new ResourceLot(shared, home, food.itemKind(), required, "fixture:provisions", List.of()),
                     new CustodyAccount(ReferenceContainerCustody.scopeId(asset.containerId()), new ResourceCustody.Container(asset.containerId()),

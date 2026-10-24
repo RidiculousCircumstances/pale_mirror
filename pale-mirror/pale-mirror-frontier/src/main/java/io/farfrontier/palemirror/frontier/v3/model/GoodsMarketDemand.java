@@ -27,11 +27,11 @@ final class GoodsMarketDemand {
                         || !GoodsParticipantStorage.eligible(state, provider, other.containerId(), item)) continue;
                 int stock = Math.min(other.availableQuantity(), GoodsParticipantStorage.unclaimed(state, provider, other.containerId(), item));
                 if (stock == 0) continue;
-                var freight = GoodsDeliveryAdvice.from(state, other.containerId(), view, item, Math.min(quantity, stock),
+                var freight = GoodsDeliveryAdvice.from(state, provider, other.containerId(), view, item, Math.min(quantity, stock),
                         other.unitPriceLimit().raw(), demand.budget().raw(), now);
                 if (freight.isEmpty()) continue;
                 var offer = new SellerPriceDiscovery.Offer(provider.party().id(), freight.orElseThrow().quantity(),
-                        other.unitPriceLimit().plus(new FixedScalar(freight.orElseThrow().deliveryPerItem())), other.unitPriceLimit());
+                        other.unitPriceLimit().plus(new FixedScalar(freight.orElseThrow().deliveryPerItem())), other.unitPriceLimit().plus(new FixedScalar(Math.ceilDiv(freight.orElseThrow().cashDelivery(), freight.orElseThrow().quantity()))));
                 competitors.merge(provider.party().id(), offer, (a, b) -> {
                     int price = a.landedPrice().compareTo(b.landedPrice());
                     return price < 0 || price == 0 && a.quantity() >= b.quantity() ? a : b;
@@ -39,7 +39,7 @@ final class GoodsMarketDemand {
             }
             result.add(new SellerPriceDiscovery.Demand(buyer.party().id(), quantity, demand.budget(), order.unitPriceLimit(),
                     FixedScalar.ZERO, List.copyOf(competitors.values()), new FixedScalar(delivery.orElseThrow().tripExpense()),
-                    delivery.orElseThrow().minimumDispatchQuantity(), FixedScalar.ZERO));
+                    delivery.orElseThrow().minimumDispatchQuantity(), new FixedScalar(delivery.orElseThrow().cashDelivery())));
         }
         return new SellerPriceDiscovery.Market(result);
     }

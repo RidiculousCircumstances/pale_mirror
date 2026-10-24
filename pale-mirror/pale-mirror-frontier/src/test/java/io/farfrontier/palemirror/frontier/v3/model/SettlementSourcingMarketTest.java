@@ -120,7 +120,7 @@ class SettlementSourcingMarketTest {
                 "expiry uses the evaluation instant, not the buyer's last review");
         var timing = ProcurementTravelForecast.read(state, offer.containerId(), offer.itemKind(), buyer,
                 TransportOrganization.Itinerary.DESTINATION_COLLECTION).orElseThrow();
-        var provisions = GoodsTransportValuation.estimate(state, buyer, timing.journeyTicks(), 1);
+        var provisions = GoodsTransportValuation.estimate(state, buyer, timing.journeyTicks(), 1, 0);
         assertTrue(provisions.resourceExpense().raw() > 0);
         var acquisition = GoodsAcquisitionPricing.estimate(state, buyer, "minecraft:bread", 32, 0).orElseThrow();
         assertEquals(offer.unitPriceLimit(), acquisition.goods());

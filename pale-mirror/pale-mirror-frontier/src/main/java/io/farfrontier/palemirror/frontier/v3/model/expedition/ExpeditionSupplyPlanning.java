@@ -261,7 +261,7 @@ public final class ExpeditionSupplyPlanning {
                     && (cargoSlots == 0 || !slot.equals(main))).toList());
             int rate = profile.characteristics().effectiveMetabolismPermille(now);
             var nutrition = state.humanPopulation().nutrition(member.actorId()).accrueThrough(now, life, rate);
-            int personal = UnitInventory.accounts(resources, member.actorId()).stream().filter(a -> a.claimQuantities().isEmpty())
+            int personal = UnitInventory.personalAccounts(state, resources, member.actorId()).stream().filter(a -> a.claimQuantities().isEmpty())
                     .mapToInt(a -> resources.unclaimedQuantity(a.id(), mission.organization().sponsor().id(), food.itemKind())).sum();
             roster.add(new ExpeditionProvisioning.Member(member.actorId(), nutrition.satietyUnits(), rate,
                     used.size() - (cargoAlreadyCounted ? 1 : 0), cargoSlots, personal, 0));

@@ -405,9 +405,14 @@ class FrontierV3DiagnosticJsonTest {
 
         assertTrue(value.contains("\"status\":\"ok\""), "a bounded pressure cut must remain readable");
         assertTrue(value.length() < 8_192, "maximum retained telemetry cannot turn into response_limit");
-        assertEquals(9, value.split("\\\"stage\\\":").length - 1,
-                "the pressure cut retains eight spans plus worst-span, leaving space for fresh queue and complete tick timing");
-        assertEquals(8, value.split("\\\"currentDepth\\\":").length - 1);
+        var report = com.google.gson.JsonParser.parseString(value.substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
+        assertEquals(8, report.getAsJsonArray("costlyStages").size());
+        assertTrue(report.getAsJsonObject("worstSpan").has("stage"));
+        for (var section : java.util.List.of("stages", "queues")) {
+            if (report.has(section)) assertEquals(8, report.getAsJsonArray(section).size());
+            else assertTrue(report.getAsJsonArray("omittedSections").asList().stream()
+                    .anyMatch(entry -> entry.getAsString().equals(section)), "bounded omission must remain explicit");
+        }
     }
 
 

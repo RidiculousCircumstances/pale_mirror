@@ -33,12 +33,15 @@ class FrontierV3CalendarRuntimeTest {
         var runtime = FrontierV3ServerRuntime.start(config,
                 new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 200);
         assertEquals(0, runtime.calendarInstant().orElseThrow());
-        runtime.advance(3, new WorkBudget(64, 512)).orElseThrow();
+        var progress = runtime.advance(3, new WorkBudget(64, 512)).orElseThrow();
         long reached = runtime.calendarInstant().orElseThrow();
-        assertEquals(3, reached);
+        assertEquals(progress.instant().ticks(), reached, "calendar reflects committed progress, including asynchronous yields");
+        assertEquals(runtime.checkpointImage().orElseThrow().instant().ticks(), reached);
+        assertEquals(FrontierV3RuntimeStatus.Kind.ACTIVE, runtime.status().kind());
         runtime.quarantine(new IllegalStateException("isolated test stop"));
         assertTrue(runtime.advance(1, new WorkBudget(64, 512)).isEmpty());
         assertEquals(reached, runtime.calendarInstant().orElseThrow());
+        runtime.shutdown();
     }
 
     @Test void restartDerivesCalendarFromTheRecoveredCanonicalInstant(@TempDir Path directory) {

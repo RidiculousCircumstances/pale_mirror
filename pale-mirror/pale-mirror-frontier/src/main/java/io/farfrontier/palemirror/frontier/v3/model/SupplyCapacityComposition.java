@@ -19,6 +19,19 @@ public final class SupplyCapacityComposition {
         if (result.size() != SupplyCapacityPort.Key.values().length) throw new IllegalArgumentException("missing supply capacity owner");
         return Map.copyOf(result);
     }
+    /** Local replacement costs need physical capabilities, not a reserve or market plan.
+     * No target/incoming promise is manufactured by this valuation-only projection. */
+    static List<SupplyPlanner.Process> forValuation(FrontierWorldState state, GoodsParticipant participant) {
+        var stocks = new TreeMap<String, SupplyPlanner.Stock>();
+        var rules = state.bootstrap().ruleset().goodsTrade();
+        for (var commodity : rules.policies().get(participant.policy())) {
+            var kind = commodity.itemKind();
+            stocks.put(kind, new SupplyPlanner.Stock(GoodsParticipantStorage.unclaimed(state, participant, kind),
+                    0, 0, 0, 0, 0, 1, rules.supplyPlanning().require(kind)));
+        }
+        return read(state, participant.settlementId(), stocks,
+                SupplyPlanningWindow.forSettlement(state, participant.settlementId(), List.of()));
+    }
     public static List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
                                                   SupplyPlanningWindow window) {
         return read(state, home, stocks, window, Optional.empty());

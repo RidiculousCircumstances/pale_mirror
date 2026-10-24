@@ -25,13 +25,14 @@ final class GoodsEconomicPricing {
         // A cash shortfall does not erase the future use/replacement value of stock.
         // Saleable quantity and the value of retaining it are separate decisions.
         var outputValues = new TreeMap<>(prices);
-        production.opportunities().forEach((key, value) -> outputValues.merge(key, value.raw(), Math::max));
+        // A costly way of making an output does not increase the value of its
+        // inputs. Only independently observed output value supports substitution.
         long inputValue = ProductionInputValue.assess(item, production.processes(), outputValues,
                 rules.supplyPlanning().sourcing().orElseThrow().labourValuePerTick());
         long value = Math.max(references.get(item).raw(), inputValue);
-        // The supply owner already selected a net requirement. An available
-        // replacement must not be rejected solely because past trades were cheap.
-        if (acquisition.isPresent()) value = Math.max(value, acquisition.orElseThrow().total().raw());
+        // The cheapest current replacement bounds consent; expensive history or
+        // a worse local process cannot justify outbidding that alternative.
+        if (acquisition.isPresent()) value = acquisition.orElseThrow().total().raw();
         var local = production.alternatives().get(item);
         if (local != null) value = Math.min(value, local.raw());
         long quantity = view.supplyPlan().orElseThrow().require(item).purchase();

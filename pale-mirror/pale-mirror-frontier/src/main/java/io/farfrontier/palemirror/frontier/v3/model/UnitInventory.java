@@ -14,8 +14,11 @@ public final class UnitInventory {
 
     /** Work custody is not personal stock even after a recipe has spent its input claim. */
     public static List<CustodyAccount> personalAccounts(FrontierWorldState state, SubjectId unit) {
+        return personalAccounts(state, state.inventory().fungibleResources(), unit);
+    }
+    public static List<CustodyAccount> personalAccounts(FrontierWorldState state, FungibleResourceLedger resources, SubjectId unit) {
         var cargo = ActorCarryCapabilities.workCargo(state, unit).map(ActorCarriedResources.Presentation::accountId);
-        return accounts(state.inventory().fungibleResources(), unit).stream()
+        return accounts(resources, unit).stream()
                 .filter(account -> !cargo.equals(Optional.of(account.id()))).toList();
     }
 
