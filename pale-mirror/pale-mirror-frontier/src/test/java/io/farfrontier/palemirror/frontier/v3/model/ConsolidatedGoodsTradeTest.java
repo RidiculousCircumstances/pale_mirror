@@ -88,7 +88,7 @@ class ConsolidatedGoodsTradeTest {
                     io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry geometry,
                     SurfaceAnchor start, SurfaceAnchor target,
                     io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteExtent extent) {
-                assertFalse(extent.estimateOnly(), "unselected quote comparisons must not enqueue regional searches"); queries.incrementAndGet();
+                assertTrue(extent.estimateOnly(), "selected endpoint admission must use regional connectivity rather than materialize the distant route"); queries.incrementAndGet();
                 return new io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult(
                         io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteResult.Status.PLANNING,
                         List.of(), 0, 0, "REGIONAL_TEST_PENDING");
@@ -97,7 +97,7 @@ class ConsolidatedGoodsTradeTest {
         try (var ignored = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.bind(planner)) {
             var result = io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRoutePlanning.observe(() -> review(before, buyer, 401));
             assertEquals(1, queries.get()); assertFalse(result.requests().isEmpty());
-            assertTrue(result.requests().stream().noneMatch(request -> request.extent().estimateOnly()));
+            assertTrue(result.requests().stream().allMatch(request -> request.extent().estimateOnly()));
             assertEquals(before.inventory(), result.result().inventory());
             assertEquals(before.actorExecutions(), result.result().actorExecutions());
             assertTrue(result.result().shipments().missions().isEmpty());

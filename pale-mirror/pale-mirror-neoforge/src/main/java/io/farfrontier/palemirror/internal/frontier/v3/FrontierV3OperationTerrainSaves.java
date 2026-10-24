@@ -13,6 +13,7 @@ import java.util.function.Supplier;
 public final class FrontierV3OperationTerrainSaves {
     private FrontierV3OperationTerrainSaves() { }
     public static void observe(ServerLevel level, ChunkPos chunk, CompoundTag data, CompletableFuture<Void> written) {
+        FrontierV3StoredTerrainInspection.wrote(level);
         if (!FrontierV3ServerLifecycle.acceptsNativeOperationSaves(level)) return;
         FrontierV3NativeOperationSaves.observe(level, FrontierV3OperationReceipt.Medium.TERRAIN,
                 chunk.toLong(), receipts(chunk, data), written);

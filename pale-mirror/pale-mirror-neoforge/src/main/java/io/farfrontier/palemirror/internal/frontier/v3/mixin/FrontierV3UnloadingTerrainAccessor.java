@@ -9,5 +9,6 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 /** Positive no-load access for the final body observation, never route planning or chunk admission. */
 @Mixin(ChunkMap.class)
 public interface FrontierV3UnloadingTerrainAccessor {
+    @Accessor("updatingChunkMap") Long2ObjectLinkedOpenHashMap<ChunkHolder> frontierV3$getUpdatingChunks();
     @Accessor("pendingUnloads") Long2ObjectLinkedOpenHashMap<ChunkHolder> frontierV3$getPendingUnloads();
 }

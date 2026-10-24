@@ -22,7 +22,9 @@ public final class ActorStorageApproach {
             if (!knowledge.clearStation(station)) continue;
             var selected = endpoint.withStation(station);
             ShipmentEndpointComposition.validate(state, selected);
-            try { knowledge.plannedBetween(origin, station); return Optional.of(selected); }
+            // Admission needs connected endpoints, not a block-by-block itinerary.
+            // The movement owner refines bounded segments after a trip is selected.
+            try { knowledge.estimateBetween(origin, station); return Optional.of(selected); }
             catch (KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 // An unfinished proof does not disqualify this station. Retain
                 // one addressed wait instead of racing every port's full route.

@@ -79,6 +79,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
     private FrontierV3ReferenceContainerCustodyExecutor() { }
 
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        FrontierV3ReferenceContainerStoredRecovery.progress(level, runtime);
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return;
         // First/repeated presentation must not wait one global discovery revolution
@@ -114,6 +115,7 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
             }
             ContainerSurface surface = state.inventory().surfaces().get(lease.objectId());
             if (surface == null || !naturallyTicking(level, state, surface)) {
+                FrontierV3ReferenceContainerStoredRecovery.offer(level, runtime, state, lease);
                 if (surface != null && surface.location() instanceof ContainerLocation.Mobile mobile) {
                     var saved = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
                     var departure = saved.bodyDeparture(mobile.actorId()).orElse(null);
@@ -418,6 +420,21 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
             return false;
         activateMobileProjection(runtime, state, saved.containerId());
         return ReferenceContainerCustody.hasOperationalCustody(runtime.decodedState().orElseThrow(), saved.containerId());
+    }
+
+    /** Caller holds a fresh flushed native image and proves the column stayed unloaded. */
+    static boolean confirmSavedFixedProjection(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            FrontierWorldState state, PhysicalCustodyLease lease, Observed actual) {
+        if (!lease.equals(state.replicaCustody().custodyByScope().get(lease.scopeId()))
+                || !(state.inventory().surfaces().get(lease.objectId()).location() instanceof ContainerLocation.Fixed))
+            throw new IllegalArgumentException("saved fixed inventory has a foreign custody boundary");
+        var replica = state.replicaCustody().replicas().get(lease.objectId());
+        if (replica == null || !replica.fingerprint().equals(actual.fingerprint())
+                || !replica.provenance().equals(actual.provenance())) return false;
+        if (lease.status() == PhysicalCustodyLeaseStatus.PREPARING)
+            return confirmProjectionObservation(level, runtime, state, lease, actual);
+        rememberCurrentProcessObservation(level, lease);
+        return true;
     }
 
     /** Only actual loaded slots may confirm or conflict the already durable write fence. */
