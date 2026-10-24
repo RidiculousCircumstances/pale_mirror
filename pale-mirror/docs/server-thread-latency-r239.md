@@ -868,3 +868,38 @@ guardrails PASS(build/r239ae-final-gates.log); native25body-lifetime PASS with
 normal shutdown/all dimensionssaved(build/r239ae-native.log). Native run exercised
 the same mixin/codec before a final buffered→filter stream simplification; final
 focused checks include rejecting writes after close. No timing test added.
+
+
+## R239 final retained-world performance check (2026-10-24)
+
+Deployed source `e764f89d7`, normal Java22 launch with no attached profiler.
+Same world `frontier-v3-r232-distant-20261023`;12settlements/359residents.
+Package/preflight/freshstartup verification PASS (`build/r239ae-*.log`).
+Pilot `2e4c5776-1aad-4f81-8238-195ab7f60f25` PASS,05:33:14–05:40:30+05:
+Clearwater→Stonefield→Clearwater, positive exact COLD custody, extended HOT wait,
+then logout. Images and assertions in `build/r239ae-hot-result.json`.
+Native autosaves completed in HOT05:38:05 and COLD05:43:05 (actual level.dat
+publication). Final snapshot after both:12,324 complete native ticks, maximum
+64.313890ms;107,096 ready continuations, maximum34.118511ms. No >80ms entries.
+The earlier same-world extended build had109.907710ms at native autosave.
+
+The588.066-second sampled interval averaged19.99947 nativeTPS and20.08110
+canonical ticks/s (catch-up included). Pending canonical time peaked at119ticks
+and drained to0 while HOT; final COLDdebt0. Readings cover the lifetime maximum,
+not just the most recent64ticks. No Gradle, compilation campaign or profiler
+attachment during measurement except pilot's up-to-date launcher preparation.
+Terminal summary revision2702332/instant729358:sceneConflicts0,
+inventoryConflicts0,replicaCustodyDiagnostics0; original retained incident unchanged.
+The Netty connection-reset at05:40:31 is the pilot exit, not a simulation crash.
+
+Receipts: `build/r239ae-throughput.log`, `build/r239ae-final-performance.json`,
+`build/r239ae-final-summary.json`. Parallel final RCON diagnostics interleaved two
+JSON messages; summary command timed out in the diagnostic parser although its
+valid summary response arrived. The retained summary JSON was selected by its
+explicit kind; do not call that transport attempt a successful query.
+
+This establishes the80ms target for this HOT/COLD/save scenario and retained
+population, not a universal worst-case bound on a non-real-time JVM/OS or M3
+acceptance of every production process. Historical ambiguous field receipts and
+the already-retained diagnostic incident were not erased or repaired by this cut.
+The pilot and profilers are stopped; live server remains available on the same world.
