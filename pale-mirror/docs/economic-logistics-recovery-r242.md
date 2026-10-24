@@ -199,3 +199,74 @@ R242e verification: full adapter suite and guardrails passed
 The runtime regression holds preparation explicitly, rejects 32 environmental
 samples, then proves readiness resumption and recovered canonical state. Native
 GameTest startup also verifies both exact Minecraft random-tick injection sites.
+
+
+## R242e deployed HOT/COLD result
+
+Clean source `3d13d18bf` was installed on the same retained world at
+2026-10-24 19:53:18 +05; fresh deployment verification passed. Exploratory
+native run `38794d48-f652-4756-af3b-51820fca1e09` visited Southgate and
+Clearwater for 60 seconds each and disconnected normally. No food, funds or
+completed-job evidence was injected.
+
+The observation advanced from 501128 to 504235 across client launch, visits
+and departure. It completed 1772 scheduled preparations with **zero
+cancellations**, admitted 13911 environmental samples and yielded 42481
+before invocation. Environmental mutation is therefore still active.
+Clearwater's exact production job `6204d2919b1c3044bb5a642dde9fec0a`
+progressed during HOT attendance and reached DELIVERY after departure; its
+next baker entered production. At 508169 Clearwater had zero hungry residents.
+Southgate's previously observed imported fuel, new bread and actual meals remain
+separate receipt-based evidence; a full-town recovery is not implied.
+
+Full adapter tests: 858/858; block-extraction native tests: 3/3, including
+refusing the physical write while its exact durable fence remains pending.
+The native visit is exploratory, not M2/M3 acceptance: the retained screenshot
+is poorly framed and the pilot did not assess a complete visual work sequence.
+The earlier two combat/patrol test failures remain unresolved.
+
+Performance remains separately open: the fresh deployment's maximum observed
+host tick was 81.306 ms; canonical time still accumulated roughly 1700 pending
+ordinary ticks. Eliminating cancelled work does not establish an 80 ms global
+bound or full real-time throughput.
+
+Mossbrook's later exact candidate differs from the earlier funding refusal:
+at approximately 504328 it had 39.025412 available, but a nearby affordable
+delivery could not acquire an eligible supplied crew. More expensive candidates
+still failed funding. Do not diagnose this state from the older 36.86 balance
+or treat hypothetical provisions as actual food.
+
+A suspected fixed one-bread-per-operation capacity limit was rejected by source
+inspection: `ProductionBatchSizing` permits multiple recipe batches and
+`ProductionStationClock` gives attended production a common operation duration.
+No throughput/balance change was made from that unproved hypothesis.
+
+At copied checkpoint 511728, Clearwater had a 20-bread batch processing and
+Hearthvale had a 20-bread batch picking up 60 wheat. Thus the batch-capacity
+check is also backed by live jobs. Southgate's next job explicitly reports
+INSUFFICIENT_HEAT at 511206: its earlier fuel delivery did not establish
+sustained fuel sufficiency.
+
+Two retained FIELD_PROJECTION operation tickets logged AMBIGUOUS on the Southgate
+visit (`35f599a2-47bc-4430-971e-7d7ab4f3161a`,
+`e3abde4b-9e6c-404d-b3cf-88c101b0ebfb`). Their exact replay/disruption history is
+not established by the economy fix. The absence of a global quarantine or a
+conflict assertion failure must not be reported as absence of these warnings.
+
+## Last long delivery
+
+Sunreach received five coal from Stonefield at tick **515977**, receipt
+`shipment-32df1e5a-6b8a-3e20-9606-3c0220018742`: goods 13.174900 and
+delivery 92.760385 coins, paid from its retained treasury. At copied 517930
+the exact internal shipment `ae54de52-e520-35a3-8a5c-5b12fce4c819` was CARRYING
+all five coal from the metals warehouse to the bakery's FUEL port, assigned to
+resident 12-12. The warehouse name does not mean smelting has consumed the fuel.
+Its baker's schedule at 517651 was FREE until 528000; no meal completion in
+Sunreach is inferred from this delivery. Evidence: `build/r242f-receipt-view.json`,
+`r242f-sunreach-baker.txt`, `r242f-sunreach-coal.txt`, `r242f-coal-haul.txt`.
+
+These repairs close the evidenced pricing/organizer/crew, service-entry and
+HOT preparation-cancellation defects. They do not establish that every town
+has recovered or that long-distance trade can fund sustained fuel consumption
+in the already impoverished world. Remaining shortages and the two retained
+field-operation warnings require their own exact evidence, not another reset.
