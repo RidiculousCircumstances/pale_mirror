@@ -800,15 +800,21 @@ final class FrontierV3AmbientActorExecutor {
         // Closing a projection retains body custody. Registered execution owners
         // check pending effects; route checkpoint settlement belongs to body departure.
         if (!releaseEligible(state, release)) return false;
-        if (lease.status() != AmbientLeaseStatus.DRAINING && !(submit(runtime, "ambient-unloaded-reserved-draining", actorId.value(),
-                new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING))
-                instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return false;
+        if (lease.status() != AmbientLeaseStatus.DRAINING) {
+            var result = submit(runtime, "ambient-unloaded-reserved-draining", actorId.value(),
+                    new AmbientLeaseTransition(actorId, AmbientLeaseStatus.DRAINING));
+            if (result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Pending)
+                FrontierV3ActorProbeSchedule.wake(runtime, runtime.decodedState().orElseThrow(), actorId, level.getGameTime());
+            if (!(result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return false;
+        }
         FrontierWorldState draining = runtime.decodedState().orElse(null);
         if (draining == null || draining.ambientLeases().get(actorId) == null
                 || draining.ambientLeases().get(actorId).status() != AmbientLeaseStatus.DRAINING) return false;
         if (!receipt.current(draining)) return false;
-        if (!(submit(runtime, "ambient-unloaded-reserved-release", actorId.value(), release)
-                instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return false;
+        var result = submit(runtime, "ambient-unloaded-reserved-release", actorId.value(), release);
+        if (result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Pending)
+            FrontierV3ActorProbeSchedule.wake(runtime, runtime.decodedState().orElseThrow(), actorId, level.getGameTime());
+        if (!(result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return false;
         FrontierV3ActorBodyController.progressDeparture(level, runtime, runtime.decodedState().orElseThrow(), actorId);
         return true;
     }

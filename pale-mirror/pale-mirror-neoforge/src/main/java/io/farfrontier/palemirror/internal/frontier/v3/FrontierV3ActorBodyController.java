@@ -527,11 +527,15 @@ final class FrontierV3ActorBodyController {
                     io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyInspected.Source.SAVED_DEPARTURE,
                     actor.body(), actor.condition().health(), physical.observed().body(), physical.observed().health(),
                     FrontierV3ActorBodyDeparture.execution(state, actorId));
-            if (!(FrontierV3CommandSubmission.submitResult(runtime, "actor-body-saved-checkpoint", actorId.value(), receipt)
-                    instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return false;
+            var result = FrontierV3CommandSubmission.submitResult(runtime, "actor-body-saved-checkpoint", actorId.value(), receipt);
+            if (result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Pending)
+                FrontierV3ActorProbeSchedule.wake(runtime, runtime.decodedState().orElseThrow(), actorId, level.getGameTime());
+            if (!(result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted)) return false;
         }
-        return ledger.fence(physical.identity(), id.physicalEpoch(), 0L)
-                && ledger.prepareActorDurable(level, state.bootstrap().worldId(), actorId);
+        if (!ledger.fence(physical.identity(), id.physicalEpoch(), 0L)) return false;
+        boolean durable = ledger.prepareActorDurable(level, state.bootstrap().worldId(), actorId);
+        if (!durable) FrontierV3ActorProbeSchedule.wake(runtime, runtime.decodedState().orElseThrow(), actorId, level.getGameTime());
+        return durable;
     }
 
     /** Protect the reservation interval before the durable returned-body fence is published. */

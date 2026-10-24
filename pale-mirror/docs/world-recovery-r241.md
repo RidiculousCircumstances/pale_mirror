@@ -160,3 +160,13 @@ from 32 to 20. Southgate baked 5, then lacked fuel/cash; buyer-collection missio
 were admitted for 211 of its wheat. Those are actual shipments, not spendable
 forecast revenue. Full economic recovery is not established; no price adjustment,
 resource injection or historical refund was applied.
+
+R241f was deployed and revisited with the full-pack native client (10 → 6),
+ending at 258259 with no retained conflicts. Resident 10-30's epoch-4 native
+unload was recorded at 13:27:03; snapshot 258355 still retained its HOT ambient
+scope. Source tracing found the remaining prerequisite: saved-position
+checkpointing, carrier fencing and ambient drain/release each returned Pending
+without retaining the addressed continuation. Those exact pending branches now
+reuse the same bounded observer queue; missing/stale save evidence and rejected
+commands still do not enter it. Existing queue fairness, departure-consumption
+and body-lifetime negative coverage applies; no timeout or custody rule changed.
