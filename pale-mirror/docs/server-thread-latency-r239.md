@@ -844,3 +844,27 @@ This is a correction before declaring the latency/lifecycle cut complete.
 R239ad compile/guardrailsPASS(build/r239ad-gates.log). R239ac live before this
 closure: pilotb6f5ece6-cc86-4ad4-9bca-b971391f8f47PASS, completehostmax45.82ms,
 ready37.42ms; prior repeattransition now<=45.82ms. HOTdebt110→0, COLD0–4.
+
+
+R239ad extended HOT probe ea8f9108-65ec-4994-ab3e-5f722bca152c passed
+unchanged custody/incident assertions; transition peaks stayed at54.30ms and
+READY35.22ms. However native autosave tick6000 at05:25:25.774 took109.907710ms:
+the80ms target is not met. Later291/189/108ms ticks at05:26:26 coincide with
+async-profiler attach; its wall stacks show CompileBroker mutex contention.
+They are diagnostic perturbation, not an explanation for the earlier autosave.
+
+R239ae native file boundary: source NbtIo.writeCompressed(Path) uses O_SYNC;
+gzip flushes compressed content and then its trailer separately. A2.4KB level.dat
+ordinary-save reproduction on the server thread spent11.838+10.371ms in those
+writes (build/r239ad-save.jfr). A bounded buffered file stream now forces once
+on close, after all gzip bytes. Native compression, caller temp-file replacement,
+backup, player event and physical-operation acknowledgement remain synchronous
+and unchanged; exceptions propagate before publication. Chunk/entity region IO
+is not intercepted. Memory is bounded by stream buffers, not whole-world images.
+This removes repeated force calls, not durability. Full autosave validation pending.
+
+R239ae verification: focused NBT/journal recovery/player exact-target checks +
+guardrails PASS(build/r239ae-final-gates.log); native25body-lifetime PASS with
+normal shutdown/all dimensionssaved(build/r239ae-native.log). Native run exercised
+the same mixin/codec before a final buffered→filter stream simplification; final
+focused checks include rejecting writes after close. No timing test added.
