@@ -32,4 +32,17 @@ Existing native tool-return coverage now starts without an artificially pre-acqu
 replica. It checks first-click admission, a pending declared chest's visibility with
 no HOT permission, refusal of that visibility for unproven provenance, and consecutive
 exact-tool/bread/coal deposits. All55 native economy tests and focused handoff tests
-passed; guardrails passed (`build/r247-container-tests.log`). Live retest pending.
+passed; guardrails passed (`build/r247-container-tests.log`). R247 retained-world live retest passed (`build/r247-field-hot.json`): first evidence
+visit received the chunk in0.100s, target geometry assertion completed4.100s from
+that request, linked screenshot4.924s; return receipt0.200s, geometry assertion1.300s.
+Both field frames were inspected. These are ready-native-chunk visits on this stand,
+not whole client startup or arbitrary first world generation. No world reset.
+
+A subsequent HOT work observation saw job223 bring4 units from its retained actor
+account into storage and close. The old oracle rejected this because it only counted
+new cut cells/retired cursor progress. Its delivery progress signal was missing;
+confirmed deliveredYield now counts alongside crop work, while movement/time/lease
+change alone still cannot pass. The first spectator-mode work attempt was invalid
+(HOT excludes spectators); the creative-mode case is the relevant retained trace.
+Runtime model/planner tests and55 native economy tests remain unchanged evidence;
+client work observation is being rerun with the corrected progress consumer.

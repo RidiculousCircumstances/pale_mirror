@@ -1,0 +1,163 @@
+{
+  "schema": 1,
+  "id": "live_published_economy_harvest",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "site",
+          "id": "site:1-wheat-field",
+          "expect": {
+            "status": "ok"
+          }
+        },
+        {
+          "view": "process",
+          "id": "settlement:1",
+          "expect": {
+            "status": "ok"
+          }
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:1-wheat-field",
+          "field": "firstCrop"
+        }
+      },
+      "offset": {
+        "x": -2,
+        "y": 6,
+        "z": 9
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:1-wheat-field",
+          "field": "firstCrop"
+        }
+      }
+    },
+    {
+      "type": "observe_harvest_semantics",
+      "siteId": "site:1-wheat-field",
+      "durationTicks": 400,
+      "sampleEveryTicks": 20,
+      "maxCanonicalStallTicks": 1200,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "inspect",
+      "view": "site",
+      "id": "site:1-wheat-field"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": 1800,
+        "y": 76,
+        "z": 1800
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait",
+      "ms": 10000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:1-wheat-field",
+          "field": "firstCrop"
+        }
+      },
+      "offset": {
+        "x": -2,
+        "y": 6,
+        "z": 9
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "site",
+          "id": "site:1-wheat-field",
+          "field": "firstCrop"
+        }
+      }
+    },
+    {
+      "type": "observe_harvest_semantics",
+      "siteId": "site:1-wheat-field",
+      "durationTicks": 400,
+      "sampleEveryTicks": 20,
+      "maxCanonicalStallTicks": 1200,
+      "timeoutMs": 180000
+    },
+    {
+      "type": "inspect",
+      "view": "field_physical",
+      "id": "site:1-wheat-field"
+    },
+    {
+      "type": "inspect",
+      "view": "process",
+      "id": "settlement:1"
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 11,
+      "view": "process",
+      "id": "settlement:1",
+      "expect": {
+        "status": "ok"
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 2,
+      "name": "published-plan-field-hot"
+    },
+    {
+      "after": 8,
+      "name": "published-plan-field-returned"
+    }
+  ]
+}

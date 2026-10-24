@@ -100,11 +100,13 @@ final class FrontierV3HarvestSemanticOracle {
         if (admission == null || "UUID_CONFLICT".equals(string(admission, "status")) || "CARRIER".equals(string(admission, "status"))) fail("worker_physical_admission_invalid");
         String lease = path(value, "claims", "lease", "status");
         String completed = path(value, "conservation", "completedCropSlots"); String cursor = path(value, "cursor", "index");
+        String delivered = path(value, "conservation", "deliveredYield");
         String physical = path(admission, "observedExact", "x") + "," + path(admission, "observedExact", "y") + "," + path(admission, "observedExact", "z");
-        String nextSemanticSignature = completed + "/" + cursor + "/" + lease + "/" + string(intentValue, "intentStatus");
+        String nextSemanticSignature = completed + "/" + cursor + "/" + delivered + "/" + lease + "/" + string(intentValue, "intentStatus");
         JsonObject snapshot = new JsonObject(); snapshot.addProperty("instant", instant); snapshot.addProperty("phase", phase); snapshot.addProperty("job", jobId);
         snapshot.addProperty("worker", workerId); snapshot.addProperty("intent", intentId); snapshot.addProperty("lease", lease);
-        snapshot.addProperty("completedCropSlots", completed); snapshot.addProperty("cursor", cursor); snapshot.addProperty("physical", physical);
+        snapshot.addProperty("completedCropSlots", completed); snapshot.addProperty("cursor", cursor);
+        snapshot.addProperty("deliveredYield", delivered); snapshot.addProperty("physical", physical);
         // The carrier's causal tail must distinguish an admitted retained edge that the
         // actuator cannot physically accept from one that was never submitted.  These
         // are read-only body facts published by the server diagnostic; they cannot choose
@@ -123,7 +125,11 @@ final class FrontierV3HarvestSemanticOracle {
         if (semanticSignature.isBlank()) {
             lastSemanticProgressInstant = instant;
         } else if (!nextSemanticSignature.equals(semanticSignature)) {
-            sawCanonicalProgress |= !completed.equals(pathTail("completedCropSlots")) || !cursor.equals(pathTail("cursor"));
+            // A retained COLD crop may enter HOT for its real hand-to-store
+            // transfer. Confirmed delivery is semantic progress of that same
+            // job; movement, elapsed time or a lease change alone still is not.
+            sawCanonicalProgress |= !completed.equals(pathTail("completedCropSlots")) || !cursor.equals(pathTail("cursor"))
+                    || !delivered.equals(pathTail("deliveredYield"));
             lastSemanticProgressInstant = instant;
         }
         if (physicalSignature.isBlank() || !physical.equals(physicalSignature)) {
