@@ -15,6 +15,12 @@ final class FrontierV3EconomyFacts {
         if (payload instanceof ExtractionWorkProgressed e && e.operation()==ExtractionWorkProgressed.Operation.EXTRACT_BLOCK
                 || payload instanceof ExtractionHotObserved hot && hot.step() instanceof ExtractionPhysicalStep.BlockWork) return "EXTRACTION";
         if (payload instanceof ProductionStationRecipeChanged e && e.stage()!=ProductionStationRecipeChanged.Stage.HOT_PREPARED) return "PRODUCTION";
+        // The worker can commit the same station conversion before its periodic review.
+        // Classify that explicit recipe boundary too; pickup, labour and delivery are not output.
+        if (payload instanceof BakeryColdStep e && e.action() == BakeryColdStep.Action.RECIPE
+                || payload instanceof BakeryHotEffectObserved hot && hot.phase() == StationWorkState.Phase.PROCESSING
+                || payload instanceof BakeryRetiredEffectObserved retired && retired.applied()
+                    && retired.effect().phase() == StationWorkState.Phase.PROCESSING) return "PRODUCTION";
         if (payload instanceof ProductionStationFuelChanged e && e.stage()!=ProductionStationFuelChanged.Stage.HOT_PREPARED) return "FUEL";
         if (payload instanceof ResidentMealColdStep e && e.expectedPhase()==ResidentMeal.Phase.CONSUME
                 || payload instanceof ResidentMealHotEffectObserved hot && hot.phase()==ResidentMeal.Phase.CONSUME) return "FOOD";

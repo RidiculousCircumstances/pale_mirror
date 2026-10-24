@@ -5,11 +5,48 @@ import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.kernel.TransactionRecord;
 import io.farfrontier.palemirror.frontier.v3.model.*;
 import io.farfrontier.palemirror.frontier.v3.model.market.MarketPriceHistory;
+import io.farfrontier.palemirror.frontier.v3.model.execution.*;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3EconomyProjectionTest {
+    @Test void workerCommittedRecipeExportsActualConversionButTransfersDoNot() {
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:analytics-recipe"),126));
+        var home = initial.bootstrap().settlements().getFirst().id();
+        var original = initial.inventory().fungibleResources(); var input = new SubjectId("lot:analytics-input");
+        var holder = original.accounts().values().stream().filter(a -> a.custody().equals(
+                new ResourceCustody.Container(FrontierWorldState.depotId(home)))).findFirst().orElseThrow();
+        var account = holder.id(); var lots = new HashMap<>(original.lots());
+        lots.put(input, new ResourceLot(input, home, "minecraft:wheat", 3, "test", List.of()));
+        var quantities = new HashMap<>(holder.lotQuantities()); quantities.put(input, 3);
+        var accounts = new HashMap<>(original.accounts()); accounts.put(account, holder.withQuantities(quantities, holder.claimQuantities()));
+        var ledger = new FungibleResourceLedger(lots, original.claims(), accounts, original.bindings());
+        var before = initial.withInventory(initial.inventory().withFungibleResources(ledger));
+        var output = new ResourceLot(new SubjectId("lot:analytics-output"), home, "minecraft:bread", 1, "test", List.of(input));
+        var after = before.withInventory(before.inventory().withFungibleResources(ledger.transformCold(account, Map.of(input, 3), Map.of(), output)));
+        var job = new SubjectId("job:analytics"); var actor = new SubjectId("resident:analytics");
+        var execution = new ActorExecutionId(actor, ActorActivityKind.PRODUCTION, job, 1);
+        var cold = new BakeryColdStep(job, StationWorkState.Phase.PROCESSING, BakeryColdStep.Action.RECIPE,
+                SurfaceAnchor.at(0, 63, 0), execution, Optional.empty());
+        var hot = new BakeryHotEffectObserved(job, new SceneLeaseId("lease:analytics"), StationWorkState.Phase.PROCESSING,
+                new BodyPosition(0, 64, 0), 1, 1, List.of(), List.of());
+        var identity = new ActorActuationId(new ActorBodyId(actor, 1), execution);
+        for (FrontierPayload payload : List.of(cold, hot, new BakeryRetiredEffectObserved(identity, hot, true))) {
+            var id = new TransactionId("transaction:recipe"); var revision = new Revision(1); var at = new SimInstant(1);
+            var event = new FrontierEvent(1, new EventId("event:recipe"), id, initial.bootstrap().worldId(), revision, at,
+                    home, CauseChain.root(new CommandId("command:recipe")), payload);
+            var tx = new TransactionRecord(id, initial.bootstrap().worldId(), revision, at, List.of(event), Optional.empty());
+            var facts = FrontierV3EconomyFacts.facts(tx, before, after);
+            assertEquals(2, facts.size());
+            assertTrue(facts.stream().anyMatch(f -> f.get("category").equals("PRODUCTION:OUTPUT") && f.get("quantity").equals(1L)));
+            assertTrue(facts.stream().anyMatch(f -> f.get("category").equals("PRODUCTION:INPUT") && f.get("quantity").equals(3L)));
+            assertTrue(FrontierV3EconomyFacts.facts(tx, after, after).isEmpty(), "no invented output from unchanged stock");
+        }
+        assertNull(FrontierV3EconomyFacts.category(new BakeryRetiredEffectObserved(identity, hot, false)));
+        assertNull(FrontierV3EconomyFacts.category(new BakeryColdStep(job, StationWorkState.Phase.DEPOT_DELIVERY,
+                BakeryColdStep.Action.DELIVER, SurfaceAnchor.at(0, 63, 0), execution, Optional.empty())));
+    }
     @Test void snapshotsReconcileOwnedInventoryWithoutChangingCanonicalState() {
         var state=FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:analytics"),126));
         var inventory=state.inventory();var snapshot=FrontierV3EconomyProjection.snapshot(state,0,0,"ACTIVE");

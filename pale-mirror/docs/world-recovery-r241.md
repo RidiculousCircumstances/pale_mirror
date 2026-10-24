@@ -35,5 +35,36 @@ Evidence: `build/r241-cold-observation.jsonl`, `r241-hot-ground-result.json`,
 `r241-carriers.json`, `r241-operations.json`. The first exploratory camera was
 invalid (Y above ground); the corrected grounded scenario completed all 16 actions.
 
-Focused verification: fast-forward safety and absolute-time tests. Live validation
-of the corrected build and sustained production/trade remains in progress.
+Focused verification: 15 fast-forward safety/absolute-time tests and guardrails passed.
+The clean detached artifact was deployed into the same R241 world, retaining the
+stalled residents. Full-pack native client observation then confirmed Ada's meal
+completed (NOURISHED 1000, meal NONE, claim released) at tick 37,836. An ordinary
+advance request during HOT was rejected at the unchanged tick 37,305 with the
+exact PREPARED body/epoch. After client departure and body release, COLD advance
+was admitted. All twelve settlements had no hungry residents at tick 44,422;
+subsequent hunger cycles continued to resolve. At tick 89,479 five sales had
+settled, active harvesting/mining continued and Redwillow had recorded new bread.
+No new quarantine or inventory/scene conflicts appeared. Maximum host tick since
+the corrected deployment was 58.7 ms; this is a bounded observation, not a global
+latency guarantee. Evidence: build/r241a-hot-result.json, r241a-hot-advance.txt,
+r241a-cold-observation.jsonl and r241a-deploy-verify.log.
+
+## Missing production observations
+
+At tick 71,210 Clearwater worker 7-9 was processing a station recipe; the job later
+finished, but analytics had no corresponding output row. Static tracing found
+that `StationWorkProcess.reduceColdStep(RECIPE)` invokes the common station
+transformation directly. Analytics recognized `ProductionStationRecipeChanged`,
+but omitted the equally explicit worker-owned recipe boundary. Which schedule
+committed the conversion therefore determined whether it was counted.
+
+The read-only facts adapter now recognizes COLD recipe steps, confirmed HOT
+processing and applied retired processing receipts. It continues to calculate
+only the actual inventory delta; transfers, preparation, unapplied recovery and
+unchanged stock cannot manufacture output. A focused conversion test checks
+three wheat consumed, one bread produced, unchanged-state suppression and
+negative transfer/recovery cases. No production, stock, balance or time rules
+are changed. Historical missing observations are not backfilled by inference.
+Four economy projection tests and guardrails pass. The first new test fixture
+incorrectly created a second account for an existing container; it was corrected
+to use the existing account. Deployment and sustained-world validation continue.
