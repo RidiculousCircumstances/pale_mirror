@@ -191,3 +191,90 @@ admit it. The existing canonical admission command and operation receipt closure
 are reused, followed by the ordinary saved departure path. No entity is created,
 no custody check is skipped, and this does not award any activity completion.
 Negative/round-trip assertions extend the existing body admission operation test.
+
+H verification passed 27 focused admission/lifetime/confirmation/queue tests,
+including saved versus merely applied, stale, foreign and rejected evidence;
+guardrails and the clean detached release/package checks also passed. On the
+retained live world, resident 6-19 became CLOSED/NOURISHED at 266786 and a COLD
+advance completed at 266949. No actor was recreated or inventory refunded.
+
+## Retained-world economic limit and fresh operational baseline
+
+The retained world continued to 300270 with 89 settled trades, but it did not
+recover economically everywhere: Southgate still had 40 hungry, Mossbrook 25,
+and Sunreach 24. The prior wasted fuel and payments are real historical losses;
+H does not reverse them. A copied-state trip calculation at 282315 exhausted
+Southgate's candidates with WAITING_FOR_AVAILABLE_TRANSPORT_OR_PROVISIONS.
+This is not evidence that every observed PLANNING wait is a stuck route.
+No prices, cash balances or resource quantities were patched to force recovery.
+The old world and its final economy/log evidence are preserved intact.
+
+A fresh baseline, `frontier-v3-r241i-clean-20261024`, was started on the same
+verified 73ee3131f binary, seed 126 and ruleset r26. Runtime invocation
+bcc0b6a0ade44181b57b6b25ecf30fae; deployment verification passed. World analytics
+identity a99aa331-c807-4e41-86fb-e94dd9680c3f separates its evidence from the old
+world. This reset removes historical consequences for playtesting; it is not
+proof that long-term market balance is solved.
+
+The exploratory native Southgate → Hearthvale visit completed at 2697 with
+zero retained scene/inventory/required conflicts. Linked frames show rendered
+buildings, ground and residents. After client departure all physical bindings
+and the departure queue closed; COLD advance was admitted at 3168. At 23672 the
+new world had recorded 48 harvested wheat, 46 mined coal and 28 consumed bread.
+These are completed economic/resource events, not just absence of errors.
+This is targeted operational evidence, not M3 or long-duration acceptance.
+
+Performance remains a separate open limit: retained-world accelerated COLD
+recorded a 195.819 ms host peak, and the fresh world's first native visits
+recorded a 1701.770 ms peak. Ordinary recent ticks were short, but the requested
+80 ms peak limit is NOT established. The retained-world JFR did not show a
+server-thread blocking join: CompletableFuture.reportJoin samples came through
+getNow. Full transition validation accounts for 169 of 595 server execution
+samples; resident-policy validation alone only 12. These samples do not justify
+claiming a single proven cause for the fresh first-load peak.
+
+The fresh baseline reached 42934 with zero hungry in all twelve settlements,
+384 wheat harvested, 74 coal extracted, 22 bread produced and 348 bread consumed.
+The first settled trade was recorded by 44046. A second ground-level native
+Southgate visit completed at 43765 with zero retained conflicts; its settlement
+report confirmed 41 nourished, zero hungry and 150 available bread. The field
+had three retained harvest jobs. Its night-time, partly occluded frames do not
+establish continuous physical harvesting. The preceding field-camera attempt
+was invalid: its anchor used board height, while the player settled on a lower
+roof; the visit correctly timed out rather than proving arrival. Correcting the
+scenario anchor was not a product fix.
+
+A 90-second HOT JFR found 17 server-thread waits in the synchronous external
+block-write WAL path (up to 23.109 ms, 225.066 ms total). One exact stack is
+vanilla grass randomTick → setBlock → ExtractionBlockWrites.observe →
+ExtractionGeologyInvalidated → FrontierFileStore.append/flushPendingBlocking.
+Those external before-write fences run outside the ordinary asynchronous
+persistence turn. This is a confirmed remaining blocking path, but not proof
+that it caused the earlier 1.7-second first-visit peak; do not remove its durable
+before-effect guarantee as a timing workaround.
+
+## R241i final operational checkpoint
+
+The bounded COLD run completed at 70500 with no outstanding fast-forward work.
+At 70550 cumulative confirmed flows were 2036 harvested wheat, 128 mined coal,
+116 baked bread and 745 consumed bread; four sales had settled. All twelve towns
+had zero hungry at 63643; the final 70550 snapshot had zero to two hungry per
+town, with actual repeated consumption. This establishes operating production,
+feeding and trade, not self-sustaining equilibrium: consumption still includes
+bootstrap food and long-term viability remains unproved.
+
+The final retained-conflict summary at 70180 was green with zero required,
+scene or inventory conflicts. Route waiting did not accumulate in this run.
+Native visits and subsequent COLD admissions succeeded without a server restart.
+The final client visit was at night, so continuous HOT harvesting is still not
+visually established by its frames. No new runtime invariant failure/quarantine
+was observed; connection-reset messages coincide with test-client shutdowns.
+
+The test client is closed and native acceleration was stopped; the server
+confirmed target tick rate 20.0 at 14:03:19 on 2026-10-24. The service remains
+running on 73ee3131f and the fresh world. The last 64 host ticks at 70550 averaged
+0.777 ms with a 4.602 ms maximum, but the run's first-visit peak remains 1701.770
+ms. These recent COLD samples do not close the outstanding peak-latency issue.
+Receipts: build/r241i-final-{economy,performance}.json,
+final-summary.txt and final-cold-observation.jsonl; native scenario/results and
+JFR paths above. Final observations are exploratory, not formal M3 acceptance.
