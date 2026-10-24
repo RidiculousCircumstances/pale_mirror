@@ -10,6 +10,21 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierV3ActorProbeScheduleTest {
+    @Test void pendingDepartureContinuesWithoutAnotherRosterSweepAndYieldsToOtherReadyActors() {
+        var actors = java.util.stream.IntStream.range(0, 100)
+                .mapToObj(index -> new SubjectId("actor:" + index)).toList();
+        var cursor = new FrontierV3ActorProbeSchedule.Cursor(actors);
+        var unloading = actors.get(90); var other = actors.get(91);
+        cursor.defer(unloading); cursor.defer(other);
+        assertEquals(List.of(unloading, other), cursor.prioritizeDeferred(cursor.next(2, 2), 2));
+        cursor.probed(unloading);
+        cursor.defer(unloading); // Exact saved departure still awaits journal acknowledgement.
+        assertEquals(List.of(other, unloading), cursor.prioritizeDeferred(cursor.next(2, 2), 2));
+        cursor.probed(other); cursor.probed(unloading);
+        assertEquals(List.of(actors.get(4), actors.get(5)), cursor.prioritizeDeferred(cursor.next(2, 2), 2),
+                "completed notifications must not replace ordinary observation forever");
+    }
+
     @Test void rosterChangesKeepFairnessAndDiscardOnlyRetiredDeferredActors() {
         var first = new SubjectId("actor:1");
         var second = new SubjectId("actor:2");

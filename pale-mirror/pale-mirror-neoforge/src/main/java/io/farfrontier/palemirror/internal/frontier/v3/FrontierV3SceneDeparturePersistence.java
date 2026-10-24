@@ -72,10 +72,12 @@ final class FrontierV3SceneDeparturePersistence {
             if (current == null) return;
             var currentLedger = FrontierV3AmbientCarrierLedger.get(level, current.bootstrap().worldId());
             try {
-                selectedIndex.batch.acknowledgeBodies(ticket, currentLedger, receipt -> receipt.current(current)
+                boolean bodiesAcknowledged = selectedIndex.batch.acknowledgeBodies(ticket, currentLedger, receipt -> receipt.current(current)
                         && !FrontierV3ActorBodyController.departureReadPending(level, receipt)
                         && level.getEntity(receipt.identity().entityId()) == null,
                         () -> currentLedger.persist(level, current.bootstrap().worldId()));
+                if (bodiesAcknowledged) for (var receipt : ticket.bodies())
+                    FrontierV3ActorBodyController.savedDepartureAvailable(level, runtime, current, receipt);
                 selectedIndex.batch.acknowledge(ticket, currentLedger, receipt -> {
                     var lease = current.sceneLeases().get(receipt.leaseId());
                     if (lease == null || lease.revision() != receipt.sceneRevision()

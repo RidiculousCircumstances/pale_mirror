@@ -129,3 +129,34 @@ reserve through recovery, followed by real ingredient arrival; existing HOT
 fuel decrement/replay and recipe lifecycle checks remain applicable. Empty
 forge fixtures now supply their actual ingredients before requesting heat.
 Economic prices, treasuries and initial stocks are unchanged.
+
+
+## R241f: resume saved-body departure without a full actor sweep
+
+The R241e native visit of towns 10 → 9 → 6 ended at tick 243311 with zero
+retained conflicts; the client disconnected normally at 13:16:55. A bounded
+COLD request at 244065 was correctly rejected for resident 10-30, despite its
+native departure having been recorded at 13:15:09. It subsequently retired;
+the next request waited on resident 10-5. This was delayed release, not authority
+to bypass the physical-body guard or recreate either resident.
+
+The body owner had no addressed wake when its exact save proof became available.
+After a probe submitted an asynchronous carrier/operation journal write, another
+full roster sweep supplied its next attempt. Save acknowledgement now wakes the
+existing bounded actor observer for that exact resident. A departure which has
+passed all physical, scene and inventory fences retains its next probe while its
+journal/command acknowledgement is pending. Each probe revalidates current
+identity, residence, absence and authority; rejected evidence does not grant COLD.
+Ready actors rotate through the existing queue; no extra executor, body owner,
+world scan or parallel mutation is introduced.
+
+Focused verification: 41 existing/new actor, departure-save and operation tests
+pass, including stale/missing evidence and pending write behaviour. Live latency
+verification on the same retained world remains pending deployment.
+
+Economic observations before this change: COLD reached tick 240407 with 64
+settled sales; Mossbrook baked 27 bread after fuel delivery and its hunger fell
+from 32 to 20. Southgate baked 5, then lacked fuel/cash; buyer-collection missions
+were admitted for 211 of its wheat. Those are actual shipments, not spendable
+forecast revenue. Full economic recovery is not established; no price adjustment,
+resource injection or historical refund was applied.

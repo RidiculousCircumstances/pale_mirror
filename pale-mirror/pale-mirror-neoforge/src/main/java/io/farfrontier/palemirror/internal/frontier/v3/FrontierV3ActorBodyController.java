@@ -165,17 +165,29 @@ final class FrontierV3ActorBodyController {
         // an irreversible ledger write followed by a rejected domain transition.
         if (io.farfrontier.palemirror.frontier.v3.model.ActorInventoryInteractionFences.pending(state, actor)) return;
         var declaration = receipt.identity();
-        if (!ledger.fence(declaration, declaration.epoch(), 0L)
-                || !ledger.prepareActorDurable(level, state.bootstrap().worldId(), actor)) return;
+        if (!ledger.fence(declaration, declaration.epoch(), 0L)) return;
+        if (!ledger.prepareActorDurable(level, state.bootstrap().worldId(), actor)) {
+            FrontierV3ActorProbeSchedule.wake(runtime, state, actor, level.getGameTime());
+            return;
+        }
         var location = state.actorLocations().get(actor);
         var payload = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyUnloaded(body,
                 location.body(), location.condition().health(), receipt.observed().body(), receipt.observed().health(),
                 FrontierV3ActorBodyDeparture.execution(state, actor));
-        FrontierV3BodyDepartureOperation.confirm(level, runtime, receipt, payload,
+        boolean confirmed = FrontierV3BodyDepartureOperation.confirm(level, runtime, receipt, payload,
                 () -> ledger.savedBodyDeparture(receipt) && ledger.currentBodyResidence(actor, receipt.residenceGeneration())
                         && receipt.current(runtime.decodedState().orElseThrow()) && !departureReadPending(level, receipt)
                         && level.getEntity(receipt.identity().entityId()) == null
                         && FrontierV3AmbientPendingAdmissions.get(runtime, receipt.identity().entityId()) == null);
+        if (!confirmed) FrontierV3ActorProbeSchedule.wake(runtime, runtime.decodedState().orElseThrow(), actor, level.getGameTime());
+    }
+
+    /** Save completion wakes the existing body executor, never submits an unload
+     * from a callback or grants COLD authority from a queued notification. */
+    static void savedDepartureAvailable(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+                                         FrontierWorldState state, FrontierV3ActorBodyDeparture receipt) {
+        if (receipt.current(state) && FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId()).savedBodyDeparture(receipt))
+            FrontierV3ActorProbeSchedule.wake(runtime, state, receipt.identity().actorId(), level.getGameTime());
     }
 
     /** Final terrain witness for all common bodies, including already-hidden entity sections. */
@@ -568,6 +580,7 @@ final class FrontierV3ActorBodyController {
                     receipt.identity().liveBody(FrontierV3ActorCarrierComposition.Owner.ACTOR_BODY, 0L, body.physicalEpoch())))
                 || !ledger.recordBodyDeparture(receipt) || !ledger.confirmSavedBodyDeparture(receipt)) return false;
         ledger.persist(level, state.bootstrap().worldId());
+        savedDepartureAvailable(level, runtime, state, receipt);
         return true;
     }
 

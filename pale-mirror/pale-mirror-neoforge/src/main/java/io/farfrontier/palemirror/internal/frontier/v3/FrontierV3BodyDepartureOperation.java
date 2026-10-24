@@ -10,7 +10,7 @@ import java.util.function.BooleanSupplier;
  * unload, entity removal, marker backfill, UUID-absence inference or body scan. */
 final class FrontierV3BodyDepartureOperation {
     private FrontierV3BodyDepartureOperation() { }
-    static void confirm(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+    static boolean confirm(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             FrontierV3ActorBodyDeparture receipt, ActorBodyUnloaded consequence, BooleanSupplier currentSavedEvidence) {
         var world = runtime.decodedState().orElseThrow().bootstrap().worldId();
         var image = fingerprint(receipt);
@@ -21,8 +21,8 @@ final class FrontierV3BodyDepartureOperation {
                 receipt.identity().actorId(), world.value() + "/epoch:" + receipt.identity().epoch()
                         + "/residence:" + receipt.residenceGeneration(), image, Set.of(participant));
         var operation = FrontierV3DurableNativeObservation.record(level, declaration, currentSavedEvidence).orElse(null);
-        if (operation == null) return;
-        FrontierV3OperationConfirmation.submitRecovery(level, runtime, operation.ticket(), consequence, java.util.Optional.empty());
+        if (operation == null) return false;
+        return FrontierV3OperationConfirmation.submitRecovery(level, runtime, operation.ticket(), consequence, java.util.Optional.empty());
     }
     private static String fingerprint(FrontierV3ActorBodyDeparture receipt) {
         try { return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")

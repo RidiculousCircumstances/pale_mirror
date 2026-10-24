@@ -30,6 +30,15 @@ final class FrontierV3ActorProbeSchedule {
 
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) { CURSORS.remove(runtime); }
 
+    /** Evidence arrived for one declared actor. This schedules observation only;
+     * the body owner revalidates the receipt and every custody fence when probed. */
+    static void wake(FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state,
+                     SubjectId actor, long gameTime) {
+        Cursor cursor = CURSORS.computeIfAbsent(runtime, ignored -> new Cursor(state));
+        cursor.synchronizeRoster(state);
+        cursor.defer(actor, gameTime);
+    }
+
     static void defer(FrontierV3ServerRuntime<?, ?> runtime, SubjectId actor, long gameTime) {
         Cursor cursor = CURSORS.get(runtime);
         if (cursor == null) throw new IllegalStateException("deferred actor without an active probe cursor");
