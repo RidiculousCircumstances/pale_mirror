@@ -5,6 +5,15 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ProductionChainAllocationTest {
+    @Test void downstreamDemandIncludesFuelAndTransitiveIngredientsWithoutInventingUnrelatedUse() {
+        var oven = new SupplyPlanner.Process("oven", "food", 1, Map.of("grain", 2), 1, Map.of("fuel", 10L), 0, 5, 1, 20, 3);
+        var mill = new SupplyPlanner.Process("mill", "grain", 2, Map.of("crop", 1), 0, Map.of(), 0, 5, 1, 20, 3);
+        var processes = List.of(oven, mill);
+        assertEquals(Set.of("crop", "grain", "food"), ProductionReachability.consumers(processes, "crop"));
+        assertEquals(Set.of("fuel", "food"), ProductionReachability.consumers(processes, "fuel"));
+        assertEquals(Set.of("metal"), ProductionReachability.consumers(processes, "metal"));
+    }
+
     private static ProductionChainAllocation allocation(long labour, long fuel) {
         var field = new SupplyPlanner.Process("field", "grain", 2, Map.of(), 0, Map.of(), 0, 10, 1, 20, 2, Map.of("person", labour));
         var oven = new SupplyPlanner.Process("oven", "food", 1, Map.of("grain", 2), 1, Map.of("fuel", 10L), 0,

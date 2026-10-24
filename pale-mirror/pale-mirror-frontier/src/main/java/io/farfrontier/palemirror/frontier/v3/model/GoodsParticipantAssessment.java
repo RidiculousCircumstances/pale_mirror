@@ -24,6 +24,19 @@ public final class GoodsParticipantAssessment {
     public static GoodsParticipantView view(FrontierWorldState state, GoodsParticipant participant, long atTick) {
         return read(state, participant, atTick).view();
     }
+    /** A single production query need not evaluate unrelated export markets.
+     * Any live downstream buy envelope retains the full shared export allocation. */
+    public static long production(FrontierWorldState state, GoodsParticipant participant, String item, long atTick) {
+        var domestic = domestic(state, participant, atTick);
+        var evaluated = domestic.domestic().orElseThrow();
+        var related = io.farfrontier.palemirror.frontier.v3.model.supply.ProductionReachability
+                .consumers(evaluated.facts().processes(), item);
+        boolean possible = state.companies().goodsTrade().orders().values().stream().anyMatch(order ->
+                order.side() == GoodsTradeOrder.Side.BUY && order.counterparty().equals(participant.party())
+                        && order.expiresAtTick() > atTick && order.availableQuantity() > 0 && related.contains(order.itemKind()));
+        var plan = possible ? read(state, participant, atTick).view().supplyPlan().orElseThrow() : evaluated.plan();
+        return Objects.requireNonNull(plan.economy().orElseThrow().additionalProduction().get(item), "undeclared production item");
+    }
     /** Present stock, domestic requirements and funded consent. Trading existing
      * goods must not recursively plan production for prospective buyers.
      * Export production remains an explicit read/view assessment. */
@@ -70,7 +83,8 @@ public final class GoodsParticipantAssessment {
     private static Assessment complete(FrontierWorldState state, Assessment domestic) {
         if (domestic.domestic().isEmpty()) return domestic;
         var plan = ECONOMY.withExports(domestic.domestic().orElseThrow(),
-                SettlementEconomicPlanning.exports(state, domestic.facts().orElseThrow(), false));
+                SettlementEconomicPlanning.exports(state, domestic.facts().orElseThrow(), false,
+                        ECONOMY.potentialExports(domestic.domestic().orElseThrow())));
         return new Assessment(domestic.atTick(), GoodsParticipantView.planned(state,
                 GoodsParticipantView.observe(state, domestic.view().participant()), Optional.of(plan)), domestic.facts(), domestic.domestic());
     }

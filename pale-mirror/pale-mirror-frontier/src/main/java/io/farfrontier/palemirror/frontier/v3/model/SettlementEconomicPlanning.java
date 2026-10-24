@@ -22,7 +22,7 @@ final class SettlementEconomicPlanning {
                 input.market(), prices, List.of(), receivables);
     }
     static List<EconomicSnapshot.ExportInterest> exports(FrontierWorldState state, SettlementSupplyFacts input,
-            boolean requireSustainedExport) {
+            boolean requireSustainedExport, Set<String> potentialItems) {
         var home = input.settlement();
         var trade = state.companies().goodsTrade(); var rules = state.bootstrap().ruleset().goodsTrade();
         var participant = trade.participants().participants().get(home);
@@ -31,8 +31,8 @@ final class SettlementEconomicPlanning {
             asks.put(commodity.itemKind(), GoodsParticipantPricing.ask(participant, commodity).raw());
         long now = input.atTick();
         var interests = new ArrayList<EconomicSnapshot.ExportInterest>();
-        for (var item : new TreeSet<>(input.stocks().keySet())) {
-          for (var demand : GoodsBuyerDemand.read(state, participant, item, now)) {
+        for (var item : new TreeSet<>(potentialItems)) {
+          for (var demand : GoodsBuyerDemand.read(state, participant, item, now, asks.get(item))) {
             var order = demand.order();
             long salePrice = asks.get(item);
             int quantity = demand.quantity();

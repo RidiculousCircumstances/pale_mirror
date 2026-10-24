@@ -29,6 +29,8 @@ public final class GoodsProcurementTransport {
     }
     private static Optional<Quote> calculate(FrontierWorldState state, GoodsParticipant seller, SubjectId source, GoodsParticipant buyer,
             String item, int requested, long price, long budget, long now) {
+        int fundedQuantity = FundedCargoLot.quantity(Math.min(requested, GoodsTransportOptions.maximumQuantity(state, item)), price, 0, budget);
+        if (fundedQuantity == 0) return Optional.empty();
         if (!GoodsParticipantStorage.eligible(state, seller, source, item)) return Optional.empty();
         Quote best = null;
         for (var mode : GoodsTradeFulfillment.Mode.values()) {
@@ -47,7 +49,7 @@ public final class GoodsProcurementTransport {
             // exact departure admission still requires its actual canonical instant.
             long crewAt = Math.max(now, people.stream().mapToLong(id -> state.humanPopulation().nutrition(id).lastEvaluatedTick()).max().orElse(now));
             int size = GoodsTransportOptions.parcelSize(state, item);
-            int quantity = FundedCargoLot.quantity(Math.min(requested, GoodsTransportOptions.maximumQuantity(state, item)), price, 0, budget);
+            int quantity = fundedQuantity;
             // Shrinking an affordable lot can reduce its crew. Each iteration
             // strictly reduces the load within the declared maximum cargo size.
             while (quantity > 0) {

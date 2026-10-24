@@ -4,6 +4,8 @@ import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.persistence.*;
 import org.junit.jupiter.api.Test;
 import java.util.*;
+import io.farfrontier.palemirror.frontier.v3.process.FrontierWorldProcessCatalog;
+import io.farfrontier.palemirror.frontier.v3.kernel.DeterministicProcessRegistry;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AutomaticStationProductionTest {
@@ -67,11 +69,19 @@ class AutomaticStationProductionTest {
         var burn = ProductionStationEnergy.next(state, spec.id()).orElseThrow();
         state = ProductionStationEnergy.apply(state, spec.id(), new ProductionStationFuelChanged(
                 ProductionStationFuelChanged.Stage.COLD_CONSUMED, burn, List.of()));
+        var registry = new DeterministicProcessRegistry(FrontierWorldProcessCatalog.descriptors(), FrontierWorldPayloadCodecs.create());
+        var schedule = FrontierWorldProcessCatalog.initialSchedule(state.bootstrap()).stream()
+                .filter(action -> action.kind().equals("frontier.production_station.review") && action.subject().equals(spec.id()))
+                .findFirst().orElseThrow();
+        var prepared = FrontierWorldProcessCatalog.prepareScheduled(registry, state, schedule, new SimInstant(1)).orElseThrow();
+        assertEquals(FrontierWorldProcessCatalog.planScheduled(registry, state, schedule, new SimInstant(1)), prepared.prepare().get());
         var offer = AutomaticStationProduction.offer(state, spec.id(), 1).orElseThrow();
         assertEquals(3, offer.operation().outputQuantity());
         var start = new ProductionStationAutomaticStarted(spec.id(), state.productionStations().require(spec.id()).revision(), offer.operation().recipeId(), 1);
         var payloads = FrontierWorldPayloadCodecs.create(); assertEquals(start, payloads.decode(start.type(), payloads.encode(start)));
         state = AutomaticStationProduction.start(state, spec.id(), start);
+        assertTrue(FrontierWorldProcessCatalog.prepareScheduled(registry, state, schedule, new SimInstant(2)).isEmpty(),
+                "running machine progress must not wait for an economic worker round trip");
         var progress = ProductionStationProgressed.automatic(state, spec.id(), 2).orElseThrow();
         state = ProductionStationProgressed.apply(state, spec.id(), progress);
         assertEquals(600_000, state.productionStations().require(spec.id()).operation().orElseThrow().progress().orElseThrow().requiredMilliWork());

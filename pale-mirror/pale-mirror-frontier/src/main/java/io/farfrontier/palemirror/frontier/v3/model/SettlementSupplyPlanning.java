@@ -22,9 +22,10 @@ public final class SettlementSupplyPlanning {
                 new SupplyCapacityComposition.Option(SupplyCapacityPort.Key.FIELD,
                         FieldSupplyCapacity.assess(state, home, stocks, window, cells))));
         var planner = new io.farfrontier.palemirror.frontier.v3.model.economy.EconomicPlanner();
-        return planner.withExports(planner.domestic(SettlementEconomicPlanning.facts(state, facts),
-                state.bootstrap().ruleset().goodsTrade().supplyPlanning().economics().orElseThrow()),
-                SettlementEconomicPlanning.exports(state, facts, requireSustainedExport));
+        var domestic = planner.domestic(SettlementEconomicPlanning.facts(state, facts),
+                state.bootstrap().ruleset().goodsTrade().supplyPlanning().economics().orElseThrow());
+        return planner.withExports(domestic, SettlementEconomicPlanning.exports(state, facts,
+                requireSustainedExport, planner.potentialExports(domestic)));
     }
     private static SettlementSupplyFacts collect(FrontierWorldState state, SubjectId home, int residents,
             Map<String, GoodsParticipantView.Stock> observed, long atTick,

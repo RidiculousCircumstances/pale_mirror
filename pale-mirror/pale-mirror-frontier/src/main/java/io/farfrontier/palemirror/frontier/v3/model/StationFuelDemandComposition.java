@@ -11,7 +11,8 @@ public final class StationFuelDemandComposition {
             ProductionStationSpec.Capability.SMELTING, new Policy(StationFuelDemandComposition::automatic, StationFuelDemandComposition::automaticBacking),
             ProductionStationSpec.Capability.FABRICATION, new Policy(StationFuelDemandComposition::equipment, StationFuelDemandComposition::workerBacking));
     public static long heat(FrontierWorldState state, ProductionStationSpec station, long tick) {
-        return Math.min(backedHeat(state, station), Objects.requireNonNull(OWNERS.get(station.capability()),
+        long backed = backedHeat(state, station);
+        return backed == 0 ? 0 : Math.min(backed, Objects.requireNonNull(OWNERS.get(station.capability()),
                 "unregistered station fuel policy").demand().heat(state, station, tick));
     }
     /** The production owner supplies priority; logistics never classifies bread, metal or jobs. */

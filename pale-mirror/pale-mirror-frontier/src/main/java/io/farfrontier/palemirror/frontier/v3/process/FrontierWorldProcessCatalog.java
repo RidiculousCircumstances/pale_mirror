@@ -202,7 +202,7 @@ public final class FrontierWorldProcessCatalog {
     }
     private static final Map<String, FrontierScheduledPlanner> SCHEDULED_PLANNERS = Map.ofEntries(
             Map.entry(CultivationProcessModule.REVIEW, coalescedReview(atExecutionTime(CultivationProcessModule::plan))),
-            Map.entry(ProductionStationProcessModule.REVIEW, atExecutionTime(ProductionStationProcessModule::plan)),
+            Map.entry(ProductionStationProcessModule.REVIEW, ProductionStationProcessModule.planner()),
             Map.entry(ResourceHaulingPolicy.REVIEW, coalescedReview(withPlanningRecovery(atExecutionTime(ResourceHaulingPolicy::plan)))),
             Map.entry(ExtractionContinuation.REVIEW, coalescedReview(withPlanningRecovery(atExecutionTime((state, action, instant) -> ExtractionWorkProcess.review(state, action, instant.ticks()))))),
             Map.entry(ExtractionContinuation.PROGRESS, detached(withPlanningRecovery(new FrontierScheduledPlanner() {

@@ -9,12 +9,19 @@ final class GoodsBuyerDemand {
     record Demand(GoodsTradeOrder order, GoodsParticipantView buyer, int quantity, FixedScalar budget) { }
 
     static List<Demand> read(FrontierWorldState state, GoodsParticipant seller, String item, long atTick) {
+        return read(state, seller, item, atTick, 0);
+    }
+
+    /** A buyer below the seller's price cannot become executable by adding freight.
+     * Filter that envelope before evaluating the buyer's independent economy. */
+    static List<Demand> read(FrontierWorldState state, GoodsParticipant seller, String item, long atTick, long minimumUnitPrice) {
+        if (minimumUnitPrice < 0) throw new IllegalArgumentException("negative buyer price bound");
         var trade = state.companies().goodsTrade();
         var rules = state.bootstrap().ruleset().goodsTrade();
         var buyers = new TreeMap<SubjectId, GoodsTradeOrder>();
         for (var order : trade.orders().values()) {
             if (order.side() != GoodsTradeOrder.Side.BUY || !order.counterparty().equals(seller.party())
-                    || !order.itemKind().equals(item) || order.expiresAtTick() <= atTick || order.availableQuantity() == 0) continue;
+                    || !order.itemKind().equals(item) || order.unitPriceLimit().raw() < minimumUnitPrice || order.expiresAtTick() <= atTick || order.availableQuantity() == 0) continue;
             var buyer = trade.participants().participants().get(order.party().id());
             if (buyer == null || !buyer.party().equals(order.party()) || !mutuallyKnown(seller, buyer)
                     || !GoodsParticipantStorage.eligible(state, buyer, order.containerId(), item)

@@ -26,6 +26,20 @@ final class ProductionStationProcessModule implements FrontierWorldProcessModule
         return bootstrap.settlements().stream().flatMap(home -> home.structures().stream()).filter(facility -> ProductionFacilityLayout.supports(facility.kind()))
                 .map(ProductionFacilityLayout::station).map(station -> review(station.id(), 1)).toList();
     }
+    static FrontierScheduledPlanner planner() {
+        return new FrontierScheduledPlanner() {
+            @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
+                throw new IllegalArgumentException("station review requires its execution instant");
+            }
+            @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, SimInstant instant) {
+                return ProductionStationProcessModule.plan(state, action, instant);
+            }
+            @Override public Optional<ScheduledPreparation> preparation(FrontierWorldState state, ScheduledAction action, SimInstant instant) {
+                return AutomaticStationProduction.requiresDemandAssessment(state, action.subject())
+                        ? Optional.of(PedestrianPlanningContinuations.prepare(action, () -> plan(state, action, instant))) : Optional.empty();
+            }
+        };
+    }
     static List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action, SimInstant now) {
         if (!review(action.subject(), action.dueAt().ticks()).equals(action)) throw new IllegalArgumentException("foreign station review schedule");
         if (state.inventory().surfaces().get(ProductionStationEnergy.record(state, action.subject()).id()).status() == ContainerSurfaceStatus.RETIRED)

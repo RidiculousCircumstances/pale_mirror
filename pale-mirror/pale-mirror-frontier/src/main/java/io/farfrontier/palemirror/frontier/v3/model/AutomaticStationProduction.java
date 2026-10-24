@@ -28,7 +28,14 @@ public final class AutomaticStationProduction {
                 .filter(value -> state.bootstrap().ruleset().production().require(value.recipeId()).capability() == spec.capability())
                 .reduce((a, b) -> { throw new IllegalArgumentException("station requires an explicit single production policy"); });
     }
-    public static Optional<Offer> offer(FrontierWorldState state, SubjectId stationId, long tick) {
+    private record Candidate(ContainerRecord record, ProductionCatalog.AutomaticPolicy policy,
+                             ProductionRecipe recipe, CustodyAccount account) { }
+    /** Only this branch needs economic planning. Ordinary clock/fuel progress
+     * should not acquire an asynchronous preparation round trip. */
+    public static boolean requiresDemandAssessment(FrontierWorldState state, SubjectId stationId) {
+        return candidate(state, stationId).isPresent();
+    }
+    private static Optional<Candidate> candidate(FrontierWorldState state, SubjectId stationId) {
         var record = ProductionStationEnergy.record(state, stationId); var spec = record.productionStation().orElseThrow();
         var policy = policy(state, spec).orElse(null);
         if (policy == null || !stations(state, record.ownerId(), state.bootstrap().ruleset().production().require(policy.recipeId())).contains(record)
@@ -44,6 +51,14 @@ public final class AutomaticStationProduction {
                 || recipe.ingredient().acceptedItems().stream().noneMatch(kind -> ledger.unclaimedQuantity(
                         account.id(), record.ownerId(), kind) >= recipe.ingredient().quantity())
                 || machine.storedHeat() < recipe.heatPerBatch()) return Optional.empty();
+        return Optional.of(new Candidate(record, policy, recipe, account));
+    }
+    public static Optional<Offer> offer(FrontierWorldState state, SubjectId stationId, long tick) {
+        var candidate = candidate(state, stationId).orElse(null);
+        if (candidate == null) return Optional.empty();
+        var record = candidate.record(); var policy = candidate.policy(); var recipe = candidate.recipe();
+        var account = candidate.account(); var machine = state.productionStations().require(stationId);
+        var ledger = state.inventory().fungibleResources();
         long missing = ProductionStockDemand.read(state, record.ownerId(), recipe.product().itemKind(), tick).missing();
         if (missing < recipe.product().quantity()) return Optional.empty();
         for (var kind : recipe.ingredient().acceptedItems().stream().sorted().toList()) {

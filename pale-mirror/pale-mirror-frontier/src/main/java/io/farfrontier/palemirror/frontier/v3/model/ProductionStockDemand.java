@@ -44,10 +44,9 @@ public final class ProductionStockDemand {
         // The economic plan owns the incremental production decision. Its caller
         // does not need a second legacy reserve calculation whose result is discarded.
         if (planning.economics().isPresent()) {
-            var plan = GoodsParticipantAssessment.view(state, participant, atTick).supplyPlan().orElseThrow();
+            long production = GoodsParticipantAssessment.production(state, participant, itemKind, atTick);
             long covered = new StockTargetDemand(0, stock, incoming, outgoing).covered();
-            return new StockTargetDemand(Math.addExact(covered, plan.economy().orElseThrow()
-                    .additionalProduction().get(itemKind)), stock, incoming, outgoing);
+            return new StockTargetDemand(Math.addExact(covered, production), stock, incoming, outgoing);
         }
         long target = SettlementReservePlanning.enabled(state) ? SettlementReservePlanning.read(state, settlement, atTick).get(itemKind).quantity()
                 : StockTargetDemand.target(commodity, LivingResidentStockView.counts(state).getOrDefault(settlement, 0),

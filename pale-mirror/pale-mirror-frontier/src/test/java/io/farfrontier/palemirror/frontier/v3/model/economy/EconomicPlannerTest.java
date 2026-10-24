@@ -6,6 +6,23 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class EconomicPlannerTest {
+    @Test void impossibleExportPruningPreservesAllocationFundingAndUpstreamProduction() {
+        var planner = new EconomicPlanner();
+        var field = new SupplyPlanner.Process("field", "grain", 2, Map.of(), 0, Map.of(), 0, 10, 1, 20, 2);
+        var interests = List.of(new EconomicSnapshot.ExportInterest("buyer", "food", 50, 10, 1000, 1000, 0),
+                new EconomicSnapshot.ExportInterest("buyer", "grain", 50, 3, 1000, 1000, 0),
+                new EconomicSnapshot.ExportInterest("buyer", "fuel", 50, 4, 1000, 1000, 0));
+        for (long grain : new long[]{0, 3, 200}) for (long fuel : new long[]{0, 2})
+            for (var processes : List.of(List.of(oven()), List.of(oven(), field))) {
+                var domestic = planner.domestic(facts(0, grain, fuel, 0, processes, interests), RULES);
+                var possible = planner.potentialExports(domestic);
+                assertEquals(planner.withExports(domestic, interests), planner.withExports(domestic,
+                        interests.stream().filter(i -> possible.contains(i.item())).toList()));
+            }
+        var empty = planner.domestic(facts(0, 0, 0, 0, List.of(oven()), interests), RULES);
+        assertTrue(planner.potentialExports(empty).isEmpty(), "an oven alone cannot supply its missing input chain");
+    }
+
     @Test void cashForecastReconsidersImportsWhenOwnInputsOfferASustainableAlternative() {
         var base = facts(20, 60, 0, 15, List.of(oven()), List.of());
         var market = new SourcingMarket(15, 100, Map.of("oven", 4L),

@@ -26,6 +26,8 @@ class GoodsProcurementTransportTest {
         assertEquals(seller, quote.organizer()); assertTrue(quote.cashFreight() > 0);
         assertTrue(quote.quantity() * 1_000_000L + quote.cashFreight() <= 100_000_000);
         assertTrue(GoodsProcurementTransport.best(stocked, seller, source, buyer, "minecraft:coal", 16, 1_000_000, 1_000_000, now).isEmpty());
+        assertTrue(GoodsProcurementTransport.best(stocked, seller, source, buyer, "minecraft:coal", 16, 1_000_000, 999_999, now).isEmpty(),
+                "funding below one item must not become a speculative transport offer");
         assertSame(resources, stocked.inventory().fungibleResources(), "a quote cannot reserve or consume stock");
         assertTrue(stocked.shipments().missions().isEmpty());
     }

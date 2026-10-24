@@ -29,14 +29,16 @@ public final class ProductionStationEnergy {
         var machine = state.productionStations().require(stationId);
         var record = record(state, stationId); var station = record.productionStation().orElseThrow();
         var catalog = state.bootstrap().ruleset().production();
-        long target = StationFuelDemandComposition.backedHeat(state, station);
-        if (machine.operation().isPresent() || machine.pendingFuel().isPresent() || machine.storedHeat() >= target
+        if (machine.operation().isPresent() || machine.pendingFuel().isPresent()
                 || ReferenceContainerCustody.blocksCanonicalUse(state, record.id())
                 || ContainerPhysicalAuthorityComposition.pending(state, record.id())) return Optional.empty();
         var account = FungibleResourceCustodySupport.accountAtContainer(state, record.id());
         if (account.isEmpty()) return Optional.empty();
         boolean hot = ReferenceContainerCustody.hasLiveCustody(state, record.id());
         if (hot && !ReferenceContainerCustody.hasOperationalCustody(state, record.id())) return Optional.empty();
+        if (catalog.fuels().stream().noneMatch(fuel -> state.inventory().fungibleResources()
+                .unclaimedQuantity(account.orElseThrow().id(), record.ownerId(), fuel.itemKind()) > 0)) return Optional.empty();
+        if (machine.storedHeat() >= StationFuelDemandComposition.backedHeat(state, station)) return Optional.empty();
         for (var fuel : catalog.fuels().stream().sorted(Comparator.comparing(ProductionCatalog.Fuel::itemKind)).toList()) {
             var selected = FungibleResourceCustodySupport.selectAtAccount(state.inventory().fungibleResources(), account.orElseThrow().id(),
                     record.ownerId(), fuel.itemKind(), 1);

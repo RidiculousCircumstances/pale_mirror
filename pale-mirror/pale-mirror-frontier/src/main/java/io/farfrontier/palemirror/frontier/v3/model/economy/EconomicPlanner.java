@@ -114,6 +114,14 @@ public final class EconomicPlanner {
                 supply.preferredPurchaseQuantities(), supply.inputRequirements(), Optional.of(economy), supply.backedRecipes()));
     }
 
+    /** Only impossible material chains are excluded; the export solver still owns
+     * feasibility, profitability and allocation of every reachable alternative. */
+    public Set<String> potentialExports(Domestic evaluated) {
+        var base = evaluated.plan.economy().orElseThrow();
+        return ProductionReachability.items(evaluated.facts.processes(), base.saleableStock(),
+                evaluated.plan.backedRecipes(), base.horizonTicks());
+    }
+
     /** Adds conditional sales to an already evaluated domestic plan. Does not
      * re-run source selection, allocate the buyer's money or count future revenue as cash. */
     public SupplyPlanner.Plan withExports(Domestic evaluated, List<EconomicSnapshot.ExportInterest> interests) {

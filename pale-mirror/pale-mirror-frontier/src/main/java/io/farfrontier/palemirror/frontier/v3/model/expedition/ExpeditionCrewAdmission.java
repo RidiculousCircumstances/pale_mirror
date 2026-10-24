@@ -39,11 +39,15 @@ public final class ExpeditionCrewAdmission {
                 missing += Math.max(0L, required - personal);
             }
             if (missing == 0) return true;
-            var origin = state.actorLocations().get(crew.getFirst()).supportingSurface();
-            long available = ResourceStorageSelection.sources(state, resources, sponsor, food.itemKind(), origin,
+            // Material feasibility needs the eligible stock scope, not a ranked
+            // pickup itinerary for every hypothetical crew/load combination.
+            long available = ResourceStorageSelection.containers(state, sponsor, food.itemKind(),
                     Set.of(ResourceStorageRole.WAREHOUSE)).stream()
-                    .filter(source -> source.endpoint().settlementId().equals(sponsor))
-                    .mapToLong(ResourceStorageSelection.Source::quantity).sum();
+                    .filter(id -> state.inventory().containers().get(id).storage().orElseThrow()
+                            .endpoint().settlementId().equals(sponsor))
+                    .map(id -> FungibleResourceCustodySupport.accountAtContainer(state, id))
+                    .flatMap(Optional::stream).filter(account -> resources.accounts().containsKey(account.id()))
+                    .mapToLong(account -> resources.unclaimedQuantity(account.id(), sponsor, food.itemKind())).sum();
             available += asset.flatMap(value -> FungibleResourceCustodySupport.accountAtContainer(state, value.containerId()))
                     .map(account -> resources.unclaimedQuantity(account.id(), sponsor, food.itemKind())).orElse(0);
             if (available >= missing) return true;
