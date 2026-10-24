@@ -31,26 +31,23 @@ final class FrontierV3EntityPersistenceObservers {
     static void complete(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             boolean complete, Supplier<CompletableFuture<Void>> synchronize) {
         if (!active(level, runtime)) return;
+        var state = runtime.decodedState().orElse(null); if (state == null) return;
+        var world = state.bootstrap().worldId();
+        // Raw observations are published once per native pass. Neither this
+        // asynchronous submission nor the native callback grants COLD custody.
+        // Exact saved-departure publication still fences release/reconstruction.
+        try { FrontierV3AmbientCarrierLedger.get(level, world).persistAsync(level, world); }
+        catch (RuntimeException failure) {
+            io.farfrontier.palemirror.PaleMirrorMod.LOGGER.error("Scene raw departure publication failed; custody remains unresolved", failure);
+        }
         FrontierV3ActorAdoptionPersistence.completeSavePass(level, runtime, complete, synchronize);
         FrontierV3SceneDeparturePersistence.completeSavePass(level, runtime, complete, synchronize);
         FrontierV3OperationEntitySaves.complete(level, complete, synchronize);
     }
     static void departed(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             Supplier<CompletableFuture<Void>> synchronize) {
-        if (!active(level, runtime)) return;
-        var state = runtime.decodedState().orElse(null); if (state == null) return;
-        var world = state.bootstrap().worldId();
-        // Raw departure is only an observation. Saved-departure publication and
-        // the body's own durable checkpoint still fence release/reconstruction.
-        // Queue this prefix in the same journal instead of stalling every native
-        // chunk departure (including passes with no new PM actor observation).
-        try { FrontierV3AmbientCarrierLedger.get(level, world).persistAsync(level, world); }
-        catch (RuntimeException failure) {
-            io.farfrontier.palemirror.PaleMirrorMod.LOGGER.error("Scene raw departure publication failed; custody remains unresolved", failure);
-        }
-        // These are positive exact-incarnation writes, not global absence proofs.
-        FrontierV3ActorAdoptionPersistence.completeSavePass(level, runtime, true, synchronize);
-        FrontierV3SceneDeparturePersistence.confirmRecordedDepartures(level, runtime, synchronize);
-        FrontierV3OperationEntitySaves.complete(level, true, synchronize);
+        // Positive exact-incarnation writes, not a global absence proof. Native
+        // pending loads outside this completed unload batch grant no evidence.
+        complete(level, runtime, true, synchronize);
     }
 }

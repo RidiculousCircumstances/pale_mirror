@@ -160,7 +160,7 @@ final class FrontierV3JournalStore implements FrontierV3PhysicalJournal {
             next.put(key, value == null ? null : value.clone());
         });
         if (next.size() > limits.rows()) throw new IOException("physical journal row capacity");
-        long bytes = encode(0, next).length + 12L;
+        long bytes = encodedFrameSize(next);
         if (bytes > MAX_FRAME || queue.size() >= 64 || queuedBytes + bytes > MAX_FRAME)
             throw new IOException("physical journal admission capacity");
         var pending = new Pending(next, bytes, new CompletableFuture<>());
@@ -414,6 +414,19 @@ final class FrontierV3JournalStore implements FrontierV3PhysicalJournal {
     private void retainTornTail(Path path, long valid, boolean last) throws IOException {
         if (!last) throw new IOException("torn nonterminal physical journal frame");
         tornSegment = path; tornLength = valid; // Inspection is read-only; the next authorized append repairs its own tail.
+    }
+    /** Exact framing size without allocating/copying the payload a second time on admission. */
+    private static long encodedFrameSize(Map<String, byte[]> changes) {
+        long bytes = 12L + Long.BYTES + Integer.BYTES; // frame header, sequence, row count
+        for (var entry : changes.entrySet()) {
+            bytes += Short.BYTES + Integer.BYTES; // modified-UTF length and nullable value length
+            for (int i = 0; i < entry.getKey().length(); i++) {
+                char value = entry.getKey().charAt(i);
+                bytes += value >= 1 && value <= 127 ? 1 : value <= 2047 ? 2 : 3;
+            }
+            if (entry.getValue() != null) bytes += entry.getValue().length;
+        }
+        return bytes;
     }
     private static byte[] encode(long id, Map<String, byte[]> changes) throws IOException {
         var bytes = new ByteArrayOutputStream();

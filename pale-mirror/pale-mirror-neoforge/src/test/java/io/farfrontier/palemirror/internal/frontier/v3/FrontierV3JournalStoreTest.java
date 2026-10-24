@@ -19,16 +19,19 @@ class FrontierV3JournalStoreTest {
         var store = FrontierV3JournalStore.open(file, work::add);
         byte[] supplied = {1, 2};
         var first = store.appendAsync(Map.of("actor:a", supplied)); supplied[0] = 9;
-        var second = store.appendAsync(Map.of("actor:b", new byte[]{3}));
+        String unicodeKey = "actor:" + (char) 0 + "é中😀";
+        var second = store.appendAsync(Map.of(unicodeKey, new byte[]{3}));
+        long admittedBytes = store.pressure().queuedBytes();
         assertFalse(first.isDone()); assertFalse(second.isDone());
         assertFalse(Files.exists(file), "submission is not a durable receipt");
         assertEquals(1, work.size()); work.remove().run();
         assertEquals(1L, first.join()); assertEquals(2L, second.join());
         assertEquals(1L, store.pressure().forcedGroups());
+        assertEquals(admittedBytes, store.pressure().appendedBytes());
         assertEquals(0, store.pressure().queuedWrites());
         var recovered = FrontierV3JournalStore.open(file).image();
         assertArrayEquals(new byte[]{1, 2}, recovered.get("actor:a"));
-        assertArrayEquals(new byte[]{3}, recovered.get("actor:b"));
+        assertArrayEquals(new byte[]{3}, recovered.get(unicodeKey));
         recovered.get("actor:a")[0] = 8;
         assertEquals(1, store.image().get("actor:a")[0]);
     }

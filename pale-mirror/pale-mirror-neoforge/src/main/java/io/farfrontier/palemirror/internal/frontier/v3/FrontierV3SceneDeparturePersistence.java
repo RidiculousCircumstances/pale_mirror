@@ -130,22 +130,22 @@ final class FrontierV3SceneDeparturePersistence {
             candidates.values().stream().flatMap(List::stream)
                     .forEach(body -> saved.computeIfAbsent(body.id(), ignored -> new ArrayList<>()).add(body));
             var selected = new ArrayList<FrontierV3SceneDeparture>();
-            for (var receipt : ledger.departures()) {
-                if (ledger.savedDeparture(receipt)) continue;
-                var appearances = saved.getOrDefault(receipt.carrier().identity().entityId(), List.of());
-                if (appearances.size() == 1 && appearances.getFirst().matches(receipt)) selected.add(receipt);
-            }
             var ambient = new ArrayList<FrontierV3AmbientDeparture>();
-            for (var receipt : ledger.ambientDepartures()) {
-                if (ledger.savedAmbientDeparture(receipt)) continue;
-                var appearances = saved.getOrDefault(receipt.carrier().identity().entityId(), List.of());
-                if (appearances.size() == 1 && appearances.getFirst().matches(receipt)) ambient.add(receipt);
-            }
             var bodies = new ArrayList<FrontierV3ActorBodyDeparture>();
-            for (var receipt : ledger.bodyDepartures()) {
-                if (ledger.savedBodyDeparture(receipt)) continue;
-                var appearances = saved.getOrDefault(receipt.identity().entityId(), List.of());
-                if (appearances.size() == 1 && appearances.getFirst().matches(receipt)) bodies.add(receipt);
+            // Saved rows carry their exact declared actor. Look up its receipts;
+            // unrelated lifetime history cannot contribute to this save proof.
+            for (var appearances : saved.values()) {
+                if (appearances.size() != 1) continue;
+                var body = appearances.getFirst();
+                final io.farfrontier.palemirror.frontier.v3.api.SubjectId actor;
+                try { actor = new io.farfrontier.palemirror.frontier.v3.api.SubjectId(body.actor()); }
+                catch (IllegalArgumentException malformedSavedIdentity) { continue; }
+                ledger.departure(actor).filter(receipt -> !ledger.savedDeparture(receipt) && body.matches(receipt))
+                        .ifPresent(selected::add);
+                ledger.ambientDeparture(actor).filter(receipt -> !ledger.savedAmbientDeparture(receipt) && body.matches(receipt))
+                        .ifPresent(ambient::add);
+                ledger.bodyDeparture(actor).filter(receipt -> !ledger.savedBodyDeparture(receipt) && body.matches(receipt))
+                        .ifPresent(bodies::add);
             }
             return writes.completePass(complete, selected.isEmpty() && ambient.isEmpty() && bodies.isEmpty()
                     ? () -> CompletableFuture.completedFuture(null) : synchronize)

@@ -17,18 +17,26 @@ import java.util.function.Consumer;
 abstract class FrontierV3EntitySavePassMixin<T extends EntityAccess> {
     @Shadow @Final private EntityPersistentStorage<T> permanentStorage;
     @Unique private boolean frontierV3$completePass;
+    @Unique private boolean frontierV3$storedPass;
 
-    @Inject(method = "autoSave", at = @At("HEAD"), require = 1)
-    private void frontierV3$beginPass(CallbackInfo callback) { frontierV3$completePass = true; }
+    @Inject(method = {"processUnloads", "autoSave", "saveAll"}, at = @At("HEAD"), require = 1)
+    private void frontierV3$beginPass(CallbackInfo callback) {
+        frontierV3$completePass = true; frontierV3$storedPass = false;
+    }
 
     @Inject(method = "storeChunkSections", at = @At("RETURN"), require = 1)
     private void frontierV3$observeSkippedChunk(long chunk, Consumer<T> consumer, CallbackInfoReturnable<Boolean> callback) {
         if (!callback.getReturnValue()) frontierV3$completePass = false;
-        else if (permanentStorage instanceof FrontierV3EntitySaveBoundary boundary) {
-            // Vanilla has called storeEntities and then every final unload callback.
-            // Publish all raw observations once for this chunk, not per entity.
-            boundary.frontierV3$storedChunk();
-        }
+        else frontierV3$storedPass = true;
+    }
+
+    @Inject(method = "processUnloads", at = @At("RETURN"), require = 1)
+    private void frontierV3$endUnloads(CallbackInfo callback) {
+        // Native writes retain their own prerequisites. Final unload observations
+        // and positive save proofs are collected once after the complete batch,
+        // not N scans/syncs over growing candidate sets for N departing chunks.
+        if (frontierV3$storedPass && permanentStorage instanceof FrontierV3EntitySaveBoundary boundary)
+            boundary.frontierV3$observedUnloadPass();
     }
 
     @Inject(method = "autoSave", at = @At("RETURN"), require = 1)

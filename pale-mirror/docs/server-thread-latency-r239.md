@@ -805,3 +805,31 @@ attribute it from absence of CPU samples. Subsequent90s wall capture has no
 new >80ms peak. HOT debt reached888; COLD recovery still needs a longer window.
 R239ab focused ReadyTurn/PerformanceDiagnostic checks, compile and guardrails
 PASS(build/r239ab-gates.log), observatory protocol tests2PASS. No timing tests.
+
+
+R239ab full-tick observation reproduced80.174248ms at05:08:57.572 on the
+Clearwater→Stonefield unload. Wall profile (r239ab-transition-wall.jfr) captures
+CarrierJournalImage.encode→AmbientCarrierLedger.persistAsync→raw departure
+publication inside storeChunkSections. CPU JFR alone missed this interval.
+Source tracing confirms a completion call after EACH stored chunk: three owners
+rebuild a growing save batch and the departure owner scans lifetime histories.
+Native store callers are processUnloads, autoSave and saveAll; no other caller.
+
+R239ac closes publication once at each native pass boundary. Individual native
+writes still retain their journal prerequisites; final unload callbacks are
+captured before proof selection. Partial autosaves retain the incomplete flag;
+ordinary unload batches provide exact positive writes, not world absence.
+Departure selection now looks up the explicitly saved actor in each receipt
+index and retains exact UUID/owner/epoch/residence/position/health/item matching
+and duplicate-UUID rejection. Journal admission computes the exact modified-UTF
+frame size without allocating/encoding a second complete frame. The writer's
+single encoding/force and immutable input copy remain unchanged.
+Focused save/adoption/departure/operation/journal/ordered-storage tests and
+canonical guardrails PASS(build/r239ac-gates.log). The existing journal recovery
+test includes null, multibyte and surrogate UTF key characters and proves admitted
+bytes equal actual appended bytes;10journal checksPASS(build/r239ac-native.log).
+Initial native invocation used an invalid slice name (scene-body-lifetime) and
+is NOT acceptance despite Gradle exit0. Correct body-lifetime run is recorded
+separately inbuild/r239ac-native-final.log.
+R239ac native body-lifetime25/25PASS, all dimensions saved and test server exited
+normally(build/r239ac-native-final.log). Full live latency measurement follows.

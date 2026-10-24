@@ -57,7 +57,7 @@ abstract class FrontierV3EntityStorageMixin implements FrontierV3EntitySaveBound
         FrontierV3ServerLifecycle.completeEntitySavePass(level, complete, this::frontierV3$synchronizeStoredEntities);
     }
 
-    @Override public void frontierV3$storedChunk() {
+    @Override public void frontierV3$observedUnloadPass() {
         FrontierV3ServerLifecycle.persistRawEntityDepartures(level, this::frontierV3$synchronizeStoredEntities);
     }
 
