@@ -121,3 +121,57 @@ wheat after its cash had been zero; it then contracted a five-coal import. Ashcr
 resumed baking and meals. Attribution limit: its old wheat mission completed
 before the second access deployment, so that completion alone does not prove
 the new arbitration. Southgate/Mossbrook fuel recovery remains unconfirmed.
+
+## Integrated release and retained-world observation
+
+The combined service change is committed as `60387330a0`; `da0427f12`
+implements the equivalent next-step commitment check without scanning a whole
+route during sorting. The clean detached artifact was deployed on October 24
+at 19:16:19 +05 to the existing `frontier-v3-r241i-clean-20261024` world.
+No cash, food, route endpoint or actor position was injected.
+
+Verification: 102 affected frontier tests, 858 adapter tests and 55 economy
+GameTests passed. The final equivalent comparator change passed the focused
+service/courier tests and packaged JAR verification. Evidence lives in
+`build/r242c-integrated-tests.log`, `r242c-release.log`,
+`r242c-final-artifact.log` and `r242c-deploy-verify.log`.
+The earlier unrelated combat/patrol native failures remain open; this is not a
+claim that the full native gate is green.
+
+During observation Hearthvale progressed from 9 hungry residents at deployment
+to zero at tick 464540, with continuing production and consumption. Southgate's
+three-coal seller delivery has a retained journey arrival at 472549; Sunreach's
+five-coal delivery is longer, with the first route section ending at 501532.
+These are actual journeys, not stuck depot permits. Receipt and subsequent
+production still require separate observation.
+
+Mossbrook at copied checkpoint 464854 is a distinct remaining financial limit:
+36.863642 available, and the full sum is available to its coal purchase.
+The nearest seller quotes 34.352286 delivery plus 3.351216 for one coal, exceeding
+that sum. Other delivery estimates are higher; collection has no provisioned
+eligible crew. This particular refusal does not prove another budget defect.
+The prior hundreds-of-coins freight error is not its current explanation.
+
+Dawnbridge's 256 claimed wheat at that checkpoint is already collected cargo
+inside its own pack animal on the return journey, not grain reserved for export
+at the home warehouse. Only one wheat is actually available at home. Keep these
+custodies distinct when diagnosing a town that reports both stock and hunger.
+
+## Receipt and HOT follow-up
+
+Southgate received three coal at 472634; fuel entered the bakery as stored heat.
+The first new bread was consumed by 480499, and eight bread had been baked by
+483770 (seven then remained in the delivery job). Clearwater received 34 coal
+at 481034. These prove fuel recovery and one complete meal, not recovery of
+every hungry resident. Hearthvale produced/consumed 19/20 bread and Ironmeadow
+36/26 during the retained-world observation.
+
+Exploratory native run b20e51b8-2ec3-4d77-9a62-e33401eab3ea visited Southgate
+and Clearwater. Conflict assertions passed, but progress did not: canonical time
+remained at 485379 through much of the Clearwater visit. After departure,
+546 scheduled preparations had been cancelled (three already ready), with 1891
+ordinary ticks pending. Source review shows external commands can cancel a
+preparation outside a persistence turn. Attribution to a particular callback
+is still unconfirmed; bounded invalidating-command diagnostics will resolve it.
+A global pending-calculation rejection is unsafe for non-replayable native
+observations, so it is not applied as an assumed fix.

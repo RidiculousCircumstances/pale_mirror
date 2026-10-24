@@ -45,6 +45,8 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     private int ticksSinceCheckpoint;
     private long pendingOrdinaryTicks;
     private CommandId pendingCommand;
+    private long commandPreparationInvalidations;
+    private String lastPreparationInvalidator = "none";
     enum CommandCompletion { PROTOCOL, OWNER }
     private final java.util.EnumMap<CommandCompletion, Runnable> commandContinuations =
             new java.util.EnumMap<>(CommandCompletion.class);
@@ -239,9 +241,19 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
         if (awaitingCanonicalPredecessor()) return Optional.of(new CommandResult.Pending(command.id(),
                 engine.canonicalState().revision(), CommandResult.Pending.Reason.PREDECESSOR));
         if (!ensureTransactionHeadroom(1)) return Optional.empty();
+        boolean prepared = engine.hasPendingCalculation();
         CommandResult result;
         try (DiagnosticCaptureScope ignored = DiagnosticCaptureScope.open(diagnosticRuntimeIdentity)) {
             result = engine.submit(command);
+        }
+        if (prepared && !engine.hasPendingCalculation()) {
+            commandPreparationInvalidations++;
+            lastPreparationInvalidator = command.payload().type();
+            if (commandPreparationInvalidations <= 8 || commandPreparationInvalidations % 128 == 0)
+                io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info(
+                        "PMV3_PREPARATION_INVALIDATED count={} command={} payload={} revision={} result={}",
+                        commandPreparationInvalidations, command.id().value(), command.payload().type(),
+                        engine.canonicalState().revision().value(), result.getClass().getSimpleName());
         }
         if (result instanceof CommandResult.Pending pending && pending.reason() == CommandResult.Pending.Reason.DURABILITY)
             pendingCommand = command.id();
@@ -315,7 +327,11 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
             pendingOrdinaryTicks = Math.addExact(pendingOrdinaryTicks, 1L);
     }
     long pendingOrdinaryTicks() { return pendingOrdinaryTicks; }
-    String preparationDiagnostic() { return preparations.diagnostic(engine != null && engine.hasPendingCalculation()); }
+    String preparationDiagnostic() {
+        String base = preparations.diagnostic(engine != null && engine.hasPendingCalculation());
+        return base.substring(0, base.length() - 1) + ",\"commandInvalidations\":" + commandPreparationInvalidations
+                + ",\"lastInvalidatingPayload\":" + new com.google.gson.Gson().toJson(lastPreparationInvalidator) + "}";
+    }
 
     void onReady(Runnable listener) {
         readiness = Objects.requireNonNull(listener);
