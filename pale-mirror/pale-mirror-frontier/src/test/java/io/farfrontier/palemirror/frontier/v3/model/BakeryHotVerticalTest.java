@@ -393,7 +393,10 @@ class BakeryHotVerticalTest {
         var handRelease = new BakeryHotHandRelease(job.id(), work.actorAccountId(), 37L, hand, release);
         assertEquals(handRelease, codecs.decode(handRelease.type(), codecs.encode(handRelease)),
                 "scene release replay must retain the baker's main hand");
+        var retainedHandBindings = blockedWithCargo.inventory().fungibleResources().bindings();
         blockedWithCargo = ProductionProcess.reduceBakeryHotHandRelease(blockedWithCargo, task.ownerId(), handRelease);
+        assertEquals(retainedHandBindings, blockedWithCargo.inventory().fungibleResources().bindings(),
+                "a retained baker body keeps its exact physical cargo across work-scope closure");
         blockedWithCargo = ProductionProcess.reduceWorkSceneFinalized(blockedWithCargo, task.ownerId(),
                 new ProductionWorkSceneFinalized(leaseId, job.id()));
         assertTrue(blockedWithCargo.productionJobs().containsKey(job.id()),

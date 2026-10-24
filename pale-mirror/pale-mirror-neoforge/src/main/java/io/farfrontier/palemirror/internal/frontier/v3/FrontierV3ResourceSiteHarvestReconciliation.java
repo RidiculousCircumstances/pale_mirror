@@ -51,7 +51,8 @@ final class FrontierV3ResourceSiteHarvestReconciliation {
             if (unbound && !firstApplied && (job.progress().hasPendingCrop()
                     || FrontierV3ResourceSiteLedger.get(level).fieldDelivery(job.siteId()) != null
                     || FrontierV3ResourceSiteLedger.get(level).fieldHandProjection(job.siteId()) != null
-                    || !FrontierV3ActorCarryProjection.witnessed(state, job.workerId(), job.actorAccountId(), worker))) {
+                    || !FrontierV3ActorCarryProjection.witnessed(state, job.workerId(), job.actorAccountId(), worker)
+                        && !FrontierV3HarvestRetainedHandEvidence.witnessed(level, state, job, reviewed.stack().orElseThrow()))) {
                 FrontierV3PhysicalWaitTrace.reconciliation(worker, lease, "unbound-hand-without-settled-projection"); continue;
             }
             // Common body inspection has already committed current physical permission/pose.

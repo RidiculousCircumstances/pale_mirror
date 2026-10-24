@@ -68,3 +68,35 @@ are changed. Historical missing observations are not backfilled by inference.
 Four economy projection tests and guardrails pass. The first new test fixture
 incorrectly created a second account for an existing container; it was corrected
 to use the existing account. Deployment and sustained-world validation continue.
+
+
+## Work-scope hand custody after HOT → COLD → HOT
+
+R241b's ordinary native Hearthvale → Clearwater → Hearthvale visit exposed
+Maya Baker (`resident:6-25`), harvest job `job:site-harvest-6-wheat-field-7`,
+with 19 wheat in both physical hand and canonical account but no physical binding.
+The old scope `crop-62-r404164` was closed; its successor `crop-52-r412109` conflicted.
+The common body remained the same epoch 3 across native residence generations.
+R241c bounded diagnostics confirmed `unbound-hand-without-settled-projection`.
+
+Both harvest and station work explicitly removed the resource binding when
+closing the work scope, although the common body retained physical custody.
+The adapter tried to replace that proof with an entity-local carry tag in an
+asynchronous post-command callback. A body already saved/unloaded could miss that
+callback. The successor then correctly rejected an unwitnessed nonempty hand.
+
+Typed harvest/station release now validates its exact hand as before and closes
+the scope while retaining the binding. The common body departure remains the
+only owner of physical-inventory retirement; no scene receives authority to
+release a still-physical stack. Generic untyped scene release still cannot bypass
+the family's hand validation.
+
+Existing isolated harvest conflicts may additionally use the field owner's
+retired physical-work acceptance: exact job, last accepted work ordinal, layout,
+epoch, actor/body, observed hand amount, and positively closed original scope.
+An arbitrary matching stack, another checkpoint/body, or pending effect provides
+no such permission. Recovery binds the existing accounted hand through the
+existing atomic reconciliation, without replaying harvest or creating resources.
+Evidence: `build/r241b-hot-result.json`, `r241b-conflict-snapshot.bin`,
+`r241b-carrier25.json`, `r241b-fields.json`, `r241c-hot-result.json`.
+This finding invalidates a complete HOT/COLD acceptance claim until retested.

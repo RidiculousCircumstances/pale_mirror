@@ -146,9 +146,8 @@ public final class ResourceSiteHarvestProcess {
                 || ResourceSiteHarvestCargo.quantity(state, job)
                         != released.observedHand().quantity())
             throw new IllegalArgumentException("harvest hand release disagrees with exact bound wheat custody");
-        FrontierWorldState unbound = state.withInventory(state.inventory().withFungibleResources(
-                resources.releaseBindings(account.id(), released.actorEpoch())));
-        return unbound.releaseSceneLease(lease.id(), released.sceneRelease().members());
+        return FrontierSceneLeaseStateSupport.releaseWithRetainedHand(state, lease.id(),
+                released.sceneRelease().members(), bound.getFirst());
     }
 
     public static FrontierWorldState reduceProgressed(FrontierWorldState state, SubjectId subject, ResourceSiteHarvestProgressed progressed) {

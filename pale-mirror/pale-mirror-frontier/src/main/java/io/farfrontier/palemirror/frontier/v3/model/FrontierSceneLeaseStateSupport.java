@@ -103,6 +103,17 @@ public final class FrontierSceneLeaseStateSupport {
     }
 
     static FrontierWorldState release(FrontierWorldState state, SceneLeaseId leaseId, List<SceneMemberPosition> positions) {
+        return release(state, leaseId, positions, java.util.Optional.empty());
+    }
+
+    /** The family has validated its observed hand; physical custody remains with the same living body. */
+    public static FrontierWorldState releaseWithRetainedHand(FrontierWorldState state, SceneLeaseId leaseId,
+            List<SceneMemberPosition> positions, PhysicalStackBinding hand) {
+        return release(state, leaseId, positions, java.util.Optional.of(Objects.requireNonNull(hand)));
+    }
+
+    private static FrontierWorldState release(FrontierWorldState state, SceneLeaseId leaseId,
+            List<SceneMemberPosition> positions, java.util.Optional<PhysicalStackBinding> retainedHand) {
         SceneLease current = state.sceneLeases().get(leaseId);
         if (current == null || current.status() != SceneLeaseStatus.DRAINING) throw new IllegalArgumentException("only a draining scene lease can be released");
         if (FrontierSceneBehaviors.isProductionWork(current)) {
@@ -111,7 +122,8 @@ public final class FrontierSceneLeaseStateSupport {
                     && job.stationWork().orElseThrow().pendingPhysicalStep().isPresent())
                 throw new IllegalArgumentException("bakery scene cannot release a possibly applied physical effect");
         }
-        requireNoBoundSceneHand(state, current);
+        if (retainedHand.isPresent()) requireRetainedHand(state, current, retainedHand.orElseThrow());
+        else requireNoBoundSceneHand(state, current);
         FrontierWorldState releaseReady = SceneStrikeStateSupport.prepareRelease(state, current);
         Set<SubjectId> expected = current.members().stream().map(SceneMember::actorId).filter(actor -> state.actorLocations().get(actor).condition().status() == ActorLifeStatus.ALIVE)
                 .collect(java.util.stream.Collectors.toSet());
@@ -127,6 +139,21 @@ public final class FrontierSceneLeaseStateSupport {
         StrategicPlanState plans = FrontierSceneBehaviors.releasePlans(state, current);
         Map<SceneLeaseId, SceneLease> leases = new LinkedHashMap<>(state.sceneLeases()); leases.put(leaseId, current.withStatus(SceneLeaseStatus.CLOSED));
         return copy(releaseReady, releaseReady.actorLocations(), leases, state.ambientLeases(), plans, confirmRecovery(releaseReady, releaseReady.fencedRecovery(), current));
+    }
+
+    private static void requireRetainedHand(FrontierWorldState state, SceneLease lease, PhysicalStackBinding binding) {
+        var resources = state.inventory().fungibleResources();
+        var accounts = FrontierSceneBehaviors.resourceHandAccounts(state, lease);
+        var account = resources.accounts().get(binding.accountId());
+        if (!binding.equals(resources.bindings().get(binding.id())) || !accounts.contains(binding.accountId())
+                || !(binding.address() instanceof PhysicalStackAddress.ActorHand hand)
+                || account == null || !account.custody().equals(new ResourceCustody.Actor(hand.actorId()))
+                || lease.members().stream().noneMatch(member -> member.actorId().equals(hand.actorId())
+                    && member.entityId().equals(hand.entityId()))
+                || !ActorBodyAuthority.retainsPhysicalCustody(state, hand.actorId())
+                || resources.bindings().values().stream().anyMatch(other -> accounts.contains(other.accountId())
+                    && !other.equals(binding)))
+            throw new IllegalArgumentException("scene continuation requires its exact body-owned hand binding");
     }
 
     /** Work-hand settlement precedes scope closure; personal hands/pockets remain with the common body owner. */

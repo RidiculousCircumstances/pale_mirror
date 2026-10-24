@@ -517,9 +517,8 @@ public final class StationWorkProcess {
                 || !kind.equals(released.observedHand().itemKind())
                 || released.observedHand().quantity() != StationWorkCargo.quantity(job))
             throw new IllegalArgumentException("bakery hand release does not match its current physical cargo");
-        FrontierWorldState unbound = state.withInventory(state.inventory().withFungibleResources(
-                ledger.releaseBindings(account.id(), released.actorEpoch())));
-        return unbound.releaseSceneLease(lease.id(), released.sceneRelease().members());
+        return FrontierSceneLeaseStateSupport.releaseWithRetainedHand(state, lease.id(),
+                released.sceneRelease().members(), bindings.getFirst());
     }
 
     static FrontierWorldState materializeHotHand(FrontierWorldState state, SubjectId subject,
