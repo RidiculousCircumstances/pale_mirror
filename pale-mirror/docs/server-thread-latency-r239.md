@@ -786,3 +786,22 @@ owner completion before checking the blocked task/objective. No new timing test.
 
 R239aa affected production lifecycle/negative input and kernel scheduled-advice
 checks plusguardrails PASS(build/r239aa-gates.log). No timing assertion.
+
+
+R239ab measurement correction: source inspection of MinecraftServer.tickServer
+confirms the native 100-tick ring is recorded BEFORE NeoForge Post handlers.
+The previous PM span included our Post handler but excluded later listeners.
+A single WrapMethod now measures the complete native method (finally closes on
+failure), excluding idle time. Diagnostic and observatory use `hostTick` rather
+than claiming the old partial metric is complete. The native reentry guard now
+belongs to CanonicalResumption, independently of optional telemetry, and covers
+the same complete execution scope. No simulation budget/order/clock changes.
+
+R239aa retained-world probe d93a3776-e10d-4d65-a6a6-b7193d437886 passed
+Clearwater → Stonefield → Clearwater custody/unchanged-incident assertions.
+One86.632462ms transition tick remains (05:03:16.778); no long journal wait,
+GC or safepoint is established in that interval. Do not claim it fixed or
+attribute it from absence of CPU samples. Subsequent90s wall capture has no
+new >80ms peak. HOT debt reached888; COLD recovery still needs a longer window.
+R239ab focused ReadyTurn/PerformanceDiagnostic checks, compile and guardrails
+PASS(build/r239ab-gates.log), observatory protocol tests2PASS. No timing tests.

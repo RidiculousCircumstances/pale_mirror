@@ -9,14 +9,20 @@ import java.util.Map;
 public final class FrontierV3HostTiming {
     private static final Map<MinecraftServer, FrontierExecutionMetrics.Span> TICKS = new IdentityHashMap<>();
     private FrontierV3HostTiming() { }
-    static boolean inHostTick(MinecraftServer server) { return TICKS.containsKey(server); }
-    /** Native work through our Post handler, excluding later listeners and the idle tick wait. */
-    public static void beginHostTick(MinecraftServer server) {
+    public static void runHostTick(MinecraftServer server, Runnable action) {
+        FrontierV3CanonicalResumption.duringNativeTick(server, () -> {
+            beginHostTick(server);
+            try { action.run(); }
+            finally { endHostTick(server); }
+        });
+    }
+    /** Complete native tick including all Post handlers; excludes the idle tick wait. */
+    private static void beginHostTick(MinecraftServer server) {
         var runtime = FrontierV3ServerLifecycle.runtimeFor(server);
         if (runtime == null) return;
         endHostTick(server);
         TICKS.put(server, FrontierExecutionMetrics.safelyBegin(runtime.executionMetrics(),
-                FrontierExecutionMetrics.Stage.HOST_TICK, "minecraft-through-pm-post", "world"));
+                FrontierExecutionMetrics.Stage.HOST_TICK, "minecraft-complete-tick", "world"));
     }
     public static void endHostTick(MinecraftServer server) {
         var span = TICKS.remove(server);

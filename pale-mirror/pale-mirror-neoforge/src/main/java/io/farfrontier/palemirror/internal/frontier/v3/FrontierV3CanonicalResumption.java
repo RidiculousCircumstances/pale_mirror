@@ -12,7 +12,15 @@ import java.util.function.BooleanSupplier;
  * Lifecycle supplies admission; runtime owns clock, budget, order and publication. */
 final class FrontierV3CanonicalResumption {
     private static final Map<MinecraftServer, FrontierV3ReadyTurn> TURNS = new IdentityHashMap<>();
+    private static final java.util.Set<MinecraftServer> NATIVE_TICKS =
+            java.util.Collections.newSetFromMap(new IdentityHashMap<>());
     private FrontierV3CanonicalResumption() { }
+    /** Execution scope is independent of optional telemetry and covers all native tick handlers. */
+    static void duringNativeTick(MinecraftServer server, Runnable action) {
+        if (!NATIVE_TICKS.add(server)) throw new IllegalStateException("nested native server tick");
+        try { action.run(); }
+        finally { NATIVE_TICKS.remove(server); }
+    }
     static void bind(MinecraftServer server, FrontierV3ServerRuntime<?, ?> runtime,
             BooleanSupplier admitted, Runnable checkFailure) {
         if (TURNS.containsKey(server)) throw new IllegalStateException("canonical resumption already bound");
@@ -23,7 +31,7 @@ final class FrontierV3CanonicalResumption {
     /** No native-tick reentry, invented time, physical replay or renewed allowance. */
     private static void resume(MinecraftServer server, FrontierV3ServerRuntime<?, ?> runtime,
             BooleanSupplier admitted, Runnable checkFailure) {
-        if (!admitted.getAsBoolean() || FrontierV3HostTiming.inHostTick(server)
+        if (!admitted.getAsBoolean() || NATIVE_TICKS.contains(server)
                 || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE
                 || !FrontierV3PedestrianPlanning.recovered(runtime)) return;
         try (var turn = FrontierV3HostTiming.beginReadyTurn(runtime.executionMetrics())) {

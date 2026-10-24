@@ -137,7 +137,7 @@ final class FrontierV3PerformanceDiagnostic {
                 .append(",\"worstSpan\":").append(worstSpan(metrics.stages()))
                 .append(",\"costlyStages\":").append(costlyStages(metrics.stages()))
                 .append(",\"hostTurn\":").append(hostTiming(metrics.stages(), FrontierExecutionMetrics.Stage.HOST_TURN))
-                .append(",\"hostTickThroughPmPost\":").append(hostTiming(metrics.stages(), FrontierExecutionMetrics.Stage.HOST_TICK))
+                .append(",\"hostTick\":").append(hostTiming(metrics.stages(), FrontierExecutionMetrics.Stage.HOST_TICK))
                 .append(",\"scheduleQueue\":").append(queuePressure(metrics, checkpoint.instant().ticks()));
         var details = new ArrayList<FrontierV3DiagnosticDetailBudget.Section>();
         if (persistence != null) details.add(new FrontierV3DiagnosticDetailBudget.Section("canonicalWal",

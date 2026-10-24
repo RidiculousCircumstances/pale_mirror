@@ -17,5 +17,5 @@ class PerformanceProtocol(unittest.TestCase):
     def test_missing_measurement_is_unknown_not_zero(self):
         missing=point({},1)
         self.assertIsNone(missing['meanMs']); self.assertIsNone(missing['tps']);self.assertIsNone(missing['ready'])
-        measured=point({'hostTickThroughPmPost':{'recentSamples':2,'recentTotalNanos':8000000,'recentMaxNanos':6000000}},1)
+        measured=point({'hostTick':{'recentSamples':2,'recentTotalNanos':8000000,'recentMaxNanos':6000000}},1)
         self.assertEqual(measured['meanMs'],4);self.assertEqual(measured['maxMs'],6)

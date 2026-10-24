@@ -77,7 +77,7 @@ def query(source):
 
 
 def point(diagnostic, observed):
-    timing = diagnostic.get('hostTickThroughPmPost') or {}
+    timing = diagnostic.get('hostTick') or {}
     count = timing.get('recentSamples', 0)
     queue = diagnostic.get('scheduleQueue') or {}
     routes = diagnostic.get('pedestrianPlanning') or {}
