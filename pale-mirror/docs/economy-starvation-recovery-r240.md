@@ -70,3 +70,17 @@ R240a's saved-body census reports seven Stonefield bodies absent from this
 dimension. No body is recreated from absence. Their old adoption fences and the
 separate pending shipment pickup still require exact recovery evidence; the
 shared census hook alone has not repaired those residents.
+
+R240b live revealed the second valid recovery outcome: the Hearthvale stored
+53 coal exactly matches the retained preparation preimage
+`sha256:8f3af2923b0f729c578e4d9dd72d6cd8779f5bebfe920cc3733d560eeb89acd3`,
+while canonical 51 coal matches the pending projection. Thus the write had not
+replaced its predecessor. R240c adds a typed deferral at the existing replica
+owner: fresh unloaded predecessor evidence withdraws that presentation request,
+retains the canonical inventory unchanged and retains the actual physical image
+as the next visit's predecessor. A later normal visit acquires fresh authority
+and projects current stock. It cannot defer an active resource effect, live
+fungible slot bindings, a different provider/epoch/image, or missing evidence.
+No economic rollback, repeated pickup, native rewrite, or fabricated receipt.
+Native verification covers deferral, duplicate/stale deferral rejection and the
+next visit's successful catch-up, alongside the existing projection cases.

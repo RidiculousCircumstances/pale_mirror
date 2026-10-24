@@ -19,6 +19,58 @@ public final class FrontierV3StoredContainerGameTests {
 
     @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft",
             template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void savedPredecessorDefersUnfinishedProjectionWithoutReversingColdStock(GameTestHelper helper) {
+        var world = new WorldId("frontier:saved-projection-predecessor");
+        var initial = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));
+        var depot = FrontierWorldState.depotId(initial.bootstrap().settlements().getFirst().id());
+        var local = helper.absolutePos(new BlockPos(2, 2, 2));
+        var original = initial.inventory().surfaces().get(depot).position();
+        initial = FrontierWorldState.initial(FrontierV3BootstrapGameTestFixtures.translatedBootstrap(initial.bootstrap(),
+                local.getX() - original.x(), local.getY() - original.y(), local.getZ() - original.z()));
+        initial = FrontierV3ReferenceContainerCustodyGameTests.activated(initial, depot);
+        var prior = PhysicalReplicaRecord.expected(depot, ReferenceContainerCustody.semanticKind(initial, depot), 0,
+                ReferenceContainerCustody.canonicalFingerprint(initial, depot), ReferenceContainerCustody.provenance(depot));
+        var scope = ReferenceContainerCustody.scopeId(depot);
+        var custody = PhysicalReplicaCustodyState.empty().declare(prior)
+                .observe(depot, 0, 1, prior.fingerprint(), prior.provenance(), 0)
+                .acquire(new PhysicalCustodyLease(scope, depot, ReferenceContainerCustody.PROVIDER_ID, 1, 0, 2,
+                        PhysicalCustodyLeaseStatus.ACQUIRED, null)).checkpoint(scope, 1, 0, 2).release(scope, 1, 0, 2);
+        initial = initial.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody));
+        var chest = FrontierV3ReferenceContainerCustodyGameTests.chest(helper, local, depot);
+        chest.clearContent(); FrontierV3ContainerSurfaceExecutor.replaceCanonicalSlots(chest, initial, depot);
+        var saved = new CompoundTag(); var list = new ListTag();
+        list.add(chest.saveWithFullMetadata(helper.getLevel().registryAccess())); saved.put("block_entities", list);
+        int free = initial.inventory().firstFreeSlot(depot).orElseThrow();
+        initial = initial.withInventory(initial.inventory().store(new ExactItemStack(
+                new io.farfrontier.palemirror.frontier.v3.api.SubjectId("item:cold-projection-change"),
+                initial.bootstrap().settlements().getFirst().id(), "minecraft:cobblestone", 8,
+                new InventoryCustody.ContainerSlot(depot, free))));
+        var runtime = FrontierV3ReferenceContainerCustodyGameTests.runtime(world, initial);
+        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.prepareReleasedProjection(runtime, initial,
+                initial.replicaCustody().replicas().get(depot)), "pending successor projection");
+        var pending = runtime.decodedState().orElseThrow(); var lease = pending.replicaCustody().custodyByScope().get(scope);
+        var observed = FrontierV3StoredContainerObservation.read(pending, depot, saved, helper.getLevel().registryAccess()).orElseThrow();
+        helper.assertTrue(FrontierV3ReferenceContainerCustodyExecutor.confirmSavedFixedProjection(helper.getLevel(), runtime,
+                pending, lease, observed), "exact stored predecessor must withdraw only unfinished presentation");
+        var deferred = runtime.decodedState().orElseThrow();
+        helper.assertTrue(deferred.inventory().equals(pending.inventory()) && chest.getItem(free).isEmpty()
+                && deferred.replicaCustody().custodyByScope().get(scope).status() == PhysicalCustodyLeaseStatus.RELEASED
+                && deferred.replicaCustody().replicas().get(depot).fingerprint().equals(prior.fingerprint()),
+                "canonical stock remains current, native image remains old, COLD authority becomes available");
+        boolean stale = false;
+        try { ReferenceProjectionStateSupport.defer(deferred, new ReferenceProjectionDeferred(depot, lease.authorityEpoch(), lease.expectedReplicaRevision(),
+                observed.fingerprint(), observed.provenance())); }
+        catch (IllegalArgumentException expected) { stale = true; }
+        helper.assertTrue(stale, "a completed boundary cannot be deferred again");
+        FrontierV3ReferenceContainerCustodyExecutor.reconcile(helper.getLevel(), runtime, deferred, deferred.inventory().surfaces().get(depot));
+        helper.assertTrue(chest.getItem(free).is(Items.COBBLESTONE) && chest.getItem(free).getCount() == 8
+                && ReferenceContainerCustody.hasOperationalCustody(runtime.decodedState().orElseThrow(), depot),
+                "next ordinary visit projects current stock under new authority without loss or duplication");
+        runtime.shutdown(); helper.succeed();
+    }
+
+    @GameTest(batch = "pm-frontier-v3-reference-projection", templateNamespace = "minecraft",
+            template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void savedNativeInventoryClosesRecoveredProjectionOnlyOnExactEvidence(GameTestHelper helper) {
         var world = new WorldId("frontier:saved-fixed-projection");
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(world, 91L));

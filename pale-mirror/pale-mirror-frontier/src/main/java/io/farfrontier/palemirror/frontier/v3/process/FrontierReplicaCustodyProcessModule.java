@@ -8,6 +8,7 @@ import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldStateUpdate;
 import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
 import io.farfrontier.palemirror.frontier.v3.model.ReferenceMutationObserved;
+import io.farfrontier.palemirror.frontier.v3.model.ReferenceProjectionDeferred;
 import io.farfrontier.palemirror.frontier.v3.model.ReferenceSurfaceVerified;
 import io.farfrontier.palemirror.frontier.v3.model.ReferenceSurfaceRecovery;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaCustodyPayloads.*;
@@ -34,6 +35,13 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
                         conflict.fingerprint(), conflict.provenance(), conflict.diagnostic()); yield accepted(conflict.objectId(), conflict); }
                 case CustodyAcquired acquired -> { state.replicaCustody().acquire(acquired.lease()); yield accepted(acquired.lease().scopeId(), acquired); }
                 case ProjectionCustodyPrepared prepared -> { state.replicaCustody().prepareProjection(prepared.lease()); yield accepted(prepared.lease().scopeId(), prepared); }
+                case ReferenceProjectionDeferred deferred -> {
+                    var after = io.farfrontier.palemirror.frontier.v3.model.ReferenceProjectionStateSupport.defer(state, deferred);
+                    var events = new java.util.ArrayList<ProposedEvent>();
+                    events.add(new ProposedEvent(deferred.containerId(), deferred));
+                    events.addAll(ProductionProcess.resumeReleasedEffects(state, after, command.submittedAt().ticks()));
+                    yield new CommandPlan.Accepted(List.copyOf(events));
+                }
                 case ReferenceProjectionPrepared prepared -> {
                     io.farfrontier.palemirror.frontier.v3.model.ReferenceProjectionStateSupport.prepare(state, prepared, command.expectedRevision().next().value());
                     yield accepted(prepared.containerId(), prepared);
@@ -103,6 +111,10 @@ final class FrontierReplicaCustodyProcessModule implements FrontierWorldProcessM
                 case ProjectionCustodyPrepared prepared -> {
                     if (!event.subject().equals(prepared.lease().scopeId())) throw new IllegalArgumentException("projection preparation has a foreign scope");
                     yield replace(state, state.replicaCustody().prepareProjection(prepared.lease()));
+                }
+                case ReferenceProjectionDeferred deferred -> {
+                    if (!event.subject().equals(deferred.containerId())) throw new IllegalArgumentException("projection deferral has a foreign subject");
+                    yield io.farfrontier.palemirror.frontier.v3.model.ReferenceProjectionStateSupport.defer(state, deferred);
                 }
                 case ReferenceProjectionPrepared prepared -> {
                     if (!event.subject().equals(prepared.containerId())) throw new IllegalArgumentException("reference projection has a foreign container");

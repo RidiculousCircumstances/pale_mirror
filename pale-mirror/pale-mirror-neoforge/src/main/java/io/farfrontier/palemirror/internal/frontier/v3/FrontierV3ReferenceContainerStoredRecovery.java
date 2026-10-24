@@ -45,7 +45,7 @@ final class FrontierV3ReferenceContainerStoredRecovery {
                     snapshot.data().orElse(null), level.registryAccess());
             if (actual.isPresent() && FrontierV3ReferenceContainerCustodyExecutor.confirmSavedFixedProjection(
                     level, runtime, state, lease, actual.orElseThrow()))
-                PaleMirrorMod.LOGGER.info("PMV3_CONTAINER_STORED_RECOVERY container={} epoch={} result=SAVED_IMAGE_CONFIRMED",
+                PaleMirrorMod.LOGGER.info("PMV3_CONTAINER_STORED_RECOVERY container={} epoch={} result=SAVED_IMAGE_RECONCILED",
                         lease.objectId().value(), lease.authorityEpoch());
             else PaleMirrorMod.LOGGER.warn("PMV3_CONTAINER_STORED_RECOVERY container={} epoch={} reason={}",
                     lease.objectId().value(), lease.authorityEpoch(), actual.isEmpty() ? "MISSING_OR_FOREIGN_SAVED_CONTAINER" : "SAVED_IMAGE_DIFFERS");

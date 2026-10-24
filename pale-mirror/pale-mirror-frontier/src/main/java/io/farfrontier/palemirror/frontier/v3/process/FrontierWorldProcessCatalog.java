@@ -46,7 +46,7 @@ public final class FrontierWorldProcessCatalog {
             "frontier.physical_replica_declared", "frontier.physical_replica_emitted", "frontier.physical_replica_observed", "frontier.physical_replica_conflict_observed",
             "frontier.reference_mutation_closed", "frontier.reference_mutation_observed", "frontier.physical_custody_acquired",
             "frontier.projection_custody_prepared", "frontier.projection_custody_confirmed",
-            "frontier.reference_projection_prepared",
+            "frontier.reference_projection_prepared", "frontier.reference_projection_deferred",
             "frontier.reference_surface_verified",
             "frontier.projection_conflict_observed",
             "frontier.physical_custody_checkpointed", "frontier.physical_custody_unresolved", "frontier.physical_custody_released",

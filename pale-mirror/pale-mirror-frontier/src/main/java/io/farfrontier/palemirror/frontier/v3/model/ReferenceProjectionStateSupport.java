@@ -69,4 +69,20 @@ public final class ReferenceProjectionStateSupport {
                     : java.util.Optional.of(new ProjectionPreimage(prior.fingerprint(), prior.provenance())));
         return transferred.withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody).fencedRecovery(recovery));
     }
+    public static FrontierWorldState defer(FrontierWorldState state, ReferenceProjectionDeferred deferred) {
+        var containerId = deferred.containerId();
+        var surface = state.inventory().surfaces().get(containerId);
+        if (!ReferenceContainerCustody.isReferenceContainer(state, containerId) || surface == null
+                || ReferenceContainerCustody.blocksCanonicalUse(state, containerId) || !(surface.location() instanceof ContainerLocation.Fixed)
+                || ContainerPhysicalAuthorityComposition.pending(state, containerId)
+                || !ReferenceContainerCustody.boundFungibleSlots(state, containerId).isEmpty())
+            throw new IllegalArgumentException("projection deferral cannot abandon a physical resource owner");
+        var lease = state.replicaCustody().custodyByScope().get(ReferenceContainerCustody.scopeId(containerId));
+        if (lease == null || !lease.objectId().equals(containerId) || !lease.providerId().equals(ReferenceContainerCustody.PROVIDER_ID))
+            throw new IllegalArgumentException("projection deferral has a foreign provider");
+        var custody = state.replicaCustody().deferProjection(ReferenceContainerCustody.scopeId(containerId), deferred.authorityEpoch(),
+                deferred.expectedReplicaRevision(), deferred.fingerprint(), deferred.provenance());
+        return ProductionTransformationStateSupport.releasePreparedForContainer(state, containerId)
+                .withChanges(FrontierWorldStateUpdate.begin().replicaCustody(custody));
+    }
 }

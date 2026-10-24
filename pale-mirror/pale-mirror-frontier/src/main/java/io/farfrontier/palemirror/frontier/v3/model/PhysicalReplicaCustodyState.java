@@ -196,6 +196,26 @@ public record PhysicalReplicaCustodyState(Map<SubjectId, PhysicalReplicaRecord> 
         return new PhysicalReplicaCustodyState(replicas, next, withoutDiagnostic(scopeId));
     }
 
+    /** Retire presentation authority on a positively witnessed, unchanged predecessor.
+     * Canonical resources are untouched; the next visit prepares a fresh projection. */
+    public PhysicalReplicaCustodyState deferProjection(SubjectId scopeId, long epoch,
+            long replicaRevision, String fingerprint, String provenance) {
+        var lease = requireLive(scopeId, epoch); var replica = requireReplica(lease.objectId());
+        if (lease.status() != PhysicalCustodyLeaseStatus.PREPARING || replica.replicaRevision() != replicaRevision
+                || replica.state() != PhysicalReplicaState.EXPECTED
+                || replica.preparationPreimage().filter(before -> before.matches(fingerprint, provenance)).isEmpty())
+            throw new IllegalArgumentException("projection deferral lacks its exact saved predecessor");
+        var nextReplicas = new LinkedHashMap<>(replicas);
+        var observed = new PhysicalReplicaRecord(replica.objectId(), replica.semanticKind(), replica.emittedCanonicalRevision(),
+                replica.observedCanonicalRevision(), Math.addExact(replicaRevision, 1), fingerprint, provenance,
+                PhysicalReplicaState.OBSERVED_CURRENT, java.util.Optional.empty(), java.util.Optional.empty(), java.util.Optional.empty());
+        nextReplicas.put(replica.objectId(), observed);
+        var nextLeases = new LinkedHashMap<>(custodyByScope);
+        nextLeases.put(scopeId, new PhysicalCustodyLease(scopeId, lease.objectId(), lease.providerId(), epoch,
+                lease.expectedCanonicalRevision(), observed.replicaRevision(), PhysicalCustodyLeaseStatus.RELEASED, null));
+        return new PhysicalReplicaCustodyState(nextReplicas, nextLeases, withoutDiagnostic(scopeId));
+    }
+
     /** Confirm only matching actual evidence; a mismatch retains the fence for explicit recovery. */
     public PhysicalReplicaCustodyState confirmProjection(SubjectId scopeId, long epoch, long canonicalRevision,
                                                          long replicaRevision, String fingerprint, String provenance) {

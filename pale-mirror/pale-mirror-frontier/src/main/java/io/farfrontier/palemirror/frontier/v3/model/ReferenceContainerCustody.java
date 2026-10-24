@@ -217,7 +217,7 @@ public final class ReferenceContainerCustody {
                 lease.expectedReplicaRevision(), emittedCanonicalRevision, canonicalFingerprint(state, containerId), provenance(containerId), oneBoundAccount(bindings));
     }
 
-    private static List<PhysicalStackBinding> boundFungibleSlots(FrontierWorldState state, SubjectId containerId) {
+    static List<PhysicalStackBinding> boundFungibleSlots(FrontierWorldState state, SubjectId containerId) {
         return state.inventory().fungibleResources().bindings().values().stream()
                 .filter(binding -> state.inventory().fungibleResources().accounts().get(binding.accountId()).custody() instanceof ResourceCustody.Container custody
                         && custody.containerId().equals(containerId)).toList();

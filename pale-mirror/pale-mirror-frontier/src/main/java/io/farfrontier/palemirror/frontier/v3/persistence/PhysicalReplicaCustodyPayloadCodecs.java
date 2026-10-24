@@ -14,7 +14,7 @@ import java.util.List;
 final class PhysicalReplicaCustodyPayloadCodecs {
     private PhysicalReplicaCustodyPayloadCodecs() { }
     static List<PayloadCodec> codecs() { return List.of(new Declared(), new Emitted(), new Observed(), new ConflictObserved(), new Acquired(), new Checkpointed(), new Unresolved(), new Released(), new
-            ReferenceMutation(), new MutationObserved(), new ProjectionPrepared(), new ProjectionConfirmed(), new ReferencePrepared(), new ProjectionConflict(), new ReferenceSurfaceVerifiedCodec()); }
+            ReferenceMutation(), new MutationObserved(), new ProjectionPrepared(), new ProjectionConfirmed(), new ReferencePrepared(), new ReferenceDeferred(), new ProjectionConflict(), new ReferenceSurfaceVerifiedCodec()); }
     private abstract static class Base implements PayloadCodec {
         final byte[] encodeBytes(Writer writer) { return FrontierWorldPayloadCodecs.encodeProduction(writer::write); }
         final FrontierPayload decodeBytes(byte[] bytes, Reader reader) { return FrontierWorldPayloadCodecs.decodeProduction(bytes, reader::read); }
@@ -81,6 +81,16 @@ final class PhysicalReplicaCustodyPayloadCodecs {
             return new ProjectionConflictObserved(fence.scope(), fence.epoch(), fence.canonical(), fence.replica(),
                     FrontierWorldPayloadCodecs.readString(input), FrontierWorldPayloadCodecs.readString(input), FrontierWorldPayloadCodecs.readDiagnosticTuple(input));
         }); }
+    }
+    private static final class ReferenceDeferred extends Base {
+        @Override public String type() { return "frontier.reference_projection_deferred"; }
+        @Override public byte[] encode(FrontierPayload payload) { return encodeBytes(output -> {
+            var value = (ReferenceProjectionDeferred) payload; subject(output, value.containerId());
+            output.writeLong(value.authorityEpoch()); output.writeLong(value.expectedReplicaRevision());
+            FrontierWorldPayloadCodecs.writeString(output, value.fingerprint()); FrontierWorldPayloadCodecs.writeString(output, value.provenance());
+        }); }
+        @Override public FrontierPayload decode(byte[] bytes) { return decodeBytes(bytes, input -> new ReferenceProjectionDeferred(
+                subject(input), input.readLong(), input.readLong(), FrontierWorldPayloadCodecs.readString(input), FrontierWorldPayloadCodecs.readString(input))); }
     }
     private static final class ReferencePrepared extends Base {
         @Override public String type() { return "frontier.reference_projection_prepared"; }

@@ -30,6 +30,7 @@ import io.farfrontier.palemirror.frontier.v3.model.PhysicalReplicaState;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackAddress;
 import io.farfrontier.palemirror.frontier.v3.model.PhysicalStackBinding;
 import io.farfrontier.palemirror.frontier.v3.model.ReferenceContainerCustody;
+import io.farfrontier.palemirror.frontier.v3.model.ReferenceProjectionDeferred;
 import io.farfrontier.palemirror.frontier.v3.model.ReplicaCustodyDiagnosticProducer;
 import io.farfrontier.palemirror.frontier.v3.model.ResourceCustody;
 import io.farfrontier.palemirror.frontier.v3.model.FungibleStackBindingsReleased;
@@ -429,6 +430,11 @@ final class FrontierV3ReferenceContainerCustodyExecutor {
                 || !(state.inventory().surfaces().get(lease.objectId()).location() instanceof ContainerLocation.Fixed))
             throw new IllegalArgumentException("saved fixed inventory has a foreign custody boundary");
         var replica = state.replicaCustody().replicas().get(lease.objectId());
+        if (replica != null && lease.status() == PhysicalCustodyLeaseStatus.PREPARING
+                && replica.preparationPreimage().filter(before -> before.matches(actual.fingerprint(), actual.provenance())).isPresent())
+            return submit(runtime, "defer-saved-projection", lease.objectId(), lease.authorityEpoch(),
+                    new ReferenceProjectionDeferred(lease.objectId(), lease.authorityEpoch(), lease.expectedReplicaRevision(),
+                            actual.fingerprint(), actual.provenance()));
         if (replica == null || !replica.fingerprint().equals(actual.fingerprint())
                 || !replica.provenance().equals(actual.provenance())) return false;
         if (lease.status() == PhysicalCustodyLeaseStatus.PREPARING)
