@@ -28,6 +28,11 @@ final class FrontierV3ClearanceProbe {
     boolean rejected(SurfaceAnchor station) { return rejected.contains(station); }
     int probes() { return probes; }
     int rejectedCount() { return rejected.size(); }
+    /** An actually stalled accepted destination joins the same finite candidate pass. */
+    void reject(SurfaceAnchor station) {
+        if (rejected.size() == MAX_RETAINED_REJECTIONS) rejected.clear();
+        rejected.add(station);
+    }
     boolean test(SurfaceAnchor station, BooleanSupplier reachable) {
         if (rejected(station)) return false;
         if (probes == PROBES_PER_TURN) throw new Pending("native-probe-budget;rejected=" + rejected.size());
@@ -37,7 +42,7 @@ final class FrontierV3ClearanceProbe {
         }
         probes++;
         if (reachable.getAsBoolean()) return true;
-        rejected.add(station);
+        reject(station);
         return false;
     }
 }

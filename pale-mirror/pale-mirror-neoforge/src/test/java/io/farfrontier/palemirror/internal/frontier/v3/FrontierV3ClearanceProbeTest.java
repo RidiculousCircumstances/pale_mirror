@@ -8,6 +8,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3ClearanceProbeTest {
+    @Test void acceptedButLaterStalledDestinationIsNotSelectedAgainInTheSamePass() {
+        var actor = new SubjectId("resident:clearance");
+        var execution = new ActorExecutionId(actor, ActorActivityKind.PRESENCE, actor, 1);
+        var search = new FrontierV3ClearanceProbe(new ActorActuationId(new ActorBodyId(actor, 1), execution),
+                SurfaceAnchor.at(0, 63, 0), new Object());
+        var blocked = SurfaceAnchor.at(1, 63, 0); var next = SurfaceAnchor.at(2, 63, 0);
+        assertTrue(search.test(blocked, () -> true));
+        search.reject(blocked); search.nextTurn();
+        assertFalse(search.test(blocked, () -> { fail("stalled destination cannot win again before the next pass"); return true; }));
+        assertTrue(search.test(next, () -> true));
+    }
     @Test void ninthReachableDestinationSurvivesBudgetYieldAndOldGenerationCannotReuseThePass() {
         var actor = new SubjectId("resident:test");
         var execution = new ActorExecutionId(actor, ActorActivityKind.PRESENCE, actor, 1);

@@ -13,6 +13,7 @@ final class FrontierV3ServicePointClearance {
     private record Target(long revision, io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId actuation,
                           List<SurfaceAnchor> surfaces) { }
     private static final Map<Mob, Target> TARGETS = new WeakHashMap<>();
+    private static final Map<Mob, FrontierV3ClearanceProbe> SEARCHES = new WeakHashMap<>();
     private FrontierV3ServicePointClearance() { }
     static boolean pursue(ServerLevel level, FrontierWorldState state, Mob body, AmbientActorLease lease,
                            FrontierV3ActorActuation actuation) {
@@ -23,20 +24,32 @@ final class FrontierV3ServicePointClearance {
         var point = ServiceBoundaryComposition.turnoverPoint(state, observed.supportingSurface()).orElse(null);
         Target target = TARGETS.get(body);
         if (target != null && (target.revision() != lease.revision() || !target.actuation().equals(actuation.id()))) {
-            TARGETS.remove(body); target = null;
+            TARGETS.remove(body); SEARCHES.remove(body); target = null;
         }
-        if (point == null && target == null) return false;
+        if (point == null && target == null) { SEARCHES.remove(body); return false; }
         if (target == null || target.revision() != lease.revision()
                 || target.surfaces().stream().noneMatch(surface -> FrontierV3SemanticMovement.targetIsNavigable(level, body, surface))) {
             if (point == null) { TARGETS.remove(body); return false; }
             var clearance = ServiceClearanceRoutes.from(state, lease.actorId(), observed.supportingSurface());
+            var search = SEARCHES.get(body);
+            if (search == null || !search.matches(actuation.id(), observed.supportingSurface(), clearance.knowledge().geometry())) {
+                search = new FrontierV3ClearanceProbe(actuation.id(), observed.supportingSurface(), clearance.knowledge().geometry());
+                SEARCHES.put(body, search);
+            }
+            search.nextTurn();
+            var probes = search;
             List<SurfaceAnchor> surfaces;
             try { surfaces = ServiceAreaDestinations.select(clearance, lease.actorId(),
                     observed.supportingSurface(), ServiceDestinationClaims.excludedFor(state, lease.actorId()),
-                    surface -> FrontierV3SemanticMovement.targetIsNavigable(level, body, surface),
-                    surface -> FrontierV3GoalNavigation.canReach(level, body, FrontierV3GoalNavigation.Goal.station(surface,
-                                new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())), actuation))
+                    surface -> !probes.rejected(surface) && FrontierV3SemanticMovement.targetIsNavigable(level, body, surface),
+                    surface -> probes.test(surface, () -> FrontierV3GoalNavigation.canReach(level, body, FrontierV3GoalNavigation.Goal.station(surface,
+                                new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())), actuation)))
                     .map(List::of).orElse(List.of()); }
+            catch (FrontierV3ClearanceProbe.Pending pending) {
+                FrontierV3GoalNavigation.stop(body, actuation);
+                FrontierV3PhysicalWaitTrace.actor(body, state, lease.actorId(), "service-clearance:SEARCH_PENDING:" + pending.getMessage());
+                return true;
+            }
             catch (io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation.RouteUnavailable unavailable) {
                 FrontierV3GoalNavigation.stop(body, actuation);
                 FrontierV3PhysicalWaitTrace.actor(body, state, lease.actorId(),
@@ -44,6 +57,7 @@ final class FrontierV3ServicePointClearance {
                 return true;
             }
             if (surfaces.isEmpty()) {
+                SEARCHES.remove(body); // A finished pass may reconsider live bodies that have moved.
                 FrontierV3GoalNavigation.stop(body, actuation);
                 FrontierV3PhysicalWaitTrace.actor(body, state, lease.actorId(), "service-clearance:no-safe-waiting-position");
                 return true;
@@ -55,7 +69,13 @@ final class FrontierV3ServicePointClearance {
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
         var result = FrontierV3GoalNavigation.pursue(level, body,
                 FrontierV3GoalNavigation.Goal.routed(order, List.of(), state.bootstrap().bounds()), actuation);
-        if (result.status() == FrontierV3GoalNavigation.Status.ARRIVED) TARGETS.remove(body);
+        if (result.status() == FrontierV3GoalNavigation.Status.ARRIVED) {
+            TARGETS.remove(body); SEARCHES.remove(body);
+        } else if (FrontierV3GoalAlternatives.reconsider(result)) {
+            var search = SEARCHES.get(body);
+            if (search != null) target.surfaces().forEach(search::reject);
+            TARGETS.remove(body);
+        }
         return true;
     }
 }

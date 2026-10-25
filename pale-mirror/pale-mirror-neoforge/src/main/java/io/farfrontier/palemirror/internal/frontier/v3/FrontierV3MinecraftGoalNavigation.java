@@ -367,6 +367,14 @@ final class FrontierV3MinecraftGoalNavigation {
         return path == control.progressPath() ? path : null;
     }
 
+    /** Read-only selected endpoint, scoped to the exact live native demand. */
+    static Optional<SurfaceAnchor> selectedTarget(Mob actor, Demand demand) {
+        var control = ACTIVE.get(actor);
+        return control != null && control.permission().current(actor)
+                && demand.matches(control.legalStations(), control.scope(), control.order())
+                ? Optional.of(control.target()) : Optional.empty();
+    }
+
     record Observation(String status, String reason, List<SurfaceAnchor> targets,
                        List<io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId> blockers) {
         static Observation idle() { return new Observation("IDLE", "", List.of(), List.of()); }

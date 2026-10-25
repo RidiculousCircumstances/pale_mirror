@@ -101,9 +101,12 @@ final class FrontierV3ActorMovementNavigation {
             if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED)
                 blocked(body, movement, "minecraft_path:" + result.reason());
             else BLOCKED.remove(body);
-        } catch (IllegalArgumentException unavailable) {
-            blocked(body, movement, "local_leg:" + unavailable.getMessage());
-            FrontierV3GoalNavigation.stop(body, actuation);
+        } catch (IllegalArgumentException invalidContract) {
+            // Operational failures are typed BLOCKED/AMBIGUOUS results. Invalid
+            // goals/authority are defects, not permission for an endless retry.
+            throw new IllegalStateException("HOT navigation contract failed actor=" + movement.order().actorId().value()
+                    + " owner=" + movement.order().ownerId().value() + " goal=" + movement.order().goalRevision()
+                    + " execution=" + movement.executionId(), invalidContract);
         }
     }
 

@@ -71,10 +71,7 @@ final class FrontierV3ServiceApproachNavigation {
         // Do not preflight with canReach: a pedestrian obstruction must reach the
         // navigator's courtesy protocol, not become a permanent no-path decision.
         // A real geometry failure advances the bounded candidate search next turn.
-        if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED
-                && result.blockReason().filter(reason -> reason == FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE
-                    || reason == FrontierV3GoalNavigation.BlockReason.OFF_CONTRACT
-                    || reason == FrontierV3GoalNavigation.BlockReason.TARGET_CHUNK_UNLOADED).isPresent()) WAITING.remove(body);
+        if (FrontierV3GoalAlternatives.reconsider(result)) WAITING.remove(body);
         return result.status() == FrontierV3GoalNavigation.Status.ARRIVED
                 ? new FrontierV3GoalNavigation.Result(FrontierV3GoalNavigation.Status.IN_PROGRESS,
                     "service-access:waiting-outside target=" + prior.target(), Optional.empty(), Optional.empty())

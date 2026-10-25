@@ -10,6 +10,14 @@ import java.util.List;
 
 /** Shared physical exit provider. Families retain effects and completion; this owns no job policy. */
 final class FrontierV3ServiceClearanceNavigation {
+    private record Attempt(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId authority,
+                           SubjectId owner, SubjectId actor, int phase, long generation,
+                           FrontierV3GoalAlternatives alternatives) {
+        Attempt withAlternatives(FrontierV3GoalAlternatives next) {
+            return new Attempt(authority, owner, actor, phase, generation, next);
+        }
+    }
+    private static final java.util.Map<Mob, Attempt> ATTEMPTS = new java.util.WeakHashMap<>();
     private FrontierV3ServiceClearanceNavigation() { }
 
     /**
@@ -53,6 +61,7 @@ final class FrontierV3ServiceClearanceNavigation {
                 FrontierV3LoadedWorld.ready(level, new net.minecraft.core.BlockPos(station.x(), station.y(), station.z()))
                         && FrontierV3SemanticMovement.targetGeometryIsNavigable(level, body, station)).toList();
         if (stations.isEmpty()) {
+            ATTEMPTS.remove(body);
             FrontierV3GoalNavigation.stop(body, actuation);
             return new FrontierV3GoalNavigation.Result(FrontierV3GoalNavigation.Status.BLOCKED,
                     "service_exit:no-available-supported-exit candidates=" + knownStations.stream()
@@ -62,15 +71,29 @@ final class FrontierV3ServiceClearanceNavigation {
                             : "unloaded")).toList(),
                     java.util.Optional.of(FrontierV3GoalNavigation.BlockReason.PATH_UNAVAILABLE), java.util.Optional.empty());
         }
-        FrontierV3GoalNavigation.Result result = null;
-        for (int offset = 0; offset < stations.size(); offset += MovementOrder.MAX_LEGAL_STATIONS) {
-            var batch = stations.subList(offset, Math.min(stations.size(), offset + MovementOrder.MAX_LEGAL_STATIONS));
-            MovementOrder order = new MovementOrder(ownerId, actorId, phase, generation, batch,
-                    TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
-            result = FrontierV3GoalNavigation.pursue(level, body,
-                    FrontierV3GoalNavigation.Goal.routed(order, List.of(), state.bootstrap().bounds()), actuation);
-            if (result.status() != FrontierV3GoalNavigation.Status.BLOCKED) return result;
+        var attempt = ATTEMPTS.get(body);
+        if (attempt == null || !attempt.authority().equals(actuation.id()) || !attempt.owner().equals(ownerId)
+                || !attempt.actor().equals(actorId) || attempt.phase() != phase || attempt.generation() != generation
+                || !attempt.alternatives().matches(stations))
+            attempt = new Attempt(actuation.id(), ownerId, actorId, phase, generation, new FrontierV3GoalAlternatives(stations));
+        attempt = attempt.withAlternatives(attempt.alternatives().nextPassIfExhausted());
+        var batch = attempt.alternatives().batch();
+        MovementOrder order = new MovementOrder(ownerId, actorId, phase, generation, batch,
+                TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
+        var goal = FrontierV3GoalNavigation.Goal.routed(order, List.of(), state.bootstrap().bounds());
+        var selected = FrontierV3MinecraftGoalNavigation.selectedTarget(body,
+                new FrontierV3MinecraftGoalNavigation.Demand(batch, goal.scope(), goal.order()));
+        var result = FrontierV3GoalNavigation.pursue(level, body, goal, actuation);
+        if (FrontierV3GoalAlternatives.reconsider(result)) {
+            // Replanning starts with the remaining candidates on the next refresh, never
+            // by cancelling a later batch with a new attempt at the first batch.
+            var rejected = result.blockReason().filter(reason -> reason == FrontierV3GoalNavigation.BlockReason.PATH_STALLED)
+                    .isPresent() && selected.isPresent() ? List.of(selected.orElseThrow()) : batch;
+            attempt = attempt.withAlternatives(attempt.alternatives().reject(rejected));
         }
+        if (result.status() == FrontierV3GoalNavigation.Status.ARRIVED
+                || result.status() == FrontierV3GoalNavigation.Status.AMBIGUOUS) ATTEMPTS.remove(body);
+        else ATTEMPTS.put(body, attempt);
         return result;
     }
 }

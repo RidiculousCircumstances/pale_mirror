@@ -1,0 +1,141 @@
+{
+  "schema": 1,
+  "id": "live_hot_service_circulation",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565,
+    "viewDistance": 6
+  },
+  "pilot": {
+    "username": "PMAudit"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -572,
+        "y": 68,
+        "z": 26
+      },
+      "settleMs": 1500
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": -586,
+        "y": 65,
+        "z": 15
+      }
+    },
+    {
+      "type": "inspect",
+      "view": "settlement_population",
+      "id": "settlement:6"
+    },
+    {
+      "type": "wait",
+      "ms": 30000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement_population",
+      "id": "settlement:6"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": 2500,
+        "y": 72,
+        "z": 2500
+      },
+      "settleMs": 500
+    },
+    {
+      "type": "wait",
+      "ms": 3000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": -572,
+        "y": 68,
+        "z": 26
+      },
+      "settleMs": 1500
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": -586,
+        "y": 65,
+        "z": 15
+      }
+    },
+    {
+      "type": "wait",
+      "ms": 30000
+    },
+    {
+      "type": "inspect",
+      "view": "settlement_population",
+      "id": "settlement:6"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 6,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    },
+    {
+      "after": 13,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 3,
+      "name": "hot-service-before"
+    },
+    {
+      "after": 5,
+      "name": "hot-service-after"
+    },
+    {
+      "after": 12,
+      "name": "hot-service-after-revisit"
+    }
+  ]
+}

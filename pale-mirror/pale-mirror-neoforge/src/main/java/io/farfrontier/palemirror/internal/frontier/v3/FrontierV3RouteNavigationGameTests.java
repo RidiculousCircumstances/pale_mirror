@@ -303,6 +303,36 @@ public final class FrontierV3RouteNavigationGameTests {
         });
     }
 
+    @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",
+            template = "bastion/treasure/big_air_full", timeoutTicks = 180)
+    public static void unreachableFirstExitBatchDoesNotCancelTheNinthReachableExit(GameTestHelper helper) {
+        floor(helper); var level = helper.getLevel();
+        // All eight northern supports stand safely but cannot be reached through this wall.
+        for (int x = 1; x <= 6; x++) for (int y = 1; y <= 3; y++)
+            level.setBlock(helper.absolutePos(new BlockPos(x, y, 3)), Blocks.STONE.defaultBlockState(), 3);
+        var candidates = new java.util.ArrayList<SurfaceAnchor>();
+        for (int x = 1; x <= 4; x++) for (int z = 1; z <= 2; z++) candidates.add(anchor(helper, x, z));
+        var exit = anchor(helper, 5, 5); candidates.add(exit);
+        var actor = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new Vec3(3.5D, 1.0D, 5.5D));
+        var pass = new java.util.concurrent.atomic.AtomicReference<>(new FrontierV3GoalAlternatives(candidates));
+        var later = new java.util.concurrent.atomic.AtomicBoolean();
+        helper.onEachTick(() -> {
+            var current = pass.get().nextPassIfExhausted(); pass.set(current);
+            var batch = current.batch();
+            var order = new MovementOrder(new SubjectId("test:exit-owner"), new SubjectId("test:exit-actor"), 0, 1,
+                    batch, TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.ANY_DECLARED_STATION);
+            var result = FrontierV3GoalNavigation.pursue(level, actor,
+                    FrontierV3GoalNavigation.Goal.routed(order, List.of(), bounds(helper)));
+            if (FrontierV3GoalAlternatives.reconsider(result)) pass.set(current.reject(batch));
+            later.set(later.get() || batch.equals(List.of(exit)));
+            FrontierV3GoalNavigation.advanceAtEntityBoundary(actor);
+            if (FrontierV3SemanticMovement.arrived(level, actor, exit)) {
+                helper.assertTrue(later.get(), "the later supported exit must actually be selected and walked");
+                FrontierV3GoalNavigation.stop(actor); actor.discard(); helper.succeed();
+            }
+        });
+    }
+
     private static void floor(GameTestHelper helper) {
         for (int x = 0; x <= 7; x++) for (int z = 0; z <= 7; z++) {
             BlockPos support = helper.absolutePos(new BlockPos(x, 0, z));
