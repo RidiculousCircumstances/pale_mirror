@@ -66,6 +66,20 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class FrontierV3DiagnosticJsonTest {
+    @Test void physicalInspectionFailureCannotMasqueradeAsSuccessfulUnobservedActors() {
+        var checkpoint = new CheckpointImage(new WorldId("frontier:diagnostic-error"),
+                new io.farfrontier.palemirror.frontier.v3.api.Revision(3L), new SimInstant(120L),
+                new byte[] {1}, List.of(), List.of());
+        var failure = new IllegalArgumentException("invalid \"target\"\nsecond line");
+        var json = JsonParser.parseString(FrontierV3DiagnosticJson.inspectionFailure(
+                "actor", "resident:6-6", checkpoint, failure).substring(FrontierV3DiagnosticJson.PREFIX.length())).getAsJsonObject();
+        assertEquals("inspection_failed", json.get("status").getAsString());
+        assertEquals("resident:6-6", json.get("id").getAsString());
+        assertEquals(failure.getMessage(), json.get("reason").getAsString());
+        assertTrue(json.getAsJsonArray("trace").size() > 0);
+        assertTrue(json.getAsJsonArray("trace").size() <= 8);
+    }
+
     @Test void conflictedScopeCannotProduceGreenSummaryWithoutAnIncidentRecord() {
         var configuration = FrontierV3FixtureCatalog.resourceSiteHarvestConfiguration(new WorldId("frontier:scope-summary"), 421L);
         var state = configuration.initialState();

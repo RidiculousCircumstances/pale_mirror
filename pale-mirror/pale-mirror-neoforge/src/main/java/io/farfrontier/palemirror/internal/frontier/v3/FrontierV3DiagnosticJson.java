@@ -223,6 +223,20 @@ final class FrontierV3DiagnosticJson {
                 + (value.reason() == null ? "null" : "\"" + quote(value.reason()) + "\"") + "}";
     }
 
+    /** An unavailable physical observation is an explicit failure, never a successful canonical-only answer. */
+    static String inspectionFailure(String kind, String id, FrontierScheduleView checkpoint, IllegalArgumentException failure) {
+        String message = String.valueOf(failure.getMessage());
+        if (message.length() > 1000) message = message.substring(0, 1000);
+        var json = new com.google.gson.JsonObject();
+        json.addProperty("status", "inspection_failed");
+        json.addProperty("errorType", failure.getClass().getName());
+        json.addProperty("reason", message);
+        var trace = new com.google.gson.JsonArray();
+        java.util.Arrays.stream(failure.getStackTrace()).limit(8).forEach(frame -> trace.add(frame.toString()));
+        json.add("trace", trace);
+        return bounded(kind, id, checkpoint, base(kind, id, checkpoint) + "," + json.toString().substring(1));
+    }
+
     /** Applies the one operator-response limit to every read-only v3 diagnostic view. */
     static String bounded(String kind, String id, FrontierScheduleView checkpoint, String value) {
         if (value.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_BYTES) {

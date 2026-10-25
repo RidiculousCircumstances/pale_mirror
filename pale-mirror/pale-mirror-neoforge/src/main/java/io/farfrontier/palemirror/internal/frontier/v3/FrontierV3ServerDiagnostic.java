@@ -48,8 +48,8 @@ final class FrontierV3ServerDiagnostic {
                         .forEach(resident -> admissions.put(resident.id(), FrontierV3AmbientActorExecutor.admissionDiagnostic(
                                 level, runtime, state, resident.id())));
                 return FrontierV3DiagnosticJson.settlementPopulation(checkpoint, state, id, admissions);
-            } catch (IllegalArgumentException ignored) {
-                return FrontierV3DiagnosticJson.settlementPopulation(checkpoint, state, id, java.util.Map.of());
+            } catch (IllegalArgumentException failure) {
+                return FrontierV3DiagnosticJson.inspectionFailure(view, id, checkpoint, failure);
             }
         }
         if ("performance".equals(view)) return FrontierV3ServerLifecycle.performanceDiagnostic(server, runtime, checkpoint, state);
@@ -68,7 +68,8 @@ final class FrontierV3ServerDiagnostic {
                 admission = java.util.Optional.of(FrontierV3AmbientActorExecutor.admissionDiagnostic(
                         FrontierV3PhysicalWorld.require(server), runtime, state,
                         new io.farfrontier.palemirror.frontier.v3.api.SubjectId(id)));
-            } catch (IllegalArgumentException ignored) {
+            } catch (IllegalArgumentException failure) {
+                return FrontierV3DiagnosticJson.inspectionFailure(view, id, checkpoint, failure);
             }
         }
         java.util.Optional<FrontierV3ResourceSiteHarvestExecutor.Readiness> harvestReadiness = java.util.Optional.empty();

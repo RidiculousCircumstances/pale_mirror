@@ -58,7 +58,7 @@
       "dimension": "minecraft:overworld",
       "position": {
         "x": 0,
-        "y": 128,
+        "y": 64,
         "z": 0
       },
       "settleMs": 500
@@ -102,6 +102,22 @@
   ],
   "assertions": [
     {
+      "after": 3,
+      "view": "settlement_population",
+      "id": "settlement:6",
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "after": 5,
+      "view": "settlement_population",
+      "id": "settlement:6",
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
       "after": 6,
       "view": "summary",
       "id": "",
@@ -110,6 +126,14 @@
         "requiredConflicts": 0,
         "sceneConflicts": 0,
         "inventoryConflicts": 0
+      }
+    },
+    {
+      "after": 12,
+      "view": "settlement_population",
+      "id": "settlement:6",
+      "expect": {
+        "status": "ok"
       }
     },
     {
