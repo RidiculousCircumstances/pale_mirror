@@ -1,12 +1,11 @@
-# Active continuity — 2026-10-25, R266 startup cleanup and crash repair delivered
+# Active continuity — 2026-10-26, R267 HOT movement audit
 
 ## Assignment and authority
 
-Forestry goal is COMPLETE. Player map delivered. Current user requested removal
-of obsolete starter kits and reported a live server crash. Both scoped fixes
-are committed/deployed and verified; no new system goal was requested.
-Main alone; no Terra/subagents/push. Ordinary commit/deploy and disposable-world
-reset authorized. Preserve all unrelated histories/WIP.
+Completed the user's static HOT-stall audit and scoped repairs, including real
+client investigation. Main alone; no Terra/subagents/push. Findings committed,
+verified and deployed to R267; R266 retained for the diagnosed lost-permission
+case. No active task or new system goal remains. Preserve unrelated histories/WIP.
 
 Canonical references: AGENTS.md, architecture.yml, engineering-agent-protocol,
 docs/work-orders/PM-FORESTRY-20261025.md, frontier-v3-forestry-design.md and
@@ -19,21 +18,21 @@ and server-ops references. Do not repeat unchanged reading/checks by ritual.
 Implementation /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror
 (Git root parent), branch feat/baker-carry-orders-20260926, CLEAN.
 Feature70b670821ec3b2b5d4abfe304bcbb11d6a02cbc0, preflight8631f679f;
-Forestry HEAD248be0f83 includes shutdown/reach closure; player-map HEADa9d5b36ef; current HEAD76c64ab13
-removes scenario grants and fixes service access/quarantined shutdown. Source clean.
-Release /home/rd/proj/pm-r242-economic-release/pale-mirror, CLEAN detached76c64ab13.
+Forestry HEAD248be0f83 includes shutdown/reach closure; player-map HEADa9d5b36ef; current HEADda6162ecb
+includes R267 HOT navigation, admission diagnostics and clean-stop operation proofs. Source clean.
+Release /home/rd/proj/pm-r242-economic-release/pale-mirror, CLEAN detachedda6162ecb.
 Pack /home/rd/proj/minecraft, HEAD33fa84b, tracked CLEAN; retain unrelated
 untracked .f0v-baseline/. No push. Governance retains extensive unrelated WIP;
 only task-owned ledger/archive/order/design and forestry-only architecture/
 materialization sections are staged. Never stage-all governance.
 
 Runtime /home/rd/far-frontier-server, far-frontier-v3-live.service ACTIVE.
-Fresh world frontier-v3-r266-starter-cleanup-20261025,
-UUID30f840b8-2963-4ffb-8552-c6203bce854b, seed126/r28/schema306.
-PID595324 at verification, startup epoch1792953177. Artifact SHA512:
-bdf54d975a1c1721aa996900fc77bfaecd1cf937e3a6f70762a19060914867b0271fe50aec560c95193ab17cd4a80f48ac9dcfce657241c263c5c1ca727005e9.
+Fresh world frontier-v3-r267-hot-navigation-20261026,
+UUIDc3762b96-ead4-475e-847e-04e60dfba421, seed126/r28/schema306; native operation format6.
+PID834022 at verification, startup epoch1792956597. Artifact SHA512:
+a2373e68a0bfadc369057b2636a9207e3d272c4dd0188280b2076340e315b2161af812c73e1eb7db057a32ff464eb7361b9604980bed75dd0a04a0b2b088e0f3.
 Exact root publish/install/preflight/start/verify succeeded; source build
-legacy-startup-audit/release-build.log PASS7sec; deployment build/r266-startup-*.log in IMPL.
+hot-movement-audit/release-shutdown-build.log PASS7sec; deployment build/r267-hot-navigation-*.log in IMPL.
 R264 retained as normal production evidence, not migrated: old jobs can contain
 unsafe former workstations. Production world grants no initial axes or logs.
 Client updater required from pre-forestry builds; current pack selects r28.
@@ -203,3 +202,71 @@ Evidence in IMPL/build/legacy-startup-audit:
  no new runtime quarantine. This short preflight is not long-run economy or
  full engineering acceptance. No normal-shutdown/native campaign needs repetition
  solely for already-covered unchanged forestry effects.
+
+## R267 HOT movement audit — delivered
+
+Source da6162ecb. Four concrete source contradictions repaired by b603ce533:
+service exit batches retain accepted later paths instead of restarting at first8;
+stalled waiting pockets rotate; idle clearance reuses bounded ClearanceProbe and
+rejects failed targets; navigation contract failures propagate with exact actor/
+owner/goal/execution rather than becoming infinite local_leg waits. Common
+GoalAlternatives owns transient physical candidates only, not jobs or routes.
+No speed, business goal or body-authority change. Source report
+ docs/hot-movement-static-audit-r267.md records callers/findings.
+
+Client exposed a separate diagnostic defect: loaded COLD actor without a current
+body caused ActorBodyAuthority.current to throw; wrappers silently discarded
+physical observations for the entire population. a45cf9337/6f583c8ae report exact
+NO_CURRENT_BODY_AUTHORITY without creating a body; unexpected errors return
+inspection_failed with bounded reason/stack. Original client trace retained.
+
+Restored observations then proved Maya Baker/resident:6-25 stationary at crop9:
+FIELD_WORK c6db2b61-d57f-4e82-8822-1e1fc6370381, NO_LIVE_ATTEMPT_PERMISSION,
+no applied/saved participants, crop mature/offhand empty. Normal stop lost a
+prepared but unused live permit. Matching preimages cannot authorize old replay.
+da6162ecb repairs the common journal: after shutdown continuations complete,
+seal exact positive unused ticket/sequence evidence; force its removal BEFORE
+any resumed mutation. Quiescence forbids late mutation. Attempted, ambiguous,
+cancelled and conditionally excluded operations gain no permission. Format6
+explicitly rejects5; R266 saved normally and retained unchanged for diagnosis.
+No manual conflict reset or replay. New R267 world selected through root installer.
+
+Evidence under IMPL/build/hot-movement-audit:
+- 13focused movement units +44local-navigation GameTests PASS; ninth reachable
+ exit behind unreachable first8. ModLens native collision sources inspected.
+- Diagnostic36units PASS25sec; body-lifetime25native PASS41sec, read-only
+ no-demand case and existing cancellation/recovery. Package/guardrails PASS.
+- operation-shutdown-final-check.log: shared-storage50native + focused units/
+ guardrails/package PASS56sec. Later terminal-proof cleanup and restored death
+ dependency passed package checks15sec and final11ledger disk tests8sec; no
+ unchanged native rerun. Disk tests force proof consumption before execution,
+ refuse attempted/crash-after-consumption replay and forged/old-format proof.
+- Clean detached package7sec; deployment-fresh.log: preflight/publish/install/
+ fresh R267/start/verify PASS. Root tracked clean at33fa84b; .f0v-baseline/ retained.
+- live-circulation-fresh.json PASS13actions, actual full-pack20FPS client,
+ run4901ecf5-1953-4a4d-b3db-94bf513cf215. HOT/COLD/HOT snapshots: summary1199→2578,
+ all conflict counts0. Native actor samples9 cover29bodies; miners move14/82blocks,
+ no observed continuously MOVING stationary subject. Other observed bodies idle;
+ fresh field GROWING, so this is not a complete harvest-cycle/long-run economy proof.
+ Frames reviewed: initial fresh-world frame still partial geometry, final revisit
+ rendered the visible area. No whole-world visual/M3 or latency claim.
+- Earlier airborne visit fixtures y68/y128 were invalid; actual feet64 in both
+ dimensions. Corrected from native observation, not properties. Old-world run
+2867d2a6 completed visits but failed sceneConflicts1: this exposed the above real
+ farmer stall. No green acceptance claimed. Initial bounded RPC transport timeouts
+ retained; no invented actor data. Corrected observer9samples completed/stopped.
+- restart-verified.log and clean-restart-stop-tail.log: actual normal server stop,
+ all dimensions saved, common quiescence observed unusedProofs0/pending0; same
+ artifact/world restarted and deployment verify PASS. This native stop is wiring
+ evidence; positive unused-resume case is the actual-journal unit check above.
+
+Final after-restart full-pack preflight PASS6actions, run
+0e008f86-d812-4188-9c17-25bdd8b1acfa: after-restart-preflight.json. Final forest
+frame reviewed with loaded geometry. It is startup/render evidence, not forestry
+work acceptance. Final summary6390: no retained/scene/inventory conflicts and no
+preparing replica scope. Players6395 empty; exact UUID unchanged through restart.
+All task clients and observers STOPPED; MC/economy ACTIVE. Source/release clean;
+root retains only unrelated .f0v-baseline/. No push. Governance unrelated WIP
+preserved; commit this task-owned ledger only. User task delivered at the scoped
+static repair + targeted native/client evidence level; no all-feature/M3 or
+long-run farm/economy claim. No further active work/goal.
