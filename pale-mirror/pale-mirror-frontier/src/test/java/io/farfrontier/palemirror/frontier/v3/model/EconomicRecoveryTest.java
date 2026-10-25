@@ -42,6 +42,17 @@ class EconomicRecoveryTest {
         assertTrue(first.request().recipe().ingredient().accepts("minecraft:cobblestone"));
         assertTrue(EquipmentProductionPlanning.ready(state, home, 5000).isEmpty(), "an estimated import is not present material");
         assertEquals(1, new EquipmentReserveSupply().readAt(state, home, 5000).needs().get("minecraft:cobblestone").immediate());
+        var requirement = new EquipmentReserveSupply().readAt(state, home, 5000).requiredInputs().get("minecraft:cobblestone");
+        assertEquals(1, requirement.quantity());
+        assertEquals(0, requirement.withinTicks());
+        var participant = state.companies().goodsTrade().participants().participants().get(home);
+        var assessment = SettlementEconomicEvaluation.domestic(state, participant, 5000);
+        var material = assessment.view().supplyPlan().orElseThrow().require("minecraft:cobblestone");
+        assertTrue(material.protectedInput() > 0);
+        assertEquals(0, material.deadlineTicks(), "a failed productive pool is not an optional undated stock target");
+        var reviewed = GoodsParticipantPricing.review(state, participant, 5000, assessment);
+        assertTrue(reviewed.get("minecraft:cobblestone").bid().raw() > FixedScalar.ONE.raw(),
+                "manufacturing substitution value must allow a real input offer above the historical one-coin reference");
 
         var depot = FrontierWorldState.depotId(home);
         var account = FungibleResourceCustodySupport.accountAtContainer(state, depot).orElseThrow().id();

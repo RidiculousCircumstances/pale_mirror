@@ -60,7 +60,8 @@ public final class SettlementSupplyPlanning {
                             ? retainedProtection.get(commodity.itemKind()).protectedQuantity() : stock.protectedMinimum(),
                     meal == null ? 0 : Math.multiplyExact(metabolism, meal.items()), period, trade.supplyPlanning().require(commodity.itemKind()),
                     deliveries.getOrDefault(commodity.itemKind(), List.of()),
-                    reserve == null ? OptionalLong.empty() : OptionalLong.of(reserve.reorderPoint())));
+                    reserve == null ? OptionalLong.empty() : OptionalLong.of(reserve.reorderPoint()),
+                    Optional.ofNullable(basis.requiredInputs().get(commodity.itemKind()))));
         }
         var window = SupplyPlanningWindow.forSettlement(state, home, reserves.values());
         var capacities = SupplyCapacityComposition.read(state, home, facts, window, option.apply(facts, window));

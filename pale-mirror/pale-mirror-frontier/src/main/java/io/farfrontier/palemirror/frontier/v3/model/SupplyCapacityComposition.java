@@ -11,7 +11,8 @@ public final class SupplyCapacityComposition {
         public Option { Objects.requireNonNull(owner); processes = List.copyOf(processes); }
     }
     private static final Map<SupplyCapacityPort.Key, SupplyCapacityPort> PORTS = register(List.of(
-            new BakerySupplyCapacity(), new FieldSupplyCapacity(), new ExtractionSupplyCapacity(), new AutomaticStationSupplyCapacity()));
+            new BakerySupplyCapacity(), new FieldSupplyCapacity(), new ExtractionSupplyCapacity(), new AutomaticStationSupplyCapacity(),
+            new IndividualStationSupplyCapacity()));
     private static final ImmutableKeyedInputView<SubjectId, List<SupplyPlanner.Process>> VALUATIONS = new ImmutableKeyedInputView<>(256);
     private SupplyCapacityComposition() { }
     public static Map<SupplyCapacityPort.Key, SupplyCapacityPort> register(List<SupplyCapacityPort> ports) {

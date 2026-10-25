@@ -61,9 +61,8 @@ have zero executable output. Their first restoration requests are one stone hoe
 repair/one cobblestone, instead of three iron hoes/six ingots plus fuel.
 See build/economy-fix-{equipment,valuations}-frozen.txt.
 
-Clean artifact deployment and connected runtime inspection remain pending.
-Frozen-state calculations are diagnostic evidence, not completed native
-deliveries or proof of a sustainable whole economy.
+Frozen-state calculations below are diagnostic evidence, not completed native
+deliveries or proof of a sustainable whole economy. Deployment evidence follows.
 
 ## Retained-world deployment and actual result
 
@@ -96,3 +95,39 @@ Actual normal-time terminal bread production above remains independently observe
 Before changing the selected test world, the retained world's diagnostic facts
 are preserved; a fresh-world run tests prevention, never retroactive repair of
 its historic low-price sales/insolvency. No money or stock is injected.
+
+
+## Fresh-world prevention run and R255 follow-up
+
+Fresh selected world `frontier-v3-r254-clean-20261025`, same seed126/r26/schema303,
+world UUID890c404c-8420-4aa3-beee-8b1a8d8e98fa. All five requested COLD segments
+(24k*4+4k) completed, last receipt102114. Native tick rate was restored20 afterward.
+The first nutrition wave164hungry at24k fell to6 by35k with342 actual food inputs;
+paid inter-town trade and field/mining/bakery outputs occurred. Total settlement
+cash remained1200coins. See build/r254-cold-soak.{log,jsonl}, segment receipts and
+r254-after-soak-{health.txt,analytics.json}. This is a bounded prevention run, not
+an equilibrium claim or proof every town can afford every future input.
+
+The run exposed another connected E5 contradiction: Southgate at82716 requested
+4cobblestone for equipment but published an undated optional need with bidRaw1.
+Maintenance materials had no minimum/deadline contract into the supply planner;
+individual manufacture recipes were also absent from downstream input valuation.
+
+R255 introduces owner-declared ProductionRequirement(quantity,withinTicks) from
+reserve ports through the shared supply/funding planner. Equipment declares one
+next operation per work pool; remaining fleet investment remains distinct.
+An existing admitted incoming unit covers that finite request, preventing repeated
+emergency purchases. It neither promises on-time arrival nor authorizes output.
+A separate registered individual-manufacture valuation adapter shares installed
+recipe costs; repairs are excluded from new-item output valuation. No second
+inventory/price model or persisted schema is introduced.
+
+Actual frozen fresh-world snapshot365711/t113055: Southgate's next repair requires
+1cobblestone now, protectedInput1/deadline0; its4.000002coin cash can fund the real
+request and acquisition value is1.81coins versus prior bid0.000001. No stock,
+cash, native outcome or accepted live plan was edited by this offline probe.
+Mossbrook's later wear replacement gets a finite88164tick horizon; its exhausted
+cash remains an actual constraint. Source: build/r255-recovery-inputs-frozen.txt.
+Focused recovery/production-requirement/equipment/funding/publication checks and
+guardrails PASS (build/economy-recovery-inputs-tests.log). Runtime R255 results
+must be recorded separately after deployment.

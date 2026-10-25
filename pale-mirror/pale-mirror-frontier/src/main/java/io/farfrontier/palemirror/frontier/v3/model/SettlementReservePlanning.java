@@ -3,6 +3,7 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.SubjectId;
 import io.farfrontier.palemirror.frontier.v3.model.supply.SupplyReservePlanner;
 import io.farfrontier.palemirror.frontier.v3.model.supply.SupplyReservePlanner.*;
+import io.farfrontier.palemirror.frontier.v3.model.supply.ProductionRequirement;
 import java.util.*;
 
 /** One shared projection; no market-view recursion or family-specific dispatch in the coordinator. */
@@ -13,8 +14,9 @@ public final class SettlementReservePlanning {
     private static final ImmutableInputView<Map<SubjectId, Basis>> BASIS = new ImmutableInputView<>();
     private record InstantKey(SubjectId home, long atTick) { }
     private static final ImmutableInputView<Map<InstantKey, Basis>> DATED = new ImmutableInputView<>();
-    public record Basis(Map<String, Need> needs, List<Flow> flows, Map<String, Timing> timing) {
-        public Basis { needs = Map.copyOf(needs); flows = List.copyOf(flows); timing = Map.copyOf(timing); }
+    public record Basis(Map<String, Need> needs, List<Flow> flows, Map<String, Timing> timing,
+                        Map<String, ProductionRequirement> requiredInputs) {
+        public Basis { needs = Map.copyOf(needs); flows = List.copyOf(flows); timing = Map.copyOf(timing); requiredInputs = Map.copyOf(requiredInputs); }
     }
     private SettlementReservePlanning() { }
     public static Map<ReserveSupplyPort.Key, ReserveSupplyPort> register(List<ReserveSupplyPort> ports) {
@@ -62,6 +64,7 @@ public final class SettlementReservePlanning {
             needs.put(item, new Need(Rate.ZERO, 0)); timing.put(item, new Timing(rule.leadTicks(), TimingBasis.INITIAL_ESTIMATE));
         });
         var estimates = new HashMap<String, Timing>();
+        var required = new TreeMap<String, ProductionRequirement>();
         for (var key : ReserveSupplyPort.Key.values()) {
             var facts = atTick.isPresent() ? PORTS.get(key).readAt(state, home, atTick.getAsLong()) : PORTS.get(key).read(state, home);
             if (!needs.keySet().containsAll(facts.needs().keySet()) || !needs.keySet().containsAll(facts.timing().keySet()))
@@ -69,10 +72,12 @@ public final class SettlementReservePlanning {
             facts.needs().forEach((item, need) -> needs.merge(item, need,
                     (a, b) -> new Need(a.consumption().plus(b.consumption()), Math.addExact(a.immediate(), b.immediate()))));
             flows.addAll(facts.flows());
+            facts.requiredInputs().forEach((item, requirement) -> required.merge(item, requirement,
+                    ProductionRequirement::plus));
             facts.timing().forEach((item, estimate) -> estimates.merge(item, estimate,
                     (a, b) -> a.leadTicks() <= b.leadTicks() ? a : b));
         }
         timing.putAll(estimates);
-        return new Basis(needs, flows, timing);
+        return new Basis(needs, flows, timing, required);
     }
 }

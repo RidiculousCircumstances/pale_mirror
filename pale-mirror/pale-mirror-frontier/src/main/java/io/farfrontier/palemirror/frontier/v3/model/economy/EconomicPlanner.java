@@ -53,7 +53,7 @@ public final class EconomicPlanner {
             long minimum = Math.addExact(need.immediate(), need.consumption().over(facts.dayTicks()));
             long target = Math.addExact(need.immediate(), need.consumption().over(horizon)); domestic.put(item, target);
             stocks.put(item, new SupplyPlanner.Stock(stock.available(), stock.incoming(), stock.promisedProduction(), target,
-                    minimum, stock.consumptionUnits(), stock.consumptionPeriodTicks(), stock.policy(), stock.arrivals(), OptionalLong.of(target)));
+                    minimum, stock.consumptionUnits(), stock.consumptionPeriodTicks(), stock.policy(), stock.arrivals(), OptionalLong.of(target), stock.requiredInput()));
         }
         var supply = new SupplyPlanner().plan(stocks, facts.processes(), facts.commitments(), selection);
         supply.inputRequirements().forEach((item, amount) -> domestic.merge(item, amount, Math::addExact));

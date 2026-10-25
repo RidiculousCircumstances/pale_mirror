@@ -13,7 +13,14 @@ public final class SupplyPlanner {
     }
     public record Stock(long available, long incoming, long promisedProduction, long target,
                         long protectedMinimum, long consumptionUnits, long consumptionPeriodTicks,
-                        SupplyPolicy policy, List<Arrival> arrivals, OptionalLong plannedReorderPoint) {
+                        SupplyPolicy policy, List<Arrival> arrivals, OptionalLong plannedReorderPoint,
+                        Optional<ProductionRequirement> requiredInput) {
+        public Stock(long available, long incoming, long promisedProduction, long target,
+                     long protectedMinimum, long consumptionUnits, long consumptionPeriodTicks,
+                     SupplyPolicy policy, List<Arrival> arrivals, OptionalLong plannedReorderPoint) {
+            this(available, incoming, promisedProduction, target, protectedMinimum, consumptionUnits,
+                    consumptionPeriodTicks, policy, arrivals, plannedReorderPoint, Optional.empty());
+        }
         public Stock(long available, long incoming, long promisedProduction, long target,
                      long protectedMinimum, long consumptionUnits, long consumptionPeriodTicks, SupplyPolicy policy, List<Arrival> arrivals) {
             this(available, incoming, promisedProduction, target, protectedMinimum, consumptionUnits, consumptionPeriodTicks, policy, arrivals, OptionalLong.empty());
@@ -25,6 +32,7 @@ public final class SupplyPlanner {
         public Stock {
             Objects.requireNonNull(policy);
             Objects.requireNonNull(plannedReorderPoint);
+            Objects.requireNonNull(requiredInput);
             arrivals = List.copyOf(arrivals);
             if (available < 0 || incoming < 0 || promisedProduction < 0 || target < 0
                     || protectedMinimum < 0 || consumptionUnits < 0 || consumptionPeriodTicks < 1 || plannedReorderPoint.orElse(0) < 0
@@ -227,13 +235,19 @@ public final class SupplyPlanner {
             var value = observed.get(product);
             pendingUnsecured.put(product, value.promisedProduction());
             backed.put(product, new Stock(value.available(), value.incoming(), 0, value.target(),
-                    value.protectedMinimum(), value.consumptionUnits(), value.consumptionPeriodTicks(), value.policy(), value.arrivals(), value.plannedReorderPoint()));
+                    value.protectedMinimum(), value.consumptionUnits(), value.consumptionPeriodTicks(), value.policy(), value.arrivals(), value.plannedReorderPoint(), value.requiredInput()));
         }
         var stocks = Map.copyOf(backed);
         var demands = new TreeMap<String, Demand>();
         var allocatedBatches = new HashMap<String, Long>();
         stocks.keySet().forEach(item -> demands.put(item,
                 new Demand(0, 0, 0, Long.MAX_VALUE, Set.of(), Optional.empty())));
+        for (var entry : stocks.entrySet()) entry.getValue().requiredInput().ifPresent(required -> {
+            // An admitted recovery delivery already covers this finite restart.
+            // Lateness remains visible; it must not buy another unit every review.
+            if (entry.getValue().covered() < required.quantity()) demands.put(entry.getKey(), new Demand(0, 0,
+                    required.quantity(), required.withinTicks(), Set.of(Reason.PRODUCTION_INPUT), Optional.empty()));
+        });
         for (var committed : commitments) {
             var product = requireStock(stocks, committed.product());
             long deadline = product.policy().essential() ? product.deadline() : Long.MAX_VALUE;
@@ -245,17 +259,24 @@ public final class SupplyPlanner {
                 .<Map.Entry<String, Stock>>comparingLong(e -> e.getValue().policy().essential() ? e.getValue().deadline() : Long.MAX_VALUE)
                 .thenComparing(Map.Entry::getKey)).toList()) {
             var stock = entry.getValue();
+            var required = stock.requiredInput().filter(value -> stock.covered() < value.quantity());
             // An admitted replenishment finishes toward the upper target; its first
             // partial promise must not switch the same purchase off at the lower mark.
             long urgent = consumptionShortfall(stock, 0);
-            if (stock.covered() > stock.reorderPoint() && stock.incoming() == 0 && urgent == 0) continue;
+            if (stock.covered() > stock.reorderPoint() && stock.incoming() == 0 && urgent == 0 && required.isEmpty()) continue;
             long missing = Math.max(0, Math.max(stock.target(), stock.protectedMinimum()) - stock.covered());
+            missing = Math.max(missing, required.map(value -> value.quantity() - stock.covered()).orElse(0L));
             missing = Math.max(missing, urgent);
             var retained = demands.get(entry.getKey());
             missing = Math.max(0, missing - retained.purchase() - retained.production());
             if (missing == 0) continue;
             var reasons = EnumSet.of(Reason.STOCK_REPLENISHMENT);
-            long deadline = stock.policy().essential() ? stock.deadline() : Long.MAX_VALUE;
+            long deadline = Math.min(stock.policy().essential() ? stock.deadline() : Long.MAX_VALUE,
+                    required.map(ProductionRequirement::withinTicks).orElse(Long.MAX_VALUE));
+            if (required.isPresent()) {
+                reasons.add(Reason.PRODUCTION_INPUT);
+                if (deadline <= stock.policy().leadTicks()) reasons.add(Reason.CRITICAL_PRODUCTION_DEADLINE);
+            }
             if (deadline <= stock.policy().leadTicks()) reasons.add(Reason.CONSUMPTION_DEADLINE);
             // An existing unfunded job keeps its identity and dependency demand. Do not
             // invent another job, but do not let its output suppress the purchase fallback.
