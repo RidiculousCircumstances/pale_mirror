@@ -131,3 +131,51 @@ cash remains an actual constraint. Source: build/r255-recovery-inputs-frozen.txt
 Focused recovery/production-requirement/equipment/funding/publication checks and
 guardrails PASS (build/economy-recovery-inputs-tests.log). Runtime R255 results
 must be recorded separately after deployment.
+
+
+## R255 retained-world delivery
+
+Commitd3d776c20, clean detached build/package PASS (RELEASE/build/r255-release.log).
+Pack preflight/publish/install and fresh verify PASS on the same selected r254 world:
+PID2042069, notBefore1792907904, SHA512
+`2559d570f26b4d9749f52a488a6209b7c6aabf72fac7fcfe2a2803d5afe3cb77021309e5e1e0b69e7f21ecaac80545dc1e4e2397e8f8b482a443a15a242c1abf`.
+Focused72tests PASS, no failures/skips; architecture guardrails PASS.
+
+At118348 Southgate's actual published policy changed to cobblestone1, deadline0,
+bid1.81coins, after the ordinary scheduled quote review. Offline advice was not
+substituted for publication (build/r255-published-plan2.txt). At frozen117168 there
+was no active cobblestone sell order addressed to it (r255-procurement-frozen.txt).
+A priced input requirement cannot manufacture a seller, provisions or money.
+No completed restoration is claimed from the improved bid alone.
+
+R255 first24ksegment COMPLETED at140348; analytics snapshot140467 records1200total
+coins,747bread,38hungry and11paid receipts. Further paid receipts include45wheat
+for57.6coins plus53.731125freight, and1coal for2.705964coins. These are actual
+accepted receipts, not advertised sale orders. At153817 cumulative bread output328
+versus1933FOOD:INPUT shows continuing drawdown of starter food. Operational recovery
+is not proof of sustainable make/import/export balance. Uneven wealth alone is
+not reclassified as corruption, and no compensating stock/cash reset is performed.
+
+Both24krequests COMPLETED at140348/164845 (target140171/164507), actual requested
+advance48000. Final analytics164948:17paid receipts,531bread,59hungry,1200coins.
+Southgate30 andMossbrook19 account for49hungry. They are not proved recovered by
+this run. Selected world already ran its first116kticks underR254 before the
+minimum-input follow-up; this is not a freshR255 prevention proof.
+
+Full-pack20FPS client `live-first-area-ingress.json` PASS, manifest
+build/r255-native-ingress.json/run7812cafa-c51c-42b3-91c3-28425da1fda3. All three
+field diagnostics ACTIVE/0mismatches. All three linked frames reviewed: complete
+foreground/visible crops in rainy night lighting. This checks display consistency,
+not duration-bearing work or whole-economy visual acceptance. Visit durations8.798,
+3.800,4.800seconds. First projection incurred1.834s and native host peak1.865s;
+strict5s/80ms acceptance is explicitly NOT met. No first-generation optimization
+is claimed from this economic correction.
+
+Client exited,0players, tick rate20 restored, no new required conflicts/quarantine.
+After HOT visits ordinary delivery debt1095ticks was visible at166457 despite
+recent native max6.80ms; retain this performance finding rather than declaring
+an idle queue a healthy whole simulation. Receipt build/r255-final-health.txt.
+Current scope closes the source contradictions and actual retained Dawnbridge
+fuel/bread stall; it does not certify sustainable market balance or terminal
+Southgate equipment restoration. Those unresolved outcomes are reported, not
+hidden by resetting cash/stock or calling a good bid a completed delivery.
