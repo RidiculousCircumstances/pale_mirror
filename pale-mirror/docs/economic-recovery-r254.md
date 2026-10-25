@@ -354,3 +354,60 @@ world reset is required for this correction.
 R260 focused quote/participant/delivery/trip checks plus guardrails PASS17s
 (build/r260-order-envelope-tests.log). Previous broader177 checks remain evidence
 for unchanged R259 logic; they are not labelled a final-source rerun.
+
+### R260 actual fresh-world result and remaining financial decision
+
+R260 was first installed in the retained R259 world; that run was interrupted
+before its first24k completion. Its history already committed Southgate's cash
+before the second publication fix. No retroactive refunds were issued. Both
+worlds remain available for diagnosis.
+
+A genuinely fresh R260 world (seed126/r26/schema304, UUIDf09d5442-d3dc-4c12-b792-
+405df4bc1e21) then completed4*24k requested ticks (request4 actual97531 versus
+target97316). A subsequent request5 completed; request6 continued the same world.
+No fake cash or goods were added. Native200 is headless acceleration, not a
+performance comparison or graphical acceptance.
+
+The original negotiation/publication contradictions are fixed, but this does NOT
+prove autonomous equipment restoration or a balanced economy. Actual frozen
+snapshot revision472015/tick142466 (build/r260-capital-snapshot.bin, actual tools
+build/r260-capital-tools.txt) shows Southgate cash0 and all3original hoes damage130
+of131. It requires one stone-hoe repair/one cobble. Mossbrook also has cash0,
+although its tools remain serviceable (damage64/64/32). At143206 there are20paid
+receipts and24hungry across the world. The financial total remains1200; rich Sunreach
+has224.188477coins. Unequal wealth itself is not a broken invariant.
+
+Source tracing identifies a separate planning boundary: EquipmentReserveSupply
+introduces material needs from EquipmentProductionPlanning.planned, whose requests
+exist only after EquipmentStockProjection reports an actual horizon deficit. Before
+that, using a healthy durable tool creates no material-consumption rate or earmarked
+renewal allowance in the financial plan. Ordinary fuel purchases can commit all
+current cash first. Positive future material quotes cannot overcome an actual
+zero cash budget. R260 does not pretend otherwise.
+
+A proposed next policy is a forecast renewal allowance, awaiting the user's
+business decision. Equipment owns service-life/expected wear and recipe facts;
+the common economic planner values the corresponding maintenance inputs and
+protects an explicit future-renewal envelope against ordinary purchases. Procurement
+may spend that envelope on its declared renewal inputs, and confirmed input stock,
+maintenance work and receipts must reduce it exactly once. It grants no stock,
+repairs, income, price floor or new financial credit. Actual need/authority remain
+with existing equipment, station, custody and logistics owners. Forecast consumption
+must be distinct from an already admitted repair to prevent double counting.
+
+Implementation, if accepted: add a typed owner-supplied renewal forecast; integrate
+it into the single economic cash allocation and quote-time budget adjustment;
+expose it in diagnostics and persistence with explicit schema handling; verify the
+healthy-tool/all-cash-fuel negative case and actual funded restoration. No further
+geometry/client mechanics rewrite is implied. Do not label this future policy as
+already implemented or allE1–E5 outcome acceptance as achieved.
+
+Exact run receipt reconciliation: requests1–6 (6*24k requested ticks) completed;
+request6 reached148348 versus target148131. The observer admitted request7 before
+it was stopped. At150272 that request still had22440ticks pending, so it was NOT
+completed and the planned additional72k series is NOT claimed complete. A graceful
+same-build restart interrupts that in-memory request, preserves canonical world
+state and restores ordinary native20 without a queued acceleration. Final financial
+sample150073:20paid receipts,36hungry,1200coins; no global economic equilibrium or
+equipment-restoration acceptance. These are measurements, not an artificial fix
+by replacing an unhealthy world after the run.
