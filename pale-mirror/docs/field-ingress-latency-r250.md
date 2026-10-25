@@ -181,3 +181,38 @@ The existing real player/tool-ingress GameTest now also checks stock mismatch:
 terrain is presentable, dynamic handoff is not READY, actual and canonical inventories
 remain untouched, and no operational custody is granted. Removing provenance
 returns WAITING. Existing click and subsequent consecutive mixed deposits still run.
+
+## R253 live result
+
+Source19d49af61, clean detached build/package and live preflight/install/start verify
+all PASS (build/r253-{release,preflight,install,publish,verify}.log); same world/seed
+retained. Native stop before install saved all dimensions. ServiceMainPID1606603,
+notBefore1792901175. SHA512:
+3003a4c67da1e517bbd3aa82b4ec371a2dba6845e37ac5ed58d51de2a5c770a3b0d3657a90a4be0035e74e80150f2c06953d106f1150a0fe414c968d4a07d04f.
+3 HotHandoff unit tests and19 player-storage native tests plus guardrails passed
+(build/r253-container-visibility.log). The native ingress test includes the new
+stock mismatch/foreign provenance checks and the unchanged consecutive real clicks.
+
+Actual20FPS full-pack client: build/r253-return-ingress.json, run
+dd7fb445-2a4b-4a14-90f5-843462a4522b. End-to-end from each visit start to both
+compiled camera support and field sections: field12 1.000s; field11 2.601s; field7
+1.301s. All three linked frames were viewed: complete foreground and physical field,
+nighttime lighting; distant terrain at scene edges is outside this bounded claim.
+Each field ACTIVE with zero mismatches at its assertion. No acceleration/reset.
+
+The in-flight neighbour28,0 diagnostic is decisive: PRESENTABLE_PENDING,
+container:7-depot / container_stock_reconciliation, presentationReady=true,
+dynamicReady=false. The camera actually compiled while this inventory fence remained.
+The new visibility lane does not manufacture full HOT readiness. Client disconnected
+and its task-owned process exited after capture.
+
+Limit: these R253 visits are returns, not untouched generation. This launch also
+logged into field7 first: native player login09:07:12.104, compiled camera/NONE UI
+observed during09:07:13 (second-resolution client logger). The subsequent7 return
+was already warmed by login, although its depot was demonstrably still reconciling
+at the measured boundary. Do not present1.301s as a matched cold-start speedup ratio.
+R252's untouched256cell first ingress remains4.799s visit / both checked by5.000s;
+its safety/suffix mechanisms are unchanged in R253. These receipts establish the
+specific regressions and tested <5s return scenes, not a universal bound for every
+mine, load radius or future machine load. Historical field9 uncertainty remains
+isolated and retained, not replayed to obtain these results.
