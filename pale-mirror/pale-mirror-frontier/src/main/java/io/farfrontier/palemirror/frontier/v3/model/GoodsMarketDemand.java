@@ -30,18 +30,33 @@ final class GoodsMarketDemand {
                 var freight = GoodsDeliveryAdvice.from(state, provider, other.containerId(), view, item, Math.min(quantity, stock),
                         other.unitPriceLimit().raw(), demand.budget().raw(), now);
                 if (freight.isEmpty()) continue;
-                var offer = new SellerPriceDiscovery.Offer(provider.party().id(), freight.orElseThrow().quantity(),
-                        other.unitPriceLimit().plus(new FixedScalar(freight.orElseThrow().deliveryPerItem())), other.unitPriceLimit().plus(new FixedScalar(Math.ceilDiv(freight.orElseThrow().cashDelivery(), freight.orElseThrow().quantity()))));
+                var priced = freight.orElseThrow();
+                var offer = new SellerPriceDiscovery.Offer(provider.party().id(), priced.quantity(), other.unitPriceLimit(),
+                        new FixedScalar(priced.tripExpense()), new FixedScalar(priced.cashDelivery()), priced.deliveryTicks(),
+                        priced.workerTicks(), priced.minimumDispatchQuantity(), priced.departure());
                 competitors.merge(provider.party().id(), offer, (a, b) -> {
-                    int price = a.landedPrice().compareTo(b.landedPrice());
-                    return price < 0 || price == 0 && a.quantity() >= b.quantity() ? a : b;
+                    var need = new io.farfrontier.palemirror.frontier.v3.model.market.ProcurementSelection.Requirement(item,
+                            demand.quantity(), view.supplyPlan().map(p -> p.require(item).deadlineTicks()).orElse(Long.MAX_VALUE));
+                    var alternatives = List.of(asProcurement(a, item, other.id()), asProcurement(b, item, order.id()));
+                    var preferred = new io.farfrontier.palemirror.frontier.v3.model.market.ProcurementSelection().preferred(need, alternatives,
+                            state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().orElseThrow().labourValuePerTick()).orElseThrow();
+                    return preferred.id().equals(other.id()) ? a : b;
                 });
             }
             result.add(new SellerPriceDiscovery.Demand(buyer.party().id(), quantity, demand.budget(), order.unitPriceLimit(),
                     FixedScalar.ZERO, List.copyOf(competitors.values()), new FixedScalar(delivery.orElseThrow().tripExpense()),
-                    delivery.orElseThrow().minimumDispatchQuantity(), new FixedScalar(delivery.orElseThrow().cashDelivery())));
+                    delivery.orElseThrow().minimumDispatchQuantity(), new FixedScalar(delivery.orElseThrow().cashDelivery()),
+                    view.supplyPlan().map(p -> p.require(item).deadlineTicks()).orElse(Long.MAX_VALUE), delivery.orElseThrow().deliveryTicks(),
+                    delivery.orElseThrow().workerTicks(), state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().orElseThrow().labourValuePerTick(),
+                    delivery.orElseThrow().departure()));
         }
         return new SellerPriceDiscovery.Market(result);
+    }
+    private static io.farfrontier.palemirror.frontier.v3.model.market.ProcurementSelection.Offer asProcurement(
+            SellerPriceDiscovery.Offer offer, String item, SubjectId id) {
+        return new io.farfrontier.palemirror.frontier.v3.model.market.ProcurementSelection.Offer(id,
+                Map.of(item, new io.farfrontier.palemirror.frontier.v3.model.market.ProcurementSelection.Line(offer.quantity(), offer.goodsPrice())),
+                offer.resourceFreight(), offer.arrivalDelayTicks(), offer.workerTicks(), offer.departure());
     }
     private GoodsMarketDemand() { }
 }

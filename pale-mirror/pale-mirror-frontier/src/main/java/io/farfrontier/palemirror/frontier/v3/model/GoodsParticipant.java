@@ -19,6 +19,9 @@ public record GoodsParticipant(GoodsTradeParty party, GoodsPolicyKind policy, Su
         policy.validate(party);
         known = List.copyOf(known);
         prices = Map.copyOf(prices);
+        if (prices.values().stream().filter(q -> q.salePlan().kind() ==
+                io.farfrontier.palemirror.frontier.v3.model.market.StockSalePlan.Kind.OPERATING_RECOVERY).count() > 1)
+            throw new IllegalArgumentException("multiple stock recovery envelopes for one operating requirement");
         if (known.size() > 16 || known.stream().map(value -> value.party().id()).distinct().count() != known.size()
                 || known.stream().anyMatch(value -> value.party().equals(party)) || reviewRevision < 0 || reviewedAtTick < 0
                 || decision == null || decision.isBlank() || decision.length() > 512 || prices.size() > 16)

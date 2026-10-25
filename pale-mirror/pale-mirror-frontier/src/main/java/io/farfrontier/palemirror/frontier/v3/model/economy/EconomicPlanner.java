@@ -109,7 +109,7 @@ public final class EconomicPlanner {
         }
         var economy = new EconomicPlan(horizon, domestic, production, funding.budgets(), funding.liquidity(),
                 funding.unfunded(), facts.contractReceivables(), checkpoints, List.of(), constraints,
-                funding.prices(), funding.fundedRestarts(), saleable);
+                funding.prices(), funding.fundedRestarts(), saleable, funding.operatingBudgets());
         return new Domestic(facts, policy, new SupplyPlanner.Plan(supply.demands(), reserves, supply.preferredPurchaseSpending(),
                 supply.preferredPurchaseQuantities(), supply.inputRequirements(), Optional.of(economy), supply.backedRecipes()));
     }
@@ -146,7 +146,7 @@ public final class EconomicPlanner {
         }
         var economy = new EconomicPlan(base.horizonTicks(), base.domesticTargets(), production, base.purchaseBudgets(),
                 base.retainedLiquidity(), base.unfundedRequirements(), base.contractReceivables(), base.checkpoints(),
-                exports.exports(), constraints, base.purchasePrices(), base.fundedRestarts(), base.saleableStock());
+                exports.exports(), constraints, base.purchasePrices(), base.fundedRestarts(), base.saleableStock(), base.operatingBudgets());
         return new ExportReview(new SupplyPlanner.Plan(domestic.demands(), domestic.reserves(), domestic.preferredPurchaseSpending(),
                 domestic.preferredPurchaseQuantities(), domestic.inputRequirements(), Optional.of(economy), domestic.backedRecipes()),
                 exports.priceableQuantities());

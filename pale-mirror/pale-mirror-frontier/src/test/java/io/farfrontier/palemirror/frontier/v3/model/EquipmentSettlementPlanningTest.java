@@ -7,6 +7,49 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class EquipmentSettlementPlanningTest {
+    @Test void recoveryStockExposureSpansParcelsButDoesNotMultiplyAcrossBuyers() {
+        var state = CultivationPlanningTest.prepared(); var home = new SubjectId("settlement:7");
+        var participant = state.companies().goodsTrade().participants().participants().get(home);
+        String item = "minecraft:wheat";
+        var recovery = new io.farfrontier.palemirror.frontier.v3.model.market.MarketPricePolicy.Quote(FixedScalar.whole(2),
+                FixedScalar.whole(3), FixedScalar.whole(2), 0, 200, Optional.empty(),
+                new io.farfrontier.palemirror.frontier.v3.model.market.StockSalePlan(
+                        io.farfrontier.palemirror.frontier.v3.model.market.StockSalePlan.Kind.OPERATING_RECOVERY, 83, FixedScalar.whole(100).raw()));
+        participant = participant.withPrices(Map.of(item, recovery));
+        var zero = Map.of(item, 0L);
+        var economic = new io.farfrontier.palemirror.frontier.v3.model.economy.EconomicPlan(1000, zero, zero, zero, 0, 0, 0,
+                List.of(), List.of(), Set.of(), Map.of(item, 1L), Set.of(), Map.of(item, 200L), Map.of(item, FixedScalar.whole(100).raw()));
+        var plan = new io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Plan(Map.of(), Map.of(), Map.of(), Optional.of(economic));
+        var stock = Map.of(item, new GoodsParticipantView.Stock(200, 200, 0));
+        var commodity = state.bootstrap().ruleset().goodsTrade().policies().get(participant.policy()).stream().filter(c -> c.itemKind().equals(item)).findFirst().orElseThrow();
+        var view = new GoodsParticipantView(participant, 1, FixedScalar.ZERO, stock, Map.of(), Optional.of(plan), Set.of(), FixedScalar.ZERO);
+        assertEquals(83, view.saleable(commodity));
+        assertEquals(200, view.releasableStock(commodity), "new pricing sees stock, independent of the previous sales cap");
+        var bound = new GoodsParticipantView(participant, 1, FixedScalar.ZERO, stock, Map.of(), Optional.of(plan), Set.of(), FixedScalar.whole(128));
+        assertEquals(19, bound.saleable(commodity), "64+19 fills one economical lot even if the first parcel funds the minimum");
+        var complete = new GoodsParticipantView(participant, 1, FixedScalar.ZERO, stock, Map.of(), Optional.of(plan), Set.of(), FixedScalar.whole(166));
+        assertEquals(0, complete.saleable(commodity));
+        var paid = new GoodsParticipantView(participant, 1, FixedScalar.whole(100), stock, Map.of(), Optional.of(plan), Set.of(), FixedScalar.ZERO);
+        assertEquals(0, paid.saleable(commodity), "paid funds close recovery authorization immediately");
+        var finalParticipant = participant;
+        assertThrows(IllegalArgumentException.class, () -> finalParticipant.withPrices(Map.of(item, recovery, "minecraft:coal", recovery)));
+    }
+    @Test void healthyToolsDeclareFutureRenewalWithoutManufacturingStockOrRepairOrders() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:healthy-renewal"), 126L,
+                FrontierRulesets.installed("frontier-v3-quarry-graybox-r27")));
+        for (var id : state.resourceSites().sites().keySet().stream().sorted().toList()) {
+            var events = ResourceSiteProcess.planPreparation(state, ResourceSiteProcess.preparation(id, 4000));
+            state = ResourceSiteProcess.reducePreparationStarted(state, id, (ResourceSitePreparationStarted) events.getFirst().payload());
+            state = ResourceSiteProcess.reducePrepared(state, id, (ResourceSitePrepared) events.get(1).payload());
+        }
+        var home = new SubjectId("settlement:7");
+        var before = state.inventory();
+        var facts = new EquipmentReserveSupply().readAt(state, home, 5000);
+        assertFalse(facts.renewalInputs().isEmpty(), "ongoing work spends healthy tools' remaining service life");
+        var basis = SettlementReservePlanning.basis(state, home, 5000);
+        facts.renewalInputs().forEach((item, q) -> assertTrue(basis.renewalInputs().get(item) >= q));
+        assertSame(before, state.inventory());
+    }
     @Test void admittedRenewableFieldsPlanToolReplacementBeforeTheLastCurrentCrop() {
         var state = CultivationPlanningTest.prepared();
         var home = new SubjectId("settlement:7");

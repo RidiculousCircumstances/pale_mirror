@@ -21,7 +21,7 @@ final class EconomicPlanCodec {
             out.writeLong(export.additionalProduction()); out.writeLong(export.conditionalRevenue());
         }
         strings(out, plan.constraints().stream().map(Enum::name).collect(java.util.stream.Collectors.toSet()));
-        quantities(out, plan.purchasePrices()); strings(out, plan.fundedRestarts()); quantities(out, plan.saleableStock());
+        quantities(out, plan.purchasePrices()); strings(out, plan.fundedRestarts()); quantities(out, plan.saleableStock()); quantities(out, plan.operatingBudgets());
     }
     static EconomicPlan read(DataInputStream in) throws IOException {
         long horizon = in.readLong(); var targets = quantities(in); var production = quantities(in); var budgets = quantities(in);
@@ -34,7 +34,7 @@ final class EconomicPlanCodec {
             exports.add(new EconomicPlan.Export(in.readUTF(), in.readLong(), in.readLong(), in.readLong()));
         var constraints = strings(in).stream().map(EconomicPlan.Constraint::valueOf).collect(java.util.stream.Collectors.toSet());
         return new EconomicPlan(horizon, targets, production, budgets, retained, unfunded, receivables,
-                points, exports, constraints, quantities(in), strings(in), quantities(in));
+                points, exports, constraints, quantities(in), strings(in), quantities(in), quantities(in));
     }
     static void quantities(DataOutputStream out, Map<String, Long> values) throws IOException {
         out.writeInt(values.size());

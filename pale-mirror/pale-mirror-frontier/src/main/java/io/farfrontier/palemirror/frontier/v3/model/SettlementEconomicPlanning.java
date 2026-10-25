@@ -27,7 +27,7 @@ final class SettlementEconomicPlanning {
                 .mapToLong(c -> c.outstandingPrice().raw()).reduce(0L, Math::addExact);
         return new EconomicSnapshot(state.humanPopulation().schedule(home).dayTicks(), input.stocks(),
                 basis.needs(), basis.flows(), input.reserves(), input.capacities(), input.commitments(),
-                input.market(), prices, List.of(), receivables);
+                input.market(), prices, List.of(), receivables, basis.renewalInputs());
     }
     record QuoteCandidate(EconomicSnapshot.ExportInterest interest, GoodsParticipantView buyer,
                           GoodsDeliveryAdvice.Advice freight) { }

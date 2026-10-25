@@ -16,7 +16,8 @@ class GoodsMarketPolicyTest {
         var prices = new TreeMap<String, io.farfrontier.palemirror.frontier.v3.model.market.MarketPricePolicy.Quote>();
         for (var commodity : state.bootstrap().ruleset().goodsTrade().policies().get(participant.policy()))
             prices.put(commodity.itemKind(), new io.farfrontier.palemirror.frontier.v3.model.market.MarketPricePolicy.Quote(
-                    new FixedScalar(398), new FixedScalar(2420), new FixedScalar(2420), 0, 0, Optional.empty()));
+                    new FixedScalar(398), new FixedScalar(2420), new FixedScalar(2420), 0, 0, Optional.empty(),
+                io.farfrontier.palemirror.frontier.v3.model.market.StockSalePlan.retained()));
         var event = new GoodsParticipantPricesReviewed(participant.reviewRevision(), 0, prices);
         state = GoodsParticipantPricing.applyCommitted(state, participant.party().id(), event, 0);
         participant = state.companies().goodsTrade().participants().participants().get(participant.party().id());
@@ -120,7 +121,10 @@ class GoodsMarketPolicyTest {
         var small = new GoodsParticipantView(participant, view.residents(), new FixedScalar(1), view.stocks(), view.purchaseLimits(), view.supplyPlan());
         var intents = GoodsParticipantPolicies.require(participant).decide(small, state.bootstrap().ruleset().goodsTrade());
         var buy = intents.stream().filter(i -> i.side() == GoodsTradeOrder.Side.BUY).findFirst().orElseThrow();
-        assertEquals(1, buy.limit().raw(), "unit ceiling cannot exceed the entire remaining budget");
+        assertEquals(FixedScalar.whole(6), buy.limit(), "willingness is distinct from the cash invoice, as adopted in R260");
+        assertEquals(1, io.farfrontier.palemirror.frontier.v3.model.market.FundedCargoLot.quantity(buy.quantity(), 1, 0, 1));
+        assertEquals(0, io.farfrontier.palemirror.frontier.v3.model.market.FundedCargoLot.quantity(buy.quantity(), buy.limit().raw(), 0, 1),
+                "publication of a ceiling does not fund an unaffordable trade");
         assertTrue(buy.quantity() > 0);
         var empty = new GoodsParticipantView(participant, view.residents(), FixedScalar.ZERO, view.stocks(), view.purchaseLimits(), view.supplyPlan());
         assertTrue(GoodsParticipantPolicies.require(participant).decide(empty, state.bootstrap().ruleset().goodsTrade()).stream()
@@ -193,7 +197,8 @@ class GoodsMarketPolicyTest {
         var historical = new HashMap<>(price.prices());
         var old = historical.get("minecraft:coal");
         historical.put("minecraft:coal", new io.farfrontier.palemirror.frontier.v3.model.market.MarketPricePolicy.Quote(
-                old.ask().plus(FixedScalar.ONE), old.bid(), old.reference(), old.reviewedAt(), old.surplus(), old.lastSale()));
+                old.ask().plus(FixedScalar.ONE), old.bid(), old.reference(), old.reviewedAt(), old.surplus(), old.lastSale(),
+                io.farfrontier.palemirror.frontier.v3.model.market.StockSalePlan.retained()));
         var retained = new GoodsParticipantPricesReviewed(0, 400, historical);
         assertEquals(historical, GoodsParticipantPricing.applyCommitted(before, home, retained, 400)
                 .companies().goodsTrade().participants().participants().get(home).prices(),

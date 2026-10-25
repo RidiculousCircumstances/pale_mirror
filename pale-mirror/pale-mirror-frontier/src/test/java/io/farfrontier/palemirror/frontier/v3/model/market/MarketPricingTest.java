@@ -6,6 +6,41 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MarketPricingTest {
+    @Test void priceAdviceUsesTimelinessRecoveryRateAndDeliberateWaitFromActualBuyerSelection() {
+        var slow = new SellerPriceDiscovery.Offer(new SubjectId("seller:slow"), 10, FixedScalar.ONE,
+                FixedScalar.ZERO, FixedScalar.ZERO, 200, 0, 1, ProcurementSelection.Departure.READY);
+        var timely = new SellerPriceDiscovery.Demand(new SubjectId("buyer:timed"), 10, FixedScalar.whole(100), FixedScalar.whole(10),
+                FixedScalar.ZERO, List.of(slow), FixedScalar.ZERO, 1, FixedScalar.ZERO, 100, 50, 0, 0, ProcurementSelection.Departure.READY);
+        assertEquals(10, SellerPriceDiscovery.sold(FixedScalar.whole(5).raw(), 10, market(timely)),
+                "a cheap late offer cannot make a timely offer appear unsaleable");
+        var late = new SellerPriceDiscovery.Demand(timely.buyer(), 10, timely.budget(), timely.landedLimit(), FixedScalar.ZERO,
+                List.of(slow), FixedScalar.ZERO, 1, FixedScalar.ZERO, 0, 100, 0, 0, ProcurementSelection.Departure.READY);
+        assertEquals(10, SellerPriceDiscovery.sold(FixedScalar.whole(5).raw(), 10, market(late)), "late recovery rate precedes price");
+        var wait = new SellerPriceDiscovery.Offer(slow.seller(), 10, FixedScalar.ONE, FixedScalar.ZERO, FixedScalar.ZERO,
+                50, 0, 1, ProcurementSelection.Departure.DEFERRED);
+        var waiting = new SellerPriceDiscovery.Demand(timely.buyer(), 10, timely.budget(), timely.landedLimit(), FixedScalar.ZERO,
+                List.of(wait), FixedScalar.ZERO, 1, FixedScalar.ZERO, 100, 50, 0, 0, ProcurementSelection.Departure.READY);
+        assertEquals(0, SellerPriceDiscovery.sold(FixedScalar.whole(5).raw(), 10, market(waiting)), "preferred waiting remains an alternative");
+    }
+    @Test void operatingRecoveryFinancesAWholeShortfallWithAnEconomicalExistingStockLot() {
+        var buyer = new SellerPriceDiscovery.Demand(new SubjectId("buyer:83"), 83, FixedScalar.whole(300), FixedScalar.whole(3),
+                FixedScalar.ZERO, List.of(), FixedScalar.whole(104));
+        assertEquals(0, SellerPriceDiscovery.sold(new FixedScalar(1_500_000).raw(), 64, market(buyer)));
+        assertEquals(83, SellerPriceDiscovery.sold(new FixedScalar(1_500_000).raw(), 83, market(buyer)));
+        var context = new MarketPricePolicy.Context(FixedScalar.ZERO, Optional.empty(), 0, market(buyer), Optional.empty(),
+                Optional.of(new ResourceEconomicValue(FixedScalar.whole(2), FixedScalar.whole(3))), FixedScalar.whole(100).raw());
+        var quote = new MarketPricePolicy().review(FixedScalar.whole(2), FixedScalar.whole(3), FixedScalar.whole(2), 83,
+                Optional.empty(), Optional.empty(), 0, MarketPricingRules.adaptive(), context);
+        assertEquals(StockSalePlan.Kind.OPERATING_RECOVERY, quote.salePlan().kind());
+        assertTrue(quote.salePlan().quantityLimit() > 64 && quote.salePlan().quantityLimit() <= 83);
+        assertTrue(quote.ask().multiply(quote.salePlan().quantityLimit()).raw() >= context.recoveryCash());
+        assertTrue(quote.ask().compareTo(FixedScalar.whole(2)) < 0);
+        assertEquals(FixedScalar.whole(2), SellerPriceDiscovery.ask(FixedScalar.whole(2), 83, market(buyer), FixedScalar.whole(2)),
+                "a stock recovery sale does not lower new production's retained-value gate");
+        var poor = new SellerPriceDiscovery.Demand(buyer.buyer(), 83, FixedScalar.whole(10), FixedScalar.whole(3), FixedScalar.ZERO, List.of());
+        assertTrue(SellerRecoveryPricing.select(FixedScalar.whole(2), 83, market(poor), FixedScalar.whole(100).raw()).isEmpty(),
+                "pennies unable to finance the declared cycle do not authorize liquidation");
+    }
     @Test void fixedFreightUsesCandidateAffordableLotRatherThanUnfundedDesiredQuantity() {
         assertEquals(4, FundedCargoLot.quantity(64, 2, 6, 14));
         assertEquals(0, FundedCargoLot.quantity(64, 2, 6, 6));
@@ -53,7 +88,7 @@ class MarketPricingTest {
     @Test void purchaseConsentUsesFullTargetWithDeliveryAndAlternativeWithoutPercentageSteps() {
         var policy = new MarketPricePolicy(); var rules = MarketPricingRules.adaptive();
         var reference = new FixedScalar(16000);
-        var previous = new MarketPricePolicy.Quote(reference, new FixedScalar(32000), reference, 0, 0, Optional.empty());
+        var previous = new MarketPricePolicy.Quote(reference, new FixedScalar(32000), reference, 0, 0, Optional.empty(), StockSalePlan.retained());
         var acquisition = new AcquisitionQuote(new FixedScalar(13600), new FixedScalar(23507));
         var context = new MarketPricePolicy.Context(FixedScalar.ZERO, Optional.empty(), 1000,
                 SellerPriceDiscovery.Market.empty(), Optional.of(acquisition));

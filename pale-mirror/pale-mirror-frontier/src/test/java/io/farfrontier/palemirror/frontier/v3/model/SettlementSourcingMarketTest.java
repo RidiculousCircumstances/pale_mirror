@@ -106,7 +106,8 @@ class SettlementSourcingMarketTest {
         var buyer = trade.participants().participants().get(new SubjectId("settlement:6"));
         buyer = buyer.withPrices(Map.of("minecraft:bread",
                 new io.farfrontier.palemirror.frontier.v3.model.market.MarketPricePolicy.Quote(
-                        new FixedScalar(1), new FixedScalar(1), new FixedScalar(1), 0, 0, Optional.empty())));
+                        new FixedScalar(1), new FixedScalar(1), new FixedScalar(1), 0, 0, Optional.empty(),
+                io.farfrontier.palemirror.frontier.v3.model.market.StockSalePlan.retained())));
         var seller = trade.participants().participants().get(new SubjectId("settlement:7"));
         var container = GoodsParticipantStorage.containers(state, seller, "minecraft:bread").stream().sorted().findFirst().orElseThrow();
         var offer = new GoodsTradeOrder(new SubjectId("order:first-economic-bread"), seller.party(), buyer.party(),

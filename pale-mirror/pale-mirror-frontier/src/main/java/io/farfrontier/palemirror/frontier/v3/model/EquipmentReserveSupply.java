@@ -71,6 +71,6 @@ final class EquipmentReserveSupply implements ReserveSupplyPort {
                             Math.ceilDiv(minimumHeat - supplied, fuel.heatUnits()), fuelDeadline),
                     ProductionRequirement::plus);
         }
-        return new Facts(needs, List.of(), Map.of(), required);
+        return new Facts(needs, List.of(), Map.of(), required, EquipmentRenewalForecast.read(state, home, tick));
     }
 }

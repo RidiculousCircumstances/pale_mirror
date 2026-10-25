@@ -57,7 +57,17 @@ public final class FrontierRulesets {
     private static final FrontierRuleset MINERAL_DEPOSITS_GRAYBOX = ironDeposits(DYNAMIC_FARMING_GRAYBOX);
     private static final FrontierRuleset SMELTING_GRAYBOX = smelting(MINERAL_DEPOSITS_GRAYBOX);
     private static final FrontierRuleset TOOL_GRAYBOX = GrayboxToolProduction.extend(SMELTING_GRAYBOX);
-    private static final FrontierRuleset DISTANT_TOOL_GRAYBOX = distant(TOOL_GRAYBOX);
+    private static final FrontierRuleset PREVIOUS_DISTANT_TOOL_GRAYBOX = distant(TOOL_GRAYBOX);
+    private static final FrontierRuleset DISTANT_TOOL_GRAYBOX = operatingPrices(PREVIOUS_DISTANT_TOOL_GRAYBOX);
+    /** New-world startup references match current recipes; historical profiles stay immutable. */
+    private static FrontierRuleset operatingPrices(FrontierRuleset base) {
+        var trade = base.goodsTrade().withPriceSeeds(GoodsPolicyKind.PUBLIC_SETTLEMENT,
+                "minecraft:coal", FixedScalar.whole(2), FixedScalar.whole(3));
+        return new FrontierRuleset("frontier-v3-quarry-graybox-r27", base.schemaVersion(), base.cadence(), base.spatial(), base.rates(),
+                base.facilityCapacity(), base.combat(), base.hiveCommand(), base.residentLife(), base.resourceHarvestColdTravelTicksPerEdge(),
+                base.workCatalog(), trade, base.initialSettlementStocks(), base.labour(), base.expedition(), base.extraction(),
+                base.execution(), base.production(), base.fields(), base.tools(), base.worldLayout());
+    }
     private static FrontierRuleset distant(FrontierRuleset base) {
         var layout = FrontierWorldLayout.distant();
         var fields = new FieldBalance(base.fields().ordinarySide(), base.fields().extractiveSide(),
@@ -83,6 +93,7 @@ public final class FrontierRulesets {
     private static final Map<String, FrontierRuleset> INSTALLED = Map.ofEntries(
             Map.entry(TOOL_GRAYBOX.id(), TOOL_GRAYBOX),
             Map.entry(DISTANT_TOOL_GRAYBOX.id(), DISTANT_TOOL_GRAYBOX),
+            Map.entry(PREVIOUS_DISTANT_TOOL_GRAYBOX.id(), PREVIOUS_DISTANT_TOOL_GRAYBOX),
             Map.entry(MINERAL_DEPOSITS_GRAYBOX.id(), MINERAL_DEPOSITS_GRAYBOX),
             Map.entry(SMELTING_GRAYBOX.id(), SMELTING_GRAYBOX),
             Map.entry(DYNAMIC_FARMING_GRAYBOX.id(), DYNAMIC_FARMING_GRAYBOX),

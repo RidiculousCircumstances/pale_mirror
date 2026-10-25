@@ -9,10 +9,12 @@ import java.util.*;
 public interface ReserveSupplyPort {
     enum Key { NUTRITION, BAKERY, FIELD, EXTRACTION, LOGISTICS, AUTOMATIC_STATIONS, EQUIPMENT }
     record Facts(Map<String, Need> needs, List<Flow> flows, Map<String, Timing> timing,
-                 Map<String, ProductionRequirement> requiredInputs) {
+                 Map<String, ProductionRequirement> requiredInputs, Map<String, Long> renewalInputs) {
+        public Facts(Map<String, Need> needs, List<Flow> flows, Map<String, Timing> timing, Map<String, ProductionRequirement> requiredInputs) { this(needs, flows, timing, requiredInputs, Map.of()); }
         public Facts(Map<String, Need> needs, List<Flow> flows, Map<String, Timing> timing) { this(needs, flows, timing, Map.of()); }
         public Facts {
-            needs = Map.copyOf(needs); flows = List.copyOf(flows); timing = Map.copyOf(timing); requiredInputs = Map.copyOf(requiredInputs);
+            needs = Map.copyOf(needs); flows = List.copyOf(flows); timing = Map.copyOf(timing); requiredInputs = Map.copyOf(requiredInputs); renewalInputs = Map.copyOf(renewalInputs);
+            if (renewalInputs.values().stream().anyMatch(q -> q < 1)) throw new IllegalArgumentException("invalid renewal input");
             if (!needs.keySet().containsAll(requiredInputs.keySet())) throw new IllegalArgumentException("undeclared recovery input");
         }
     }

@@ -58,6 +58,7 @@ final class MarketEconomicInputChanges implements EconomicInputChangePort {
         if (!a.preferredPurchaseSpending().equals(b.preferredPurchaseSpending())
                 || !a.preferredPurchaseQuantities().equals(b.preferredPurchaseQuantities())
                 || !a.economy().map(value -> value.purchaseBudgets()).equals(b.economy().map(value -> value.purchaseBudgets()))
+                || !a.economy().map(value -> value.operatingBudgets()).equals(b.economy().map(value -> value.operatingBudgets()))
                 || !a.economy().map(value -> value.purchasePrices()).equals(b.economy().map(value -> value.purchasePrices()))) return false;
         return a.demands().keySet().equals(b.demands().keySet()) && a.demands().entrySet().stream().allMatch(entry ->
                 entry.getValue().purchase() == b.require(entry.getKey()).purchase()

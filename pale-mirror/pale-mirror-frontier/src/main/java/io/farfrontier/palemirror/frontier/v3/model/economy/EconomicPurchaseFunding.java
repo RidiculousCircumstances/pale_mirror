@@ -35,7 +35,9 @@ public final class EconomicPurchaseFunding {
         // Only an immediate restart may displace fallback/reserve spending. Ordinary
         // purchases can use their envelope and genuinely unallocated liquidity.
         long envelope = restart ? cash.raw() : Math.min(cash.raw(), Math.addExact(estimate, optional));
-        long ordinary = Math.min(envelope, protectedCash.raw());
+        long otherOperating = plan.operatingBudgets().entrySet().stream().filter(e -> !e.getKey().equals(item))
+                .mapToLong(Map.Entry::getValue).reduce(0L, Math::addExact);
+        long ordinary = Math.min(Math.min(envelope, protectedCash.raw()), Math.max(0, cash.raw() - otherOperating));
         if (immediateAlternativeQuantity == 0) return new FixedScalar(ordinary);
         var backed = needs.stream().filter(other -> !other.item().equals(item)
                 && other.deadline() <= need.deadline() && plan.fundedRestarts().contains(other.item()))

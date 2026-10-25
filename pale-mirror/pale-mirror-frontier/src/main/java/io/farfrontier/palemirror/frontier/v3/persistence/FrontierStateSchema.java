@@ -12,7 +12,8 @@ final class FrontierStateSchema {
     // source port; replay must never substitute the cargo warehouse.
     // Individual durable items retain condition through every custody boundary.
     // Accepted plans retain nominal supplier-owned conditional price advice.
-    static final int VERSION = 304;
+    // Economic operating envelopes and bounded stock-recovery sale plans are explicit.
+    static final int VERSION = 305;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

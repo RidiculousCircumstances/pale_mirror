@@ -22,7 +22,7 @@ public final class AgriculturalSurfaceGameTests {
             template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void generatedSurfaceMatchesUnloadedColumnsWithoutChangingHeights(GameTestHelper helper) {
         verify(helper, "frontier-v3-quarry-graybox-r25", List.of(new ChunkPos(8, 0), new ChunkPos(-8, 0), new ChunkPos(0, 32), new ChunkPos(14, 10)));
-        verify(helper, "frontier-v3-quarry-graybox-r26", List.of(new ChunkPos(32, -4), new ChunkPos(-33, 0), new ChunkPos(0, 100)));
+        verify(helper, "frontier-v3-quarry-graybox-r27", List.of(new ChunkPos(32, -4), new ChunkPos(-33, 0), new ChunkPos(0, 100)));
         helper.succeed();
     }
     private static void verify(GameTestHelper helper, String profile, List<ChunkPos> positions) {

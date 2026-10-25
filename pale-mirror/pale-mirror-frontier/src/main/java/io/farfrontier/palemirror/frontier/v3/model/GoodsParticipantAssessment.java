@@ -35,7 +35,7 @@ public final class GoodsParticipantAssessment {
         var view = new GoodsParticipantView(current.participant(), current.residents(), current.availableMoney(), current.stocks(),
                 current.purchaseLimits(), current.supplyPlan(), state.bootstrap().ruleset().goodsTrade().supplyPlanning().enabled()
                         && participant.policy() == GoodsPolicyKind.PUBLIC_SETTLEMENT
-                        ? economic.awaitingTrade(atTick, current.stocks().keySet()) : Set.of());
+                        ? economic.awaitingTrade(atTick, current.stocks().keySet()) : Set.of(), current.receivableExposure());
         return new Assessment(accepted.map(SettlementEconomicPlan::atTick).orElse(atTick), view, Optional.empty(), Optional.empty());
     }
 }

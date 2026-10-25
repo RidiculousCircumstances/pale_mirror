@@ -12,6 +12,8 @@ final class FrontierV3EconomicDiagnosticJson {
                 + ",\"additionalProduction\":" + quantities(plan.additionalProduction())
                 + ",\"purchaseBudgetsRaw\":" + quantities(plan.purchaseBudgets())
                 + ",\"purchasePricesRaw\":" + quantities(plan.purchasePrices())
+                + ",\"operatingBudgetsRaw\":" + quantities(plan.operatingBudgets())
+                + ",\"operatingCashRequirementRaw\":" + plan.operatingCashRequirement()
                 + ",\"saleableStock\":" + quantities(plan.saleableStock())
                 + ",\"fundedRestarts\":[" + plan.fundedRestarts().stream().sorted().map(FrontierV3EconomicDiagnosticJson::string).collect(Collectors.joining(",")) + "]"
                 + ",\"retainedLiquidityRaw\":" + plan.retainedLiquidity()

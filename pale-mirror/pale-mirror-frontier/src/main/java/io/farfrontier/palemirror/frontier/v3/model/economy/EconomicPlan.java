@@ -9,7 +9,12 @@ public record EconomicPlan(long horizonTicks, Map<String, Long> domesticTargets,
         Map<String, Long> additionalProduction, Map<String, Long> purchaseBudgets,
         long retainedLiquidity, long unfundedRequirements, long contractReceivables, List<Checkpoint> checkpoints,
         List<Export> exports, Set<Constraint> constraints, Map<String, Long> purchasePrices,
-        Set<String> fundedRestarts, Map<String, Long> saleableStock) {
+        Set<String> fundedRestarts, Map<String, Long> saleableStock, Map<String, Long> operatingBudgets) {
+    public EconomicPlan(long horizonTicks, Map<String, Long> domesticTargets, Map<String, Long> additionalProduction, Map<String, Long> purchaseBudgets, long retainedLiquidity, long unfundedRequirements, long contractReceivables,
+                List<Checkpoint> checkpoints, List<Export> exports, Set<Constraint> constraints, Map<String, Long> purchasePrices, Set<String> fundedRestarts, Map<String, Long> saleableStock) {
+        this(horizonTicks, domesticTargets, additionalProduction, purchaseBudgets, retainedLiquidity, unfundedRequirements, contractReceivables, checkpoints, exports, constraints, purchasePrices, fundedRestarts, saleableStock, Map.of());
+    }
+    public long operatingCashRequirement() { return operatingBudgets.values().stream().reduce(0L, Math::addExact); }
     public enum Constraint { MATERIAL_SHORTFALL, CASH_SHORTFALL, CONDITIONAL_EXPORT_INCOME, NO_EXPORT_MARKET }
     public record Checkpoint(long afterTicks, Map<String, Long> netRequirements, long importCost, long cashWithoutNewSales) {
         public Checkpoint {
@@ -29,7 +34,8 @@ public record EconomicPlan(long horizonTicks, Map<String, Long> domesticTargets,
         purchaseBudgets = Map.copyOf(purchaseBudgets); checkpoints = List.copyOf(checkpoints);
         exports = List.copyOf(exports); constraints = Set.copyOf(constraints);
         purchasePrices = Map.copyOf(purchasePrices); fundedRestarts = Set.copyOf(fundedRestarts);
-        saleableStock = Map.copyOf(saleableStock);
+        saleableStock = Map.copyOf(saleableStock); operatingBudgets = Map.copyOf(operatingBudgets);
+        if (!domesticTargets.keySet().containsAll(operatingBudgets.keySet()) || operatingBudgets.values().stream().anyMatch(q -> q < 0)) throw new IllegalArgumentException("invalid operating envelope");
         if (horizonTicks < 1 || retainedLiquidity < 0 || unfundedRequirements < 0 || contractReceivables < 0
                 || !domesticTargets.keySet().equals(additionalProduction.keySet())
                 || !domesticTargets.keySet().containsAll(purchaseBudgets.keySet())

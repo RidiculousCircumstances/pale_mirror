@@ -14,6 +14,7 @@ final class ParticipantPriceCodec {
             out.writeLong(quote.ask().raw()); out.writeLong(quote.bid().raw()); out.writeLong(quote.reference().raw());
             out.writeLong(quote.reviewedAt()); out.writeLong(quote.surplus()); out.writeBoolean(quote.lastSale().isPresent());
             if (quote.lastSale().isPresent()) out.writeUTF(quote.lastSale().orElseThrow().value());
+            out.writeByte(quote.salePlan().kind().wireTag()); out.writeLong(quote.salePlan().quantityLimit()); out.writeLong(quote.salePlan().cashRequirement());
         }
     }
     static Map<String, MarketPricePolicy.Quote> read(DataInputStream in) throws IOException {
@@ -24,7 +25,9 @@ final class ParticipantPriceCodec {
             String item = in.readUTF();
             var quote = new MarketPricePolicy.Quote(new FixedScalar(in.readLong()), new FixedScalar(in.readLong()),
                     new FixedScalar(in.readLong()), in.readLong(), in.readLong(),
-                    in.readBoolean() ? Optional.of(new SubjectId(in.readUTF())) : Optional.empty());
+                    in.readBoolean() ? Optional.of(new SubjectId(in.readUTF())) : Optional.empty(),
+                    new io.farfrontier.palemirror.frontier.v3.model.market.StockSalePlan(
+                        io.farfrontier.palemirror.frontier.v3.model.market.StockSalePlan.Kind.fromWireTag(in.readUnsignedByte()), in.readLong(), in.readLong()));
             if (prices.put(item, quote) != null) throw new IllegalArgumentException("duplicate participant price");
         }
         return Map.copyOf(prices);

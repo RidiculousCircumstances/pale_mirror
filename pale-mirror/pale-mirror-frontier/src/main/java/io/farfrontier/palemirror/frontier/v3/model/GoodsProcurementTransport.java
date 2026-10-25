@@ -4,6 +4,7 @@ import io.farfrontier.palemirror.frontier.v3.api.*;
 import io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionCrewAdmission;
 import io.farfrontier.palemirror.frontier.v3.model.expedition.TransportAsset;
 import io.farfrontier.palemirror.frontier.v3.model.market.FundedCargoLot;
+import io.farfrontier.palemirror.frontier.v3.model.market.ProcurementSelection;
 import io.farfrontier.palemirror.frontier.v3.model.supply.LotTransportCost;
 import java.util.*;
 
@@ -11,24 +12,51 @@ import java.util.*;
  * workers, a route or stock: exact logistics admission rechecks those owners. */
 public final class GoodsProcurementTransport {
     public record Quote(int quantity, long expense, long cashFreight, long deliveryTicks, long journeyTicks,
-                        GoodsParticipant organizer, GoodsTradeFulfillment.Mode mode, LotTransportCost transport) {
+                        GoodsParticipant organizer, GoodsTradeFulfillment.Mode mode, LotTransportCost transport, long workerTicks) {
         public long perItem() { return Math.ceilDiv(expense, quantity); }
         public long economicPerItem() { return Math.ceilDiv(transport.quote(quantity).economic(), quantity); }
     }
-    private record Query(GoodsParticipant seller, SubjectId source, GoodsParticipant buyer, String item, int requested, long price, long budget, long now) { }
+    private record Query(GoodsParticipant seller, SubjectId source, GoodsParticipant buyer, String item, int requested, long price, long budget, long now, long deadline) { }
     private record Crew(SubjectId home, int count, Optional<TransportAsset> asset, long duration, long now) { }
     private static final ImmutableInputView<BoundedValueMemo<Query, Optional<Quote>>> QUOTES = new ImmutableInputView<>();
     private static final ImmutableInputView<BoundedValueMemo<Crew, Boolean>> CREWS = new ImmutableInputView<>();
     private GoodsProcurementTransport() { }
     public static Optional<Quote> best(FrontierWorldState state, GoodsParticipant seller, SubjectId source, GoodsParticipant buyer,
             String item, int requested, long price, long budget, long now) {
-        if (requested < 1 || price < 1 || budget < 0 || now < 0) throw new IllegalArgumentException("invalid procurement envelope");
+        return best(state, seller, source, buyer, item, requested, price, budget, now, Long.MAX_VALUE);
+    }
+    public static Optional<Quote> best(FrontierWorldState state, GoodsParticipant seller, SubjectId source, GoodsParticipant buyer,
+            String item, int requested, long price, long budget, long now, long deadline) {
+        if (requested < 1 || price < 1 || budget < 0 || now < 0 || deadline < 0) throw new IllegalArgumentException("invalid procurement envelope");
         return QUOTES.get(List.of(state), () -> new BoundedValueMemo<Query, Optional<Quote>>(512))
-                .get(new Query(seller, source, buyer, item, requested, price, budget, now),
-                        () -> calculate(state, seller, source, buyer, item, requested, price, budget, now));
+                .get(new Query(seller, source, buyer, item, requested, price, budget, now, deadline),
+                        () -> calculate(state, seller, source, buyer, item, requested, price, budget, now, deadline));
+    }
+    private static boolean preferred(FrontierWorldState state, Quote candidate, Quote incumbent,
+            String item, int requested, long price, long deadline) {
+        var candidateId = new SubjectId("advice:candidate"); var incumbentId = new SubjectId("advice:incumbent");
+        var a = new ProcurementSelection.Offer(candidateId, Map.of(item, new ProcurementSelection.Line(candidate.quantity(), new FixedScalar(price))),
+                new FixedScalar(candidate.expense()), candidate.deliveryTicks(), candidate.workerTicks(), ProcurementSelection.Departure.READY);
+        var b = new ProcurementSelection.Offer(incumbentId, Map.of(item, new ProcurementSelection.Line(incumbent.quantity(), new FixedScalar(price))),
+                new FixedScalar(incumbent.expense()), incumbent.deliveryTicks(), incumbent.workerTicks(), ProcurementSelection.Departure.READY);
+        long labour = state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing()
+                .map(io.farfrontier.palemirror.frontier.v3.model.supply.SourcingRules::labourValuePerTick).orElse(0L);
+        return new ProcurementSelection().preferred(new ProcurementSelection.Requirement(item, requested, deadline), List.of(a, b), labour)
+                .orElseThrow().id().equals(candidateId);
     }
     private static Optional<Quote> calculate(FrontierWorldState state, GoodsParticipant seller, SubjectId source, GoodsParticipant buyer,
-            String item, int requested, long price, long budget, long now) {
+            String item, int requested, long price, long budget, long now, long deadline) {
+        Quote best = null;
+        int size = GoodsTransportOptions.parcelSize(state, item);
+        for (int quantity = Math.min(requested, GoodsTransportOptions.maximumQuantity(state, item)); quantity > 0; quantity = ((quantity - 1) / size) * size) {
+            var candidate = calculateQuantity(state, seller, source, buyer, item, quantity, price, budget, now, deadline);
+            if (candidate.isPresent() && (best == null || preferred(state, candidate.orElseThrow(), best, item, requested, price, deadline)))
+                best = candidate.orElseThrow();
+        }
+        return Optional.ofNullable(best);
+    }
+    private static Optional<Quote> calculateQuantity(FrontierWorldState state, GoodsParticipant seller, SubjectId source, GoodsParticipant buyer,
+            String item, int requested, long price, long budget, long now, long deadline) {
         int fundedQuantity = FundedCargoLot.quantity(Math.min(requested, GoodsTransportOptions.maximumQuantity(state, item)), price, 0, budget);
         if (fundedQuantity == 0) return Optional.empty();
         if (!GoodsParticipantStorage.eligible(state, seller, source, item)) return Optional.empty();
@@ -67,9 +95,8 @@ public final class GoodsProcurementTransport {
                             .map(io.farfrontier.palemirror.frontier.v3.model.supply.SourcingRules::labourValuePerTick).orElse(0L);
                     var curve = new LotTransportCost(List.of(new LotTransportCost.Option(quantity, quantity,
                             option.economicCost(labour), cash)));
-                    var quote = new Quote(quantity, cost, cash, forecast.deliveryTicks(), forecast.journeyTicks(), organizer, mode, curve);
-                    if (best == null || quote.economicPerItem() < best.economicPerItem()
-                            || quote.economicPerItem() == best.economicPerItem() && quote.deliveryTicks() < best.deliveryTicks()) best = quote;
+                    var quote = new Quote(quantity, cost, cash, forecast.deliveryTicks(), forecast.journeyTicks(), organizer, mode, curve, option.cost().workerTicks());
+                    if (best == null || preferred(state, quote, best, item, requested, price, deadline)) best = quote;
                 }
                 if (smaller == 0) break;
                 quantity = smaller;

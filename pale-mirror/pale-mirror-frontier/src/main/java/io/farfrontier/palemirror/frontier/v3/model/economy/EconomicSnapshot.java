@@ -8,10 +8,14 @@ public record EconomicSnapshot(long dayTicks, Map<String, SupplyPlanner.Stock> s
         Map<String, SupplyReservePlanner.Need> needs, List<SupplyReservePlanner.Flow> flows,
         Map<String, SupplyReservePlanner.Target> reserves, List<SupplyPlanner.Process> processes,
         List<SupplyPlanner.Dependency> commitments, SourcingMarket market,
-        Map<String, Long> replacementPrices, List<ExportInterest> exportInterest, long contractReceivables) {
+        Map<String, Long> replacementPrices, List<ExportInterest> exportInterest, long contractReceivables, Map<String, Long> renewalInputs) {
+    public EconomicSnapshot(long dayTicks, Map<String, SupplyPlanner.Stock> stocks, Map<String, SupplyReservePlanner.Need> needs, List<SupplyReservePlanner.Flow> flows, Map<String, SupplyReservePlanner.Target> reserves,
+                List<SupplyPlanner.Process> processes, List<SupplyPlanner.Dependency> commitments, SourcingMarket market, Map<String, Long> replacementPrices, List<ExportInterest> exportInterest, long contractReceivables) {
+        this(dayTicks, stocks, needs, flows, reserves, processes, commitments, market, replacementPrices, exportInterest, contractReceivables, Map.of());
+    }
     public EconomicSnapshot withExportInterest(List<ExportInterest> interests) {
         return new EconomicSnapshot(dayTicks, stocks, needs, flows, reserves, processes, commitments,
-                market, replacementPrices, interests, contractReceivables);
+                market, replacementPrices, interests, contractReceivables, renewalInputs);
     }
     public record ExportInterest(String buyer, String item, long quantity, long unitPrice,
                                  long availableCash, long commodityBudget, long deliveryUnitExpense, long deliveryUnitCash) {
@@ -33,7 +37,9 @@ public record EconomicSnapshot(long dayTicks, Map<String, SupplyPlanner.Stock> s
         stocks = Map.copyOf(stocks); needs = Map.copyOf(needs); flows = List.copyOf(flows);
         reserves = Map.copyOf(reserves); processes = List.copyOf(processes); commitments = List.copyOf(commitments);
         Objects.requireNonNull(market); replacementPrices = Map.copyOf(replacementPrices); exportInterest = List.copyOf(exportInterest);
+        renewalInputs = Map.copyOf(renewalInputs);
         var declared = stocks.keySet();
+        if (!declared.containsAll(renewalInputs.keySet()) || renewalInputs.values().stream().anyMatch(q -> q < 1)) throw new IllegalArgumentException("invalid renewal forecast");
         if (dayTicks < 1 || contractReceivables < 0 || stocks.isEmpty() || stocks.size() > 256 || flows.size() > 256
                 || processes.size() > 256 || commitments.size() > 4096 || exportInterest.size() > 4096
                 || !stocks.keySet().equals(needs.keySet()) || !stocks.keySet().equals(reserves.keySet())

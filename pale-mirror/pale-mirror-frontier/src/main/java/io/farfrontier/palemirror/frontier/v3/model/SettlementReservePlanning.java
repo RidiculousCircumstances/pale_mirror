@@ -15,8 +15,8 @@ public final class SettlementReservePlanning {
     private record InstantKey(SubjectId home, long atTick) { }
     private static final ImmutableInputView<Map<InstantKey, Basis>> DATED = new ImmutableInputView<>();
     public record Basis(Map<String, Need> needs, List<Flow> flows, Map<String, Timing> timing,
-                        Map<String, ProductionRequirement> requiredInputs) {
-        public Basis { needs = Map.copyOf(needs); flows = List.copyOf(flows); timing = Map.copyOf(timing); requiredInputs = Map.copyOf(requiredInputs); }
+                        Map<String, ProductionRequirement> requiredInputs, Map<String, Long> renewalInputs) {
+        public Basis { needs = Map.copyOf(needs); flows = List.copyOf(flows); timing = Map.copyOf(timing); requiredInputs = Map.copyOf(requiredInputs); renewalInputs = Map.copyOf(renewalInputs); }
     }
     private SettlementReservePlanning() { }
     public static Map<ReserveSupplyPort.Key, ReserveSupplyPort> register(List<ReserveSupplyPort> ports) {
@@ -65,6 +65,7 @@ public final class SettlementReservePlanning {
         });
         var estimates = new HashMap<String, Timing>();
         var required = new TreeMap<String, ProductionRequirement>();
+        var renewal = new TreeMap<String, Long>();
         for (var key : ReserveSupplyPort.Key.values()) {
             var facts = atTick.isPresent() ? PORTS.get(key).readAt(state, home, atTick.getAsLong()) : PORTS.get(key).read(state, home);
             if (!needs.keySet().containsAll(facts.needs().keySet()) || !needs.keySet().containsAll(facts.timing().keySet()))
@@ -72,12 +73,14 @@ public final class SettlementReservePlanning {
             facts.needs().forEach((item, need) -> needs.merge(item, need,
                     (a, b) -> new Need(a.consumption().plus(b.consumption()), Math.addExact(a.immediate(), b.immediate()))));
             flows.addAll(facts.flows());
+            if (!needs.keySet().containsAll(facts.renewalInputs().keySet())) throw new IllegalArgumentException("undeclared renewal input");
+            facts.renewalInputs().forEach((item, quantity) -> renewal.merge(item, quantity, Math::addExact));
             facts.requiredInputs().forEach((item, requirement) -> required.merge(item, requirement,
                     ProductionRequirement::plus));
             facts.timing().forEach((item, estimate) -> estimates.merge(item, estimate,
                     (a, b) -> a.leadTicks() <= b.leadTicks() ? a : b));
         }
         timing.putAll(estimates);
-        return new Basis(needs, flows, timing, required);
+        return new Basis(needs, flows, timing, required, renewal);
     }
 }

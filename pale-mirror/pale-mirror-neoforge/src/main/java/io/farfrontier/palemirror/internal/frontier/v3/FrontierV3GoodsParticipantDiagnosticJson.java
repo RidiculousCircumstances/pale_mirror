@@ -64,6 +64,9 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
         var prices = participant.prices().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
                 .map(e -> "{\"commodity\":" + string(e.getKey()) + ",\"askRaw\":" + e.getValue().ask().raw()
                         + ",\"bidRaw\":" + e.getValue().bid().raw() + ",\"referenceRaw\":" + e.getValue().reference().raw()
+                        + ",\"salePurpose\":" + string(e.getValue().salePlan().kind().name())
+                        + ",\"saleQuantityLimit\":" + e.getValue().salePlan().quantityLimit()
+                        + ",\"recoveryCashRequirementRaw\":" + e.getValue().salePlan().cashRequirement()
                         + ",\"reviewedAtTick\":" + e.getValue().reviewedAt() + "}").collect(Collectors.joining(","));
         var completedSales = trade.priceHistory().commodities().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey())
                 .map(e -> "{\"commodity\":" + string(e.getKey()) + ",\"acceptedQuantity\":" + e.getValue().stream()
@@ -81,6 +84,8 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                 + ",\"policy\":" + string(participant.policy().name()) + ",\"settlement\":" + string(participant.settlementId().value()) + "}"
                 + ",\"declaredStorages\":[" + GoodsParticipantStorage.declared(state, participant).stream().sorted()
                     .map(id -> string(id.value())).collect(Collectors.joining(",")) + "]"
+                + ",\"operatingRecoveryCashRaw\":" + view.operatingRecoveryCash()
+                + ",\"saleReceivableExposureRaw\":" + view.receivableExposure().raw()
                 + ",\"reviewRevision\":" + participant.reviewRevision() + ",\"reviewedAtTick\":" + participant.reviewedAtTick()
                 + ",\"assessedAtTick\":" + assessment.atTick()
                 + ",\"economicPublication\":" + publication(state, participant, checkpoint.instant().ticks(), view)
@@ -98,6 +103,8 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
         // The common byte budget preserves current stock/planning facts when retained
         // trade history grows. Explicit omissions are not empty orders or no caravans.
         return FrontierV3DiagnosticDetailBudget.finish(essential, java.util.List.of(
+                new FrontierV3DiagnosticDetailBudget.Section("economy", view.supplyPlan().flatMap(plan -> plan.economy())
+                    .map(FrontierV3EconomicDiagnosticJson::render).orElse("null")),
                 new FrontierV3DiagnosticDetailBudget.Section("conditionalAcquisitionQuotes", counterquotes(
                     ConditionalSupplyPricing.currentQuotes(state, participant, checkpoint.instant().ticks()), checkpoint.instant().ticks())),
                 new FrontierV3DiagnosticDetailBudget.Section("conditionalProductionQuotes", counterquotes(state.companies().goodsTrade().participants()
@@ -105,8 +112,6 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                 new FrontierV3DiagnosticDetailBudget.Section("reserves", view.supplyPlan().map(FrontierV3ReserveDiagnosticJson::render).orElse("[]")),
                 new FrontierV3DiagnosticDetailBudget.Section("supplyPlan", "[" + supply + "]"),
                 new FrontierV3DiagnosticDetailBudget.Section("prices", "[" + prices + "]"),
-                new FrontierV3DiagnosticDetailBudget.Section("economy", view.supplyPlan().flatMap(plan -> plan.economy())
-                    .map(FrontierV3EconomicDiagnosticJson::render).orElse("null")),
                 new FrontierV3DiagnosticDetailBudget.Section("sourcingInputs", assessment.facts()
                     .map(FrontierV3SourcingDiagnosticJson::render).orElse("null")),
                 new FrontierV3DiagnosticDetailBudget.Section("expeditions", FrontierV3ExpeditionDiagnosticJson.render(checkpoint, state, participant)),

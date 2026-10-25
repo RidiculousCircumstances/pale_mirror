@@ -34,7 +34,7 @@ final class GoodsBuyerDemand {
             var view = GoodsParticipantAssessment.domestic(state, buyer, atTick).view();
             var budget = GoodsParticipantFunding.purchase(view, rules, item);
             if (budget.raw() <= 0) continue;
-            int quantity = Math.min(order.availableQuantity(), rules.maximumBatch());
+            int quantity = Math.min(order.availableQuantity(), GoodsTransportOptions.maximumQuantity(state, item));
             if (view.supplyPlan().isPresent()) quantity = (int) Math.min(quantity, view.supplyPlan().orElseThrow().require(item).purchase());
             while (quantity > 0 && !GoodsTradeStateSupport.receivingCapacity(state, order.containerId(), item, quantity)) quantity--;
             if (quantity > 0) result.add(new Demand(order, view, quantity, budget));

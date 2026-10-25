@@ -6,34 +6,53 @@ import java.util.*;
 
 /** Static response to visible orders, not a sale or a guarantee of future revenue. */
 public final class SellerPriceDiscovery {
-    public record Offer(SubjectId seller, int quantity, FixedScalar landedPrice, FixedScalar cashPrice) {
-        public Offer(SubjectId seller, int quantity, FixedScalar landedPrice) { this(seller, quantity, landedPrice, landedPrice); }
+    public record Offer(SubjectId seller, int quantity, FixedScalar goodsPrice, FixedScalar resourceFreight,
+                        FixedScalar cashFreight, long arrivalDelayTicks, long workerTicks, int minimumQuantity,
+                        ProcurementSelection.Departure departure) {
+        public Offer(SubjectId seller, int quantity, FixedScalar landedPrice) {
+            this(seller, quantity, landedPrice, FixedScalar.ZERO, FixedScalar.ZERO, 0, 0, 1, ProcurementSelection.Departure.READY);
+        }
+        public Offer(SubjectId seller, int quantity, FixedScalar landedPrice, FixedScalar cashPrice) {
+            this(seller, quantity, cashPrice, new FixedScalar(Math.multiplyExact(landedPrice.raw() - cashPrice.raw(), quantity)), FixedScalar.ZERO,
+                    0, 0, 1, ProcurementSelection.Departure.READY);
+        }
+        public FixedScalar landedPrice() { return goodsPrice.plus(new FixedScalar(Math.ceilDiv(resourceFreight.raw(), quantity))); }
+        public FixedScalar cashPrice() { return goodsPrice.plus(new FixedScalar(Math.ceilDiv(cashFreight.raw(), quantity))); }
         public Offer {
-            Objects.requireNonNull(seller); Objects.requireNonNull(landedPrice); Objects.requireNonNull(cashPrice);
-            if (quantity < 1 || landedPrice.raw() <= 0 || cashPrice.raw() <= 0 || cashPrice.compareTo(landedPrice) > 0) throw new IllegalArgumentException("invalid competing offer");
+            Objects.requireNonNull(seller); Objects.requireNonNull(goodsPrice); Objects.requireNonNull(resourceFreight);
+            Objects.requireNonNull(cashFreight); Objects.requireNonNull(departure);
+            if (quantity < 1 || goodsPrice.raw() < 1 || cashFreight.raw() < 0 || resourceFreight.compareTo(cashFreight) < 0
+                    || arrivalDelayTicks < 0 || workerTicks < 0 || minimumQuantity < 1) throw new IllegalArgumentException("invalid competing offer");
         }
     }
-    /** Fixed delivery includes noncash supplies; cashDelivery is only the amount actually payable. */
+    /** Timed whole-lot advice uses the same buyer choice as actual procurement. */
     public record Demand(SubjectId buyer, int quantity, FixedScalar budget, FixedScalar landedLimit,
-                         FixedScalar deliveryPerItem, List<Offer> alternatives, FixedScalar fixedDelivery, int minimumQuantity, FixedScalar cashDelivery) {
-        public Demand(SubjectId buyer, int quantity, FixedScalar budget, FixedScalar landedLimit,
-                      FixedScalar deliveryPerItem, List<Offer> alternatives, FixedScalar fixedDelivery, int minimumQuantity) {
+                         FixedScalar deliveryPerItem, List<Offer> alternatives, FixedScalar fixedDelivery, int minimumQuantity, FixedScalar cashDelivery,
+                         long deadlineTicks, long arrivalDelayTicks, long workerTicks, long labourValuePerTick,
+                         ProcurementSelection.Departure departure) {
+        public Demand(SubjectId buyer, int quantity, FixedScalar budget, FixedScalar landedLimit, FixedScalar deliveryPerItem,
+                      List<Offer> alternatives, FixedScalar fixedDelivery, int minimumQuantity, FixedScalar cashDelivery) {
+            this(buyer, quantity, budget, landedLimit, deliveryPerItem, alternatives, fixedDelivery, minimumQuantity, cashDelivery,
+                    Long.MAX_VALUE, 0, 0, 0, ProcurementSelection.Departure.READY);
+        }
+        public Demand(SubjectId buyer, int quantity, FixedScalar budget, FixedScalar landedLimit, FixedScalar deliveryPerItem,
+                      List<Offer> alternatives, FixedScalar fixedDelivery, int minimumQuantity) {
             this(buyer, quantity, budget, landedLimit, deliveryPerItem, alternatives, fixedDelivery, minimumQuantity, fixedDelivery);
         }
-        public Demand(SubjectId buyer, int quantity, FixedScalar budget, FixedScalar landedLimit,
-                      FixedScalar deliveryPerItem, List<Offer> alternatives, FixedScalar fixedDelivery) {
+        public Demand(SubjectId buyer, int quantity, FixedScalar budget, FixedScalar landedLimit, FixedScalar deliveryPerItem,
+                      List<Offer> alternatives, FixedScalar fixedDelivery) {
             this(buyer, quantity, budget, landedLimit, deliveryPerItem, alternatives, fixedDelivery, 1);
         }
-        public Demand(SubjectId buyer, int quantity, FixedScalar budget, FixedScalar landedLimit,
-                      FixedScalar deliveryPerItem, List<Offer> alternatives) {
+        public Demand(SubjectId buyer, int quantity, FixedScalar budget, FixedScalar landedLimit, FixedScalar deliveryPerItem, List<Offer> alternatives) {
             this(buyer, quantity, budget, landedLimit, deliveryPerItem, alternatives, FixedScalar.ZERO);
         }
         public Demand {
             Objects.requireNonNull(buyer); Objects.requireNonNull(budget); Objects.requireNonNull(landedLimit);
             Objects.requireNonNull(deliveryPerItem); alternatives = List.copyOf(alternatives);
-            Objects.requireNonNull(fixedDelivery); Objects.requireNonNull(cashDelivery);
-            if (quantity < 1 || budget.raw() <= 0 || landedLimit.raw() <= 0 || deliveryPerItem.raw() < 0
+            Objects.requireNonNull(fixedDelivery); Objects.requireNonNull(cashDelivery); Objects.requireNonNull(departure);
+            if (quantity < 1 || quantity > 4096 || budget.raw() <= 0 || landedLimit.raw() <= 0 || deliveryPerItem.raw() < 0
                     || fixedDelivery.raw() < 0 || cashDelivery.raw() < 0 || cashDelivery.compareTo(fixedDelivery) > 0 || minimumQuantity < 1
+                    || deadlineTicks < 0 || arrivalDelayTicks < 0 || workerTicks < 0 || labourValuePerTick < 0
                     || alternatives.stream().map(Offer::seller).distinct().count() != alternatives.size())
                 throw new IllegalArgumentException("invalid funded demand");
         }
@@ -58,6 +77,18 @@ public final class SellerPriceDiscovery {
         long minimum = Math.max(1, retainedValue.raw());
         long anchor = Math.max(previous.raw(), minimum);
         if (surplus == 0 || market.buyers().isEmpty()) return new FixedScalar(anchor);
+        var candidates = candidates(anchor, minimum, surplus, market);
+        long best = anchor; var revenue = gain(best, surplus, market, retainedValue.raw());
+        for (long candidate : candidates) {
+            if (candidate < minimum) continue;
+            var value = gain(candidate, surplus, market, retainedValue.raw());
+            // Equal proceeds do not justify giving away more of the owner's stock.
+            if (value.compareTo(revenue) > 0 || value.equals(revenue)
+                    && sold(candidate, surplus, market) < sold(best, surplus, market)) { best = candidate; revenue = value; }
+        }
+        return new FixedScalar(best);
+    }
+    static SortedSet<Long> candidates(long anchor, long minimum, long surplus, Market market) {
         var candidates = new TreeSet<Long>(); candidates.add(anchor); candidates.add(minimum);
         for (var buyer : market.buyers()) {
             long cash = Math.max(0, buyer.budget().raw() - buyer.cashDelivery().raw());
@@ -76,7 +107,7 @@ public final class SellerPriceDiscovery {
                 // A smaller affordable cargo changes freight per item. Include
                 // those bounded lot breakpoints instead of jumping from an
                 // unfillable large-lot ask straight to the retention floor.
-                for (long count = buyer.minimumQuantity(); count <= Math.min(64, quantity); count++) {
+                for (long count = buyer.minimumQuantity(); count <= Math.min(4096, quantity); count++) {
                     long freight = Math.addExact(buyer.deliveryPerItem().raw(), Math.ceilDiv(buyer.fixedDelivery().raw(), count));
                     long price = Math.min(buyer.landedLimit().raw() - freight,
                             cash / count - buyer.deliveryPerItem().raw());
@@ -88,44 +119,11 @@ public final class SellerPriceDiscovery {
                 }
             }
         }
-        long best = anchor; var revenue = gain(best, surplus, market, retainedValue.raw());
-        for (long candidate : candidates) {
-            if (candidate < minimum) continue;
-            var value = gain(candidate, surplus, market, retainedValue.raw());
-            // Equal proceeds do not justify giving away more of the owner's stock.
-            if (value.compareTo(revenue) > 0 || value.equals(revenue)
-                    && sold(candidate, surplus, market) < sold(best, surplus, market)) { best = candidate; revenue = value; }
-        }
-        return new FixedScalar(best);
+        return candidates;
     }
+    static long sold(long ask, long surplus, Market market) { return SellerMarketAllocation.sold(ask, surplus, market); }
     private static BigInteger gain(long ask, long surplus, Market market, long retained) {
         return BigInteger.valueOf(ask - retained).multiply(BigInteger.valueOf(sold(ask, surplus, market)));
-    }
-    private static long sold(long ask, long surplus, Market market) {
-        long sold = 0;
-        var competingUsed = new HashMap<SubjectId, Long>();
-        for (var buyer : market.buyers()) {
-            if (sold == surplus) break;
-            long unit = Math.addExact(ask, buyer.deliveryPerItem().raw());
-            long ownLot = Math.min(surplus - sold, Math.min(buyer.quantity(),
-                    Math.max(0, buyer.budget().raw() - buyer.cashDelivery().raw()) / unit));
-            long landed = ownLot == 0 ? Long.MAX_VALUE : Math.addExact(unit, Math.ceilDiv(buyer.fixedDelivery().raw(), ownLot));
-            boolean affordableLimit = landed <= buyer.landedLimit().raw();
-            long remaining = buyer.quantity(), budget = buyer.budget().raw();
-            for (var other : buyer.alternatives().stream().sorted(Comparator.comparing(Offer::landedPrice)
-                    .thenComparing(Offer::seller)).toList()) {
-                if (other.landedPrice().raw() > landed) break;
-                long count = Math.min(remaining, Math.min(budget / other.cashPrice().raw(),
-                        Math.max(0, other.quantity() - competingUsed.getOrDefault(other.seller(), 0L))));
-                remaining -= count; budget -= count * other.cashPrice().raw();
-                competingUsed.merge(other.seller(), count, Math::addExact);
-            }
-            long take = Math.min(surplus - sold, Math.min(remaining, Math.max(0, budget - buyer.cashDelivery().raw()) / unit));
-            if (affordableLimit && take >= buyer.minimumQuantity()
-                    && Math.addExact(unit, Math.ceilDiv(buyer.fixedDelivery().raw(), take)) <= buyer.landedLimit().raw())
-                sold += take;
-        }
-        return sold;
     }
     private SellerPriceDiscovery() { }
 }

@@ -34,7 +34,7 @@ public final class SettlementEconomicPublication {
             if (!quote.supplier().equals(participant.party()) || recipient == null
                     || !recipient.party().equals(quote.recipient()) || !known.contains(quote.recipient()))
                 throw new IllegalArgumentException("conditional quote owner mismatch: publisher=" + participant.party() + " quote=" + quote.key());
-            if (!catalog.contains(quote.itemKind()) || quote.quantity() > rules.maximumBatch()
+            if (!catalog.contains(quote.itemKind()) || quote.quantity() > Math.multiplyExact(rules.maximumBatch(), rules.supplyPlanning().maximumTripCargoStacks())
                     || quote.expiresAtTick() > Math.addExact(plan.atTick(), Math.multiplyExact(2, rules.reviewInterval())))
                 throw new IllegalArgumentException("conditional quote exceeds catalog/freshness bounds: " + quote.key());
         }

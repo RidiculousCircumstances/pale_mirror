@@ -55,19 +55,26 @@ public final class ProcurementSelection {
         for (var need : requirements.stream().sorted(Comparator.comparingLong(Requirement::deadlineHorizonTicks)
                 .thenComparing(need -> !need.fundedProductionRestart())
                 .thenComparing(Requirement::item)).toList()) {
-            var candidates = offers.stream().filter(o -> o.goods().containsKey(need.item())).toList();
-            if (candidates.isEmpty()) continue;
-            // When all offers miss the deadline, partial recovery remains useful. Never
-            // pretend no demand exists merely because timely provision has become impossible.
-            boolean timely = candidates.stream().anyMatch(o -> o.arrivalDelayTicks() <= need.deadlineHorizonTicks());
-            var selected = candidates.stream().filter(o -> !timely || o.arrivalDelayTicks() <= need.deadlineHorizonTicks())
-                    .min((a, b) -> compare(a, b, need, timely, labourValuePerTick)).orElseThrow();
+            var preferred = preferred(need, offers, labourValuePerTick);
+            if (preferred.isEmpty()) continue;
+            var selected = preferred.orElseThrow();
             // Waiting is an alternative, not a missing offer. Filtering it out
             // first would select a longer, dearer journey merely because that
             // journey must start earlier. Other requirements can still depart.
             if (selected.departure() == Departure.READY) return Optional.of(selected.id());
         }
         return Optional.empty();
+    }
+    /** Read-only best alternative, including a deliberate wait. Shared by
+     * price advice and dispatch so advice cannot erase the preferred wait. */
+    public Optional<Offer> preferred(Requirement need, List<Offer> offers, long labourValuePerTick) {
+        if (labourValuePerTick < 0 || offers.size() > 2048
+                || offers.stream().map(Offer::id).distinct().count() != offers.size())
+            throw new IllegalArgumentException("invalid procurement alternatives");
+        var candidates = offers.stream().filter(o -> o.goods().containsKey(need.item())).toList();
+        boolean timely = candidates.stream().anyMatch(o -> o.arrivalDelayTicks() <= need.deadlineHorizonTicks());
+        return candidates.stream().filter(o -> !timely || o.arrivalDelayTicks() <= need.deadlineHorizonTicks())
+                .min((a, b) -> compare(a, b, need, timely, labourValuePerTick));
     }
     private static int compare(Offer a, Offer b, Requirement need, boolean timely, long labourValuePerTick) {
         if (!timely) {

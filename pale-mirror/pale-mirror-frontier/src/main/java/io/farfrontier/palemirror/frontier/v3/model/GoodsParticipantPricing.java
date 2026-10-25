@@ -43,6 +43,7 @@ public final class GoodsParticipantPricing {
         var history = state.companies().goodsTrade().priceHistory();
         var next = new TreeMap<String, MarketPricePolicy.Quote>();
         var policy = new MarketPricePolicy();
+        var contexts = new HashMap<String, MarketPricePolicy.Context>();
         var prices = new TreeMap<String, io.farfrontier.palemirror.frontier.v3.api.FixedScalar>();
         catalog.forEach(commodity -> prices.put(commodity.itemKind(), rules.supplyPlanning().sourcing().isPresent()
                 ? history.reference(commodity.itemKind(), rules.pricing().recencyTicks()).orElse(commodity.minimumSellPrice())
@@ -59,7 +60,7 @@ public final class GoodsParticipantPricing {
             long shortage = view.supplyPlan().map(plan -> plan.require(commodity.itemKind()).purchase())
                     .orElse((long) Math.max(0, target - stock.unclaimedInStorage() - stock.expectedIncoming()));
             int pressure = (int) Math.min(1000, Math.multiplyExact(shortage, 1000) / Math.max(1, target));
-            long surplus = view.saleable(commodity);
+            long surplus = view.releasableStock(commodity);
             var acquisition = GoodsAcquisitionPricing.purchase(state, participant, commodity.itemKind(), shortage, now,
                     GoodsParticipantFunding.purchase(view, rules, commodity.itemKind()));
             var context = new MarketPricePolicy.Context(floors.getOrDefault(commodity.itemKind(), io.farfrontier.palemirror.frontier.v3.api.FixedScalar.ZERO),
@@ -67,9 +68,22 @@ public final class GoodsParticipantPricing {
                     GoodsMarketDemand.read(state, participant, commodity.itemKind(), surplus, now),
                     acquisition, view.supplyPlan().isPresent() && rules.supplyPlanning().sourcing().isPresent()
                             ? Optional.of(GoodsEconomicPricing.assess(state, view, commodity.itemKind(), prices, production, acquisition, now))
-                            : Optional.empty());
+                            : Optional.empty(), view.operatingRecoveryCash());
+            contexts.put(commodity.itemKind(), context);
             next.put(commodity.itemKind(), policy.review(commodity.minimumSellPrice(), commodity.maximumBuyPrice(), reference,
                     surplus, sale, Optional.ofNullable(participant.prices().get(commodity.itemKind())), now, rules.pricing(), context));
+        }
+        // One shared cash shortfall selects one stock-release proposal, not
+        // one independent fundraising quota per commodity.
+        var recovery = next.entrySet().stream().filter(e -> e.getValue().salePlan().kind() == StockSalePlan.Kind.OPERATING_RECOVERY)
+                .min(Comparator.<Map.Entry<String, MarketPricePolicy.Quote>, java.math.BigInteger>comparing(e ->
+                    java.math.BigInteger.valueOf(Math.max(0, contexts.get(e.getKey()).economics().orElseThrow().retained().raw() - e.getValue().ask().raw()))
+                        .multiply(java.math.BigInteger.valueOf(e.getValue().salePlan().quantityLimit())))
+                    .thenComparing(Map.Entry::getKey)).map(Map.Entry::getKey);
+        for (var item : new ArrayList<>(next.keySet())) if (next.get(item).salePlan().kind() == StockSalePlan.Kind.OPERATING_RECOVERY
+                && !recovery.orElseThrow().equals(item)) {
+            var c = contexts.get(item); var commodity = catalog.stream().filter(v -> v.itemKind().equals(item)).findFirst().orElseThrow();
+            next.put(item, policy.retainStock(next.get(item), commodity.minimumSellPrice(), rules.pricing(), c));
         }
         return Map.copyOf(next);
     }

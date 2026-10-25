@@ -213,7 +213,8 @@ class AutonomousGoodsTradeTest {
         var buyer = participants.get(COMPANY);
         participants.put(COMPANY, buyer.withPrices(Map.of("minecraft:wheat",
                 new io.farfrontier.palemirror.frontier.v3.model.market.MarketPricePolicy.Quote(
-                        FixedScalar.whole(1), FixedScalar.whole(10), FixedScalar.whole(1), 0, 0, Optional.empty()))));
+                        FixedScalar.whole(1), FixedScalar.whole(10), FixedScalar.whole(1), 0, 0, Optional.empty(),
+                io.farfrontier.palemirror.frontier.v3.model.market.StockSalePlan.retained()))));
         state = state.withCompanies(state.companies().withGoodsTrade(trade.withParticipants(new GoodsParticipantState(participants))));
         state = review(state, HOME, 400); state = review(state, COMPANY, 400);
         var contract = state.companies().goodsTrade().contracts().values().stream()

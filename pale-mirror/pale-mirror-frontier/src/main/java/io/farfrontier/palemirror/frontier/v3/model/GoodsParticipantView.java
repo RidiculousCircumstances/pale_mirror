@@ -7,7 +7,15 @@ import java.util.*;
 public record GoodsParticipantView(GoodsParticipant participant, int residents, FixedScalar availableMoney,
                                    Map<String, Stock> stocks, Map<String, Integer> purchaseLimits,
                                    Optional<io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Plan> supplyPlan,
-                                   Set<String> awaitingReview) {
+                                   Set<String> awaitingReview, FixedScalar receivableExposure) {
+    public GoodsParticipantView(GoodsParticipant participant, int residents, FixedScalar availableMoney, Map<String, Stock> stocks, Map<String, Integer> purchaseLimits,
+                Optional<io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Plan> supplyPlan, Set<String> awaitingReview) {
+        this(participant, residents, availableMoney, stocks, purchaseLimits, supplyPlan, awaitingReview, FixedScalar.ZERO);
+    }
+    public long operatingRecoveryCash() {
+        long required = supplyPlan.flatMap(p -> p.economy()).map(p -> p.operatingCashRequirement()).orElse(0L);
+        return Math.max(0, required - Math.min(required, Math.addExact(availableMoney.raw(), receivableExposure.raw())));
+    }
     public GoodsParticipantView(GoodsParticipant participant, int residents, FixedScalar availableMoney,
             Map<String, Stock> stocks, Map<String, Integer> purchaseLimits,
             Optional<io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Plan> supplyPlan) {
@@ -38,17 +46,36 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
     }
     public int saleable(GoodsTradeRules.Commodity commodity) {
         if (awaitingReview.contains(commodity.itemKind())) return 0;
+        int available = releasableStock(commodity);
+        return permittedSale(commodity, available);
+    }
+    /** Physical/policy surplus independent of the previous quotation's exposure cap. */
+    int releasableStock(GoodsTradeRules.Commodity commodity) {
         return supplyPlan.flatMap(plan -> plan.economy())
                 .map(plan -> Math.min(Math.toIntExact(plan.saleableStock().get(commodity.itemKind())),
                         Math.max(0, stocks.get(commodity.itemKind()).unclaimedInStorage() - stocks.get(commodity.itemKind()).protectedMinimum())))
                 .orElseGet(() -> Math.max(0, stocks.get(commodity.itemKind()).unclaimedInStorage() - target(commodity)));
     }
+    private int permittedSale(GoodsTradeRules.Commodity commodity, int available) {
+        var quote = participant.prices().get(commodity.itemKind());
+        if (quote != null && quote.salePlan().kind() == io.farfrontier.palemirror.frontier.v3.model.market.StockSalePlan.Kind.OPERATING_RECOVERY) {
+            long required = supplyPlan.flatMap(p -> p.economy()).map(p -> p.operatingCashRequirement()).orElse(0L);
+            if (availableMoney.raw() >= required) return 0;
+            // One economical lot may exceed the minimum invoice. Account for
+            // every already-bound sale across all goods without treating its
+            // receivable as spendable cash. Draft reservations reduce this cap.
+            long overshoot = Math.max(0, Math.multiplyExact(quote.salePlan().quantityLimit(), quote.ask().raw()) - quote.salePlan().cashRequirement());
+            long exposure = Math.max(0, Math.subtractExact(Math.addExact(required, overshoot), Math.addExact(availableMoney.raw(), receivableExposure.raw())));
+            available = Math.toIntExact(Math.min(available, Math.min(quote.salePlan().quantityLimit(), exposure / quote.ask().raw())));
+        }
+        return available;
+    }
     public GoodsParticipantView {
-        Objects.requireNonNull(participant); Objects.requireNonNull(availableMoney); stocks = Map.copyOf(stocks);
+        Objects.requireNonNull(participant); Objects.requireNonNull(availableMoney); Objects.requireNonNull(receivableExposure); stocks = Map.copyOf(stocks);
         supplyPlan = Objects.requireNonNull(supplyPlan); awaitingReview = Set.copyOf(awaitingReview);
         purchaseLimits = Map.copyOf(purchaseLimits);
         if (purchaseLimits.values().stream().anyMatch(value -> value < 0)) throw new IllegalArgumentException("negative purchase limit");
-        if (residents < 0 || availableMoney.raw() < 0) throw new IllegalArgumentException("invalid participant economic view");
+        if (residents < 0 || availableMoney.raw() < 0 || receivableExposure.raw() < 0) throw new IllegalArgumentException("invalid participant economic view");
     }
     /** Facts only. Evaluation belongs to the explicit economic review owner. */
     public static GoodsParticipantView observe(FrontierWorldState state, GoodsParticipant participant) {
@@ -97,7 +124,9 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
         }
         int residents = LivingResidentStockView.counts(state).getOrDefault(participant.settlementId(), 0);
         return new GoodsParticipantView(participant, residents,
-                state.inventory().economics().availableToReserve(participant.party().id()), result);
+                state.inventory().economics().availableToReserve(participant.party().id()), result, Map.of(), Optional.empty(), Set.of(),
+                new FixedScalar(state.companies().goodsTrade().contracts().values().stream().filter(c -> !c.terminal() && c.seller().equals(participant.party()))
+                        .mapToLong(c -> c.outstandingPrice().raw()).reduce(0L, Math::addExact)));
     }
     static GoodsParticipantView planned(FrontierWorldState state, GoodsParticipantView observed,
             Optional<io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Plan> plan) {
@@ -115,7 +144,7 @@ public record GoodsParticipantView(GoodsParticipant participant, int residents, 
             result.put(kind, new Stock(stock.ownedInStorage(), stock.unclaimedInStorage(), stock.expectedIncoming(),
                     Math.max(minimum, local)));
         });
-        return new GoodsParticipantView(participant, residents, observed.availableMoney(), result, advice.limits(), plan);
+        return new GoodsParticipantView(participant, residents, observed.availableMoney(), result, advice.limits(), plan, Set.of(), observed.receivableExposure());
     }
     private static SettlementFoodPurchases.Advice planningAdvice(io.farfrontier.palemirror.frontier.v3.model.supply.SupplyPlanner.Plan plan) {
         var limits = new HashMap<String, Integer>(); var protection = new HashMap<String, Integer>();

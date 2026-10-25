@@ -55,7 +55,8 @@ class ConditionalProductionQuoteTest {
         var prices = new TreeMap<>(GoodsParticipantPricing.review(state, buyer, 5002, assessment));
         var old = prices.get(ITEM);
         prices.put(ITEM, new io.farfrontier.palemirror.frontier.v3.model.market.MarketPricePolicy.Quote(
-                old.ask(), value.acquisition(), old.reference(), old.reviewedAt(), old.surplus(), old.lastSale()));
+                old.ask(), value.acquisition(), old.reference(), old.reviewedAt(), old.surplus(), old.lastSale(),
+                io.farfrontier.palemirror.frontier.v3.model.market.StockSalePlan.retained()));
         var view = assessment.view();
         var priced = new GoodsParticipantView(buyer.withPrices(prices), view.residents(), view.availableMoney(),
                 view.stocks(), view.purchaseLimits(), view.supplyPlan(), view.awaitingReview());

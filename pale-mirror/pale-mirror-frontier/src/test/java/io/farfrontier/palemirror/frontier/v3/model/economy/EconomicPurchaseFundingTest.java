@@ -7,6 +7,18 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class EconomicPurchaseFundingTest {
+    @Test void ordinaryFuelPurchasePreservesTheOtherOperatingInputsWithoutCreatingMoney() {
+        var budgets = Map.of("fuel", 90L, "repair", 10L, "food", 0L);
+        var plan = new EconomicPlan(1000, budgets, budgets, budgets, 0, 0, 0, List.of(), List.of(), Set.of(),
+                Map.of("fuel", 1L, "repair", 1L, "food", 1L), Set.of(), Map.of("fuel", 0L, "repair", 0L, "food", 0L),
+                Map.of("fuel", 1L, "repair", 10L));
+        var needs = List.of(new ProcurementBudget.Need("fuel", 100, new FixedScalar(1), 0, 1),
+                new ProcurementBudget.Need("food", 100, new FixedScalar(1), 0));
+        assertEquals(90, EconomicPurchaseFunding.available(plan, new FixedScalar(100), needs, "fuel").raw());
+        assertEquals(0, EconomicPurchaseFunding.available(plan, new FixedScalar(10), needs, "fuel").raw());
+        assertEquals(10, EconomicPurchaseFunding.available(plan, new FixedScalar(10), needs, "food", 10).raw(),
+                "real immediate food may substitute for unbacked future recovery; no imaginary cash");
+    }
     @Test void immediateNeedCanUseUnbackedRecoveryEnvelopeButNotInventCashOrSpendBackedRestart() {
         var budgets = Map.of("grain", 128L, "food", 0L);
         var plan = new EconomicPlan(96000, budgets, budgets, budgets, 0, 0, 0, List.of(), List.of(), Set.of(),
