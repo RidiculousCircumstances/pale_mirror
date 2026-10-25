@@ -40,25 +40,27 @@ public final class FrontierV3TerrainAdmissionGameTests {
             var prepared = operations.prepare(declaration); operations.persist(level);
             var effects = new java.util.concurrent.atomic.AtomicInteger();
             var planned = List.of(new FrontierV3ManagedBlockWrites.PlannedWrite(pos, Blocks.DIRT.defaultBlockState()));
-            var request = new FrontierV3MinecraftOperation.Request(declaration, List.of(port),
+            var request = new FrontierV3MinecraftOperation.Request[1];
+            request[0] = new FrontierV3MinecraftOperation.Request(declaration, List.of(port),
                     () -> level.getBlockState(pos).is(Blocks.STONE),
                     FrontierV3ManagedBlockWrites.effect(level, runtime, planned, () -> {
                         helper.assertTrue(new FrontierV3ExtractionBlockWrites().observe(level, runtime, pos,
                                 Blocks.DIRT.defaultBlockState(), false), "native ingress must not discover a pending geology fence");
                         effects.incrementAndGet(); return level.setBlock(pos, Blocks.DIRT.defaultBlockState(), 3);
-                    }, () -> { }), () -> level.getBlockState(pos).is(Blocks.DIRT));
+                    }, () -> FrontierV3MinecraftOperation.applyDeferred(level, request[0])),
+                    () -> level.getBlockState(pos).is(Blocks.DIRT));
             delay.set(true);
             runtime.runEnvironmentalSample(() -> helper.assertTrue(
-                    FrontierV3MinecraftOperation.applyDeferred(level, request).status() == FrontierV3MinecraftOperation.Status.WAITING_PREPARATION,
+                    FrontierV3MinecraftOperation.applyDeferred(level, request[0]).status() == FrontierV3MinecraftOperation.Status.WAITING_PREPARATION,
                     "pending prerequisite is a wait, not an unknown attempted effect"));
             helper.assertTrue(!writes.isEmpty() && effects.get() == 0 && operations.unattempted(prepared.ticket())
                     && !operations.unresolvedAttempt(prepared.ticket()), "waiting preserves the original unused permission");
             delay.set(false); while (!writes.isEmpty()) writes.remove().run();
-            runtime.runEnvironmentalSample(() -> helper.assertTrue(
-                    FrontierV3MinecraftOperation.applyDeferred(level, request).complete(), "ready preparation must finish the same operation"));
+            runtime.runEnvironmentalSample(() -> { });
             helper.assertTrue(effects.get() == 1 && runtime.decodedState().orElseThrow()
-                    .extractionSites().geologicalExclusions().positions().contains(point), "one effect follows its exact geology fence");
-            helper.assertTrue(FrontierV3MinecraftOperation.applyDeferred(level, request).complete()
+                    .extractionSites().geologicalExclusions().positions().contains(point),
+                    "durability must wake the retained producer before a second poll");
+            helper.assertTrue(FrontierV3MinecraftOperation.applyDeferred(level, request[0]).complete()
                     && effects.get() == 1, "repeat observes the retained receipt without another effect");
         } finally {
             delay.set(false); while (!writes.isEmpty()) writes.remove().run();

@@ -47,3 +47,42 @@ build/r250-shared-native.log). The full adapter run and real rendered-ingress
 measurement are still pending. This is a candidate correction of the confirmed
 small-window/per-cell-fence path, not yet a claim that all latency or the missing
 neighbour has been fixed. Existing world and diagnostic evidence are retained.
+
+## Follow-up after the first candidate
+
+R250 deployment f4119e657 passed clean-source preflight and startup verification
+(build/r250-verify.log); same world retained. The full adapter run was intentionally
+cancelled while it exercised the unchanged legacy
+SourceGrayboxPresentationPlanTest.everySourceClaimRemainsSpatiallyDistinctThroughoutTheSeededFirstYear;
+it is not counted as passed. The applicable9 focused checks and50 native shared
+checks remain the executed evidence for that candidate.
+
+The repeated field9 visit became visible, but its neighbouring cultivated field had
+an old unresolved prepared operation after restart (ticket
+d7ca9916-a235-4466-b827-2e47e1e7cee2, cause revision1835127, before this deployment).
+The handoff correctly made that historical uncertainty presentable as a conflict.
+That quick visit therefore is not accepted as proof of faster normal catch-up or a
+healthy field9. The old operation was not replayed or erased.
+
+Exploratory first visits to other untouched areas passed actual compiled-terrain
+assertions: field3 took10.300s (r250-north-ingress.json); field5 took7.400s
+(r250-west-ingress.json). These are different areas, not a matched speedup ratio,
+and neither satisfies the5s target. Both linked images require normal review;
+no overall completion claim follows from merely successful scenario status.
+
+The field5 timeline (r250-west-timeline.jsonl, single writer) showed initial cursor
+201→256, a roughly4s prepared pause at256/512, then512/activation. Another concrete
+source defect was found: navigation preparation accepted a producer continuation,
+but the extraction/geology owner discarded that continuation after its asynchronous
+canonical durability. The producer could only be rediscovered by a later full pass.
+The shared mutation-owner port now passes the continuation to every owner; geology
+registers it against its exact pending command and resumes only after durability.
+Immediate acceptance continues normally, predecessor waits do not invent a callback,
+and no effects or field completion are granted by a notification.
+
+The existing deferred-geology native test now requires an empty environmental turn
+to resume the exact operation after the held WAL completes, without manually
+polling the producer again. All4 native block-preparation tests and guardrails
+passed (r251-native-preparation.log). This change applies to all users of planned
+managed writes, including static and worksite projection. The next real first-entry
+measurement remains necessary; the target is not declared achieved yet.

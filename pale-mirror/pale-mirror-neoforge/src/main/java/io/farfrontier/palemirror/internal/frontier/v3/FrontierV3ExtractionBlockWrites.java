@@ -12,7 +12,7 @@ import java.util.*;
 final class FrontierV3ExtractionBlockWrites implements FrontierV3ManagedBlockWrites.Owner {
     @Override public CellMutationKey.OwnerFamily family() { return CellMutationKey.OwnerFamily.EXTRACTIVE_SITE; }
     @Override public boolean preparePlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-            List<FrontierV3ManagedBlockWrites.PlannedWrite> writes) {
+            List<FrontierV3ManagedBlockWrites.PlannedWrite> writes, Runnable resume) {
         var state = runtime.decodedState().orElseThrow();
         if (!state.bootstrap().ruleset().extraction().enabled()) return true;
         var observations = new LinkedHashMap<BlockPosition, ExtractionGeologyInvalidated.Observation>();
@@ -25,9 +25,14 @@ final class FrontierV3ExtractionBlockWrites implements FrontierV3ManagedBlockWri
             ExtractionTerrainFacts.at(state.bootstrap(), raw).ifPresent(fact -> observations.put(raw,
                     new ExtractionGeologyInvalidated.Observation(raw, fact.revision())));
         }
-        if (!observations.isEmpty()) return FrontierV3CommandSubmission.submit(runtime, "extraction-geology-invalidated",
-                ExtractionGeologyInvalidated.OWNER.value(), new ExtractionGeologyInvalidated(List.copyOf(observations.values())))
-                instanceof CommandResult.Accepted;
+        if (!observations.isEmpty()) {
+            var result = FrontierV3CommandSubmission.submit(runtime, "extraction-geology-invalidated",
+                    ExtractionGeologyInvalidated.OWNER.value(), new ExtractionGeologyInvalidated(List.copyOf(observations.values())));
+            runtime.afterCommand(result, () -> {
+                if (result instanceof CommandResult.Pending) resume.run();
+            });
+            return result instanceof CommandResult.Accepted;
+        }
         // submit accepts only after the complete bounded intent has passed validation and the
         // WAL prefix is forced. Per-block ingress below still owns indexed witnesses/effects.
         return true;

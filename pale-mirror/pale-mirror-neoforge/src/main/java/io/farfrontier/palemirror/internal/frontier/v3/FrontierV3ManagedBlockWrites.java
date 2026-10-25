@@ -18,14 +18,14 @@ final class FrontierV3ManagedBlockWrites {
     interface Owner {
         CellMutationKey.OwnerFamily family();
         boolean preparePlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                List<PlannedWrite> writes);
+                List<PlannedWrite> writes, Runnable resume);
         boolean observe(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
                 BlockPos position, BlockState replacement, boolean committed);
     }
     private static final List<Owner> OWNERS = List.of(new Owner() {
         public CellMutationKey.OwnerFamily family() { return CellMutationKey.OwnerFamily.RESOURCE_SITE; }
         public boolean preparePlannedWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
-                List<PlannedWrite> writes) {
+                List<PlannedWrite> writes, Runnable resume) {
             // Field effects retain their individual world-change/custody witnesses in observe.
             // Planned static projection neither acquires field authority nor acknowledges work.
             return true;
@@ -83,7 +83,7 @@ final class FrontierV3ManagedBlockWrites {
             throw new IllegalArgumentException("unbounded planned native write window");
         if (!FrontierV3NavigationObservation.preparePlannedWrites(level, runtime, writes, resume))
             return FrontierV3NativeEffect.Admission.waiting("navigation-knowledge");
-        for (var owner : OWNERS) if (!owner.preparePlannedWrites(level, runtime, writes))
+        for (var owner : OWNERS) if (!owner.preparePlannedWrites(level, runtime, writes, resume))
             return FrontierV3NativeEffect.Admission.waiting("block-owner:" + owner.family());
         return FrontierV3NativeEffect.Admission.READY;
     }
