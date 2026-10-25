@@ -1,12 +1,12 @@
-# Active continuity — 2026-10-25, R265 player map delivered
+# Active continuity — 2026-10-25, R266 startup cleanup and crash repair delivered
 
 ## Assignment and authority
 
-Forestry goal is COMPLETE (system goal closed); documentation commit31da8594f.
-Current user asks to add online player positions to the analytical Map UI.
-Implementation, verification and same-world deployment COMPLETE.
-Main alone, no Terra/subagents/push. Implement/deploy scoped read-only observation;
-no world reset or simulation changes. Preserve all unrelated histories/WIP.
+Forestry goal is COMPLETE. Player map delivered. Current user requested removal
+of obsolete starter kits and reported a live server crash. Both scoped fixes
+are committed/deployed and verified; no new system goal was requested.
+Main alone; no Terra/subagents/push. Ordinary commit/deploy and disposable-world
+reset authorized. Preserve all unrelated histories/WIP.
 
 Canonical references: AGENTS.md, architecture.yml, engineering-agent-protocol,
 docs/work-orders/PM-FORESTRY-20261025.md, frontier-v3-forestry-design.md and
@@ -19,21 +19,21 @@ and server-ops references. Do not repeat unchanged reading/checks by ritual.
 Implementation /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror
 (Git root parent), branch feat/baker-carry-orders-20260926, CLEAN.
 Feature70b670821ec3b2b5d4abfe304bcbb11d6a02cbc0, preflight8631f679f;
-Forestry HEAD248be0f83 includes shutdown/reach closure; current HEADa9d5b36ef
-adds the player map. Source clean.
-Release /home/rd/proj/pm-r242-economic-release/pale-mirror, CLEAN detacheda9d5b36ef.
+Forestry HEAD248be0f83 includes shutdown/reach closure; player-map HEADa9d5b36ef; current HEAD76c64ab13
+removes scenario grants and fixes service access/quarantined shutdown. Source clean.
+Release /home/rd/proj/pm-r242-economic-release/pale-mirror, CLEAN detached76c64ab13.
 Pack /home/rd/proj/minecraft, HEAD33fa84b, tracked CLEAN; retain unrelated
 untracked .f0v-baseline/. No push. Governance retains extensive unrelated WIP;
 only task-owned ledger/archive/order/design and forestry-only architecture/
 materialization sections are staged. Never stage-all governance.
 
 Runtime /home/rd/far-frontier-server, far-frontier-v3-live.service ACTIVE.
-Fresh world frontier-v3-r265-forestry-complete-20261025,
-UUIDc17a0343-fe9a-4c00-8e69-eb8849771cd1, seed126/r28/schema306.
-PID516348 at verification, startup epoch1792952072. Artifact SHA512:
-fe30da9fb8697b6e0fb45457604c8c998aeb476ad7b30aab99e0c9e11f848bcc461dbb395b5f24d1a937b66883335cfcdcda0ec874ec3599bada617c14dd7e0d.
+Fresh world frontier-v3-r266-starter-cleanup-20261025,
+UUID30f840b8-2963-4ffb-8552-c6203bce854b, seed126/r28/schema306.
+PID595324 at verification, startup epoch1792953177. Artifact SHA512:
+bdf54d975a1c1721aa996900fc77bfaecd1cf937e3a6f70762a19060914867b0271fe50aec560c95193ab17cd4a80f48ac9dcfce657241c263c5c1ca727005e9.
 Exact root publish/install/preflight/start/verify succeeded; source build
-r265-clean-package.log PASS7sec, deployment build/r265-final-*.log in IMPL.
+legacy-startup-audit/release-build.log PASS7sec; deployment build/r266-startup-*.log in IMPL.
 R264 retained as normal production evidence, not migrated: old jobs can contain
 unsafe former workstations. Production world grants no initial axes or logs.
 Client updater required from pre-forestry builds; current pack selects r28.
@@ -154,3 +154,52 @@ build/player-map/live-*.{log,json,png}. Test client/browser/static8094 STOPPED;
 live MC/economy services ACTIVE. No new functional world scenario or goal.
 No simulation defect inferred from this short telemetry check. Other governance
 WIP unrelated. Native/source and pack tracked clean; preserve .f0v-baseline/.
+
+## R266 starter cleanup and live incident repair — complete
+
+Source76c64ab13, source doc docs/startup-equipment-and-service-access-r266.md.
+Normal genesis no longer grants four hardcoded engineering iron picks per town;
+field-tool placement uses actual container capacity. Explicit engineering test
+fixtures alone supply kits; generic custody/destruction tests use actual field
+tools. Farming/mining equipment, finite food and configured public stocks remain
+intentional startup supply. No economic rebalance, migration or inactive feature
+removal. Fresh R266 removes old issued kits; R265 retained for incident evidence.
+
+Original R265 failed23:23:40: native movement requireDeclared, then quarantine
+forestry shutdown Optional.orElseThrow masked original failure and left RCON-only
+JVM. All dimensions saved; residual service stopped. Actual copied save recovers
+revision131378/tick37781 and exactly one missing access: resident:6-6, shipment
+internal/19b8d17c-5d09-3191-b0bf-6f5d18cc2215, raw_iron1 from depot6 to smeltery6
+INPUT. Logical capacity allowed the item, physical destination unavailable;
+transient transfer readiness erased the declaration despite valid current job.
+
+Common ephemeral ServiceAccessDemand now separates readyToEnter from identity.
+Unready declared approaches wait outside; actual occupied footprints remain
+blocking until clearance. Transfers retain exact workflow/phase checks. Draft
+meal-source feasibility remains permitted before admission, while committed
+movement still requires its current declared owner. Missing declaration includes
+identity in error trace. Forestry shutdown issues no cancellation after quarantine
+revokes command authority; journals and primary failure remain retained.
+
+Evidence in IMPL/build/legacy-startup-audit:
+- service-cause.log reproduces original missing declaration; service-cause-fixed.log
+  recovers SAME revision: zero missing, exact old courier has declaration/allowed
+  false with absent physical destination. Read-only isolated store copy, no world
+  edits. New tests exercise station-full/unready/capacity release across codec,
+  normal startup and quarantine shutdown. No caught/ignored invariant.
+- final-check.log guardrails+63Frontier tests+package PASS44sec; unaffected
+ 36NeoForge tests incl shutdown/diagnostics passed in check.log. Prior failures
+ were removed fixture assumptions; kits moved into explicit testFixtures, one
+ draft-meal check preserved. No full unrelated expedition suite repeated.
+- clean detached package PASS7sec; root validate/preflight/publish/install/fresh
+ world/start/verify PASS. Root tracked clean at33fa84b, no pack edits/commit;
+ .f0v-baseline/ remains unrelated. Both histories preserved. Analytics database
+ preserved, latest API now reports R266 UUID; server-only change, no client update.
+- live-preflight.json OK6actions, actual full-pack20FPS client,
+ run7997991d-dd8d-46a7-82d7-59e21fa9bfa8; current forest frame reviewed.
+ live-removed-kit.log reports old Clearwater pick not_found. After-client
+ summary1647green/conflicts0. Test client STOPPED; MC/economy ACTIVE.
+ Netty Connection reset by peer coincides exactly with test-client closure;
+ no new runtime quarantine. This short preflight is not long-run economy or
+ full engineering acceptance. No normal-shutdown/native campaign needs repetition
+ solely for already-covered unchanged forestry effects.
