@@ -64,7 +64,11 @@ final class FrontierV3PhysicalExecutorRegistry {
     private final List<Diagnostic> diagnostics;
     private final java.util.Map<ServerLevel, FrontierV3PreparationAdmission> preparation = new java.util.WeakHashMap<>();
     private final java.util.Map<ServerLevel, FrontierV3PreparationAdmission.Turn> activePreparation = new java.util.IdentityHashMap<>();
-    private final java.util.Map<FrontierV3ServerRuntime<?, ?>, FrontierV3CooperativeStageCursor> continuations = new java.util.WeakHashMap<>();
+    private static final class Turn {
+        final FrontierV3PhysicalPass pass = new FrontierV3PhysicalPass(System::nanoTime);
+        FrontierV3PreparationAdmission.Turn preparation;
+    }
+    private final java.util.Map<FrontierV3ServerRuntime<?, ?>, Turn> continuations = new java.util.WeakHashMap<>();
 
     FrontierV3PhysicalExecutorRegistry(Collection<Definition> definitions) {
         List<DeterministicStagePlan.Definition<Definition>> staged = List.copyOf(definitions).stream()
@@ -78,19 +82,28 @@ final class FrontierV3PhysicalExecutorRegistry {
     }
 
     void tick(ServerLevel world, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
-        var admission = preparation.computeIfAbsent(world, ignored -> new FrontierV3PreparationAdmission(
-                ordered.stream().filter(definition -> definition.admission() == Admission.DEFERABLE_PREPARATION)
-                        .map(Definition::id).toList())).begin((long)
-                (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D), System::nanoTime);
-        activePreparation.put(world, admission);
-        long started = System.nanoTime();
+        var turn = continuations.computeIfAbsent(runtime, ignored -> new Turn());
         long allowance = (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D);
-        try { continuations.computeIfAbsent(runtime, ignored -> new FrontierV3CooperativeStageCursor()).run(ordered.size(), () -> {
+        if (turn.pass.begin(world.getGameTime())) turn.preparation = preparation.computeIfAbsent(world, ignored -> new FrontierV3PreparationAdmission(
+                ordered.stream().filter(definition -> definition.admission() == Admission.DEFERABLE_PREPARATION)
+                        .map(Definition::id).toList())).begin(allowance, turn.pass::elapsed);
+        run(world, runtime, turn, allowance);
+    }
+    void resume(ServerLevel world, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
+        var turn = continuations.get(runtime);
+        if (turn != null && turn.pass.current(world.getGameTime())) run(world, runtime, turn,
+                (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D));
+    }
+    private void run(ServerLevel world, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime,
+            Turn turn, long allowance) {
+        var admission = turn.preparation;
+        activePreparation.put(world, admission);
+        try { turn.pass.run(ordered.size(), allowance, () -> {
             var capacity = runtime.commandAdmissionCapacity();
             // A predecessor can quarantine the runtime. Preserve that primary trace and
             // stop this turn instead of throwing a second missing-Optional exception.
             return capacity.isPresent() && capacity.orElseThrow().hasCausalHeadroom() && !runtime.awaitingCanonicalPredecessor();
-        }, () -> System.nanoTime() - started < allowance, index -> {
+        }, index -> {
             Definition definition = ordered.get(index);
             // Definitions presently represent one invocation.  A future multi-slice executor must
             // declare and consume its own bounded work units rather than adding a second tick call.

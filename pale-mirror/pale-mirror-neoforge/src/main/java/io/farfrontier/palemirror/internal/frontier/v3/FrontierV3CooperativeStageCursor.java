@@ -7,16 +7,18 @@ import java.util.function.IntConsumer;
  * This is scheduling only: no captured world state or physical permission survives. */
 final class FrontierV3CooperativeStageCursor {
     private int next;
-    void run(int size, BooleanSupplier admitted, IntConsumer execute) {
-        run(size, admitted, () -> true, execute);
+    boolean run(int size, BooleanSupplier admitted, IntConsumer execute) {
+        return run(size, admitted, () -> true, execute);
     }
-    void run(int size, BooleanSupplier admitted, BooleanSupplier remainingBudget, IntConsumer execute) {
+    boolean run(int size, BooleanSupplier admitted, BooleanSupplier remainingBudget, IntConsumer execute) {
         boolean progressed = false;
         while (next < size && (!progressed || remainingBudget.getAsBoolean()) && admitted.getAsBoolean()) {
             int current = next;
             execute.accept(current);
             next = current + 1; progressed = true;
         }
-        if (next == size) next = 0;
+        if (next != size) return false;
+        next = 0;
+        return true;
     }
 }

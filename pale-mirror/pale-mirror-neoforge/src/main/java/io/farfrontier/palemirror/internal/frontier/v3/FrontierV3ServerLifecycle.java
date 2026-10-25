@@ -223,6 +223,7 @@ public final class FrontierV3ServerLifecycle {
         var readyRuntime = runtime;
         FrontierV3CanonicalResumption.bind(server, runtime,
                 () -> !stopping(server) && RUNTIMES.get(server) == readyRuntime && ordinaryTime(server),
+                () -> FrontierV3PhysicalExecutors.registry().resume(FrontierV3PhysicalWorld.require(server), readyRuntime),
                 () -> stopQuarantined(server, readyRuntime));
         if (runtime.status().kind() == FrontierV3RuntimeStatus.Kind.ACTIVE && Boolean.getBoolean(PILOT_INITIAL_CANONICAL_HOLD_PROPERTY)) {
             INITIAL_CANONICAL_HOLDS.put(server, Boolean.TRUE);
@@ -650,7 +651,6 @@ public final class FrontierV3ServerLifecycle {
         }
         FAST_FORWARD_OUTCOMES.put(server, nextFastForwardTargetOutcome(prior, target, admittedCheckpoint, reachedCheckpoint, status, failure));
     }
-
     private static void recordFastForwardRequest(MinecraftServer server, String kind, int requestedTicks, Long target,
                                                  Long admittedCheckpoint, Long reachedCheckpoint, String status, String reason) {
         List<FastForwardRequestOutcome> prior = new ArrayList<>(fastForwardRequests(server));

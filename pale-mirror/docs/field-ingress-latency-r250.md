@@ -86,3 +86,33 @@ polling the producer again. All4 native block-preparation tests and guardrails
 passed (r251-native-preparation.log). This change applies to all users of planned
 managed writes, including static and worksite projection. The next real first-entry
 measurement remains necessary; the target is not declared achieved yet.
+
+## Physical suffix starvation (next correction)
+
+R251's stronger field10 scenario passed healthy READY/zero mismatches and an inspected
+complete foreground, but first ingress still took22.300s
+(build/r251-first-ingress.json, run254b4db3-2f7b-4e77-a306-a1f98f3b3207).
+The camera-chunk support is now checked separately before aiming at the field:
+review of the earlier north/west images rejected their void foreground despite the
+field target section being compiled. Those images are not full visual acceptance.
+
+Source tracing found another connected scheduling defect. Canonical readiness only
+resumed ordinary canonical work; the already-started physical execution suffix had
+no equivalent resumption. New ordinary calculations/commits could repeatedly hold
+that suffix until a later native tick/pass. The remaining first-field window was
+prepared but not serviced promptly even while native ticks continued normally.
+
+The correction lets the lifecycle supply a pending-physical continuation before the
+next canonical quantum. A host-only physical pass retains the suffix and one elapsed
+work allowance per actual native tick. Idle journal time consumes no allowance;
+ready callbacks never renew that allowance or restart a completed round. Thus each
+registered actor/effect stage still executes at most once per native tick. Registry
+order, canonical predecessor barriers, durable permissions and the shared block-write
+budget remain active. The generic canonical wake adapter receives a Runnable; it
+contains no farmer, geology or world-state inference.
+
+Deterministic clock tests cover a durable pause, suffix resumption, no duplicate
+actor pass, no renewed allowance on successive receipts and carry to the next tick.
+The existing order/admission/ready/registry checks are reused. Completion and fresh
+first-entry latency still require live verification; no claimed improvement is inferred
+from these structural changes.

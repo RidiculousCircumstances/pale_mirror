@@ -22,20 +22,21 @@ final class FrontierV3CanonicalResumption {
         finally { NATIVE_TICKS.remove(server); }
     }
     static void bind(MinecraftServer server, FrontierV3ServerRuntime<?, ?> runtime,
-            BooleanSupplier admitted, Runnable checkFailure) {
+            BooleanSupplier admitted, Runnable physicalContinuation, Runnable checkFailure) {
         if (TURNS.containsKey(server)) throw new IllegalStateException("canonical resumption already bound");
         var turn = new FrontierV3ReadyTurn(task -> server.tell(new TickTask(server.getTickCount(), task)),
-                () -> resume(server, runtime, admitted, checkFailure));
+                () -> resume(server, runtime, admitted, physicalContinuation, checkFailure));
         TURNS.put(server, turn); runtime.onReady(turn::signal);
     }
     /** No native-tick reentry, invented time, physical replay or renewed allowance. */
     private static void resume(MinecraftServer server, FrontierV3ServerRuntime<?, ?> runtime,
-            BooleanSupplier admitted, Runnable checkFailure) {
+            BooleanSupplier admitted, Runnable physicalContinuation, Runnable checkFailure) {
         if (!admitted.getAsBoolean() || NATIVE_TICKS.contains(server)
                 || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE
                 || !FrontierV3PedestrianPlanning.recovered(runtime)) return;
         try (var turn = FrontierV3HostTiming.beginReadyTurn(runtime.executionMetrics())) {
             runtime.runPersistenceTurn(() -> ImmutablePlanningScope.within(() -> {
+                physicalContinuation.run();
                 runtime.resumeOrdinaryTurn(); return null;
             }));
         } catch (RuntimeException error) {

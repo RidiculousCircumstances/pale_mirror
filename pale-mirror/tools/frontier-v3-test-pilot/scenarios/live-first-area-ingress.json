@@ -19,7 +19,7 @@
       "checks": [
         {
           "view": "site",
-          "id": "site:10-wheat-field",
+          "id": "site:12-wheat-field",
           "expect": {
             "status": "ok"
           }
@@ -32,7 +32,7 @@
       "type": "visit",
       "dimension": "pale_mirror:frontier_graybox",
       "position": {
-        "x": -604,
+        "x": 1596,
         "y": 64,
         "z": 1470
       },
@@ -41,20 +41,36 @@
     {
       "type": "wait_until_diagnostic",
       "view": "first_visibility",
-      "id": "-38,91",
+      "id": "99,91",
       "expect": {
-        "presentationReady": true
+        "presentationReady": true,
+        "dynamicReady": true,
+        "visibility": "READY"
       },
       "timeoutMs": 30000
     },
     {
       "type": "assert_visible_block",
       "position": {
-        "x": -602,
+        "x": 1596,
+        "y": 63,
+        "z": 1470
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "x": 1598,
         "y": 63,
         "z": 1461
       },
       "timeoutMs": 30000
+    },
+    {
+      "type": "inspect",
+      "view": "field_physical",
+      "id": "site:12-wheat-field"
     },
     {
       "type": "inspect",
@@ -67,10 +83,20 @@
       "id": ""
     }
   ],
-  "assertions": [],
+  "assertions": [
+    {
+      "after": 5,
+      "view": "field_physical",
+      "id": "site:12-wheat-field",
+      "expect": {
+        "status": "ACTIVE",
+        "mismatchedCells": 0
+      }
+    }
+  ],
   "frames": [
     {
-      "after": 3,
+      "after": 4,
       "name": "first-area-field-visible"
     }
   ]
