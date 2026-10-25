@@ -179,3 +179,28 @@ Current scope closes the source contradictions and actual retained Dawnbridge
 fuel/bread stall; it does not certify sustainable market balance or terminal
 Southgate equipment restoration. Those unresolved outcomes are reported, not
 hidden by resetting cash/stock or calling a good bid a completed delivery.
+
+
+## R256 export cash/resource correction
+
+Further connected source review found conditional export planning treating all
+journey-resource expense as buyer cash. GoodsDeliveryAdvice already declared both
+resource expense and invoiced cash, but ExportInterest retained only one and
+EconomicExportPlanning divided the buyer cash envelope by that economic expense.
+This contradicted actual buyer-collection accounting. The immutable advisory
+ExportInterest now retains both explicitly; consent still checks total acquisition
+value, while export cash feasibility/de-duplication consumes only actual invoice.
+No prices, stock, crew nutrition gates, custody, sale settlement or durable schema
+were relaxed. Focused planner/funding/recovery/publication and actual organizer
+pricing checks plus guardrails PASS (build/r256-export-cash-tests.log). One test
+proves provisioned collection can fund5items at2coins with10cash despite owned
+resource cost; the same invoiced seller freight still rejects an unfunded sale.
+
+This is not asserted as the cause of Southgate's present refusal. Actual frozen
+snapshot585867/t170602 has a2cobblestone Redwillow offer at1.21coins, but Southgate
+gets no feasible shared transport quote. It is now out of bread; fallback funding
+assigns its4.000002coins to food, leaving the still-retained required repair
+unfunded and its bid falls again. There is no executable complete restart proved
+by this snapshot. Existing money and provisions remain constraints, and the
+appropriateness of that fallback versus productive restoration remains unresolved.
+See build/r256-{procurement,needs}-frozen.txt and r256-current-southgate.txt.

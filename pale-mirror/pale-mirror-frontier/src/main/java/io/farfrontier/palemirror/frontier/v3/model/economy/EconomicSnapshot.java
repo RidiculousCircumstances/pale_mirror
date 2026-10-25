@@ -14,15 +14,20 @@ public record EconomicSnapshot(long dayTicks, Map<String, SupplyPlanner.Stock> s
                 market, replacementPrices, interests, contractReceivables);
     }
     public record ExportInterest(String buyer, String item, long quantity, long unitPrice,
-                                 long availableCash, long commodityBudget, long deliveryUnitExpense) {
+                                 long availableCash, long commodityBudget, long deliveryUnitExpense, long deliveryUnitCash) {
+        public ExportInterest(String buyer, String item, long quantity, long unitPrice,
+                              long availableCash, long commodityBudget, long deliveryUnitExpense) {
+            this(buyer, item, quantity, unitPrice, availableCash, commodityBudget, deliveryUnitExpense, deliveryUnitExpense);
+        }
         public ExportInterest {
             if (buyer == null || buyer.isBlank() || item == null || item.isBlank()
                     || quantity < 1 || unitPrice < 1 || availableCash < 0 || commodityBudget < 0 || commodityBudget > availableCash
-                    || deliveryUnitExpense < 0)
+                    || deliveryUnitExpense < 0 || deliveryUnitCash < 0 || deliveryUnitCash > deliveryUnitExpense)
                 throw new IllegalArgumentException("invalid economic export interest");
             Math.addExact(unitPrice, deliveryUnitExpense);
         }
         public long buyerUnitExpense() { return Math.addExact(unitPrice, deliveryUnitExpense); }
+        public long buyerUnitCash() { return Math.addExact(unitPrice, deliveryUnitCash); }
     }
     public EconomicSnapshot {
         stocks = Map.copyOf(stocks); needs = Map.copyOf(needs); flows = List.copyOf(flows);

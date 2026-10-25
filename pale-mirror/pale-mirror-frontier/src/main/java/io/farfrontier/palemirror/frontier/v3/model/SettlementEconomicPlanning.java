@@ -52,9 +52,10 @@ final class SettlementEconomicPlanning {
             if (freight.isEmpty()) continue;
             quantity = freight.orElseThrow().quantity();
             long unitExpense = Math.addExact(salePrice, freight.orElseThrow().deliveryPerItem());
-            if (order.unitPriceLimit().raw() < unitExpense || demand.budget().raw() < unitExpense) continue;
+            long unitCash = Math.addExact(salePrice, freight.orElseThrow().cashDeliveryPerItem());
+            if (order.unitPriceLimit().raw() < unitExpense || demand.budget().raw() < unitCash) continue;
             interests.add(new EconomicSnapshot.ExportInterest(order.party().id().value(), item, quantity,
-                    salePrice, demand.buyer().availableMoney().raw(), demand.budget().raw(), freight.orElseThrow().deliveryPerItem()));
+                    salePrice, demand.buyer().availableMoney().raw(), demand.budget().raw(), freight.orElseThrow().deliveryPerItem(), freight.orElseThrow().cashDeliveryPerItem()));
           }
         }
         return List.copyOf(interests);

@@ -10,6 +10,7 @@ final class GoodsDeliveryAdvice {
     enum Supply { STORED, CONDITIONAL_PRODUCTION }
     record Advice(int quantity, long tripExpense, int minimumDispatchQuantity, long cashDelivery) {
         long deliveryPerItem() { return Math.ceilDiv(tripExpense, quantity); }
+        long cashDeliveryPerItem() { return Math.ceilDiv(cashDelivery, quantity); }
     }
 
     static Optional<Advice> read(FrontierWorldState state, GoodsParticipant seller,

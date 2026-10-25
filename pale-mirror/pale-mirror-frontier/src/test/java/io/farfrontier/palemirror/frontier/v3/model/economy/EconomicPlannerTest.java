@@ -6,6 +6,21 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class EconomicPlannerTest {
+    @Test void ownedCollectorProvisionsDoNotBecomeAnotherCashInvoiceForConditionalExports() {
+        var field = new SupplyPlanner.Process("field", "grain", 1, Map.of(), 0, Map.of(), 0,
+                10, 1, 100, 1);
+        var collection = new EconomicSnapshot.ExportInterest("buyer", "grain", 10, 2, 10, 10, 100, 0);
+        var plan = new EconomicPlanner().plan(facts(100, 200, 0, 0, List.of(field), List.of(collection)), RULES);
+        var export = plan.economy().orElseThrow().exports().stream().filter(e -> e.item().equals("grain")).findFirst().orElseThrow();
+        assertEquals(5, export.existingStock() + export.additionalProduction());
+        assertEquals(10, export.conditionalRevenue());
+        var delivery = new EconomicSnapshot.ExportInterest("buyer", "grain", 10, 2, 10, 10, 100, 100);
+        var unfunded = new EconomicPlanner().plan(facts(100, 200, 0, 0, List.of(field), List.of(delivery)), RULES);
+        assertTrue(unfunded.economy().orElseThrow().exports().isEmpty(), "invoiced seller freight still needs real cash");
+        assertEquals(0, plan.economy().orElseThrow().purchaseBudgets().values().stream().mapToLong(Long::longValue).sum(),
+                "conditional sales cannot finance purchases before payment");
+    }
+
     @Test void impossibleExportPruningPreservesAllocationFundingAndUpstreamProduction() {
         var planner = new EconomicPlanner();
         var field = new SupplyPlanner.Process("field", "grain", 2, Map.of(), 0, Map.of(), 0, 10, 1, 20, 2);

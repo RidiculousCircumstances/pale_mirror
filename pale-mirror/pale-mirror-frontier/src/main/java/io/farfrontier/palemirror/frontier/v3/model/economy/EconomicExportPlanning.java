@@ -41,7 +41,8 @@ final class EconomicExportPlanning {
         for (var interest : facts.exportInterest().stream().sorted(valuation.order(facts, capacity)).toList()) {
             var budget = new BudgetKey(interest.buyer(), interest.item());
             long spending = Math.min(buyerCash.get(interest.buyer()), budgets.get(budget));
-            long wanted = Math.min(remaining, Math.min(interest.quantity(), spending / interest.buyerUnitExpense()));
+            // Owned journey supplies consume resources, not the buyer's cash twice.
+            long wanted = Math.min(remaining, Math.min(interest.quantity(), spending / interest.buyerUnitCash()));
             String item = interest.item();
             var allowed = facts.processes().stream().filter(p -> p.product().equals(item)
                             && valuation.returnOn(p, interest.unitPrice()).margin() >= 0)
@@ -51,7 +52,7 @@ final class EconomicExportPlanning {
             long held = selected.existingStock(), made = selected.quantity() - held;
             long quantity = selected.quantity(); if (quantity == 0) continue;
             long proceeds = Math.multiplyExact(quantity, interest.unitPrice());
-            long expense = Math.multiplyExact(quantity, interest.buyerUnitExpense());
+            long expense = Math.multiplyExact(quantity, interest.buyerUnitCash());
             buyerCash.merge(interest.buyer(), -expense, Long::sum); remaining -= quantity;
             budgets.merge(budget, -expense, Long::sum);
             var previous = result.getOrDefault(item, new EconomicPlan.Export(item, 0, 0, 0));
