@@ -225,6 +225,39 @@ player can explain the cause, current activity, threatened value, available
 intervention and outcome. Graybox colour, particles, pose, carried item and local
 object state should carry the explanation; text is a supplement.
 
+## R264/R265 forestry — class C work with shared B transfers and A natural provenance
+
+Forest accounting retains exact tree generations and sparse losses; forestry owns
+worker/tool/source/labour/cargo intent. UAE, navigation, dynamic storage, native
+operations and source journals remain the shared authorities. Initial canopies
+belong to chunk generation; vanilla owns leaf decay. Subsequent felling is not
+bootstrap projection: an exact worker labours at the trunk before bounded child
+receipts award logs and wear once. COLD runs the same retained consequences.
+
+Native growth/intervention passed (`growth-final-candidate.json`); ordinary
+sapling/bonemeal register an actual new source, and removal neither awards work
+output nor restores player blocks. `handoff-post-power.json` passed two workers,
+HOT felling,4kCOLD, graceful restart/HOT return, retained tools/cargo and source
+release,5->38logs. Source/custody semantics are unchanged by the final work-access
+correction. The interrupted power-loss run is not acceptance.
+
+`external-reserve-final-continuation.json` passed15actions in the retained
+world: actual HOT felling, ordinary player64log deposit, all earned cargo stored,
+259stock,0jobs and tools returned; real open-chest frame reviewed. This is a
+continuation, not a new full primary carrier pass. Player stock alone was254,
+so it could not meet the256target. It proves partial delivery/external-stock
+cutoff, not autonomous0->256production. Normal live R264 separately made2axes
+and earned167logs,125stored/42carried, without fixture supplies.
+
+Final source also closes exact unused intents on normal shutdown through the
+shared protocol (observed cancellation+resumed extraction), and shared work
+access covers the body's lateral support footprint. Native hit reach is not
+extended. Forge/tool/source tests and final affected47Frontier+864native checks
+pass; the known unrelated baseline hive GameTest failure is retained. Clean
+R265/r28/schema306 delivery and full-pack preflight passed (6actions, two reviewed
+forest frames, client stopped). No M3 or blanket80ms claim.
+See PM-FORESTRY-20261025 and source docs/forestry-r264.md.
+
 ## Confirmed current gaps
 
 These are implementation debts, not evidence that their canonical models are
