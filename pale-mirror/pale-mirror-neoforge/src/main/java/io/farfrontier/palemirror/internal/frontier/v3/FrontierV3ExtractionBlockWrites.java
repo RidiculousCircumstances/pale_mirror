@@ -52,6 +52,7 @@ final class FrontierV3ExtractionBlockWrites implements FrontierV3ManagedBlockWri
                         new ExtractionGeologyInvalidated(raw, fact.orElseThrow().revision())) instanceof CommandResult.Accepted;
             return true;
         }
+        if (indexed.key().family() != CellMutationKey.OwnerFamily.EXTRACTIVE_SITE) return true;
         if (FrontierV3WorksiteWrites.owns(indexed.key())) return true;
         var ledger = FrontierV3GrayboxLedger.get(level); var prior = FrontierV3WorksiteEvidence.at(level, ledger, state, position);
         // The container owner owns this socket after creation, not the block projector.
@@ -94,11 +95,13 @@ final class FrontierV3ExtractionBlockWrites implements FrontierV3ManagedBlockWri
     }
     static void reconcile(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         var state = runtime.decodedState().orElseThrow(); var ledger = FrontierV3GrayboxLedger.get(level);
-        for (var position : ledger.externalWorksites()) {
+        for (var position : ledger.externalWorksites(CellMutationKey.OwnerFamily.EXTRACTIVE_SITE)) {
             if (!FrontierV3LoadedWorld.ready(level, position)) continue;
             var indexed = FrontierV3WorksiteRegistry.point(state, position).orElseThrow(
                     () -> new IllegalStateException("external worksite witness lost its declared geometry"));
             var witness = ledger.worksite(position);
+            if (indexed.key().family() != CellMutationKey.OwnerFamily.EXTRACTIVE_SITE)
+                throw new IllegalStateException("external extraction witness changed geometry owner at " + position);
             if (witness == null || witness.phase() != FrontierV3WorksiteBlockWitness.Phase.EXTERNAL
                     && witness.phase() != FrontierV3WorksiteBlockWitness.Phase.EXTERNAL_PENDING) continue;
             var current = FrontierV3WorksiteRegistry.owner(indexed.key().family()).current(state, indexed);

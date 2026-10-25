@@ -21,7 +21,8 @@ import java.util.*;
 public final class FrontierV3GrayboxGenesisFeature extends Feature<NoneFeatureConfiguration> {
     static final String PROVIDER = "pale_mirror:graybox_geology_v1";
     private record Plan(long seed, FrontierRuleset rules, String configuration, RegionalBlockMap<BlockExtraction.Block> blocks,
-                        RegionalBlockMap<GrayboxCell> structures, RegionalBlockMap<WorksiteBlock> worksites) { }
+                        RegionalBlockMap<GrayboxCell> structures, RegionalBlockMap<WorksiteBlock> worksites,
+                        GrayboxForestPlan forest) { }
     // Generator lifetime owns the immutable plan. Values contain neither worlds nor generators.
     private final Map<ChunkGenerator, Plan> plans = new WeakHashMap<>();
     public FrontierV3GrayboxGenesisFeature() { super(NoneFeatureConfiguration.CODEC); }
@@ -39,7 +40,7 @@ public final class FrontierV3GrayboxGenesisFeature extends Feature<NoneFeatureCo
         var bootstrap = FrontierBootstrapper.create(FrontierV3PhysicalWorld.WORLD_ID, seed, rules);
         var value = new Plan(seed, rules, rules.contentSha256(), GrayboxNaturalGeology.compile(bootstrap),
                 RegionalBlockMap.copyOf(FrontierGrayboxPlan.compileInitialSettlementFabric(bootstrap).cells()),
-                GrayboxInitialWorksites.compile(bootstrap));
+                GrayboxInitialWorksites.compile(bootstrap), GrayboxForestPlan.compile(bootstrap));
         plans.put(generator, value); return value;
     }
     @Override public boolean place(FeaturePlaceContext<NoneFeatureConfiguration> context) {
@@ -54,7 +55,9 @@ public final class FrontierV3GrayboxGenesisFeature extends Feature<NoneFeatureCo
         var cells = plan.blocks().in(region);
         var structures = plan.structures().in(region);
         var worksites = plan.worksites().in(region);
-        if (cells.isEmpty() && structures.isEmpty() && worksites.isEmpty()) return false;
+        var forestRegion = new io.farfrontier.palemirror.frontier.v3.model.forestry.ForestRegion(region.x(), region.z());
+        var forestBlocks = plan.forest().blocksIn(forestRegion);
+        if (cells.isEmpty() && structures.isEmpty() && worksites.isEmpty() && forestBlocks.isEmpty()) return false;
         var chunk = level.getChunk(region.x(), region.z());
         if (chunk.hasData(GeologyRegistration.BASELINE))
             throw new IllegalStateException("geological baseline cannot be generated twice for " + chunk.getPos());
@@ -101,6 +104,17 @@ public final class FrontierV3GrayboxGenesisFeature extends Feature<NoneFeatureCo
         }
         chunk.setData(GeologyRegistration.WORKSITES, Optional.of(new FrontierV3GeneratedWorksites(
                 plan.configuration(), plan.seed(), infrastructure)));
+        for (var entry : forestBlocks.entrySet()) {
+            var p = entry.getKey(); var position = new BlockPos(p.x(), p.y(), p.z());
+            if (!chunk.getBlockState(position).isAir())
+                throw new IllegalStateException("authored forest overlaps undeclared native block at " + position);
+            var expected = FrontierV3MinecraftBlockExtraction.block(entry.getValue());
+            if (!level.setBlock(position, expected, 2) && !chunk.getBlockState(position).equals(expected))
+                throw new IllegalStateException("initial forest placement failed at " + position);
+        }
+        if (!forestBlocks.isEmpty()) chunk.setData(io.farfrontier.palemirror.internal.forestry.ForestRegistration.GENERATED,
+                Optional.of(io.farfrontier.palemirror.internal.forestry.GeneratedForest.authored(plan.configuration(), plan.seed(),
+                        forestRegion, plan.forest().touching(forestRegion))));
         return true;
     }
 }

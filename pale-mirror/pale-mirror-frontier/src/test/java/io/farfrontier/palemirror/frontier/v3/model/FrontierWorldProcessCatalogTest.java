@@ -354,6 +354,11 @@ class FrontierWorldProcessCatalogTest {
                 Map.entry("extraction", new ExtractionSourceBoundary(
                         new io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRegion(new SubjectId("extraction:representative"), 0, 0),
                         ExtractionSourceBoundary.Operation.PREPARE, 0, 0, "source:representative")),
+                Map.entry("forestry", new ForestrySourceBoundary(
+                        new io.farfrontier.palemirror.frontier.v3.model.forestry.TreeReference(
+                            new io.farfrontier.palemirror.frontier.v3.model.forestry.TreeId(java.util.UUID.fromString("04ef3c5e-e41f-4f4f-af2a-bee3f4710d17")), 1,
+                            new io.farfrontier.palemirror.frontier.v3.model.forestry.ForestRegion(0, 0)),
+                        ForestrySourceBoundary.Operation.PREPARE, 0, 0, "source:representative")),
                 Map.entry("hive", new InfectionChanged(new InfectionCell(1, 1), new FixedRatio(FixedScalar.ONE))),
                 Map.entry("infrastructure", new RouteTopologyCutover(new SubjectId("route-construction:representative"), Optional.empty())),
                 Map.entry("settlement-service-work", serviceWorkRepresentative()),

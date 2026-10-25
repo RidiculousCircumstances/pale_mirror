@@ -152,8 +152,9 @@ public final class FrontierWorldProcessCatalog {
     private static final Set<String> ALL_WORLD = union(physicalCommands(), REPLICA_CUSTODY, AMBIENT, SCENES, POPULATION, ACTOR_MOVEMENT, ACTOR_EXECUTION, ACTOR_BODY, ECONOMY, RESOURCE_SITES,
             HIVE, INFRASTRUCTURE, SETTLEMENT_SERVICE_WORK, STRATEGY, GoodsTradeProcessModule.TYPES, ShipmentProcessModule.TYPES,
             UnitGroupProcessModule.TYPES, TransportMissionProcessModule.TYPES, UnitInventoryProcessModule.TYPES, ExpeditionSupplyProcessModule.TYPES, ExtractionWorkProcessModule.TYPES,
-            DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.TYPES, CultivationProcessModule.TYPES);
+            DefenderEquipmentReturnVisitProcessModule.TYPES, ProductionStationProcessModule.TYPES, CultivationProcessModule.TYPES, ForestryProcessModule.TYPES);
     private static final Map<String, FrontierWorldProcessModule> MODULES = Map.ofEntries(
+            Map.entry("forestry", new ForestryProcessModule()),
             Map.entry("cultivation", new CultivationProcessModule()),
             Map.entry("defender-equipment-return-visit", new DefenderEquipmentReturnVisitProcessModule()),
             Map.entry("extraction", new ExtractionWorkProcessModule()),
@@ -204,6 +205,9 @@ public final class FrontierWorldProcessCatalog {
             Map.entry(CultivationProcessModule.REVIEW, coalescedReview(atExecutionTime(CultivationProcessModule::plan))),
             Map.entry(ProductionStationProcessModule.REVIEW, ProductionStationProcessModule.planner()),
             Map.entry(ResourceHaulingPolicy.REVIEW, coalescedReview(withPlanningRecovery(atExecutionTime(ResourceHaulingPolicy::plan)))),
+            Map.entry(ForestryContinuation.REVIEW, coalescedReview(withPlanningRecovery(atExecutionTime(
+                    (state, action, instant) -> ForestryWorkProcess.review(state, action, instant.ticks()))))),
+            Map.entry(ForestryContinuation.PROGRESS, detached(withPlanningRecovery(ForestryWorkProcess.progressPlanner()))),
             Map.entry(ExtractionContinuation.REVIEW, coalescedReview(withPlanningRecovery(atExecutionTime((state, action, instant) -> ExtractionWorkProcess.review(state, action, instant.ticks()))))),
             Map.entry(ExtractionContinuation.PROGRESS, detached(withPlanningRecovery(new FrontierScheduledPlanner() {
                 @Override public List<ProposedEvent> plan(FrontierWorldState state, ScheduledAction action) {
@@ -424,7 +428,7 @@ public final class FrontierWorldProcessCatalog {
                 ProductionStationProcessModule.DESCRIPTOR, GoodsTradeProcessModule.DESCRIPTOR, ShipmentProcessModule.DESCRIPTOR, UnitGroupProcessModule.DESCRIPTOR, ExtractionWorkProcessModule.DESCRIPTOR,
                 DefenderEquipmentReturnVisitProcessModule.DESCRIPTOR,
                 TransportMissionProcessModule.DESCRIPTOR, UnitInventoryProcessModule.DESCRIPTOR, ExpeditionSupplyProcessModule.DESCRIPTOR,
-                PedestrianPlanningProcessModule.DESCRIPTOR, NavigationGeometryProcessModule.DESCRIPTOR, CultivationProcessModule.DESCRIPTOR);
+                PedestrianPlanningProcessModule.DESCRIPTOR, NavigationGeometryProcessModule.DESCRIPTOR, CultivationProcessModule.DESCRIPTOR, ForestryProcessModule.DESCRIPTOR);
     }
 
     public static Set<String> allWorldPayloadTypes() { return ALL_WORLD; }
@@ -923,7 +927,8 @@ public final class FrontierWorldProcessCatalog {
                     "frontier.hive_nutrient_transfer_completed", "frontier.hive_nutrient_transfer_blocked", "frontier.hive_nutrient_transfer_endpoint_prepared",
                     "frontier.hive_territory_observed", "frontier.hive_settlement_observed", "frontier.hive_doctrine_selected",
                     "frontier.scout_patrol_advanced", "frontier.scout_patrol_started", "frontier.settlement_assault_started",
-                    "frontier.settlement_assault_attacker_advanced", "frontier.settlement_assault_formation_observed", "frontier.settlement_assault_march_issue_observed", "frontier.settlement_assault_transition", "frontier.settlement_assault_strike",
+                    "frontier.settlement_assault_attacker_advanced", "frontier.settlement_assault_formation_observed", "frontier.settlement_assault_march_issue_observed", "frontier.settlement_assault_transition",
+                            "frontier.settlement_assault_strike",
                     "frontier.settlement_assault_resolved", "frontier.deferred_aftermath_prepared", "frontier.deferred_aftermath_resolved",
                     "frontier.hive_mobilization_started", "frontier.hive_mobilization_release_started",
                     "frontier.hive_mobilization_cocoon_released", "frontier.hive_mobilization_assembly_advanced", "frontier.hive_mobilization_return_advanced", "frontier.hive_mobilization_departed", "frontier.hive_mobilization_conflicted",

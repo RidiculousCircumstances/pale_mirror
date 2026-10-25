@@ -6,7 +6,7 @@ import java.util.Objects;
 /** Exact address of a managed cell, independent of its material, work or presentation. */
 public record CellMutationKey(OwnerFamily family, SubjectId owner, long cell) implements Comparable<CellMutationKey> {
     public enum OwnerFamily {
-        RESOURCE_SITE(1), EXTRACTIVE_SITE(2);
+        RESOURCE_SITE(1), EXTRACTIVE_SITE(2), FOREST_TREE(3);
         private final int tag;
         OwnerFamily(int tag) { this.tag = tag; }
         public int wireTag() { return tag; }

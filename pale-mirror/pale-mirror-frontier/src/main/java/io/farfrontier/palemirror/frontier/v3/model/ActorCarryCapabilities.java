@@ -13,7 +13,8 @@ public final class ActorCarryCapabilities {
                     HumanAssignmentKind.PRODUCTION, FrontierProductionWorkSceneSupport::carriedResources,
                     HumanAssignmentKind.COURIER, ShipmentStateSupport::carriedResources,
                     HumanAssignmentKind.GROUP_MEMBER, io.farfrontier.palemirror.frontier.v3.model.group.UnitGroupCarryView::read,
-                    HumanAssignmentKind.EXTRACTION, ExtractionWorkAuthority::carriedResources);
+                    HumanAssignmentKind.EXTRACTION, ExtractionWorkAuthority::carriedResources,
+                    HumanAssignmentKind.FORESTRY, ForestryWorkAuthority::carriedResources);
     private ActorCarryCapabilities() { }
 
     public static Optional<ActorCarriedResources.Presentation> workCargo(FrontierWorldState state, SubjectId actorId) {

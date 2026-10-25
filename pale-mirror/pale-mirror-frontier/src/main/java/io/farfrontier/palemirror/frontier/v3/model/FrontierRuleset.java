@@ -23,7 +23,22 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                               io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionRules expedition,
                               io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRules extraction,
                               Execution execution, ProductionCatalog production, FieldBalance fields,
-                              io.farfrontier.palemirror.frontier.v3.model.tooling.ToolCatalog tools, FrontierWorldLayout worldLayout) {
+                              io.farfrontier.palemirror.frontier.v3.model.tooling.ToolCatalog tools, FrontierWorldLayout worldLayout,
+                              io.farfrontier.palemirror.frontier.v3.model.forestry.ForestryRules forestry) {
+    public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
+                           FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
+                           ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog,
+                           GoodsTradeRules goodsTrade, java.util.List<InitialSettlementStock> initialSettlementStocks,
+                           SettlementLabourRules labour,
+                           io.farfrontier.palemirror.frontier.v3.model.expedition.ExpeditionRules expedition,
+                           io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionRules extraction,
+                           Execution execution, ProductionCatalog production, FieldBalance fields,
+                           io.farfrontier.palemirror.frontier.v3.model.tooling.ToolCatalog tools, FrontierWorldLayout worldLayout) {
+        this(id, schemaVersion, cadence, spatial, rates, facilityCapacity, combat, hiveCommand, residentLife,
+                resourceHarvestColdTravelTicksPerEdge, workCatalog, goodsTrade, initialSettlementStocks, labour,
+                expedition, extraction, execution, production, fields, tools, worldLayout,
+                io.farfrontier.palemirror.frontier.v3.model.forestry.ForestryRules.disabled());
+    }
     public FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spatial spatial, Rates rates,
                            FacilityCapacity facilityCapacity, Combat combat, HiveCommand hiveCommand,
                            ResidentLife residentLife, long resourceHarvestColdTravelTicksPerEdge, WorkCatalog workCatalog,
@@ -162,6 +177,7 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
     }
 
     public FrontierRuleset {
+        Objects.requireNonNull(forestry);
         Objects.requireNonNull(worldLayout);
         java.util.Objects.requireNonNull(tools);
         java.util.Objects.requireNonNull(fields);
@@ -189,6 +205,10 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
             throw new IllegalArgumentException("custom extraction rules require hashed schema18");
         if (extraction.enabled() != labour.entries().containsKey(ResidentWorkKind.EXTRACTION))
             throw new IllegalArgumentException("extraction content and staffing must be explicitly enabled together");
+        if (forestry.enabled() != labour.entries().containsKey(ResidentWorkKind.FORESTRY))
+            throw new IllegalArgumentException("forestry content and staffing must be explicitly enabled together");
+        if (forestry.enabled() && labour.entries().get(ResidentWorkKind.FORESTRY).targetWorkers() != forestry.workersPerSettlement())
+            throw new IllegalArgumentException("forestry staffing differs from its declared content policy");
         if (extraction.enabled()) {
             var operation = workCatalog.require(extraction.source().before().kind(), WorkOperation.EXTRACT);
             if (operation.capability() != HumanCapability.EXTRACTION
@@ -241,7 +261,8 @@ public record FrontierRuleset(String id, int schemaVersion, Cadence cadence, Spa
                 + (schemaVersion >= 19 ? "|" + execution.canonicalText() : "")
                 + (schemaVersion >= 25 ? "|" + production.canonicalText() + "|fields=" + fields.canonicalText() : "")
                 + (tools.definitions().isEmpty() ? "" : "|tools=" + tools.canonicalText())
-                + (worldLayout.equals(FrontierWorldLayout.compact()) ? "" : "|layout=" + worldLayout.canonicalText());
+                + (worldLayout.equals(FrontierWorldLayout.compact()) ? "" : "|layout=" + worldLayout.canonicalText())
+                + (forestry.enabled() ? "|forestry=" + forestry.canonicalText() : "");
     }
 
     /** Balance and settlement policy for exact resident activities. No competing due-time queue. */

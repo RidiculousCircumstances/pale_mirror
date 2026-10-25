@@ -40,7 +40,7 @@ final class FrontierV3WorksiteProjection {
     }
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
         var state = runtime.decodedState().orElse(null);
-        if (state == null || !state.bootstrap().ruleset().extraction().enabled()) return;
+        if (state == null || !state.bootstrap().ruleset().extraction().enabled() && !state.bootstrap().ruleset().forestry().enabled()) return;
         var progress = PROGRESS.computeIfAbsent(level, ignored -> new Progress()); progress.turns++;
         for (var owner : FrontierV3WorksiteRegistry.OWNERS) owner.beforeTurn(level, runtime);
         var windows = PREPARING.computeIfAbsent(level, ignored -> new ArrayList<>());
@@ -132,6 +132,13 @@ final class FrontierV3WorksiteProjection {
                     continue;
                 }
                 writes.add(prior); continue;
+            }
+            // An undeclared natural source cannot be manufactured over an empty host.
+            // Its family explicitly requires a generation receipt; actual absence is
+            // external ingress and never permission to reconstruct a missing tree.
+            if (prior == null && owner.initialPlacement() == FrontierV3WorksiteProjectionOwner.InitialPlacement.GENERATION_RECEIPT) {
+                ledger.worksite(new FrontierV3WorksiteBlockWitness(current, actual, FrontierV3WorksiteBlockWitness.Phase.EXTERNAL));
+                queue.complete(chunk(current), current); continue;
             }
             var preimage = prior == null ? generatedBase(level, position) : prior.declaration().block();
             if (ledger.claim(position) != null) continue; // Another declared owner is never overwritten or adopted.

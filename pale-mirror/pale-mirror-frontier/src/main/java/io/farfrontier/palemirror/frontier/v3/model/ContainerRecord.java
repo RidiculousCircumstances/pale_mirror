@@ -11,6 +11,7 @@ public record ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount,
                               Optional<ProductionStationSpec> productionStation,
                               Optional<ResourceStoragePolicy> storage,
                               FungibleContainerLayout fungibleLayout) {
+    public static final int MAX_SLOTS = 54;
     public ContainerRecord {
         Objects.requireNonNull(id, "container id"); Objects.requireNonNull(ownerId, "container owner");
         productionStation = Objects.requireNonNull(productionStation, "production station declaration");
@@ -28,7 +29,7 @@ public record ContainerRecord(SubjectId id, SubjectId ownerId, int slotCount,
         if ((purpose == ContainerPurpose.RESOURCE_STORAGE)
                 != storage.map(policy -> policy.endpoint() instanceof ShipmentEndpoint.Storage).orElse(false))
             throw new IllegalArgumentException("resource storage requires its complete ordinary access declaration");
-        if (slotCount <= 0 || slotCount > 54) throw new IllegalArgumentException("container slot count must be 1..54");
+        if (slotCount <= 0 || slotCount > MAX_SLOTS) throw new IllegalArgumentException("container slot count must be 1..54");
         if (fungibleLayout.slots().keySet().stream().anyMatch(slot -> slot >= slotCount))
             throw new IllegalArgumentException("retained placement targets a slot outside this container");
         productionStation.ifPresent(station -> {

@@ -13,6 +13,11 @@ import java.util.List;
 
 /** Exact owner for durable physical observations, intents and surface state. */
 final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule {
+    @Override public List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction> retiredSchedules(
+            FrontierWorldState previous, FrontierWorldState next, FrontierEvent event,
+            java.util.function.Supplier<List<io.farfrontier.palemirror.frontier.v3.kernel.ScheduledAction>> pending) {
+        return ExactItemDepartureReactions.retiredSchedules(previous, next, pending);
+    }
     @Override public CommandPlan planCommand(FrontierWorldState state, FrontierCommand command) {
         if (command.payload() instanceof PhysicalInventoryTransfersObserved batch)
             return PhysicalInventoryTransfersProcess.plan(state, batch, command);
@@ -133,14 +138,14 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
             case PhysicalDeltaObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
             case PhysicalDeltasObserved observed -> FrontierWorldPhysicalObservationProcess.reduce(state, event.subject(), observed);
             case ResourceDeposited deposited -> FrontierWorldPhysicalObservationProcess.reduceResourceDeposit(state, event.subject(), deposited);
-            case ContainerPlayerEditObserved observed -> ContainerPlayerEditProcess.reduce(state, event.subject(), observed);
+            case ContainerPlayerEditObserved observed -> ContainerPlayerEditProcess.reduce(state, event.subject(), observed, event.instant().ticks());
             case FungibleStackLayoutObserved observed -> FrontierWorldPhysicalObservationProcess.reduceFungibleLayout(state, event.subject(), observed);
             case FungibleResourceHandoffObserved observed -> FrontierWorldPhysicalObservationProcess.reduceFungibleHandoff(state, event.subject(), observed);
             case FungibleStockDepartureObserved observed -> FrontierWorldPhysicalObservationProcess.reduceFungibleStockDeparture(state, event.subject(), observed);
             case FungibleStockContributionObserved observed -> FrontierWorldPhysicalObservationProcess.reduceFungibleStockContribution(state, event.subject(), observed);
             case FungibleStackBindingsReleased released -> FrontierWorldPhysicalObservationProcess.reduceFungibleBindingRelease(state, event.subject(), released);
-            case ExactItemCustodyChanged changed -> reduceCustodyChanged(state, event.subject(), changed);
-            case ExactItemDestroyed destroyed -> reduceDestroyed(state, event.subject(), destroyed);
+            case ExactItemCustodyChanged changed -> reduceCustodyChanged(state, event.subject(), changed, event.instant().ticks());
+            case ExactItemDestroyed destroyed -> reduceDestroyed(state, event.subject(), destroyed, event.instant().ticks());
             case InventoryConflictObserved observed -> reduceInventoryConflict(state, event.subject(), observed);
             case ContainerSurfaceTransition transition -> ContainerSurfaceProcess.reduce(state, event.subject(), transition);
             default -> throw new IllegalArgumentException("physical process does not own event: " + event.payload().type());
@@ -160,19 +165,19 @@ final class FrontierPhysicalProcessModule implements FrontierWorldProcessModule 
         return state.recordStructureDamage(damage);
     }
 
-    static FrontierWorldState reduceCustodyChanged(FrontierWorldState state, SubjectId subject, ExactItemCustodyChanged changed) {
+    static FrontierWorldState reduceCustodyChanged(FrontierWorldState state, SubjectId subject, ExactItemCustodyChanged changed, long tick) {
         if (!subject.equals(FrontierWorldStateSupport.itemOwner(state, changed))) throw new IllegalArgumentException("item custody observation lacks its canonical owner");
         return ExactItemDepartureComposition.observe(state, changed.itemId(), changed.from(),
-                state.inventory().moveObservedItem(changed.itemId(), changed.from(), changed.to()));
+                state.inventory().moveObservedItem(changed.itemId(), changed.from(), changed.to()), tick);
     }
 
-    private static FrontierWorldState reduceDestroyed(FrontierWorldState state, SubjectId subject, ExactItemDestroyed destroyed) {
+    private static FrontierWorldState reduceDestroyed(FrontierWorldState state, SubjectId subject, ExactItemDestroyed destroyed, long tick) {
         ExactItemStack item = state.inventory().items().get(destroyed.itemId());
         if (item == null || !item.custody().equals(destroyed.source()) || !subject.equals(FrontierWorldStateSupport.itemOwner(state, destroyed))) {
             throw new IllegalArgumentException("item destruction lacks its canonical owner");
         }
         return ExactItemDepartureComposition.observe(state, destroyed.itemId(), destroyed.source(),
-                state.inventory().destroyObservedItem(destroyed.itemId(), destroyed.source()));
+                state.inventory().destroyObservedItem(destroyed.itemId(), destroyed.source()), tick);
     }
 
     private static FrontierWorldState reduceInventoryConflict(FrontierWorldState state, SubjectId subject, InventoryConflictObserved observed) {

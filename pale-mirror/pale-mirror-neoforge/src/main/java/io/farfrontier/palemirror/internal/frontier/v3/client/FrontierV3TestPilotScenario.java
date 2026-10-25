@@ -14,7 +14,7 @@ final class FrontierV3TestPilotScenario {
             "wait", "wait_until_block", "wait_until_diagnostic", "wait_until_harvest_result", "observe_harvest_semantics",
             "assert_complete_resource_site", "fast_forward", "fast_forward_to_instant",
             "release_fast_forward_hold", "command", "inspect", "look", "look_nearest_entity",
-            "walk", "break", "place", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board",
+            "walk", "break", "place", "use_item_on", "assert_fixture", "visit", "assert_visible_block", "assert_visible_board",
             "observe_entity_motion", "observe_settlement_population", "open_container", "quick_move_from_inventory",
             "quick_move_from_container", "split_move_from_container", "move_within_container", "click_menu_button", "close_container",
             "wait_until_container_item", "interact_board", "interact_nearest_entity", "attack_nearest_entity", "assert_visible_entity");
@@ -87,6 +87,8 @@ final class FrontierV3TestPilotScenario {
                     (type.equals("close_container") && action.keySet().stream()
                             .anyMatch(key -> !key.equals("type") && !key.equals("causalMilestone"))) ||
                     (type.equals("place") && (!placePosition(action) || !itemKind(action) || !timeout(action, 120_000L))) ||
+                    (type.equals("use_item_on") && (!resolvablePosition(action, "position") || !itemKind(action)
+                            || !wholeWithin(action, "uses", 1, 32) || !timeout(action, 120_000L))) ||
                     ((type.equals("quick_move_from_inventory") || type.equals("quick_move_from_container")) && !validQuickMove(action)) ||
                     (type.equals("split_move_from_container") && !validSplitMove(action)) ||
                     (type.equals("move_within_container") && !validContainerReorder(action)) ||
@@ -412,6 +414,7 @@ final class FrontierV3TestPilotScenario {
         return (view.equals("site") && requiredId(reference, "id", "site:")
                 && (diagnosticField.equals("firstCrop") || diagnosticField.equals("lastCrop") || diagnosticField.equals("boardPosition")
                 || diagnosticField.equals("terminalHarvest.terminalBody")))
+                || (view.equals("forest") && requiredId(reference, "id", "settlement:") && Set.of("firstTree", "workSource").contains(diagnosticField))
                 || (view.equals("container") && requiredId(reference, "id", "container:") && diagnosticField.equals("position"))
                 || (view.equals("actor") && (requiredId(reference, "id", "actor:") || requiredId(reference, "id", "resident:"))
                     && diagnosticField.equals("position"))

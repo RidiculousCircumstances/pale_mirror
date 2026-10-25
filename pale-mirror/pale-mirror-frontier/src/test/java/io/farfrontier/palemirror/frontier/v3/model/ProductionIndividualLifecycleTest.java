@@ -12,8 +12,9 @@ class ProductionIndividualLifecycleTest {
     private static final SubjectId MATERIAL = new SubjectId("lot:forge-test-ingots"), FUEL = new SubjectId("lot:forge-test-coal"),
             TOOL = new SubjectId("item:forge-test-target");
     record Fixture(FrontierWorldState state, ProductionStationSpec station, ProductionRecipe.Id recipe) { }
-    private static Fixture fixture(boolean repair) {
-        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:forge-test"), 41, FrontierRulesets.toolGraybox()));
+    private static Fixture fixture(boolean repair) { return fixture(repair, "minecraft:iron_pickaxe"); }
+    private static Fixture fixture(boolean repair, String kind) {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:forge-test"), 41, FrontierRulesets.installed("frontier-v3-forestry-graybox-r28")));
         var record = state.inventory().containers().values().stream().filter(value -> value.productionStation()
                 .filter(spec -> spec.capability() == ProductionStationSpec.Capability.FABRICATION).isPresent())
                 .sorted(Comparator.comparing(ContainerRecord::id)).findFirst().orElseThrow();
@@ -34,10 +35,10 @@ class ProductionIndividualLifecycleTest {
                 ProductionStationOperatorTest.stack(station, station.inputSlot(), "minecraft:iron_ingot", 5),
                 ProductionStationOperatorTest.stack(station, station.fuelSlot(), "minecraft:coal", 1))));
         var inventory = state.inventory().withFungibleResources(ledger);
-        if (repair) inventory = inventory.store(new ExactItemStack(TOOL, record.ownerId(), "minecraft:iron_pickaxe", 1,
+        if (repair) inventory = inventory.store(new ExactItemStack(TOOL, record.ownerId(), kind, 1,
                 new InventoryCustody.ContainerSlot(record.id(), station.maintenanceSlot().orElseThrow()), new ItemCondition(250, 200)));
         state = ReferenceContainerCustodyFixtures.observedAndHeld(state.withInventory(inventory), record.id());
-        return new Fixture(state, station, new ProductionRecipe.Id(repair ? "pale_mirror:repair_iron_pickaxe" : "pale_mirror:make_iron_pickaxe"));
+        return new Fixture(state, station, new ProductionRecipe.Id("pale_mirror:" + (repair ? "repair_" : "make_") + kind.substring("minecraft:".length())));
     }
     private static FrontierWorldState attend(FrontierWorldState state, Fixture fixture, ProductionStationOperatorChanged.Stage stage, long tick) {
         return ProductionStationOperator.apply(state, fixture.station().id(), new ProductionStationOperatorChanged(fixture.station().id(),
@@ -50,8 +51,10 @@ class ProductionIndividualLifecycleTest {
         assertTrue(state.productionStations().require(fixture.station().id()).operation().orElseThrow().complete());
         return state;
     }
-    @Test void repairConsumesMaterialAndHeatKeepsIdentityAcrossPreparedRecoveryAndRejectsWrongOrRepeatedReceipt() {
-        var f = fixture(true); var state = finishWork(f); var codec = new FrontierWorldStateCodec();
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"minecraft:iron_pickaxe", "minecraft:iron_axe"})
+    void repairConsumesMaterialAndHeatKeepsIdentityAcrossPreparedRecoveryAndRejectsWrongOrRepeatedReceipt(String kind) {
+        var f = fixture(true, kind); var state = finishWork(f); var codec = new FrontierWorldStateCodec();
         var boundary = ProductionStationTransformation.next(state, f.station().id()).orElseThrow();
         assertEquals(TOOL, boundary.exactAfter().orElseThrow().id());
         assertEquals(75, boundary.exactAfter().orElseThrow().condition().damage());
@@ -73,8 +76,10 @@ class ProductionIndividualLifecycleTest {
         assertThrows(IllegalArgumentException.class, () -> ProductionStationTransformation.apply(finished, f.station().id(), completed,
                 ProductionOperationCompletionComposition::completed));
     }
-    @Test void manufactureCompletesAfterHotToColdWithOneNewUsableItemAndNoFungibleToolLot() {
-        var f = fixture(false); var state = finishWork(f); var account = ReferenceContainerCustody.scopeId(f.station().containerId());
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"minecraft:iron_pickaxe", "minecraft:iron_axe"})
+    void manufactureCompletesAfterHotToColdWithOneNewUsableItemAndNoFungibleToolLot(String kind) {
+        var f = fixture(false, kind); var state = finishWork(f); var account = ReferenceContainerCustody.scopeId(f.station().containerId());
         var lease = state.replicaCustody().custodyByScope().get(account);
         state = state.withChanges(FrontierWorldStateUpdate.begin().inventory(state.inventory().withFungibleResources(
                 state.inventory().fungibleResources().releaseBindings(account, 1))).replicaCustody(state.replicaCustody()
@@ -84,6 +89,7 @@ class ProductionIndividualLifecycleTest {
         var finished = ProductionStationTransformation.apply(state, f.station().id(), new ProductionStationRecipeChanged(
                 ProductionStationRecipeChanged.Stage.COLD_COMPLETED, boundary, List.of()), ProductionOperationCompletionComposition::completed);
         var item = finished.inventory().items().get(boundary.exactAfter().orElseThrow().id());
+        assertEquals(kind, item.itemKind());
         assertEquals(new ItemCondition(250, 0), item.condition());
         assertEquals(new InventoryCustody.ContainerSlot(f.station().containerId(), f.station().outputSlot()), item.custody());
         assertEquals(2, finished.inventory().fungibleResources().lots().get(MATERIAL).quantity());

@@ -29,11 +29,13 @@ public final class FrontierDomainRelationships {
         GOODS_ORDER, GOODS_CONTRACT, ECONOMIC_ACCOUNT, CONTAINER, SHIPMENT, UNIT_GROUP, TRANSPORT_MISSION,
         PRODUCTION_JOB, HIVE_GROWTH_JOB, RESOURCE_SITE, RESOURCE_HARVEST_JOB, RESIDENT, EXACT_ITEM, RESOURCE_LOT, RESOURCE_ACCOUNT,
         RESOURCE_CLAIM, PROVISION_CYCLE, PROVISION_ALLOCATION, SCENE_LEASE, AMBIENT_LEASE, CARRIER_EVIDENCE,
-        CARGO, SERVICE_WORK, HIVE_MOBILIZATION, BIOFORM, STRUCTURE, ACTOR, EXTRACTION_SITE, EXTRACTION_WORK, SETTLEMENT, MINERAL_DEPOSIT
+        CARGO, SERVICE_WORK, HIVE_MOBILIZATION, BIOFORM, STRUCTURE, ACTOR, EXTRACTION_SITE, EXTRACTION_WORK, SETTLEMENT, MINERAL_DEPOSIT, FORESTRY_WORK, FOREST_SOURCE
     }
 
     /** Stable semantic strings are deliberately independent from enum ordinal/wire ordering. */
     public enum Kind {
+        FORESTRY_HOME("forestry-home"), FORESTRY_WORKER("forestry-worker"), FORESTRY_TOOL("forestry-tool"),
+        FORESTRY_TOOL_SOURCE("forestry-tool-source"), FORESTRY_STORAGE("forestry-storage"), FORESTRY_SOURCE("forestry-source"), FORESTRY_CARGO("forestry-cargo"),
         EXTRACTION_MINERAL("extraction-mineral"), SETTLEMENT_MINERAL_KNOWLEDGE("settlement-mineral-knowledge"),
         EXTRACTION_WORK_SITE("extraction-work-site"),
         EXTRACTION_WORKER("extraction-worker"), EXTRACTION_TOOL("extraction-tool"), EXTRACTION_CARGO("extraction-cargo"),
@@ -97,6 +99,7 @@ public final class FrontierDomainRelationships {
         return Map.copyOf(result); }
     private static Set<Lifecycle> lifecycle(Kind kind) { return kind == Kind.ACTOR_AMBIENT_LEASE || kind == Kind.ACTOR_CARRIER_EVIDENCE ? EnumSet.of(Lifecycle.OBSERVED) : EnumSet.allOf(Lifecycle.class); }
     private static EntityKind source(Kind kind) { return switch (kind) {
+        case FORESTRY_HOME, FORESTRY_WORKER, FORESTRY_TOOL, FORESTRY_TOOL_SOURCE, FORESTRY_STORAGE, FORESTRY_SOURCE, FORESTRY_CARGO -> EntityKind.FORESTRY_WORK;
         case EXTRACTION_MINERAL -> EntityKind.EXTRACTION_SITE;
         case SETTLEMENT_MINERAL_KNOWLEDGE -> EntityKind.SETTLEMENT;
         case EXTRACTION_WORK_SITE, EXTRACTION_WORKER, EXTRACTION_TOOL, EXTRACTION_CARGO, EXTRACTION_TOOL_SOURCE, EXTRACTION_WORK_STORAGE -> EntityKind.EXTRACTION_WORK;
@@ -118,6 +121,12 @@ public final class FrontierDomainRelationships {
         case SERVICE_TASK, SERVICE_WORKER, SERVICE_FACILITY, SERVICE_INPUT, SERVICE_SCENE_LEASE -> EntityKind.SERVICE_WORK;
         case HIVE_MOBILIZATION_TASK, HIVE_MOBILIZATION_MEMBER -> EntityKind.HIVE_MOBILIZATION; }; }
     private static EntityKind target(Kind kind) { return switch (kind) {
+        case FORESTRY_HOME -> EntityKind.SETTLEMENT;
+        case FORESTRY_WORKER -> EntityKind.RESIDENT;
+        case FORESTRY_TOOL -> EntityKind.EXACT_ITEM;
+        case FORESTRY_TOOL_SOURCE, FORESTRY_STORAGE -> EntityKind.CONTAINER;
+        case FORESTRY_SOURCE -> EntityKind.FOREST_SOURCE;
+        case FORESTRY_CARGO -> EntityKind.RESOURCE_ACCOUNT;
         case EXTRACTION_MINERAL, SETTLEMENT_MINERAL_KNOWLEDGE -> EntityKind.MINERAL_DEPOSIT;
         case EXTRACTION_WORK_SITE -> EntityKind.EXTRACTION_SITE;
         case EXTRACTION_WORKER -> EntityKind.RESIDENT;
@@ -156,6 +165,7 @@ public final class FrontierDomainRelationships {
         case SERVICE_TASK, HIVE_MOBILIZATION_TASK -> EntityKind.TASK; case SERVICE_FACILITY -> EntityKind.STRUCTURE; case SERVICE_INPUT -> EntityKind.EXACT_ITEM;
         case SERVICE_SCENE_LEASE -> EntityKind.SCENE_LEASE; case HIVE_MOBILIZATION_MEMBER -> EntityKind.BIOFORM; }; }
     private static EntityKind owner(Kind kind) { return switch (kind) {
+        case FORESTRY_HOME, FORESTRY_WORKER, FORESTRY_TOOL, FORESTRY_TOOL_SOURCE, FORESTRY_STORAGE, FORESTRY_SOURCE, FORESTRY_CARGO -> EntityKind.FORESTRY_WORK;
         case EXTRACTION_MINERAL -> EntityKind.EXTRACTION_SITE;
         case SETTLEMENT_MINERAL_KNOWLEDGE -> EntityKind.SETTLEMENT;
         case EXTRACTION_WORK_SITE, EXTRACTION_WORKER, EXTRACTION_TOOL, EXTRACTION_CARGO, EXTRACTION_TOOL_SOURCE, EXTRACTION_WORK_STORAGE -> EntityKind.EXTRACTION_WORK;
@@ -235,6 +245,8 @@ public final class FrontierDomainRelationships {
     }
 
     private static final List<OwnerSurface> CURRENT_OWNER_SURFACES = List.of(
+            surface(io.farfrontier.palemirror.frontier.v3.model.forestry.ForestryWork.class,
+                    "id", "home", "toolId", "carriedAccount", "outputLot"),
             surface(io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSite.class, "id", "settlementId", "mineralDeposits"),
             surface(io.farfrontier.palemirror.frontier.v3.model.geology.MineralDeposit.class, "id"),
             surface(io.farfrontier.palemirror.frontier.v3.model.geology.GeologicalKnowledge.class, "surveys"),
@@ -412,6 +424,7 @@ public final class FrontierDomainRelationships {
         GoodsTradeRelationships.collect(state, edges);
         ShipmentRelationships.collect(state, edges);
         ExtractionRelationships.collect(state, edges);
+        ForestryRelationships.collect(state, edges);
         UnitGroupRelationships.collect(state, edges);
         FinancialBudgetRelationships.collect(state, edges);
         addLeases(state, edges);
@@ -462,6 +475,8 @@ public final class FrontierDomainRelationships {
     private record ValidationFamily(java.util.function.Function<FrontierWorldState, List<Object>> dependencies,
                                     ValidationCollector collect) { }
     private static final List<ValidationFamily> VALIDATION_FAMILIES = List.of(
+            new ValidationFamily(s -> List.of(s.forest(), s.actorExecutions(), s.humanPopulation().residents(), s.inventory()),
+                    (s, edges, incidents) -> ForestryRelationships.collect(s, edges)),
             new ValidationFamily(s -> List.of(s.extractionSites(), s.humanPopulation().residents(), s.actorExecutions(), s.inventory()),
                     (s, edges, incidents) -> ExtractionRelationships.collect(s, edges)),
             new ValidationFamily(s -> List.of(s.inventory().economics(), s.shipments()),
@@ -549,7 +564,8 @@ public final class FrontierDomainRelationships {
                         "active reservation", order.reservationId().value());
             }
             else edge(edges, Kind.ORDER_RESERVATION, owner, owner, subject(EntityKind.FINANCIAL_RESERVATION, order.reservationId()), lifecycle, order.id().value());
-            if (order.status() == MarketWorkOrderStatus.ACCEPTED && acceptedByJob.put(order.jobId(), order) != null) incident(incidents, Kind.ORDER_JOB, owner, IncidentReason.DUPLICATE_ENDPOINT, "one accepted order per job", order.jobId().value());
+            if (order.status() == MarketWorkOrderStatus.ACCEPTED && acceptedByJob.put(order.jobId(), order) != null) incident(incidents, Kind.ORDER_JOB, owner, IncidentReason.DUPLICATE_ENDPOINT, "one accepted order per job",
+                    order.jobId().value());
             ProductionJob job = state.productionJobs().get(order.jobId());
             if (job == null && order.status() == MarketWorkOrderStatus.ACCEPTED) incident(incidents, Kind.ORDER_JOB, owner, IncidentReason.MISSING_ENDPOINT, "active production job", order.jobId().value());
             else if (job != null && order.status() == MarketWorkOrderStatus.ACCEPTED && !job.taskId().equals(order.taskId()))

@@ -6,6 +6,7 @@ import java.util.Set;
 /** The one explicit v3 physical execution composition. */
 final class FrontierV3PhysicalExecutors {
     private static final FrontierV3PhysicalExecutorRegistry REGISTRY = new FrontierV3PhysicalExecutorRegistry(List.of(
+            executor("forest-generation", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of(), "forest-generation-observation", FrontierV3ForestryObservation::tick),
             executor("navigation-geometry", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of(), "navigation-geometry", FrontierV3NavigationObservation::tick),
             executor("storage-adoption", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of(), "storage-admission", FrontierV3StorageAdoption::tick),
             executor("production-station-adoption", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of("storage-adoption"), "production-station-admission", FrontierV3ProductionStationAdoption::tick),
@@ -33,6 +34,7 @@ final class FrontierV3PhysicalExecutors {
             // before a restart persisted its canonical receipt.  Reconcile that durable
             // physical effect before the generic surface drift audit: otherwise the audit
             // mistakes its own known recovery window for player/world tampering.
+            executor("forestry-effects", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("inventory-observation"), "forestry-effects", FrontierV3ForestryExecutor::tick),
             executor("extraction-effects", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("inventory-observation"), "extraction-effects", FrontierV3ExtractionExecutor::tick),
             executor("production-transformation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT, Set.of("extraction-effects"), "production-transformation-effect", FrontierV3ProductionTransformationExecutor::tick),
             executor("production-station-recipes", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,
@@ -49,7 +51,7 @@ final class FrontierV3PhysicalExecutors {
             // layout and would otherwise mark the source CONFLICT, permanently hiding the
             // one recoverable player departure.
             executor("fungible-resource-observation", FrontierV3PhysicalExecutorRegistry.Stage.EFFECT,
-                    Set.of("resource-site-delivery", "expedition-supplies", "production-station-recipes"), "fungible-resource-custody-observation", FrontierV3FungibleResourceObservationExecutor::tick),
+                    Set.of("resource-site-delivery", "expedition-supplies", "production-station-recipes", "forestry-effects"), "fungible-resource-custody-observation", FrontierV3FungibleResourceObservationExecutor::tick),
             // The generic audit has two independently durable predecessors: a
             // RUNNING production receipt and a fungible HOT handoff recovered
             // from physical storage.  Keep both graph edges explicit so a

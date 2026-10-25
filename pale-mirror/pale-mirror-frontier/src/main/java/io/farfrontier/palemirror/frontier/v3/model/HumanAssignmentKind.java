@@ -14,5 +14,6 @@ public enum HumanAssignmentKind {
     MEDICAL_EVACUATION,
     TRANSIT,
     EXTRACTION,
-    EQUIPMENT_SERVICE
+    EQUIPMENT_SERVICE,
+    FORESTRY
 }

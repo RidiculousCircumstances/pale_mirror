@@ -44,6 +44,7 @@ public final class KnownPedestrianRouteKnowledge {
                              Set<BlockPosition> obstructions, KnownPedestrianRouteKnowledge knowledge,
                              java.util.Map<SurfaceAnchor, KnownPedestrianRouteKnowledge> witnessedDepartures) { }
     private static final java.util.Map<SubjectId, FieldView> FIELDS = new java.util.LinkedHashMap<>();
+    private static KnownNaturalGeometry.Composite viewNatural;
     private final FrontierBootstrap bootstrap;
     private final RegionalBlockSet hard;
     private final Set<BlockPosition> raisedDepartureSupports;
@@ -214,11 +215,12 @@ public final class KnownPedestrianRouteKnowledge {
 
     private static void refresh(FrontierWorldState state, KnownSiteGeometry.View sites) {
         var storage = KnownStorageGeometry.forState(state);
+        var natural = KnownNaturalGeometry.forState(state);
         var departures = KnownStorageGeometry.fixedSupports(state);
         if (viewBootstrap != state.bootstrap() || viewOrgans != state.hiveColony().addedOrgans()
                 || viewDeltas != state.physicalDeltas() || viewTopology != state.routeTopology()
                 || viewSites != sites || viewStorageGeometry != storage || viewDepartureSupports != departures
-                || viewNavigation != state.navigationGeometry()) {
+                || viewNavigation != state.navigationGeometry() || viewNatural != natural) {
             if (viewBootstrap != state.bootstrap()) {
                 obstacleIndex = new KnownPedestrianObstacleIndex(); groundSupports = new RegionalSurfaceContributions<>();
             }
@@ -242,6 +244,8 @@ public final class KnownPedestrianRouteKnowledge {
             KnownPedestrianGeometryScopes.refresh(state.bootstrap(), obstacleIndex.groundChanges(), supports,
                     sites.withdrawnSupports(), sites.unknown(), state.physicalDeltas().keySet());
             KnownPedestrianGeometryScopes.observeShapes(viewNavigation, state.navigationGeometry(), sites.retainedBlocks());
+            KnownPedestrianGeometryScopes.observeNatural(viewBootstrap == state.bootstrap() ? natural.changesFrom(viewNatural) : Set.of());
+            viewNatural = natural;
             viewNavigation = state.navigationGeometry();
             JOURNEYS.clear();
             frontierView = null;
@@ -258,6 +262,11 @@ public final class KnownPedestrianRouteKnowledge {
     /** Transit knowledge does not imply that a complete body can centre at a service station. */
     public boolean clearStation(SurfaceAnchor surface) {
         return geometry.clearStation(surface);
+    }
+    /** Work families receive real supported/body-clear candidates, never a guessed constant Y. */
+    public List<SurfaceAnchor> interactionStations(BlockPosition target,
+            io.farfrontier.palemirror.frontier.v3.model.geometry.BlockInteractionReach reach) {
+        return io.farfrontier.palemirror.frontier.v3.model.geometry.BlockWorkAccess.candidates(geometry, target, reach);
     }
     public int formationSpacing(int requested) {
         return profile == null ? requested : io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianHeadway.formationSpacing(requested, profile.width());

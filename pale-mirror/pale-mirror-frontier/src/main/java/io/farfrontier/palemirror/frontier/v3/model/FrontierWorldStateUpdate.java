@@ -57,7 +57,8 @@ public final class FrontierWorldStateUpdate {
         TRANSPORT_FLEET,
         EXTRACTION_SITES,
         PRODUCTION_STATIONS,
-        NAVIGATION_GEOMETRY
+        NAVIGATION_GEOMETRY,
+        FOREST
     }
 
     private final EnumSet<Component> changed = EnumSet.noneOf(Component.class);
@@ -93,6 +94,13 @@ public final class FrontierWorldStateUpdate {
     private io.farfrontier.palemirror.frontier.v3.model.extraction.ExtractionSiteState extractionSites;
     private ProductionStations productionStations;
     private io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryState navigationGeometry;
+
+    private io.farfrontier.palemirror.frontier.v3.model.forestry.ForestState forest;
+
+    public FrontierWorldStateUpdate forest(io.farfrontier.palemirror.frontier.v3.model.forestry.ForestState next) {
+        mark(Component.FOREST); forest = require(next, "forest"); return this;
+    }
+    io.farfrontier.palemirror.frontier.v3.model.forestry.ForestState forest(FrontierWorldState state) { return changed(Component.FOREST, forest, state.forest()); }
 
     private FrontierWorldStateUpdate() { }
 
@@ -155,6 +163,7 @@ public final class FrontierWorldStateUpdate {
                 case EXTRACTION_SITES -> extractionSites(contribution.extractionSites);
                 case PRODUCTION_STATIONS -> productionStations(contribution.productionStations);
                 case NAVIGATION_GEOMETRY -> navigationGeometry(contribution.navigationGeometry);
+                case FOREST -> forest(contribution.forest);
             }
         }
         return this;

@@ -9,7 +9,7 @@ public final class ContainerPhysicalAuthorityComposition {
     private static final List<BiPredicate<FrontierWorldState, SubjectId>> OWNERS = List.of(
             ProductionStationEnergy::pendingForContainer, ProductionStationTransformation::pendingForContainer,
             StationWorkPhysicalAuthority::pendingForContainer, ResidentMealPhysicalAuthority::pendingForContainer,
-            ShipmentPhysicalAuthority::pendingForContainer, ExtractionPhysicalAuthority::pendingForContainer,
+            ShipmentPhysicalAuthority::pendingForContainer, ExtractionPhysicalAuthority::pendingForContainer, ForestryPhysicalAuthority::pendingForContainer,
             FieldEquipment::pendingForContainer,
             MedicalPhysicalAuthority::pendingForContainer,
             EquipmentPhysicalAuthority::pendingForContainer,

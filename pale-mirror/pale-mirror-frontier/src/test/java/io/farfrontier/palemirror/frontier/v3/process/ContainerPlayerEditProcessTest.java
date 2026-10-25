@@ -59,7 +59,7 @@ class ContainerPlayerEditProcessTest {
         var plan = assertInstanceOf(CommandPlan.Accepted.class, FrontierWorldCommandPlanner.plan(state, command(edit), registry,
                 FrontierExecutionSubjects.PHYSICAL_EXECUTOR));
         assertEquals(1, plan.events().stream().filter(e -> e.payload() instanceof ReferenceMutationObserved).count());
-        var successor = ContainerPlayerEditProcess.reduce(state, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, edit);
+        var successor = ContainerPlayerEditProcess.reduce(state, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, edit, 0);
         assertEquals(tool.custody(), successor.inventory().items().get(tool.id()).custody());
         var invalid = new ContainerPlayerEditObserved(PLAYER, CLICK, edit.members(), Optional.empty(),
                 Optional.of(new ExactItemContainerChange.Transfer(new ExactItemStack(new SubjectId("item:missing"), owner,
@@ -78,13 +78,13 @@ class ContainerPlayerEditProcessTest {
         var codecs = FrontierWorldPayloadCodecs.create();
         assertEquals(edit, codecs.decode(edit.type(), codecs.encode(edit)));
         assertInstanceOf(CommandPlan.Accepted.class, ContainerPlayerEditProcess.plan(state, edit, command(edit)));
-        var successor = ContainerPlayerEditProcess.reduce(state, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, edit);
+        var successor = ContainerPlayerEditProcess.reduce(state, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, edit, 0);
         assertEquals(held, successor.inventory().items().get(tool.id()));
         assertTrue(successor.inventory().itemAt(LEFT, 0).isEmpty());
         var back = new ContainerPlayerEditObserved(PLAYER, UUID.randomUUID(), edit.members(), Optional.empty(),
                 Optional.of(new ExactItemContainerChange.Transfer(held, tool)));
         assertInstanceOf(CommandPlan.Accepted.class, ContainerPlayerEditProcess.plan(successor, back, command(back)));
-        assertEquals(tool, ContainerPlayerEditProcess.reduce(successor, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, back)
+        assertEquals(tool, ContainerPlayerEditProcess.reduce(successor, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, back, 0)
                 .inventory().items().get(tool.id()));
         assertThrows(IllegalArgumentException.class, () -> new ContainerPlayerEditObserved(UUID.randomUUID(), CLICK,
                 edit.members(), Optional.empty(), edit.exactChange()));
@@ -139,7 +139,7 @@ class ContainerPlayerEditProcessTest {
         var plan = assertInstanceOf(CommandPlan.Accepted.class, ContainerPlayerEditProcess.plan(state, edit, command(edit)));
         assertEquals(edit, plan.events().getFirst().payload());
         assertEquals(1, plan.events().stream().filter(e -> e.payload() instanceof ContainerPlayerEditObserved).count());
-        var next = ContainerPlayerEditProcess.reduce(state, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, edit);
+        var next = ContainerPlayerEditProcess.reduce(state, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, edit, 0);
         for (var id : List.of(LEFT, RIGHT)) assertEquals(id.equals(LEFT) ? 1 : 16,
                 next.inventory().fungibleResources().accounts().get(ReferenceContainerCustody.scopeId(id)).lotQuantities()
                         .values().stream().mapToInt(Integer::intValue).sum());
@@ -150,7 +150,7 @@ class ContainerPlayerEditProcessTest {
         var stateCodec = new FrontierWorldStateCodec(); assertEquals(next, stateCodec.decode(stateCodec.encode(next)));
         var withdrawal = new ContainerPlayerEditObserved(PLAYER, new UUID(0, 753), List.of(
                 member(next, LEFT, List.of(stack(LEFT, 1)), List.of()), member(next, RIGHT, List.of(stack(RIGHT, 16)), List.of())), Optional.empty());
-        var empty = ContainerPlayerEditProcess.reduce(next, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, withdrawal);
+        var empty = ContainerPlayerEditProcess.reduce(next, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, withdrawal, 0);
         assertFalse(empty.inventory().fungibleResources().accounts().containsKey(ReferenceContainerCustody.scopeId(LEFT)));
         assertFalse(empty.inventory().fungibleResources().accounts().containsKey(ReferenceContainerCustody.scopeId(RIGHT)));
     }
@@ -163,10 +163,10 @@ class ContainerPlayerEditProcessTest {
         for (var forged : invalid) {
             var bad = new ContainerPlayerEditObserved(PLAYER, CLICK, List.of(edit.members().getFirst(), forged), Optional.empty());
             assertInstanceOf(CommandPlan.Rejected.class, ContainerPlayerEditProcess.plan(state, bad, command(bad)));
-            assertThrows(IllegalArgumentException.class, () -> ContainerPlayerEditProcess.reduce(state, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, bad));
+            assertThrows(IllegalArgumentException.class, () -> ContainerPlayerEditProcess.reduce(state, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, bad, 0));
         }
         assertFalse(state.inventory().fungibleResources().accounts().containsKey(ReferenceContainerCustody.scopeId(LEFT)));
-        assertThrows(IllegalArgumentException.class, () -> ContainerPlayerEditProcess.reduce(state, new SubjectId("resident:foreign"), edit));
+        assertThrows(IllegalArgumentException.class, () -> ContainerPlayerEditProcess.reduce(state, new SubjectId("resident:foreign"), edit, 0));
         assertThrows(IllegalArgumentException.class, () -> new ContainerPlayerEditObserved(PLAYER, CLICK, List.of(right, right), Optional.empty()));
         assertThrows(IllegalArgumentException.class, () -> new ContainerPlayerEditObserved.Member(RIGHT, right.accountId(), right.ownerId(), 1, List.of(), List.of(stack(LEFT, 1))));
         assertThrows(NullPointerException.class, () -> new ContainerPlayerEditObserved.Member(RIGHT, right.accountId(), null, 1, List.of(), List.of()));
@@ -183,7 +183,7 @@ class ContainerPlayerEditProcessTest {
         var binding = resources.bindings().values().stream().filter(b -> b.accountId().equals(account)).findFirst().orElseThrow();
         var source = new ContainerPlayerEditObserved.PlayerReturn(binding.id(), account, 1, 9, lot.itemKind(), 17, 0);
         var edit = new ContainerPlayerEditObserved(PLAYER, CLICK, gift(state).members(), Optional.of(source));
-        var next = ContainerPlayerEditProcess.reduce(state, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, edit);
+        var next = ContainerPlayerEditProcess.reduce(state, FrontierExecutionSubjects.PHYSICAL_EXECUTOR, edit, 0);
         assertEquals(resources.lots(), next.inventory().fungibleResources().lots());
         assertFalse(next.inventory().fungibleResources().accounts().containsKey(account));
         assertEquals(Map.of(lot.id(), 1), next.inventory().fungibleResources().accounts().get(ReferenceContainerCustody.scopeId(LEFT)).lotQuantities());

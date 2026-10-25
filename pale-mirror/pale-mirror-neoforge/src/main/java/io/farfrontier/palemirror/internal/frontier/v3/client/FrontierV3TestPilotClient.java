@@ -54,7 +54,7 @@ public final class FrontierV3TestPilotClient {
     private static long actionStartedNanos = -1L;
     private static long anchorResolutionStartedNanos = -1L;
     private static long anchorResolutionLastRequestNanos = -1L;
-    private static boolean breaking, placementAttempted;
+    private static boolean breaking, placementAttempted; private static FrontierV3PilotItemActions itemUse;
     private static boolean visitSent;
     private static long visitChunkReadyTick = -1L;
     private static long visitChunkReadyNanos = -1L;
@@ -103,7 +103,7 @@ public final class FrontierV3TestPilotClient {
             setup = scenario.setup(); actions = scenario.actions(); frames = scenario.frames();
             runningSetup = !setup.isEmpty(); index = 0; actionStartedTick = -1L;
             anchorResolutionStartedNanos = -1L; anchorResolutionLastRequestNanos = -1L;
-            breaking = false; placementAttempted = false; visitSent = false; visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null;
+            breaking = false; placementAttempted = false; itemUse = null; visitSent = false; visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null;
             containerOpenAttempted = false; quickMoveAttempted = false;
             inspectSent = false; inspectBaseline = null; fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null;
             diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L; currentCausalMilestone = null;
@@ -299,6 +299,11 @@ public final class FrontierV3TestPilotClient {
                     if (target != null) breakBlock(minecraft, target);
                 }
                 case "place" -> placeBlock(minecraft, action);
+                case "use_item_on" -> {
+                    BlockPos target = resolvedPosition(minecraft, action, "position"); if (target == null) return;
+                    if (itemUse == null) itemUse = new FrontierV3PilotItemActions(action);
+                    if (itemUse.use(minecraft, target)) advance(type); else timeout(minecraft, action, "ordinary item use did not complete");
+                }
                 case "open_container" -> {
                     BlockPos target = resolvedPosition(minecraft, action, "position");
                     if (target != null) openContainer(minecraft, target, action.get("timeoutMs").getAsLong());
@@ -333,23 +338,9 @@ public final class FrontierV3TestPilotClient {
     private static void placeBlock(Minecraft minecraft, JsonObject action) {
         BlockPos target = resolvedPosition(minecraft, action, "position"); if (target == null) return;
         ResourceLocation itemId = ResourceLocation.parse(action.get("item").getAsString());
-        var item = BuiltInRegistries.ITEM.getOptional(itemId).orElseThrow(() -> new IllegalArgumentException("unknown placement item " + itemId));
-        var expected = BuiltInRegistries.BLOCK.getOptional(itemId).orElseThrow(() -> new IllegalArgumentException("placement item is not a block " + itemId));
-        if (minecraft.level.getBlockState(target).is(expected)) { advance("place"); return; }
-        BlockPos support = target.below();
-        if (minecraft.level.getBlockState(support).isAir()) throw new IllegalStateException("ordinary placement has no support at " + support);
-        if (!placementAttempted) {
-            int slot = -1;
-            for (int index = 0; index < minecraft.player.getInventory().items.size(); index++) {
-                ItemStack stack = minecraft.player.getInventory().items.get(index);
-                if (!stack.isEmpty() && BuiltInRegistries.ITEM.getKey(stack.getItem()).equals(itemId)) { slot = index; break; }
-            }
-            if (slot < 0 || slot >= 9) throw new IllegalStateException("ordinary player hotbar lacks placement item " + itemId);
-            minecraft.player.getInventory().selected = slot;
-            minecraft.gameMode.useItemOn(minecraft.player, InteractionHand.MAIN_HAND,
-                    new BlockHitResult(Vec3.atCenterOf(support).add(0.0D, 0.5D, 0.0D), Direction.UP, support, false));
-            placementAttempted = true;
-        }
+        var result = FrontierV3PilotItemActions.place(minecraft, target, itemId, placementAttempted);
+        placementAttempted = result.attempted();
+        if (result.complete()) { advance("place"); return; }
         timeout(minecraft, action, "ordinary placement did not produce " + itemId + " at " + target);
     }
     private static void openContainer(Minecraft minecraft, BlockPos target, long timeoutMs) {
@@ -920,7 +911,7 @@ public final class FrontierV3TestPilotClient {
         // Each observation owns its exact job/worker and fresh progress window.
         // A prior PASS must never satisfy another field or a later harvest epoch.
         harvestSemanticOracle = null;
-        currentCausalMilestone = null; breaking = false; placementAttempted = false;
+        currentCausalMilestone = null; breaking = false; placementAttempted = false; itemUse = null;
         visitSent = false; visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null; visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false; quickMoveAttempted =
                 false; inspectSent = false; inspectBaseline = null;
         fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null;
@@ -988,7 +979,7 @@ public final class FrontierV3TestPilotClient {
         Minecraft.getInstance().options.keyUp.setDown(false);
         actions = null; setup = null; frames = null; captureBarrier = null; captureFocus = null; runningSetup = false; index = 0; actionStartedTick = -1L;
         anchorResolutionStartedNanos = -1L; anchorResolutionLastRequestNanos = -1L; breaking = false;
-        placementAttempted = false; visitSent = false; visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null;
+        placementAttempted = false; itemUse = null; visitSent = false; visitChunkReadyTick = -1L; visitChunkReadyNanos = -1L; visitIngress = null;
         visitHandshakeArmed = false; visitHandshakeBaseline = null; containerOpenAttempted = false;
         quickMoveAttempted = false; inspectSent = false; inspectBaseline = null;
         fastForwardSent = false; fastForwardBaseline = null; releaseProjectionBaseline = null; boardInteractionAttempted = false; diagnosticWaitBaseline = null; diagnosticWaitRequestNanos = 0L;

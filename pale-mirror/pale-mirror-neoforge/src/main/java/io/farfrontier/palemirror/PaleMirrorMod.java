@@ -21,6 +21,7 @@ public final class PaleMirrorMod {
         PaleMirrorItems.register(modBus);
         io.farfrontier.palemirror.internal.agriculture.AgricultureRegistration.register(modBus);
         io.farfrontier.palemirror.internal.world.GeologyRegistration.register(modBus);
+        io.farfrontier.palemirror.internal.forestry.ForestRegistration.register(modBus);
         io.farfrontier.palemirror.internal.production.PaleMirrorProductionStations.register(modBus);
         io.farfrontier.palemirror.internal.production.ProductionBenchInteraction.install(
                 new io.farfrontier.palemirror.internal.frontier.v3.FrontierV3ProductionBenchAccess());

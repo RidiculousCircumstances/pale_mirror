@@ -2,7 +2,6 @@ package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.model.FrontierWorldState;
 import io.farfrontier.palemirror.frontier.v3.model.WorksiteBlock;
-import io.farfrontier.palemirror.internal.world.GeneratedGeology;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 
@@ -17,6 +16,15 @@ final class FrontierV3WorksiteEvidence {
         return FrontierV3WorksiteRegistry.point(state, position)
                 .map(current -> initial(level, state, current)).orElse(null);
     }
+    /** Acquisition must retain its actual positive observation, even when the birth
+     * declaration came from a virtual generation receipt. The caller fences the
+     * journal before confirming custody; later unload/recovery needs no loaded chunk. */
+    static boolean retainCurrent(FrontierV3GrayboxLedger ledger, WorksiteBlock current,
+            io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block actual,
+            FrontierV3WorksiteBlockWitness witness) {
+        if (witness == null || !witness.settledCurrent(current, actual)) return false;
+        ledger.worksite(witness); return true;
+    }
     static FrontierV3WorksiteBlockWitness initial(ServerLevel level, FrontierWorldState state, WorksiteBlock current) {
         var position = FrontierV3WorksiteProjection.position(current);
         var infrastructure = FrontierV3GeneratedWorksites.loaded(level, position).orElse(null);
@@ -27,12 +35,8 @@ final class FrontierV3WorksiteEvidence {
                 throw new IllegalStateException("generated worksite infrastructure changed owner at " + position);
             return new FrontierV3WorksiteBlockWitness(initial, initial.block(), FrontierV3WorksiteBlockWitness.Phase.SETTLED);
         }
-        var baseline = GeneratedGeology.loaded(level, position).orElse(null);
-        if (baseline == null || !baseline.blocks().containsKey(position)) return null;
-        FrontierV3GenerationConfiguration.require(state.bootstrap(), baseline.seed(), baseline.configuration());
-        var generated = FrontierV3MinecraftBlockExtraction.describe(baseline.blocks().get(position));
-        return FrontierV3WorksiteRegistry.owner(current.key().family()).initialGeology(state, current, generated)
-                .map(initial -> new FrontierV3WorksiteBlockWitness(initial, generated, FrontierV3WorksiteBlockWitness.Phase.SETTLED))
+        return FrontierV3WorksiteRegistry.owner(current.key().family()).initialSource(level, state, current)
+                .map(initial -> new FrontierV3WorksiteBlockWitness(initial, initial.block(), FrontierV3WorksiteBlockWitness.Phase.SETTLED))
                 .orElse(null);
     }
 }

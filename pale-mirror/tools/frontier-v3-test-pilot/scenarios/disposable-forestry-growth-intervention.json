@@ -1,0 +1,216 @@
+{
+  "schema": 1,
+  "id": "disposable_forestry_growth_intervention",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 126
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 26328,
+    "profile": "forestry-world",
+    "viewDistance": 8
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "setup": [
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/clear PMTestPilot"
+    },
+    {
+      "type": "command",
+      "command": "/give PMTestPilot minecraft:oak_sapling 1"
+    },
+    {
+      "type": "command",
+      "command": "/give PMTestPilot minecraft:bone_meal 64"
+    },
+    {
+      "type": "command",
+      "command": "/give PMTestPilot minecraft:oak_log 1"
+    }
+  ],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": 517,
+        "y": 64,
+        "z": 15
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "inspect",
+      "view": "forest",
+      "id": "settlement:7"
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": 514,
+        "y": 64,
+        "z": 12
+      },
+      "block": "minecraft:air",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "look",
+      "at": {
+        "x": 514,
+        "y": 64,
+        "z": 12
+      }
+    },
+    {
+      "type": "place",
+      "position": {
+        "x": 514,
+        "y": 64,
+        "z": 12
+      },
+      "item": "minecraft:oak_sapling",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "use_item_on",
+      "position": {
+        "x": 514,
+        "y": 64,
+        "z": 12
+      },
+      "item": "minecraft:bone_meal",
+      "uses": 16,
+      "timeoutMs": 15000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": 514,
+        "y": 64,
+        "z": 12
+      },
+      "block": "minecraft:oak_log",
+      "timeoutMs": 15000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "forest",
+      "id": "settlement:7",
+      "expect": {
+        "status": "ok",
+        "knownTrees": 696,
+        "hasWood": false
+      },
+      "requireIncreaseAt": "knownTrees",
+      "timeoutMs": 15000
+    },
+    {
+      "type": "break",
+      "position": {
+        "x": 514,
+        "y": 64,
+        "z": 12
+      }
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": 514,
+        "y": 64,
+        "z": 12
+      },
+      "block": "minecraft:air",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": 514,
+        "y": 64,
+        "z": 12
+      },
+      "block": "minecraft:air",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "place",
+      "position": {
+        "x": 514,
+        "y": 64,
+        "z": 12
+      },
+      "item": "minecraft:oak_log",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "wait",
+      "ms": 3000
+    },
+    {
+      "type": "wait_until_block",
+      "position": {
+        "x": 514,
+        "y": 64,
+        "z": 12
+      },
+      "block": "minecraft:oak_log",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "inspect",
+      "view": "forest",
+      "id": "settlement:7"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 16,
+      "view": "forest",
+      "id": "settlement:7",
+      "expect": {
+        "status": "ok",
+        "knownTrees": 696,
+        "hasWood": false
+      }
+    },
+    {
+      "after": 17,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 8,
+      "name": "ordinary-sapling-grown-and-accounted"
+    },
+    {
+      "after": 15,
+      "name": "player-log-is-not-old-source-restoration"
+    }
+  ]
+}

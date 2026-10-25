@@ -12,9 +12,10 @@ final class ActorMovementStateSupport {
     private ActorMovementStateSupport() { }
     static void validate(Map<SubjectId, ActorMovement> movements, Map<SubjectId, ActorLocation> actors,
                          HumanPopulation people, ExactInventory inventory, ActorExecutionState executions,
-                         ShipmentState shipments, UnitGroupState groups, ExtractionSiteState extractionSites, StrategicPlanState strategicPlans) {
+                         ShipmentState shipments, UnitGroupState groups, ExtractionSiteState extractionSites, StrategicPlanState strategicPlans,
+                         io.farfrontier.palemirror.frontier.v3.model.forestry.ForestState forest) {
         if (movements.size() > 4_096) throw new IllegalArgumentException("actor movement retention bound exceeded");
-        var references = new ActorMovementReferences(people, inventory, shipments, groups, extractionSites, strategicPlans);
+        var references = new ActorMovementReferences(people, inventory, shipments, groups, extractionSites, strategicPlans, forest);
         for (var id : executions.current(ActorActivityKind.SERVICE_EXIT).values()) {
             var movement = movements.get(id.actorId());
             if (movement == null || !movement.executionId().equals(id))

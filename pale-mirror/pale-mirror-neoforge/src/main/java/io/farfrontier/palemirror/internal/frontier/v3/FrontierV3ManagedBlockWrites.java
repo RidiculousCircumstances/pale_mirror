@@ -35,7 +35,7 @@ final class FrontierV3ManagedBlockWrites {
             FrontierV3ResourceFieldWorldChangeExecutor.observeBlockWrite(level, runtime, position, replacement, committed);
             return true;
         }
-    }, new FrontierV3ExtractionBlockWrites());
+    }, new FrontierV3ExtractionBlockWrites(), new FrontierV3ForestryBlockWrites());
     static {
         var keys = new HashSet<CellMutationKey.OwnerFamily>();
         for (var owner : OWNERS) if (!keys.add(owner.family())) throw new IllegalStateException("duplicate native mutation owner");

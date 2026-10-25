@@ -23,8 +23,8 @@ public final class KnownPedestrianGround {
     }
     static BoundedPedestrianApproach.SurveyedSurface forSettlement(FrontierWorldState state,
             SubjectId settlementId, KnownSiteGeometry.View sites) {
-        return restricted(state, RetainedNavigationGeometry.overlay(layered(state.bootstrap(), roads(state.bootstrap(), state.routeTopology()),
-                local(state.bootstrap(), settlementId), sites), state.navigationGeometry(), sites.retainedBlocks()));
+        return KnownNaturalGeometry.forState(state).overlay(restricted(state, RetainedNavigationGeometry.overlay(layered(state.bootstrap(), roads(state.bootstrap(), state.routeTopology()),
+                local(state.bootstrap(), settlementId), sites), state.navigationGeometry(), sites.retainedBlocks())));
     }
 
     /** Immutable admission/hydration datum, using the same authored-ground policy. */
@@ -42,8 +42,8 @@ public final class KnownPedestrianGround {
         return forFrontier(state, KnownSiteGeometry.forState(state));
     }
     static BoundedPedestrianApproach.SurveyedSurface forFrontier(FrontierWorldState state, KnownSiteGeometry.View sites) {
-        return restricted(state, RetainedNavigationGeometry.overlay(layered(state.bootstrap(), roads(state.bootstrap(), state.routeTopology()),
-                frontierLocal(state.bootstrap()), sites), state.navigationGeometry(), sites.retainedBlocks()));
+        return KnownNaturalGeometry.forState(state).overlay(restricted(state, RetainedNavigationGeometry.overlay(layered(state.bootstrap(), roads(state.bootstrap(), state.routeTopology()),
+                frontierLocal(state.bootstrap()), sites), state.navigationGeometry(), sites.retainedBlocks())));
     }
 
     private static BoundedPedestrianApproach.SurveyedSurface restricted(FrontierWorldState state,

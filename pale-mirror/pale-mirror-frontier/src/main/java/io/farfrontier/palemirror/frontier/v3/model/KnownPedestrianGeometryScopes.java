@@ -102,6 +102,7 @@ final class KnownPedestrianGeometryScopes {
         return revision(key, RegionalBlockSet.copyOf(hard), overlay, ground);
     }
     static synchronized PedestrianGeometryRevision groundRevision() { return ground; }
+    static synchronized void observeNatural(Set<PedestrianGeometryRevision.Region> changed) { ground = ground.changed(changed); }
     static synchronized PedestrianGeometryRevision revision(Object key, RegionalBlockSet hard,
             Map<TerrainColumn, List<SurfaceAnchor>> overlayMap, PedestrianGeometryRevision capturedGround) {
         var overlay = RegionalSurfaceMap.copyOf(overlayMap);

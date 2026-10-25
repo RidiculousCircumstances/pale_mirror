@@ -5,20 +5,10 @@ import io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction;
 import io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtractionPort;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.storage.loot.LootParams;
-import net.minecraft.world.level.storage.loot.LootTable;
-import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
-import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
-import net.minecraft.world.phys.Vec3;
-import java.util.Map;
-import java.util.TreeMap;
 
 /** Minecraft mechanics adapter shared by all block-resource work; knows no crop/job/settlement. */
 final class FrontierV3MinecraftBlockExtraction implements BlockExtractionPort {
@@ -53,28 +43,7 @@ final class FrontierV3MinecraftBlockExtraction implements BlockExtractionPort {
                     + "; execution=" + execution + "; entity=" + worker.getUUID()
                     + "; target=" + target + "; required=" + definition.toolRequirement()
                     + "; actual=" + tool + "; damage=" + tool.getDamageValue() + "/" + tool.getMaxDamage());
-        if (source.requiresCorrectToolForDrops() && !tool.isCorrectToolForDrops(source))
-            throw new IllegalArgumentException("extraction tool cannot obtain this block's drops");
-        var table = level.getServer().reloadableRegistries().getLootTable(ResourceKey.create(
-                Registries.LOOT_TABLE, ResourceLocation.parse(definition.lootTable())));
-        if (table == LootTable.EMPTY) throw new IllegalArgumentException("missing extraction loot table: " + definition.lootTable());
-        var params = new LootParams.Builder(level).withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(position))
-                .withParameter(LootContextParams.BLOCK_STATE, source).withParameter(LootContextParams.TOOL, tool.copy())
-                .withOptionalParameter(LootContextParams.THIS_ENTITY, worker)
-                .withOptionalParameter(LootContextParams.BLOCK_ENTITY, level.getBlockEntity(position))
-                .create(LootContextParamSets.BLOCK);
-        Map<String, Integer> totals = new TreeMap<>();
-        // Explicit seed avoids consuming a world random stream. The result is retained BEFORE effects.
-        long seed = java.nio.ByteBuffer.wrap(digest(operationId)).getLong();
-        if (seed == 0) seed = 1;
-        for (var stack : table.getRandomItems(params, seed)) {
-            if (stack.isEmpty()) continue;
-            if (!ItemStack.isSameItemSameComponents(stack, new ItemStack(stack.getItem(), stack.getCount())))
-                throw new IllegalArgumentException("component-bearing extraction output needs an exact-item destination");
-            totals.merge(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), stack.getCount(), Math::addExact);
-        }
-        var output = totals.entrySet().stream().map(entry -> new BlockExtraction.Output(entry.getKey(), entry.getValue())).toList();
-        return new BlockExtraction(operationId, execution, target, definition, output);
+        return FrontierV3BlockLoot.prepare(level, worker, operationId, execution, position, source, tool, definition);
     }
 
     @Override public Result apply(BlockExtraction prepared) {
@@ -123,9 +92,5 @@ final class FrontierV3MinecraftBlockExtraction implements BlockExtractionPort {
                 descriptor.kind(), descriptor.properties()));
     }
 
-    private static byte[] digest(String operationId) {
-        try { return java.security.MessageDigest.getInstance("SHA-256").digest(operationId.getBytes(java.nio.charset.StandardCharsets.UTF_8)); }
-        catch (java.security.NoSuchAlgorithmException impossible) { throw new IllegalStateException(impossible); }
-    }
     private static BlockPos position(BlockPosition value) { return new BlockPos(value.x(), value.y(), value.z()); }
 }

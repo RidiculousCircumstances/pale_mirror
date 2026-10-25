@@ -179,24 +179,10 @@ public final class ExtractionPhysicalStateSupport {
         if (!subject.equals(job.id()) || job.pending().isPresent() || !job.execution().equals(event.identity().execution())
                 || !event.stack().equals(hand(state, job, ExtractionWorkAuthority.carried(state, job))))
             throw new IllegalArgumentException("mining hand boundary lacks its exact retained cargo/body");
-        state.actorExecutions().requireRetained(job.execution());
-        var body = event.identity().body(); var fence = ActorBodyAuthority.require(state, body);
-        var ledger = state.inventory().fungibleResources();
-        var bindings = ledger.bindings().values().stream().filter(binding -> binding.accountId().equals(job.carriedAccountId())).toList();
-        if (event.boundary() == ExtractionHandCustodyObserved.Boundary.MATERIALIZED) {
-            if (!bindings.isEmpty()) throw new IllegalArgumentException("mining hand materialization already owns a binding");
-            ActorBodyAuthority.requireActuation(state, event.identity());
-            ledger = ledger.rebind(job.carriedAccountId(), body.physicalEpoch(),
-                    FungiblePhysicalObservation.bind(ledger, job.carriedAccountId(), body.physicalEpoch(), List.of(event.stack())));
-        } else {
-            if (!body.equals(ActorBodyAuthority.current(state, body.actorId())) || bindings.size() != 1
-                    || bindings.getFirst().authorityEpoch() != body.physicalEpoch() || !bindings.getFirst().address().equals(event.stack().address())
-                    || !bindings.getFirst().lotQuantities().equals(ledger.accounts().get(job.carriedAccountId()).lotQuantities())
-                    || !bindings.getFirst().claimQuantities().isEmpty()
-                    || fence.phase() != FencedRecoveryPhase.RUNNING && fence.phase() != FencedRecoveryPhase.AMBIGUOUS)
-                throw new IllegalArgumentException("mining saved departure lacks its exact bound cargo");
-            ledger = ledger.releaseBindings(job.carriedAccountId(), body.physicalEpoch());
-        }
-        return state.withInventory(state.inventory().withFungibleResources(ledger));
+        return ActorWorkCargoCustody.apply(state, job.execution(), job.carriedAccountId(), event.identity(),
+                switch (event.boundary()) {
+                    case MATERIALIZED -> ActorWorkCargoCustody.Boundary.MATERIALIZED;
+                    case SAVED_DEPARTURE -> ActorWorkCargoCustody.Boundary.SAVED_DEPARTURE;
+                }, event.stack());
     }
 }

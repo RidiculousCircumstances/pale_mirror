@@ -164,7 +164,7 @@ class ServiceAccessCapabilitiesTest {
         var changed = state.withActorBody(resident, state.actorLocations().get(resident).body().offset(1, 0, 0));
         assertEquals(new ServiceAccessCapabilities(List.of(new ResidentMealServiceAccess(),
                 new ProductionServiceAccess(), new HarvestServiceAccess(), new ShipmentServiceAccess(),
-                new ExpeditionSupplyServiceAccess(), new ExtractionServiceAccess(), new EngineeringEquipmentServiceAccess(),
+                new ExpeditionSupplyServiceAccess(), new ExtractionServiceAccess(), new ForestryServiceAccess(), new EngineeringEquipmentServiceAccess(),
                 new EquipmentTransferServiceAccess(ServiceAccessDemand.Kind.DEFENDER_EQUIPMENT))).evaluate(changed, point),
                 ServiceAccessCapabilities.current(changed, point));
         assertSame(ServiceAccessCapabilities.current(changed, point), ServiceAccessCapabilities.current(changed, point));
@@ -183,7 +183,7 @@ class ServiceAccessCapabilitiesTest {
             }
         };
         var counted = new ServiceAccessCapabilities(List.of(new ResidentMealServiceAccess(), new HarvestServiceAccess(),
-                new ShipmentServiceAccess(), new ExpeditionSupplyServiceAccess(), new ExtractionServiceAccess(), new EngineeringEquipmentServiceAccess(),
+                new ShipmentServiceAccess(), new ExpeditionSupplyServiceAccess(), new ExtractionServiceAccess(), new ForestryServiceAccess(), new EngineeringEquipmentServiceAccess(),
                 new EquipmentTransferServiceAccess(ServiceAccessDemand.Kind.DEFENDER_EQUIPMENT), production));
         counted.indexed(state, point); counted.indexed(state, point);
         assertEquals(1, calls.get(), "family demand scans occur once per immutable state and queried point");

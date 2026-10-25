@@ -22,7 +22,7 @@ final class ScheduledSubjectExistence {
                 state.inventory().items(), state.inventory().cargo(), state.inventory().fungibleResources().lots(),
                 state.inventory().fungibleResources().claims(), state.productionJobs(), state.serviceWorks(),
                 state.routeConstructions(), state.routeMaintenances(), state.resourceSites().sites(),
-                state.extractionSites().deposits(), state.extractionSites().work(), state.productionStations().machines(),
+                state.extractionSites().deposits(), state.extractionSites().work(), state.forest().work(), state.productionStations().machines(),
                 state.humanPopulation().residents(), state.humanPopulation().birthJobs(), state.humanPopulation().migrations(),
                 state.humanPopulation().provisions(), state.hiveColony().growthJobs(), state.hiveColony().nutrientTransfers(),
                 state.hiveColony().mobilizations(), state.strategicPlans().objectives(), state.strategicPlans().tasks(),

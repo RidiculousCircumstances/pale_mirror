@@ -7,7 +7,7 @@ import java.util.*;
 
 /** Closed owner composition and immutable authored point index, shared by all native consumers. */
 final class FrontierV3WorksiteRegistry {
-    static final List<FrontierV3WorksiteProjectionOwner> OWNERS = List.of(new FrontierV3ExtractionWorksiteOwner());
+    static final List<FrontierV3WorksiteProjectionOwner> OWNERS = List.of(new FrontierV3ExtractionWorksiteOwner(), new FrontierV3ForestryWorksiteOwner());
     private static final Map<CellMutationKey.OwnerFamily, FrontierV3WorksiteProjectionOwner> BY_FAMILY;
     private static FrontierBootstrap bootstrap;
     private static Map<Long, List<WorksiteBlock>> chunks = Map.of();

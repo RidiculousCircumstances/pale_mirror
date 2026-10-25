@@ -433,6 +433,7 @@ public final class FrontierV3ServerLifecycle {
     public static void observeNaturalChunkLoad(ServerLevel level, net.minecraft.world.level.ChunkPos chunk) {
         Objects.requireNonNull(level, "first visibility level"); Objects.requireNonNull(chunk, "first visibility chunk");
         if (!ownsPhysicalWorld(level.getServer()) || !FrontierV3PhysicalWorld.isPhysical(level)) return;
+        FrontierV3ForestryObservation.loaded(level, chunk);
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = RUNTIMES.get(level.getServer());
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
         FrontierV3GrayboxExecutor.observeNaturalChunkLoad(level, runtime, chunk);
@@ -825,11 +826,7 @@ public final class FrontierV3ServerLifecycle {
     }
     /** Observe final geometry without asking Minecraft to reload an unloading chunk. */
     public static void observeNaturalChunkUnload(ServerLevel level, net.minecraft.world.level.chunk.LevelChunk chunk) {
-        if (!FrontierV3PhysicalWorld.isPhysical(level)) return;
-        var runtime = runtimeForNativeMutation(level.getServer());
-        if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
-        runtime.decodedState().ifPresent(state -> FrontierV3ActorBodyController.observeTerrainDeparture(level, state, chunk));
-        for (var owner : FrontierV3WorksiteRegistry.OWNERS) owner.departure(level, runtime, chunk);
+        FrontierV3TerrainDeparture.observe(level, RUNTIMES.get(level.getServer()), chunk);
     }
 
     /** Tracking-end precedes removal for hidden chunks and cannot certify final departure. */
@@ -932,11 +929,10 @@ public final class FrontierV3ServerLifecycle {
         if (runtime == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return false;
         FrontierWorldState state = runtime.decodedState().orElse(null);
         if (state == null) return false;
-        return state.sceneLeases().values().stream()
-                .filter(io.farfrontier.palemirror.frontier.v3.model.FrontierSceneBehaviors::isResourceSiteHarvest)
-                .noneMatch(lease -> lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.PREPARED
-                        || lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.HOT
-                        || lease.status() == io.farfrontier.palemirror.frontier.v3.model.SceneLeaseStatus.DRAINING);
+        // Demand loss is complete only after every physical owner has released its
+        // obligation. A field-only scene check can acknowledge while another actor
+        // still owns a RUNNING body and the ordinary COLD admission correctly refuses.
+        return !requiresPhysicalStep(FrontierV3PhysicalWorld.require(server), runtime);
     }
     static FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtimeFor(MinecraftServer server) {
         return RUNTIMES.get(server);

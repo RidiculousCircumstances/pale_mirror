@@ -12,7 +12,7 @@ import java.util.UUID;
 final class PhysicalObservationStackCodec {
     private PhysicalObservationStackCodec() { }
     static void writeStacks(DataOutputStream output, List<FungiblePhysicalObservation.Stack> stacks) throws IOException {
-        if (stacks.size() > 27) throw new IllegalArgumentException("physical witness exceeds one bounded chest");
+        if (stacks.size() > ContainerRecord.MAX_SLOTS) throw new IllegalArgumentException("physical witness exceeds the bounded container topology");
         output.writeByte(stacks.size());
         for (var stack : stacks) {
             switch (stack.address()) {
@@ -37,7 +37,7 @@ final class PhysicalObservationStackCodec {
     }
     static List<FungiblePhysicalObservation.Stack> readStacks(DataInputStream input) throws IOException {
         int count = input.readUnsignedByte();
-        if (count > 27) throw new IllegalArgumentException("physical witness exceeds one bounded chest");
+        if (count > ContainerRecord.MAX_SLOTS) throw new IllegalArgumentException("physical witness exceeds the bounded container topology");
         List<FungiblePhysicalObservation.Stack> result = new ArrayList<>();
         for (int index = 0; index < count; index++) {
             PhysicalStackAddress address = switch (input.readUnsignedByte()) {

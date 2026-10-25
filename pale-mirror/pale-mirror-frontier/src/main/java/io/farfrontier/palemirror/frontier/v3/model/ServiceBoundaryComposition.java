@@ -87,6 +87,10 @@ public final class ServiceBoundaryComposition {
         return !previous.equals(observed) && operationalDeclarations(state).values().stream()
                 .anyMatch(point -> point.boundary().occupied(previous) || point.boundary().occupied(observed));
     }
+    /** A retired/destroyed access point cannot fence departure as though it still operated. */
+    public static Optional<ServiceBoundaryProvider.Declaration> operational(FrontierWorldState state, SubjectId point) {
+        return Optional.ofNullable(operationalDeclarations(state).get(point));
+    }
     public static Optional<ServiceBoundaryProvider.Declaration> turnoverPoint(FrontierWorldState state, SurfaceAnchor actual) {
         var candidates = nearbyDeclarations(state, new TerrainColumn(actual.x(), actual.z()));
         // Actual service boundaries outrank adjacent aprons, in stable point-ID order.

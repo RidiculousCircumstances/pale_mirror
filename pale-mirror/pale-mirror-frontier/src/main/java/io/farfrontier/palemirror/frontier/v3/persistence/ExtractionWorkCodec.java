@@ -42,10 +42,7 @@ final class ExtractionWorkCodec {
             }
             case ExtractionPhysicalStep.BlockWork block -> {
                 out.writeByte(2); ActorHotObservationCodec.write(out, block.observation());
-                var effect = block.extraction(); out.writeUTF(effect.operationId()); ActorExecutionStateCodec.writeId(out, effect.execution());
-                FrontierWorldStateCodec.writePosition(out, effect.target()); ExtractionSiteStateCodec.writeDefinition(out, effect.definition());
-                out.writeByte(effect.output().size());
-                for (var output : effect.output()) { out.writeUTF(output.itemKind()); out.writeByte(output.quantity()); }
+                BlockExtractionStateCodec.write(out, block.extraction());
                 out.writeByte(block.carriedBefore());
                 out.writeLong(block.sourceEpoch());
                 ExactItemStateCodec.write(out, block.toolUse().before()); out.writeInt(block.toolUse().wear());
@@ -60,13 +57,8 @@ final class ExtractionWorkCodec {
             case 1 -> new ExtractionPhysicalStep.Equipment(ActorHotObservationCodec.read(in),
                     new InventoryCustody.ContainerSlot(id(in), in.readInt()), in.readLong());
             case 2 -> {
-                var observation = ActorHotObservationCodec.read(in); String operation = in.readUTF();
-                var execution = ActorExecutionStateCodec.readId(in); var position = FrontierWorldStateCodec.readPosition(in);
-                var definition = ExtractionSiteStateCodec.readDefinition(in); int count = in.readUnsignedByte();
-                if (count < 1 || count > BlockExtraction.MAX_OUTPUTS) throw new IllegalArgumentException("invalid retained extraction outputs");
-                var outputs = new ArrayList<BlockExtraction.Output>();
-                for (int index = 0; index < count; index++) outputs.add(new BlockExtraction.Output(in.readUTF(), in.readUnsignedByte()));
-                yield new ExtractionPhysicalStep.BlockWork(observation, new BlockExtraction(operation, execution, position, definition, outputs),
+                var observation = ActorHotObservationCodec.read(in); var effect = BlockExtractionStateCodec.read(in);
+                yield new ExtractionPhysicalStep.BlockWork(observation, effect,
                         in.readUnsignedByte(), in.readLong(), new io.farfrontier.palemirror.frontier.v3.model.tooling.ToolUse(ExactItemStateCodec.read(in), in.readInt()));
             }
             case 3 -> new ExtractionPhysicalStep.Cargo(ActorItemTransferStepCodec.read(in));

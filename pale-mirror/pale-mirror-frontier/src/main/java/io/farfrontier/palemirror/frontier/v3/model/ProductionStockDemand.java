@@ -5,8 +5,6 @@ import java.util.*;
 
 /** Read-only production demand from existing inventory/title and owner-declared commitments. */
 public final class ProductionStockDemand {
-    private record Resource(SubjectId owner, String itemKind) { }
-    private static final ImmutableInputView<Map<Resource, Long>> STOCK = new ImmutableInputView<>();
     private ProductionStockDemand() { }
 
     public static StockTargetDemand read(FrontierWorldState state, SubjectId settlement, String itemKind, long atTick) {
@@ -39,7 +37,7 @@ public final class ProductionStockDemand {
             incoming = Math.addExact(incoming, commitment.incoming());
             outgoing = Math.addExact(outgoing, commitment.outgoing());
         }
-        long stock = held(state.inventory()).getOrDefault(new Resource(settlement, itemKind), 0L);
+        long stock = ProductiveResourceStock.held(state.inventory(), settlement, itemKind);
         var planning = state.bootstrap().ruleset().goodsTrade().supplyPlanning();
         // The economic plan owns the incremental production decision. Its caller
         // does not need a second legacy reserve calculation whose result is discarded.
@@ -72,25 +70,6 @@ public final class ProductionStockDemand {
             if (!commitment.economicOwner().equals(owner) || !commitment.itemKind().equals(item)) continue;
             incoming = Math.addExact(incoming, commitment.incoming()); outgoing = Math.addExact(outgoing, commitment.outgoing());
         }
-        return new StockTargetDemand(0, held(state.inventory()).getOrDefault(new Resource(owner, item), 0L), incoming, outgoing).covered();
-    }
-    private static Map<Resource, Long> held(ExactInventory inventory) {
-        return STOCK.get(List.of(inventory), () -> {
-            var result = new HashMap<Resource, Long>();
-            for (var item : inventory.items().values()) {
-                if (item.custody() instanceof InventoryCustody.Player || item.custody() instanceof InventoryCustody.WorldCarrier) continue;
-                result.merge(new Resource(item.economicOwnerId(), item.itemKind()), (long) item.count(), Math::addExact);
-            }
-            var ledger = inventory.fungibleResources();
-            for (var account : ledger.accounts().values()) {
-                if (account.custody() instanceof ResourceCustody.Player || account.custody() instanceof ResourceCustody.WorldCarrier
-                        || account.custody() instanceof ResourceCustody.Ground) continue;
-                for (var entry : account.lotQuantities().entrySet()) {
-                    var lot = ledger.lots().get(entry.getKey());
-                    result.merge(new Resource(lot.economicOwnerId(), lot.itemKind()), (long) entry.getValue(), Math::addExact);
-                }
-            }
-            return Map.copyOf(result);
-        });
+        return new StockTargetDemand(0, ProductiveResourceStock.held(state.inventory(), owner, item), incoming, outgoing).covered();
     }
 }

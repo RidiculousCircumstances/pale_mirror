@@ -26,9 +26,11 @@ public final class WorkEquipmentOrders {
         }
         if (!slot.containerId().equals(endpoint.containerId()) || retainedSlot.filter(value -> !value.equals(slot)).isPresent())
             throw new IllegalArgumentException("equipment handoff has a changed source/destination declaration");
-        return new ActorContainerItemOrder(workOwner, actor, direction, new ActorContainerItemOrder.Portion.Exact(item),
+        var order = new ActorContainerItemOrder(workOwner, actor, direction, new ActorContainerItemOrder.Portion.Exact(item),
                 new ActorContainerItemOrder.ContainerEndpoint.ExactSlot(slot), endpoint.station(), ActorContainerItemOrder.Hand.MAIN,
                 ordinal, revision);
+        ActorItemCustody.requireEndpointPolicy(state, order);
+        return order;
     }
     private WorkEquipmentOrders() { }
 }

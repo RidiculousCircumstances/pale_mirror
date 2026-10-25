@@ -10,6 +10,7 @@ import io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianGeometry
 
 /** Finite-source policy behind the common worksite projection SPI. */
 final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProjectionOwner {
+    @Override public InitialPlacement initialPlacement() { return InitialPlacement.KNOWN_HOST; }
     private final ExtractionWorksiteView currentView = new ExtractionWorksiteView();
     @Override public Map<Region, List<WorksiteBlock>> currentRegions(FrontierWorldState state) {
         return currentView.current(state);
@@ -70,6 +71,13 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
     }
     @Override public WorksiteBlock current(FrontierWorldState state, WorksiteBlock declaration) {
         return ExtractionWorksiteBlocks.current(state.extractionSites().deposits().get(declaration.key().owner()), declaration);
+    }
+    @Override public Optional<WorksiteBlock> initialSource(ServerLevel level, FrontierWorldState state, WorksiteBlock current) {
+        var position = FrontierV3WorksiteProjection.position(current);
+        var baseline = io.farfrontier.palemirror.internal.world.GeneratedGeology.loaded(level, position).orElse(null);
+        if (baseline == null || !baseline.blocks().containsKey(position)) return Optional.empty();
+        FrontierV3GenerationConfiguration.require(state.bootstrap(), baseline.seed(), baseline.configuration());
+        return initialGeology(state, current, FrontierV3MinecraftBlockExtraction.describe(baseline.blocks().get(position)));
     }
     @Override public Optional<WorksiteBlock> initialGeology(FrontierWorldState state, WorksiteBlock current,
             BlockExtraction.Block generated) {
@@ -140,10 +148,10 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
                 var position = new BlockPos(cell.source().x(), cell.source().y(), cell.source().z());
                 if (!FrontierV3LoadedWorld.ready(level, position)) return false;
                 var witness = FrontierV3WorksiteEvidence.at(level, ledger, state, position); var current = state.extractionSites().deposits().get(region.siteId()).cells().get(cell.id());
-                return witness != null && witness.phase() == FrontierV3WorksiteBlockWitness.Phase.SETTLED
-                        && witness.declaration().key().equals(new WorksiteBlock.Key(family(), region.siteId(), WorksiteBlock.Role.RESOURCE, cell.id()))
-                        && witness.declaration().revision() == current.revision()
-                        && FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position)).equals(current.knownBlock());
+                var declared = new WorksiteBlock(new WorksiteBlock.Key(family(), region.siteId(), WorksiteBlock.Role.RESOURCE, cell.id()),
+                        cell.source(), current.revision(), current.knownBlock());
+                return FrontierV3WorksiteEvidence.retainCurrent(ledger, declared,
+                        FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position)), witness);
             });
             if (complete) complete = currentRegions(state).getOrDefault(new Region(
                     region.chunkX(), region.chunkZ()), List.of()).stream().filter(cell -> cell.key().owner().equals(region.siteId())
@@ -152,11 +160,10 @@ final class FrontierV3ExtractionWorksiteOwner implements FrontierV3WorksiteProje
                         var position = FrontierV3WorksiteProjection.position(cell);
                         if (!FrontierV3LoadedWorld.ready(level, position)) return false;
                         var witness = FrontierV3WorksiteEvidence.at(level, ledger, state, position); var current = current(state, cell);
-                        return witness != null && witness.phase() == FrontierV3WorksiteBlockWitness.Phase.SETTLED
-                                && witness.declaration().equals(current)
-                                && FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position)).equals(current.block());
+                        return FrontierV3WorksiteEvidence.retainCurrent(ledger, current,
+                                FrontierV3MinecraftBlockExtraction.describe(level.getBlockState(position)), witness);
                     });
-            if (complete) {
+            if (complete && ledger.prepareDurable(level)) {
                 submit(runtime, new ExtractionSourceBoundary(region, ExtractionSourceBoundary.Operation.CONFIRM,
                         lease.authorityEpoch(), lease.expectedReplicaRevision(), ExtractionSourceCustody.fingerprint(state.extractionSites(), region)));
                 return;

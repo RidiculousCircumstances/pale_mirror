@@ -6,7 +6,7 @@ import java.util.List;
 
 /** Work families declare required capabilities; equipment policy never examines their job internals. */
 interface EquipmentDemandPort {
-    enum Key { FIELD, EXTRACTION }
+    enum Key { FIELD, EXTRACTION, FORESTRY }
     Key key();
     List<EquipmentWorkDemand> read(FrontierWorldState state, SubjectId home);
 }

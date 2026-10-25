@@ -62,9 +62,10 @@ final class ExactItemDepartureComposition {
         return events;
     }
 
-    static FrontierWorldState observe(FrontierWorldState state, SubjectId item, InventoryCustody source, ExactInventory inventory) {
-        var policy = CURRENT.owner(state, item);
-        return policy == null ? state.withInventory(inventory) : policy.reducer().observe(state, item, source, inventory);
+    static FrontierWorldState observe(FrontierWorldState state, SubjectId item, InventoryCustody source, ExactInventory inventory, long tick) {
+        var prepared = ExactItemDepartureReactions.beforeInventory(state, item, inventory, tick);
+        var policy = CURRENT.owner(prepared, item);
+        return policy == null ? prepared.withInventory(inventory) : policy.reducer().observe(prepared, item, source, inventory);
     }
 
     private Policy owner(FrontierWorldState state, SubjectId item) {

@@ -32,8 +32,8 @@ final class ContainerPlayerEditProcess {
         events.addAll(consequences);
         return new CommandPlan.Accepted(List.copyOf(events));
     }
-    static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, ContainerPlayerEditObserved edit) {
-        return apply(state, subject, edit, 0, null, null);
+    static FrontierWorldState reduce(FrontierWorldState state, SubjectId subject, ContainerPlayerEditObserved edit, long tick) {
+        return apply(state, subject, edit, tick, null, null);
     }
     private static FrontierWorldState apply(FrontierWorldState state, SubjectId subject,
             ContainerPlayerEditObserved edit, long now, List<ProposedEvent> consequences, FrontierCommand command) {
@@ -55,7 +55,7 @@ final class ContainerPlayerEditProcess {
                             .stream().filter(event -> !event.equals(observation)).toList());
                     if (!returned.before().condition().equals(returned.after().condition()))
                         next = next.withInventory(next.inventory().changeCondition(returned.before(), returned.after().condition()));
-                    next = FrontierPhysicalProcessModule.reduceCustodyChanged(next, observation.subject(), transfer);
+                    next = FrontierPhysicalProcessModule.reduceCustodyChanged(next, observation.subject(), transfer, now);
                 }
             }
         }

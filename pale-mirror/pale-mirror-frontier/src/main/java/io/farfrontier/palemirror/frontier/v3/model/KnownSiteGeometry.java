@@ -43,7 +43,8 @@ final class KnownSiteGeometry {
     private KnownSiteGeometry() { }
     /** Block type discovery must not construct spatial contacts or acquire the projection lock. */
     static Set<NavigationBlockState> palette(FrontierWorldState state) {
-        var parts = PROVIDERS.stream().map(provider -> provider.palette(state)).toList();
+        var parts = new ArrayList<>(PROVIDERS.stream().map(provider -> provider.palette(state)).toList());
+        parts.add(KnownNaturalGeometry.palette(state));
         return PALETTES.get(new ArrayList<Object>(parts), "types", () -> {
             var blocks = new HashSet<NavigationBlockState>();
             parts.forEach(blocks::addAll);

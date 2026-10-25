@@ -7,10 +7,12 @@ import java.util.Objects;
 
 /** Immutable aggregate inputs during hydration; never an alternative movement authority. */
 public record ActorMovementReferences(HumanPopulation people, ExactInventory inventory, ShipmentState shipments,
-                                     UnitGroupState groups, ExtractionSiteState extractionSites, StrategicPlanState strategicPlans) {
+                                     UnitGroupState groups, ExtractionSiteState extractionSites, StrategicPlanState strategicPlans,
+                                     io.farfrontier.palemirror.frontier.v3.model.forestry.ForestState forest) {
     public ActorMovementReferences {
         Objects.requireNonNull(people); Objects.requireNonNull(inventory); Objects.requireNonNull(shipments);
         Objects.requireNonNull(groups); Objects.requireNonNull(extractionSites);
         Objects.requireNonNull(strategicPlans);
+        Objects.requireNonNull(forest);
     }
 }

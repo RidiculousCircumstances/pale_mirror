@@ -24,6 +24,7 @@
     "FrontierV3LivingDeathMixin",
     "FrontierV3FarmlandObservationMixin",
     "FrontierV3FieldBlockWriteMixin",
+    "FrontierV3TreeCaptureMixin",
     "FrontierV3BonemealAdmissionMixin",
     "FrontierV3EntityStorageMixin",
     "FrontierV3TerrainStorageMixin",

@@ -7,7 +7,7 @@ import java.util.Optional;
 /** An owner's exact physical destination; optional inbound demand already covered by this slot. */
 public record ContainerSlotClaim(Owner owner, InventoryCustody.ContainerSlot slot,
                                  Optional<ContainerInboundCapacity.Demand> coveredDemand) {
-    public enum Family { HARVEST, PRODUCTION, SHIPMENT, EXTRACTION, EQUIPMENT }
+    public enum Family { HARVEST, PRODUCTION, SHIPMENT, EXTRACTION, EQUIPMENT, FORESTRY }
     public record Owner(Family family, SubjectId id) {
         public Owner { Objects.requireNonNull(family); Objects.requireNonNull(id); }
     }

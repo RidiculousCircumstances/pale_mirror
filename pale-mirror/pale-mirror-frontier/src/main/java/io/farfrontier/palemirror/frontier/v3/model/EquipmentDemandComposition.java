@@ -8,7 +8,7 @@ import java.util.*;
 public final class EquipmentDemandComposition {
     private static final ImmutableKeyedInputView<SubjectId, List<EquipmentWorkDemand>> VIEWS = new ImmutableKeyedInputView<>(256);
     private static final Map<EquipmentDemandPort.Key, EquipmentDemandPort> PORTS = register(List.of(
-            new FieldEquipmentDemand(), new ExtractionEquipmentDemand()));
+            new FieldEquipmentDemand(), new ExtractionEquipmentDemand(), new ForestryEquipmentDemand()));
     private static Map<EquipmentDemandPort.Key, EquipmentDemandPort> register(List<EquipmentDemandPort> values) {
         var result = new EnumMap<EquipmentDemandPort.Key, EquipmentDemandPort>(EquipmentDemandPort.Key.class);
         for (var value : values) if (result.put(value.key(), value) != null) throw new IllegalArgumentException("duplicate equipment demand owner");

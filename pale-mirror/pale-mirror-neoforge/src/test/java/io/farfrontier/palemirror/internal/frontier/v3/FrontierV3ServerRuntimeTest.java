@@ -250,11 +250,12 @@ class FrontierV3ServerRuntimeTest {
 
     @Test
     void boundedColdIntervalsMatchOrdinaryTicksAndRecoverTheSameWorld(@TempDir Path directory) {
-        WorldId world = new WorldId("frontier:cold-interval-equivalence");
-        var definition = FrontierWorldRuntimeDefinition.configuration(world, 91L);
+        // This kernel invariant excludes background economy worker completion times.
+        // Exact domain recovery is exercised by the production and resource custody tests.
+        var definition = configuration();
         var ordinary = FrontierV3ServerRuntime.start(definition,
-                new FrontierFileStore(directory.resolve("ordinary"), FrontierWorldRuntimeDefinition.payloadCodecs()), 37);
-        var store = new FrontierFileStore(directory.resolve("interval"), FrontierWorldRuntimeDefinition.payloadCodecs());
+                new FrontierFileStore(directory.resolve("ordinary"), codecs()), 37);
+        var store = new FrontierFileStore(directory.resolve("interval"), codecs());
         var interval = FrontierV3ServerRuntime.start(definition, store, 37);
         var budget = new WorkBudget(4, 64);
         advanceLogicalTicks(ordinary, 120, budget);
@@ -268,7 +269,7 @@ class FrontierV3ServerRuntimeTest {
         var expected = interval.checkpointImage().orElseThrow();
         ordinary.shutdown(); interval.shutdown();
         var recovered = FrontierV3ServerRuntime.start(definition,
-                new FrontierFileStore(directory.resolve("interval"), FrontierWorldRuntimeDefinition.payloadCodecs()), 37);
+                new FrontierFileStore(directory.resolve("interval"), codecs()), 37);
         assertEquals(expected, recovered.checkpointImage().orElseThrow());
         recovered.shutdown();
     }

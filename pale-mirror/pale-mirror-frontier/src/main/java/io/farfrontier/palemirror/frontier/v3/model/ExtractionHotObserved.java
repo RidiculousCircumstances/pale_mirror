@@ -15,7 +15,7 @@ public record ExtractionHotObserved(SubjectId jobId, ExtractionPhysicalStep step
         Objects.requireNonNull(externalSuccessor);
         if (externalSuccessor.isPresent() && !(step instanceof ExtractionPhysicalStep.BlockWork))
             throw new IllegalArgumentException("only a block effect may retain a subsequent external block observation");
-        if (remainingSource.size() > 27 || destination.size() > 27) throw new IllegalArgumentException("unbounded mining resource witness");
+        if (remainingSource.size() > ContainerRecord.MAX_SLOTS || destination.size() > ContainerRecord.MAX_SLOTS) throw new IllegalArgumentException("unbounded mining resource witness");
     }
     @Override public String type() { return "frontier.extraction_hot_observed"; }
     @Override public boolean requiresDurableBeforeEffect() { return true; }

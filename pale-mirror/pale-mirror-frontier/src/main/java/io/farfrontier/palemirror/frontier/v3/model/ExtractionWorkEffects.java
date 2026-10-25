@@ -28,20 +28,8 @@ public final class ExtractionWorkEffects {
     }
     public static ActorContainerItemOrder cargo(FrontierWorldState state, ExtractionWork job) {
         if (job.phase() != ExtractionWork.Phase.STORE) throw new IllegalArgumentException("mining is not storing its cargo");
-        var site = ExtractionWorkAuthority.site(state, job);
-        var ledger = state.inventory().fungibleResources();
-        var account = Objects.requireNonNull(ledger.accounts().get(job.carriedAccountId()), "mining carried account");
-        if (!(account.custody() instanceof ResourceCustody.Actor actor) || !actor.actorId().equals(job.execution().actorId())
-                || !account.claimQuantities().isEmpty() || account.lotQuantities().isEmpty())
-            throw new IllegalArgumentException("mining cargo has a foreign holder or competing allocation");
-        var endpoint = job.storageTarget();
-        var recipient = FungibleResourceCustodySupport.accountAtContainer(state, endpoint.containerId())
-                .map(CustodyAccount::id).orElseGet(() -> ReferenceContainerCustody.scopeId(endpoint.containerId()));
-        return new ActorContainerItemOrder(job.id(), job.execution().actorId(), ActorContainerItemOrder.Direction.PLACE,
-                new ActorContainerItemOrder.Portion.Fungible(job.carriedAccountId(), account.custody(), recipient,
-                        new ResourceCustody.Container(endpoint.containerId()), Optional.empty(), job.outputKind(), account.lotQuantities()),
-                new ActorContainerItemOrder.ContainerEndpoint.FungibleContainer(endpoint.containerId()), endpoint.station(),
-                ActorContainerItemOrder.Hand.OFF, job.phase().wireTag(), job.revision());
+        return WorkCargoOrders.store(state, job.id(), job.execution().actorId(), job.carriedAccountId(),
+                job.outputKind(), job.storageTarget(), job.phase().wireTag(), job.revision());
     }
     public static ExtractionWork afterBlock(FrontierWorldState state, ExtractionWork job, ExtractionDeposit nextDeposit, int carried, long atTick,
                                             ExactItemStack equipmentAfter) {

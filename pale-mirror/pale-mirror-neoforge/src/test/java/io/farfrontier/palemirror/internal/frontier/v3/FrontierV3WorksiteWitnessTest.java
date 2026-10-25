@@ -8,6 +8,40 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FrontierV3WorksiteWitnessTest {
+    @Test void externalFactsDispatchFromTheirRetainedOwnerAfterGeometryWithdrawalAndRecovery() {
+        var ledger = FrontierV3GrayboxLedger.inMemory();
+        var block = new BlockExtraction.Block("minecraft:oak_log", Map.of());
+        var forest = new WorksiteBlock(new WorksiteBlock.Key(CellMutationKey.OwnerFamily.FOREST_TREE,
+                new SubjectId("forest:test"), WorksiteBlock.Role.RESOURCE, 1), new BlockPosition(1, 64, 1), 1, block);
+        var mining = new WorksiteBlock(new WorksiteBlock.Key(CellMutationKey.OwnerFamily.EXTRACTIVE_SITE,
+                new SubjectId("extraction:test"), WorksiteBlock.Role.RESOURCE, 1), new BlockPosition(2, 64, 1), 1, block);
+        var forestWitness = new FrontierV3WorksiteBlockWitness(forest, block, FrontierV3WorksiteBlockWitness.Phase.EXTERNAL);
+        ledger.worksite(forestWitness);
+        ledger.worksite(new FrontierV3WorksiteBlockWitness(mining, block, FrontierV3WorksiteBlockWitness.Phase.EXTERNAL_PENDING));
+        var recovered = FrontierV3GrayboxLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), null), null);
+        assertEquals(List.of(new net.minecraft.core.BlockPos(1, 64, 1)),
+                recovered.externalWorksites(CellMutationKey.OwnerFamily.FOREST_TREE));
+        assertEquals(List.of(new net.minecraft.core.BlockPos(2, 64, 1)),
+                recovered.externalWorksites(CellMutationKey.OwnerFamily.EXTRACTIVE_SITE));
+        // No current point index is needed to retire an acknowledged lost tree source.
+        recovered.retireExternalWorksite(forestWitness);
+        assertTrue(recovered.externalWorksites(CellMutationKey.OwnerFamily.FOREST_TREE).isEmpty());
+        assertEquals(1, recovered.externalWorksites(CellMutationKey.OwnerFamily.EXTRACTIVE_SITE).size());
+    }
+    @Test void acquisitionRetainsItsPositiveGenerationObservationForUnloadedDepartureAndRecovery() {
+        var ledger = FrontierV3GrayboxLedger.inMemory();
+        var log = new BlockExtraction.Block("minecraft:oak_log", Map.of());
+        var cell = new WorksiteBlock(new WorksiteBlock.Key(CellMutationKey.OwnerFamily.FOREST_TREE,
+                new SubjectId("forest:test"), WorksiteBlock.Role.RESOURCE, 1), new BlockPosition(1, 64, 1), 1, log);
+        var virtual = new FrontierV3WorksiteBlockWitness(cell, log, FrontierV3WorksiteBlockWitness.Phase.SETTLED);
+        assertNull(ledger.worksite(new net.minecraft.core.BlockPos(1, 64, 1)));
+        assertFalse(FrontierV3WorksiteEvidence.retainCurrent(ledger, cell, new BlockExtraction.Block("minecraft:air", Map.of()), virtual));
+        assertNull(ledger.worksite(new net.minecraft.core.BlockPos(1, 64, 1)), "generation is not a current native observation");
+        assertTrue(FrontierV3WorksiteEvidence.retainCurrent(ledger, cell, log, virtual));
+        var recovered = FrontierV3GrayboxLedger.load(ledger.save(new net.minecraft.nbt.CompoundTag(), null), null);
+        assertTrue(recovered.worksite(new net.minecraft.core.BlockPos(1, 64, 1)).settledCurrent(cell, log),
+                "release no longer needs a loaded chunk to recreate its generation receipt");
+    }
     @Test void ownerCertifiedReclassificationRetainsPhysicalPreimageAndSurvivesLedgerHydration() {
         var owner = new SubjectId("extraction:test"); var position = new BlockPosition(1, 64, 1);
         var stone = new BlockExtraction.Block("minecraft:stone", Map.of());

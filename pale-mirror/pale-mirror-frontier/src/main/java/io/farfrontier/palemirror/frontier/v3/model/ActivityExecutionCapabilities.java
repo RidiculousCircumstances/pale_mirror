@@ -23,6 +23,7 @@ public final class ActivityExecutionCapabilities {
                     FrontierResourceSiteHarvestSceneSupport::resumeWakeKeys),
             delegated(HumanAssignmentKind.COURIER, ActorActivityKind.COURIER),
             new ExtractionAssignmentCapability(),
+            new ForestryAssignmentCapability(),
             delegated(HumanAssignmentKind.EQUIPMENT_SERVICE, ActorActivityKind.EQUIPMENT_SERVICE),
             new GroupAssignmentCapability(),
             delegated(HumanAssignmentKind.ROUTE_PATROL, ActorActivityKind.ROUTE_PATROL),

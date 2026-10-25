@@ -31,6 +31,12 @@ public final class ResidentWorkComposition {
                 public boolean available(FrontierWorldState state, ResidentProfile resident, long tick) {
                     return ExtractionWorkPlanning.availableWork(state, resident, tick);
                 }
+            }, new ResidentWorkAvailabilityPort() {
+                public ResidentWorkKind kind() { return ResidentWorkKind.FORESTRY; }
+                public HumanCapability capability() { return HumanCapability.EXTRACTION; }
+                public boolean available(FrontierWorldState state, ResidentProfile resident, long tick) {
+                    return ForestryWorkPlanning.availableWork(state, resident, tick);
+                }
             }));
     private ResidentWorkComposition() { }
     private static ResidentWorkSelection create(List<ResidentWorkAvailabilityPort> ports) {

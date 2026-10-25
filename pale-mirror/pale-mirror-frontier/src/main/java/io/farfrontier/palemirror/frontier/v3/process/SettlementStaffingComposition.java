@@ -32,6 +32,12 @@ public final class SettlementStaffingComposition {
                 public Demand assess(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules, long atTick) {
                     return ExtractionWorkPlanning.staffingDemand(state, home, rules, atTick);
                 }
+            }, new SettlementStaffingPort() {
+                public ResidentWorkKind kind() { return ResidentWorkKind.FORESTRY; }
+                public HumanCapability capability() { return HumanCapability.EXTRACTION; }
+                public Demand assess(FrontierWorldState state, SubjectId home, SettlementLabourRules.Entry rules, long atTick) {
+                    return ForestryWorkPlanning.staffingDemand(state, home, rules, atTick);
+                }
             }));
     private SettlementStaffingComposition() { }
     public static Optional<SettlementWorkPolicyChanged> change(FrontierWorldState state, SubjectId home, long tick) {

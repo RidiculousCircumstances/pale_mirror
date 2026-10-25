@@ -9,14 +9,26 @@ import io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind;
 /** Producer-declared provider context; a bare ID never selects navigation behavior. */
 public sealed interface ActorMovementContext permits ActorMovementContext.ServiceExit, ActorMovementContext.ShipmentLeg, ActorMovementContext.GroupLeg,
         ActorMovementContext.ExpeditionSupply, ActorMovementContext.ExpeditionAssembly, ActorMovementContext.ExpeditionReplenishment,
-        ActorMovementContext.ResourceAccessExit, ActorMovementContext.ExtractionLeg, ActorMovementContext.DefenderEquipmentReturn {
-    enum Provider { SERVICE_EXIT, SHIPMENT, GROUP, EXPEDITION_SUPPLY, EXTRACTION, DEFENDER_EQUIPMENT_RETURN }
+        ActorMovementContext.ResourceAccessExit, ActorMovementContext.ExtractionLeg, ActorMovementContext.DefenderEquipmentReturn, ActorMovementContext.ForestryLeg {
+    enum Provider { SERVICE_EXIT, SHIPMENT, GROUP, EXPEDITION_SUPPLY, EXTRACTION, DEFENDER_EQUIPMENT_RETURN, FORESTRY }
     Provider provider();
     /** This exact nominal context owns reference closure, not the generic movement aggregate. */
     void validateReferences(ActorMovementReferences references, ActorMovement movement);
     /** Explicit caller-owned goal delegation; the registered provider validates its retained relationship. */
     java.util.Optional<SubjectId> delegatedGoalOwner();
     default java.util.Optional<SubjectId> clearancePoint() { return java.util.Optional.empty(); }
+    record ForestryLeg(SubjectId jobId, long jobRevision) implements ActorMovementContext {
+        public ForestryLeg { Objects.requireNonNull(jobId);
+            if (jobRevision < 1) throw new IllegalArgumentException("invalid forestry movement revision"); }
+        @Override public Provider provider() { return Provider.FORESTRY; }
+        @Override public java.util.Optional<SubjectId> delegatedGoalOwner() { return java.util.Optional.empty(); }
+        @Override public void validateReferences(ActorMovementReferences refs, ActorMovement movement) {
+            var job = refs.forest().work().get(jobId);
+            if (job == null || job.terminal() || job.revision() != jobRevision || job.pending().isPresent()
+                    || !job.execution().equals(movement.executionId()) || !job.movementOrder().equals(movement.order()))
+                throw new IllegalArgumentException("forestry movement lost its exact retained work/goal");
+        }
+    }
     record DefenderEquipmentReturn(SubjectId assaultId, io.farfrontier.palemirror.frontier.v3.api.PhysicalIntentId transferId)
             implements ActorMovementContext {
         public DefenderEquipmentReturn { Objects.requireNonNull(assaultId); Objects.requireNonNull(transferId); }

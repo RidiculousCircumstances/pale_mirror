@@ -13,6 +13,7 @@ record FrontierV3OperationReceipt(Declaration declaration, UUID ticket, long seq
     enum Protocol {
         MEAL_TAKE("resident-meal-take-v1"), MEAL_CONSUME("resident-meal-consume-v1"),
         STATION_FUEL("station-fuel-v1"), STATION_RECIPE("station-recipe-v1"), BAKERY("bakery-effect-v1"),
+        FORESTRY_BLOCK("forestry-block-v1"), FORESTRY_EQUIPMENT("forestry-equipment-v1"), FORESTRY_CARGO("forestry-cargo-v1"),
         EXTRACTION_BLOCK("extraction-block-v1"), EXTRACTION_EQUIPMENT("extraction-equipment-v1"),
         EXTRACTION_CARGO("extraction-cargo-v1"), EXPEDITION_SUPPLY("expedition-supply-v1"),
         EXPEDITION_REPLENISHMENT("expedition-replenishment-v1"), FIELD_DELIVERY("field-delivery-v1"), FIELD_WORK("field-work-v1"),

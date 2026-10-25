@@ -128,6 +128,12 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
         var changes = java.util.Set.copyOf(changedWorksites); changedWorksites.clear(); return changes;
     }
     List<BlockPos> externalWorksites() { return externalWorksitePositions.stream().map(BlockPos::of).toList(); }
+    /** Dispatch from retained provenance, before an owner resolves its current geometry. */
+    List<BlockPos> externalWorksites(io.farfrontier.palemirror.frontier.v3.model.CellMutationKey.OwnerFamily family) {
+        java.util.Objects.requireNonNull(family);
+        return externalWorksitePositions.stream().filter(address -> worksiteCells.get(address).declaration().key().family() == family)
+                .map(BlockPos::of).toList();
+    }
     private void indexExternalWorksite(long address, FrontierV3WorksiteBlockWitness witness) {
         if (external(witness))
             externalWorksitePositions.add(address);
@@ -144,6 +150,13 @@ final class FrontierV3GrayboxLedger extends FrontierV3JournaledSavedData {
         if (!witness.equals(prior)) {
             worksiteCells.put(address, witness); indexExternalWorksite(address, witness); changedWorksites.add(address); setDirty();
         }
+    }
+    /** Owner calls only after its canonical source authority was withdrawn. No block is changed. */
+    void retireExternalWorksite(FrontierV3WorksiteBlockWitness expected) {
+        var position = expected.declaration().position(); long address = BlockPos.asLong(position.x(), position.y(), position.z());
+        if (!expected.equals(worksiteCells.get(address)) || expected.phase() != FrontierV3WorksiteBlockWitness.Phase.EXTERNAL)
+            throw new IllegalStateException("worksite retirement lacks its exact acknowledged external capture");
+        worksiteCells.remove(address); externalWorksitePositions.remove(address); changedWorksites.add(address); setDirty();
     }
     /** The registered owner's exact proof changes declaration identity, never the witnessed world block. */
     FrontierV3WorksiteBlockWitness reclassify(FrontierV3WorksiteBlockWitness expected,

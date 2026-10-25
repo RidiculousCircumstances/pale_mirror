@@ -29,7 +29,7 @@ final class PhysicalInventoryTransfersProcess {
                 throw new IllegalArgumentException("observed exact transfer source differs from canonical custody");
             var observation = new ProposedEvent(FrontierWorldStateSupport.itemOwner(next, transfer), transfer);
             consequences.addAll(ExactItemDepartureComposition.plan(next, command, transfer.itemId(), observation));
-            next = FrontierPhysicalProcessModule.reduceCustodyChanged(next, observation.subject(), transfer);
+            next = FrontierPhysicalProcessModule.reduceCustodyChanged(next, observation.subject(), transfer, command.submittedAt().ticks());
         }
         return next;
     }

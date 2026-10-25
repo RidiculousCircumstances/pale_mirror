@@ -105,6 +105,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                 UnitGroupStateCodec.write(output, state.unitGroups());
                 TransportFleetStateCodec.write(output, state.transportFleet());
                 ExtractionSiteStateCodec.write(output, state.extractionSites());
+                ForestStateCodec.write(output, state.forest());
                 SettlementEconomicPlanCodec.writeStates(output, state.companies().goodsTrade().participants().planning());
             }
             return bytes.toByteArray();
@@ -150,6 +151,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             var executions = ActorExecutionStateCodec.read(input); var shipments = ShipmentStateCodec.read(input);
             var groups = UnitGroupStateCodec.read(input); var fleet = TransportFleetStateCodec.read(input);
             var extraction = ExtractionSiteStateCodec.read(input);
+            var forest = ForestStateCodec.read(input);
             var trade = companies.goodsTrade();
             var economicParties = new GoodsParticipantState(trade.participants().participants(), SettlementEconomicPlanCodec.readStates(input));
             for (var entry : economicParties.planning().entrySet()) if (entry.getValue().accepted().isPresent())
@@ -160,7 +162,7 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
                     infection, inventory, jobs, serviceWorks, intents, observations, scenes, colony, structureDamage,
                     physicalDeltas, ambient, constructions, maintenances, topology, plans, population, companies,
                     sites, replicaCustody, deferredAftermath, fencedRecovery, diagnosticIncidents, actorMovements,
-                    executions, shipments, groups, fleet, extraction, productionStations, navigationGeometry);
+                    executions, shipments, groups, fleet, extraction, productionStations, navigationGeometry, forest);
             FrontierWorldStateCodecValidation.validate(input, state);
             return state;
         } catch (IOException error) { throw new IllegalArgumentException("truncated Frontier v3 state", error); }
@@ -409,7 +411,8 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             SubjectId transfer = new SubjectId(readString(input)); SubjectId hive = new SubjectId(readString(input)); SubjectId cargo = new SubjectId(readString(input)); SubjectId item = new SubjectId(readString(input));
             SubjectId source = new SubjectId(readString(input)); int sourceSlot = input.readUnsignedByte(); SubjectId target = new SubjectId(readString(input)); int targetSlot = input.readUnsignedByte();
             HiveNutrientReceiptStatus status = HiveNutrientReceiptStatus.STORED; java.util.Optional<SubjectId> consumedBy = java.util.Optional.empty();
-            if (hasReceiptConsumption) { int code = input.readUnsignedByte(); boolean present = input.readBoolean(); if (code >= HiveNutrientReceiptStatus.values().length) throw new IllegalArgumentException("invalid hive nutrient receipt status");
+            if (hasReceiptConsumption) { int code = input.readUnsignedByte(); boolean present = input.readBoolean(); if (code >= HiveNutrientReceiptStatus.values().length) throw new
+                    IllegalArgumentException("invalid hive nutrient receipt status");
                 status = FrontierWireTags.require(HiveNutrientReceiptStatus.class, code); consumedBy = present ? java.util.Optional.of(new SubjectId(readString(input))) : java.util.Optional.empty(); }
             if (receipts.put(transfer, new HiveNutrientReceipt(transfer, hive, cargo, item, new InventoryCustody.ContainerSlot(source, sourceSlot), new InventoryCustody.ContainerSlot(target, targetSlot), status, consumedBy)) != null) {
                 throw new IllegalArgumentException("duplicate hive nutrient receipt");

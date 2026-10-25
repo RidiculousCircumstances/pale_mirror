@@ -8,6 +8,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierV3TestPilotScenarioTest {
+    @Test void ordinarySaplingGrowthDeclarationHasBoundedNativeItemUse() throws java.io.IOException {
+        var source = java.nio.file.Files.readString(java.nio.file.Path.of("..", "tools", "frontier-v3-test-pilot",
+                "scenarios", "disposable-forestry-growth-intervention.json"));
+        assertEquals(17, FrontierV3TestPilotScenario.parse(source).actionCount());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse(source.replace("\"uses\": 16", "\"uses\": 0")));
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3TestPilotScenario.parse(source.replace("\"uses\": 16", "\"uses\": 33")));
+    }
     @Test void actualAdjacentQuarryDeclarationIsAcceptedByTheNativeParserBeforeClientLaunch() throws java.io.IOException {
         var declaration = java.nio.file.Files.readString(java.nio.file.Path.of("..", "tools", "frontier-v3-test-pilot",
                 "scenarios", "live-quarry-adjacent-development.json"));

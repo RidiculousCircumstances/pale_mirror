@@ -159,26 +159,27 @@ public final class FrontierV3ProductionPhysicalTurnGameTests {
     public static void registeredTurnProjectsAnAlreadyPresentPlayerDestination(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime = runtime(level);
-        try {
-            var player = helper.makeMockServerPlayerInLevel();
-            ChunkPos destination = loadedChunk(helper);
-            player.absMoveTo(destination.getMinBlockX() + 8.5D, 64.0D, destination.getMinBlockZ() + 8.5D,
-                    player.getYRot(), player.getXRot());
-            helper.assertValueEqual(FrontierV3GrayboxExecutor.firstVisibility(runtime, destination.x + "," + destination.z).status(),
-                    "UNOBSERVED", "the player destination has no synthetic prior projection record");
-            // A soft-budget yield preserves the ordered suffix; READY is a physical
-            // result, not a promise that every registered stage fits in one invocation.
-            for (int turn = 0; turn < 80 && !FrontierV3GrayboxExecutor.firstVisibility(
-                    runtime, destination.x + "," + destination.z).status().equals("READY"); turn++)
-                FrontierV3PhysicalTurn.observeAndRun(level, runtime);
-            helper.assertValueEqual(FrontierV3GrayboxExecutor.firstVisibility(runtime, destination.x + "," + destination.z).status(),
-                    "READY", "registered production turns fence and project the destination before scene consumption");
-        } finally {
+        var player = helper.makeMockServerPlayerInLevel();
+        ChunkPos destination = loadedChunk(helper);
+        player.absMoveTo(destination.getMinBlockX() + 8.5D, 64.0D, destination.getMinBlockZ() + 8.5D,
+                player.getYRot(), player.getXRot());
+        helper.assertValueEqual(FrontierV3GrayboxExecutor.firstVisibility(runtime, destination.x + "," + destination.z).status(),
+                "UNOBSERVED", "the player destination has no synthetic prior projection record");
+        // Async durable completion needs real server turns; a tight local loop cannot acknowledge its I/O.
+        var closed = new java.util.concurrent.atomic.AtomicBoolean();
+        Runnable cleanup = () -> {
+            if (!closed.compareAndSet(false, true)) return;
             FrontierV3GrayboxExecutor.forgetFirstVisibility(runtime);
             FrontierV3GrayboxExecutor.forget(runtime);
             runtime.shutdown();
-        }
-        helper.succeed();
+        };
+        helper.runAtTickTime(79L, cleanup);
+        helper.succeedWhen(() -> {
+            FrontierV3PhysicalTurn.observeAndRun(level, runtime);
+            helper.assertValueEqual(FrontierV3GrayboxExecutor.firstVisibility(runtime, destination.x + "," + destination.z).status(),
+                    "READY", "registered production turns fence and project the destination before scene consumption");
+            cleanup.run();
+        });
     }
 
     private static ChunkPos loadedChunk(GameTestHelper helper) {

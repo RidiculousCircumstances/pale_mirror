@@ -19,7 +19,7 @@ const VISIT_TIMEOUT_MS = 120_000;
 const INSPECT_TIMEOUT_MS = 30_000;
 const PILOT_CATALOG = resolve(dirname(new URL(import.meta.url).pathname), '../../../pale-mirror-frontier/src/testFixtures/resources/io/farfrontier/palemirror/frontier/v3/model/frontier-v3-pilot-profiles.properties');
 const { profiles: PILOT_PROFILES, defaultProfile: PILOT_DEFAULT_PROFILE } = loadPilotProfiles(PILOT_CATALOG);
-const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'look_nearest_entity', 'break', 'place', 'open_container', 'click_menu_button', 'close_container', 'quick_move_from_inventory', 'quick_move_from_container', 'split_move_from_container', 'move_within_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'observe_harvest_semantics', 'assert_complete_resource_site', 'fast_forward', 'fast_forward_to_instant', 'release_fast_forward_hold', 'inspect', 'assert_visible_block', 'assert_visible_board', 'assert_visible_entity', 'observe_entity_motion', 'observe_settlement_population', 'interact_board', 'interact_nearest_entity', 'attack_nearest_entity', 'visit']);
+const EVIDENCE_ACTIONS = new Set(['walk', 'look', 'look_nearest_entity', 'break', 'place', 'use_item_on', 'open_container', 'click_menu_button', 'close_container', 'quick_move_from_inventory', 'quick_move_from_container', 'split_move_from_container', 'move_within_container', 'wait_until_container_item', 'wait', 'wait_until_block', 'wait_until_diagnostic', 'wait_until_harvest_result', 'observe_harvest_semantics', 'assert_complete_resource_site', 'fast_forward', 'fast_forward_to_instant', 'release_fast_forward_hold', 'inspect', 'assert_visible_block', 'assert_visible_board', 'assert_visible_entity', 'observe_entity_motion', 'observe_settlement_population', 'interact_board', 'interact_nearest_entity', 'attack_nearest_entity', 'visit']);
 const SETUP_ACTIONS = new Set(['command', 'observe', 'assert_fixture', 'visit']);
 
 /** Resolves only the unambiguous Xwayland session cookie name; it never reads the secret. */
@@ -222,6 +222,11 @@ export function validateScenario(scenario) {
       }
       if (action.type === 'look' && !validResolvablePosition(action.at ?? action.position)) validatePosition(action.at ?? action.position);
       if (action.type === 'wait_until_block' && !validResolvablePosition(action.position)) validatePosition(action.position);
+      if (action.type === 'use_item_on' && (!validResolvablePosition(action.position) || !validItemKind(action.item)
+          || !Number.isInteger(action.uses) || action.uses < 1 || action.uses > 32
+          || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120000)) {
+        throw new Error('use_item_on needs a declared target/item, 1..32 ordinary uses and bounded timeoutMs');
+      }
       if (action.type === 'place' && (!validItemKind(action.item) || !Number.isInteger(action.timeoutMs) || action.timeoutMs < 0 || action.timeoutMs > 120_000)) {
         throw new Error('place needs a known item, block position and timeoutMs 0..120000');
       }
@@ -481,7 +486,7 @@ function segment(scenario, first, end, setup, includeFirstBoundary) {
 }
 
 function validDiagnosticIdentity(value) {
-  return ['summary', 'performance', 'projection_work', 'aftermath', 'process', 'process_inventory', 'site', 'field_physical', 'settlement', 'settlement_population', 'resident_life', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'resource', 'player_resource', 'container', 'reference_container', 'market_order', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'incident', 'transit', 'traversal_foundry', 'hive_foundry', 'recovery', 'first_visibility'].includes(value.view)
+  return ['summary', 'performance', 'projection_work', 'aftermath', 'process', 'process_inventory', 'site', 'field_physical', 'forest', 'settlement', 'settlement_population', 'resident_life', 'hive', 'hive_transfer', 'hive_mobilization', 'actor', 'item', 'resource', 'player_resource', 'container', 'reference_container', 'market_order', 'route_construction', 'route_maintenance', 'route_topology', 'physical_delta', 'medical', 'scene', 'intent', 'trace', 'incident', 'transit', 'traversal_foundry', 'hive_foundry', 'recovery', 'first_visibility'].includes(value.view)
     && typeof value.id === 'string' && (['summary', 'performance', 'projection_work', 'aftermath'].includes(value.view) || Boolean(value.id));
 }
 
@@ -549,6 +554,7 @@ function validResolvablePosition(value) {
     && reference && typeof reference === 'object' && Object.keys(reference).length === 3
     && ((reference.view === 'site' && requiredId(reference.id, 'site:')
       && ['firstCrop', 'lastCrop', 'boardPosition', 'terminalHarvest.terminalBody'].includes(reference.field))
+      || (reference.view === 'forest' && requiredId(reference.id, 'settlement:') && ['firstTree', 'workSource'].includes(reference.field))
       || (reference.view === 'container' && requiredId(reference.id, 'container:') && reference.field === 'position')
       || (reference.view === 'actor' && (requiredId(reference.id, 'actor:') || requiredId(reference.id, 'resident:')) && reference.field === 'position')
       || (reference.view === 'settlement' && requiredId(reference.id, 'settlement:')

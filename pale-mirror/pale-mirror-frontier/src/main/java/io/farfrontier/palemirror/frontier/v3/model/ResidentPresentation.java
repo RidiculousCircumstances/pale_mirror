@@ -14,6 +14,7 @@ public record ResidentPresentation(String name, String settlement, String task, 
             case IDLE -> "None";
             case FIELD_HARVEST -> "Harvest and deliver crops";
             case EXTRACTION -> "Extract and store resources";
+            case FORESTRY -> "Fell trees and store wood";
             case EQUIPMENT_SERVICE -> "Return equipment";
             case PRODUCTION -> "Production";
             case COURIER -> "Transport resources";
@@ -29,6 +30,7 @@ public record ResidentPresentation(String name, String settlement, String task, 
             case IDLE -> "Unassigned";
             case FIELD_HARVEST -> "Farmer";
             case EXTRACTION -> "Miner";
+            case FORESTRY -> "Woodcutter";
             case EQUIPMENT_SERVICE -> "Resident";
             case PRODUCTION -> assignment.ownerId().map(state.productionJobs()::get)
                     .filter(job -> job.stationWork().isPresent()).isPresent() ? "Baker" : "Production worker";

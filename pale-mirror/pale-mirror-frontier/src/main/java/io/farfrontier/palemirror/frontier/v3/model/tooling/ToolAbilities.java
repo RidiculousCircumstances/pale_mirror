@@ -6,5 +6,6 @@ public final class ToolAbilities {
     public static final String DIG = "pale_mirror:dig";
     public static final String TILL = "pale_mirror:till";
     public static final String HARVEST = "pale_mirror:harvest";
+    public static final String CHOP = "pale_mirror:chop";
     private ToolAbilities() { }
 }

@@ -9,11 +9,14 @@ import java.util.Optional;
 
 /** Owning family supplies cells and authority; the common adapter owns only physical writes. */
 interface FrontierV3WorksiteProjectionOwner {
+    enum InitialPlacement { KNOWN_HOST, GENERATION_RECEIPT }
     CellMutationKey.OwnerFamily family();
+    InitialPlacement initialPlacement();
     List<WorksiteBlock> declarations(FrontierWorldState state);
     Map<Region, List<WorksiteBlock>> currentRegions(FrontierWorldState state);
     Optional<WorksiteBlock> point(FrontierWorldState state, BlockPosition position);
     WorksiteBlock current(FrontierWorldState state, WorksiteBlock declared);
+    Optional<WorksiteBlock> initialSource(ServerLevel level, FrontierWorldState state, WorksiteBlock current);
     Optional<WorksiteBlock> initialGeology(FrontierWorldState state, WorksiteBlock current,
             io.farfrontier.palemirror.frontier.v3.model.extraction.BlockExtraction.Block generated);
     Optional<WorksiteBlockTransition> reclassification(FrontierWorldState state, WorksiteBlock predecessor, WorksiteBlock successor);

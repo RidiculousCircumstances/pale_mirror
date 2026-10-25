@@ -167,6 +167,12 @@ public final class ActorItemCustody {
         return preparation.ownerChanges().inventory(preparation.inventory().withFungibleResources(resources));
     }
 
+    /** Validate placement policy before a native intent is admitted, not only
+     * when its physical result is reconciled. Selection may then choose another endpoint. */
+    public static void requireEndpointPolicy(FrontierWorldState state, ActorContainerItemOrder order) {
+        Objects.requireNonNull(state); Objects.requireNonNull(order);
+        requireEndpoint(state.inventory().containers().get(order.containerEndpoint().containerId()), order);
+    }
     private static void requireEndpoint(ContainerRecord container, ActorContainerItemOrder order) {
         if (container == null) {
             throw new IllegalArgumentException("actor item endpoint has no compatible declared container");

@@ -45,66 +45,29 @@ public final class ExtractionSourceCustody {
         var region = event.region(); region.cells(state.extractionSites());
         if (!subject.equals(region.objectId()) || !fingerprint(state.extractionSites(), region).equals(event.fingerprint()))
             throw new IllegalArgumentException("source boundary has foreign address or stale canonical image");
-        var custody = state.replicaCustody(); var prior = custody.custodyByScope().get(region.scopeId());
-        var replica = custody.replicas().get(region.objectId());
-        if (event.expectedEpoch() != (prior == null ? 0 : prior.authorityEpoch())
-                || event.expectedReplicaRevision() != (replica == null ? 0 : replica.replicaRevision())
-                || prior != null && (!prior.objectId().equals(region.objectId()) || !prior.providerId().equals(PROVIDER)))
-            throw new IllegalArgumentException("source boundary does not match its declared authority epoch");
-        switch (event.operation()) {
-            case PREPARE -> {
-                if (replica == null) custody = custody.declare(PhysicalReplicaRecord.expected(region.objectId(),
-                        "extraction.source-region", canonicalRevision, event.fingerprint(), region.provenance()));
-                else {
-                    if (prior != null && prior.live()) throw new IllegalArgumentException("source projection already has live custody");
-                    custody = replica.state() == PhysicalReplicaState.EXPECTED
-                            ? custody.reissueProjection(region.objectId(), replica.emittedCanonicalRevision(), replica.replicaRevision(),
-                                canonicalRevision, event.fingerprint(), region.provenance())
-                            : custody.emit(region.objectId(), replica.emittedCanonicalRevision(), replica.replicaRevision(),
-                                canonicalRevision, event.fingerprint(), region.provenance());
-                }
-                var expected = custody.replicas().get(region.objectId());
-                return custody.prepareProjection(new PhysicalCustodyLease(region.scopeId(), region.objectId(), PROVIDER,
-                        event.expectedEpoch() + 1, expected.emittedCanonicalRevision(), expected.replicaRevision(), PhysicalCustodyLeaseStatus.PREPARING, null));
-            }
-            case CONFIRM -> {
-                if (prior == null || prior.status() != PhysicalCustodyLeaseStatus.PREPARING)
-                    throw new IllegalArgumentException("source confirmation lacks its before-write custody");
-                return custody.confirmProjection(region.scopeId(), prior.authorityEpoch(), prior.expectedCanonicalRevision(),
-                        prior.expectedReplicaRevision(), event.fingerprint(), region.provenance());
-            }
-            case RELEASE, WITHDRAW_PROJECTION -> {
-                if (prior == null || state.extractionSites().work().values().stream().anyMatch(job -> job.pending().isPresent()
-                        && job.siteId().equals(region.siteId()) && job.target().filter(target -> region.contains(
-                            state.extractionSites().deposits().get(region.siteId()).site().layout().require(target.key().cell()).source())).isPresent()))
-                    throw new IllegalArgumentException("source release retains a pending non-replayable effect");
-                return event.operation() == ExtractionSourceBoundary.Operation.WITHDRAW_PROJECTION
-                        ? custody.withdrawProjection(region.scopeId(), prior.authorityEpoch(), prior.expectedCanonicalRevision(),
-                            prior.expectedReplicaRevision()) : release(custody, prior);
-            }
-        }
-        throw new IllegalArgumentException("undeclared extraction source transition");
+        boolean pending = state.extractionSites().work().values().stream().anyMatch(job -> job.pending().isPresent()
+                && job.siteId().equals(region.siteId()) && job.target().filter(target -> region.contains(
+                    state.extractionSites().deposits().get(region.siteId()).site().layout().require(target.key().cell()).source())).isPresent());
+        var operation = switch (event.operation()) {
+            case PREPARE -> SourceReplicaProtocol.Operation.PREPARE;
+            case CONFIRM -> SourceReplicaProtocol.Operation.CONFIRM;
+            case RELEASE -> SourceReplicaProtocol.Operation.RELEASE;
+            case WITHDRAW_PROJECTION -> SourceReplicaProtocol.Operation.WITHDRAW_PROJECTION;
+        };
+        return SourceReplicaProtocol.boundary(state.replicaCustody(), address(region), operation, event.expectedEpoch(),
+                event.expectedReplicaRevision(), event.fingerprint(), canonicalRevision, pending);
+    }
+    private static SourceReplicaProtocol.Address address(ExtractionRegion region) {
+        return new SourceReplicaProtocol.Address(region.objectId(), region.scopeId(), PROVIDER, "extraction.source-region", region.provenance());
     }
     public static PhysicalReplicaCustodyState release(PhysicalReplicaCustodyState custody, PhysicalCustodyLease lease) {
-        if (lease.status() == PhysicalCustodyLeaseStatus.ACQUIRED)
-            custody = custody.checkpoint(lease.scopeId(), lease.authorityEpoch(), lease.expectedCanonicalRevision(), lease.expectedReplicaRevision());
-        return custody.release(lease.scopeId(), lease.authorityEpoch(), lease.expectedCanonicalRevision(), lease.expectedReplicaRevision());
+        return SourceReplicaProtocol.release(custody, lease);
     }
     /** Called by the source owner after a confirmed effect, in the SAME canonical transaction. */
     public static PhysicalReplicaCustodyState closeMutation(FrontierWorldState state, ExtractionSiteState successor,
             ExtractionTarget target, long canonicalRevision) {
         var position = state.extractionSites().deposits().get(target.key().owner()).site().layout().require(target.key().cell()).source();
         var region = new ExtractionRegion(target.key().owner(), Math.floorDiv(position.x(), 16), Math.floorDiv(position.z(), 16));
-        var lease = state.replicaCustody().custodyByScope().get(region.scopeId());
-        if (lease == null || lease.status() != PhysicalCustodyLeaseStatus.ACQUIRED || !lease.providerId().equals(PROVIDER))
-            throw new IllegalArgumentException("physical mining effect lacks the current source custodian");
-        var custody = release(state.replicaCustody(), lease); var replica = custody.replicas().get(region.objectId());
-        var fingerprint = fingerprint(successor, region);
-        custody = custody.emit(region.objectId(), replica.emittedCanonicalRevision(), replica.replicaRevision(), canonicalRevision, fingerprint, region.provenance());
-        replica = custody.replicas().get(region.objectId());
-        // One cell's receipt is not an observation of the entire region. A neighbour may
-        // have changed meanwhile. The native owner confirms the complete successor image.
-        return custody.prepareProjection(new PhysicalCustodyLease(region.scopeId(), region.objectId(), PROVIDER, lease.authorityEpoch() + 1,
-                canonicalRevision, replica.replicaRevision(), PhysicalCustodyLeaseStatus.PREPARING, null));
+        return SourceReplicaProtocol.mutated(state.replicaCustody(), address(region), fingerprint(successor, region), canonicalRevision);
     }
 }

@@ -13,7 +13,8 @@ final class FrontierStateSchema {
     // Individual durable items retain condition through every custody boundary.
     // Accepted plans retain nominal supplier-owned conditional price advice.
     // Economic operating envelopes and bounded stock-recovery sale plans are explicit.
-    static final int VERSION = 305;
+    // Explicit tree generations and sparse source losses; old disposable worlds are rejected.
+    static final int VERSION = 306;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {
