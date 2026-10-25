@@ -86,6 +86,28 @@ public final class FrontierV3ExactContainerIngressGameTests {
         helper.assertTrue(chest != null, "owned player-accessible physical chest");
         player.teleportTo(position.getX() + 0.5, position.getY() + 1, position.getZ() + 0.5);
         chest.getPersistentData().putString(FrontierV3ReferenceContainerCustodyExecutor.REPLICA_PROVENANCE_KEY, ReferenceContainerCustody.provenance(container));
+        // An existing provider's stock can need reconciliation without making the
+        // surrounding terrain disappear. Read-only presentation cannot adopt it.
+        chest.setItem(0, new ItemStack(Items.BREAD, 1));
+        var beforePresentation = state(runtime);
+        var stockCheck = FrontierV3ReferenceContainerHandoff.inspect(level, beforePresentation,
+                new net.minecraft.world.level.ChunkPos(position)).stream()
+                .filter(check -> check.owner().equals(container)).findFirst().orElseThrow();
+        helper.assertValueEqual(stockCheck.status(), FrontierV3HotHandoff.Status.PRESENTABLE_PENDING,
+                "a proven active provider is visible during stock reconciliation");
+        var stockReview = new FrontierV3HotHandoff.Review(0, List.of(stockCheck));
+        helper.assertTrue(stockReview.presentable() && !stockReview.ready()
+                && !ReferenceContainerCustody.hasOperationalCustody(beforePresentation, container)
+                && state(runtime).inventory().equals(beforePresentation.inventory()) && chest.getItem(0).getCount() == 1,
+                "terrain visibility neither publishes stock nor grants custody or modifies the real chest");
+        chest.getPersistentData().remove(FrontierV3ReferenceContainerCustodyExecutor.REPLICA_PROVENANCE_KEY);
+        helper.assertValueEqual(FrontierV3ReferenceContainerHandoff.inspect(level, beforePresentation,
+                new net.minecraft.world.level.ChunkPos(position)).stream()
+                .filter(check -> check.owner().equals(container)).findFirst().orElseThrow().status(),
+                FrontierV3HotHandoff.Status.WAITING, "an unproven provider cannot borrow stock-pending presentation");
+        chest.getPersistentData().putString(FrontierV3ReferenceContainerCustodyExecutor.REPLICA_PROVENANCE_KEY,
+                ReferenceContainerCustody.provenance(container));
+        chest.removeItemNoUpdate(0);
         var menu = net.minecraft.world.inventory.ChestMenu.threeRows(1, player.getInventory(), chest);
         player.containerMenu = menu;
         player.getInventory().setItem(9, FrontierV3ExactItemPresentation.materializedStack(tool));

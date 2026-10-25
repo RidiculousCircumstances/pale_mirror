@@ -116,3 +116,68 @@ actor pass, no renewed allowance on successive receipts and carry to the next ti
 The existing order/admission/ready/registry checks are reused. Completion and fresh
 first-entry latency still require live verification; no claimed improvement is inferred
 from these structural changes.
+
+## R252 deployed measurements
+
+Source c986cf711, clean detached package build and deployment verification passed
+(build/r252-{release,preflight,install,publish,verify}.log). Same aged world retained:
+frontier-v3-r249-clean-20261025 / seed126 / rulesr26 / schema303. No reset, price,
+subsidy, biological clock or worker-cadence change. SHA512:
+71e6e10246a4e632dc372a5250e747fe86be6124162f7160181ffef60df6814af19735938834e47bfdeeb23096501864568323cd07efd4f2e78545dd3eee9ad7.
+
+The exact affected checks passed:13 focused registry/cursor/readiness/admission/pass
+unit tests, guardrails and50 shared field/storage/body native tests
+(build/r252-verified-pass.log). Detached packaged-JAR verification also passed.
+The previously cancelled full adapter run is not counted as a fresh full pass.
+
+First untouched field12 (256cells): actual20FPS full-pack client visit4,799.35ms;
+READY confirmation by4.900s; camera support and field target sections both checked
+by5.000s including scenario dispatch gaps. The linked reviewed frame at5.500s plus
+capture settling shows complete foreground and physical field. Field ACTIVE with
+zero mismatches. build/r252-first-ingress.json, run
+3cebf046-1f1c-4ba8-a134-0bc0c023b673. No overall strict-less-than5s visual-frame claim:
+the screenshot is deliberately taken after a rendering-settle barrier.
+
+The checked-in scenario was extended to another still-UNCLAIMED first area, field11
+(64cells). build/r252-two-area-ingress.json, run
+1ea90b42-90b9-44e3-add7-aafbdf647c60: repeat field12 visit0.09ms at the already-current
+position (not a return-travel measurement); first field11 visit1,199.55ms, both
+compiled camera/field assertions by1.700s. Its reviewed linked frame has complete
+foreground/field; ACTIVE and zero mismatches. Far unloaded terrain is visible at
+frame edges; these are bounded scene observations, not an all-visible-radius claim.
+Both clients exited after capture; no acceleration was active.
+
+These are different first areas, not a matched speedup ratio or a guarantee for
+all settlements/mines. The main demonstrated result is removal of the22–35s wait
+in these healthy first-ingress cases. Historical field9 unknown effects were not
+replayed or erased. R252 polling timelines are incomplete: the first parser missed
+PMV3_DIAG prefixes, the corrected polling process timed out during ingress. Use the
+client manifests/trace and actual reviewed frames for these timing claims, not
+those incomplete JSONL files.
+
+## Return visit exposes another neighbour fence (R253 candidate)
+
+The third area in build/r252-return-ingress.json (run
+9dcb8a8a-b8b3-46f9-9b27-074e9688b1f1) was the already-created field7. Before entry
+it had74 stale physical cells. Visit900ms and target chunk27,-2 READY by1s, but
+camera27,-1 section compilation waited another5,600ms: both sections only passed
+by6.700s. The actual reviewed frame is complete. This contradicts a blanket <5s
+claim despite the previous two good cases, so latency acceptance remains open.
+Received-neighbour mask255 identifies missing bit8: chunk28,0 (dx=+1,dz=+1), containing
+container:7-depot. Its inventory recovery is a distinct barrier from current fields.
+The after-unload diagnostic is not a complete in-flight trace of that interval.
+
+Source review confirms an unnecessary coupling: exact existing ACTIVE chest with
+matching declaration/provenance could expose terrain during a pending physical
+effect, but identical stock mismatch during ordinary COLD-to-HOT reconciliation
+returned WAITING. Its neighbouring renderer sections could not compile until the
+custody discovery cycle finished. Extend the same PRESENTABLE_PENDING policy to
+stock reconciliation of an exact existing ACTIVE provider. Missing/foreign or not
+yet active providers still wait; conflict remains explicit. No stock, lease,
+operation permission, write/replay or economic decision is changed by this read-only
+handoff. Actual stock operations keep their own custody and mutation fences.
+
+The existing real player/tool-ingress GameTest now also checks stock mismatch:
+terrain is presentable, dynamic handoff is not READY, actual and canonical inventories
+remain untouched, and no operational custody is granted. Removing provenance
+returns WAITING. Existing click and subsequent consecutive mixed deposits still run.

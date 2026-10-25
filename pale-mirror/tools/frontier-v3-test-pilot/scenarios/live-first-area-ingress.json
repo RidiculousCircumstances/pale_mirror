@@ -23,6 +23,20 @@
           "expect": {
             "status": "ok"
           }
+        },
+        {
+          "view": "site",
+          "id": "site:11-wheat-field",
+          "expect": {
+            "status": "ok"
+          }
+        },
+        {
+          "view": "site",
+          "id": "site:7-wheat-field",
+          "expect": {
+            "status": "ok"
+          }
         }
       ]
     }
@@ -81,6 +95,109 @@
       "type": "inspect",
       "view": "performance",
       "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": 455,
+        "y": 64,
+        "z": 1483
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "first_visibility",
+      "id": "28,92",
+      "expect": {
+        "presentationReady": true,
+        "dynamicReady": true,
+        "visibility": "READY"
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "x": 455,
+        "y": 63,
+        "z": 1483
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "x": 457,
+        "y": 63,
+        "z": 1474
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "inspect",
+      "view": "field_physical",
+      "id": "site:11-wheat-field"
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "x": 436,
+        "y": 64,
+        "z": -10
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "first_visibility",
+      "id": "27,-2",
+      "expect": {
+        "presentationReady": true,
+        "dynamicReady": true,
+        "visibility": "READY"
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "inspect",
+      "view": "first_visibility",
+      "id": "28,0"
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "x": 436,
+        "y": 63,
+        "z": -10
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "assert_visible_block",
+      "position": {
+        "x": 438,
+        "y": 63,
+        "z": -19
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "inspect",
+      "view": "field_physical",
+      "id": "site:7-wheat-field"
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
     }
   ],
   "assertions": [
@@ -92,12 +209,38 @@
         "status": "ACTIVE",
         "mismatchedCells": 0
       }
+    },
+    {
+      "after": 12,
+      "view": "field_physical",
+      "id": "site:11-wheat-field",
+      "expect": {
+        "status": "ACTIVE",
+        "mismatchedCells": 0
+      }
+    },
+    {
+      "after": 19,
+      "view": "field_physical",
+      "id": "site:7-wheat-field",
+      "expect": {
+        "status": "ACTIVE",
+        "mismatchedCells": 0
+      }
     }
   ],
   "frames": [
     {
       "after": 4,
       "name": "first-area-field-visible"
+    },
+    {
+      "after": 11,
+      "name": "second-area-field-visible"
+    },
+    {
+      "after": 18,
+      "name": "revisited-field-visible"
     }
   ]
 }

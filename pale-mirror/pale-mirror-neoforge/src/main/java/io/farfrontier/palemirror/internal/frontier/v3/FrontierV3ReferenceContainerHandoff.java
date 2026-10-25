@@ -1,10 +1,8 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.model.*;
-import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import java.util.ArrayList;
 import java.util.List;
 import static io.farfrontier.palemirror.internal.frontier.v3.FrontierV3HotHandoff.Status.*;
@@ -41,12 +39,17 @@ final class FrontierV3ReferenceContainerHandoff {
                         visible ? PRESENTABLE_PENDING : WAITING, "container_effect_recovery"));
                 continue;
             }
-            var block = new BlockPos(pos.x(), pos.y(), pos.z());
             if (physical != null) {
                 var observed = FrontierV3ReferenceContainerCustodyExecutor.observedContainer(state, surface.containerId(), physical);
                 if (observed.fingerprint().equals(ReferenceContainerCustody.canonicalFingerprint(state, surface.containerId()))
                         && observed.provenance().equals(ReferenceContainerCustody.provenance(surface.containerId()))) {
                     status = READY; reason = "current_container";
+                } else if (surface.status() == ContainerSurfaceStatus.ACTIVE && physical.declared()
+                        && physical.provenance().equals(ReferenceContainerCustody.provenance(surface.containerId()))) {
+                    // Stock reconciliation fences inventory operations, not the existing
+                    // terrain or the renderer sections in neighbouring chunks. This does
+                    // not acquire custody, adopt the observed contents or permit a write.
+                    status = PRESENTABLE_PENDING; reason = "container_stock_reconciliation";
                 }
             }
             checks.add(new FrontierV3HotHandoff.Check(surface.containerId(), status, reason));
