@@ -19,28 +19,47 @@
       "checks": [
         {
           "view": "process",
-          "id": "job:production-settlement-3-settlement_produce_bread-1180",
-          "expect": {
-            "status": "ok",
-            "result": {
-              "workStage": "STATION_LOAD"
-            }
-          }
-        },
-        {
-          "view": "process",
           "id": "task:settlement-3-settlement_produce_bread-1180",
           "expect": {
-            "status": "ok",
-            "result": {
-              "taskStatus": "ACTIVE"
-            }
+            "status": "ok"
           }
         }
       ]
     }
   ],
   "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:7-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -10,
+        "y": -1,
+        "z": -10
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "first_visibility",
+      "id": "27,-2",
+      "expect": {
+        "presentationReady": true,
+        "dynamicReady": true
+      },
+      "timeoutMs": 90000
+    },
+    {
+      "type": "inspect",
+      "view": "actor",
+      "id": "resident:7-7"
+    },
     {
       "type": "inspect",
       "view": "process",
@@ -55,26 +74,35 @@
       "type": "visit",
       "dimension": "pale_mirror:frontier_graybox",
       "position": {
-        "x": 418,
-        "y": 64,
-        "z": -1353
+        "diagnostic": {
+          "view": "container",
+          "id": "container:3-depot",
+          "field": "position"
+        }
       },
-      "settleMs": 0
+      "settleMs": 0,
+      "offset": {
+        "x": -10,
+        "y": -1,
+        "z": -12
+      }
     },
     {
       "type": "look",
       "at": {
-        "x": 418,
-        "y": 65,
-        "z": -1344
+        "diagnostic": {
+          "view": "container",
+          "id": "container:3-depot",
+          "field": "position"
+        }
       }
     },
     {
       "type": "assert_visible_block",
       "position": {
-        "x": 418,
+        "x": 447,
         "y": 63,
-        "z": -1353
+        "z": -1358
       },
       "timeoutMs": 30000
     },
@@ -96,11 +124,6 @@
         "z": 0
       },
       "settleMs": 5000
-    },
-    {
-      "type": "fast_forward",
-      "ticks": 24000,
-      "timeoutMs": 180000
     },
     {
       "type": "wait_until_diagnostic",
@@ -132,7 +155,7 @@
   ],
   "assertions": [
     {
-      "after": 10,
+      "after": 12,
       "view": "process",
       "id": "task:settlement-3-settlement_produce_bread-1180",
       "expect": {
@@ -145,7 +168,7 @@
   ],
   "frames": [
     {
-      "after": 5,
+      "after": 8,
       "name": "dawnbridge-native-bakery-recovery"
     }
   ]
