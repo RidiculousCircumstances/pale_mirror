@@ -107,6 +107,10 @@ public final class FrontierV3AmbientActorGameTests {
         var store = new EphemeralStore(); var runtime = FrontierV3ServerRuntime.start(config, store, 10_000);
         initializeAdmission(level, config, store);
         var feet = helper.absolutePos(new BlockPos(0, 1, 0)); prepareFloor(level, feet);
+        var before = state(runtime);
+        helper.assertValueEqual(FrontierV3AmbientActorExecutor.admissionDiagnostic(level, runtime, before, actor).status(),
+                "NO_CURRENT_BODY_AUTHORITY", "loaded but undemanded actor must not erase the population's physical diagnostics");
+        helper.assertValueEqual(state(runtime), before, "diagnostics cannot demand an incarnation");
         var lease = AmbientActorProcess.nextLease(state(runtime), actor, runtime.checkpointImage().orElseThrow().instant());
         FrontierV3CommandSubmission.submit(runtime, "async-cancel-prepare", actor.value(), new AmbientLeasePrepared(lease));
         publishProjectionBeforeManagedJoin(helper, level, runtime);

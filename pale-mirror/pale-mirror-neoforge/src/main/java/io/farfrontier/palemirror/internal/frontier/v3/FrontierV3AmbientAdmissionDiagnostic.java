@@ -65,6 +65,9 @@ record FrontierV3AmbientAdmissionDiagnostic(String status, UUID entityId, boolea
     static FrontierV3AmbientAdmissionDiagnostic pendingUnindexed(UUID entityId, BlockPosition observedPosition, FrontierV3AmbientActorExecutor.ObservedPosition observedExact) {
         return new FrontierV3AmbientAdmissionDiagnostic("PENDING_UNINDEXED", entityId, true, null, observedPosition, observedExact);
     }
+    static FrontierV3AmbientAdmissionDiagnostic noCurrentBodyAuthority(UUID entityId) {
+        return new FrontierV3AmbientAdmissionDiagnostic("NO_CURRENT_BODY_AUTHORITY", entityId, false, null, null, null);
+    }
     static FrontierV3AmbientAdmissionDiagnostic unloaded(UUID entityId) { return new FrontierV3AmbientAdmissionDiagnostic("UNLOADED", entityId, false, null, null, null); }
     static FrontierV3AmbientAdmissionDiagnostic entityStoragePending(UUID entityId, BlockPosition placement) {
         return new FrontierV3AmbientAdmissionDiagnostic("ENTITY_STORAGE_PENDING", entityId, false, placement, null, null);

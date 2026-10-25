@@ -534,6 +534,13 @@ final class FrontierV3AmbientActorExecutor {
         if (!FrontierV3LoadedWorld.ready(level, anchor)) return FrontierV3AmbientAdmissionDiagnostic.unloaded(expectedId);
         if (!level.areEntitiesLoaded(ChunkPos.asLong(anchor))) return FrontierV3AmbientAdmissionDiagnostic.entityStoragePending(expectedId,
                 new BlockPosition(location.body().x(), location.body().y(), location.body().z()));
+        // Loaded terrain is not a representation demand. An actor can remain in
+        // canonical COLD custody without any current physical incarnation. The
+        // diagnostic must report that state without allocating a body or losing
+        // observations of every other actor in the population response.
+        if (!state.fencedRecovery().current().containsKey(
+                io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId.recoveryBindingId(actorId)))
+            return FrontierV3AmbientAdmissionDiagnostic.noCurrentBodyAuthority(expectedId);
         var contact = location.supportingSurface();
         var declaration = carrierDeclaration(state, actorId, expectedId,
                 FrontierV3ActorCarrierComposition.Representation.LIVE_BODY, io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(state, actorId).physicalEpoch());

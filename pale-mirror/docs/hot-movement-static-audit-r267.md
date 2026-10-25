@@ -38,3 +38,12 @@ observation around Hearthvale's service area, with snapshots and graphical frame
 Current runtime receipts and any follow-up findings are kept in the canonical
 continuity ledger. No simulation fast-forward or fabricated activity completion
 is required by that observation.
+
+Live follow-up: one loaded, canonically COLD actor without current body authority
+caused `admissionDiagnostic` to call `ActorBodyAuthority.current` and throw. The
+population wrapper then swallowed the exception and removed physical observations
+for the whole settlement. Report `NO_CURRENT_BODY_AUTHORITY` for that exact absent
+authority state; never allocate an incarnation from a read-only query. Unexpected
+inspection errors now produce `inspection_failed`, error type, cause and a bounded
+stack instead of an apparently successful canonical-only response. Existing native
+before-admission/cancellation coverage also checks this non-mutating observation.
