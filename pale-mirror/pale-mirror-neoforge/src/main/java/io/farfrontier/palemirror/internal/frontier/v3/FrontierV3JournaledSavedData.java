@@ -267,6 +267,8 @@ abstract class FrontierV3JournaledSavedData extends SavedData {
         persistAsync(level);
         durableContinuations.advance();
     }
+    /** Called only when the registered owner is quiescing, never by an ordinary save. */
+    void beforeShutdown() { }
     final void finish() {
         if (level == null) save(path.toFile(), null); else persist(level);
         durableContinuations.finish();

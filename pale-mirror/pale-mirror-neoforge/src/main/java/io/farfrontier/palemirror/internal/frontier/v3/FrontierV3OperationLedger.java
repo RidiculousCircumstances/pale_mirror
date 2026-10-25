@@ -57,8 +57,11 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
      * Unlike a recovered PREPARED row, this is durable proof that the child was
      * excluded from native execution before its parent's native boundary. */
     private final Map<UUID, UUID> cancellationParents;
+    /** Positive clean-stop evidence only. Removed durably before the next live attempt. */
+    private final Map<UUID, Long> unusedOnStop;
     private final Map<UUID, Integer> cancellationChildren = new HashMap<>();
     private long nextSequence;
+    private boolean quiescing;
     private final Map<Key, UUID> byOwner = new HashMap<>();
     /** Derived, bounded recovery index; never a second durable operation owner. */
     private final Map<FrontierV3OperationReceipt.Protocol, LinkedHashSet<UUID>> byProtocol = new EnumMap<>(FrontierV3OperationReceipt.Protocol.class);
@@ -76,7 +79,7 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
     private final Map<UUID, Set<FrontierV3OperationReceipt.Participant>> currentNative = new HashMap<>();
     private final Map<UUID, Long> observedSince = new HashMap<>(); // diagnostics only, reset explicitly on process recovery
     private FrontierV3OperationLedger(Map<UUID, FrontierV3OperationReceipt> initial,
-            Map<Long, Long> ranges, Map<UUID, OwnerCommand> commands, Map<UUID, UUID> cancellations, long nextSequence) {
+            Map<Long, Long> ranges, Map<UUID, OwnerCommand> commands, Map<UUID, UUID> cancellations, Map<UUID, Long> unused, long nextSequence) {
         super(FrontierV3PhysicalStoreKind.OPERATIONS);
         if (initial.size() > MAX_PENDING) throw new IllegalArgumentException("physical operation backlog exceeds its bound");
         operations = table("operations", initial, UUID::toString, (key, value) -> FrontierV3OperationReceiptCodec.write(value));
@@ -96,6 +99,7 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         }
         ownerCommands = table("ownerCommands", commands, UUID::toString, FrontierV3OperationLedger::commandTag);
         cancellationParents = table("cancellationParents", cancellations, UUID::toString, FrontierV3OperationLedger::cancellationTag);
+        unusedOnStop = table("unusedOnStop", unused, UUID::toString, FrontierV3OperationLedger::unusedTag);
         cancellations.values().forEach(parent -> cancellationChildren.merge(parent, 1, Math::addExact));
         cancellations.forEach((child, parent) -> validateCancellation(parent, child));
         if (nextSequence < 1 || initial.values().stream().map(FrontierV3OperationReceipt::sequence).distinct().count() != initial.size())
@@ -109,9 +113,17 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
             if (value.sequence() >= nextSequence) throw new IllegalArgumentException("physical operation beyond issued sequence");
             pendingParticipants = Math.addExact(pendingParticipants, value.declaration().participants().size());
         });
+        unused.forEach((ticket, sequence) -> {
+            var value = operations.get(ticket);
+            if (value == null || value.sequence() != sequence || value.cancelled() || value.ownerClosed()
+                    || !value.applied().isEmpty() || cancellationParents.containsKey(ticket) || cancellationChildren.containsKey(ticket)
+                    || value.declaration().participants().stream().anyMatch(p -> p.medium() == FrontierV3OperationReceipt.Medium.ENTITY_SNAPSHOT))
+                throw new IllegalArgumentException("invalid clean-stop unused operation proof");
+            unattempted.add(ticket);
+        });
         if (pendingParticipants > MAX_NATIVE_RECEIPTS) throw new IllegalArgumentException("physical participant backlog exceeds admission bound");
     }
-    static FrontierV3OperationLedger inMemory() { return new FrontierV3OperationLedger(Map.of(), Map.of(), Map.of(), Map.of(), 1); }
+    static FrontierV3OperationLedger inMemory() { return new FrontierV3OperationLedger(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), 1); }
     static FrontierV3OperationLedger get(ServerLevel level) {
         return FrontierV3JournaledSavedData.get(level, FrontierV3PhysicalStoreKind.OPERATIONS,
                 FrontierV3OperationLedger::inMemory, FrontierV3OperationLedger::load);
@@ -119,10 +131,14 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
     /** Called immediately before physical application, AFTER the owner's durable preparation.
      * A returned existing entry is observation/recovery, never a new execution permission. */
     FrontierV3OperationReceipt prepare(FrontierV3OperationReceipt.Declaration declaration) {
+        if (quiescing) throw new IllegalStateException("native mutation admitted after operation quiescence");
         var id = byOwner.get(Key.of(declaration));
         if (id != null) {
             var prior = operations.get(id);
             if (!prior.declaration().equals(declaration)) throw new IllegalArgumentException("physical intent changed under the same owner operation");
+            // Restored unused proof is consumed in the journal BEFORE execution.
+            // A crash while waiting for that force may lose permission, never duplicate an effect.
+            if (unusedOnStop.remove(id) != null) { changedOperations.add(id); setDirty(); }
             return prior;
         }
         if (!canPrepare(declaration)) throw new IllegalStateException("physical operation backlog needs save/recovery; no evidence may be evicted");
@@ -151,7 +167,9 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
     /** Must follow persist(). Even matching preimages do not permit replay after restart. */
     boolean beginAttempt(UUID ticket) {
         require(ticket);
+        if (quiescing) throw new IllegalStateException("native mutation attempted after operation quiescence");
         if (!unattempted.contains(ticket)) return false;
+        if (unusedOnStop.containsKey(ticket)) throw new IllegalStateException("clean-stop proof was not consumed by current preparation");
         if (!durableOperation(ticket)) throw new IllegalStateException("physical operation has no durable prepare receipt");
         unattempted.remove(ticket);
         attempting.add(ticket); return true;
@@ -180,6 +198,7 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         if (Objects.equals(cancellationParents.get(child), parent)) return;
         if (!unattempted.contains(parent) || !unattempted.remove(child))
             throw new IllegalStateException("conditional cancellation requires both original unused live permits");
+        unusedOnStop.remove(parent); unusedOnStop.remove(child);
         cancellationParents.put(child, parent); cancellationChildren.merge(parent, 1, Math::addExact);
         changedOperations.add(parent); changedOperations.add(child); setDirty();
     }
@@ -280,7 +299,12 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         replace(require(ticket).closeOwner());
     }
     private void replace(FrontierV3OperationReceipt value) {
-        if (!value.equals(require(value.ticket()))) { operations.put(value.ticket(), value); changedOperations.add(value.ticket()); setDirty(); }
+        if (!value.equals(require(value.ticket()))) {
+            if (value.cancelled() || value.ownerClosed() || !value.applied().isEmpty()) {
+                unusedOnStop.remove(value.ticket()); unattempted.remove(value.ticket());
+            }
+            operations.put(value.ticket(), value); changedOperations.add(value.ticket()); setDirty();
+        }
     }
     /** No TTL. The caller removes same-object markers only after this removal is durable.
      * Domain closure prohibits further callbacks; a retired random ticket is never recreated. */
@@ -309,12 +333,14 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
             changedOperations.add(parent); setDirty(); return true;
         }
         if (!unattempted.contains(ticket) || !value.applied().isEmpty()) return false;
+        unusedOnStop.remove(ticket);
         replace(value.cancel()); unattempted.remove(ticket); return true;
     }
     private void remove(FrontierV3OperationReceipt value) {
         UUID ticket = value.ticket();
         if (cancellationChildren.containsKey(ticket) || cancellationParents.containsKey(ticket))
             throw new IllegalStateException("conditional operation cannot retire its causal boundary");
+        unusedOnStop.remove(ticket);
         changedOperations.remove(ticket); writeReceipts.remove(ticket);
         attempting.remove(ticket);
         currentNative.remove(ticket);
@@ -339,10 +365,22 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         long ownerWaiting = operations.values().stream().filter(value -> !value.ownerClosed()).count();
         return "{\"pendingOperations\":" + operations.size() + ",\"pendingParticipants\":" + pendingParticipants
                 + ",\"ownerContextBytes\":" + pendingOwnerContextBytes
+                + ",\"restartUnusedProofs\":" + unusedOnStop.size() + ",\"liveUnusedPermissions\":" + unattempted.size()
                 + ",\"awaitingNativeSave\":" + nativeWaiting + ",\"awaitingOwner\":" + ownerWaiting
                 + ",\"oldestObservedAgeMs\":" + age + ",\"ageScope\":\"current-process\",\"retiredRanges\":" + retired.size() + "}";
     }
-    @Override protected CompoundTag metadata() { var tag = new CompoundTag(); tag.putInt("format", 5); tag.putLong("nextSequence", nextSequence); return tag; }
+    @Override void beforeShutdown() {
+        if (!attempting.isEmpty()) throw new IllegalStateException("physical mutation still running during shutdown");
+        quiescing = true;
+        for (var ticket : unattempted) {
+            var value = require(ticket);
+            if (value.cancelled() || value.ownerClosed() || !value.applied().isEmpty()
+                    || cancellationParents.containsKey(ticket) || cancellationChildren.containsKey(ticket)) continue;
+            if (unusedOnStop.putIfAbsent(ticket, value.sequence()) == null) { changedOperations.add(ticket); setDirty(); }
+        }
+        io.farfrontier.palemirror.PaleMirrorMod.LOGGER.info("PMV3_OPERATION_QUIESCED unusedProofs={} pending={}", unusedOnStop.size(), operations.size());
+    }
+    @Override protected CompoundTag metadata() { var tag = new CompoundTag(); tag.putInt("format", 6); tag.putLong("nextSequence", nextSequence); return tag; }
     @Override public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         tag.merge(metadata()); var rows = new ListTag();
         operations.values().stream().sorted(Comparator.comparing(value -> value.ticket().toString()))
@@ -355,10 +393,13 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
         tag.put("ownerCommands", commands);
         var cancellations = new ListTag(); cancellationParents.entrySet().stream().sorted(Map.Entry.comparingByKey())
                 .map(entry -> cancellationTag(entry.getKey(), entry.getValue())).forEach(cancellations::add);
-        tag.put("cancellationParents", cancellations); return tag;
+        tag.put("cancellationParents", cancellations);
+        var unused = new ListTag(); unusedOnStop.entrySet().stream().sorted(Map.Entry.comparingByKey())
+                .map(entry -> unusedTag(entry.getKey(), entry.getValue())).forEach(unused::add);
+        tag.put("unusedOnStop", unused); return tag;
     }
     static FrontierV3OperationLedger load(CompoundTag tag, HolderLookup.Provider registries) {
-        if (!tag.contains("format", Tag.TAG_INT) || tag.getInt("format") != 5 || !tag.contains("operations", Tag.TAG_LIST))
+        if (!tag.contains("format", Tag.TAG_INT) || tag.getInt("format") != 6 || !tag.contains("operations", Tag.TAG_LIST))
             throw new IllegalArgumentException("unsupported physical operation journal format");
         var rows = tag.getList("operations", Tag.TAG_COMPOUND);
         if (!rows.equals(tag.get("operations")) || rows.size() > MAX_PENDING) throw new IllegalArgumentException("invalid operation journal rows");
@@ -399,7 +440,18 @@ final class FrontierV3OperationLedger extends FrontierV3JournaledSavedData {
             if (!cancellationTag(child, parent).equals(row) || cancellations.putIfAbsent(child, parent) != null)
                 throw new IllegalArgumentException("invalid or duplicate conditional operation");
         }
-        return new FrontierV3OperationLedger(values, ranges, commands, cancellations, tag.getLong("nextSequence"));
+        var unused = new HashMap<UUID, Long>(); var unusedTags = tag.getList("unusedOnStop", Tag.TAG_COMPOUND);
+        if (!tag.contains("unusedOnStop", Tag.TAG_LIST) || !unusedTags.equals(tag.get("unusedOnStop")) || unusedTags.size() > values.size())
+            throw new IllegalArgumentException("invalid clean-stop unused operation list");
+        for (int i = 0; i < unusedTags.size(); i++) {
+            var row = unusedTags.getCompound(i); var ticket = row.getUUID("ticket"); long sequence = row.getLong("sequence");
+            if (!unusedTag(ticket, sequence).equals(row) || unused.putIfAbsent(ticket, sequence) != null)
+                throw new IllegalArgumentException("invalid or duplicate clean-stop unused operation");
+        }
+        return new FrontierV3OperationLedger(values, ranges, commands, cancellations, unused, tag.getLong("nextSequence"));
+    }
+    private static CompoundTag unusedTag(UUID ticket, long sequence) {
+        var tag = new CompoundTag(); tag.putUUID("ticket", ticket); tag.putLong("sequence", sequence); return tag;
     }
     private static CompoundTag cancellationTag(UUID child, UUID parent) {
         var tag = new CompoundTag(); tag.putUUID("child", child); tag.putUUID("parent", parent); return tag;

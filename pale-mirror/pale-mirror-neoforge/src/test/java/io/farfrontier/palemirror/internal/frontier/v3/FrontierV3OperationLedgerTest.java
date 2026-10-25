@@ -12,6 +12,40 @@ import static org.junit.jupiter.api.Assertions.*;
 class FrontierV3OperationLedgerTest {
     @BeforeAll static void version() { net.minecraft.SharedConstants.tryDetectVersion(); }
     @TempDir Path directory;
+    @Test void cleanStopPreservesOnlyUnusedAttemptsAndConsumesTheirProofBeforeExecution() throws Exception {
+        var path = directory.resolve("clean-stop.dat"); var ledger = fresh(path);
+        var unused = ledger.prepare(declaration("unused"));
+        var attempted = ledger.prepare(declaration("attempted")); ledger.finish();
+        assertTrue(ledger.beginAttempt(attempted.ticket())); ledger.finishAttempt(attempted.ticket());
+        ledger.beforeShutdown(); ledger.finish();
+        assertThrows(IllegalStateException.class, () -> ledger.beginAttempt(unused.ticket()), "quiescence cannot issue a late native effect");
+        var recovered = reopen(path);
+        assertTrue(recovered.unattempted(unused.ticket()), "positive shutdown evidence survives actual journal recovery");
+        assertFalse(recovered.beginAttempt(attempted.ticket()), "clean stop cannot rehabilitate an attempted effect");
+        assertThrows(IllegalStateException.class, () -> recovered.beginAttempt(unused.ticket()), "consume the shutdown proof first");
+        recovered.prepare(unused.declaration());
+        assertFalse(recovered.durableOperation(unused.ticket()));
+        assertThrows(IllegalStateException.class, () -> recovered.beginAttempt(unused.ticket()), "consumption must be forced before mutation");
+        recovered.finish();
+        var crashAfterConsumption = reopen(path);
+        assertFalse(crashAfterConsumption.beginAttempt(unused.ticket()), "crash after proof consumption never permits replay");
+        assertTrue(recovered.beginAttempt(unused.ticket())); recovered.finishAttempt(unused.ticket());
+        assertFalse(recovered.beginAttempt(unused.ticket()), "one resumed operation has one live attempt");
+    }
+
+    @Test void forgedOrIncompatibleShutdownProofCannotGrantPhysicalPermission() throws Exception {
+        var ledger = FrontierV3OperationLedger.inMemory(); var operation = ledger.prepare(declaration("proof"));
+        ledger.beforeShutdown(); var valid = ledger.save(new CompoundTag(), null);
+        var wrongSequence = valid.copy();
+        wrongSequence.getList("unusedOnStop", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0).putLong("sequence", operation.sequence() + 1);
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3OperationLedger.load(wrongSequence, null));
+        var orphan = valid.copy();
+        orphan.getList("unusedOnStop", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0).putUUID("ticket", UUID.randomUUID());
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3OperationLedger.load(orphan, null));
+        var oldFormat = valid.copy(); oldFormat.putInt("format", 5);
+        assertThrows(IllegalArgumentException.class, () -> FrontierV3OperationLedger.load(oldFormat, null));
+    }
+
     @Test void nativeSaveAcknowledgementCannotEraseMarkersBeforeItsAsyncRetirementIsDurable() throws Exception {
         var tasks = new ArrayDeque<Runnable>();
         var path = directory.resolve("async-retirement.dat");
@@ -59,11 +93,16 @@ class FrontierV3OperationLedgerTest {
         var context = FrontierV3JournalNbt.encode(aftermath.save());
         ledger.retainOwnerIntent(parent.ticket(), new FrontierV3OperationLedger.OwnerCommand(new CommandId("test:conditional-parent"), payload,
                 FrontierV3OperationLedger.OwnerCommand.Closure.EXPLICIT_OWNER, context));
-        aftermath.retain(ledger, parent.ticket()); ledger.finish();
-        assertFalse(ledger.beginAttempt(child.ticket()), "parent admission positively excludes the still-unused child");
-        assertFalse(ledger.sealUnattemptedCancellation(child.ticket()), "parent preparation is not death");
-        assertFalse(ledger.cancelUnattempted(parent.ticket()), "parent cannot erase its conditional outcome");
-        assertEquals(normal, ledger.ownerCommand(child.ticket()).orElseThrow(), "living owner was not replaced by a death-only command");
+        // The shared-participant variant also crosses a clean restart before
+        // fatality admission. It must consume the old unused child proof.
+        if (sharedParticipant) { ledger.beforeShutdown(); ledger.finish(); }
+        var active = sharedParticipant ? reopen(path) : ledger;
+        if (sharedParticipant) active.prepare(parent.declaration());
+        aftermath.retain(active, parent.ticket()); active.finish();
+        assertFalse(active.beginAttempt(child.ticket()), "parent admission positively excludes the still-unused child");
+        assertFalse(active.sealUnattemptedCancellation(child.ticket()), "parent preparation is not death");
+        assertFalse(active.cancelUnattempted(parent.ticket()), "parent cannot erase its conditional outcome");
+        assertEquals(normal, active.ownerCommand(child.ticket()).orElseThrow(), "living owner was not replaced by a death-only command");
         var recovered = reopen(path);
         assertEquals(aftermath, FrontierV3OperationAftermath.load(FrontierV3JournalNbt.decode(
                 recovered.ownerCommand(parent.ticket()).orElseThrow().context())), "typed child outcome survives the actual journal boundary");

@@ -17,7 +17,7 @@ enum FrontierV3PhysicalStoreKind {
             new Table(4,"containerRemovals"), new Table(6,"lossOperations"), new Table(7,"handoffOperations"), new Table(8,"containerDrops"), new Table(9,"entityDrops"))),
     INFECTION(8, "pale_mirror_frontier_v3_infection_overlay", List.of(new Table(1,"claims"))),
     OPERATIONS(12, "pale_mirror_frontier_v3_operations", List.of(new Table(1,"operations"), new Table(4,"retired"),
-            new Table(3,"ownerCommands"), new Table(5,"cancellationParents")));
+            new Table(3,"ownerCommands"), new Table(5,"cancellationParents"), new Table(6,"unusedOnStop")));
 
     record Table(int wireTag, String name) {
         Table {

@@ -47,3 +47,18 @@ authority state; never allocate an incarnation from a read-only query. Unexpecte
 inspection errors now produce `inspection_failed`, error type, cause and a bounded
 stack instead of an apparently successful canonical-only response. Existing native
 before-admission/cancellation coverage also checks this non-mutating observation.
+
+The now-visible client evidence identified an additional real stall: Maya Baker,
+resident:6-25, retained crop9 and an unused FIELD_WORK ticket across a normal
+server stop. Recovery lost the live-only unused permission and correctly refused
+execution with NO_LIVE_ATTEMPT_PERMISSION; the field and hand still matched the
+preimage, which alone is not permission to replay. The general operation journal
+now seals positive unused-attempt evidence at quiescence, after owner callbacks
+finish. Hydration validates the exact operation ticket/sequence and absence of
+applied effects; the next preparation removes and forces that proof before any
+mutation. A crash after proof consumption remains fail-closed. Attempted,
+ambiguous, cancelled and conditionally excluded operations gain no new permit.
+Quiescence rejects late mutation admission. No field-specific replay or clearing
+of old ambiguity is introduced. Native operation journal format6 explicitly
+rejects format5; the affected R266 test world is retained for diagnosis, and the
+new build requires a fresh disposable world.

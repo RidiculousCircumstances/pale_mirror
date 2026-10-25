@@ -9,12 +9,12 @@ import java.util.function.Supplier;
 /** Shared lifecycle only. Exact world/store identity is supplied by the owning adapter. */
 final class FrontierV3PhysicalStores {
     private record Key(WorldId world, FrontierV3PhysicalStoreKind kind) { }
-    private record Entry(Object owner, Runnable advance, Runnable flush, Runnable finish, Supplier<String> diagnostic) { }
+    private record Entry(Object owner, Runnable advance, Runnable flush, Runnable quiesce, Runnable finish, Supplier<String> diagnostic) { }
     private static final Map<ServerLevel, Map<Key,Entry>> STORES = new IdentityHashMap<>();
     private FrontierV3PhysicalStores() { }
     static void register(ServerLevel level, FrontierV3PhysicalStoreKind kind, FrontierV3JournaledSavedData ledger) {
         register(level, FrontierV3PhysicalWorld.WORLD_ID, kind, ledger, () -> ledger.advance(level),
-                () -> ledger.persist(level), ledger::finish, ledger::journalDiagnostic);
+                () -> ledger.persist(level), ledger::beforeShutdown, ledger::finish, ledger::journalDiagnostic);
     }
     static void register(ServerLevel level, WorldId world, FrontierV3PhysicalStoreKind kind, Object owner,
             Runnable flush, Runnable finish, Supplier<String> diagnostic) {
@@ -22,9 +22,13 @@ final class FrontierV3PhysicalStores {
     }
     static void register(ServerLevel level, WorldId world, FrontierV3PhysicalStoreKind kind, Object owner,
             Runnable advance, Runnable flush, Runnable finish, Supplier<String> diagnostic) {
+        register(level, world, kind, owner, advance, flush, () -> { }, finish, diagnostic);
+    }
+    private static void register(ServerLevel level, WorldId world, FrontierV3PhysicalStoreKind kind, Object owner,
+            Runnable advance, Runnable flush, Runnable quiesce, Runnable finish, Supplier<String> diagnostic) {
         Objects.requireNonNull(world); Objects.requireNonNull(kind); Objects.requireNonNull(owner);
         var entries = STORES.computeIfAbsent(level, ignored -> new LinkedHashMap<>());
-        var prior = entries.putIfAbsent(new Key(world,kind), new Entry(owner,advance,flush,finish,diagnostic));
+        var prior = entries.putIfAbsent(new Key(world,kind), new Entry(owner,advance,flush,quiesce,finish,diagnostic));
         if (prior != null && prior.owner != owner) throw new IllegalStateException("competing physical store owner: " + world + "/" + kind);
     }
     static void release(ServerLevel level, WorldId world, FrontierV3PhysicalStoreKind kind, Object expected) {
@@ -44,7 +48,11 @@ final class FrontierV3PhysicalStores {
     static void finish(MinecraftServer server) {
         var owned = STORES.keySet().stream().filter(level -> level.getServer() == server).toList();
         // Retain all registrations on failure; failed durability must not release an owner.
+        // Finish can deliver owner-thread continuations. Seal unused permissions
+        // only AFTER those callbacks, then force their proofs without running callbacks again.
         for (var level : owned) STORES.get(level).values().forEach(entry -> entry.finish.run());
+        for (var level : owned) STORES.get(level).values().forEach(entry -> entry.quiesce.run());
+        for (var level : owned) STORES.get(level).values().forEach(entry -> entry.flush.run());
         owned.forEach(STORES::remove);
     }
     static String diagnostic(ServerLevel level) {
