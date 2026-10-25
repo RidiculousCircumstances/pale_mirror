@@ -41,6 +41,12 @@ public record SettlementEconomicPlanningState(long inputRevision, Optional<Settl
     }
     public Set<String> awaitingResources(long now, Set<String> catalog) {
         if (accepted.isEmpty() || now >= accepted.orElseThrow().reviewAtTick()) return Set.copyOf(catalog);
+        return invalidatedProduction(catalog);
+    }
+    /** Critical input invalidations, separate from a technical review deadline.
+     * Priced advice has its own explicit expiry; this grants no work authority. */
+    public Set<String> invalidatedProduction(Set<String> catalog) {
+        if (accepted.isEmpty()) return Set.copyOf(catalog);
         var blocked = new HashSet<String>();
         for (var reason : List.of(Change.CAPACITY, Change.NEED))
             for (var item : resources(reason, catalog))

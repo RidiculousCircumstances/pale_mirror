@@ -30,13 +30,23 @@ final class GoodsEconomicPricing {
         long inputValue = ProductionInputValue.assess(item, production.processes(), outputValues,
                 rules.supplyPlanning().sourcing().orElseThrow().labourValuePerTick());
         long value = Math.max(references.get(item).raw(), inputValue);
+        // A published production counterquote is price advice, never ready
+        // supply. It closes negotiation before sell stock exists. Keep it out
+        // of retained-stock value and physical/dated supply forecasts.
+        long quantity = view.supplyPlan().orElseThrow().require(item).purchase();
+        long cash = GoodsParticipantFunding.purchase(view, rules, item).raw();
+        var conditional = acquisition.isEmpty() ? ConditionalSupplyPricing.best(state, view.participant(), item,
+                quantity, cash, now) : Optional.<ConditionalSupplyPricing.Estimate>empty();
+        if (conditional.isPresent()) value = conditional.orElseThrow().resourceUnitExpense();
         // The cheapest current replacement bounds consent; expensive history or
         // a worse local process cannot justify outbidding that alternative.
         if (acquisition.isPresent()) value = acquisition.orElseThrow().total().raw();
         var local = production.alternatives().get(item);
         if (local != null) value = Math.min(value, local.raw());
-        long quantity = view.supplyPlan().orElseThrow().require(item).purchase();
-        if (quantity > 0) value = Math.min(value, Math.max(1, GoodsParticipantFunding.purchase(view, rules, item).raw()));
+        // Qualified quotes already bound invoiced cash. Their resource expense
+        // can also include provisions already owned by the collector; it is not
+        // another cash invoice. Matching still rechecks actual money and goods.
+        if (quantity > 0 && acquisition.isEmpty() && conditional.isEmpty()) value = Math.min(value, Math.max(1, cash));
         return new ResourceEconomicValue(retained, new FixedScalar(Math.max(1, value)));
     }
     private GoodsEconomicPricing() { }

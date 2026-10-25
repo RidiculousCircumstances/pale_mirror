@@ -16,6 +16,8 @@ final class MarketEconomicInputChanges implements EconomicInputChangePort {
         if (a.participants().planning() != b.participants().planning()) for (var entry : b.participants().planning().entrySet()) {
             var current = entry.getValue().accepted();
             var prior = a.participants().planning().getOrDefault(entry.getKey(), SettlementEconomicPlanningState.empty()).accepted();
+            if (current.orElse(null) == prior.orElse(null)) continue;
+            if (current.isPresent()) changedCounterquotes(prior.orElse(null), current.orElseThrow(), sink);
             if (current.isEmpty() || sameBuyerDemand(prior.orElse(null), current.orElseThrow())) continue;
             for (var order : b.orders().values()) if (order.side() == GoodsTradeOrder.Side.BUY
                     && order.party().id().equals(entry.getKey()) && order.availableQuantity() > 0)
@@ -33,6 +35,21 @@ final class MarketEconomicInputChanges implements EconomicInputChangePort {
             if (old != null && next != null && old.prices().equals(next.prices()) && old.known().equals(next.known())) return;
             if (next != null) sink.changed(next.party().id(), MARKET, Set.of());
         });
+    }
+    private record QuoteTerms(int quantity, long goods, long resources, long cash,
+                              GoodsTradeFulfillment fulfillment) { }
+    private static void changedCounterquotes(SettlementEconomicPlan prior, SettlementEconomicPlan current, Sink sink) {
+        var before = quoteTerms(prior); var after = quoteTerms(current);
+        var keys = new HashSet<>(before.keySet()); keys.addAll(after.keySet());
+        for (var key : keys) if (!Objects.equals(before.get(key), after.get(key)))
+            sink.resource(key.recipient().id(), MARKET, key.itemKind());
+    }
+    private static Map<ConditionalProductionQuote.Key, QuoteTerms> quoteTerms(SettlementEconomicPlan plan) {
+        if (plan == null) return Map.of();
+        var result = new HashMap<ConditionalProductionQuote.Key, QuoteTerms>();
+        for (var q : plan.conditionalQuotes()) result.put(q.key(), new QuoteTerms(q.quantity(), q.goodsUnitPrice(),
+                q.resourceFreight(), q.cashFreight(), q.fulfillment()));
+        return result;
     }
     private static boolean sameBuyerDemand(SettlementEconomicPlan prior, SettlementEconomicPlan current) {
         if (prior == null) return false;

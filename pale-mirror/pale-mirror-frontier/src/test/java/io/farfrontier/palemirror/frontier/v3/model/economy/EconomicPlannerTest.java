@@ -21,6 +21,22 @@ class EconomicPlannerTest {
                 "conditional sales cannot finance purchases before payment");
     }
 
+    @Test void conditionalCounterquotesCannotCreateProductionRevenueStockOrDoubleBookLabour() {
+        var field = new SupplyPlanner.Process("field", "grain", 1, Map.of(), 0, Map.of(), 0,
+                10, 1, 10, 1, Map.of("worker", 10L));
+        var input = facts(100, 0, 0, 0, List.of(field), List.of());
+        var planner = new EconomicPlanner(); var domestic = planner.domestic(input, RULES);
+        var counter = new EconomicSnapshot.ExportInterest("counter-buyer", "grain", 10, 2, 20, 20, 100, 0);
+        var onlyAdvice = planner.withConditionalQuotes(domestic, List.of(), List.of(counter));
+        assertEquals(planner.withExports(domestic, List.of()), onlyAdvice.plan(), "a counterquote grants no actual production or income");
+        assertEquals(10L, onlyAdvice.priceableQuantities().get(counter));
+        var consent = new EconomicSnapshot.ExportInterest("real-buyer", "grain", 7, 2, 14, 14, 0);
+        var both = planner.withConditionalQuotes(domestic, List.of(consent), List.of(counter));
+        assertEquals(7, both.plan().economy().orElseThrow().exports().getFirst().additionalProduction());
+        assertEquals(3L, both.priceableQuantities().get(counter), "only remaining shared labour may underpin conditional advice");
+        assertEquals(0, both.plan().economy().orElseThrow().purchaseBudgets().values().stream().mapToLong(Long::longValue).sum());
+    }
+
     @Test void impossibleExportPruningPreservesAllocationFundingAndUpstreamProduction() {
         var planner = new EconomicPlanner();
         var field = new SupplyPlanner.Process("field", "grain", 2, Map.of(), 0, Map.of(), 0, 10, 1, 20, 2);

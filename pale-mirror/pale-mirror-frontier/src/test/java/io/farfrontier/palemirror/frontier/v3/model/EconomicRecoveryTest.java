@@ -43,7 +43,8 @@ class EconomicRecoveryTest {
         assertEquals(1, first.operations());
         assertTrue(first.request().recipe().ingredient().accepts("minecraft:cobblestone"));
         assertTrue(EquipmentProductionPlanning.ready(state, home, 5000).isEmpty(), "an estimated import is not present material");
-        assertEquals(1, new EquipmentReserveSupply().readAt(state, home, 5000).needs().get("minecraft:cobblestone").immediate());
+        assertTrue(new EquipmentReserveSupply().readAt(state, home, 5000).needs().get("minecraft:cobblestone").immediate() > 1,
+                "the desired restoration portfolio stays visible separately from its first-unit minimum");
         var requirement = new EquipmentReserveSupply().readAt(state, home, 5000).requiredInputs().get("minecraft:cobblestone");
         assertEquals(1, requirement.quantity());
         assertEquals(0, requirement.withinTicks());

@@ -98,6 +98,10 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
         // The common byte budget preserves current stock/planning facts when retained
         // trade history grows. Explicit omissions are not empty orders or no caravans.
         return FrontierV3DiagnosticDetailBudget.finish(essential, java.util.List.of(
+                new FrontierV3DiagnosticDetailBudget.Section("conditionalAcquisitionQuotes", counterquotes(
+                    ConditionalSupplyPricing.currentQuotes(state, participant, checkpoint.instant().ticks()), checkpoint.instant().ticks())),
+                new FrontierV3DiagnosticDetailBudget.Section("conditionalProductionQuotes", counterquotes(state.companies().goodsTrade().participants()
+                    .economicState(participant.party().id()).accepted().map(SettlementEconomicPlan::conditionalQuotes).orElse(java.util.List.of()), checkpoint.instant().ticks())),
                 new FrontierV3DiagnosticDetailBudget.Section("reserves", view.supplyPlan().map(FrontierV3ReserveDiagnosticJson::render).orElse("[]")),
                 new FrontierV3DiagnosticDetailBudget.Section("supplyPlan", "[" + supply + "]"),
                 new FrontierV3DiagnosticDetailBudget.Section("prices", "[" + prices + "]"),
@@ -109,6 +113,19 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                 new FrontierV3DiagnosticDetailBudget.Section("knownCounterparties", "[" + known + "]"),
                 new FrontierV3DiagnosticDetailBudget.Section("orders", "[" + orders + "]"),
                 new FrontierV3DiagnosticDetailBudget.Section("contracts", "[" + contracts + "]")));
+    }
+    private static String counterquotes(java.util.List<ConditionalProductionQuote> quotes, long now) {
+        return "{\"total\":" + quotes.size() + ",\"shown\":" + Math.min(16, quotes.size()) + ",\"quotes\":[" + quotes.stream()
+                    .sorted(java.util.Comparator.comparing((ConditionalProductionQuote q) -> q.supplier().id())
+                        .thenComparing(q -> q.recipient().id()).thenComparing(ConditionalProductionQuote::itemKind)).limit(16)
+                    .map(q -> "{\"status\":" + string(now >= q.expiresAtTick() ? "EXPIRED_ESTIMATE" : "CONDITIONAL_PRICE_ESTIMATE")
+                        + ",\"supplier\":" + string(q.supplier().id().value()) + ",\"recipient\":" + string(q.recipient().id().value())
+                        + ",\"item\":" + string(q.itemKind()) + ",\"quantity\":" + q.quantity()
+                        + ",\"goodsUnitPriceRaw\":" + q.goodsUnitPrice() + ",\"resourceFreightRaw\":" + q.resourceFreight()
+                        + ",\"cashFreightRaw\":" + q.cashFreight() + ",\"organizer\":" + string(q.fulfillment().organizer().id().value())
+                        + ",\"mode\":" + string(q.fulfillment().mode().name()) + ",\"sourcePlanRevision\":" + q.sourcePlanRevision()
+                        + ",\"capacityWindowTicks\":" + q.capacityWindowTicks() + ",\"deliveryTicks\":" + q.deliveryTicks()
+                        + ",\"expiresAtTick\":" + q.expiresAtTick() + "}").collect(Collectors.joining(",")) + "]}";
     }
     private static String publication(FrontierWorldState state, GoodsParticipant participant, long now, GoodsParticipantView view) {
         var lifecycle = state.companies().goodsTrade().participants().economicState(participant.party().id());
@@ -122,7 +139,7 @@ final class FrontierV3GoodsParticipantDiagnosticJson {
                 + ",\"planRevision\":" + accepted.map(value -> Long.toString(value.revision())).orElse("null")
                 + ",\"acceptedInputRevision\":" + accepted.map(value -> Long.toString(value.inputRevision())).orElse("null")
                 + ",\"reviewAtTick\":" + accepted.map(value -> Long.toString(value.reviewAtTick())).orElse("null")
-                + ",\"unpublishedPeerPlans\":[" + accepted.stream().flatMap(plan -> plan.buyerVersions().entrySet().stream())
+                + ",\"unpublishedPeerPlans\":[" + accepted.stream().flatMap(plan -> plan.peerVersions().entrySet().stream())
                     .filter(entry -> entry.getValue() == 0).map(entry -> entry.getKey().value()).sorted()
                     .map(FrontierV3GoodsParticipantDiagnosticJson::string).collect(Collectors.joining(",")) + "]"
                 + ",\"reasons\":[" + reasons + "],\"awaitingTrade\":[" + view.awaitingReview().stream().sorted()

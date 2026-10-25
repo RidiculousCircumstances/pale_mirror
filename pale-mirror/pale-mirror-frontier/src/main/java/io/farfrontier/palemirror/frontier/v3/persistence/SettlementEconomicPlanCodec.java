@@ -10,8 +10,8 @@ final class SettlementEconomicPlanCodec {
     static void write(DataOutputStream out, SettlementEconomicPlan plan) throws IOException {
         out.writeLong(plan.revision()); out.writeLong(plan.inputRevision()); out.writeLong(plan.atTick()); out.writeLong(plan.reviewAtTick());
         SupplyPlanCodec.write(out, plan.domestic()); SupplyPlanCodec.write(out, plan.complete());
-        EconomicPlanCodec.quantities(out, plan.productionCeilings()); out.writeInt(plan.buyerVersions().size());
-        for (var entry : new TreeMap<>(plan.buyerVersions()).entrySet()) { out.writeUTF(entry.getKey().value()); out.writeLong(entry.getValue()); }
+        EconomicPlanCodec.quantities(out, plan.productionCeilings()); out.writeInt(plan.peerVersions().size());
+        for (var entry : new TreeMap<>(plan.peerVersions()).entrySet()) { out.writeUTF(entry.getKey().value()); out.writeLong(entry.getValue()); }
         out.writeInt(plan.affectedProducts().size());
         for (var entry : new TreeMap<>(plan.affectedProducts()).entrySet()) { out.writeUTF(entry.getKey()); EconomicPlanCodec.strings(out, entry.getValue()); }
         out.writeInt(plan.needs().size());
@@ -24,6 +24,7 @@ final class SettlementEconomicPlanCodec {
             var value = plan.cultivation().orElseThrow(); out.writeLong(value.desiredOutput()); out.writeLong(value.safetyOutput());
             out.writeLong(value.horizonTicks()); out.writeBoolean(value.safe());
         }
+        ConditionalProductionQuoteCodec.write(out, plan.conditionalQuotes());
     }
     static SettlementEconomicPlan read(DataInputStream in) throws IOException {
         long revision = in.readLong(), input = in.readLong(), at = in.readLong(), review = in.readLong();
@@ -44,7 +45,7 @@ final class SettlementEconomicPlanCodec {
         }
         var cultivation = in.readBoolean() ? Optional.of(new CultivationEconomicIntent(in.readLong(), in.readLong(), in.readLong(), in.readBoolean()))
                 : Optional.<CultivationEconomicIntent>empty();
-        return new SettlementEconomicPlan(revision, input, at, review, domestic, complete, ceilings, buyers, affected, cultivation, needs);
+        return new SettlementEconomicPlan(revision, input, at, review, domestic, complete, ceilings, buyers, affected, cultivation, needs, ConditionalProductionQuoteCodec.read(in));
     }
     static void writeStates(DataOutputStream out, Map<SubjectId, SettlementEconomicPlanningState> states) throws IOException {
         out.writeInt(states.size());

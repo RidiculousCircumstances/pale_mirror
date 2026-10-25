@@ -42,7 +42,7 @@ final class GoodsTradeStateCodec {
         out.writeInt(0x47544333); // Explicit separate goods/freight grammar, including WAL payloads.
         id(out, contract.id()); id(out, contract.sellOrderId()); id(out, contract.buyOrderId());
         party(out, contract.seller()); party(out, contract.buyer());
-        out.writeByte(switch (contract.fulfillment().mode()) { case SELLER_DELIVERY -> 1; case BUYER_COLLECTION -> 2; });
+        out.writeByte(contract.fulfillment().mode().wireTag());
         party(out, contract.fulfillment().organizer()); id(out, contract.sourceContainerId()); id(out, contract.receiverContainerId());
         out.writeUTF(contract.itemKind()); out.writeInt(contract.quantity()); out.writeLong(contract.goodsUnitPrice().raw());
         out.writeLong(contract.deliveryUnitPrice().raw());
@@ -61,8 +61,7 @@ final class GoodsTradeStateCodec {
     static GoodsTradeContract readContract(DataInputStream in) throws IOException {
         if (in.readInt() != 0x47544333) throw new IllegalArgumentException("unsupported goods/freight contract grammar");
         SubjectId id = id(in), sell = id(in), buy = id(in); GoodsTradeParty seller = party(in), buyer = party(in);
-        var mode = switch (in.readUnsignedByte()) { case 1 -> GoodsTradeFulfillment.Mode.SELLER_DELIVERY; case 2 -> GoodsTradeFulfillment.Mode.BUYER_COLLECTION;
-            default -> throw new IllegalArgumentException("unknown goods fulfillment mode"); };
+        var mode = GoodsTradeFulfillment.Mode.fromWireTag(in.readUnsignedByte());
         var fulfillment = new GoodsTradeFulfillment(mode, party(in));
         SubjectId source = id(in), receiver = id(in); String kind = in.readUTF(); int quantity = in.readInt();
         FixedScalar price = new FixedScalar(in.readLong()), delivery = new FixedScalar(in.readLong());

@@ -11,7 +11,8 @@ final class FrontierStateSchema {
     // Every expedition provision allocation retains its independently selected
     // source port; replay must never substitute the cargo warehouse.
     // Individual durable items retain condition through every custody boundary.
-    static final int VERSION = 303;
+    // Accepted plans retain nominal supplier-owned conditional price advice.
+    static final int VERSION = 304;
     private static final int MAGIC = 0x4656334D;
     private FrontierStateSchema() { }
     static void write(DataOutputStream output) throws IOException {

@@ -151,8 +151,11 @@ public final class FrontierWorldStateCodec implements StateCodec<FrontierWorldSt
             var groups = UnitGroupStateCodec.read(input); var fleet = TransportFleetStateCodec.read(input);
             var extraction = ExtractionSiteStateCodec.read(input);
             var trade = companies.goodsTrade();
-            companies = companies.withGoodsTrade(trade.withParticipants(new GoodsParticipantState(
-                    trade.participants().participants(), SettlementEconomicPlanCodec.readStates(input))));
+            var economicParties = new GoodsParticipantState(trade.participants().participants(), SettlementEconomicPlanCodec.readStates(input));
+            for (var entry : economicParties.planning().entrySet()) if (entry.getValue().accepted().isPresent())
+                SettlementEconomicPublication.requireQuoteEnvelope(economicParties, economicParties.participants().get(entry.getKey()),
+                        entry.getValue().accepted().orElseThrow(), bootstrap.ruleset().goodsTrade());
+            companies = companies.withGoodsTrade(trade.withParticipants(economicParties));
             FrontierWorldState state = new FrontierWorldState(bootstrap, actors, structures,
                     infection, inventory, jobs, serviceWorks, intents, observations, scenes, colony, structureDamage,
                     physicalDeltas, ambient, constructions, maintenances, topology, plans, population, companies,

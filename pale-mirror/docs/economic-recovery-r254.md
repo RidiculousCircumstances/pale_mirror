@@ -246,3 +246,85 @@ so a complete100krequest series is not claimed. At47669 Southgate still had100co
 with65.089136 actually reserved under existing commitments. No contract was
 repriced/cancelled and no resources were injected. All native dimensions saved
 normally11:27:02. The task-owned observer was stopped; no user client was present.
+
+
+## Remaining E5 closure: priced conditional production advice
+
+R258's three requested segments56k completed at104742; a further32k completed at
+144446. Native rate20 restored, no client. Final analytics144558:13paid receipts,
+5hungry and1200coins. No new tool/restoration was proved. A correctly selected and
+dated material request alone has not closed E5.
+
+Concrete missing feedback on actual frozen102k: Southgate bids1.81 for2cobble,
+has2coins available after current contracts. Registered producers have finite
+stone capacity and can return conditional transport advice. At their actual asks,
+that advice covers1item with zero invoiced freight but40–113coins of owned journey
+resources (build/r259-conditional-quote-frozen.txt). Export planning simply discards
+it when total acquisition expense exceeds the buyer's old bid. The buyer cannot
+see that future replacement cost through GoodsAcquisitionPricing until ready sell
+stock exists. No new goods, cash or route is proved by the conditional advice.
+This is a missing price-negotiation feedback, not permission to force the trade.
+
+Complete the connected correction in one owned slice:
+
+1. The existing participant economic review publishes bounded typed conditional
+   production counterquotes: exact supplier/recipient, item/quantity, explicit
+   organizer/mode, goods price, separate resource/cash freight, source plan/input
+   generation and expiry. They are estimates, never stock, an arrival or a contract.
+2. Reuse the same pure production-chain/labour allocation. Consented production
+   takes capacity first; only remaining feasible known capacity may underpin a
+   counterquote. No per-buyer recursive economic solver or catalogue-wide query
+   from eligibility/stock/diagnostics. Conditional allocations grant no executor
+   production ceiling until the buyer actually consents in its public demand.
+3. Buyers read only accepted current peer counterquotes. Real ready offers remain
+   separate. Update acquisition willingness and cash estimates independently:
+   owned provisions are economic cost, not a second cash invoice. Actual stock,
+   funds, crew, trip and delivery admission still run normally. Estimates cannot
+   suppress necessary local production or count as incoming stock.
+4. Equipment retains the first-unit minimum separately from the affordable desired
+   restoration portfolio. Unknown input quotes must not truncate every future
+   material requirement to a one-item trip; estimated intentions remain unfunded
+   until real availability/admission. No financed revenue before actual payment.
+5. Persist quotes in the accepted economic plan under an explicit fresh schema;
+   reject old worlds rather than infer missing identities. Invalidate only named
+   parties/resources when economic quote content changes; technical renewal and
+   generation/time differences alone cannot create a review ping-pong.
+6. Verify no stock/output/cash from a counterquote, stale/wrong-owner rejection,
+   no duplicated cash/labour, ordinary paid pickup and terminal tool work; then
+   commit/deploy and a bounded actual preventive run. Keep old diagnostic worlds.
+   No free supplies, money injection, arbitrary new price floor or forced sale.
+
+This extends the accepted quote/planning model through explicit cost feedback; it
+adds no credit, new resource sink, autonomous controller or parallel logistics.
+
+
+### R259 implementation status
+
+Typed ConditionalProductionQuote is retained by the existing accepted plan,
+with exact nominal supplier/recipient/organizer, stable fulfillment wire tags,
+source generation and explicit expiry. Snapshot schema304 rejects303 without
+heuristic migration. Publication and hydration both validate owner tuples.
+The common export allocator serves consented demand first, then uses only the
+remaining cash/labour/known resource chains to price conditional requests. Only
+consented production reaches executor ceilings or conditional revenue. A supplier
+also retains price advice after consent to prevent quote disappearance during
+manufacture. Buyers read accepted peer estimates; actual offers alone still
+back supply, incoming stock, reservations and transport admission.
+
+Acquisition value includes owned journey resources; cash estimates include only
+the invoice. GoodsResourceValuation retention/food opportunity anchors remain
+independent of these future estimates to avoid circular price inflation.
+Expected equipment portfolios keep future material needs separate from first-unit
+protection, rather than truncating each unquoted requirement to one-item travel.
+Quote content invalidation excludes source epoch, expiry and unconsumed diagnostic
+timing changes; unchanged participant plans are skipped before scanning quotes.
+Read-only diagnostics show incoming/issued conditional estimates before bulky
+history, with explicit total/shown counts. Existing exact stock, authority,
+physical custody, pickup/payment and actor/route owners remain unchanged.
+
+Initial69focused checks PASS (r259-conditional-tests3.log). Broader177trade/equipment/
+station/economic checks PASS in2m47s (r259-trade-integration.log/counts.json).
+Final hydration/nominal-kind/diagnostic checks and guardrails PASS in36s
+(build/r259-final-identity-checks.log). Forged owner kinds are rejected both at
+publication and snapshot hydration; persisted nonempty quotes survive roundtrip.
+No new tool/actual recovery or balanced whole economy is claimed from unit advice.

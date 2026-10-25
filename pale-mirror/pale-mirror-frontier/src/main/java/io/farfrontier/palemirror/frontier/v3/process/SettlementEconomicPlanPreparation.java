@@ -10,7 +10,15 @@ final class SettlementEconomicPlanPreparation {
             GoodsParticipantAssessment.Assessment domestic, long now) {
         var registry = state.companies().goodsTrade().participants();
         var input = registry.economicState(participant.party().id());
-        var complete = SettlementEconomicEvaluation.complete(state, domestic).view().supplyPlan().orElseThrow();
+        long next = Math.addExact(now, state.bootstrap().ruleset().goodsTrade().reviewInterval());
+        for (var order : state.companies().goodsTrade().orders().values()) {
+            if ((order.party().equals(participant.party()) || order.counterparty().equals(participant.party())) && order.expiresAtTick() > now)
+                next = Math.min(next, order.expiresAtTick());
+        }
+        long revision = Math.incrementExact(input.accepted().map(SettlementEconomicPlan::revision).orElse(0L));
+        var completion = SettlementEconomicEvaluation.complete(state, domestic, input.inputRevision(), revision, Math.addExact(now, Math.multiplyExact(2,
+                state.bootstrap().ruleset().goodsTrade().reviewInterval())));
+        var complete = completion.assessment().view().supplyPlan().orElseThrow();
         var ceilings = new TreeMap<String, Long>();
         for (var item : complete.demands().keySet()) {
             long additional = complete.economy().map(plan -> plan.additionalProduction().get(item))
@@ -28,14 +36,9 @@ final class SettlementEconomicPlanPreparation {
             buyers.put(peer.party().id(), registry.economicState(peer.party().id()).accepted()
                     .map(SettlementEconomicPlan::revision).orElse(0L));
         }
-        long next = Math.addExact(now, state.bootstrap().ruleset().goodsTrade().reviewInterval());
-        for (var order : state.companies().goodsTrade().orders().values()) {
-            if ((order.party().equals(participant.party()) || order.counterparty().equals(participant.party())) && order.expiresAtTick() > now)
-                next = Math.min(next, order.expiresAtTick());
-        }
-        return new SettlementEconomicPlan(Math.incrementExact(input.accepted().map(SettlementEconomicPlan::revision).orElse(0L)),
+        return new SettlementEconomicPlan(revision,
                 input.inputRevision(), now, next, domestic.view().supplyPlan().orElseThrow(), complete, ceilings, buyers, affected,
-                CultivationEconomicEvaluation.evaluate(state, participant.party().id(), now), domestic.facts().orElseThrow().basis().needs());
+                CultivationEconomicEvaluation.evaluate(state, participant.party().id(), now), domestic.facts().orElseThrow().basis().needs(), completion.quotes());
     }
     private SettlementEconomicPlanPreparation() { }
 }

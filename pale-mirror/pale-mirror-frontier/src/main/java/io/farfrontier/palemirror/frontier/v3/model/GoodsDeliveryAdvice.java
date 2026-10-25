@@ -8,7 +8,8 @@ import java.util.*;
  * Future output may use a current eligible warehouse but is never reported as stored stock. */
 final class GoodsDeliveryAdvice {
     enum Supply { STORED, CONDITIONAL_PRODUCTION }
-    record Advice(int quantity, long tripExpense, int minimumDispatchQuantity, long cashDelivery) {
+    record Advice(int quantity, long tripExpense, int minimumDispatchQuantity, long cashDelivery,
+                  GoodsTradeFulfillment fulfillment, long deliveryTicks) {
         long deliveryPerItem() { return Math.ceilDiv(tripExpense, quantity); }
         long cashDeliveryPerItem() { return Math.ceilDiv(cashDelivery, quantity); }
     }
@@ -39,7 +40,8 @@ final class GoodsDeliveryAdvice {
         if (!cause.permitsDeparture()) return Optional.empty();
         int minimum = cause == TripDispatchPolicy.Cause.SUPPLY_DEADLINE ? 1
                 : Math.toIntExact(Math.max(1, GoodsDispatchAdvice.plannedLot(state, buyer, value.organizer(), value.mode(), item, goodsPrice, value.journeyTicks(), atTick)));
-        return Optional.of(new Advice(value.quantity(), value.expense(), minimum, value.cashFreight()));
+        return Optional.of(new Advice(value.quantity(), value.expense(), minimum, value.cashFreight(),
+                new GoodsTradeFulfillment(value.mode(), value.organizer().party()), value.deliveryTicks()));
     }
     private GoodsDeliveryAdvice() { }
 }

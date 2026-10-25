@@ -152,7 +152,10 @@ public final class EquipmentProductionPlanning {
                     result.add(new Planned(request, quantity)); request.maintenance().ifPresent(t -> used.add(t.itemId()));
                     units = Math.max(0, units - quantity); wear = Math.max(0, wear - Math.multiplyExact(quantity, request.usefulWear()));
                     var start = EquipmentRecoveryFunding.cost(state, home, request.recipe(), quantity, market, tick);
-                    if (!start.funded(money)) break;
+                    // Continue the affordable desired restoration portfolio even
+                    // without ready quotes. ReserveSupply keeps its first-unit
+                    // minimum separate; no planned item or cash is granted here.
+                    if (start.cash() > money) break;
                     money -= start.cash();
                 } else break; // Neither production capability nor a funded delivered alternative exists.
             }

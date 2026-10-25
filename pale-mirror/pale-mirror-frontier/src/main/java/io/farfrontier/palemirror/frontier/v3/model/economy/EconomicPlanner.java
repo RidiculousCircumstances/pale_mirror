@@ -124,11 +124,18 @@ public final class EconomicPlanner {
 
     /** Adds conditional sales to an already evaluated domestic plan. Does not
      * re-run source selection, allocate the buyer's money or count future revenue as cash. */
+    public record ExportReview(SupplyPlanner.Plan plan, Map<EconomicSnapshot.ExportInterest, Long> priceableQuantities) {
+        public ExportReview { priceableQuantities = Map.copyOf(priceableQuantities); }
+    }
     public SupplyPlanner.Plan withExports(Domestic evaluated, List<EconomicSnapshot.ExportInterest> interests) {
+        return withConditionalQuotes(evaluated, interests, List.of()).plan();
+    }
+    public ExportReview withConditionalQuotes(Domestic evaluated, List<EconomicSnapshot.ExportInterest> interests,
+            List<EconomicSnapshot.ExportInterest> conditional) {
         var facts = evaluated.facts.withExportInterest(interests);
         var domestic = evaluated.plan;
         var base = domestic.economy().orElseThrow();
-        var exports = new EconomicExportPlanning().plan(facts, domestic, base.saleableStock(), evaluated.policy, base.horizonTicks());
+        var exports = new EconomicExportPlanning().plan(facts, domestic, base.saleableStock(), evaluated.policy, base.horizonTicks(), conditional);
         var production = new TreeMap<>(base.additionalProduction());
         exports.additionalProduction().forEach((item, amount) -> production.merge(item, amount, Math::addExact));
         var constraints = EnumSet.noneOf(EconomicPlan.Constraint.class);
@@ -140,7 +147,8 @@ public final class EconomicPlanner {
         var economy = new EconomicPlan(base.horizonTicks(), base.domesticTargets(), production, base.purchaseBudgets(),
                 base.retainedLiquidity(), base.unfundedRequirements(), base.contractReceivables(), base.checkpoints(),
                 exports.exports(), constraints, base.purchasePrices(), base.fundedRestarts(), base.saleableStock());
-        return new SupplyPlanner.Plan(domestic.demands(), domestic.reserves(), domestic.preferredPurchaseSpending(),
-                domestic.preferredPurchaseQuantities(), domestic.inputRequirements(), Optional.of(economy), domestic.backedRecipes());
+        return new ExportReview(new SupplyPlanner.Plan(domestic.demands(), domestic.reserves(), domestic.preferredPurchaseSpending(),
+                domestic.preferredPurchaseQuantities(), domestic.inputRequirements(), Optional.of(economy), domestic.backedRecipes()),
+                exports.priceableQuantities());
     }
 }

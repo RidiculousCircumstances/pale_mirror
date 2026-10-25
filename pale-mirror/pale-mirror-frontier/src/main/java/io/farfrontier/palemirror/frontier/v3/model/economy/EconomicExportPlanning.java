@@ -5,11 +5,14 @@ import java.util.*;
 
 /** Conditional export production consumes spare capacity, never a neighbour's money or an assumed sale. */
 final class EconomicExportPlanning {
-    record Plan(List<EconomicPlan.Export> exports, Map<String, Long> additionalProduction) {
-        Plan { exports = List.copyOf(exports); additionalProduction = Map.copyOf(additionalProduction); }
+    record Plan(List<EconomicPlan.Export> exports, Map<String, Long> additionalProduction,
+                Map<EconomicSnapshot.ExportInterest, Long> priceableQuantities) {
+        Plan { exports = List.copyOf(exports); additionalProduction = Map.copyOf(additionalProduction);
+            priceableQuantities = Map.copyOf(priceableQuantities); }
     }
     Plan plan(EconomicSnapshot facts, SupplyPlanner.Plan supply,
-                                  Map<String, Long> saleable, EconomicPlanningRules policy, long horizonTicks) {
+                                  Map<String, Long> saleable, EconomicPlanningRules policy, long horizonTicks,
+                                  List<EconomicSnapshot.ExportInterest> conditional) {
         var labour = new TreeMap<String, Long>(); var capacity = new HashMap<String, Long>();
         var heat = new HashMap<String, Long>();
         var usedRecipes = new HashMap<String, Long>();
@@ -31,14 +34,22 @@ final class EconomicExportPlanning {
         var buyerCash = new TreeMap<String, Long>();
         record BudgetKey(String buyer, String item) { }
         var budgets = new HashMap<BudgetKey, Long>();
-        for (var interest : facts.exportInterest()) buyerCash.merge(interest.buyer(), interest.availableCash(), Math::min);
-        for (var interest : facts.exportInterest())
+        var all = new ArrayList<>(facts.exportInterest()); all.addAll(conditional);
+        for (var interest : all) buyerCash.merge(interest.buyer(), interest.availableCash(), Math::min);
+        for (var interest : all)
             budgets.merge(new BudgetKey(interest.buyer(), interest.item()), interest.commodityBudget(), Math::min);
         var result = new TreeMap<String, EconomicPlan.Export>();
         var valuation = new ExportProductionValuation(facts);
         var allocation = new ProductionChainAllocation(facts.processes(), inputs, usedRecipes, labour, heat, facts.replacementPrices());
         long remaining = policy.maximumExportItems();
-        for (var interest : facts.exportInterest().stream().sorted(valuation.order(facts, capacity)).toList()) {
+        var quoted = new LinkedHashMap<EconomicSnapshot.ExportInterest, Long>();
+        Map<String, Long> committedProduction = Map.of();
+        for (int phase = 0; phase < 2; phase++) {
+          // Quotes share only capacity left by consented production. Their
+          // hypothetical use can never become an executor production ceiling.
+          if (phase == 1) committedProduction = allocation.additionalProduction();
+          var interests = phase == 0 ? facts.exportInterest() : conditional;
+          for (var interest : interests.stream().sorted(valuation.order(facts, capacity)).toList()) {
             var budget = new BudgetKey(interest.buyer(), interest.item());
             long spending = Math.min(buyerCash.get(interest.buyer()), budgets.get(budget));
             // Owned journey supplies consume resources, not the buyer's cash twice.
@@ -55,11 +66,15 @@ final class EconomicExportPlanning {
             long expense = Math.multiplyExact(quantity, interest.buyerUnitCash());
             buyerCash.merge(interest.buyer(), -expense, Long::sum); remaining -= quantity;
             budgets.merge(budget, -expense, Long::sum);
-            var previous = result.getOrDefault(item, new EconomicPlan.Export(item, 0, 0, 0));
-            result.put(item, new EconomicPlan.Export(item, Math.addExact(previous.existingStock(), held),
-                    Math.addExact(previous.additionalProduction(), made), Math.addExact(previous.conditionalRevenue(), proceeds)));
+            quoted.put(interest, quantity);
+            if (phase == 0) {
+                var previous = result.getOrDefault(item, new EconomicPlan.Export(item, 0, 0, 0));
+                result.put(item, new EconomicPlan.Export(item, Math.addExact(previous.existingStock(), held),
+                        Math.addExact(previous.additionalProduction(), made), Math.addExact(previous.conditionalRevenue(), proceeds)));
+            }
+          }
         }
-        return new Plan(List.copyOf(result.values()), allocation.additionalProduction());
+        return new Plan(List.copyOf(result.values()), committedProduction, quoted);
     }
     private static void consumeLabour(Map<String, Long> labour, SupplyPlanner.Process process, long batches) {
         long missing = process.labourTicks(batches);

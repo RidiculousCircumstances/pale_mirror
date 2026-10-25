@@ -37,8 +37,13 @@ final class EquipmentRecoveryFunding {
             long missing = Math.max(0, entry.getValue() - GoodsParticipantStorage.unclaimed(state, participant, entry.getKey()));
             var quote = SourcingPurchaseCost.quote(market, entry.getKey(), missing, Long.MAX_VALUE);
             cash = Math.addExact(cash, quote.cash()); quoted &= quote.quantity() == missing;
-            if (quote.quantity() < missing) cash = Math.addExact(cash, Math.multiplyExact(missing - quote.quantity(),
-                    GoodsResourceValuation.replacement(state, participant, entry.getKey(), tick).raw()));
+            if (quote.quantity() < missing) {
+                long remaining = missing - quote.quantity();
+                long expected = ConditionalSupplyPricing.best(state, participant, entry.getKey(), remaining,
+                        market.availableMoney(), tick).map(ConditionalSupplyPricing.Estimate::cashUnitExpense)
+                        .orElseGet(() -> GoodsResourceValuation.replacement(state, participant, entry.getKey(), tick).raw());
+                cash = Math.addExact(cash, Math.multiplyExact(remaining, expected));
+            }
         }
         return new Cost(cash, quoted);
     }

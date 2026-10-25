@@ -24,12 +24,35 @@ public final class SettlementEconomicEvaluation {
         });
         return new GoodsParticipantAssessment.Assessment(atTick, GoodsParticipantView.planned(state, observed, Optional.of(plan)), Optional.of(facts), domestic);
     }
-    public static GoodsParticipantAssessment.Assessment complete(FrontierWorldState state, GoodsParticipantAssessment.Assessment domestic) {
-        if (domestic.domestic().isEmpty()) return domestic;
-        var plan = ECONOMY.withExports(domestic.domestic().orElseThrow(),
-                SettlementEconomicPlanning.exports(state, domestic.facts().orElseThrow(), false,
-                        ECONOMY.potentialExports(domestic.domestic().orElseThrow())));
-        return new GoodsParticipantAssessment.Assessment(domestic.atTick(), GoodsParticipantView.planned(state,
-                GoodsParticipantView.observe(state, domestic.view().participant()), Optional.of(plan)), domestic.facts(), domestic.domestic());
+    public record Completed(GoodsParticipantAssessment.Assessment assessment, List<ConditionalProductionQuote> quotes) {
+        public Completed { quotes = List.copyOf(quotes); }
+    }
+    public static Completed complete(FrontierWorldState state, GoodsParticipantAssessment.Assessment domestic,
+            long inputRevision, long planRevision, long expiresAt) {
+        if (domestic.domestic().isEmpty()) return new Completed(domestic, List.of());
+        var advice = SettlementEconomicPlanning.exportAdvice(state, domestic.facts().orElseThrow(), false,
+                ECONOMY.potentialExports(domestic.domestic().orElseThrow()), true);
+        var reviewed = ECONOMY.withConditionalQuotes(domestic.domestic().orElseThrow(),
+                advice.consented().stream().map(SettlementEconomicPlanning.QuoteCandidate::interest).toList(),
+                advice.counters().stream().map(SettlementEconomicPlanning.QuoteCandidate::interest).toList());
+        var supplier = domestic.view().participant(); var quotes = new ArrayList<ConditionalProductionQuote>();
+        long horizon = reviewed.plan().economy().orElseThrow().horizonTicks();
+        for (var candidate : advice.all()) {
+            int quantity = Math.toIntExact(reviewed.priceableQuantities().getOrDefault(candidate.interest(), 0L));
+            if (quantity == 0) continue;
+            var freight = quantity == candidate.freight().quantity() ? Optional.of(candidate.freight())
+                    : GoodsDeliveryAdvice.read(state, supplier, candidate.buyer(), candidate.interest().item(), quantity,
+                            candidate.interest().unitPrice(), candidate.buyer().availableMoney().raw(),
+                            GoodsDeliveryAdvice.Supply.CONDITIONAL_PRODUCTION, domestic.atTick());
+            if (freight.isEmpty()) continue;
+            var value = freight.orElseThrow();
+            quotes.add(new ConditionalProductionQuote(supplier.party(), candidate.buyer().participant().party(),
+                    candidate.interest().item(), value.quantity(), candidate.interest().unitPrice(), value.tripExpense(),
+                    value.cashDelivery(), value.fulfillment(), horizon, value.deliveryTicks(), inputRevision,
+                    planRevision, domestic.atTick(), expiresAt));
+        }
+        var assessment = new GoodsParticipantAssessment.Assessment(domestic.atTick(), GoodsParticipantView.planned(state,
+                GoodsParticipantView.observe(state, supplier), Optional.of(reviewed.plan())), domestic.facts(), domestic.domestic());
+        return new Completed(assessment, quotes);
     }
 }
