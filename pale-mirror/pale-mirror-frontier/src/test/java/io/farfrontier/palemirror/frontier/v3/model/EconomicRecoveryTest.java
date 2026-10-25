@@ -63,6 +63,27 @@ class EconomicRecoveryTest {
         state = state.withInventory(state.inventory().withFungibleResources(resources));
         assertTrue(EquipmentProductionPlanning.ready(state, home, 5000).orElseThrow().request().maintenance().isPresent());
     }
+    @Test void preventiveRestorationChoosesCashReachableMaterialBeforeAllToolsFail() {
+        var state = prepared(); var home = new SubjectId("settlement:7");
+        var inventory = state.inventory();
+        for (var item : List.copyOf(inventory.items().values()))
+            if (item.economicOwnerId().equals(home) && item.itemKind().equals("minecraft:stone_hoe"))
+                inventory = inventory.changeCondition(item, new ItemCondition(item.condition().maximumDamage(), 120));
+        state = state.withInventory(inventory.withEconomics(inventory.economics()
+                .transfer(home, new SubjectId("settlement:6"), FixedScalar.whole(96))));
+        var deficits = EquipmentStockProjection.deficits(state, home);
+        assertFalse(deficits.isEmpty());
+        assertTrue(deficits.stream().noneMatch(EquipmentStockProjection.Deficit::immediate), "working tools still cover current concurrent workers");
+        var first = EquipmentProductionPlanning.planned(state, home, 5000).getFirst();
+        assertTrue(first.request().recipe().ingredient().accepts("minecraft:cobblestone"),
+                "an unquoted iron upgrade cannot displace an estimated affordable repair before the pool fails: " + first);
+        assertEquals(1, first.operations());
+        var required = new EquipmentReserveSupply().readAt(state, home, 5000).requiredInputs().get("minecraft:cobblestone");
+        assertNotNull(required);
+        assertTrue(required.withinTicks() > 0, "working equipment still has a finite planning runway");
+        assertTrue(EquipmentProductionPlanning.ready(state, home, 5000).isEmpty(), "expected affordability is not physical stock");
+    }
+
     @Test void depletedPicksDoNotEraseKnownMineralReplacementValueOrAuthorizeMining() {
         var state = prepared(); var home = new SubjectId("settlement:6");
         var participant = state.companies().goodsTrade().participants().participants().get(home);

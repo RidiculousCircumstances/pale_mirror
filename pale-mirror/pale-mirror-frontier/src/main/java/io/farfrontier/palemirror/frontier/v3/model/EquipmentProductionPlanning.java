@@ -61,6 +61,11 @@ public final class EquipmentProductionPlanning {
             var aStart = restart.get(a.recipe().id()); var bStart = restart.get(b.recipe().id());
             int funded = Boolean.compare(bStart.funded(market.availableMoney()), aStart.funded(market.availableMoney()));
             if (funded != 0) return funded;
+            // An unquoted estimate is not obtainable supply, but an estimated
+            // unaffordable upgrade must not suppress a cash-reachable maintenance
+            // intention while the remaining equipment is still working.
+            int cashReachable = Boolean.compare(bStart.cash() <= market.availableMoney(), aStart.cash() <= market.availableMoney());
+            if (cashReachable != 0) return cashReachable;
             if (a.urgent() && b.urgent() && !aStart.funded(market.availableMoney())) {
                 int minimum = Long.compare(aStart.cash(), bStart.cash());
                 if (minimum != 0) return minimum;
@@ -138,12 +143,10 @@ public final class EquipmentProductionPlanning {
                 } else if (local.isPresent()) {
                     var request = local.orElseThrow();
                     int quantity = request.maintenance().isPresent() ? 1 : Math.toIntExact(Math.max(units, Math.ceilDiv(wear, request.usefulWear())));
-                    // A failed production pool needs an obtainable first unit,
-                    // not a fully upgraded fleet as one indivisible restart.
-                    // Keep the rest visible in deficits; no output promise is made.
-                    if (deficit.immediate()) {
-                        while (quantity > 1 && !EquipmentRecoveryFunding.cost(state, home, request.recipe(), quantity, market, tick).funded(money)) quantity--;
-                    }
+                    // Unquoted/unfunded fleet replacement must start with a finite
+                    // obtainable unit before failure, too. Remaining wear stays in
+                    // deficits; this intention is never an output promise.
+                    while (quantity > 1 && !EquipmentRecoveryFunding.cost(state, home, request.recipe(), quantity, market, tick).funded(money)) quantity--;
                     result.add(new Planned(request, quantity)); request.maintenance().ifPresent(t -> used.add(t.itemId()));
                     units = Math.max(0, units - quantity); wear = Math.max(0, wear - Math.multiplyExact(quantity, request.usefulWear()));
                     var start = EquipmentRecoveryFunding.cost(state, home, request.recipe(), quantity, market, tick);

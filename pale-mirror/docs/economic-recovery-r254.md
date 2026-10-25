@@ -204,3 +204,21 @@ unfunded and its bid falls again. There is no executable complete restart proved
 by this snapshot. Existing money and provisions remain constraints, and the
 appropriateness of that fallback versus productive restoration remains unresolved.
 See build/r256-{procurement,needs}-frozen.txt and r256-current-southgate.txt.
+
+
+## R257 preventive equipment choice
+
+The earlier fix still prioritized minimum cash only AFTER concurrent tools became
+unusable. While all tools remained serviceable but their wear coverage was short,
+unquoted options were compared by long-run efficiency even if the preferred iron
+fleet exceeded current cash. A negative test on three still-working worn hoes and
+4coins selected2ironhoes before correction (r257-prevention-before.log).
+
+Requests now compare estimated cash reachability after genuinely executable and
+quoted/funded options, before long-run wear efficiency. Missing quotes remain
+missing: this creates an intention, never readiness or a supplier promise.
+Unfunded/unquoted fleet requests start with one operation before failure as well;
+remaining deficits stay visible and follow-up reviews remain owned by equipment.
+Actual frozen170602 Mossbrook changes from2ingots+fuel to2cobblestone within59143ticks,
+with2coin material funding instead0 (r257-prevention-frozen.txt). Southgate's already
+insolvent/no-food state is not claimed restored by that counterfactual.
