@@ -120,7 +120,14 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
         for (var task : java.util.List.copyOf(inFlight)) {
             if (publications-- == 0 || !mayContinue.getAsBoolean()) break;
             var request = task.request();
-            if (pending.get(request) != task) { inFlight.remove(task); continue; }
+            if (pending.get(request) != task) {
+                // Cancellation retires authority, not the accepted executor slot.
+                // Keep it occupied until that exact slice has actually returned;
+                // otherwise rapid invalidations can overfill the bounded pool.
+                var retired = task.poll();
+                if (retired != null) { inFlight.remove(task); workUnits += retired.spent(); }
+                continue;
+            }
             var lane = fairness.lane(request);
             if (blocked.contains(lane)) continue;
             var step = task.poll();
@@ -184,7 +191,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     }
     private void discardExact(PedestrianRouteRequest request) {
         var search = pending.remove(request);
-        if (search != null) { search.cancel(); inFlight.remove(search); ready.remove(request); }
+        if (search != null) { search.cancel(); ready.remove(request); }
         deferred.remove(request); discardSuspended(request);
         if (admittedAt.containsKey(request)) invalidated(request);
     }
@@ -242,7 +249,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
                 for (var queued : ready) rotation.addLast(queued.equals(request) ? replacement : queued);
                 ready.clear(); ready.addAll(rotation);
                 admittedAt.put(replacement, since);
-            } else { fairness.remove(replacement); search.cancel(); inFlight.remove(search); ready.remove(request); }
+            } else { fairness.remove(replacement); search.cancel(); ready.remove(request); }
             progressRevision++;
         }
         for (var request : java.util.List.copyOf(completed.keySet())) if (request.geometry() != geometry && sameScope(request, geometry)) {
@@ -372,6 +379,7 @@ public final class CooperativePedestrianPlanner implements PedestrianRoutePlanne
     }
     @Override public synchronized void close() {
         closed = true; pending.values().forEach(PedestrianSearchTask::cancel);
+        inFlight.forEach(PedestrianSearchTask::cancel);
         suspended.values().forEach(PedestrianSearchTask::cancel); suspended.clear(); fairness.clear();
         pending.clear(); inFlight.clear(); ready.clear(); completed.clear(); deferred.clear(); admittedAt.clear(); changes.clear();
         regions.clear(); corridors.clear(); itineraries.clear(); retainedSurfaces = 0; retainedRegions = 0;

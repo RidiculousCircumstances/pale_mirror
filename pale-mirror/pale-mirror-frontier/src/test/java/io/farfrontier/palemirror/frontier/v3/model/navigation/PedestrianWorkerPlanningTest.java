@@ -20,6 +20,32 @@ class PedestrianWorkerPlanningTest {
         void drain() { while (!queue.isEmpty()) run(0); }
     }
 
+    @Test void cancellationCannotRecycleAcceptedExecutorSlotsBeforeWorkersActuallyReturn() {
+        var workers = new ManualWorkers();
+        java.util.concurrent.Executor bounded = work -> {
+            if (workers.queue.size() >= 8) throw new java.util.concurrent.RejectedExecutionException("full test worker queue");
+            workers.execute(work);
+        };
+        var geometry = geometry(workers, PedestrianGeometryRevision.initial(), -1);
+        var start = SurfaceAnchor.at(0, 63, 0);
+        var targets = java.util.stream.IntStream.range(1, 9).mapToObj(i -> SurfaceAnchor.at(i, 63, 0)).toList();
+        try (var planner = new CooperativePedestrianPlanner(bounded)) {
+            for (int round = 0; round < 20; round++) {
+                for (var target : targets) {
+                    planner.discardUnobserved(PedestrianRouteRequest.of(geometry, start, target, PedestrianRouteExtent.COMPLETE));
+                    planner.query(geometry, start, target);
+                }
+                planner.advance(BUDGET * 8);
+                assertEquals(8, workers.queue.size(), "unreturned cancelled slices still consume the bounded executor capacity");
+                assertEquals(8, planner.inFlightCount());
+                assertTrue(planner.drainChanges().stream().noneMatch(c -> c.kind() == PedestrianPlanningChange.Kind.RESULT_AVAILABLE));
+            }
+            for (int turn = 0; turn < 100 && planner.completedCount() < targets.size(); turn++) {
+                workers.drain(); planner.advance(BUDGET * 8);
+            }
+            for (var target : targets) assertEquals(PedestrianRouteResult.Status.FOUND, planner.query(geometry, start, target).status());
+        }
+    }
     @Test void independentRegionsActuallyBuildConcurrentlyRatherThanUnderOneGlobalCacheLock() throws Exception {
         var cache = new PedestrianRegionCache(); var revision = PedestrianGeometryRevision.initial();
         var entered = new java.util.concurrent.CountDownLatch(2);
