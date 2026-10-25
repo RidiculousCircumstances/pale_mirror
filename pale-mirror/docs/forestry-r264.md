@@ -117,3 +117,54 @@ chunk/renderer warm-up peaks are retained in performance diagnostics; this
 report makes no blanket80ms worst-tick guarantee. Final scoped gate, native
 candidate receipts, clean release identity and deployment are recorded on
 completion in the canonical continuity ledger.
+
+## R265 connected closure
+
+Two additional native findings were repaired before delivery:
+
+- An unused prepared forest effect could outlive normal shutdown while its live
+  attempt permission disappeared. The forestry shutdown hook now withdraws that
+  exact intent through the existing shared protocol before closing its source.
+  Native `external-reserve-shutdown.log` records cancellation at22:34:37 and
+  subsequent resumed extraction. Attempted/ambiguous effects still cannot replay
+  from matching preimages; no journal proof or recovery constraint was weakened.
+- Nominal cell-center reach could admit a station whose actual off-center body
+  was outside4.5blocks. Actual failing feet388.5976307/64/-31.4279835 at support
+  388/63/-32 were4.504blocks from target385/64/-35. Shared BlockInteractionReach
+  now includes the support's lateral extent plus the explicitly declared body's
+  half-width. All shared candidates/validators use it; native hit radius stays
+  4500mm. This fixes the contract rather than nudging/teleporting a woodcutter.
+
+Forge inspection also reports the declared recipe capability: Toolsmith,
+Smelter or Baker. A generic station job is no longer automatically labelled Baker.
+
+`forestry-final-consumers.log` passed47 affected Frontier checks; all864 native
+unit checks passed with zero failures/errors/skips, and the final build/package
+checks passed. Guardrails and the focused ledger/confirmation checks also pass.
+A broad all-Frontier attempt was intentionally stopped in the unchanged expensive
+ExpeditionSupplyFlowTest; it is not recorded as a full-suite pass.
+
+`build/forestry-native/external-reserve-final-continuation.json` passed15 ordinary
+client actions in the retained disposable world. Both forest jobs closed, real
+warehouse stock259, no retained conflicts; the actual open-chest frame shows the
+wood and returned tools. This is explicitly a continuation of the retained
+`external-reserve-final` attempt, whose first-cut wall-time bound was too short;
+that earlier attempt is not a fresh full pass. The primary declared cut bound
+now reflects the measured path plus labour. Neither simulation speed nor work
+policy was changed to pass a deadline.
+
+This carrier starts with190logs, two explicitly supplied axes and food. The
+player's original64logs are shift-clicked normally into the chest: external
+stock254 alone cannot meet target256. Actual felling earned five more, and those
+five had to be deposited before both jobs/tools could close. It proves ordinary
+external-stock response, partial delivery and reserve cutoff, not autonomous
+0->256production or manufacture from a fixture. Separately the normal live R264
+world manufactured two axes and reached167earned logs by tick81800, with125
+already stored and42carried. No fixture supplied those axes or logs.
+
+Final deployment uses fresh R265/r28/schema306 because old work may retain the
+former unsafe stations. Exact clean source/artifact/world identities are in the
+canonical continuity ledger. Private Xvfb frames were reviewed; no human/M3
+acceptance or blanket80ms worst-tick guarantee is claimed. The full-pack first
+forest visit previously took4.5seconds including its1second settle; that is one
+observed visit, not a universal loading guarantee.

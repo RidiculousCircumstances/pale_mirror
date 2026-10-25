@@ -169,6 +169,7 @@ final class FrontierV3ForestryWorksiteOwner implements FrontierV3WorksiteProject
         ledger.persistAsync(level);
     }
     @Override public void shutdown(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        FrontierV3ForestryExecutor.shutdown(level, runtime);
         beforeTurn(level, runtime);
         var state = runtime.decodedState().orElseThrow(); var ledger = FrontierV3GrayboxLedger.get(level);
         for (var part : state.forest().regions().values()) for (var tree : part.values()) captureLoaded(level, state, tree, ledger);

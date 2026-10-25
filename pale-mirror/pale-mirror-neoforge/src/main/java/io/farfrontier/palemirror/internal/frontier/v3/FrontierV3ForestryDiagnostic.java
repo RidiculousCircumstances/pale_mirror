@@ -32,6 +32,8 @@ final class FrontierV3ForestryDiagnostic {
         String first = available.isEmpty() ? "null" : FrontierV3DiagnosticJson.position(available.getFirst().origin());
         return FrontierV3DiagnosticJson.base("forest", id, checkpoint) + ",\"status\":\"ok\",\"enabled\":" + ForestryStockDemand.enabled(state, home)
                 + ",\"knownTrees\":" + known.size() + ",\"availableTrees\":" + available.size() + ",\"firstTree\":" + first
+                + ",\"exhaustedTrees\":" + (known.size()-available.size()) + ",\"activeWorkers\":" + actors.size()
+                + ",\"hasPendingEffects\":" + state.forest().work().values().stream().anyMatch(job -> job.home().equals(home) && job.pending().isPresent())
                 + ",\"workSource\":" + workSource + ",\"workersCold\":" + workersCold + ",\"liveSources\":" + liveSources
                 + ",\"hasWood\":" + hasWood + ",\"reserveSupplied\":" + supplied
                 + ",\"reserveTarget\":" + rules.reserveItems() + ",\"resumeBelow\":" + rules.resumeBelowItems() + ",\"stocks\":" + stocks

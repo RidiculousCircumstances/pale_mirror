@@ -33,7 +33,11 @@ public record ResidentPresentation(String name, String settlement, String task, 
             case FORESTRY -> "Woodcutter";
             case EQUIPMENT_SERVICE -> "Resident";
             case PRODUCTION -> assignment.ownerId().map(state.productionJobs()::get)
-                    .filter(job -> job.stationWork().isPresent()).isPresent() ? "Baker" : "Production worker";
+                    .flatMap(ProductionJob::stationWork).map(work -> switch (state.bootstrap().ruleset().production().require(work.recipeId()).capability()) {
+                        case BAKING -> "Baker";
+                        case SMELTING -> "Smelter";
+                        case FABRICATION -> "Toolsmith";
+                    }).orElse("Production worker");
             case COURIER -> "Carrier";
             case GROUP_MEMBER -> "Companion";
             case ROUTE_PATROL -> "Guard";

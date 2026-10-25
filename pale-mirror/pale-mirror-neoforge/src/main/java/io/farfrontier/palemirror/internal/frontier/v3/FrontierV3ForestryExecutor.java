@@ -264,14 +264,7 @@ final class FrontierV3ForestryExecutor {
             var departure = ledger.bodyDeparture(job.execution().actorId()).orElse(null);
             if (departure == null || !departure.current(state) || !ledger.savedBodyDeparture(departure)
                     || !departure.executionAtCapture().equals(Optional.of(job.execution()))) return false;
-            var step = job.pending().orElseThrow();
-            var protocol = switch (step) {
-                case ForestryPhysicalStep.Fell ignored -> FrontierV3OperationReceipt.Protocol.FORESTRY_BLOCK;
-                case ForestryPhysicalStep.Equipment ignored -> FrontierV3OperationReceipt.Protocol.FORESTRY_EQUIPMENT;
-                case ForestryPhysicalStep.Cargo ignored -> FrontierV3OperationReceipt.Protocol.FORESTRY_CARGO;
-            };
-            return FrontierV3PreparedOperationWithdrawal.submit(level, runtime, protocol, job.id(),
-                    new ForestryPhysicalEvent.Prepared(job.id(), step), new ForestryPhysicalEvent.Cancelled(job.id(), step));
+            return withdrawPending(level, runtime, job);
         }
         if (!ForestryWorkAuthority.physicalCargo(state, job)) return false;
         var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
@@ -282,6 +275,29 @@ final class FrontierV3ForestryExecutor {
         return submit(level, runtime, job.id(), "hand-saved-departure", new ForestryPhysicalEvent.HandBoundary(job.id(),
                 new ActorActuationId(new ActorBodyId(job.execution().actorId(), departure.identity().epoch()), job.execution()),
                 ForestryPhysicalEvent.HandBoundary.Boundary.DEPARTED, ForestryPhysicalStateSupport.hand(state, job, carried)));
+    }
+    /** Normal shutdown still owns the unused live attempt permission. Seal its
+     * cancellation before that permission disappears; never recreate it on recovery. */
+    static void shutdown(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        runtime.settleNativeBoundary();
+        var ids = runtime.decodedState().orElseThrow().forest().work().keySet().stream().sorted().toList();
+        for (var id : ids) {
+            var job = runtime.decodedState().orElseThrow().forest().work().get(id);
+            if (job != null && job.pending().isPresent() && withdrawPending(level, runtime, job)) {
+                runtime.settleNativeBoundary();
+                LOGGER.info("PMV3 forestry shutdown cancelled unused effect job={}", id.value());
+            }
+        }
+    }
+    private static boolean withdrawPending(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime, ForestryWork job) {
+        var step = job.pending().orElseThrow();
+        var protocol = switch (step) {
+            case ForestryPhysicalStep.Fell ignored -> FrontierV3OperationReceipt.Protocol.FORESTRY_BLOCK;
+            case ForestryPhysicalStep.Equipment ignored -> FrontierV3OperationReceipt.Protocol.FORESTRY_EQUIPMENT;
+            case ForestryPhysicalStep.Cargo ignored -> FrontierV3OperationReceipt.Protocol.FORESTRY_CARGO;
+        };
+        return FrontierV3PreparedOperationWithdrawal.submit(level, runtime, protocol, job.id(),
+                new ForestryPhysicalEvent.Prepared(job.id(), step), new ForestryPhysicalEvent.Cancelled(job.id(), step));
     }
     private static boolean submit(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
             SubjectId id, String operation, FrontierPayload payload) {

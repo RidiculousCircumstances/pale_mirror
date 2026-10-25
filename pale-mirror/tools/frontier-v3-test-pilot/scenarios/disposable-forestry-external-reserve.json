@@ -1,0 +1,291 @@
+{
+  "schema": 1,
+  "id": "disposable_forestry_external_reserve",
+  "isolation": {
+    "mode": "disposable_lite",
+    "seed": 126
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 26328,
+    "profile": "forestry-reserve",
+    "viewDistance": 8
+  },
+  "pilot": {
+    "username": "PMTestPilot"
+  },
+  "zeroPlayerPrelude": {
+    "kind": "cold_duty_cycle",
+    "advanceTicks": 1200,
+    "timeoutMs": 90000
+  },
+  "setup": [
+    {
+      "type": "assert_fixture",
+      "timeoutMs": 30000,
+      "checks": [
+        {
+          "view": "forest",
+          "id": "settlement:7",
+          "expect": {
+            "status": "ok",
+            "enabled": true
+          }
+        }
+      ]
+    },
+    {
+      "type": "command",
+      "command": "/gamemode creative"
+    },
+    {
+      "type": "command",
+      "command": "/clear PMTestPilot"
+    },
+    {
+      "type": "command",
+      "command": "/give PMTestPilot minecraft:oak_log 64"
+    }
+  ],
+  "actions": [
+    {
+      "type": "wait_until_diagnostic",
+      "view": "forest",
+      "id": "settlement:7",
+      "expect": {
+        "status": "ok",
+        "activeWorkers": 2
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "forest",
+          "id": "settlement:7",
+          "field": "workSource"
+        }
+      },
+      "offset": {
+        "x": -6,
+        "y": 0,
+        "z": 6
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "forest",
+          "id": "settlement:7",
+          "field": "workSource"
+        }
+      }
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "forest",
+      "id": "settlement:7",
+      "expect": {
+        "status": "ok"
+      },
+      "requireIncreaseAt": "exhaustedTrees",
+      "timeoutMs": 180000
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "forest",
+      "id": "settlement:7",
+      "expect": {
+        "status": "ok",
+        "hasPendingEffects": true
+      },
+      "pollIntervalMs": 50,
+      "timeoutMs": 120000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "forest",
+          "id": "settlement:7",
+          "field": "workSource"
+        }
+      },
+      "offset": {
+        "x": -6,
+        "y": 0,
+        "z": 6
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "forest",
+      "id": "settlement:7",
+      "expect": {
+        "status": "ok"
+      },
+      "requireIncreaseAt": "exhaustedTrees",
+      "timeoutMs": 180000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:7-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -2,
+        "y": 0,
+        "z": -2
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:7-depot",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "quick_move_from_inventory",
+      "item": "minecraft:oak_log",
+      "count": 64,
+      "timeoutMs": 15000
+    },
+    {
+      "type": "close_container"
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "forest",
+          "id": "settlement:7",
+          "field": "workSource"
+        }
+      },
+      "offset": {
+        "x": -6,
+        "y": 0,
+        "z": 6
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "wait_until_diagnostic",
+      "view": "forest",
+      "id": "settlement:7",
+      "expect": {
+        "status": "ok",
+        "reserveSupplied": true,
+        "activeWorkers": 0
+      },
+      "timeoutMs": 180000
+    },
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:7-depot",
+          "field": "position"
+        }
+      },
+      "offset": {
+        "x": -2,
+        "y": 0,
+        "z": -2
+      },
+      "settleMs": 0
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:7-depot",
+          "field": "position"
+        }
+      }
+    },
+    {
+      "type": "open_container",
+      "position": {
+        "diagnostic": {
+          "view": "container",
+          "id": "container:7-depot",
+          "field": "position"
+        }
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "inspect",
+      "view": "forest",
+      "id": "settlement:7"
+    },
+    {
+      "type": "close_container"
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    }
+  ],
+  "restart": {
+    "mode": "graceful",
+    "afterAction": 5
+  },
+  "assertions": [
+    {
+      "after": 17,
+      "view": "forest",
+      "id": "settlement:7",
+      "expect": {
+        "status": "ok",
+        "reserveSupplied": true,
+        "activeWorkers": 0
+      }
+    },
+    {
+      "after": 19,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 4,
+      "name": "actual-felling-before-hot-restart"
+    },
+    {
+      "after": 16,
+      "name": "player-stock-plus-delivered-earned-wood",
+      "presentation": "player"
+    }
+  ]
+}

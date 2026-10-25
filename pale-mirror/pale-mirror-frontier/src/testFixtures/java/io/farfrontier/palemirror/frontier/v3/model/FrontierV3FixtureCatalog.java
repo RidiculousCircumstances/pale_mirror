@@ -58,6 +58,7 @@ public final class FrontierV3FixtureCatalog {
             Map.entry("equipmentManufacture", (world, seed) -> equipmentWorkConfiguration(world, seed, false)),
             Map.entry("forestryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("forestry-r28"))),
             Map.entry("forestryEquipped", ForestryFixture::configuration),
+            Map.entry("forestryReserve", ForestryFixture::reserveConfiguration),
             Map.entry("quarryR22World", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("quarry-r22"))),
             Map.entry("quarryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("quarry-graybox"))),
             Map.entry("fuelledQuarryWorld", (world, seed) -> FrontierWorldRuntimeDefinition.configuration(world, seed, RULESETS.get("fuelled-quarry"))),

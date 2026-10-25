@@ -27,6 +27,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrontierV3FixtureCatalogTest {
+    @Test void forestryReserveProfileStartsBelowResumeThresholdWithOnlyInitialToolsAndStock() {
+        var state = FrontierV3FixtureCatalog.configuration("forestry-reserve", new WorldId("frontier:forestry-reserve"), 126L).initialState();
+        var home = new SubjectId("settlement:7");
+        assertTrue(state.forest().work().isEmpty()); assertTrue(state.forest().regions().isEmpty());
+        assertEquals(190, ProductiveResourceStock.held(state.inventory(), home, "minecraft:oak_log"));
+        assertTrue(ForestryStockDemand.requested(state, home, "minecraft:oak_log", java.util.Optional.empty()));
+        assertEquals(2, EquipmentStockProjection.units(state, home).stream()
+                .filter(tool -> tool.kind().equals("minecraft:iron_axe")).count());
+    }
     @Test void freshBakeryProfileStartsBeforeTheFirstWheatTransfer() {
         var configuration = FrontierV3FixtureCatalog.configuration("bakery-fresh-job",
                 new WorldId("frontier:bakery-fresh-profile"), 41L);
