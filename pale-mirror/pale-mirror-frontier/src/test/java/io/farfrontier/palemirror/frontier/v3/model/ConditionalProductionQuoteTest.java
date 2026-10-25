@@ -51,6 +51,20 @@ class ConditionalProductionQuoteTest {
         var value = GoodsEconomicPricing.assess(state, assessment.view(), ITEM, references, production, Optional.of(qualified), 5002);
         assertEquals(201_000_000, value.acquisition().raw(), "only the invoice needs cash; qualified own provisions still have economic value");
         assertEquals(FixedScalar.whole(100), state.inventory().economics().require(BUYER).balance());
+        var rules = state.bootstrap().ruleset().goodsTrade();
+        var prices = new TreeMap<>(GoodsParticipantPricing.review(state, buyer, 5002, assessment));
+        var old = prices.get(ITEM);
+        prices.put(ITEM, new io.farfrontier.palemirror.frontier.v3.model.market.MarketPricePolicy.Quote(
+                old.ask(), value.acquisition(), old.reference(), old.reviewedAt(), old.surplus(), old.lastSale()));
+        var view = assessment.view();
+        var priced = new GoodsParticipantView(buyer.withPrices(prices), view.residents(), view.availableMoney(),
+                view.stocks(), view.purchaseLimits(), view.supplyPlan(), view.awaitingReview());
+        var budget = GoodsParticipantFunding.purchase(priced, rules, ITEM);
+        assertTrue(budget.raw() >= qualified.goods().raw() && budget.raw() < value.acquisition().raw());
+        var intent = GoodsParticipantPolicies.require(priced.participant()).decide(priced, rules).stream()
+                .filter(i -> i.itemKind().equals(ITEM) && i.side() == GoodsTradeOrder.Side.BUY).findFirst().orElseThrow();
+        assertEquals(value.acquisition(), intent.limit(), "the published economic price must not be truncated to the separate cash budget");
+
     }
     @Test void foreignOwnerOrOrganizerFailsBeforePublicationAndTechnicalRenewalDoesNotPingPong() {
         var f = fixture(); var state = f.state(); var q = f.quote();

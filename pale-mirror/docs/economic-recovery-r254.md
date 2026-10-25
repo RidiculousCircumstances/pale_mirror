@@ -328,3 +328,29 @@ Final hydration/nominal-kind/diagnostic checks and guardrails PASS in36s
 (build/r259-final-identity-checks.log). Forged owner kinds are rejected both at
 publication and snapshot hydration; persisted nonempty quotes survive roundtrip.
 No new tool/actual recovery or balanced whole economy is claimed from unit advice.
+
+### R260 remaining quotation publication boundary
+
+The real preventive R259 run completed two24k requests. Its third request was
+explicitly interrupted for this correction; no120k completion is claimed. Frozen
+revision/tick in build/r259-mid2-accepted.txt is53831. Source plans have priced
+counterquotes, buyer retained cobble bid37.298940, available commodity cash17.797714,
+but all actual public cobble orders were capped at17.797714. Every producer still
+had zero cobble export ceiling. Inspecting StockTargetPolicy proves a second
+Math.min(bid,cashBudget) erased the resource/cash distinction after pricing.
+This is an actual remaining publication contradiction, not insufficient invoice
+cash or a selected-trip scheduling defect.
+
+Publication now preserves independently calculated economic consent when a positive
+cash envelope exists. It preserves desired quantity as before. Matching/procurement
+still cap actual quantity at supplier goods price and real freight against current
+separate budgets; no contract or reserve is granted by an interest quote. A201coin
+acquisition value with1coin goods and200coins owned journey supplies previously
+published a truncated limit; the regression failed exact intent.limit(), then
+checks the preserved limit without a cash mutation. Existing unfunded/admission
+and paid delivery regressions remain relevant. No schema change from304 and no
+world reset is required for this correction.
+
+R260 focused quote/participant/delivery/trip checks plus guardrails PASS17s
+(build/r260-order-envelope-tests.log). Previous broader177 checks remain evidence
+for unchanged R259 logic; they are not labelled a final-source rerun.

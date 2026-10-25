@@ -66,9 +66,11 @@ public final class GoodsParticipantPolicies {
                     // A quote is interest, not a financial reservation. Preserve the
                     // desired quantity; matching caps it at the actual seller price
                     // against the remaining budget after each admitted allocation.
-                    var limit = new io.farfrontier.palemirror.frontier.v3.api.FixedScalar(
-                            Math.min(buyPrice.raw(), GoodsParticipantFunding.purchase(view, rules, commodity.itemKind()).raw()));
-                    if (quantity > 0 && limit.raw() > 0) result.add(new Intent(commodity.itemKind(), GoodsTradeOrder.Side.BUY, quantity, limit));
+                    // The consent ceiling includes owned journey resources;
+                    // the separately funded invoice is checked at matching.
+                    // Clamping this value to cash would erase that distinction.
+                    if (quantity > 0 && GoodsParticipantFunding.purchase(view, rules, commodity.itemKind()).raw() > 0)
+                        result.add(new Intent(commodity.itemKind(), GoodsTradeOrder.Side.BUY, quantity, buyPrice));
                 }
             }
             return List.copyOf(result);
