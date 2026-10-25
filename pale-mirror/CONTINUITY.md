@@ -1,12 +1,12 @@
-# Active continuity — 2026-10-25, R265 forestry delivered
+# Active continuity — 2026-10-25, R265 player map delivered
 
 ## Assignment and authority
 
-PM-FORESTRY-20261025 technical implementation and deployment are complete.
-Finish this scoped documentation commit, then mark the existing system goal
-complete. No next feature is authorized by this closure. Main alone; no Terra,
-subagents or push. Disposable-world reset and ordinary deployment are authorized.
-Preserve both source/pack histories and unrelated governance WIP.
+Forestry goal is COMPLETE (system goal closed); documentation commit31da8594f.
+Current user asks to add online player positions to the analytical Map UI.
+Implementation, verification and same-world deployment COMPLETE.
+Main alone, no Terra/subagents/push. Implement/deploy scoped read-only observation;
+no world reset or simulation changes. Preserve all unrelated histories/WIP.
 
 Canonical references: AGENTS.md, architecture.yml, engineering-agent-protocol,
 docs/work-orders/PM-FORESTRY-20261025.md, frontier-v3-forestry-design.md and
@@ -19,9 +19,10 @@ and server-ops references. Do not repeat unchanged reading/checks by ritual.
 Implementation /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror
 (Git root parent), branch feat/baker-carry-orders-20260926, CLEAN.
 Feature70b670821ec3b2b5d4abfe304bcbb11d6a02cbc0, preflight8631f679f;
-final HEAD248be0f83cb0703c305e5686939860daf7287a39 includes shutdown/reach closure.
-Release /home/rd/proj/pm-r242-economic-release/pale-mirror, CLEAN detached248be0f83.
-Pack /home/rd/proj/minecraft, HEADa2015c8, tracked CLEAN; retain unrelated
+Forestry HEAD248be0f83 includes shutdown/reach closure; current HEADa9d5b36ef
+adds the player map. Source clean.
+Release /home/rd/proj/pm-r242-economic-release/pale-mirror, CLEAN detacheda9d5b36ef.
+Pack /home/rd/proj/minecraft, HEAD33fa84b, tracked CLEAN; retain unrelated
 untracked .f0v-baseline/. No push. Governance retains extensive unrelated WIP;
 only task-owned ledger/archive/order/design and forestry-only architecture/
 materialization sections are staged. Never stage-all governance.
@@ -29,8 +30,8 @@ materialization sections are staged. Never stage-all governance.
 Runtime /home/rd/far-frontier-server, far-frontier-v3-live.service ACTIVE.
 Fresh world frontier-v3-r265-forestry-complete-20261025,
 UUIDc17a0343-fe9a-4c00-8e69-eb8849771cd1, seed126/r28/schema306.
-PID443981 at verification, startup epoch1792950984. Artifact SHA512:
-7db0d9b69de101fc47b2a28c737a9db93269f08026314a82e25cc2e820dd708dce1d65db9056d50a436b8668ecd55d292dd256d2448d946aa2b06dd0f206c3b4.
+PID516348 at verification, startup epoch1792952072. Artifact SHA512:
+fe30da9fb8697b6e0fb45457604c8c998aeb476ad7b30aab99e0c9e11f848bcc461dbb395b5f24d1a937b66883335cfcdcda0ec874ec3599bada617c14dd7e0d.
 Exact root publish/install/preflight/start/verify succeeded; source build
 r265-clean-package.log PASS7sec, deployment build/r265-final-*.log in IMPL.
 R264 retained as normal production evidence, not migrated: old jobs can contain
@@ -123,3 +124,33 @@ source no NUL, artifact CRC/Git checks good. Old R263 recovered normally before
 fresh deployment. Temporary systemd live unit and /tmp helpers disappeared at
 boot; server restored. Do not attribute host power loss to the native feature
 bug. Historical detail: docs/archive/continuity-20261025-r264-before-forestry-close.md.
+
+## Player-map delivery
+
+Source a9d5b36ef and pack33fa84b committed, no push. Java read-only players
+observation returns x/y/z/yaw/dimension plus cached analytical UUID, cap32;
+no scans, canonical mutations or save reads. Separate in-memory2sec collector
+and /api/players, shared bounded RCON with performance; browser Map refresh
+retains pan/zoom. Blue named direction markers, player selector and centering,
+layer toggle. Missing/stale/failed/wrong-world observations show no marker;
+other dimensions counted separately. No economic player history or client update.
+
+IMPL/build/player-map-check.log: guardrails, scoped performance/economy tests,
+JAR+verify PASS14sec. Python8tests PASS; JS and installer syntax pass. Local
+Chrome/Playwright fixture browser11checks pass: coords/focus/refresh/toggle,
+wrong-world/stale/error/disconnect; frame UI-only ui-fixture.png reviewed.
+MCP Chrome binary missing; used installed /usr/bin/google-chrome, no MCP changes.
+Clean detached release package PASS7sec. Pack validate PASS, installer tests8PASS.
+Same-world deployment normal save/preflight/publish/install/start/verify PASS:
+build/player-map-deploy-*.log and player-map/deployment.log. Analytics installed
+in /home/rd/far-frontier-economy; service running, database preserved. Native
+inspect players and /api/players agree on actual worldUUID, empty before client.
+Actual full-pack PMAudit preflight PASS6actions, run9b3569d8-45e2-4143-a1ad-0be98ceac7b8.
+Live browser on8093 with no mocked responses displayed real PMAudit at
+561.5/64/34.5 yaw-135 in graybox; same analytical UUID, no browser errors.
+live-map.png reviewed. Browser subsequently observed marker disappear after
+actual client disconnect, native inspect confirms empty list. Receipts
+build/player-map/live-*.{log,json,png}. Test client/browser/static8094 STOPPED;
+live MC/economy services ACTIVE. No new functional world scenario or goal.
+No simulation defect inferred from this short telemetry check. Other governance
+WIP unrelated. Native/source and pack tracked clean; preserve .f0v-baseline/.
