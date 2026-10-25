@@ -10,6 +10,14 @@ final class ExtractionSupplyCapacity implements SupplyCapacityPort {
     @Override public Key key() { return Key.EXTRACTION; }
     @Override public List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
                                                     SupplyPlanningWindow window) {
+        return assess(state, home, stocks, window, true);
+    }
+    @Override public List<SupplyPlanner.Process> valuation(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
+                                                         SupplyPlanningWindow window) {
+        return assess(state, home, stocks, window, false);
+    }
+    private static List<SupplyPlanner.Process> assess(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
+                                                     SupplyPlanningWindow window, boolean equipmentBacked) {
         if (state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing().isEmpty()) return List.of();
         var materials = new HashSet<BlockExtraction.Definition>();
         for (var deposit : state.extractionSites().deposits().values()) if (deposit.site().settlementId().equals(home))
@@ -27,21 +35,23 @@ final class ExtractionSupplyCapacity implements SupplyCapacityPort {
             var product = material.coldOutput().getFirst();
             if (!stocks.containsKey(product.itemKind())) continue;
             var definition = state.bootstrap().ruleset().workCatalog().require(material.before().kind(), WorkOperation.EXTRACT);
-            var candidates = SupplyLabourCapacity.candidates(state, home, ResidentWorkKind.EXTRACTION, definition.capability(),
+            var candidates = equipmentBacked ? SupplyLabourCapacity.candidates(state, home, ResidentWorkKind.EXTRACTION, definition.capability(),
                             r -> assignments.assignment(r.id()).kind() == HumanAssignmentKind.EXTRACTION).stream()
                     .filter(r -> !assignments.assignment(r.id()).active()
                             || assignments.assignment(r.id()).kind() == HumanAssignmentKind.EXTRACTION)
-                    .sorted(Comparator.comparing(ResidentProfile::id)).toList();
+                    .sorted(Comparator.comparing(ResidentProfile::id)).toList()
+                    : SupplyLabourCapacity.potential(state, home, ResidentWorkKind.EXTRACTION, definition.capability());
             var ids = candidates.stream().map(ResidentProfile::id).collect(java.util.stream.Collectors.toSet());
             var equipment = EquipmentProductiveCapacity.items(state, home, ids,
                     io.farfrontier.palemirror.frontier.v3.model.tooling.EquipmentRequirements.allOf(Set.of(material.toolRequirement())));
-            var workers = candidates.stream().limit(equipment.size()).toList();
+            var workers = equipmentBacked ? candidates.stream().limit(equipment.size()).toList() : candidates;
             if (workers.isEmpty()) continue;
             var forecasts = state.extractionSites().deposits().values().stream().filter(d -> d.site().settlementId().equals(home))
-                    .map(d -> ExtractionProductionForecast.assess(state, d, material, workers)).filter(f -> f.outputs() > 0).toList();
+                    .map(d -> equipmentBacked ? ExtractionProductionForecast.assess(state, d, material, workers)
+                            : ExtractionProductionForecast.valuation(state, d, material, workers)).filter(f -> f.outputs() > 0).toList();
             if (forecasts.isEmpty()) continue;
             long reachable = forecasts.stream().mapToLong(f -> f.outputs()).sum();
-            long quantity = Math.min(reachable, EquipmentProductiveCapacity.remainingOperations(state, equipment, material.toolRequirement()));
+            long quantity = equipmentBacked ? Math.min(reachable, EquipmentProductiveCapacity.remainingOperations(state, equipment, material.toolRequirement())) : reachable;
             if (quantity == 0) continue;
             long work = Math.max(1, Math.ceilDiv(forecasts.stream().mapToLong(f -> f.labourTicks()).sum(), reachable));
             long first = forecasts.stream().mapToLong(f -> f.firstOutputTicks()).min().orElseThrow();

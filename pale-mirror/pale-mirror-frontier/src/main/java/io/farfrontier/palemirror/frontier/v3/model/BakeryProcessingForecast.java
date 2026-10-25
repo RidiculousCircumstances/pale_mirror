@@ -7,6 +7,23 @@ import java.util.OptionalLong;
 final class BakeryProcessingForecast {
     record Capacity(SubjectId station, long firstOutputDelay, long batchTicks, long labourTicks,
                     java.util.Map<String, Long> labourCapacity) { }
+    static java.util.Optional<Capacity> valuation(FrontierWorldState state, SubjectId home) {
+        var recipe = BakeryRecipes.bread(state);
+        var stations = AutomaticStationProduction.stations(state, home, recipe);
+        if (stations.isEmpty()) return java.util.Optional.empty();
+        var station = stations.getFirst().productionStation().orElseThrow();
+        var definition = state.bootstrap().ruleset().workCatalog().require(recipe.product().itemKind(), WorkOperation.PRODUCE);
+        if (recipe.processingMode() == ProductionRecipe.ProcessingMode.AUTOMATIC)
+            return java.util.Optional.of(new Capacity(station.id(), definition.workUnits(), definition.workUnits(), 0, java.util.Map.of()));
+        var workers = SupplyLabourCapacity.potential(state, home, ResidentWorkKind.PRODUCTION, definition.capability());
+        int speed = workers.stream().mapToInt(r -> ResidentWorkStatistics.speedPermille(r, definition,
+                state.bootstrap().ruleset().workCatalog())).min().orElse(0);
+        var schedule = state.humanPopulation().schedule(home); long daily = SupplyPlanningWindow.dailyWork(schedule);
+        if (speed == 0 || daily == 0) return java.util.Optional.empty();
+        long labour = Math.ceilDiv(Math.multiplyExact(definition.workUnits(), 1000L), speed);
+        return java.util.Optional.of(new Capacity(station.id(), SupplyPlanningWindow.completionDelay(schedule, labour),
+                Math.ceilDiv(Math.multiplyExact(labour, schedule.dayTicks()), daily), labour, java.util.Map.of()));
+    }
     static OptionalLong firstOutputDelay(FrontierWorldState state, SubjectId home) {
         return capacity(state, home, new SupplyPlanningWindow(state.humanPopulation().schedule(home).dayTicks()))
                 .map(c -> OptionalLong.of(c.firstOutputDelay())).orElseGet(OptionalLong::empty);

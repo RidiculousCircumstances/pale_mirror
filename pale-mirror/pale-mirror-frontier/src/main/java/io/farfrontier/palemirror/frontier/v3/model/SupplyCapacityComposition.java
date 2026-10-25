@@ -12,6 +12,7 @@ public final class SupplyCapacityComposition {
     }
     private static final Map<SupplyCapacityPort.Key, SupplyCapacityPort> PORTS = register(List.of(
             new BakerySupplyCapacity(), new FieldSupplyCapacity(), new ExtractionSupplyCapacity(), new AutomaticStationSupplyCapacity()));
+    private static final ImmutableKeyedInputView<SubjectId, List<SupplyPlanner.Process>> VALUATIONS = new ImmutableKeyedInputView<>(256);
     private SupplyCapacityComposition() { }
     public static Map<SupplyCapacityPort.Key, SupplyCapacityPort> register(List<SupplyCapacityPort> ports) {
         var result = new EnumMap<SupplyCapacityPort.Key, SupplyCapacityPort>(SupplyCapacityPort.Key.class);
@@ -22,6 +23,10 @@ public final class SupplyCapacityComposition {
     /** Local replacement costs need physical capabilities, not a reserve or market plan.
      * No target/incoming promise is manufactured by this valuation-only projection. */
     static List<SupplyPlanner.Process> forValuation(FrontierWorldState state, GoodsParticipant participant) {
+        return VALUATIONS.get(state.bootstrap(), participant.party().id(), List.of(state, participant),
+                () -> valueInstalled(state, participant));
+    }
+    private static List<SupplyPlanner.Process> valueInstalled(FrontierWorldState state, GoodsParticipant participant) {
         var stocks = new TreeMap<String, SupplyPlanner.Stock>();
         var rules = state.bootstrap().ruleset().goodsTrade();
         for (var commodity : rules.policies().get(participant.policy())) {
@@ -29,8 +34,10 @@ public final class SupplyCapacityComposition {
             stocks.put(kind, new SupplyPlanner.Stock(GoodsParticipantStorage.unclaimed(state, participant, kind),
                     0, 0, 0, 0, 0, 1, rules.supplyPlanning().require(kind)));
         }
-        return read(state, participant.settlementId(), stocks,
-                SupplyPlanningWindow.forSettlement(state, participant.settlementId(), List.of()));
+        var window = SupplyPlanningWindow.forSettlement(state, participant.settlementId(), List.of());
+        var result = new ArrayList<SupplyPlanner.Process>();
+        for (var key : SupplyCapacityPort.Key.values()) result.addAll(PORTS.get(key).valuation(state, participant.settlementId(), stocks, window));
+        return List.copyOf(result);
     }
     public static List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
                                                   SupplyPlanningWindow window) {

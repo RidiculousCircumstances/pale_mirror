@@ -20,7 +20,7 @@ public final class EquipmentProductionPlanning {
         if (deficits.isEmpty()) return List.of();
         var catalog = state.bootstrap().ruleset().production(); var tools = state.bootstrap().ruleset().tools();
         var reserved = WorkEquipmentClaimComposition.reserved(state); var result = new ArrayList<Request>();
-        var costs = EquipmentRecipeValuation.read(state, home, tick).processUnitCosts();
+        var market = EquipmentRecipeValuation.read(state, home, tick); var costs = market.processUnitCosts();
         for (var deficit : deficits) for (var recipe : catalog.recipes()) {
             var definition = tools.find(recipe.product().itemKind());
             if (definition.isEmpty() || !deficit.demand().supports(definition.orElseThrow())
@@ -49,13 +49,21 @@ public final class EquipmentProductionPlanning {
             }
         }
         var materialNow = new HashMap<ProductionRecipe.Id, Boolean>();
-        result.stream().filter(Request::urgent).forEach(request -> materialNow.computeIfAbsent(request.recipe().id(),
+        var restart = new HashMap<ProductionRecipe.Id, EquipmentRecoveryFunding.Cost>();
+        result.forEach(request -> materialNow.computeIfAbsent(request.recipe().id(),
                 ignored -> materialAvailable(state, home, request.recipe())));
+        result.forEach(request -> restart.computeIfAbsent(request.recipe().id(), ignored ->
+                EquipmentRecoveryFunding.cost(state, home, request.recipe(), 1, market, tick)));
         return result.stream().distinct().sorted((a, b) -> {
             int urgent = Boolean.compare(b.urgent(), a.urgent()); if (urgent != 0) return urgent;
-            if (a.urgent() && b.urgent()) {
-                int executable = Boolean.compare(materialNow.get(b.recipe().id()), materialNow.get(a.recipe().id()));
-                if (executable != 0) return executable;
+            int executable = Boolean.compare(materialNow.get(b.recipe().id()), materialNow.get(a.recipe().id()));
+            if (executable != 0) return executable;
+            var aStart = restart.get(a.recipe().id()); var bStart = restart.get(b.recipe().id());
+            int funded = Boolean.compare(bStart.funded(market.availableMoney()), aStart.funded(market.availableMoney()));
+            if (funded != 0) return funded;
+            if (a.urgent() && b.urgent() && !aStart.funded(market.availableMoney())) {
+                int minimum = Long.compare(aStart.cash(), bStart.cash());
+                if (minimum != 0) return minimum;
             }
             int value = BigInteger.valueOf(a.replacementCost()).add(BigInteger.valueOf(a.workCostPerWear()).multiply(BigInteger.valueOf(a.usefulWear())))
                     .multiply(BigInteger.valueOf(b.usefulWear())).compareTo(BigInteger.valueOf(b.replacementCost())
@@ -130,8 +138,17 @@ public final class EquipmentProductionPlanning {
                 } else if (local.isPresent()) {
                     var request = local.orElseThrow();
                     int quantity = request.maintenance().isPresent() ? 1 : Math.toIntExact(Math.max(units, Math.ceilDiv(wear, request.usefulWear())));
+                    // A failed production pool needs an obtainable first unit,
+                    // not a fully upgraded fleet as one indivisible restart.
+                    // Keep the rest visible in deficits; no output promise is made.
+                    if (deficit.immediate()) {
+                        while (quantity > 1 && !EquipmentRecoveryFunding.cost(state, home, request.recipe(), quantity, market, tick).funded(money)) quantity--;
+                    }
                     result.add(new Planned(request, quantity)); request.maintenance().ifPresent(t -> used.add(t.itemId()));
                     units = Math.max(0, units - quantity); wear = Math.max(0, wear - Math.multiplyExact(quantity, request.usefulWear()));
+                    var start = EquipmentRecoveryFunding.cost(state, home, request.recipe(), quantity, market, tick);
+                    if (!start.funded(money)) break;
+                    money -= start.cash();
                 } else break; // Neither production capability nor a funded delivered alternative exists.
             }
         }

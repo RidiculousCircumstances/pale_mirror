@@ -59,7 +59,15 @@ final class FrontierV3ManagedBlockWrites {
         var retained = List.copyOf(writes);
         if (retained.isEmpty() || retained.size() > MAX_PLANNED_WRITES)
             throw new IllegalArgumentException("native block effect needs a bounded declared write set");
-        return FrontierV3NativeEffect.observed(mutation).preparedBy(() -> {
+        return FrontierV3NativeEffect.observed(() -> {
+            try { return mutation.getAsBoolean(); }
+            finally {
+                if (!unmanaged.getAsBoolean()) {
+                    var runtime = runtimeSource.get();
+                    if (runtime != null) FrontierV3NavigationObservation.finishNativeWrites(level, runtime, retained);
+                }
+            }
+        }).preparedBy(() -> {
             if (unmanaged.getAsBoolean()) return FrontierV3NativeEffect.Admission.READY;
             var runtime = runtimeSource.get();
             return runtime == null ? FrontierV3NativeEffect.Admission.waiting("canonical-runtime")

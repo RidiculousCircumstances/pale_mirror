@@ -13,6 +13,15 @@ final class FieldSupplyCapacity implements SupplyCapacityPort {
     @Override public Key key() { return Key.FIELD; }
     @Override public List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
                                                     SupplyPlanningWindow window) {
+        return assess(state, home, stocks, window, cells(state, home));
+    }
+    @Override public List<SupplyPlanner.Process> valuation(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
+                                                         SupplyPlanningWindow window) {
+        if (state.bootstrap().ruleset().tools().definitions().values().stream().noneMatch(tool ->
+                FieldEquipment.requirements().alternatives().stream().anyMatch(group -> group.stream().allMatch(tool::supports)))) return List.of();
+        return assess(state, home, stocks, window, cells(state, home), FieldWorkForecast.valuationWorkers(state, home), false);
+    }
+    private static List<Cell> cells(FrontierWorldState state, SubjectId home) {
         var cells = new ArrayList<Cell>();
         for (var site : state.resourceSites().sites().values()) {
             if (!state.resourceSite(site.siteId()).settlementId().equals(home)
@@ -24,20 +33,24 @@ final class FieldSupplyCapacity implements SupplyCapacityPort {
                 cells.add(new Cell(cell.crop(), value, cycle.sowing().cells().contains(cell.id())));
             }
         }
-        return assess(state, home, stocks, window, cells);
+        return List.copyOf(cells);
     }
 
     static List<SupplyPlanner.Process> assess(FrontierWorldState state, SubjectId home,
             Map<String, SupplyPlanner.Stock> stocks, SupplyPlanningWindow window, List<Cell> cells) {
+        return assess(state, home, stocks, window, cells, FieldWorkForecast.workers(state, home), true);
+    }
+    private static List<SupplyPlanner.Process> assess(FrontierWorldState state, SubjectId home,
+            Map<String, SupplyPlanner.Stock> stocks, SupplyPlanningWindow window, List<Cell> cells,
+            List<ResidentProfile> workers, boolean equipmentBacked) {
         if (cells.size() > ResourceFieldLayout.MAX_CELLS || cells.stream().map(Cell::crop).distinct().count() != cells.size())
             throw new IllegalArgumentException("field capacity option has duplicate or unbounded land");
         if (state.bootstrap().ruleset().fields().agriculture().isEmpty()) return List.of();
-        var workers = FieldWorkForecast.workers(state, home);
         if (workers.isEmpty()) return List.of();
         var schedule = state.humanPopulation().schedule(home);
         long workWindow = SupplyPlanningWindow.dailyWork(schedule);
         if (workWindow == 0) return List.of();
-        var estimate = new FieldWorkForecast(state, home, workers);
+        var estimate = new FieldWorkForecast(state, home, workers, equipmentBacked);
         var sources = cells.stream().filter(cell -> {
             var value = cell.condition();
             return !value.workAccessBlocked() && value.soil().cultivable()
@@ -63,7 +76,7 @@ final class FieldSupplyCapacity implements SupplyCapacityPort {
         var releases = new ArrayList<SupplyPlanner.OutputRelease>();
         long promised = stocks.get(FieldHarvestExtraction.ITEM).promisedProduction();
         for (var release : forecast) {
-            long available = Math.min(release.recipes(), equipmentOutput) - promised;
+            long available = equipmentBacked ? Math.min(release.recipes(), equipmentOutput) - promised : release.recipes();
             if (available > 0 && (releases.isEmpty() || available > releases.getLast().recipes())) releases.add(new SupplyPlanner.OutputRelease(release.afterTicks(), Math.toIntExact(available)));
         }
         if (releases.isEmpty()) return List.of();

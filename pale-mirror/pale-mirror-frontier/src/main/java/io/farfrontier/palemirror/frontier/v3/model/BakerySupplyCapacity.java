@@ -9,7 +9,14 @@ final class BakerySupplyCapacity implements SupplyCapacityPort {
     @Override public Key key() { return Key.BAKERY; }
     @Override public List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
                                                     SupplyPlanningWindow window) {
-        var capacity = BakeryProcessingForecast.capacity(state, home, window);
+        return assess(state, home, stocks, BakeryProcessingForecast.capacity(state, home, window), window);
+    }
+    @Override public List<SupplyPlanner.Process> valuation(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
+                                                         SupplyPlanningWindow window) {
+        return assess(state, home, stocks, BakeryProcessingForecast.valuation(state, home), window);
+    }
+    private static List<SupplyPlanner.Process> assess(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
+            Optional<BakeryProcessingForecast.Capacity> capacity, SupplyPlanningWindow window) {
         if (capacity.isEmpty()) return List.of();
         var recipe = BakeryRecipes.bread(state);
         var input = recipe.ingredient().acceptedItems().stream().sorted(Comparator

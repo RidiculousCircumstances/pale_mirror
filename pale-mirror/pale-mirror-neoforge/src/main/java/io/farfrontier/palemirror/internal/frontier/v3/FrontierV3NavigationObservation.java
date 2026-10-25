@@ -21,6 +21,8 @@ final class FrontierV3NavigationObservation {
         boolean fenceRejected;
         final Map<io.farfrontier.palemirror.frontier.v3.api.SubjectId, Pose> seen = new HashMap<>();
         final Set<BlockPosition> dirty = new LinkedHashSet<>();
+        final Set<BlockPosition> committed = new LinkedHashSet<>();
+        Iterator<Map.Entry<BlockPosition, NavigationObservation>> recovery = Collections.emptyIterator();
         Set<BlockPosition> demands = Set.of();
         Iterator<BlockPosition> demandCursor = Collections.emptyIterator();
     }
@@ -38,6 +40,8 @@ final class FrontierV3NavigationObservation {
     static void tick(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, FrontierWorldProjection> runtime) {
         var state = runtime.decodedState().orElse(null); if (state == null) return;
         var window = window(level, state);
+        enqueueRecovery(level, runtime, state, window);
+        if (observeCommitted(level, runtime, state, window)) return;
         if (registerDefinitions(level, runtime, state, window)) return;
         enqueueDemands(level, runtime, state, window);
         if (observePending(level, runtime, state, window)) return;
@@ -100,6 +104,21 @@ final class FrontierV3NavigationObservation {
         var surveyed = Set.copyOf(changes.keySet());
         if (publish(runtime, state, changes)) window.dirty.removeAll(surveyed);
         return true;
+    }
+    private static void enqueueRecovery(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime, FrontierWorldState state, Window window) {
+        // A restart loses the ephemeral dirty queue, not its durable fences.
+        // Traverse a retained immutable view incrementally; never rebuild a full
+        // registry list on each revision and never load a chunk for observation.
+        if (!window.recovery.hasNext()) window.recovery = state.navigationGeometry().cells().entrySet().iterator();
+        for (int i = 0; i < 125 && window.recovery.hasNext(); i++) {
+            var entry = window.recovery.next(); var position = entry.getKey();
+            var current = state.navigationGeometry().cells().get(position);
+            if (current != null && current.kind() == NavigationObservation.Kind.WRITE_PENDING
+                    && level.getChunkSource().getChunkNow(position.x() >> 4, position.z() >> 4) != null
+                    && FrontierV3GrayboxExecutor.staticVisibilityComplete(runtime,
+                        new net.minecraft.world.level.ChunkPos(position.x() >> 4, position.z() >> 4)))
+                window.committed.add(position);
+        }
     }
     private static void enqueueDemands(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime,
             FrontierWorldState state, Window window) {
@@ -168,8 +187,18 @@ final class FrontierV3NavigationObservation {
         var changes = new LinkedHashMap<BlockPosition, NavigationObservation>();
         var window = window(level, state);
         if (committed) {
-            // Capture at publication time: later neighbour updates in the same physical
-            // operation must not leave a cached pre-update dependent shape.
+            // This is a real native write, unlike an unprojected authored cell.
+            // Retain its dependents until the outer effect/next native turn samples
+            // the final neighbour updates. Static projection readiness is unrelated.
+            var own = state.navigationGeometry().cells().get(position);
+            if (own != null && own.kind() == NavigationObservation.Kind.WRITE_PENDING) window.committed.add(position);
+            int radius = NavigationObservation.DEPENDENCY_RADIUS;
+            for (int dx = -radius; dx <= radius; dx++) for (int dy = -radius; dy <= radius; dy++) for (int dz = -radius; dz <= radius; dz++) {
+                var dependent = position.offset(dx, dy, dz);
+                var evidence = state.navigationGeometry().cells().get(dependent);
+                if (evidence != null && evidence.kind() == NavigationObservation.Kind.WRITE_PENDING
+                        && evidence.dependencies().containsKey(position)) window.committed.add(dependent);
+            }
             return true;
         }
         collectWriteFence(level, state, physical, replacement, changes);
@@ -182,6 +211,36 @@ final class FrontierV3NavigationObservation {
             return false;
         }
         window.fenceRejected = false;
+        return true;
+    }
+    /** Geometry observations establish collision facts, never an operation outcome.
+     * Even a partially failed effect must retain its actual changed geometry. */
+    static void finishNativeWrites(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            List<FrontierV3ManagedBlockWrites.PlannedWrite> writes) {
+        var state = runtime.passiveOwnershipState().orElse(null);
+        if (state == null) return;
+        var window = window(level, state);
+        for (var write : writes) {
+            var p = write.position(); var position = new BlockPosition(p.getX(), p.getY(), p.getZ());
+            var evidence = state.navigationGeometry().cells().get(position);
+            if (evidence != null && evidence.kind() == NavigationObservation.Kind.WRITE_PENDING) window.committed.add(position);
+        }
+        observeCommitted(level, runtime, state, window);
+    }
+    private static boolean observeCommitted(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            FrontierWorldState state, Window window) {
+        if (window.committed.isEmpty()) return false;
+        var changes = new LinkedHashMap<BlockPosition, NavigationObservation>();
+        for (var position : window.committed.stream().limit(NavigationGeometryState.MAX_CHANGE).toList()) {
+            window.committed.remove(position); window.committed.add(position);
+            if (level.getChunkSource().getChunkNow(position.x() >> 4, position.z() >> 4) == null) continue;
+            changes.put(position, FrontierV3NavigationShapes.capture(level, position));
+        }
+        if (changes.isEmpty()) return false;
+        var surveyed = Set.copyOf(changes.keySet());
+        if (publish(runtime, state, changes)) {
+            window.committed.removeAll(surveyed); window.dirty.removeAll(surveyed);
+        }
         return true;
     }
     /** Amortize durable invalidation over a bounded declared write window. This is

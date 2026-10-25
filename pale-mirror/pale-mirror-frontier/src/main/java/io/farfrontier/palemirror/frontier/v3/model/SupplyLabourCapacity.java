@@ -6,6 +6,17 @@ import java.util.*;
 /** A common finite planning horizon; capability owners alone select eligible workers. */
 final class SupplyLabourCapacity {
     private record Candidate(ResidentProfile resident, boolean permitted, int skill) { }
+    /** Long-run workforce potential ignores temporary activity/assignment. */
+    static List<ResidentProfile> potential(FrontierWorldState state, SubjectId home, ResidentWorkKind work, HumanCapability capability) {
+        var rule = state.bootstrap().ruleset().labour().entries().get(work);
+        if (rule == null) return List.of();
+        return state.humanPopulation().residents().values().stream()
+                .filter(r -> r.settlementId().equals(home) && r.capability(capability) > 0
+                        && !state.humanPopulation().migrations().containsKey(r.id())
+                        && state.actorLocations().get(r.id()).condition().status() == ActorLifeStatus.ALIVE)
+                .sorted(Comparator.comparingInt((ResidentProfile r) -> r.capability(capability)).reversed().thenComparing(ResidentProfile::id))
+                .limit(rule.targetWorkers()).toList();
+    }
     /** Advisory workforce potential precedes demand-driven staffing. This grants no permission. */
     static List<ResidentProfile> candidates(FrontierWorldState state, SubjectId home, ResidentWorkKind work,
             HumanCapability capability, java.util.function.Predicate<ResidentProfile> retainedByOwner) {

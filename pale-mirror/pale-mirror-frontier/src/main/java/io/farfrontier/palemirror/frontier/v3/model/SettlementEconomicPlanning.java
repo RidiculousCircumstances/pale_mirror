@@ -14,7 +14,7 @@ final class SettlementEconomicPlanning {
         var basis = input.basis();
         var prices = new TreeMap<String, Long>();
         for (var commodity : rules.policies().get(participant.policy())) prices.put(commodity.itemKind(),
-                trade.priceHistory().reference(commodity.itemKind(), rules.pricing().recencyTicks()).orElse(commodity.minimumSellPrice()).raw());
+                GoodsResourceValuation.replacement(state, participant, commodity.itemKind(), input.atTick()).raw());
         long receivables = trade.contracts().values().stream().filter(c -> !c.terminal() && c.seller().equals(participant.party()))
                 .mapToLong(c -> c.outstandingPrice().raw()).reduce(0L, Math::addExact);
         return new EconomicSnapshot(state.humanPopulation().schedule(home).dayTicks(), input.stocks(),

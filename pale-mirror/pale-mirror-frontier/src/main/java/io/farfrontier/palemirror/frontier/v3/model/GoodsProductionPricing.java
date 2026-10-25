@@ -25,11 +25,11 @@ final class GoodsProductionPricing {
         }
         return Map.copyOf(result);
     }
-    static Map<String, FixedScalar> alternatives(GoodsParticipantAssessment.Assessment assessment,
+    static Map<String, FixedScalar> alternatives(FrontierWorldState state, GoodsParticipantAssessment.Assessment assessment,
                                                 Map<String, FixedScalar> prices) {
-        return assess(assessment, prices).alternatives();
+        return assess(state, assessment, prices).alternatives();
     }
-    static Assessment assess(GoodsParticipantAssessment.Assessment assessment, Map<String, FixedScalar> prices) {
+    static Assessment assess(FrontierWorldState state, GoodsParticipantAssessment.Assessment assessment, Map<String, FixedScalar> prices) {
         var view = assessment.view();
         if (assessment.facts().isEmpty())
             return new Assessment(Map.of(), Map.of(), List.of());
@@ -39,9 +39,14 @@ final class GoodsProductionPricing {
         var capacities = collected.capacities();
         var economic = collected.market().processUnitCosts();
         var opportunities = new TreeMap<String, FixedScalar>();
+        var sourcing = state.bootstrap().ruleset().goodsTrade().supplyPlanning().sourcing();
+        var potential = sourcing.isPresent() ? SupplyCapacityComposition.forValuation(state, view.participant()) : capacities;
+        var estimates = new TreeMap<String, Long>(); prices.forEach((kind, price) -> estimates.put(kind, price.raw()));
+        var replacementCosts = sourcing.isPresent() ? io.farfrontier.palemirror.frontier.v3.model.supply.SourcingValuation.processes(potential,
+                estimates, collected.market().offers(), sourcing.orElseThrow().labourValuePerTick()) : economic;
+        for (var process : potential) if (replacementCosts.containsKey(process.id())) opportunities.merge(process.product(), new FixedScalar(replacementCosts.get(process.id())),
+                (a, b) -> a.compareTo(b) <= 0 ? a : b);
         for (var process : capacities) {
-            if (economic.containsKey(process.id())) opportunities.merge(process.product(), new FixedScalar(economic.get(process.id())),
-                    (a, b) -> a.compareTo(b) <= 0 ? a : b);
             var demand = view.supplyPlan().orElseThrow().require(process.product());
             long batches = Math.max(1, Math.ceilDiv(demand.purchase(), process.outputPerBatch()));
             if (batches > process.maximumBatches()
@@ -59,7 +64,7 @@ final class GoodsProductionPricing {
             if (economic.containsKey(process.id())) cost = Optional.of(new FixedScalar(economic.get(process.id())));
             cost.filter(value -> value.raw() > 0).ifPresent(value -> result.merge(process.product(), value, (a, b) -> a.compareTo(b) <= 0 ? a : b));
         }
-        return new Assessment(opportunities, result, capacities);
+        return new Assessment(opportunities, result, potential);
     }
     private GoodsProductionPricing() { }
 }

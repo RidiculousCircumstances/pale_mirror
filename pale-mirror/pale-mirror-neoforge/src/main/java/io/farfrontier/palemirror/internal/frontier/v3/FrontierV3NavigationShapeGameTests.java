@@ -62,12 +62,14 @@ public final class FrontierV3NavigationShapeGameTests {
                     "both the changed cell and exact contextual dependent are fenced before effects");
             level.setBlock(neighbourPos, Blocks.TORCH.defaultBlockState(), 2);
             FrontierV3NavigationObservation.blockWrite(level, runtime, neighbourPos, Blocks.TORCH.defaultBlockState(), true);
-            for (int i = 0; i < 12 && runtime.decodedState().orElseThrow().navigationGeometry().cells().get(neighbour).cell().isEmpty(); i++)
-                FrontierV3NavigationObservation.tick(level, runtime);
+            FrontierV3NavigationObservation.finishNativeWrites(level, runtime, List.of(
+                    new FrontierV3ManagedBlockWrites.PlannedWrite(neighbourPos, Blocks.TORCH.defaultBlockState())));
             var observed = runtime.decodedState().orElseThrow().navigationGeometry();
             helper.assertTrue(observed.cells().get(neighbour).cell().orElseThrow().shape().boxes().isEmpty(),
                     "a real torch publishes empty collision, never an unresolved fence");
             helper.assertTrue(observed.cells().get(origin).cell().isPresent(), "dependent is resampled without actor movement or a timer retry");
+            helper.assertTrue(observed.cells().get(second).kind() == NavigationObservation.Kind.WRITE_PENDING,
+                    "a prepared but unattempted second write is not silently closed with its old native image");
         } finally {
             runtime.shutdown(); level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2); level.setBlock(neighbourPos, Blocks.AIR.defaultBlockState(), 2);
             level.setBlock(secondPos, Blocks.AIR.defaultBlockState(), 2);
@@ -106,10 +108,14 @@ public final class FrontierV3NavigationShapeGameTests {
             template = "bastion/mobs/empty", timeoutTicks = 60)
     public static void unknownWriteFenceSurvivesWalRecoveryAndObservedShapeSurvivesCheckpoint(GameTestHelper helper) throws java.io.IOException {
         var directory = java.nio.file.Files.createTempDirectory(java.nio.file.Path.of("."), "navigation-recovery-");
-        var config = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:shape-recovery"), 41);
+        var nativePos = helper.absolutePos(new BlockPos(3, 2, 3));
+        var bootstrap = FrontierV3AmbientPhysicsGameTests.translatedBootstrap(FrontierBootstrapper.create(
+                new WorldId("frontier:shape-recovery"), 41), nativePos.getX(), nativePos.getY() - 64, nativePos.getZ());
+        var config = FrontierWorldRuntimeDefinition.configuration(bootstrap);
         var store = new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs());
         var first = FrontierV3ServerRuntime.start(config, store, 10_000);
-        var p = new BlockPosition(20, 64, 20);
+        var p = new BlockPosition(nativePos.getX(), nativePos.getY(), nativePos.getZ());
+        helper.getLevel().setBlock(nativePos, Blocks.STONE.defaultBlockState(), 2);
         try {
             var fence = new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved(0,
                     java.util.Map.of(p, NavigationObservation.unavailable(NavigationObservation.Kind.WRITE_PENDING)));
@@ -121,15 +127,22 @@ public final class FrontierV3NavigationShapeGameTests {
             var recovered = second.decodedState().orElseThrow();
             helper.assertTrue(recovered.navigationGeometry().cells().containsKey(p) && recovered.navigationGeometry().cells().get(p).kind() == NavigationObservation.Kind.WRITE_PENDING,
                     "WAL recovery must not turn an unresolved physical write into bootstrap air");
-            var slab = FrontierV3NavigationShapes.declared(Blocks.OAK_SLAB.defaultBlockState(), p, helper.getLevel().getHeight(), helper.getLevel().getMinBuildHeight());
-            FrontierV3CommandSubmission.submit(second, "shape-observed", "test",
-                    new io.farfrontier.palemirror.frontier.v3.model.geometry.NavigationGeometryObserved(1, java.util.Map.of(p, slab)));
+            FrontierV3NavigationObservation.tick(helper.getLevel(), second);
+            helper.assertTrue(second.decodedState().orElseThrow().navigationGeometry().cells().get(p).cell().orElseThrow()
+                    .shape().topAt(.5, .5).orElseThrow() == 1, "recovery observes the real preimage without an actor, route request or effect replay");
+            helper.assertTrue(FrontierV3NavigationObservation.blockWrite(helper.getLevel(), second, nativePos,
+                    Blocks.OAK_SLAB.defaultBlockState(), false), "new actual write needs its own durable fence");
+            helper.getLevel().setBlock(nativePos, Blocks.OAK_SLAB.defaultBlockState(), 2);
+            FrontierV3NavigationObservation.blockWrite(helper.getLevel(), second, nativePos, Blocks.OAK_SLAB.defaultBlockState(), true);
+            FrontierV3NavigationObservation.finishNativeWrites(helper.getLevel(), second, List.of(
+                    new FrontierV3ManagedBlockWrites.PlannedWrite(nativePos, Blocks.OAK_SLAB.defaultBlockState())));
         } finally { second.shutdown(); }
         var third = FrontierV3ServerRuntime.start(config, new FrontierFileStore(directory, FrontierWorldRuntimeDefinition.payloadCodecs()), 10_000);
         try {
             helper.assertTrue(third.decodedState().orElseThrow().navigationGeometry().cells().get(p).cell().orElseThrow().shape()
                     .topAt(.5, .5).orElseThrow() == .5, "checkpoint recovery retains native fractional support");
         } finally { third.shutdown(); }
+        helper.getLevel().setBlock(nativePos, Blocks.AIR.defaultBlockState(), 2);
         helper.succeed();
     }
     @GameTest(batch = "pm-frontier-v3-scene-local-navigation", templateNamespace = "minecraft",

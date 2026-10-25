@@ -9,13 +9,21 @@ final class AutomaticStationSupplyCapacity implements SupplyCapacityPort {
     @Override public Key key() { return Key.AUTOMATIC_STATIONS; }
     @Override public List<SupplyPlanner.Process> read(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
                                                     SupplyPlanningWindow window) {
+        return assess(state, home, stocks, window, true);
+    }
+    @Override public List<SupplyPlanner.Process> valuation(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
+                                                         SupplyPlanningWindow window) {
+        return assess(state, home, stocks, window, false);
+    }
+    private static List<SupplyPlanner.Process> assess(FrontierWorldState state, SubjectId home, Map<String, SupplyPlanner.Stock> stocks,
+            SupplyPlanningWindow window, boolean executable) {
         var result = new ArrayList<SupplyPlanner.Process>(); var catalog = state.bootstrap().ruleset().production();
         for (var policy : catalog.automaticPolicies()) {
             var recipe = catalog.require(policy.recipeId());
             for (var record : AutomaticStationProduction.stations(state, home, recipe)) {
                 var station = record.productionStation().orElseThrow();
                 var machine = state.productionStations().require(station.id());
-                if (ReferenceContainerCustody.blocksCanonicalUse(state, record.id())) continue;
+                if (executable && ReferenceContainerCustody.blocksCanonicalUse(state, record.id())) continue;
                 var fuels = new TreeMap<String, Long>(); catalog.fuels().forEach(f -> fuels.put(f.itemKind(), f.heatUnits()));
                 var ingredient = recipe.ingredient().acceptedItems().stream().sorted(Comparator
                         .<String>comparingLong(kind -> stocks.containsKey(kind) ? stocks.get(kind).covered() : 0).reversed()

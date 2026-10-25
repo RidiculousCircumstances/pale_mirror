@@ -14,10 +14,13 @@ final class FieldWorkForecast {
 
     /** One immutable input view per assessment, shared by every candidate cell. */
     FieldWorkForecast(FrontierWorldState state, SubjectId home, List<ResidentProfile> workers) {
+        this(state, home, workers, true);
+    }
+    FieldWorkForecast(FrontierWorldState state, SubjectId home, List<ResidentProfile> workers, boolean equipmentBacked) {
         bootstrap = state.bootstrap(); schedule = state.humanPopulation().schedule(home);
-        sowTicks = duration(state, workers, WorkOperation.SOW);
-        tillTicks = duration(state, workers, WorkOperation.TILL);
-        harvestTicks = duration(state, workers, WorkOperation.HARVEST);
+        sowTicks = duration(state, workers, WorkOperation.SOW, equipmentBacked);
+        tillTicks = duration(state, workers, WorkOperation.TILL, equipmentBacked);
+        harvestTicks = duration(state, workers, WorkOperation.HARVEST, equipmentBacked);
         var participant = state.companies().goodsTrade().participants().participants().get(home);
         stores = GoodsParticipantStorage.containers(state, participant, FieldHarvestExtraction.ITEM).stream()
                 .map(id -> state.inventory().surfaces().get(id).position(state)).toList();
@@ -34,6 +37,10 @@ final class FieldWorkForecast {
         var equipment = EquipmentProductiveCapacity.items(state, home, candidates.stream().map(ResidentProfile::id)
                 .collect(java.util.stream.Collectors.toSet()), FieldEquipment.requirements());
         return candidates.stream().limit(equipment.size()).toList();
+    }
+    static List<ResidentProfile> valuationWorkers(FrontierWorldState state, SubjectId home) {
+        var definition = state.bootstrap().ruleset().workCatalog().require(FieldHarvestExtraction.ITEM, WorkOperation.HARVEST);
+        return SupplyLabourCapacity.potential(state, home, ResidentWorkKind.AGRICULTURE, definition.capability());
     }
     RenewableWorkForecast.Source source(FieldSupplyCapacity.Cell cell) {
         var condition = cell.condition();
@@ -54,7 +61,7 @@ final class FieldWorkForecast {
         return Math.addExact(source.remainingGrowth(), SupplyPlanningWindow.completionDelay(schedule,
                 Math.addExact(source.preparation(), source.harvest())));
     }
-    private static long duration(FrontierWorldState state, List<ResidentProfile> workers, WorkOperation operation) {
+    private static long duration(FrontierWorldState state, List<ResidentProfile> workers, WorkOperation operation, boolean equipmentBacked) {
         var catalog = state.bootstrap().ruleset().workCatalog(); var definition = catalog.require(FieldHarvestExtraction.ITEM, operation);
         int speed = workers.stream().mapToInt(r -> ResidentWorkStatistics.speedPermille(r, definition, catalog))
                 .min().orElse(catalog.minSpeedPermille());
@@ -64,8 +71,10 @@ final class FieldWorkForecast {
             var equipment = EquipmentProductiveCapacity.items(state, workers.getFirst().settlementId(), workers.stream().map(ResidentProfile::id)
                     .collect(java.util.stream.Collectors.toSet()), FieldEquipment.requirements());
             final int workerSpeed = speed;
-            speed = equipment.stream().mapToInt(item -> io.farfrontier.palemirror.frontier.v3.model.tooling.ToolWorkRate.speedPermille(
-                    workerSpeed, state.bootstrap().ruleset().tools(), item, requirement)).min().orElse(speed);
+            speed = equipmentBacked ? equipment.stream().mapToInt(item -> io.farfrontier.palemirror.frontier.v3.model.tooling.ToolWorkRate.speedPermille(
+                    workerSpeed, state.bootstrap().ruleset().tools(), item, requirement)).min().orElse(speed)
+                    : state.bootstrap().ruleset().tools().definitions().values().stream().filter(tool -> tool.supports(requirement))
+                        .mapToInt(tool -> Math.toIntExact(Math.max(1, (long) workerSpeed * tool.speedPermille() / 1000))).min().orElse(speed);
         }
         return Math.ceilDiv(Math.multiplyExact(definition.workUnits(), 1000L), speed);
     }

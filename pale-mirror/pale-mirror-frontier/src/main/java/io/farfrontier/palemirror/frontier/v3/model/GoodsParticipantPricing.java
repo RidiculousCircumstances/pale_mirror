@@ -48,7 +48,7 @@ public final class GoodsParticipantPricing {
                 ? history.reference(commodity.itemKind(), rules.pricing().recencyTicks()).orElse(commodity.minimumSellPrice())
                 : ask(participant, commodity)));
         var floors = GoodsProductionPricing.floors(state.bootstrap().ruleset().production(), prices);
-        var production = GoodsProductionPricing.assess(assessment, prices);
+        var production = GoodsProductionPricing.assess(state, assessment, prices);
         for (var commodity : catalog) {
             var stock = view.stocks().get(commodity.itemKind());
             var reference = history.reference(commodity.itemKind(), rules.pricing().recencyTicks()).orElse(commodity.minimumSellPrice());
