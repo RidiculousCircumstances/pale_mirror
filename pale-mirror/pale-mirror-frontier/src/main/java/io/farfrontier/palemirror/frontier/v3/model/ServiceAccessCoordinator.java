@@ -76,11 +76,13 @@ public final class ServiceAccessCoordinator {
         Objects.requireNonNull(requested, "complete service identity");
         var access = boundary(state, requested.pointId());
         var demands = ServiceAccessCapabilities.current(state, requested.pointId());
-        var selfCare = demands.stream().filter(demand -> demand.priority() == ServiceAccessDemand.Priority.SELF_CARE).toList();
+        // A waiting declaration retains its identity and physical footprint but cannot win entry.
+        if (demands.stream().anyMatch(demand -> demand.identity().equals(requested) && !demand.readyToEnter())) return false;
+        var selfCare = demands.stream().filter(ServiceAccessDemand::readyToEnter).filter(demand -> demand.priority() == ServiceAccessDemand.Priority.SELF_CARE).toList();
         var entering = selfCare.stream().filter(demand -> demand.presence() == ServiceAccessDemand.Presence.ENTERING)
                 .min(Comparator.comparingLong(ServiceAccessDemand::requestedAtTick)
                         .thenComparing(demand -> demand.identity().actorId()));
-        var workers = demands.stream().filter(demand -> demand.priority() == ServiceAccessDemand.Priority.WORK)
+        var workers = demands.stream().filter(ServiceAccessDemand::readyToEnter).filter(demand -> demand.priority() == ServiceAccessDemand.Priority.WORK)
                 .sorted(approachOrder(state, access)).toList();
         boolean requestingSelfCare = ServiceAccessCapabilities.priority(requested) == ServiceAccessDemand.Priority.SELF_CARE;
         boolean departing = state.actorMovements().values().stream().anyMatch(movement ->
@@ -126,7 +128,7 @@ public final class ServiceAccessCoordinator {
     public static void requireDeclared(FrontierWorldState state, ServiceAccessDemand.Identity requested) {
         if (ServiceAccessCapabilities.current(state, requested.pointId()).stream()
                 .noneMatch(demand -> demand.identity().equals(requested)))
-            throw new IllegalArgumentException("service approach has no exact current owner declaration");
+            throw new IllegalArgumentException("service approach has no exact current owner declaration: " + requested);
     }
 
     /** COLD transit is shared; only entry into the service boundary needs a turn. */

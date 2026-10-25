@@ -43,6 +43,37 @@ class InternalShipmentTest {
         var codec = new FrontierWorldStateCodec();
         assertTrue(io.farfrontier.palemirror.frontier.v3.process.ShipmentProcess.held(codec.decode(codec.encode(waiting)), due));
     }
+    @Test void fullStationRetainsAnUnreadyApproachAndResumesAdmissionWhenCapacityReturns() {
+        var fixture = machineSupplyFixture(); var state = fixture.state(); var shipment = fixture.shipment();
+        var actor = shipment.execution().actorId(); var id = shipment.id();
+        state = state.withActorBody(actor, shipment.sender().station().standingBody());
+        state = ShipmentStateSupport.transferCold(state, id, id, 1, Shipment.Status.AWAITING_LOAD);
+        shipment = state.shipments().shipments().get(id);
+        var movement = new ActorMovement(shipment.movementOrder(), 2,
+                new ActorMovementContext.ShipmentLeg(id, shipment.revision()), shipment.execution());
+        state = io.farfrontier.palemirror.frontier.v3.process.ActorMovementProcess.reduceStarted(state, actor,
+                new ActorMovementStarted(movement));
+        var lot = new SubjectId("lot:full-station-fixture"); var account = new SubjectId("custody:full-station-fixture");
+        var ledger = state.inventory().fungibleResources().issue(new ResourceLot(lot, shipment.receiver().settlementId(),
+                shipment.itemKind(), 64, "test:station-full", List.of()),
+                new CustodyAccount(account, new ResourceCustody.Container(shipment.receiver().containerId()), Map.of(lot, 64), Map.of()));
+        state = state.withInventory(state.inventory().withFungibleResources(ledger));
+        var codec = new FrontierWorldStateCodec(); state = codec.decode(codec.encode(state));
+        var access = io.farfrontier.palemirror.frontier.v3.process.ActorMovementProviders.require(movement)
+                .serviceApproach(state, movement).orElseThrow();
+        ServiceAccessCoordinator.requireDeclared(state, access);
+        assertTrue(ShipmentStateSupport.coldTransferLots(state, shipment).isEmpty());
+        assertFalse(ServiceAccessCoordinator.available(state, access), "capacity wait cannot enter or erase the current journey");
+        var before = state.inventory();
+        var route = List.of(state.actorLocations().get(actor).supportingSurface());
+        assertEquals(route, ServiceApproachSegments.bounded(state, Optional.of(access), route));
+        assertEquals(before, state.inventory(), "access checks are read-only");
+        state = state.withInventory(state.inventory().withFungibleResources(
+                state.inventory().fungibleResources().destroy(account, Map.of(lot, 64), Map.of())));
+        ServiceAccessCoordinator.requireDeclared(state, access);
+        assertTrue(ServiceAccessCoordinator.available(state, access), "the same journey can enter after external capacity release");
+    }
+
     private RetargetFixture machineSupplyFixture() {
         var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:machine-supply"),
                 20260918065L, FrontierRulesets.fuelledQuarryGraybox()));

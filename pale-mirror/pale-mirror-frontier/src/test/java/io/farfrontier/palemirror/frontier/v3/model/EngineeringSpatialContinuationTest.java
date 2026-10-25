@@ -352,6 +352,7 @@ class EngineeringSpatialContinuationTest {
                 + purpose.name().toLowerCase(java.util.Locale.ROOT)), 41L).initialState();
         if (repair) {
             state = FrontierWorldState.initial(state.bootstrap());
+            state = FrontierEngineeringFixtures.withEquipment(state, state.bootstrap().settlements().getFirst().id());
             var settlement = state.bootstrap().settlements().getFirst();
             var loss = state.routeTopology().settlementWaypoints(state.bootstrap(), settlement.id()).get(2);
             state = state.recordPhysicalDelta(new PhysicalDelta(loss, PhysicalDeltaKind.KNOWN_SEMANTIC_LOSS,

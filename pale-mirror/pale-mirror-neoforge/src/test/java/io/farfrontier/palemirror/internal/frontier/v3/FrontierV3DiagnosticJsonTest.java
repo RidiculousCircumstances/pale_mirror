@@ -149,7 +149,7 @@ class FrontierV3DiagnosticJsonTest {
     void playerCustodyConflictKeepsTheSameStampedCauseForWhyIncidentAndBlockedAggregate() {
         var configuration = FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:diagnostic-player-conflict"), 91L);
         FrontierWorldState baseline = configuration.initialState();
-        SubjectId item = new SubjectId("item:bootstrap-1-engineering-tool-1");
+        SubjectId item = new SubjectId("item:bootstrap-field-tool-settlement-1-0");
         var slot = (InventoryCustody.ContainerSlot) baseline.inventory().items().get(item).custody();
         SubjectId incident = new SubjectId("conflict:diagnostic-player-custody");
         var conflict = io.farfrontier.palemirror.frontier.v3.model.InventoryDiagnosticProducer.PLAYER_EXPECTED_SLOT_MISSING

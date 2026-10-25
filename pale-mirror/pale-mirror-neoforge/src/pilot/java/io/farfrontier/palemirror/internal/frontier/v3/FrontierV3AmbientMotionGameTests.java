@@ -173,7 +173,7 @@ public final class FrontierV3AmbientMotionGameTests {
     }
 
     @GameTest(batch = "pm-frontier-v3-ambient-prepared-recovery", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 20)
-    public static void freshAmbientBodyRehydratesExactEngineeringToolFromActorCustody(GameTestHelper helper) {
+    public static void freshAmbientBodyRehydratesExactWorkToolFromActorCustody(GameTestHelper helper) {
         ServerLevel level = helper.getLevel(); BlockPos origin = helper.absolutePos(new BlockPos(0, 1, 0)); prepareFloor(level, origin);
         var config = configurationAt(helper, new WorldId("frontier:ambient-engineering-tool-hydration"), 91L,
                 new SubjectId("resident:1-1"));
@@ -181,7 +181,7 @@ public final class FrontierV3AmbientMotionGameTests {
         initializeAdmission(level, config, store);
         FrontierV3ServerRuntime<FrontierWorldState, io.farfrontier.palemirror.frontier.v3.model.FrontierWorldProjection> runtime =
                 FrontierV3ServerRuntime.start(config, store, 10_000);
-        SubjectId resident = new SubjectId("resident:1-1"), tool = new SubjectId("item:bootstrap-1-engineering-tool-1");
+        SubjectId resident = new SubjectId("resident:1-1"), tool = new SubjectId("item:bootstrap-field-tool-settlement-1-0");
         FrontierWorldState initial = state(runtime);
         var exactTool = initial.inventory().items().get(tool);
         FrontierWorldState equipped = io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.demand(initial, resident)
@@ -194,7 +194,7 @@ public final class FrontierV3AmbientMotionGameTests {
         Villager body = (Villager) level.getEntity(FrontierV3AmbientActorExecutor.entityId(equipped, resident));
         helper.assertTrue(body != null && FrontierV3ExactItemPresentation.exactMatch(
                         body.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND), exactTool),
-                "canonical engineering-tool custody must survive fresh COLD/restart materialization as the same tagged physical stack");
+                "canonical work-tool custody must survive fresh COLD/restart materialization as the same tagged physical stack");
         body.discard(); FrontierV3AmbientActorExecutor.forget(runtime); runtime.shutdown(); helper.succeed();
     }
 

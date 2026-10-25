@@ -28,6 +28,26 @@ class FrontierBootstrapperTest {
     }
 
     @Test
+    void normalWorldGrantsOnlyWorkEquipmentAndNoEngineeringScenarioKit() {
+        var state = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:no-engineering-kit"),
+                126L, FrontierRulesets.installed("frontier-v3-forestry-graybox-r28")));
+        assertTrue(state.inventory().items().values().stream().noneMatch(item -> item.id().value().contains("engineering-tool")));
+        for (var settlement : state.bootstrap().settlements()) {
+            var depot = FrontierWorldState.depotId(settlement.id());
+            var items = state.inventory().items().values().stream().filter(item -> item.custody() instanceof InventoryCustody.ContainerSlot slot
+                    && slot.containerId().equals(depot)).toList();
+            assertEquals(state.bootstrap().ruleset().labour().entries().get(ResidentWorkKind.AGRICULTURE).targetWorkers(), items.size());
+            assertTrue(items.stream().allMatch(item -> state.bootstrap().ruleset().tools().require(item.itemKind())
+                    .supports(FieldHarvestExtraction.DEFINITION.toolRequirement())));
+        }
+        assertTrue(state.extractionSites().deposits().values().stream().allMatch(deposit -> state.inventory().items().values().stream()
+                .anyMatch(item -> item.economicOwnerId().equals(deposit.site().settlementId())
+                        && state.bootstrap().ruleset().tools().require(item.itemKind()).supports(
+                                deposit.site().layout().cells().getFirst().definition().toolRequirement()))),
+                "ordinary mining keeps finite equipment to start its real resource chain");
+    }
+
+    @Test
     void createsTheExactFiniteProfileWithIndependentCanonicalSubjects() {
         FrontierBootstrap bootstrap = FrontierBootstrapper.create(new WorldId("frontier:bootstrap"), 918_273L);
 

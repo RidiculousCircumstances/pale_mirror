@@ -101,15 +101,11 @@ final class FrontierWorldInitialState {
             var equipment = GrayboxToolCatalog.initialFor(bootstrap.ruleset().tools(), List.of(FieldHarvestExtraction.DEFINITION.toolRequirement()));
             int nextSlot = 0;
             for (var definition : equipment) for (int worker = 0;
-                    worker < bootstrap.ruleset().labour().entries().get(ResidentWorkKind.AGRICULTURE).targetWorkers() && nextSlot < 20; worker++) {
+                    worker < bootstrap.ruleset().labour().entries().get(ResidentWorkKind.AGRICULTURE).targetWorkers()
+                            && nextSlot < containers.get(depot).slotCount(); worker++) {
                 var id = new SubjectId("item:bootstrap-field-tool-" + settlement.id().value().replace(':', '-') + "-" + nextSlot);
                 items.put(id, new ExactItemStack(id, settlement.id(), definition.itemKind(), 1,
                         new InventoryCustody.ContainerSlot(depot, nextSlot++), definition.pristine()));
-            }
-            for (int index = 0; index < EngineeringRecoveryTeam.MAX_MEMBERS; index++) {
-                SubjectId tool = new SubjectId("item:bootstrap-" + settlement.id().value().substring("settlement:".length()) + "-engineering-tool-" + (index + 1));
-                items.put(tool, new ExactItemStack(tool, settlement.id(), EngineeringToolCustody.FIRST_GRAYBOX_TOOL, 1,
-                        new InventoryCustody.ContainerSlot(depot, 20 + index)));
             }
         });
         int stockIndex = 0;

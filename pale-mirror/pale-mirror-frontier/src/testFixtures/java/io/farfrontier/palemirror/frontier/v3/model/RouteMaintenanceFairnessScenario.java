@@ -26,6 +26,9 @@ final class RouteMaintenanceFairnessScenario {
         RouteMaintenance second = maintenanceStarted(state, 2, 200L, secondLoss);
         state = RouteMaintenanceStateSupport.reduceStarted(state, FrontierRouteNetwork.OWNER, io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.maintenanceStarted(state, second));
 
+        state = FrontierEngineeringFixtures.withEquipment(state, second.settlementId());
+        if (!first.settlementId().equals(second.settlementId()))
+            state = FrontierEngineeringFixtures.withEquipment(state, first.settlementId());
         ExactInventory inventory = state.inventory().withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.PREPARED)
                 .withSurfaceStatus(FrontierRouteNetwork.MAINTENANCE_CONTAINER, ContainerSurfaceStatus.ACTIVE);
         SubjectId coldSource = new SubjectId("item:fixture-maintenance-cold-source");

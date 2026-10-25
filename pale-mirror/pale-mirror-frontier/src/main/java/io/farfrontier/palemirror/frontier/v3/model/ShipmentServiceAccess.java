@@ -30,12 +30,12 @@ public final class ShipmentServiceAccess implements ServiceAccessCapability {
             // is a spatial blocker, not an incumbent of a finished container transaction.
             if (target.filter(pointId::equals).isPresent())
                 result.add(new ServiceAccessDemand(identity(shipment, pointId), priority(), occupied
-                        ? ServiceAccessDemand.Presence.OCCUPIED : ServiceAccessDemand.Presence.APPROACH, 0, false));
+                        ? ServiceAccessDemand.Presence.OCCUPIED : ServiceAccessDemand.Presence.APPROACH, 0, shipment.pendingPhysicalStep().isPresent(), transferReady(state, shipment)));
         }
         return List.copyOf(result);
     }
     static boolean available(FrontierWorldState state, Shipment shipment) {
-        return operationEligible(state, shipment) && point(shipment)
+        return operationEligible(state, shipment) && transferReady(state, shipment) && point(shipment)
                 .map(point -> ServiceAccessCoordinator.available(state, identity(shipment, point))).orElse(true);
     }
     private static boolean operationEligible(FrontierWorldState state, Shipment shipment) {
@@ -52,6 +52,10 @@ public final class ShipmentServiceAccess implements ServiceAccessCapability {
             // replenishment or return the workflow owns a different operation.
             if (mission.stage() != operation || mission.replenishment().isPresent()) return false;
         }
+        return true;
+    }
+    /** Availability may change while a valid journey is in flight; it cannot erase that journey's declaration. */
+    private static boolean transferReady(FrontierWorldState state, Shipment shipment) {
         if (shipment.pendingPhysicalStep().isPresent()) return true;
         if (shipment.reception().isPresent()) return false;
         if (shipment.carrying()

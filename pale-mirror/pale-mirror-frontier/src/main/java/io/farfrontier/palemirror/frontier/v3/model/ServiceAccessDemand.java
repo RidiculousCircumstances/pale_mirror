@@ -5,7 +5,7 @@ import java.util.Objects;
 
 /** Ephemeral owner-issued access claim; no copied job, resource ledger or movement authority. */
 public record ServiceAccessDemand(Identity identity, Priority priority, Presence presence, long requestedAtTick,
-                                  boolean physicallyAdmitted) {
+                                  boolean physicallyAdmitted, boolean readyToEnter) {
     public enum Kind { MEAL, PRODUCTION, FIELD_HARVEST, COURIER, EXPEDITION_SUPPLY, EXTRACTION, ENGINEERING_EQUIPMENT, DEFENDER_EQUIPMENT, FORESTRY }
     public enum Priority { SELF_CARE, WORK }
     public enum Presence { OCCUPIED, ENTERING, APPROACH }
@@ -16,6 +16,10 @@ public record ServiceAccessDemand(Identity identity, Priority priority, Presence
             Objects.requireNonNull(actorId, "declared service actor");
             Objects.requireNonNull(pointId, "declared service point");
         }
+    }
+    public ServiceAccessDemand(Identity identity, Priority priority, Presence presence, long requestedAtTick,
+                               boolean physicallyAdmitted) {
+        this(identity, priority, presence, requestedAtTick, physicallyAdmitted, true);
     }
     public ServiceAccessDemand {
         Objects.requireNonNull(identity, "service identity");

@@ -19,9 +19,22 @@ final class FrontierEngineeringFixtures {
     static RouteConstructionFixture engineeringEquipmentFixture(WorldId worldId, long seed) {
         FrontierWorldState state = FrontierWorldState.initial(FrontierBootstrapper.create(worldId, seed));
         Settlement settlement = state.bootstrap().settlements().getFirst();
+        state = withEquipment(state, settlement.id());
         RouteConstruction project = fixtureDetourProject(state, settlement);
         state = RouteConstructionStateSupport.reduceStarted(state, FrontierRouteNetwork.OWNER, io.farfrontier.palemirror.frontier.v3.model.EngineeringExecutionEvents.constructionStarted(state, project));
         return new RouteConstructionFixture(state, new SimInstant(200L), List.of(RouteConstructionProcess.scan(1, 200L)), project.id());
+    }
+
+    /** Explicit precondition for engineering-only scenarios, never a normal world grant. */
+    static FrontierWorldState withEquipment(FrontierWorldState state, SubjectId home) {
+        var inventory = state.inventory();
+        for (int index = 0; index < EngineeringRecoveryTeam.MAX_MEMBERS; index++) {
+            var tool = new SubjectId("item:bootstrap-" + home.value().substring("settlement:".length())
+                    + "-engineering-tool-" + (index + 1));
+            inventory = inventory.store(new ExactItemStack(tool, home, EngineeringToolCustody.FIRST_GRAYBOX_TOOL, 1,
+                    new InventoryCustody.ContainerSlot(FrontierWorldState.depotId(home), 20 + index)));
+        }
+        return state.withInventory(inventory);
     }
 
     private static RouteConstruction fixtureDetourProject(FrontierWorldState state, Settlement settlement) {

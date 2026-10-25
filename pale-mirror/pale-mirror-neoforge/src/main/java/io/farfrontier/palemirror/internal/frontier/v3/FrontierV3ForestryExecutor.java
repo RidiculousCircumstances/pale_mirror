@@ -279,10 +279,16 @@ final class FrontierV3ForestryExecutor {
     /** Normal shutdown still owns the unused live attempt permission. Seal its
      * cancellation before that permission disappears; never recreate it on recovery. */
     static void shutdown(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        // Quarantine revokes command authority. Retain journals for recovery without executing cancellations.
+        if (runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE) return;
         runtime.settleNativeBoundary();
-        var ids = runtime.decodedState().orElseThrow().forest().work().keySet().stream().sorted().toList();
+        var initial = runtime.decodedState().orElse(null);
+        if (initial == null) return; // Settling may itself quarantine the runtime.
+        var ids = initial.forest().work().keySet().stream().sorted().toList();
         for (var id : ids) {
-            var job = runtime.decodedState().orElseThrow().forest().work().get(id);
+            var current = runtime.decodedState().orElse(null);
+            if (current == null) return;
+            var job = current.forest().work().get(id);
             if (job != null && job.pending().isPresent() && withdrawPending(level, runtime, job)) {
                 runtime.settleNativeBoundary();
                 LOGGER.info("PMV3 forestry shutdown cancelled unused effect job={}", id.value());

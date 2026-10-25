@@ -47,8 +47,8 @@ class FrontierWorldRuntimeDefinitionTest {
         assertEquals(12, projection.settlementCount());
         assertEquals(48, projection.bioformCount());
         org.junit.jupiter.api.Assertions.assertTrue(projection.residentCount() >= 240 && projection.residentCount() <= 480);
-        assertEquals(projection.settlementCount() * (EngineeringRecoveryTeam.MAX_MEMBERS + 3), projection.itemStackCount(),
-                "only engineering tools and three field tools per town are exact items; bulk resources remain fungible");
+        assertEquals(projection.settlementCount() * 3, projection.itemStackCount(),
+                "only the three agricultural starter tools per town are exact items; bulk resources remain fungible");
         assertEquals(0, projection.activeProductionJobCount());
         assertEquals(18, projection.infectedCellCount());
     }
@@ -225,7 +225,7 @@ class FrontierWorldRuntimeDefinitionTest {
     void durableObservedItemTransferMovesOnlyTheNamedCanonicalStack() {
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(new WorldId("frontier:item-custody"), 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        SubjectId itemId = new SubjectId("item:bootstrap-1-engineering-tool-1");
+        SubjectId itemId = new SubjectId("item:bootstrap-field-tool-settlement-1-0");
         InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) before.inventory().items().get(itemId).custody();
         var player = java.util.UUID.fromString("00000000-0000-0000-0000-000000000023");
         ExactItemCustodyChanged changed = new ExactItemCustodyChanged(itemId, source, new InventoryCustody.Player(player));
@@ -245,7 +245,7 @@ class FrontierWorldRuntimeDefinitionTest {
         WorldId worldId = new WorldId("frontier:actor-custody");
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        SubjectId itemId = new SubjectId("item:bootstrap-1-engineering-tool-1");
+        SubjectId itemId = new SubjectId("item:bootstrap-field-tool-settlement-1-0");
         InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) before.inventory().items().get(itemId).custody();
         SubjectId resident = before.humanPopulation().residents().values().stream()
                 .filter(value -> value.settlementId().equals(new SubjectId("settlement:1"))).findFirst().orElseThrow().id();
@@ -267,7 +267,7 @@ class FrontierWorldRuntimeDefinitionTest {
         WorldId worldId = new WorldId("frontier:inventory-conflict");
         var engine = FrontierEngines.create(FrontierWorldRuntimeDefinition.configuration(worldId, 91L));
         FrontierWorldState before = new FrontierWorldStateCodec().decode(engine.checkpoint().canonicalState());
-        SubjectId itemId = new SubjectId("item:bootstrap-1-engineering-tool-1");
+        SubjectId itemId = new SubjectId("item:bootstrap-field-tool-settlement-1-0");
         InventoryCustody.ContainerSlot source = (InventoryCustody.ContainerSlot) before.inventory().items().get(itemId).custody();
         SubjectId containerId = source.containerId();
         InventoryConflict conflict = InventoryDiagnosticProducer.PLAYER_EXPECTED_SLOT_MISSING.create(new SubjectId("conflict:inventory-bootstrap-tool"), itemId, containerId, source.slot());
