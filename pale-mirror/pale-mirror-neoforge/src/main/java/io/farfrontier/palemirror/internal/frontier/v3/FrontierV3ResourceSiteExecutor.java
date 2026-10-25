@@ -38,7 +38,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 final class FrontierV3ResourceSiteExecutor {
-    private static final int MAX_SITE_PROJECTION_WRITES_PER_TICK = 8;
     private static final Map<FrontierV3ServerRuntime<?, ?>, Integer> STAGE_CURSORS = new IdentityHashMap<>();
     private static final Map<FrontierV3ServerRuntime<?, ?>, Map<SubjectId, Integer>> CELL_CURSORS = new IdentityHashMap<>();
     private static final Map<FrontierV3ServerRuntime<?, ?>, Map<SubjectId, Integer>> WORLD_OBSERVATION_CURSORS = new IdentityHashMap<>();
@@ -47,7 +46,8 @@ final class FrontierV3ResourceSiteExecutor {
     enum BlockBreakObservation { UNMANAGED, ACCEPTED, REJECTED }
     enum LifecycleConflictOrigin { ORDINARY_GROWTH, RESTART_RECONCILIATION }
     private FrontierV3ResourceSiteExecutor() { }
-    static int projectionWriteBudget() { return MAX_SITE_PROJECTION_WRITES_PER_TICK; }
+    /** Preparation window only; the shared native-turn budget admits actual writes. */
+    static int projectionBatchLimit() { return FrontierV3ManagedBlockWrites.MAX_PLANNED_WRITES; }
     static void forget(FrontierV3ServerRuntime<?, ?> runtime) {
         STAGE_CURSORS.remove(runtime); CELL_CURSORS.remove(runtime); WORLD_OBSERVATION_CURSORS.remove(runtime);
         RECOVERY_SITES.remove(runtime); RECOVERY_TURNS.remove(runtime);

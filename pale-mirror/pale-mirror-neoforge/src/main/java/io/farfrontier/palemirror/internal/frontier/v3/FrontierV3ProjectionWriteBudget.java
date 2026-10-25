@@ -35,6 +35,17 @@ final class FrontierV3ProjectionWriteBudget {
                 io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_WEIGHT_BUDGET.get()));
     }
     int remaining() { return remaining; }
+    /** The runtime owns one turn budget; component fixtures outside its world do not. */
+    static FrontierV3NativeEffect admit(ServerLevel level, FrontierV3NativeEffect effect) {
+        if (!FrontierV3PhysicalWorld.isPhysical(level)) return effect;
+        return new FrontierV3NativeEffect(() -> current(level).admit(effect.preparation().get()), effect.mutation());
+    }
+    FrontierV3NativeEffect.Admission admit(FrontierV3NativeEffect.Admission preparation) {
+        // A pending fence cannot spend capacity. Capacity is checked before the
+        // common executor consumes a live attempt, never inside its mutation.
+        if (!preparation.ready()) return preparation;
+        return take() ? preparation : FrontierV3NativeEffect.Admission.waiting("projection-turn-capacity");
+    }
     // Preparation is already count-bounded and may await durable fences. Charging
     // that wait to the effect window could starve it forever. Start once at the
     // first effect, never reset for a second invocation in the same native tick.

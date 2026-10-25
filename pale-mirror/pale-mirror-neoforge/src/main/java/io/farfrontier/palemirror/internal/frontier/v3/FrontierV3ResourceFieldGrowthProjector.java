@@ -16,7 +16,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.Objects;
 
-/** One naturally loaded, canonical-first field cell per call; never guesses physical work or local damage. */
+/** Bounded current-image projection; never guesses physical work or local damage. */
 final class FrontierV3ResourceFieldGrowthProjector {
     enum Result { CURRENT, ADVANCED, UNLOADED, PENDING_WORK, PENDING_PLAYER, NEEDS_WORK,
         STALE_CANONICAL, PHYSICAL_CONFLICT, RETRY }
@@ -89,7 +89,7 @@ final class FrontierV3ResourceFieldGrowthProjector {
     }
     static BatchResult projectAcceptedBatch(ServerLevel level, ResourceSite site,
             FrontierCanonicalState<ResourceFieldCycle> accepted, java.util.List<ResourceFieldLayout.CellId> cells, boolean deferred) {
-        if (cells.isEmpty() || cells.size() > FrontierV3ResourceSiteExecutor.projectionWriteBudget()
+        if (cells.isEmpty() || cells.size() > FrontierV3ResourceSiteExecutor.projectionBatchLimit()
                 || new java.util.HashSet<>(cells).size() != cells.size())
             throw new IllegalArgumentException("growth batch exceeds its disjoint write budget");
         var siteId = site.id();
@@ -154,6 +154,9 @@ final class FrontierV3ResourceFieldGrowthProjector {
             }
             var results = new java.util.HashMap<ResourceFieldLayout.CellId, FrontierV3MinecraftOperation.Result>();
             if (!requests.isEmpty()) {
+                var window = java.util.List.copyOf(requests.keySet());
+                if (!FrontierV3FieldProjectionOperation.prepareBatch(level, site, witness, window,
+                        () -> resumeCurrentBatch(level, siteId, window))) return BatchResult.waiting();
                 var completed = deferred ? FrontierV3MinecraftOperation.applyBatchDeferred(level, java.util.List.copyOf(requests.values()))
                         : FrontierV3MinecraftOperation.applyBatch(level, java.util.List.copyOf(requests.values()));
                 int index = 0;
@@ -276,6 +279,12 @@ final class FrontierV3ResourceFieldGrowthProjector {
     }
 
     /** Resume through the owner and current revision; never replay a captured request. */
+    private static void resumeCurrentBatch(ServerLevel level, SubjectId site,
+            java.util.List<ResourceFieldLayout.CellId> cells) {
+        var runtime = FrontierV3ServerLifecycle.runtimeForNativeMutation(level.getServer());
+        if (runtime != null && FrontierV3PhysicalWorld.isPhysical(level))
+            projectCurrentBatch(level, runtime, site, cells);
+    }
     private static void resumeCurrent(ServerLevel level, SubjectId site, ResourceFieldLayout.CellId cell) {
         var runtime = FrontierV3ServerLifecycle.runtimeForNativeMutation(level.getServer());
         if (runtime != null && FrontierV3PhysicalWorld.isPhysical(level))

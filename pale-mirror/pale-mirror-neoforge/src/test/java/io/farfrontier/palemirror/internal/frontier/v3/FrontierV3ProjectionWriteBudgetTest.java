@@ -21,4 +21,13 @@ class FrontierV3ProjectionWriteBudgetTest {
         var budget = new FrontierV3ProjectionWriteBudget(7, 2, () -> 0L);
         assertTrue(budget.take()); assertTrue(budget.take()); assertFalse(budget.take());
     }
+    @Test void pendingDurabilityDoesNotSpendAnAttemptOrTheSharedCapacity() {
+        var budget = new FrontierV3ProjectionWriteBudget(7, 1, () -> 0L);
+        var waiting = FrontierV3NativeEffect.Admission.waiting("exact-durable-predecessor");
+        assertSame(waiting, budget.admit(waiting));
+        assertEquals(1, budget.remaining());
+        assertTrue(budget.admit(FrontierV3NativeEffect.Admission.READY).ready());
+        assertFalse(budget.admit(FrontierV3NativeEffect.Admission.READY).ready());
+        assertEquals("projection-turn-capacity", budget.admit(FrontierV3NativeEffect.Admission.READY).waitingFor().orElseThrow());
+    }
 }

@@ -12,7 +12,6 @@ class FrontierV3AmbientActorLocalTargetsTest {
         assertEquals(256, FrontierV3GrayboxExecutor.firstVisibilityCellBudget(256));
         assertEquals(16, FrontierV3GrayboxExecutor.firstVisibilityCellBudget(16));
         assertEquals(8, FrontierV3GrayboxExecutor.structuralCellBudget());
-        assertEquals(8, FrontierV3ResourceSiteExecutor.projectionWriteBudget());
         assertEquals(256, FrontierV3ResourceFieldInitialWriter.initialWriteBudget(256));
         assertEquals(16, FrontierV3ResourceFieldInitialWriter.initialWriteBudget(16));
         assertEquals(256, FrontierV3ResourceFieldInitialWriter.initialWriteBudget(4096));

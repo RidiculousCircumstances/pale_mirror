@@ -8,7 +8,7 @@ import java.util.List;
 
 /** Fair bounded discovery; unchanged cells do not consume a physical write slot. */
 final class FrontierV3ResourceFieldProjectionSelection {
-    private static final int MAX_CELL_PROBES_PER_TURN = 64;
+    private static final int MAX_CELL_PROBES_PER_TURN = FrontierV3ManagedBlockWrites.MAX_PLANNED_WRITES;
     record Selection(List<ResourceFieldLayout.CellId> cells, int nextIndex, int probes) {
         Selection { cells = List.copyOf(cells); }
     }
@@ -21,7 +21,7 @@ final class FrontierV3ResourceFieldProjectionSelection {
         int index = Math.floorMod(start, layout.size()), probes = 0;
         var selected = new ArrayList<ResourceFieldLayout.CellId>();
         int limit = Math.min(MAX_CELL_PROBES_PER_TURN, layout.size());
-        while (probes < limit && selected.size() < FrontierV3ResourceSiteExecutor.projectionWriteBudget()) {
+        while (probes < limit && selected.size() < FrontierV3ResourceSiteExecutor.projectionBatchLimit()) {
             var id = layout.get(index).id();
             var retained = witness.cell(id);
             var canonical = cycle.cell(id);

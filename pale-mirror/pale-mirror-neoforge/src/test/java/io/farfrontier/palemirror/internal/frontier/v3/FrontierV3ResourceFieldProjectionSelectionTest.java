@@ -30,19 +30,19 @@ class FrontierV3ResourceFieldProjectionSelectionTest {
     }
 
     @Test void discoveryAndWritesStayBoundedAndSparseDistantCellsCannotStarve() {
-        var before = cycle(256, index -> 0);
-        var after = cycle(256, index -> index == 199 ? 1 : 0);
+        var before = cycle(1024, index -> 0);
+        var after = cycle(1024, index -> index == 999 ? 1 : 0);
         var witness = claimed(before);
         int cursor = 0;
         for (int turn = 0; turn < 4; turn++) {
             var selected = FrontierV3ResourceFieldProjectionSelection.select(after, witness, cursor);
-            assertEquals(64, selected.probes()); cursor = selected.nextIndex();
-            assertEquals(turn == 3 ? List.of(new ResourceFieldLayout.CellId(200)) : List.of(), selected.cells());
+            assertEquals(256, selected.probes()); cursor = selected.nextIndex();
+            assertEquals(turn == 3 ? List.of(new ResourceFieldLayout.CellId(1000)) : List.of(), selected.cells());
         }
-        var allDirty = cycle(256, index -> 7);
+        var allDirty = cycle(1024, index -> 7);
         var first = FrontierV3ResourceFieldProjectionSelection.select(allDirty, witness, 0);
         var next = FrontierV3ResourceFieldProjectionSelection.select(allDirty, witness, first.nextIndex());
-        assertEquals(8, first.cells().size()); assertEquals(8, first.probes());
+        assertEquals(256, first.cells().size()); assertEquals(256, first.probes());
         assertTrue(java.util.Collections.disjoint(first.cells(), next.cells()));
     }
 
