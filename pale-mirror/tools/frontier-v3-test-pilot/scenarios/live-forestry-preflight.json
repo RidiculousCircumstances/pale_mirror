@@ -1,0 +1,94 @@
+{
+  "schema": 1,
+  "id": "live_forestry_preflight",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 25565,
+    "viewDistance": 8
+  },
+  "pilot": {
+    "username": "PMAudit"
+  },
+  "setup": [],
+  "actions": [
+    {
+      "type": "visit",
+      "dimension": "pale_mirror:frontier_graybox",
+      "position": {
+        "diagnostic": {
+          "view": "forest",
+          "id": "settlement:7",
+          "field": "firstTree"
+        }
+      },
+      "offset": {
+        "x": -6,
+        "y": 0,
+        "z": 6
+      },
+      "settleMs": 1000
+    },
+    {
+      "type": "look",
+      "at": {
+        "diagnostic": {
+          "view": "forest",
+          "id": "settlement:7",
+          "field": "firstTree"
+        }
+      }
+    },
+    {
+      "type": "inspect",
+      "view": "forest",
+      "id": "settlement:7"
+    },
+    {
+      "type": "wait",
+      "ms": 10000
+    },
+    {
+      "type": "inspect",
+      "view": "summary",
+      "id": ""
+    },
+    {
+      "type": "inspect",
+      "view": "performance",
+      "id": ""
+    }
+  ],
+  "assertions": [
+    {
+      "after": 3,
+      "view": "forest",
+      "id": "settlement:7",
+      "expect": {
+        "status": "ok",
+        "enabled": true,
+        "reserveTarget": 256
+      }
+    },
+    {
+      "after": 5,
+      "view": "summary",
+      "id": "",
+      "expect": {
+        "status": "ok",
+        "requiredConflicts": 0,
+        "sceneConflicts": 0,
+        "inventoryConflicts": 0
+      }
+    }
+  ],
+  "frames": [
+    {
+      "after": 2,
+      "name": "full-pack-natural-forest"
+    },
+    {
+      "after": 4,
+      "name": "full-pack-current-forest"
+    }
+  ]
+}
