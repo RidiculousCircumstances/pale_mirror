@@ -21,7 +21,7 @@
       "dimension": "pale_mirror:frontier_graybox",
       "position": {
         "x": -572,
-        "y": 68,
+        "y": 64,
         "z": 26
       },
       "settleMs": 1500
@@ -55,11 +55,11 @@
     },
     {
       "type": "visit",
-      "dimension": "pale_mirror:frontier_graybox",
+      "dimension": "minecraft:overworld",
       "position": {
-        "x": 2500,
-        "y": 72,
-        "z": 2500
+        "x": 0,
+        "y": 128,
+        "z": 0
       },
       "settleMs": 500
     },
@@ -72,7 +72,7 @@
       "dimension": "pale_mirror:frontier_graybox",
       "position": {
         "x": -572,
-        "y": 68,
+        "y": 64,
         "z": 26
       },
       "settleMs": 1500
