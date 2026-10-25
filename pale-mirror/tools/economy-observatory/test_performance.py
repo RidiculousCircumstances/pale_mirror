@@ -1,7 +1,8 @@
 import struct
 import time
 import unittest
-from performance import receive, frame, point
+from performance import point
+from rcon import receive, frame
 
 class Fragmented:
     def __init__(self, data): self.data=data

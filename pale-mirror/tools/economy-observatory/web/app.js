@@ -19,7 +19,7 @@ const n = (x) =>
       maximumFractionDigits: 6,
     }),
   short = (x) => String(x ?? "").replace(/^minecraft:/, "");
-let performanceData = null;
+let performanceData = null, playersData = null;
 let data = null,
   tab = "map",
   busy = false,
@@ -228,7 +228,7 @@ function render() {
   if (tab === "map") {
     if (!$("content").querySelector(".world-map")) setContent('<div class="world-map"></div>');
     WorldMap.mount($("content").firstElementChild, data, {
-      town: $("town").value, item: $("item").value,
+      town: $("town").value, item: $("item").value, players: playersData,
       selectTown: (id) => { $("town").value = id; refresh(); },
     });
     return;
@@ -581,12 +581,23 @@ async function refresh() {
       if (!metrics.ok) throw new Error(await metrics.text());
       performanceReceived = await metrics.json();
     }
+    let playersReceived = null;
+    if (requestedTab === "map") {
+      try {
+        const positions = await fetch("/api/players");
+        if (!positions.ok) throw new Error(await positions.text());
+        playersReceived = await positions.json();
+      } catch (error) {
+        playersReceived = {latest: null, error: error.message};
+      }
+    }
     if (query !== params().toString() || requestedTab !== tab) {
       refreshPending = true;
       return;
     }
     data = received;
     if (performanceReceived) performanceData = performanceReceived;
+    if (playersReceived) playersData = playersReceived;
     options(
       "world",
       data.worlds.map((w) => [w.world, w.name]),

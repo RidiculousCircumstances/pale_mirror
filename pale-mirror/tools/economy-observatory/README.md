@@ -56,7 +56,7 @@ sorting; monetary columns use raw numeric values. Tables have independent bounde
 scroll areas and sticky headers; refresh preserves scroll and chosen sort.
 
 The Performance tab reads `/api/performance`, backed by one background loop calling
-only the existing `pale_mirror v3 inspect performance` diagnostic over loopback RCON
+the existing `pale_mirror v3 inspect performance` diagnostic over loopback RCON
 once per 10 seconds (3-second total response bound, 64 KiB response cap). Credentials
 stay local in server.properties; HTTP accepts no command or endpoint parameter.
 No browser-triggered game requests, additional Java ticking or new telemetry owner.
@@ -93,3 +93,17 @@ of world bounds, pan/zoom and SVG aspect-ratio letterboxing. The bottom separato
 resizes map height (drag, arrow keys, Home/End); size survives data refresh and tab
 changes. Expand fills the browser window while retaining the details panel;
 Collapse or Escape returns to the normal page. These controls are local UI only.
+
+Player map overlay: an independent in-memory collector reads the fixed `inspect
+players` diagnostic every2seconds over the same bounded loopback RCON transport.
+`/api/players` serves that cache; browser requests never issue game commands.
+The native adapter observes only the online player list on the server thread
+(up to32players), exact X/Y/Z, dimension and yaw. It loads no chunks, computes no
+routes and records no player history or canonical state. World identity is read
+from the analytical observer's already-published cache, never from disk on ticks.
+The map accepts only the selected analytical world UUID and its map dimension;
+players in other dimensions are counted separately. Missing/stale/failed samples
+remove markers rather than extrapolating or retaining disconnected-player ghosts.
+The blue direction marker has hover/click details, a player selector, a layer
+toggle and a centering button. Position refresh preserves the chosen viewport.
+This server-only diagnostic/UI update requires no Minecraft client update.

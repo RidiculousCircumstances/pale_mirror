@@ -53,6 +53,7 @@ final class FrontierV3ServerDiagnostic {
             }
         }
         if ("performance".equals(view)) return FrontierV3ServerLifecycle.performanceDiagnostic(server, runtime, checkpoint, state);
+        if ("players".equals(view)) return FrontierV3PlayerPositionsDiagnostic.render(server, runtime, checkpoint);
         if ("projection_work".equals(view)) return FrontierV3ProjectionWorkDiagnostic.render(checkpoint, runtime);
         if ("player_resource".equals(view)) return FrontierV3PlayerResourceDiagnostic.render(checkpoint, state, server, id);
         if ("traversal_foundry".equals(view)) return FrontierV3TraversalFoundryDiagnostic.render(checkpoint, state,

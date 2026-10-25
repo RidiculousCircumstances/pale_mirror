@@ -8,8 +8,8 @@ const WorldMap = (() => {
   const itemName = (x) => String(x ?? "").replace(/^minecraft:/, "");
   const phases = {PREPARING:"Подготовка",TO_SOURCE:"К поставщику",LOADING:"Погрузка",OUTBOUND:"Доставка",UNLOADING:"Разгрузка",RETURNING:"Возвращение",RECOVERING:"Восстановление",COMPLETE:"Завершён"};
   let root, data, filters, world, view, initial, selected = null, hovered = null, drag = null;
-  let showTrade = true, showCaravans = true, paintUnits = 1, height = null, resizeObserver;
-  let objects = new Map(), towns = new Map(), missions = [];
+  let showTrade = true, showCaravans = true, showPlayers = true, paintUnits = 1, height = null, resizeObserver;
+  let objects = new Map(), towns = new Map(), missions = [], players = [], playerChoice = null, playerAge = null;
   const name = (id) => towns.get(id)?.name || id;
   const valid = (p) => p && Number.isFinite(p.x) && Number.isFinite(p.z);
   const summary = (rows) => rows.length ? rows.map(([k,v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("") : "";
@@ -18,14 +18,16 @@ const WorldMap = (() => {
     <button data-map="fit">Весь мир</button><button data-map="expand" aria-pressed="false">Развернуть карту</button><button data-map="focus">К выбранному</button>
     <label class="check"><input type="checkbox" data-layer="trade" ${showTrade?"checked":""}>Торговые связи</label>
     <label class="check"><input type="checkbox" data-layer="caravans" ${showCaravans?"checked":""}>Караваны</label>
-    <span class="map-clock"></span></div>
+    <label class="check"><input type="checkbox" data-layer="players" ${showPlayers?"checked":""}>Игроки</label>
+    <select data-player-choice aria-label="Игрок на карте"></select><button data-map="player">К игроку</button>
+    <span class="map-player-status muted"></span><span class="map-clock"></span></div>
     <div class="map-layout"><div class="map-viewport">
     <svg class="world-map-svg" tabindex="0" role="group" aria-label="Интерактивная карта поселений. Колесо — масштаб, перетаскивание — перемещение, стрелки — сдвиг."></svg>
     <svg class="map-grid-labels" aria-hidden="true" preserveAspectRatio="none"></svg><div class="map-tooltip" role="tooltip" hidden></div>
     <div class="map-axis">Север −Z ↑ · Восток +X →</div></div>
     <aside class="map-sidebar"><div class="map-details"></div><h3>Караваны сейчас</h3><div class="map-missions"></div></aside></div>
     <div class="map-resize" role="separator" tabindex="0" aria-label="Высота карты: перетащите или используйте стрелки" aria-orientation="horizontal"></div><p class="map-note muted"></p><div class="map-legend"><span>● Поселение</span><span class="map-warning">● Есть голодные</span>
-    <span class="map-gold">◆ Караван — центр группы</span><span>→ Оплаченные поставки за период; толщина — стоимость товара</span></div></section>`;
+    <span class="map-sky">▲ Игрок — позиция и направление взгляда</span><span class="map-gold">◆ Караван — центр группы</span><span>→ Оплаченные поставки за период; толщина — стоимость товара</span></div></section>`;
   function mount(host, value, options) {
     data = value; filters = options; root = host;
     const map = data.latest?.map;
@@ -34,7 +36,7 @@ const WorldMap = (() => {
       return;
     }
     if (world !== data.world?.world) {
-      world = data.world?.world; view = null; selected = null;
+      world = data.world?.world; view = null; selected = null; playerChoice = null;
     }
     const b = map.bounds;
     initial = {x:b.minX-b.width*.035,z:b.minZ-b.depth*.035,w:b.width*1.07,h:b.depth*1.07};
@@ -47,8 +49,21 @@ const WorldMap = (() => {
     if (!root.querySelector("svg")) {
       root.innerHTML = shell(); bind();
     }
+    const feed = options.players, observed = feed?.latest;
+    playerAge = feed?.ageSeconds;
+    const fresh = !feed?.error && Number.isFinite(playerAge) && playerAge <= Math.max(6, (feed?.intervalSeconds || 2) * 3);
+    const sameWorld = observed?.worldInstance === world;
+    players = fresh && sameWorld ? (observed.players || []).filter(p => valid(p) && Number.isFinite(p.y) && Number.isFinite(p.yaw) && p.dimension === observed.mapDimension) : [];
+    if (!players.some(p => p.id === playerChoice)) playerChoice = players[0]?.id ?? null;
+    const chooser = root.querySelector("[data-player-choice]");
+    chooser.innerHTML = players.length ? players.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("") : '<option value="">Нет игроков на карте</option>';
+    chooser.value = playerChoice || ""; chooser.disabled = !players.length;
+    root.querySelector('[data-map="player"]').disabled = !players.length;
+    const otherDimensions = fresh && sameWorld ? (observed.players || []).filter(p => p.dimension !== observed.mapDimension).length : 0;
+    root.querySelector(".map-player-status").textContent = !observed || !fresh ? "Позиции игроков недоступны" : !sameWorld ? "Игроки доступны только для текущего мира сервера" :
+      `Игроков на карте: ${players.length}${otherDimensions ? ` · в других измерениях: ${otherDimensions}` : ""} · ${Math.round(playerAge)} с назад${observed.truncated ? " · список ограничен" : ""}`;
     root.querySelector(".map-clock").textContent = `Снимок: тик ${num(data.latest.tick)} · ${Math.round(data.ageSeconds)} с назад`;
-    root.querySelector(".map-note").textContent = `Поселения и караваны — последний снимок; связи — приёмки за ${num(data.from)}–${num(data.to)} тиков. Линии связей не являются дорогами. Пунктир выбранного каравана — сохранённый маршрут, до 128 точек. Позиции COLD вычислены общим механизмом движения, HOT — последние подтверждённые.${map.activeCount > map.shownCount ? ` Ограничение карты: показано ${map.shownCount} из ${map.activeCount} активных караванов.` : ""}${data.ageSeconds > 15 || data.collectorError ? " Данные устарели или сборщик недоступен; перемещения не дорисовываются." : ""}`;
+    root.querySelector(".map-note").textContent = `Поселения и караваны — последний снимок; связи — приёмки за ${num(data.from)}–${num(data.to)} тиков. Линии связей не являются дорогами. Пунктир выбранного каравана — сохранённый маршрут, до 128 точек. Позиции COLD вычислены общим механизмом движения, HOT — последние подтверждённые. Игроки — отдельные текущие наблюдения сервера; история и перемещения между наблюдениями не восстанавливаются.${map.activeCount > map.shownCount ? ` Ограничение карты: показано ${map.shownCount} из ${map.activeCount} активных караванов.` : ""}${data.ageSeconds > 15 || data.collectorError ? " Данные устарели или сборщик недоступен; перемещения не дорисовываются." : ""}`;
     paint();
   }
   function marker(key, attrs, shape, label) {
@@ -125,6 +140,16 @@ const WorldMap = (() => {
       out+=marker(key,`class="map-caravan${selected===key?" selected":""}"`,
         `<path d="M${x} ${z-r} L${x+r} ${z} L${x} ${z+r} L${x-r} ${z}Z" fill="#f1bd75" stroke="#17232b" stroke-width="${2*u}"/><text x="${x+10*u}" y="${z+4*u}" font-size="${10*u}" fill="#f9d9a5" paint-order="stroke" stroke="#10252c" stroke-width="${3*u}">${label}</text>`,`${name(mission.source)} → ${name(mission.destination)}: ${phases[mission.stage]||mission.stage}`);
     }
+    for (const player of players) {
+      const key = `player:${player.id}`;
+      objects.set(key, {type:"player", ...player});
+      if (!showPlayers) continue;
+      const x = player.x, z = player.z, r = 11 * u;
+      out += marker(key, `class="map-player${selected===key?" selected":""}"`,
+        `<circle cx="${x}" cy="${z}" r="${r}" fill="#10252c" stroke="#80caff" stroke-width="${2*u}"/>
+        <path d="M0 ${8*u} L${-6*u} ${-6*u} L0 ${-3*u} L${6*u} ${-6*u}Z" transform="translate(${x} ${z}) rotate(${player.yaw})" fill="#80caff"/>
+        <text x="${x+15*u}" y="${z+4*u}" font-size="${12*u}" fill="#b6e1ff" paint-order="stroke" stroke="#10252c" stroke-width="${3*u}">${esc(player.name)}</text>`, `Игрок ${player.name}`);
+    }
     svg.innerHTML=out;
     if(selected && !objects.has(selected)) selected=null;
     renderDetails();
@@ -137,6 +162,9 @@ const WorldMap = (() => {
     if(hovered && objects.has(hovered)) tooltip(hovered); else hideTooltip();
   }
   function details(object, compact = false) {
+    if(object.type==="player") return `<h3>Игрок ${esc(object.name)}</h3><dl>${summary([
+      ["Координаты X / Y / Z", `${num(object.x)} / ${num(object.y)} / ${num(object.z)}`],
+      ["Измерение", object.dimension], ["Наблюдение", `${Math.round(playerAge)} с назад`]])}</dl>`;
     if(object.type==="town") {
       const stocks=(data.latest.stocks||[]).filter(s=>s.town===object.id && (!filters.item||s.item===filters.item));
       const jobs=(data.latest.jobs||[]).filter(j=>j.town===object.id).length;
@@ -161,7 +189,7 @@ const WorldMap = (() => {
   }
   function renderDetails() {
     const object=objects.get(selected);
-    root.querySelector(".map-details").innerHTML=object ? details(object)+(object.type==="town"?`<button data-filter-town="${esc(object.id)}">Фильтр по поселению</button>`:"") : '<h3>Карта мира</h3><p>Наведите на поселение, караван или торговую связь. Нажмите, чтобы закрепить сведения и увидеть маршрут каравана.</p><p class="muted">Колесо — масштаб; перетаскивание — перемещение. Данные обновляются без сброса выбранного масштаба.</p>';
+    root.querySelector(".map-details").innerHTML=object ? details(object)+(object.type==="town"?`<button data-filter-town="${esc(object.id)}">Фильтр по поселению</button>`:"") : '<h3>Карта мира</h3><p>Наведите на игрока, поселение, караван или торговую связь. Нажмите, чтобы закрепить сведения и увидеть маршрут каравана.</p><p class="muted">Колесо — масштаб; перетаскивание — перемещение. Данные обновляются без сброса выбранного масштаба.</p>';
   }
   function tooltip(key,event) {
     const object=objects.get(key); if(!object) return;
@@ -211,9 +239,13 @@ const WorldMap = (() => {
       if(action==="zoom-in") zoom(.7); if(action==="zoom-out") zoom(1/.7);
       if(action==="fit") {view={...initial};paint();}
       if(action==="expand") expand(!panel.classList.contains("expanded"));
+      if(action==="player") {
+        const p=players.find(player => player.id===playerChoice);
+        if(p) {showPlayers=true;root.querySelector('[data-layer="players"]').checked=true;view={...view,x:p.x-view.w/2,z:p.z-view.h/2};selected=`player:${p.id}`;hideTooltip();paint();}
+      }
       if(action==="focus") {const p=objects.get(selected)||towns.get(filters.town);if(p){view={...view,x:p.x-view.w/2,z:p.z-view.h/2};paint();}}
     };
-    root.onchange=(event)=>{if(event.target.dataset.layer==="trade")showTrade=event.target.checked;if(event.target.dataset.layer==="caravans")showCaravans=event.target.checked;paint();};
+    root.onchange=(event)=>{if(event.target.dataset.layer==="trade")showTrade=event.target.checked;if(event.target.dataset.layer==="caravans")showCaravans=event.target.checked;if(event.target.dataset.layer==="players")showPlayers=event.target.checked;if(event.target.matches("[data-player-choice]"))playerChoice=event.target.value;paint();};
     svg.addEventListener("wheel",(event)=>{event.preventDefault();zoom(Math.exp(Math.max(-1,Math.min(1,event.deltaY*.002))),point(event));},{passive:false});
     svg.onpointerdown=(event)=>{if(event.button!==0||event.target.closest("[data-object]"))return;event.preventDefault();svg.focus({preventScroll:true});drag={point:point(event),view:{...view}};svg.setPointerCapture(event.pointerId);hideTooltip();};
     svg.onpointermove=(event)=>{

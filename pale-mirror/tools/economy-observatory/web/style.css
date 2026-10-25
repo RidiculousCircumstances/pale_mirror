@@ -270,3 +270,7 @@ svg.world-map-svg:active { cursor: grabbing; }
 .chart-scale { fill: #adc2c7; font-size: 11px; }
 .chart-tooltip { position: absolute; pointer-events: none; white-space: pre-line; font-size: 12px; line-height: 1.6; background: #172a33f5; border: 1px solid #779c9c; border-radius: 5px; padding: 8px 12px; box-shadow: 0 4px 12px #0008; }
 .chart-tooltip[hidden] { display: none; }
+
+.map-sky { color: #80caff; }
+.map-player-status { font-size: 12px; }
+.map-toolbar [data-player-choice] { max-width: 160px; }

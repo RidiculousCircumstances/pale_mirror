@@ -26,6 +26,7 @@ final class FrontierV3EconomyObservatory implements CanonicalPublicationObserver
     private final String session=UUID.randomUUID().toString();
     private final Thread worker;
     private volatile boolean stopping;
+    private volatile String world;
     private long sequence;
     private FrontierV3EconomyObservatory(Path directory) {
         this.directory=directory;
@@ -44,6 +45,11 @@ final class FrontierV3EconomyObservatory implements CanonicalPublicationObserver
         observer.latest.updateAndGet(c->c==null?null:new Cut(c.state(),c.tick(),c.revision(),runtime.status().kind()==FrontierV3RuntimeStatus.Kind.ACTIVE?"STOPPED":runtime.status().kind().name()));
         observer.close();
     }
+    /** Already-published analytical identity; never reads a save from the server thread. */
+    static Optional<String> worldIdentity(FrontierV3ServerRuntime<?,?> runtime) {
+        var observer = ACTIVE.get(runtime);
+        return observer == null ? Optional.empty() : Optional.ofNullable(observer.world);
+    }
     @Override public void published(TransactionRecord tx,FrontierWorldState before,FrontierWorldState after) {
         latest.set(new Cut(after,tx.instant().ticks(),tx.revision().value(),"ACTIVE"));
         try {
@@ -51,7 +57,7 @@ final class FrontierV3EconomyObservatory implements CanonicalPublicationObserver
         } catch(RuntimeException error) { lost.incrementAndGet(); }
     }
     private void run() {
-        var gson=new Gson();String world=null;long lastLog=0, nextFlush=0;boolean snapshotAdded=false;
+        var gson=new Gson();long lastLog=0, nextFlush=0;boolean snapshotAdded=false;
         var pending=new ArrayList<Map<String,Object>>();
         while(true) {
             try {
