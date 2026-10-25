@@ -66,7 +66,9 @@ public final class EquipmentProductionPlanning {
             // intention while the remaining equipment is still working.
             int cashReachable = Boolean.compare(bStart.cash() <= market.availableMoney(), aStart.cash() <= market.availableMoney());
             if (cashReachable != 0) return cashReachable;
-            if (a.urgent() && b.urgent() && !aStart.funded(market.availableMoney())) {
+            // Without an obtainable quoted bundle, restore productive service at
+            // minimum expected cash before speculating on a fleet upgrade.
+            if (!aStart.funded(market.availableMoney()) && !bStart.funded(market.availableMoney())) {
                 int minimum = Long.compare(aStart.cash(), bStart.cash());
                 if (minimum != 0) return minimum;
             }

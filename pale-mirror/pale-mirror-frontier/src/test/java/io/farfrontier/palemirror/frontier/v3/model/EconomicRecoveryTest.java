@@ -3,6 +3,8 @@ package io.farfrontier.palemirror.frontier.v3.model;
 import io.farfrontier.palemirror.frontier.v3.api.*;
 import java.util.*;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import static org.junit.jupiter.api.Assertions.*;
 
 class EconomicRecoveryTest {
@@ -63,14 +65,16 @@ class EconomicRecoveryTest {
         state = state.withInventory(state.inventory().withFungibleResources(resources));
         assertTrue(EquipmentProductionPlanning.ready(state, home, 5000).orElseThrow().request().maintenance().isPresent());
     }
-    @Test void preventiveRestorationChoosesCashReachableMaterialBeforeAllToolsFail() {
+    @ParameterizedTest @ValueSource(ints = {4, 100})
+    void preventiveRestorationChoosesCashReachableMaterialBeforeAllToolsFail(int cash) {
         var state = prepared(); var home = new SubjectId("settlement:7");
         var inventory = state.inventory();
         for (var item : List.copyOf(inventory.items().values()))
             if (item.economicOwnerId().equals(home) && item.itemKind().equals("minecraft:stone_hoe"))
                 inventory = inventory.changeCondition(item, new ItemCondition(item.condition().maximumDamage(), 120));
-        state = state.withInventory(inventory.withEconomics(inventory.economics()
-                .transfer(home, new SubjectId("settlement:6"), FixedScalar.whole(96))));
+        state = state.withInventory(inventory);
+        if (cash < 100) state = state.withInventory(inventory.withEconomics(inventory.economics()
+                .transfer(home, new SubjectId("settlement:6"), FixedScalar.whole(100 - cash))));
         var deficits = EquipmentStockProjection.deficits(state, home);
         assertFalse(deficits.isEmpty());
         assertTrue(deficits.stream().noneMatch(EquipmentStockProjection.Deficit::immediate), "working tools still cover current concurrent workers");

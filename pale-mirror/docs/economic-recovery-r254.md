@@ -222,3 +222,27 @@ remaining deficits stay visible and follow-up reviews remain owned by equipment.
 Actual frozen170602 Mossbrook changes from2ingots+fuel to2cobblestone within59143ticks,
 with2coin material funding instead0 (r257-prevention-frozen.txt). Southgate's already
 insolvent/no-food state is not claimed restored by that counterfactual.
+
+
+## R258 unquoted upgrade guard
+
+The preventive test was extended to100coins after the actual early R257 snapshot
+still selected an unquoted iron upgrade. It failed the exact recipe choice with
+still-working tools (r258-quoted-upgrade-before.log). When neither option has an
+obtainable funded input quote, necessary service restoration now chooses minimum
+expected material cash before long-run upgrade efficiency at both cash levels.
+Actual obtainable/executable options still precede estimates. This is no supplier
+promise, forced sale, tool grant or cancellation of a current contract.
+The same frozen early Southgate snapshot now plans1stonehoe/2cobble rather than
+1ironhoe/2ingots+heat (r258-early-frozen.txt). Focused checks+guardrails PASS
+(r258-quoted-upgrade-tests.log).
+
+R256 deployed to fresh frontier-v3-r256-clean-20261025, same seed126/r26/schema303;
+R257 installed before firstharvest (~2kticks), verifyPASS PID2132103/notBefore1792909245,
+SHA512bb63054153e319102b93a39467a215bd0889df52aa01bfe533d4cbf53b1122ddbc4460fe773ef4a4688148ee0e32c29be93540a1afa7deeed22d3975e2146649.
+Headless native rate200 was used as acceleration, not performance evidence.
+First24koperatorrequest completed; second stopped explicitly for the R258 update,
+so a complete100krequest series is not claimed. At47669 Southgate still had100coins
+with65.089136 actually reserved under existing commitments. No contract was
+repriced/cancelled and no resources were injected. All native dimensions saved
+normally11:27:02. The task-owned observer was stopped; no user client was present.
