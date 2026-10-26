@@ -1,7 +1,6 @@
 package io.farfrontier.palemirror.internal.frontier.v3;
 
 import io.farfrontier.palemirror.frontier.v3.model.*;
-import io.farfrontier.palemirror.frontier.v3.model.navigation.KnownPedestrianNavigation;
 import io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder;
 import io.farfrontier.palemirror.frontier.v3.process.ResidentMealProcess;
 import io.farfrontier.palemirror.PaleMirrorMod;
@@ -28,6 +27,7 @@ final class FrontierV3ResidentMealNavigation {
                        AmbientActorLease lease, ResidentMeal meal) {
         if (meal == null) {
             ROUTES.remove(body);
+            FrontierV3ServiceApproachNavigation.forget(body);
             BLOCKED.remove(body);
             return; // Its retired command is quiesced at the common entity boundary, never by a new owner.
         }
@@ -43,6 +43,7 @@ final class FrontierV3ResidentMealNavigation {
         if (meal.phase() != ResidentMeal.Phase.MOVE
                 && !meal.movesToClearance()) {
             ROUTES.remove(body);
+            FrontierV3ServiceApproachNavigation.forget(body);
             BLOCKED.remove(body);
             FrontierV3GoalNavigation.stop(body, actuation);
             return;
@@ -76,25 +77,23 @@ final class FrontierV3ResidentMealNavigation {
                 // Missing COLD departure knowledge is not a native path verdict.
                 // Keep the same source/access turn and ask the common provider to
                 // prove an ordinary loaded-world path under the exact actuator.
-                var destination = meal.phase() == ResidentMeal.Phase.MOVE
-                        ? ResidentMealKnownNavigation.approachStations(state, meal,
-                            FrontierV3SurfaceObservation.observedBody(body).supportingSurface(), station -> available(level, body, station))
-                            .stream().limit(MovementOrder.MAX_LEGAL_STATIONS)
-                            .filter(station -> FrontierV3GoalNavigation.canReach(level, body,
-                                FrontierV3GoalNavigation.Goal.station(station,
-                                    new FrontierV3NavigationScope.ObservedWorld(state.bootstrap().bounds())), actuation)).findFirst()
-                        : java.util.Optional.<SurfaceAnchor>empty();
-                if (destination.isPresent()) {
-                    route = new Route(actuation.id(), lease.revision(), meal.startedAtTick(), meal.phase(), admitted,
-                            List.of(destination.orElseThrow()), level.getGameTime(), true);
-                } else {
-                    blocked(body, meal, "native_approach:awaiting-permitted-destination");
-                    FrontierV3GoalNavigation.stop(body, actuation);
-                    return;
-                }
+                route = new Route(actuation.id(), lease.revision(), meal.startedAtTick(), meal.phase(), admitted,
+                        List.of(ResidentMealProcess.serviceSurface(state, meal)), level.getGameTime(), true);
             }
         }
         ROUTES.put(body, route);
+        if (route.physicalOnly() && meal.phase() == ResidentMeal.Phase.MOVE
+                && !ResidentMealKnownNavigation.approachStations(state, meal,
+                    FrontierV3SurfaceObservation.observedBody(body).supportingSurface(), station -> available(level, body, station))
+                    .contains(ResidentMealProcess.serviceSurface(state, meal))) {
+            var result = FrontierV3ServiceApproachNavigation.waitOutside(level, body, state, meal.depotId(),
+                    meal.residentId(), FrontierWireTags.tag(meal.phase()), meal.startedAtTick() + 1L, actuation);
+            if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED)
+                blocked(body, meal, "native_approach:" + result.reason());
+            else BLOCKED.remove(body);
+            return;
+        }
+        FrontierV3ServiceApproachNavigation.forget(body);
         if (FrontierV3SemanticMovement.arrived(level, body, route.waypoints().getLast())) {
             BLOCKED.remove(body);
             FrontierV3GoalNavigation.stop(body, actuation);
@@ -113,6 +112,7 @@ final class FrontierV3ResidentMealNavigation {
     private static void pursueClearance(ServerLevel level, FrontierWorldState state, Mob body,
                                         ResidentMeal meal, FrontierV3ActorActuation actuation) {
         ROUTES.remove(body);
+        FrontierV3ServiceApproachNavigation.forget(body);
         var result = FrontierV3ServiceClearanceNavigation.pursue(level, body, state, meal.settlementId(),
                 meal.depotId(), meal.claimId(), meal.residentId(), FrontierWireTags.tag(meal.phase()),
                 meal.startedAtTick() + 1L, actuation);
@@ -139,7 +139,7 @@ final class FrontierV3ResidentMealNavigation {
         // An unloaded destination is a known intent, not a physical clearance observation.
         // The shared provider checks each naturally loaded local leg; never force-load the endpoint.
         return !FrontierV3LoadedWorld.ready(level, new net.minecraft.core.BlockPos(station.x(), station.y(), station.z()))
-                || FrontierV3SemanticMovement.targetIsNavigable(level, body, station);
+                || FrontierV3SemanticMovement.targetGeometryIsNavigable(level, body, station);
     }
 
     private static List<SurfaceAnchor> approach(ServerLevel level, FrontierWorldState state, Mob body, ResidentMeal meal) {

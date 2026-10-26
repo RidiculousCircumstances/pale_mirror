@@ -70,20 +70,27 @@ class FrontierV3NavigationScopeTest {
         var point = new ServiceAccessPoint(new SubjectId("test:facility"), new SubjectId("test:settlement"),
                 station, boundary, List.of(waiting), java.util.Set.of(exit));
         var bounds = new WorldBounds(0, 0, 10, 10);
-        var goal = FrontierV3ServiceApproachNavigation.waitingGoal(point, waiting, bounds);
+        var order = new MovementOrder(new SubjectId("test:owner"), new SubjectId("test:visitor"), 1, 7L,
+                List.of(waiting), TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
+        var goal = FrontierV3ServiceApproachNavigation.waitingGoal(point, waiting, bounds, order);
         assertEquals(List.of(waiting), goal.legalStations());
         assertTrue(goal.routeHint().isEmpty(), "waiting must not reuse every visitor's same ingress prefix");
         assertTrue(goal.scope().permits(start.support()));
         assertTrue(goal.scope().permits(new BlockPosition(3, 63, 3)));
         assertFalse(goal.scope().permits(station.support()));
         assertFalse(goal.scope().permits(new BlockPosition(-1, 63, 1)));
-        assertTrue(goal.order().isEmpty(), "waiting arrival cannot be the retained owner goal arrival");
+        assertEquals(order, goal.order().orElseThrow(), "waiting retains exact execution order for native continuation");
         assertThrows(IllegalArgumentException.class,
-                () -> FrontierV3ServiceApproachNavigation.waitingGoal(point, exit, bounds), "egress is not parking");
+                () -> FrontierV3ServiceApproachNavigation.waitingGoal(point, waiting, bounds,
+                    new MovementOrder(order.ownerId(), order.actorId(), 1, 7L, List.of(start),
+                        TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION)),
+                "a waiting order cannot name a different destination");
         assertThrows(IllegalArgumentException.class,
-                () -> FrontierV3ServiceApproachNavigation.waitingGoal(point, station, bounds), "service needs admission");
+                () -> FrontierV3ServiceApproachNavigation.waitingGoal(point, exit, bounds, order), "egress is not parking");
         assertThrows(IllegalArgumentException.class,
-                () -> FrontierV3ServiceApproachNavigation.waitingGoal(point, start, bounds), "undeclared positions cannot become waiting targets");
+                () -> FrontierV3ServiceApproachNavigation.waitingGoal(point, station, bounds, order), "service needs admission");
+        assertThrows(IllegalArgumentException.class,
+                () -> FrontierV3ServiceApproachNavigation.waitingGoal(point, start, bounds, order), "undeclared positions cannot become waiting targets");
     }
     @Test void progressAlongADetourCanIncreaseStraightLineDistanceToTheGoal() {
         var nodes = List.of(new net.minecraft.world.level.pathfinder.Node(2, 64, 4),

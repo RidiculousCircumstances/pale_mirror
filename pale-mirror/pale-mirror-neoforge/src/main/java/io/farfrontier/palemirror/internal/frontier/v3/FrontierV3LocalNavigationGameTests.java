@@ -162,7 +162,12 @@ public final class FrontierV3LocalNavigationGameTests {
                 for (var entry : List.of(java.util.Map.entry(first, left), java.util.Map.entry(second, right))) {
                     var actor = entry.getKey();
                     var result = FrontierV3GoalNavigation.pursue(level, actor,
-                            FrontierV3ServiceApproachNavigation.waitingGoal(point, entry.getValue(), bounds));
+                            FrontierV3ServiceApproachNavigation.waitingGoal(point, entry.getValue(), bounds,
+                                new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(
+                                    new io.farfrontier.palemirror.frontier.v3.api.SubjectId("test:waiting-owner"),
+                                    new io.farfrontier.palemirror.frontier.v3.api.SubjectId("test:" + actor.getUUID()),
+                                    0, 1L, List.of(entry.getValue()), TraversalCapability.PEDESTRIAN,
+                                    io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION)));
                     helper.assertTrue(result.status() != FrontierV3GoalNavigation.Status.BLOCKED,
                             "declared outside buffer remains reachable over the real raised road: " + result);
                     FrontierV3GoalNavigation.advanceAtEntityBoundary(actor); actor.aiStep();

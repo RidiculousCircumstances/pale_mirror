@@ -486,3 +486,23 @@ Contract exceptions propagate. Actual loaded collision, bounds and native path
 remain mandatory; a missing hint is neither arrival nor resource/work permission.
 Explicit actor-movement arrival uses its declared legal goals even without a hint.
 COLD movement, saved route schemas and their exact validation are unchanged.
+
+The subsequent same-world check materialized Mila but did not complete her old
+meal. The remaining HOT no-hint branch preflighted up to eight candidate paths
+with `canReach`, then stopped if pedestrians prevented the proof. Unlike actual
+pursuit, that query cannot request courtesy. This contradicted the existing
+shared service-approach provider's explicit no-preflight protocol. Meal waiting
+now uses that provider, including stable bounded target selection, native
+pursuit, courtesy and an outside-service hard boundary. Only admitted residents
+near the declared entrance may target the service socket directly. Loaded
+waiting availability uses physical geometry rather than treating pedestrians as
+terrain. The no-hint decision is retained for the exact actuation/meal generation;
+it does not resubmit all candidate COLD/native searches on every ordinary turn.
+
+Shared waiting goals now carry their caller's exact declared execution owner,
+phase and generation. Activity capabilities still decide whether such an order
+may continue; other owners retain periodic refresh until they declare equivalent
+permission. A waiting arrival remains IN_PROGRESS, never a completed service or
+resource action. Phase/source/access changes revoke or replace the goal, and
+leaving waiting clears its transient target reservation. Native raised-road
+waiting and scope negatives retain the exclusive service/egress restrictions.

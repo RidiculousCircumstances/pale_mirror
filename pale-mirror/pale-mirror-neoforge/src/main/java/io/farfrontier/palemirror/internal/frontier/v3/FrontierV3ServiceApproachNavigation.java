@@ -67,7 +67,11 @@ final class FrontierV3ServiceApproachNavigation {
                     Optional.of(FrontierV3GoalNavigation.BlockReason.SEARCH_BUDGET_EXHAUSTED), Optional.empty());
         }
         var result = FrontierV3GoalNavigation.pursue(level, body,
-                waitingGoal(point, prior.target(), state.bootstrap().bounds()), actuation);
+                waitingGoal(point, prior.target(), state.bootstrap().bounds(),
+                    new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(
+                        actuation.id().execution().activityOwnerId(), actorId, phase, generation, List.of(prior.target()),
+                        TraversalCapability.PEDESTRIAN,
+                        io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION)), actuation);
         // Do not preflight with canReach: a pedestrian obstruction must reach the
         // navigator's courtesy protocol, not become a permanent no-path decision.
         // A real geometry failure advances the bounded candidate search next turn.
@@ -92,12 +96,13 @@ final class FrontierV3ServiceApproachNavigation {
         ActorBodyAuthority.requireActuation(state, authority);
     }
 
-    static FrontierV3GoalNavigation.Goal waitingGoal(ServiceAccessPoint point, SurfaceAnchor target, WorldBounds bounds) {
+    static FrontierV3GoalNavigation.Goal waitingGoal(ServiceAccessPoint point, SurfaceAnchor target, WorldBounds bounds,
+            io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder order) {
         if (!point.waitingSurfaces().contains(target) || point.egressSurfaces().contains(target)
                 || !point.boundary().cleared(target.standingBody()))
             throw new IllegalArgumentException("waiting target must belong to the declared non-egress buffer");
         return new FrontierV3GoalNavigation.Goal(List.of(target), TraversalCapability.PEDESTRIAN,
                 new FrontierV3NavigationScope.OutsideService(new FrontierV3NavigationScope.ObservedWorld(bounds), point.boundary()),
-                Optional.empty(), List.of());
+                Optional.of(order), List.of());
     }
 }
