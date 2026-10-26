@@ -112,7 +112,11 @@ final class FrontierV3BodyInsertionJournal {
         var nativeDurable = operations.persistAsync(level);
         var ticket = new Ticket(key.world(), binding, residence, admission, undo,
                 ownerDurable.thenCombine(nativeDurable, (ownerSequence, nativeSequence) -> nativeSequence));
-        tickets.put(key, ticket); return ticket;
+        tickets.put(key, ticket);
+        FrontierV3ActorProbeSchedule.whenDurable(level, key.world(),
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(actor, binding.declaration().epoch()),
+                residence, ticket.durable());
+        return ticket;
     }
     static boolean consume(ServerLevel level, Ticket ticket) {
         if (!ticket.ready()) return false;

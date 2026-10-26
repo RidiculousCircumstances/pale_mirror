@@ -17,7 +17,7 @@ final class FrontierV3BodyOperationIntegration {
         if (body.getPersistentData().getLong(FrontierV3NativeOperationMarkers.LIFETIME) != link.participant().incarnation())
             throw new IllegalStateException("body projection changed its native lifetime");
         var port = FrontierV3OperationEntityParticipant.birth(body);
-        return FrontierV3MinecraftOperation.applyDeferred(level, new FrontierV3MinecraftOperation.Request(link.operation().declaration(),
+        var result = FrontierV3MinecraftOperation.applyDeferred(level, new FrontierV3MinecraftOperation.Request(link.operation().declaration(),
                 List.of(port),
                 () -> ticket.current(carriers) && !body.isRemoved()
                         && level.getEntity(body.getUUID()) == null,
@@ -28,6 +28,10 @@ final class FrontierV3BodyOperationIntegration {
                 // never a timeout, recovered UUID absence or inferred cancellation.
                 () -> level.getEntity(body.getUUID()) == null && !body.isAddedToLevel()),
                 () -> level.getEntity(body.getUUID()) == body && !body.isRemoved()));
+        if (result.complete()) FrontierV3ActorProbeSchedule.whenDurable(level, ticket.world(),
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(link.actor(), link.binding().declaration().epoch()),
+                link.residence(), FrontierV3OperationLedger.get(level).persistAsync(level));
+        return result;
     }
     static void reject(ServerLevel level, WorldId world, FrontierV3AmbientCarrierLedger carriers,
             FrontierV3BodyAdmissionOperation link) {

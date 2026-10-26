@@ -490,8 +490,19 @@ final class FrontierV3ActorBodyController {
         if (result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Accepted) {
             INSPECTION_WAITS.remove(body); return true;
         }
-        if (result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Pending pending)
+        if (result instanceof io.farfrontier.palemirror.frontier.v3.api.CommandResult.Pending pending) {
+            long residence = body.getPersistentData().getLong(RESIDENCE_KEY);
+            runtime.afterCommand(result, () -> {
+                var current = runtime.decodedState().orElse(null);
+                if (current != null && current.actorLocations().containsKey(declaration.actorId())
+                        && !body.isRemoved() && body.isAlive() && level.getEntity(body.getUUID()) == body
+                        && id.equals(ActorBodyAuthority.current(current, declaration.actorId()))
+                        && body.getPersistentData().getLong(RESIDENCE_KEY) == residence
+                        && ledger.currentBodyResidence(declaration.actorId(), residence))
+                    FrontierV3ActorProbeSchedule.wake(runtime, current, declaration.actorId(), level.getGameTime());
+            });
             return inspectionDeferred(body, "OBSERVATION_PENDING:" + pending.reason());
+        }
         return inspectionDeferred(body, "OBSERVATION_REJECTED:" + result);
     }
 

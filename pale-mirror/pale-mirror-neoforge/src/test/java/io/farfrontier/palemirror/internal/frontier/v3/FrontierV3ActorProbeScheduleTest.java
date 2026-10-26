@@ -10,6 +10,29 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FrontierV3ActorProbeScheduleTest {
+    @Test void durableWakeDoesNotWaitBehindTheWholeCensusOrStarveIt() {
+        var actors = java.util.stream.IntStream.range(0, 100)
+                .mapToObj(index -> new SubjectId("actor:" + index)).toList();
+        var cursor = new FrontierV3ActorProbeSchedule.Cursor(actors);
+        for (var actor : actors) cursor.defer(actor, 5L);
+        var ready = actors.get(90);
+        cursor.wake(ready, 20L);
+        cursor.wake(ready, 25L); // Notifications coalesce without losing the first waiting age.
+        cursor.defer(ready, 30L); // An exhausted turn must retain the receipt-driven lane.
+        assertEquals(ready, cursor.prioritizeDeferred(List.of(), 1).getFirst());
+        assertEquals("{\"depth\":100,\"oldestHostTicks\":25}", cursor.diagnostic(30L));
+        cursor.probed(ready);
+        cursor.wake(ready, 31L); // Even an always-ready hot actor cannot monopolize the observer.
+        assertEquals(actors.getFirst(), cursor.prioritizeDeferred(List.of(), 1).getFirst());
+        cursor.probed(actors.getFirst());
+        assertEquals(ready, cursor.prioritizeDeferred(List.of(), 1).getFirst());
+        cursor.probed(ready);
+        cursor.wake(actors.get(91), 32L);
+        cursor.synchronizeRoster(Set.copyOf(actors.subList(0, 90)));
+        assertEquals(actors.get(1), cursor.prioritizeDeferred(List.of(), 1).getFirst());
+        assertThrows(IllegalArgumentException.class, () -> cursor.wake(ready, 33L));
+    }
+
     @Test void pendingDepartureContinuesWithoutAnotherRosterSweepAndYieldsToOtherReadyActors() {
         var actors = java.util.stream.IntStream.range(0, 100)
                 .mapToObj(index -> new SubjectId("actor:" + index)).toList();

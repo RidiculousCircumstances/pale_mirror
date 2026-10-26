@@ -286,7 +286,12 @@ final class FrontierV3AmbientActorExecutor {
             }
             forgetColdDemand(runtime, actorId);
             if (lease == null || lease.status() == AmbientLeaseStatus.CLOSED) {
-                submit(runtime, "ambient-prepare", actorId.value(), new AmbientLeasePrepared(AmbientActorProcess.nextLease(state, actorId, runtime.canonicalState().orElseThrow().instant())));
+                var prepared = AmbientActorProcess.nextLease(state, actorId, runtime.canonicalState().orElseThrow().instant());
+                var result = submit(runtime, "ambient-prepare", actorId.value(), new AmbientLeasePrepared(prepared));
+                runtime.afterCommand(result, () -> runtime.decodedState().ifPresent(current -> {
+                    if (prepared.equals(current.ambientLeases().get(actorId)))
+                        FrontierV3ActorProbeSchedule.wake(runtime, current, actorId, level.getGameTime());
+                }));
                 admitted++;
                 continue;
             }

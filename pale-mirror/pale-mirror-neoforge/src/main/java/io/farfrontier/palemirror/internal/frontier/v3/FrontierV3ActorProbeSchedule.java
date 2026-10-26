@@ -36,7 +36,23 @@ final class FrontierV3ActorProbeSchedule {
                      SubjectId actor, long gameTime) {
         Cursor cursor = CURSORS.computeIfAbsent(runtime, ignored -> new Cursor(state));
         cursor.synchronizeRoster(state);
-        cursor.defer(actor, gameTime);
+        cursor.wake(actor, gameTime);
+    }
+
+    /** A durable native receipt schedules observation on the server thread; it grants no body/activity permission. */
+    static void whenDurable(ServerLevel level, io.farfrontier.palemirror.frontier.v3.api.WorldId world,
+            io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId body, long residence,
+            java.util.concurrent.CompletableFuture<?> durable) {
+        durable.thenRun(() -> level.getServer().execute(() -> {
+            var runtime = FrontierV3ServerLifecycle.runtimeFor(level.getServer());
+            var current = runtime == null ? null : runtime.decodedState().orElse(null);
+            if (current == null || runtime.status().kind() != FrontierV3RuntimeStatus.Kind.ACTIVE
+                    || !current.bootstrap().worldId().equals(world)
+                    || !current.actorLocations().containsKey(body.actorId())
+                    || !body.equals(io.farfrontier.palemirror.frontier.v3.model.ActorBodyAuthority.current(current, body.actorId()))
+                    || !FrontierV3AmbientCarrierLedger.get(level, world).currentBodyResidence(body.actorId(), residence)) return;
+            wake(runtime, current, body.actorId(), level.getGameTime());
+        }));
     }
 
     static void defer(FrontierV3ServerRuntime<?, ?> runtime, SubjectId actor, long gameTime) {
@@ -61,6 +77,10 @@ final class FrontierV3ActorProbeSchedule {
         private final Map<SubjectId, Long> retainedDemand = new LinkedHashMap<>();
         private final Map<SubjectId, Long> deferred = new LinkedHashMap<>();
         private final FrontierV3ActorSpatialCandidates spatial = new FrontierV3ActorSpatialCandidates();
+        // Both lanes belong to this one observer cursor. Alternate actual probes,
+        // so receipt-driven continuation and ordinary census cannot starve each other.
+        private final Map<SubjectId, Long> awakened = new LinkedHashMap<>();
+        private boolean preferWake = true;
         private int next;
         private int nextDemanded;
 
@@ -94,27 +114,41 @@ final class FrontierV3ActorProbeSchedule {
             next = actors.isEmpty() ? 0 : Math.floorMod(successor < 0 ? -successor - 1 : successor, actors.size());
             retainedDemand.keySet().retainAll(actorIds);
             deferred.keySet().retainAll(actorIds);
+            awakened.keySet().retainAll(actorIds);
         }
 
         void defer(SubjectId actor) { defer(actor, 0L); }
 
         void defer(SubjectId actor, long gameTime) {
             if (!actorIds.contains(actor)) throw new IllegalArgumentException("deferred unknown actor");
-            deferred.putIfAbsent(actor, gameTime);
+            if (!awakened.containsKey(actor)) deferred.putIfAbsent(actor, gameTime);
         }
 
-        void probed(SubjectId actor) { deferred.remove(actor); }
+        void wake(SubjectId actor, long gameTime) {
+            if (!actorIds.contains(actor)) throw new IllegalArgumentException("awakened unknown actor");
+            Long prior = deferred.remove(actor);
+            awakened.putIfAbsent(actor, prior == null ? gameTime : prior);
+        }
+
+        void probed(SubjectId actor) {
+            deferred.remove(actor); awakened.remove(actor); preferWake = !preferWake;
+        }
 
         String diagnostic(long gameTime) {
-            long oldest = deferred.values().stream().mapToLong(Long::longValue).min().orElse(gameTime);
-            return "{\"depth\":" + deferred.size() + ",\"oldestHostTicks\":" + Math.max(0L, gameTime - oldest) + "}";
+            long oldest = java.util.stream.Stream.concat(deferred.values().stream(), awakened.values().stream())
+                    .mapToLong(Long::longValue).min().orElse(gameTime);
+            return "{\"depth\":" + (deferred.size() + awakened.size()) + ",\"oldestHostTicks\":" + Math.max(0L, gameTime - oldest) + "}";
         }
 
         List<SubjectId> prioritizeDeferred(List<SubjectId> candidates, int maximum) {
             LinkedHashSet<SubjectId> result = new LinkedHashSet<>();
-            var iterator = deferred.keySet().iterator();
-            while (iterator.hasNext() && result.size() < maximum) {
-                result.add(iterator.next());
+            var ordinary = deferred.keySet().iterator();
+            var ready = awakened.keySet().iterator();
+            boolean takeReady = preferWake;
+            while (result.size() < maximum && (ordinary.hasNext() || ready.hasNext())) {
+                if (ready.hasNext() && (takeReady || !ordinary.hasNext())) result.add(ready.next());
+                else result.add(ordinary.next());
+                takeReady = !takeReady;
             }
             for (SubjectId actor : candidates) {
                 if (result.size() >= maximum) break;

@@ -506,3 +506,34 @@ permission. A waiting arrival remains IN_PROGRESS, never a completed service or
 resource action. Phase/source/access changes revoke or replace the goal, and
 leaving waiting clears its transient target reservation. Native raised-road
 waiting and scope negatives retain the exclusive service/egress restrictions.
+
+The first shared-approach visit moved Mila out of the original workshop but did
+not yet complete food; it is retained as a failed terminal assertion, not a
+pass. A subsequent continuous visit confirmed the old portion actually consumed:
+resident6-12 became NOURISHED, meal NONE, activity IDLE/READY at361339. No grants,
+NPC teleportation or world reset occurred. At361660 native max65.801ms, ready
+max50.532ms and ordinary debt671->176 were observed, not a universal latency
+bound. Exact frame/log receipts remain in build/r274-runtime-repair.
+
+The same trace repeatedly showed OBSERVATION_PENDING:DURABILITY before a new
+physical action. Common inspectCurrent submitted the pose inspection but did
+not schedule its waiting observer when the exact command became durable. It now
+wakes the existing actor probe after that acknowledgement, only while the same
+indexed living object, body epoch and captured residence remain current. It
+neither grants activity/arrival nor reuses an old pose; the owner rechecks its
+ordinary gates. Busy/rejected commands create no completion callback. This is
+separate from insertion's existing mandatory prepare/observation fences.
+
+The admission timeline also separated four roster-sized waits: CLOSED->PREPARED,
+durable insertion ready, indexed body and HOT steering. Lease preparation now
+wakes its exact unchanged prepared lease on canonical publication. Common body
+insertion wakes observation after its native prepare and applied-receipt journal
+futures finish; world/body epoch/residence are rechecked on the server thread.
+Neither callback inserts a body or grants authority. The existing actor observer
+cursor now distinguishes coalesced receipt wakes from budget-deferred census
+checks, alternates actual probes between them, and preserves age/membership
+cleanup. Selecting a candidate without executing it cannot consume either lane;
+a constantly awakened actor cannot starve census work. This replaces the old
+FIFO treatment of every wake as ordinary deferred work, without another scheduler
+or canonical activity queue. The queue regression covers a wake behind100 census
+entries, duplicate notification/deferral, alternating progress and retired actors.
