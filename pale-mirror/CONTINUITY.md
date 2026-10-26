@@ -2,10 +2,11 @@
 
 ## Assignment and authority
 
-Completed the user's static HOT-stall audit and scoped repairs, including real
-client investigation. Main alone; no Terra/subagents/push. Findings committed,
-verified and deployed to R267; R266 retained for the diagnosed lost-permission
-case. No active task or new system goal remains. Preserve unrelated histories/WIP.
+Active user request: diagnose and FIX the R267 economy crisis, then verify,
+commit and deploy. Main alone, no Terra/subagents/push. Preserve current R267
+for diagnosis/recovery unless a demonstrated schema change requires a new world.
+Read source and exact current decisions first; do not mask deficits with starter
+stock, free money, forced sales or relaxed physical/persistence fences.
 
 Canonical references: AGENTS.md, architecture.yml, engineering-agent-protocol,
 docs/work-orders/PM-FORESTRY-20261025.md, frontier-v3-forestry-design.md and
@@ -270,3 +271,108 @@ root retains only unrelated .f0v-baseline/. No push. Governance unrelated WIP
 preserved; commit this task-owned ledger only. User task delivered at the scoped
 static repair + targeted native/client evidence level; no all-feature/M3 or
 long-run farm/economy claim. No further active work/goal.
+
+## R267 server/economy check — 2026-10-26 morning
+
+Read-only user check; no source/pack edit, client, reset, restart or deployment.
+Same da6162ecb/R267 UUID, MC/economy ACTIVE since00:29:57. Current summary511595:
+required/scene/inventory/custody conflicts0; runtime incident index4 is not four
+current conflicts. Analytics current/error-free (~2s age). Retained performance
+last360samples ~20TPS(min19.9), max sampled64tick window54.53ms, no sampled >80ms;
+lifetime host-turn max264.33ms. COLD only, players absent; not HOT acceptance.
+Latest.log only startup keep-up2686ms and PMAudit disconnect reset (00:31:20), no
+new quarantine/native unresolved-operation error. Local planner backlog119–131,
+oldest measured lane wait2turns, ready schedule lag0, no FF. No permanent freeze.
+
+Snapshot511709 hunger227/352; refreshed516707 hunger219/352. Dawnbridge23/23,
+Ashcross22/22, Southgate40/40, Mossbrook38/38 have zero coal/bread and warehouse
+wheat682/349/968/844. Suppliers retain coal37–209, so global absence of fuel is
+not the explanation. Southgate exact job resumes blocked INSUFFICIENT_HEAT;
+Dawnbridge coal bid1.038 < lowest asks1.34, so quotes do not cross. Other buyers'
+funding/logistics rejection remains UNPROVEN; do not label all waits as bugs.
+Redwillow's baker initially STATION_LOAD/ROUTE_NOT_CALCULATED but then physically
+COLD arrived and progressed to PROCESSING with accumulated1431000/1600000work:
+not confirmed stuck. Only1 bread from Redwillow in earlier24ktick window.
+
+Last24kticks: initially103, refreshed109bread produced; three settled sales only
+bread8/wheat11/coal12. Five current missions; common members moved333–334blocks
+between snapshots511709→516707 (live simulation, no FF). Totalmoney1200 conserved;
+Sunreach718.26 (~60%), unequal balances alone are not a defect. Production/fuel
+procurement throughput is inadequate for population; exact cause of every failed
+coal procurement is not yet established. Clearwater's one hungry snapshot did
+not reproduce in a later resident-life sweep (no current hungry resident found).
+Raw bounded receipts in IMPL/build/server-check-r267, including view/performance,
+production before/after, needs and refreshed world snapshot. No fixes claimed.
+
+R268 diagnosis: process settlement:N already exposes the goods participant
+review. Current poor towns report WAITING_FOR_AVAILABLE_TRANSPORT_OR_PROVISIONS.
+Exact accepted economic/price details exceed the8KiB optional diagnostic budget;
+therefore read one immutable4.3MiB periodic snapshot (copied, no native save edits)
+with existing Java codecs, compiled ignored R268EconomyProbe in build/economy-repair-r268.
+Probe prints accepted funding/restarts, actual logistics eligibility, provisioning
+and cheap goods-only matching. Source audit includes GoodsTripPlanning/Assembly,
+DeliveryPricing, OrderMatching, ProcurementSelection, Funding and expedition
+supply. Diagnosis continued into the confirmed repairs below.
+
+## R268 repair delivery and remaining crisis — 2026-10-26
+
+IMPL clean 2ff550333dc46017154bbd6670c011d0bf3f2a94, RELEASE detached same;
+prior coherent batch fix2f80559f8. Source report docs/economy-supply-repair-r268.md.
+Three demonstrated contradictions repaired without stock/cash grants:
+- Bakery sizing used burned heat alone, repeatedly proposing3wheat/1bread despite
+ real warehouse fuel. Recipe-neutral obtainableHeat includes eligible free fuel
+ and station/incoming heat; bakery subtracts retained unfunded loads. Existing
+ logistics/actual heat checks still own admission/execution. Same snapshot2048582:
+ Sunreach next batch3→63wheat; Northwatch3→6 (ingredient-limited).
+- Expedition first meal used threshold-sized yield even at actual satiety0:
+ forecast3bread vs actual1. First hungry meal now uses actual satiety, subsequent
+ travel/return/margin remains conservative. Nutrition-transition oracle covers
+200kticks at slow/default/fast metabolism; no dispatch without real food.
+- Quote funding protected unfunded operating wishes as though already allocated:
+ Dawnbridge coal allowance1.038273 vs its own2.293122 allocation. Protect allocated
+ operating portion, retain earlier/complementary needs and actual cash limits.
+
+Evidence IMPL/build/economy-repair-r268:
+ affected-check29tests + guardrails/package PASS20sec; native-production-check
+5required native tests PASS43sec; logistics-check49tests/16classes + guardrails/
+package PASS3m29sec. Initial new test had invalid duplicate fixture account;
+fixed by existing staging/transfer API, not production relaxation.
+Native production evidence predates only later pure provision/funding changes;
+new logistics tests cover that connected admission/replay/return/custody flow.
+Final detached release7sec; deployment-final preflight/publish/install/verify PASS.
+Same R267 world/UUID, no reset; normal stop writes full checkpoint and compacts
+WAL, retaining old admitted allocations without repricing/replaying old decisions.
+Unit far-frontier-v3-live ACTIVE since08:03, wrapper PID2488377; artifact SHA512
+f49e26a2486426119379878d79840a3bec9ed8ded31cac133bb3d10179816eb1c3c6e6d1ebe81442719e2f352a3c0e95b1f1e4e68ad68a96a55c3bd31d0f996f.
+Root tracked clean, only unrelated .f0v-baseline/ retained. No push.
+
+Full-pack20FPS client live-hot-service-circulation PASS13actions, run
+cc866b4b-0cc6-4d31-b7af-769c2502dcb8. HOT/COLD/HOT summary all conflict counts0;
+final frame reviewed: loaded visible neighborhood, bakery/service occluded by
+building, so not a complete baking/hauling visual acceptance. Client stopped.
+Expected disconnect reset at08:05:10; no new quarantine/crash or inspection_failed.
+Preparing scope1 remains an observation (not a conflict or established defect).
+
+Combined retained-world observation536420→560543 spans24kticks across two builds,
+not a full-day final-candidate-only acceptance. Restart interrupted first relative
+FF; final request resumed remaining6449, terminal COMPLETED at560498, remaining0,
+no failure/hold. Recorded182bread produced; Sunreach three21bread batches, current
+cash1200 conserved. New bread12 Sunreach→Clearwater and stone2 Hearthvale→Clearwater
+missions plus new coal collection Sunreach→Ironmeadow. One settled sale in interval;
+new coal transport has not arrived yet. No invented trading/recovery proof.
+
+CRISIS NOT CLOSED: at560543 hungry228/352; Dawnbridge23/23, Ashcross22/22,
+Southgate40/40, Mossbrook38/38 remain without coal/bread. Ashcross/Mossbrook still
+WAITING_FOR_AVAILABLE_TRANSPORT_OR_PROVISIONS. Do not call the whole economy fixed.
+Exact snapshot551841 price probe shows real affordability/route-cost constraints:
+Sunreach bread retained estimate8.351441, ask13.496248; Mossbrook cash33.559193,
+forecast freight28.288788 (leaves5.270405), Ashcross cash56.589872/freight51.862778
+(leaves4.727094). Both below retained unit value. Dawnbridge grain682/free679;
+not all grain is locked by reserves. No confirmed price-policy defect from this
+alone; no forced discounts, free provisioning, credit or starter resources.
+Possible next discriminator: transport valuation assumes default metabolism and
+meal-target satiety for its preliminary crew cost; actual Sunreach people can need
+5 vs assumed6bread at124250ticks. This is advisory vs exact pricing, not yet proved
+an active bad rejection or authorized blanket cheap-freight change. Read exact
+callers before further repair. R268PriceProbe/R268EconomyProbe are ignored read-only
+snapshot consumers using existing CRC/codecs; never edited canonical saves.
