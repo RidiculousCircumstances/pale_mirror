@@ -64,7 +64,8 @@ final class PedestrianMacroSearch {
                 if (part == reverse.size()) { result = List.copyOf(route); finished = true; continue; }
                 var edge = reverse.get(reverse.size() - 1 - part);
                 if (portalIndex == edge.arc().cost()) { part++; portalIndex = 0; continue; }
-                if (route.size() == HierarchicalPedestrianSearch.MAX_NODES) { finished = true; continue; }
+                if (route.size() == HierarchicalPedestrianSearch.MAX_NODES
+                        || route.size() >= PedestrianReuseBudget.portals(start, target)) { finished = true; continue; }
                 route.add(edge.itinerary().portals().get(edge.arc().fromIndex() + portalIndex++)); continue;
             }
             if (expanding == null) {

@@ -42,6 +42,16 @@ class KnownPedestrianRouteHintTest {
         }
     }
 
+    @Test void oversizedCompletePathIsAnExplicitAdmissionLimitRatherThanAnInvalidReceipt() throws Exception {
+        var path = IntStream.rangeClosed(0, TimedKnownRoute.MAX_SURFACES).mapToObj(x -> SurfaceAnchor.at(x, 63, 0)).toList();
+        try (var binding = PedestrianRoutePlanning.bind((geometry, start, target) -> new PedestrianRouteResult(
+                PedestrianRouteResult.Status.FOUND, path, 1, 1, "long complete path"))) {
+            var failure = assertThrows(KnownPedestrianNavigation.RouteUnavailable.class,
+                    () -> KnownPedestrianNavigation.plannedBetween(geometry(-1), path.getFirst(), path.getLast()));
+            assertEquals(PedestrianRouteResult.Status.SAFETY_LIMIT, failure.status());
+            assertTrue(failure.getMessage().contains("surfaces=4097"));
+        }
+    }
     private static MovementOrder order() {
         return new MovementOrder(new SubjectId("job:hint"), new SubjectId("resident:hint"), 1, 1,
                 List.of(HINT.getLast()), TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);

@@ -16,6 +16,7 @@ final class PedestrianCorridorCache {
     synchronized Corridor find(PedestrianRouteGeometry geometry, SurfaceAnchor start, SurfaceAnchor target) {
         var key = key(geometry, start, target);
         var result = key == null ? null : corridors.get(key);
+        if (result != null && result.route().size() > PedestrianReuseBudget.cells(start, target)) return null;
         if (result != null) hits++;
         return result; // The consumer validates every dependency cooperatively before use.
     }

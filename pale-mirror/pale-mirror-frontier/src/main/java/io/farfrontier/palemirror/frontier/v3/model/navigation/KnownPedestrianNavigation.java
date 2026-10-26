@@ -156,6 +156,9 @@ public final class KnownPedestrianNavigation {
         if (result.status() == PedestrianRouteResult.Status.FOUND && (result.route().isEmpty()
                 || !result.route().getFirst().equals(start) || !result.route().getLast().equals(target)))
             throw new IllegalArgumentException("planner returned a route with foreign endpoints");
+        if (result.status() == PedestrianRouteResult.Status.FOUND && result.route().size() > TimedKnownRoute.MAX_SURFACES)
+            return new PedestrianRouteResult(PedestrianRouteResult.Status.SAFETY_LIMIT, List.of(), result.workUnits(), result.regions(),
+                    "ADMISSION_ROUTE_EXCEEDS_BOUNDED_LEG: surfaces=" + result.route().size() + " start=" + start + " target=" + target);
         return result;
     }
 

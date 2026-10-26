@@ -146,3 +146,27 @@ shared journals and actor rows. Only the automatic tickServer save entry uses
 that port; direct persist/effect/explicit save and shutdown paths still force
 their exact prefixes. All normal rows use the existing async writer and receipt
 gates. No vanilla save-cycle replacement or reduced native durability is added.
+
+## Oversized route reuse found during the sustained run
+
+At canonical75502 the R274 server stopped while selecting the next tree for
+work:forestry-1. The receipt factory is entered only for paths longer than one
+point, so its bounded-leg failure proves a path exceeded4096 points. The copied
+sealed snapshot at75401 produces a68-point direct route from the same job's
+warehouse to its next tree. The discarded live planner cache was not preserved;
+its exact oversized route is therefore not reconstructed from that snapshot.
+
+A source-level reproducer establishes a concrete shared defect: a cached proven
+itinerary can send a nearby query along a multi-thousand-cell detour, bypassing
+ordinary regional search. The test fails before this repair. Optional corridor
+and macro-chain reuse now have a bounded geometric stretch allowance (four times
+the endpoint lower bound, with local cell/region slack). An excessive hint falls
+back to the unchanged regional search; it is not a negative connectivity result
+or a restriction on actual terrain detours. This applies to all work families.
+
+The geometry-only admission API also reports an explicit SAFETY_LIMIT, including
+length and endpoints, if a complete result cannot fit its4096-point receipt.
+It never truncates a proof and calls the destination reached. Movement segment
+and full-route calculation contracts remain separate. No state/schema change or
+world reset is required. This removes the demonstrated failure path, but does
+not by itself prove all HOT next-action waits or caravan pauses resolved.
