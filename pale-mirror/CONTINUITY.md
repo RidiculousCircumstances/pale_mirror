@@ -144,3 +144,30 @@ because immutable definitions are resources. Current ignored deploy-r272.py expe
 OLD R271 -> absentR272 and CANNOT rerun unchanged; discover exact currentworld,
 normal stop/checkAllDimensionsSaved, root install/preflight/systemd-run/exactverify.
 No next work automatically scheduled; user can test current deployed generic soil.
+
+## R272 one-coal-trip question — read-only diagnosis
+Current user asks why coal1 trips exist. No code/game/pack edits, test client,
+FF/deploy/reset. Same R272. API at15684: two real qty1 contracts, Hearthvale6 ->
+Clearwater7 BUYER_COLLECTION and Stonefield2 -> Dawnbridge3 SELLER_DELIVERY.
+Original retained orders BOTHqty1, not a UI count of stacks. Clearwater now
+wants14more, but copied snapshots800/6202 prove its original demandpurchase1,
+urgentPurchase1/deadline0; Dawnbridge original demand likewise1. Snapshot8803
+already contains committed Clearwater1 contract. Do not claim current14wanted
+at admission or current supplier18stock existed then. Original supplier orders
+alsoqty1. Funding not absent: at800 buyers had100coins, coal allowance~53/54;
+at6202 Clearwater allowance4coins/coalbudget4. Contracts immutable after admission.
+Exact current17603 contract goods2coins each; Stonefield->Dawnbridge freight
+14.990096, total16.990096. Clearwater self-collection has0freight cash invoice,
+but actual mission loads2bread,1carrier; resource/labour expense still exists.
+TripDispatchPolicy.assess lines20-26 explicitly admits any positive uncovered
+finite-deadline cargo once next review would be too late, BEFORE economic-lot
+check. Thus startup minimal production-input/fuel need becomes urgent qty1 trip;
+this does not prove the trip is economically useless (coal may unlock production)
+or that qty14alternative existed then. Persistent micro-shipment optimality not
+proved. No hard-minimum suggestion: it can deadlock restart. Need compare useful
+recovery volume/horizon and complete trip expense while preserving feasible small
+emergencies, if user requests policy change.
+Raw current-coal-{trips.json,buyer7.log,mission.log} in build/soil-preparation-r271;
+sealed read-only snapshot/probe and historical800/6202/8803 outputs in
+build/coal-trip-diagnosis-r272. Probe uses canonical codecs/resources, no saves
+edited. Current supplier bulk stock13/18 is reservable but developed later.
