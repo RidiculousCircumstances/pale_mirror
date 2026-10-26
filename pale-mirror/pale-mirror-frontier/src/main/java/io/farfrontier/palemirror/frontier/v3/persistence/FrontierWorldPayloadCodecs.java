@@ -26,7 +26,7 @@ public final class FrontierWorldPayloadCodecs { private FrontierWorldPayloadCode
             HumanPopulationPayloadCodecs.migrationBlocked(), HumanPopulationPayloadCodecs.migrationResumed(),
             HumanPopulationPayloadCodecs.starvationIntegrated(), HumanPopulationPayloadCodecs.needIntegrated(),
             HumanPopulationPayloadCodecs.metabolismChanged(), HumanPopulationPayloadCodecs.workModifiersChanged(), HumanPopulationPayloadCodecs.mealStarted(),
-            HumanPopulationPayloadCodecs.mealHotArrived(), HumanPopulationPayloadCodecs.mealHotEffectPrepared(),
+            HumanPopulationPayloadCodecs.mealHotArrived(), HumanPopulationPayloadCodecs.mealHotEffectPrepared(), HumanPopulationPayloadCodecs.mealHotEffectCancelled(),
             HumanPopulationPayloadCodecs.mealHotEffectObserved(), HumanPopulationPayloadCodecs.mealResourceEffectObserved(),
             HumanPopulationPayloadCodecs.mealPortionDispositionObserved(),
             HumanPopulationPayloadCodecs.mealHotHandMaterialized(), HumanPopulationPayloadCodecs.mealHotHandReleased(),

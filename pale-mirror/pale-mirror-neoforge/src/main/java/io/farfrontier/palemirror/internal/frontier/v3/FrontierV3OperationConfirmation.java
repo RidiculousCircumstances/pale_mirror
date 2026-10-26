@@ -157,6 +157,19 @@ final class FrontierV3OperationConfirmation {
         }
         return submitOutcome(ledger, durability, canonical, ticket, consequence) == Outcome.CONFIRMED;
     }
+    /** Continue an already bound exact consequence without a live mutation port.
+     * True also means waiting for its native evidence/durability; callers must not compete. */
+    static boolean resumeBound(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime,
+            FrontierV3OperationReceipt.Protocol protocol, SubjectId owner, FrontierPayload preparation) {
+        var ledger = FrontierV3OperationLedger.get(level);
+        var operation = ledger.find(protocol, owner, fingerprint(preparation)).orElse(null);
+        if (operation == null || operation.ownerClosed()) return false;
+        var command = ledger.ownerCommand(operation.ticket()).orElse(null);
+        if (command == null) return false;
+        submitRecovery(level, runtime, operation.ticket(), command.consequence(), java.util.Optional.empty());
+        return true;
+    }
+
     /** Must run before the first startup command/advance can expire canonical receipts. */
     static void recover(ServerLevel level, FrontierV3ServerRuntime<?, ?> runtime) {
         var ledger = FrontierV3OperationLedger.get(level);

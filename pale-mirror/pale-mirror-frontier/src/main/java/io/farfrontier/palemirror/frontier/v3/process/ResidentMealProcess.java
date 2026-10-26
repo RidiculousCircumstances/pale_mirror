@@ -297,6 +297,18 @@ public final class ResidentMealProcess {
         return state.withHumanPopulation(state.humanPopulation().advanceMeal(meal, meal.prepare(step)));
     }
 
+    public static FrontierWorldState reduceHotCancelled(FrontierWorldState state, SubjectId subject,
+                                                        ResidentMealHotEffectCancelled cancelled) {
+        var body = cancelled.body();
+        var step = cancelled.step();
+        ResidentMeal meal = hotMeal(state, subject, body.actorId(), step.ambientRevision());
+        if (!meal.executionId().equals(step.executionId()) || !meal.pendingPhysicalStep().equals(Optional.of(step))
+                || state.actorLocations().get(subject).condition().status() != ActorLifeStatus.ALIVE)
+            throw new IllegalArgumentException("meal cancellation lacks its exact living preparation");
+        if (!ActorBodyAuthority.retainsRetiredDeparture(state, body)) ActorBodyAuthority.require(state, body);
+        return state.withHumanPopulation(state.humanPopulation().advanceMeal(meal, meal.cancelPrepared()));
+    }
+
     public static FrontierWorldState reduceHotObserved(FrontierWorldState state, SubjectId subject,
                                                        ResidentMealHotEffectObserved observed, long atTick) {
         ResidentMeal meal = hotMeal(state, subject, observed.residentId(), observed.ambientRevision());

@@ -175,6 +175,26 @@ final class HumanPopulationPayloadCodecs {
         };
     }
 
+    static PayloadCodec mealHotEffectCancelled() {
+        return new PayloadCodec() {
+            @Override public String type() { return "frontier.resident_meal_hot_effect_cancelled"; }
+            @Override public byte[] encode(FrontierPayload payload) {
+                var cancelled = (ResidentMealHotEffectCancelled) payload;
+                return FrontierWorldPayloadCodecs.encodeProduction(output -> {
+                    FrontierWorldPayloadCodecs.writeSubject(output, cancelled.body().actorId());
+                    output.writeLong(cancelled.body().physicalEpoch());
+                    HumanPopulationStateCodec.writeMealPhysicalStep(output, cancelled.step());
+                });
+            }
+            @Override public FrontierPayload decode(byte[] bytes) {
+                return FrontierWorldPayloadCodecs.decodeProduction(bytes, input -> new ResidentMealHotEffectCancelled(
+                        new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyId(
+                                FrontierWorldPayloadCodecs.readSubject(input).value(), input.readLong()),
+                        HumanPopulationStateCodec.readMealPhysicalStep(input)));
+            }
+        };
+    }
+
     static PayloadCodec mealHotEffectObserved() {
         return new PayloadCodec() {
             @Override public String type() { return "frontier.resident_meal_hot_effect_observed"; }

@@ -126,6 +126,12 @@ public record ResidentMeal(SubjectId residentId, SubjectId settlementId, Residen
                 portion, claimId, retainedWorkOwner, phase, startedAtTick, waitReason, Optional.of(step), coldTravel, executionId);
     }
 
+    public ResidentMeal cancelPrepared() {
+        if (pendingPhysicalStep.isEmpty()) throw new IllegalArgumentException("meal has no preparation to cancel");
+        return new ResidentMeal(residentId, settlementId, source, clearingSurface, actorAccountId,
+                portion, claimId, retainedWorkOwner, phase, startedAtTick, waitReason, Optional.empty(), coldTravel, executionId);
+    }
+
     public ResidentMeal advance(Phase next) {
         boolean legal = switch (phase) {
             case MOVE -> next == Phase.TAKE;

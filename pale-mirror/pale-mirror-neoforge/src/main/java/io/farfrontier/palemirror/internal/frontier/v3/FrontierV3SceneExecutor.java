@@ -444,6 +444,7 @@ final class FrontierV3SceneExecutor {
         FrontierV3RestartDemandGrace.forget(runtime);
         FrontierV3SceneStoredRecovery.forget(runtime);
         FrontierV3SceneTurnScheduler.forget(runtime);
+        FrontierV3SceneBehaviorRegistry.forgetTurns(runtime);
         FrontierV3ProductionTransformationExecutor.forget(runtime);
         FrontierV3ExactItemConsumptionExecutor.forget(runtime);
     }

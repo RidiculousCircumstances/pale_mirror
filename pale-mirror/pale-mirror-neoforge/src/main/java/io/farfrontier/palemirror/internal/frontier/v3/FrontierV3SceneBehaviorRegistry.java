@@ -21,7 +21,7 @@ import java.util.Optional;
  * Closed NeoForge behavior registry for scene-local materialization.
  *
  * <p>The ordering is deterministic admission policy, not a global scene lock. Every registered
- * behavior receives one bounded turn each server tick, so an unrelated or unloaded assault can
+ * behavior receives one fair turn per cooperative round, so an unrelated or unloaded assault can
  * never starve an engineering worksite in another naturally loaded area. Actor admission remains
  * exclusive in canonical state. Generic lifecycle code has no concrete cause tests and never
  * calls a sibling executor directly.</p>
@@ -61,6 +61,7 @@ final class FrontierV3SceneBehaviorRegistry {
                     Optional.empty(), "AWAITING_EXACT_FLOOR", ReleaseFailurePolicy.STANDARD, UNBOUND_RELEASE, NO_FAMILY_EFFECT, new FrontierV3SceneReleaseEffects.NoResourceHand(SceneCauseKind.ROUTE_PATROL))));
 
     private final List<Behavior> ordered;
+    private final Map<FrontierV3ServerRuntime<?, ?>, FrontierV3PhysicalPass> turns = new java.util.WeakHashMap<>();
 
     FrontierV3SceneBehaviorRegistry(List<Behavior> registrations) {
         Objects.requireNonNull(registrations, "scene behavior registrations");
@@ -85,14 +86,22 @@ final class FrontierV3SceneBehaviorRegistry {
         CURRENT.tickAll(level, runtime);
     }
 
-    /** Every registered scene family gets one ordered bounded turn; return values are local only. */
+    /** One cooperative round, with the unvisited suffix retained across native ticks.
+     * Readiness callbacks share the same allowance and cannot replay an acted family. */
     void tickAll(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
-        runBoundedTurns(ordered.stream().<Runnable>map(behavior -> () -> behavior.tick().tick(level, runtime)).toList());
+        var pass = turns.computeIfAbsent(runtime, ignored -> new FrontierV3PhysicalPass(System::nanoTime));
+        pass.begin(level.getGameTime());
+        long allowance = (long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D);
+        pass.run(ordered.size(), allowance, () -> !runtime.awaitingCanonicalPredecessor(), index -> {
+            var behavior = ordered.get(index);
+            try (var ignored = io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics.safelyBegin(
+                    runtime.executionMetrics(), io.farfrontier.palemirror.frontier.v3.kernel.FrontierExecutionMetrics.Stage.PHYSICAL,
+                    "scene-family", behavior.kind().name())) {
+                behavior.tick().tick(level, runtime);
+            }
+        });
     }
-
-    static void runBoundedTurns(List<? extends Runnable> turns) {
-        for (Runnable turn : turns) turn.run();
-    }
+    static void forgetTurns(FrontierV3ServerRuntime<?, ?> runtime) { CURRENT.turns.remove(runtime); }
 
     static SubjectId strikeCause(FrontierWorldState state, SceneLease lease, SubjectId attacker, long epoch) {
         for (Behavior behavior : CURRENT.ordered) {

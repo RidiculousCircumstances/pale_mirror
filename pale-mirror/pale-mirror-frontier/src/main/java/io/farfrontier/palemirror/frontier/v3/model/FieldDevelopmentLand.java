@@ -6,6 +6,8 @@ import java.util.*;
 
 /** Agriculture's suitability predicate over shared geometry and reachable-area discovery. No mutation or forced chunks. */
 final class FieldDevelopmentLand {
+    private record Query(SubjectId home, int limit) { }
+    private static final ImmutableResultView<Query, List<FieldDevelopmentCell>> LAND = new ImmutableResultView<>(64);
     /** Opaque reachability/suitability result tied to one exact immutable world input. */
     static final class Survey {
         private final FrontierWorldState state; private final SubjectId home;
@@ -29,16 +31,22 @@ final class FieldDevelopmentLand {
                 || fields.stream().anyMatch(field -> !field.settlementId().equals(home)
                     || !field.equals(state.resourceSiteDescriptors().get(field.id()))))
             throw new IllegalArgumentException("field survey has stale or foreign declared sources");
-        return new Survey(state, home, fields, discover(state, home, fields, limit));
+        if (limit <= 0 || fields.isEmpty()) return new Survey(state, home, fields, List.of());
+        var knowledge = new DevelopmentGroundKnowledge(state);
+        var geometry = KnownPedestrianRouteKnowledge.forSettlement(state, home, List.of()).geometry();
+        var inputs = new ArrayList<Object>(knowledge.immutableInputs());
+        inputs.add(geometry); inputs.addAll(fields);
+        var cells = LAND.get(inputs, new Query(home, limit), () -> discover(state, fields, limit, knowledge, geometry));
+        // Reuse only immutable facts. The admission proof is freshly tied to this
+        // exact world state; cached land never grants stale development authority.
+        return new Survey(state, home, fields, cells);
     }
     static List<FieldDevelopmentCell> read(FrontierWorldState state, SubjectId home, List<ResourceSite> fields, int limit) {
         return survey(state, home, fields, limit).cells();
     }
-    private static List<FieldDevelopmentCell> discover(FrontierWorldState state, SubjectId home, List<ResourceSite> fields, int limit) {
-        if (limit <= 0 || fields.isEmpty()) return List.of();
+    private static List<FieldDevelopmentCell> discover(FrontierWorldState state, List<ResourceSite> fields, int limit,
+            DevelopmentGroundKnowledge knowledge, io.farfrontier.palemirror.frontier.v3.model.navigation.PedestrianRouteGeometry geometry) {
         var rules = state.bootstrap().ruleset().fields().cultivation().orElseThrow();
-        var knowledge = new DevelopmentGroundKnowledge(state);
-        var geometry = KnownPedestrianRouteKnowledge.forSettlement(state, home, List.of()).geometry();
         var starts = fields.stream().flatMap(field -> field.layout().cells().stream())
                 .map(ResourceFieldLayout.Cell::workstation).toList();
         // Suitability is cheaper than a body-clearance flood. An entirely rocky

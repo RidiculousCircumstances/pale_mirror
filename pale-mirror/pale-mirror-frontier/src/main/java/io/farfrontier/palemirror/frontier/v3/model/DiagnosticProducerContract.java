@@ -118,7 +118,7 @@ public final class DiagnosticProducerContract {
         "frontier.actor_movement_grounded", "frontier.actor_movement_cold_advanced", "frontier.actor_movement_cold_requested", "frontier.actor_movement_cold_route_started",
         "frontier.actor_movement_hot_observed", "frontier.actor_movement_interrupted", "frontier.actor_movement_started",
         "frontier.resident_meal_started", "frontier.resident_meal_cold_step", "frontier.resident_meal_hot_arrived",
-        "frontier.resident_meal_hot_effect_prepared", "frontier.resident_meal_hot_effect_observed",
+        "frontier.resident_meal_hot_effect_prepared", "frontier.resident_meal_hot_effect_cancelled", "frontier.resident_meal_hot_effect_observed",
         "frontier.resident_meal_resource_effect_observed",
         "frontier.resident_meal_portion_disposition_observed",
         "frontier.unit_inventory_disposition_observed",

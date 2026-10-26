@@ -6,6 +6,7 @@ import java.util.Set;
 /** The one explicit v3 physical execution composition. */
 final class FrontierV3PhysicalExecutors {
     private static final FrontierV3PhysicalExecutorRegistry REGISTRY = new FrontierV3PhysicalExecutorRegistry(List.of(
+            executor("meal-departure-recovery", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of(), "meal-departure-recovery", FrontierV3ResidentMealDepartureRecovery::tick),
             executor("field-equipment-recovery", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of(), "field-equipment-recovery", FrontierV3FieldEquipmentExecutor::recoverDeparture),
             executor("forest-generation", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of(), "forest-generation-observation", FrontierV3ForestryObservation::tick),
             executor("navigation-geometry", FrontierV3PhysicalExecutorRegistry.Stage.OBSERVATION, Set.of(), "navigation-geometry", FrontierV3NavigationObservation::tick),

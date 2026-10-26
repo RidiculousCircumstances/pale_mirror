@@ -56,3 +56,35 @@ Mossbrook's 47-coal shipment was not stalled: sealed snapshots at 171252 and
 home delivery. Hunger while that cargo is in transit is not repaired by
 teleportation or a fictitious receipt. Live recovery, movement and performance
 results are recorded in the canonical continuity ledger after deployment.
+
+## HOT continuation and next-action latency follow-up
+
+The first delivery recovered farmer6-7 in the retained world (nourished again),
+and Hearthvale hunger fell29->19. A later real HOT/COLD visit exposed a second
+missing fence: resident6-29 retained TAKE at depot6/ambient revision4 while its
+body had departed. That held the service point and18 other meals. Food's
+container fence existed, but its actor fence was absent from the common body
+composition. Food now supplies that declaration; a new incarnation cannot be
+created behind a pending TAKE or CONSUME.
+
+The shared departed-body evidence port is used by both food and equipment.
+Food first continues an already bound native consequence through the common
+confirmation protocol; otherwise the common operation owner proves unused
+preparation. Only then does a typed food cancellation clear the preparation.
+The phase, exact claim, food amount, hunger and resource accounts stay unchanged.
+A current or exact retired living incarnation is required; stale body epochs
+and repeated cancellation reject. No food is granted from an absent body.
+
+A45-second candidate JFR found416/641 scheduled-preparation samples under
+FieldDevelopmentLand reachability selection. The land owner now reuses bounded
+immutable candidate results for exactly unchanged input identities, including
+geometry, physical deltas, protected land, geology and fields. Every admission
+still requires a freshly constructed exact-state Survey; actor motion alone
+need not repeat the flood. The scene-family executor now retains its fair
+cooperative suffix and measures each family independently instead of treating
+seven families as one indivisible stage.
+
+Native shared operation/body/field checks and focused recovery checks cover the
+changed boundaries. Exploratory live client visits assess actual continued
+feeding and simulation lag; no all-activities smooth-motion or universal80ms
+hard-real-time claim follows from an empty conflict list.

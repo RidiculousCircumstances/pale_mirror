@@ -26,6 +26,12 @@ public final class DevelopmentGroundKnowledge implements KnownBlockGeometry<Navi
         });
     }
 
+    /** Complete immutable input declaration for derived suitability queries. Work, stock,
+     * resident motion and hunger cannot change this land-provider image. */
+    List<Object> immutableInputs() {
+        return List.of(state.bootstrap(), protectedColumns, state.physicalDeltas(), state.navigationGeometry(),
+                state.extractionSites().geologicalExclusions(), state.extractionSites().geology());
+    }
     @Override public Optional<Sample<NavigationBlockState>> at(BlockPosition position) {
         if (!state.bootstrap().bounds().contains(position) || state.physicalDeltas().containsKey(position)
                 || state.extractionSites().geologicalExclusions().positions().contains(position)) return Optional.empty();

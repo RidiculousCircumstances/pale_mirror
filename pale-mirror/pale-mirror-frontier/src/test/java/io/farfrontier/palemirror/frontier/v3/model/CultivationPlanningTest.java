@@ -8,6 +8,23 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class CultivationPlanningTest {
+    @Test void unchangedLandReusesItsSurveyButChangedGroundAndAdmissionStateRemainFenced() {
+        var state = prepared(); var home = new SubjectId("settlement:1");
+        var fields = state.resourceSiteDescriptors().values().stream().filter(f -> f.settlementId().equals(home)).toList();
+        var first = FieldDevelopmentLand.survey(state, home, fields, 3);
+        var actor = state.humanPopulation().residents().keySet().stream().sorted().findFirst().orElseThrow();
+        var moved = state.withActorBody(actor, state.actorLocations().get(actor).body().offset(1, 0, 0));
+        var again = FieldDevelopmentLand.survey(moved, home, fields, 3);
+        assertSame(first.cells().getFirst(), again.cells().getFirst(), "unit motion does not require another land flood");
+        assertThrows(IllegalArgumentException.class, () -> first.require(moved, home, fields),
+                "reused immutable candidate facts cannot admit an old state's plan");
+        var cell = first.cells().getFirst();
+        var changed = moved.withChanges(FrontierWorldStateUpdate.begin().extractionSites(
+                moved.extractionSites().invalidateGeology(cell.support().support())));
+        assertFalse(FieldDevelopmentLand.survey(changed, home, fields, 3).cells().contains(cell),
+                "actual revoked ground must be re-evaluated before land can be developed");
+    }
+
     @Test void separatedSoilPatchesShareOneBoundedReachableWorkAreaAndRejectStaleSurveys() {
         var state = prepared(); var home = new SubjectId("settlement:1");
         for (int turn = 0; turn < 3; turn++) {
