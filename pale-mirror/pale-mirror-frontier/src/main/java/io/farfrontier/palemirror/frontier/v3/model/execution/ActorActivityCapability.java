@@ -32,6 +32,18 @@ public interface ActorActivityCapability {
         validateReference(state, execution);
         return java.util.Optional.empty();
     }
+    /** The owner may authorize one of its current semantic destinations without
+     * choosing a native route or refreshing a timer. Unsupported local gestures
+     * retain their bounded periodic permission. */
+    default boolean permitsNavigationOrder(FrontierWorldState state, ActorExecutionId execution,
+            io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder order) {
+        var retained = navigationOrder(state, execution);
+        retained.ifPresent(value -> {
+            if (!value.actorId().equals(execution.actorId()) || !value.ownerId().equals(execution.activityOwnerId()))
+                throw new IllegalArgumentException("activity navigation returned a foreign actor or owner");
+        });
+        return retained.filter(order::equals).isPresent();
+    }
     /** Optional explicit idle/service presentation between legs; generic projection knows no family phase. */
     default java.util.Optional<ActorActivityAmbientTarget> stationaryAmbientTarget(FrontierWorldState state, ActorExecutionId execution) {
         return java.util.Optional.empty();

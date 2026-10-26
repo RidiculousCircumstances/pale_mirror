@@ -442,3 +442,23 @@ BodyOperationIntegration already forces the sealed refusal before restoring the
 unused permission and forces its final actor row. Its callers no longer force
 those same journals again. The sole rollback owner and all causal save ordering
 remain unchanged; this is not an asynchronous grant of unused birth permission.
+
+
+The clean cddd050c2 HOT/COLD/HOT exploration completed15 actions with native
+max53.472ms, ready max45.585ms and ordinary debt131->2, no new scene/inventory
+conflict. This finite result does not explain the earlier non-reproduced1.93s
+transition or prove every resident's selection latency. The client was stopped.
+
+The same source audit found the remaining meal approach had only a periodic
+native directive: the generic permission expired after20 ticks although its
+exact portion execution still owned the journey. The common capability now
+accepts an owner-validated navigation order as well as the existing single-goal
+implementation. Meal policy authorizes only its exact current MOVE phase,
+portion claim/generation and currently permitted service/waiting destination.
+Changing the phase, source access or exit reservation revokes it at the native
+entity boundary without a route search. Short local clearance directives keep
+their bounded refresh until their owner supplies a continuing goal. The native
+meal order now names its actual activity owner (claimId), rather than the resident
+as a surrogate. No domain meal branch was added to the shared navigator.
+Existing waiting/exit-reservation coverage additionally rejects forged owners,
+meal generations and reservation withdrawal for a previously issued approach.

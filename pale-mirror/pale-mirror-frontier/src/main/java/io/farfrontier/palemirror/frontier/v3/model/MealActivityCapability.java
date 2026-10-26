@@ -6,6 +6,24 @@ import java.util.Optional;
 /** A portion remains owned until consumption or explicit resource reconciliation. */
 final class MealActivityCapability implements ActorActivityCapability {
     @Override public ActorActivityKind kind() { return ActorActivityKind.MEAL; }
+    @Override public boolean permitsNavigationOrder(FrontierWorldState state, ActorExecutionId execution,
+            io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder order) {
+        validateReference(state, execution);
+        var meal = state.humanPopulation().meals().get(execution.actorId());
+        if (meal.portable() || meal.phase() != ResidentMeal.Phase.MOVE || meal.pendingPhysicalStep().isPresent()
+                || !order.actorId().equals(meal.residentId()) || !order.ownerId().equals(meal.claimId())
+                || order.goalOrdinal() != FrontierWireTags.tag(meal.phase()) || order.goalRevision() != meal.startedAtTick() + 1L
+                || order.capability() != TraversalCapability.PEDESTRIAN
+                || order.arrivalPolicy() != io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION)
+            return false;
+        var storage = state.inventory().containers().get(meal.depotId());
+        if (storage == null || storage.storage().isEmpty()) return false;
+        var station = order.legalStations().getFirst();
+        var service = ResourceStorageAccess.at(state, meal.depotId()).interactionStation(state);
+        return station.equals(service)
+                ? ResidentMealServiceAccess.available(state, meal.depotId(), meal.residentId())
+                : ResidentMealKnownNavigation.waitingStationAvailable(state, meal, station);
+    }
     @Override public void validateAmbientRelease(FrontierWorldState state, ActorExecutionId execution) {
         if (state.humanPopulation().meals().get(execution.actorId()).pendingPhysicalStep().isPresent())
             throw new IllegalArgumentException("ambient meal has an unresolved physical effect");

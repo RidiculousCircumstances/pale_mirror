@@ -101,7 +101,7 @@ final class FrontierV3ResidentMealNavigation {
             FrontierV3GoalNavigation.stop(body, actuation);
             return;
         }
-        MovementOrder order = new MovementOrder(meal.residentId(), meal.residentId(),
+        MovementOrder order = new MovementOrder(meal.claimId(), meal.residentId(),
                 FrontierWireTags.tag(meal.phase()), meal.startedAtTick() + 1L, List.of(route.waypoints().getLast()),
                 TraversalCapability.PEDESTRIAN, MovementOrder.ArrivalPolicy.EXACT_STATION);
         FrontierV3GoalNavigation.Result result = FrontierV3GoalNavigation.pursue(level, body,
@@ -115,7 +115,7 @@ final class FrontierV3ResidentMealNavigation {
                                         ResidentMeal meal, FrontierV3ActorActuation actuation) {
         ROUTES.remove(body);
         var result = FrontierV3ServiceClearanceNavigation.pursue(level, body, state, meal.settlementId(),
-                meal.depotId(), meal.residentId(), meal.residentId(), FrontierWireTags.tag(meal.phase()),
+                meal.depotId(), meal.claimId(), meal.residentId(), FrontierWireTags.tag(meal.phase()),
                 meal.startedAtTick() + 1L, actuation);
         if (result.status() == FrontierV3GoalNavigation.Status.BLOCKED)
             blocked(body, meal, "service_exit:" + result.reason());

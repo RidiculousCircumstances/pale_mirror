@@ -70,13 +70,9 @@ record FrontierV3ActorActuation(ActorActuationId id, Supplier<Optional<FrontierW
         if (state.isEmpty()) return false;
         try { ActorBodyAuthority.requireActuation(state.orElseThrow(), id); }
         catch (IllegalArgumentException stale) { return false; }
-        var retained = io.farfrontier.palemirror.frontier.v3.model.ActorExecutionComposition.CAPABILITIES
-                .require(id.execution().activityKind()).navigationOrder(state.orElseThrow(), id.execution());
-        retained.ifPresent(value -> {
-            if (!value.actorId().equals(id.execution().actorId()) || !value.ownerId().equals(id.execution().activityOwnerId()))
-                throw new IllegalArgumentException("activity navigation returned a foreign actor or owner");
-        });
-        return retained.filter(order::equals).isPresent();
+        if (!order.actorId().equals(id.execution().actorId()) || !order.ownerId().equals(id.execution().activityOwnerId())) return false;
+        return io.farfrontier.palemirror.frontier.v3.model.ActorExecutionComposition.CAPABILITIES
+                .require(id.execution().activityKind()).permitsNavigationOrder(state.orElseThrow(), id.execution(), order);
     }
 
     private static void requireEnvelope(FrontierWorldState state, io.farfrontier.palemirror.frontier.v3.api.SubjectId actorId, Mob body) {

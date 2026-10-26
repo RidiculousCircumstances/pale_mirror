@@ -333,11 +333,27 @@ class ResidentMealKnownNavigationTest {
         ResidentMeal meal = testMeal(state, settlement, resident, depot,
                 state.actorLocations().get(resident).supportingSurface());
         SurfaceAnchor originalPocket = ResidentMealKnownNavigation.path(state, meal).getLast();
+        var navigationState = withMeal(state, meal);
+        var capability = new MealActivityCapability();
+        var issuedOrder = new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(meal.claimId(), resident,
+                FrontierWireTags.tag(meal.phase()), meal.startedAtTick() + 1L, List.of(originalPocket), TraversalCapability.PEDESTRIAN,
+                io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder.ArrivalPolicy.EXACT_STATION);
+        assertTrue(capability.permitsNavigationOrder(navigationState, meal.executionId(), issuedOrder));
+        assertFalse(capability.permitsNavigationOrder(navigationState, meal.executionId(),
+                new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(resident, resident,
+                        issuedOrder.goalOrdinal(), issuedOrder.goalRevision(), issuedOrder.legalStations(), issuedOrder.capability(), issuedOrder.arrivalPolicy())),
+                "the resident is not the retained portion's activity owner");
+        assertFalse(capability.permitsNavigationOrder(navigationState, meal.executionId(),
+                new io.farfrontier.palemirror.frontier.v3.model.navigation.MovementOrder(meal.claimId(), resident,
+                        issuedOrder.goalOrdinal(), issuedOrder.goalRevision() + 1L, issuedOrder.legalStations(), issuedOrder.capability(), issuedOrder.arrivalPolicy())),
+                "a matching destination cannot borrow another meal generation");
         ResidentMeal departing = testMeal(state, settlement, other, depot, originalPocket);
         FrontierWorldState reserved = state.withChanges(FrontierWorldStateUpdate.begin()
                 .humanPopulation(state.humanPopulation().withMeal(departing))
                 .actorExecutions(state.actorExecutions().begin(departing.executionId(), 0L)));
         assertTrue(!ResidentMealKnownNavigation.waitingStationAvailable(reserved, meal, originalPocket));
+        assertFalse(capability.permitsNavigationOrder(withMeal(reserved, meal), meal.executionId(), issuedOrder),
+                "a new exit reservation revokes an already-issued native approach immediately");
         SurfaceAnchor alternative = ResidentMealKnownNavigation.path(reserved, meal).getLast();
         assertTrue(!alternative.equals(originalPocket), "arrival must not steal a reserved departure destination");
         assertTrue(!ResidentMealKnownNavigation.pathFrom(reserved, meal,
