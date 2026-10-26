@@ -376,3 +376,32 @@ meal-target satiety for its preliminary crew cost; actual Sunreach people can ne
 an active bad rejection or authorized blanket cheap-freight change. Read exact
 callers before further repair. R268PriceProbe/R268EconomyProbe are ignored read-only
 snapshot consumers using existing CRC/codecs; never edited canonical saves.
+
+
+Final additional bounded observation (same final2ff550333, no code changes):
+recovery-watch ran570910→595162, a completed24000tick RELATIVE request with no
+failure. At596220 hungry236/352; four fuel-less towns remain fully hungry.
+Paid receipts: coal45 Ironmeadow→Sunreach60.864390coins (buyer pickup580813),
+coal11 Hearthvale→Clearwater14.740000 (pickup580753), bread12 Sunreach→Clearwater
+actual receiver acceptance591537. Pickup is purchase/title at the collector's
+hands, NOT arrival at home; coal remains in transit. Ironmeadow cash1.064467→
+61.928857 then admitted new bread3 purchase, seller-delivery mission
+55b866700db215798e4b658f2531148b OUTBOUND. This demonstrates sale proceeds funding
+new food procurement, not completion of its delivery or whole-world recovery.
+Stonefield reached hungry0 at587000; later hunger fluctuates normally, so no
+permanent-zero claim. Totalcash1200 conserved throughout. Finalsummary596235
+required/scene/inventory/custody conflicts0, incidentindex4 unchanged.
+
+Persistent preparing scope identified exactly by copied immutable snapshot:
+custody:forest-tree/4e2f7711-d53b-3b4f-bc25-0ff635510398/g1, provider forest-source,
+epoch1, expectedCanonicalRevision2159181. It is NOT a depot/bakery fence and
+cannot explain the four coal-less towns. Forestry beforeTurn refuses withdrawal
+without its common block witnesses; partial-tree physical status needs separate
+native evidence before calling it a bug or changing safe withdrawal. No manual
+release. Retained receipts: price-and-scope-current.log, recovery-watch.log,
+recovery-view-final.json, recovery-performance-final.json, recovery-players-final.json.
+All FF requests terminal, remaining0/failure null; player list empty, test client
+and observer stopped, MC/economy services active, source/release clean, root only
+unrelated .f0v-baseline/. No further test/background watch remains. Three technical
+repairs delivered; do not relabel the remaining economic crisis as solved or assume
+that every remaining provisioning/affordability failure is a code defect.
