@@ -248,3 +248,16 @@ Out of scope: taxes/dividends, credit expansion, theft/crime, dynamic exchange,
 share ownership, full combat escorts, generic construction AI and porting the
 entire Python economy. Historical reference behavior informs requirements only;
 v3 must not depend on Python, v2 or `frontier.reference` at runtime or admission.
+
+### Finite service procurement (R273)
+
+The economic owner distinguishes direct selected uses from inventory buffers and
+adds upstream recipe requirements without spending the same forecast unit twice.
+Recovery quantities use the resolved replenishment lead. Dispatch accounts for
+current stock, dated deliveries and secured local output; stale net urgency must
+not grow when stock arrives. Explicit finite/recurring continuity follows accepted
+needs and selected production dependencies. A dated finite need waits for its
+route/review service window or shares an otherwise justified manifest; merely
+matching its entire tiny requirement does not justify an early dedicated trip.
+Due/late useful partial recovery and undated explicit stocking remain possible.
+No fixed commodity minimum, waived cost or rewriting of admitted cargo follows.
