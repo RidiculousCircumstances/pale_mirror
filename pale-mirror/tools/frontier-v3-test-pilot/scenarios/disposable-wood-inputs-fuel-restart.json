@@ -436,9 +436,22 @@
       "settleMs": 0
     },
     {
-      "type": "fast_forward",
-      "ticks": 2000,
-      "timeoutMs": 180000
+      "type": "wait_until_diagnostic",
+      "view": "process",
+      "id": "station:structure-7-forge",
+      "expect": {
+        "status": "ok",
+        "result": {
+          "remainingBurnTicks": 0,
+          "operation": {
+            "transformed": false,
+            "ratePermille": 0,
+            "playerAttendanceIntent": "PAUSED"
+          }
+        }
+      },
+      "timeoutMs": 180000,
+      "causalMilestone": "ignited_fuel_expires_while_paused_and_unobserved_after_restart"
     },
     {
       "type": "inspect",

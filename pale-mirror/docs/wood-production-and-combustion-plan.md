@@ -76,28 +76,28 @@ boundary; burn ticks are not silently called joules or FE.
 
 ## Implementation sequence and exits
 
-- [ ] A. General recipes, allocations and station compartments. Replace active
+- [x] A. General recipes, allocations and station compartments. Replace active
   single-input assumptions, update physical inventory/menu and resource/custody
   codecs. Exit: complete multi-material allocation, arbitrary input slot order,
   distinct input/fuel custody for the same item and no type-inferred packing.
-- [ ] B. Integrate multi-leg input acquisition, station admission/consumption,
+- [x] B. Integrate multi-leg input acquisition, station admission/consumption,
   output and repair through existing job, claims, item operations and logistics.
   Exit: partial supply never starts or partially consumes a recipe; stale or
   foreign evidence rejects; cancellation/replacement retain real material.
-- [ ] C. Timed combustion and process progress. Retain ignition/current fuel,
+- [x] C. Timed combustion and process progress. Retain ignition/current fuel,
   start/end simulation ticks and one machine clock; clamp processing to actual
   burning/attendance intervals and schedule semantic boundaries, not per-tick WAL.
   Exit: idle burns out, unlit fuel is preserved, fuel starvation pauses progress,
   HOT/COLD/restart agree, no old heat-credit path remains. Recipe time and fuel
   costs must be recomputed together; old heatPerBatch numbers are not silently
   interpreted as processing durations or electrical energy.
-- [ ] D. Wood content and graybox integration. Register wood/planks/sticks as
+- [x] D. Wood content and graybox integration. Register wood/planks/sticks as
   production/economic resources, woodworking equipment/assignment and explicit
   starter axes. Compile supported vanilla recipes/tags and declared fuel times.
   Exit: actual log->planks->sticks->tool and existing repair, using normal worker
   selection, inventories, animations and paths. Declare portable bench recipe
   support without adding a separate construction system.
-- [ ] E. Economy and diagnostics. Expand every input and fuel alternative through
+- [x] E. Economy and diagnostics. Expand every input and fuel alternative through
   existing demand/capacity/valuation/sourcing/reserve code; replenish logging from
   actual demand and retain bounded stock policy. UI exposes inputs, output,
   running/paused/blocked reason and remaining burn time. Exit: wood competes as
@@ -149,3 +149,34 @@ is separate. `FRONTIER_V3_PILOT_GRAYBOX_DATAPACK_DIRECTORY` selects it explicitl
 the runner retains the installed dimension digest/generator/ruleset and checks
 recovery against that same input. A neighbouring historical vanilla-flat fixture
 pack is not evidence for the current agricultural generator or genesis fabric.
+
+
+## Verification at the delivery boundary
+
+The integrated source is committed in83f925eb3 and a49e66757. Clean detached
+release guardrails/check/build/packaged-JAR verification passed in
+`build/wood-release-final-verification.log`:1947 Frontier and877 NeoForge tests,
+no failures/errors/skips. Focused recovery cases cover partial multi-input loss,
+repair identity and atomic closure of all station compartment accounts.
+
+The checked-in `disposable-wood-inputs-fuel-restart.json` scenario completed its
+54 ordinary player actions, graceful active-burn restart and five inspected UI
+frames. Receipt:`build/wood-native/physical-wood-idle-expiry.json`. With the
+current agricultural r29 pack it produced1log->4planks->8sticks->1ironaxe,
+using INPUT7/INPUT8. At tick2182 the paused station had0remaining burn ticks
+and2unlitcoal; reopening retained PAUSED. Explicit resume consumed3iron and
+2sticks, retained6sticks and allowed the player to collect the exact axe.
+Final inventory/scene conflict counts were zero. The task-owned client/display
+exited. This proves the declared player/physical/recovery story, not human M3
+or a complete autonomous NPC wood-stock cycle.
+
+One earlier attempt requested fast-forward while a recovering actor body was
+PREPARED; the server correctly rejected it. The scenario now observes natural
+idle burnout instead of assuming that physical departure is already complete.
+
+The broad native smoke still has three separately classified pre-existing
+failures: an obsolete execution-order diagnostic expectation, fixed-tick patrol
+readiness and an inactive hive/assault timeout. The affected native storage/body
+and production/economy slices passed (56 and55 tests). These narrower results do
+not turn that broad gate green. Final fresh-world deployment/full-pack receipt
+remains the delivery exit below.
