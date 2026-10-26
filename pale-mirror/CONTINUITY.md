@@ -1,4 +1,4 @@
-# Active continuity — 2026-10-26, R267 HOT movement audit
+# Active continuity — 2026-10-26, economy repair and LAN analytics
 
 ## Assignment and authority
 
@@ -19,10 +19,12 @@ and server-ops references. Do not repeat unchanged reading/checks by ritual.
 Implementation /home/rd/proj/pm-f06r3-facility-lane-recovery/pale-mirror
 (Git root parent), branch feat/baker-carry-orders-20260926, CLEAN.
 Feature70b670821ec3b2b5d4abfe304bcbb11d6a02cbc0, preflight8631f679f;
-Forestry HEAD248be0f83 includes shutdown/reach closure; player-map HEADa9d5b36ef; current HEADda6162ecb
-includes R267 HOT navigation, admission diagnostics and clean-stop operation proofs. Source clean.
-Release /home/rd/proj/pm-r242-economic-release/pale-mirror, CLEAN detachedda6162ecb.
-Pack /home/rd/proj/minecraft, HEAD33fa84b, tracked CLEAN; retain unrelated
+Forestry HEAD248be0f83 includes shutdown/reach closure; player-map HEADa9d5b36ef.
+Current source HEAD2e2897013 adds LAN/VPN analytics above economy repair2ff550333.
+Minecraft still runs the verified2ff550333 artifact; this latest Python-only change
+did not rebuild/restart the game. Source clean.
+Release /home/rd/proj/pm-r242-economic-release/pale-mirror, CLEAN detached2e2897013.
+Pack /home/rd/proj/minecraft, HEADcfdc160, tracked CLEAN; retain unrelated
 untracked .f0v-baseline/. No push. Governance retains extensive unrelated WIP;
 only task-owned ledger/archive/order/design and forestry-only architecture/
 materialization sections are staged. Never stage-all governance.
@@ -30,8 +32,8 @@ materialization sections are staged. Never stage-all governance.
 Runtime /home/rd/far-frontier-server, far-frontier-v3-live.service ACTIVE.
 Fresh world frontier-v3-r267-hot-navigation-20261026,
 UUIDc3762b96-ead4-475e-847e-04e60dfba421, seed126/r28/schema306; native operation format6.
-PID834022 at verification, startup epoch1792956597. Artifact SHA512:
-a2373e68a0bfadc369057b2636a9207e3d272c4dd0188280b2076340e315b2161af812c73e1eb7db057a32ff464eb7361b9604980bed75dd0a04a0b2b088e0f3.
+Current wrapper PID2488377, startup2026-10-26 08:02:47 +05. Artifact SHA512:
+f49e26a2486426119379878d79840a3bec9ed8ded31cac133bb3d10179816eb1c3c6e6d1ebe81442719e2f352a3c0e95b1f1e4e68ad68a96a55c3bd31d0f996f.
 Exact root publish/install/preflight/start/verify succeeded; source build
 hot-movement-audit/release-shutdown-build.log PASS7sec; deployment build/r267-hot-navigation-*.log in IMPL.
 R264 retained as normal production evidence, not migrated: old jobs can contain
@@ -405,3 +407,31 @@ and observer stopped, MC/economy services active, source/release clean, root onl
 unrelated .f0v-baseline/. No further test/background watch remains. Three technical
 repairs delivered; do not relabel the remaining economic crisis as solved or assume
 that every remaining provisioning/affordability failure is a code defect.
+
+
+## LAN analytics and money-concentration question — 2026-10-26
+
+User cannot reach http://192.168.0.103:8093/ and asks whether Sunreach's accumulated
+cash permits economic recovery. Exact cause: HTTP bound only to Tailscale
+100.100.78.29, while host WLAN is192.168.0.103/24; LAN connection refused.
+Repaired service with repeatable explicit --bind addresses, one shared Store/
+collector/performance/player feeds and eight-request budget. All sockets bind
+before collection; later bind failure closes earlier sockets. Pack installer
+preserves repeated flags. No wildcard bind, second collector, game restart,
+reset, simulation change or push. Source2e2897013, rootcfdc160, both clean apart
+from root's retained unrelated .f0v-baseline/. Scoped Python10tests PASS0.52sec,
+including real HTTP on two loopback interfaces and bind-failure rollback;
+bash -n/diff-check and source guardrails PASS10sec. Installed from clean detached
+source through root scripts/install-economy-observatory.sh. UI PID2692362 active,
+both exact interfaces listening; /, /app.js, /api/view and /api/performance all200
+on LAN and VPN. Same world UUID, analytical data age<2s/errorNone. Runtime sources
+and installer checked separately. Existing DB retained; no canonical save access.
+
+At625509/625524: Sunreach1008.893804 of total1200coins (~84%); inequality has
+increased since the previous718.26 snapshot. Ironmeadow's coal45 sale60.864390
+was followed by bread3 purchase40.488744goods+14.847138delivery=55.335882 paid
+back to Sunreach (receipt616800); remaining cash6.592975. Thus circulation exists,
+but that example does not prove sustainable mineral-export/food-import exchange
+or automatic recovery. Do not promise the crisis fixes itself just because
+Sunreach sometimes buys coal. Remaining model investigation is productive income
+versus necessary inputs/food and actual freight, not forced equal cash balances.
