@@ -122,11 +122,12 @@ final class FrontierV3BodyOperationIntegration {
         var operations = FrontierV3OperationLedger.get(level);
         if (!operations.durableOperation(link.operation().ticket())) return;
         if (FrontierV3OperationConfirmation.submitRecovery(level, runtime, link.operation().ticket(), consequence, java.util.Optional.empty())) {
-            closeAdmissionOwner(level, carriers, link);
+            closeAdmissionOwner(level, runtime, carriers, link);
         } else operations.ownerCommand(link.operation().ticket()).ifPresent(command ->
-                runtime.afterCommandReceipt(command.id(), () -> closeAdmissionOwner(level, carriers, link)));
+                runtime.afterCommandReceipt(command.id(), () -> closeAdmissionOwner(level, runtime, carriers, link)));
     }
-    private static void closeAdmissionOwner(ServerLevel level, FrontierV3AmbientCarrierLedger carriers,
+    private static void closeAdmissionOwner(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            FrontierV3AmbientCarrierLedger carriers,
             FrontierV3BodyAdmissionOperation link) {
         // ActorBodyPresent may become durable between turns. Once RUNNING, ordinary
         // inspection no longer calls confirm, so exact owner cleanup must follow that receipt.
@@ -136,6 +137,10 @@ final class FrontierV3BodyOperationIntegration {
         // this cleanup is saved restores the old link; recover/retired above then
         // removes it without inserting or admitting the body a second time.
         carriers.forgetBodyOperation(link); carriers.persistAsync(level, link.world());
+        runtime.decodedState().ifPresent(current -> {
+            if (current.actorLocations().containsKey(link.actor()))
+                FrontierV3ActorProbeSchedule.wake(runtime, current, link.actor(), level.getGameTime());
+        });
     }
     private static boolean retired(FrontierV3OperationLedger operations, FrontierV3BodyAdmissionOperation link) {
         return operations.prunable(link.operation().nativeReceipt(link.participant()));

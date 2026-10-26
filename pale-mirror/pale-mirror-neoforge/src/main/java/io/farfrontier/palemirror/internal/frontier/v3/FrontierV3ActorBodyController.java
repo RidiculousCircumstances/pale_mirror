@@ -433,8 +433,13 @@ final class FrontierV3ActorBodyController {
                 * (double) io.farfrontier.palemirror.frontier.v3.api.FixedScalar.SCALE));
         var consequence = new io.farfrontier.palemirror.frontier.v3.model.execution.ActorBodyPresent(id,
                 location.body(), location.condition().health(), observed.orElseThrow(), health);
-        if (!FrontierV3BodyOperationIntegration.confirm(level, runtime, state, body, declaration.actorId(), consequence))
-            FrontierV3CommandSubmission.submit(runtime, "actor-body-present", declaration.actorId().value(), consequence);
+        if (!FrontierV3BodyOperationIntegration.confirm(level, runtime, state, body, declaration.actorId(), consequence)) {
+            var result = FrontierV3CommandSubmission.submit(runtime, "actor-body-present", declaration.actorId().value(), consequence);
+            runtime.afterCommand(result, () -> runtime.decodedState().ifPresent(current -> {
+                if (current.actorLocations().containsKey(declaration.actorId()))
+                    FrontierV3ActorProbeSchedule.wake(runtime, current, declaration.actorId(), level.getGameTime());
+            }));
+        }
     }
 
     /** A physical insertion is not execution readiness until the common observation is durable. */

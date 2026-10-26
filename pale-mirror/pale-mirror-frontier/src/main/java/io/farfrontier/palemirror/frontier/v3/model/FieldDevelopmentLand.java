@@ -6,7 +6,7 @@ import java.util.*;
 
 /** Agriculture's suitability predicate over shared geometry and reachable-area discovery. No mutation or forced chunks. */
 final class FieldDevelopmentLand {
-    private record Query(SubjectId home, int limit) { }
+    private record Query(SubjectId home, int limit, Object geometryVersion) { }
     private static final ImmutableResultView<Query, List<FieldDevelopmentCell>> LAND = new ImmutableResultView<>(64);
     /** Opaque reachability/suitability result tied to one exact immutable world input. */
     static final class Survey {
@@ -35,10 +35,12 @@ final class FieldDevelopmentLand {
         var knowledge = new DevelopmentGroundKnowledge(state);
         var geometry = KnownPedestrianRouteKnowledge.forSettlement(state, home, List.of()).geometry();
         var inputs = new ArrayList<Object>(knowledge.immutableInputs());
-        // Geometry wrappers may be rebuilt after bounded view-cache eviction.
-        // Their owner-supplied immutable version still denotes the complete same facts.
-        inputs.add(geometry.version()); inputs.addAll(fields);
-        var cells = LAND.get(inputs, new Query(home, limit), () -> discover(state, fields, limit, knowledge, geometry));
+        // ImmutableResultView compares its input list by IDENTITY. Geometry
+        // revisions are reconstructible value proofs, so keep that complete
+        // version in the value query rather than treating cache eviction as a
+        // terrain change. The remaining owner inputs retain their exact images.
+        inputs.addAll(fields);
+        var cells = LAND.get(inputs, new Query(home, limit, geometry.version()), () -> discover(state, fields, limit, knowledge, geometry));
         // Reuse only immutable facts. The admission proof is freshly tied to this
         // exact world state; cached land never grants stale development authority.
         return new Survey(state, home, fields, cells);

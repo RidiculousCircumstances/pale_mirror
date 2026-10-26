@@ -8,6 +8,30 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class CultivationPlanningTest {
+    @Test void disposingRouteViewsDoesNotInvalidateUnchangedLandFacts() {
+        var state = prepared(); var home = new SubjectId("settlement:1");
+        var fields = state.resourceSiteDescriptors().values().stream().filter(f -> f.settlementId().equals(home)).toList();
+        var first = FieldDevelopmentLand.survey(state, home, fields, 3);
+        var before = KnownPedestrianRouteKnowledge.forSettlement(state, home, List.of()).geometry();
+        var settlement = FrontierWorldStateSupport.settlement(state.bootstrap(), home);
+        var passages = settlement.structures().stream().filter(facility -> FrontierTraversalPlan.facilityPort(facility).isPresent())
+                .flatMap(facility -> Arrays.stream(
+                KnownPedestrianRouteKnowledge.Passage.Reach.values()).map(reach ->
+                    new KnownPedestrianRouteKnowledge.Passage(facility, reach))).toList();
+        assertTrue(passages.size() >= 7);
+        // Exercise real bounded view/scope eviction without changing terrain,
+        // permissions of the original query, or any canonical world state.
+        for (int i = 0; i < 300; i++) KnownPedestrianRouteKnowledge.forSettlement(state, home,
+                List.of(passages.get(i % passages.size()), passages.get(i / passages.size() % passages.size()),
+                        passages.get(i / (passages.size() * passages.size()) % passages.size())));
+        var after = KnownPedestrianRouteKnowledge.forSettlement(state, home, List.of()).geometry();
+        assertNotSame(before, after);
+        assertNotSame(before.version(), after.version());
+        assertEquals(before.version(), after.version(), "reconstructed geometry retains its complete facts");
+        assertSame(first.cells().getFirst(), FieldDevelopmentLand.survey(state, home, fields, 3).cells().getFirst(),
+                "disposable route-view eviction cannot trigger a new land discovery");
+    }
+
     @Test void unchangedLandReusesItsSurveyButChangedGroundAndAdmissionStateRemainFenced() {
         var state = prepared(); var home = new SubjectId("settlement:1");
         var fields = state.resourceSiteDescriptors().values().stream().filter(f -> f.settlementId().equals(home)).toList();

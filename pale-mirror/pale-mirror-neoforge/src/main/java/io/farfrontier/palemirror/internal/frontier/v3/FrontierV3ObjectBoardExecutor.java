@@ -71,7 +71,14 @@ final class FrontierV3ObjectBoardExecutor {
         }
         FrontierV3ObjectBoardLedger ledger = FrontierV3ObjectBoardLedger.get(level);
         var index = BOARD_INDEXES.get(runtime);
+        var budget = new FrontierV3PhysicalTransitionBudget((long)
+                (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D),
+                System::nanoTime);
         for (int count = 0; count < MAX_BOARDS_PER_TICK && cursor.hasNext(); count++) {
+            // A count cap alone still batches several expensive text/entity
+            // updates into one indivisible registry stage. Retain the cursor
+            // before taking the next board; never interrupt one publication.
+            if (!budget.tryStart()) break;
             var slot = cursor.next();
             // The stable slot already supplies position. Do not derive stock,
             // field or economy text for a board with no physical recipient.

@@ -286,3 +286,38 @@ or terminal-arrival assertion is weakened. Scoped native local-navigation45
 tests pass, including real grazing/release. Runtime durability/recovery checks,
 guardrails and package verification are retained in
 build/r274-runtime-repair/horse-admission-final-check.log.
+
+Live73acaa598 exploration passed12actions on the retained world. The exact
+pack4 donkey yielded566poses/16.79blocks, with an initial41-tick admission hold
+and no subsequent stationary interval of three ticks or more. This is not a
+matched speed comparison. A complete native tick still reached83.26ms; its
+object-board stage spent25.6ms. Board publication now checks the existing soft
+physical allowance between boards, retaining its cursor and finishing each
+individual update. The count cap alone did not bound a whole eight-board batch.
+
+The earlier indexed-body delay also exposed the preceding common boundary:
+ActorBodyPresent publication closed the insertion journal but did not notify
+the retained actor probe queue. Both insertion confirmation and a returning
+saved body's confirmation now notify that existing queue after publication.
+The probe rechecks current ownership; a wake neither grants admission nor
+replays a physical effect. This complements the exact ambient-arm callback.
+
+Ordinary debt still grew739->1574 during the two-minute city phase. A separate
+25s worker JFR attributes its dominant samples to land discovery during goods
+planning. A complete geometry revision was placed in ImmutableResultView's
+identity-only inputs, although that revision explicitly permits reconstruction
+as an equal value after bounded-cache eviction. Land-use exclusions similarly
+used derived access-boundary identity, which declaration-cache refresh can
+replace without a spatial change. Both caches now compare those complete
+derived values in their typed queries; canonical owner inputs retain their
+exact identity fences. Reuse still creates a fresh exact-state Survey for
+admission. The actual view/scope eviction regression retains unchanged candidate
+facts and still rejects changed ground/stale admission; no TTL, smaller search
+area, route bypass or relaxed physical check is introduced.
+
+The eviction regression fails with the preceding FieldDevelopmentLand source
+and passes with the candidate. Final scoped checks:19 cultivation and18
+board/budget/probe/confirmation tests PASS,25 native body-lifetime tests PASS,
+guardrails and packaged JAR PASS. Receipts:land-eviction-before-fix.log,
+admission-wake-land-check.log,wake-cache-package-final-check.log. These do not
+establish a hard80ms maximum or universal next-action latency.
