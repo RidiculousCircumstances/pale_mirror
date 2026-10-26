@@ -10,13 +10,13 @@ import java.util.function.BiFunction;
 public final class ActorInventoryInteractionFences {
     private static final List<BiFunction<FrontierWorldState, SubjectId, Optional<SubjectId>>> OWNERS = List.of(
             ExpeditionSupplyAuthority::pendingOwnerForActor, ReferenceContainerCustody::pendingOwnerForActor,
-            ExtractionWorkAuthority::pendingOwner, ForestryWorkAuthority::pendingOwner, StationWorkDeathResources::pendingOwner, HarvestDeathResources::pendingOwner);
+            ExtractionWorkAuthority::pendingOwner, ForestryWorkAuthority::pendingOwner, StationWorkDeathResources::pendingOwner, HarvestDeathResources::pendingOwner, FieldEquipment::pendingOwnerForActor);
     private ActorInventoryInteractionFences() { }
     public static boolean pending(FrontierWorldState state, SubjectId actor) {
         return pendingOwner(state, actor).isPresent();
     }
     public static Optional<SubjectId> pendingOwner(FrontierWorldState state, SubjectId actor) {
-        var owners = OWNERS.stream().flatMap(owner -> owner.apply(state, actor).stream()).toList();
+        var owners = OWNERS.stream().flatMap(owner -> owner.apply(state, actor).stream()).distinct().toList();
         if (owners.size() > 1) throw new IllegalArgumentException("actor has competing physical inventory interaction owners");
         return owners.stream().findFirst();
     }

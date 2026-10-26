@@ -8,6 +8,42 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FieldEquipmentTest {
+    @Test void preparedEquipmentFencesLivingBodyAndAbortsOnlyTheExactUnusedGeneration() {
+        var fixture = ResourceSiteHarvestProcessTest.awaitingEquipment(125L);
+        var job = fixture.job(); var state = fixture.state();
+        state = ActorBodyAuthority.demand(state, job.workerId());
+        var body = ActorBodyAuthority.current(state, job.workerId());
+        state = ActorBodyAuthority.running(state, body);
+        var execution = state.actorExecutions().current(io.farfrontier.palemirror.frontier.v3.model.execution.ActorActivityKind.FIELD_HARVEST).get(job.workerId());
+        var item = state.inventory().items().get(job.equipment().itemId());
+        var step = new WorkEquipmentStep(new io.farfrontier.palemirror.frontier.v3.model.execution.ActorHotObservation(
+                new io.farfrontier.palemirror.frontier.v3.model.execution.ActorActuationId(body, execution), job.storageRevision()),
+                item, (InventoryCustody.ContainerSlot) item.custody(), 1L);
+        var prepared = state.withResourceSites(state.resourceSites().replace(state.resourceSites().site(job.siteId())
+                .withHarvestEquipment(job, job.equipment().prepare(step))));
+        assertTrue(ActorInventoryInteractionFences.pending(prepared, job.workerId()));
+        assertThrows(IllegalArgumentException.class, () -> ActorBodyAuthority.released(prepared, body));
+        var abort = new FieldEquipmentChanged(job.siteId(), job.id(), job.equipment().stage(),
+                FieldEquipmentChanged.Action.ABORT_UNATTEMPTED, Optional.of(step));
+        var codecs = io.farfrontier.palemirror.frontier.v3.runtime.FrontierWorldRuntimeDefinition.payloadCodecs();
+        assertEquals(abort, codecs.decode(abort.type(), codecs.encode(abort)));
+        var restored = new FrontierWorldStateCodec().decode(new FrontierWorldStateCodec().encode(prepared));
+        var after = FieldEquipmentProcess.reduce(restored, job.siteId(), abort, 22_100);
+        assertEquals(prepared.inventory(), after.inventory(), "an unused effect cannot award or discard an item");
+        var next = after.resourceSites().site(job.siteId()).harvestJob(job.id()).orElseThrow();
+        assertTrue(next.equipment().pending().isEmpty()); assertEquals(job.storageRevision() + 1, next.storageRevision());
+        assertFalse(ActorInventoryInteractionFences.pending(after, job.workerId()));
+        assertThrows(IllegalArgumentException.class, () -> FieldEquipmentProcess.reduce(after, job.siteId(), abort, 22_100));
+        // Reproduce the old partial departure: physical authority retired before
+        // the still-unissued preparation was retained. Only that incarnation drains.
+        var retired = ActorBodyAuthority.released(state, body);
+        var stranded = retired.withResourceSites(retired.resourceSites().replace(retired.resourceSites().site(job.siteId())
+                .withHarvestEquipment(job, job.equipment().prepare(step))));
+        assertDoesNotThrow(() -> FieldEquipmentProcess.reduce(stranded, job.siteId(), abort, 22_100));
+        assertThrows(IllegalArgumentException.class, () -> ActorBodyAuthority.demand(stranded, job.workerId()),
+                "do not create another incarnation while a retired physical transfer is unresolved");
+    }
+
     @Test void playerRemovalReleasesOnlyTheUnstartedOfferWithoutChangingAnyCell() {
         var fixture = ResourceSiteHarvestProcessTest.awaitingEquipment(125L);
         var job = fixture.job(); var before = fixture.state();

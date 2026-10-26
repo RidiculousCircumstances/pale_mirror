@@ -8,6 +8,41 @@ import java.util.*;
 
 /** Field adapter for the shared inventory and durable Minecraft operation protocol. No independent tick loop. */
 final class FrontierV3FieldEquipmentExecutor {
+    /** Saved body evidence drains an unused preparation before its body/container fences.
+     * Also accepts that exact retired incarnation to recover an already-stranded preparation;
+     * a new body epoch, loaded/returning entity or attempted effect can never use this path. */
+    static void recoverDeparture(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime) {
+        runtime.decodedState().ifPresent(state -> reconcileDeparture(level, runtime, state));
+    }
+    private static boolean reconcileDeparture(ServerLevel level, FrontierV3ServerRuntime<FrontierWorldState, ?> runtime,
+            FrontierWorldState state) {
+        var ledger = FrontierV3AmbientCarrierLedger.get(level, state.bootstrap().worldId());
+        for (var site : state.resourceSites().sites().values()) for (var job : site.harvestJobs().values()) {
+            var step = job.equipment().pending().orElse(null);
+            if (step == null) continue;
+            var departure = ledger.bodyDeparture(job.workerId()).orElse(null);
+            if (departure == null || !departure.retainedForDependentCheckpoint(state)
+                    || departure.identity().epoch() != step.observation().actuation().body().physicalEpoch()
+                    || !ledger.savedBodyDeparture(departure)
+                    || !ledger.currentBodyResidence(job.workerId(), departure.residenceGeneration())
+                    || FrontierV3ActorBodyController.departureReadPending(level, departure)
+                    || level.getEntity(departure.identity().entityId()) != null
+                    || FrontierV3AmbientPendingAdmissions.get(runtime, departure.identity().entityId()) != null) continue;
+            var preparation = new FieldEquipmentChanged(job.siteId(), job.id(), job.equipment().stage(),
+                    FieldEquipmentChanged.Action.PREPARE, Optional.of(step));
+            var unused = FrontierV3MinecraftOperation.cancelUnusedPreparation(level,
+                    FrontierV3OperationReceipt.Protocol.FIELD_EQUIPMENT, job.id(), preparation);
+            if (unused.isEmpty()) continue;
+            var aborted = new FieldEquipmentChanged(job.siteId(), job.id(), job.equipment().stage(),
+                    FieldEquipmentChanged.Action.ABORT_UNATTEMPTED, Optional.of(step));
+            if (unused.orElseThrow().cancelledTicket().isPresent())
+                FrontierV3OperationConfirmation.submitRecovery(level, runtime,
+                        unused.orElseThrow().cancelledTicket().orElseThrow(), aborted, Optional.empty());
+            else FrontierV3CommandSubmission.submit(runtime, "field-equipment-departure-abort", job.id().value(), aborted);
+            return true;
+        }
+        return false;
+    }
     static Optional<FrontierV3OperationAftermath> deathEffect(ServerLevel level, FrontierWorldState state,
             ResourceSiteHarvestJob job, net.minecraft.world.entity.Mob body) {
         var step = job.equipment().pending().orElse(null);

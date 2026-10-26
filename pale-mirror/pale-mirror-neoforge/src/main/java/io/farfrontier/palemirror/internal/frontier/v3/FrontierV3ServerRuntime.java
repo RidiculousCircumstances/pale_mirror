@@ -405,11 +405,14 @@ final class FrontierV3ServerRuntime<S, P extends FrontierProjection> {
     /** Random environmental samples have no retained player intent. Yield them before
      * any effect while an exact calculation owns publication; Minecraft samples again.
      * Explicit player/entity interactions keep their ordinary native boundary. */
+    private final FrontierV3EnvironmentalAdmission environmentalAdmission = new FrontierV3EnvironmentalAdmission(System::nanoTime);
+    void beginEnvironmentalTurn(long allowanceNanos) { environmentalAdmission.begin(allowanceNanos); }
     void runEnvironmentalSample(Runnable sample) {
         if (status.kind() != FrontierV3RuntimeStatus.Kind.ACTIVE || engine.hasPendingCalculation()) {
             yieldedEnvironmentalSamples++; return;
         }
-        runPersistenceTurn(() -> { environmentalSamples++; sample.run(); });
+        if (!environmentalAdmission.run(() ->
+                runPersistenceTurn(() -> { environmentalSamples++; sample.run(); }))) yieldedEnvironmentalSamples++;
     }
 
     /** The runtime owns pairing and gating; host callers cannot acknowledge a queued prefix. */

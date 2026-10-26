@@ -22,6 +22,17 @@ class IncrementalValidationTest {
         assertEquals(3, calls.get());
     }
 
+    @Test void deferredPreviewStillFailsAtPublicationAndRecoveryWhenAnExecutionRelationshipIsMissing() {
+        var before = ResourceSiteHarvestProcessTest.awaitingEquipment(125L).state();
+        var actors = new java.util.LinkedHashMap<>(before.actorLocations());
+        actors.remove(before.resourceSites().sites().values().stream().flatMap(site -> site.harvestJobs().values().stream())
+                .findFirst().orElseThrow().workerId());
+        var preview = FrontierWorldState.duringUnpublishedTransition(() -> before.withChanges(
+                FrontierWorldStateUpdate.begin().actorLocations(actors)));
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldStateTransitionValidator.INSTANCE.validateTransition(before, preview));
+        assertThrows(IllegalArgumentException.class, () -> FrontierWorldStateTransitionValidator.INSTANCE.validateInitial(preview));
+    }
+
     @Test void retiredResourceRejectsUnchangedIncomingScheduleButAtomicCancellationIsValid() {
         var before = FrontierWorldState.initial(FrontierBootstrapper.create(new WorldId("frontier:incremental-reference"), 421L));
         var owner = before.bootstrap().settlements().getFirst().id();

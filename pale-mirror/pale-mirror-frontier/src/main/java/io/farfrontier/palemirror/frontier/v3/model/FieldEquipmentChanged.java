@@ -7,7 +7,7 @@ public record FieldEquipmentChanged(SubjectId siteId, SubjectId jobId, WorkToolA
                                     Action action, Optional<WorkEquipmentStep> physical,
                                     Optional<ShipmentEndpoint> returnTarget) implements FrontierPayload {
     public enum Action {
-        COLD_TRANSFER(1), PREPARE(2), CONFIRM(3), SELECT_RETURN(4), RETIRED_APPLIED(5), RETIRED_UNAPPLIED(6);
+        COLD_TRANSFER(1), PREPARE(2), CONFIRM(3), SELECT_RETURN(4), RETIRED_APPLIED(5), RETIRED_UNAPPLIED(6), ABORT_UNATTEMPTED(7);
         private final int tag;
         Action(int tag) { this.tag = tag; }
         public int wireTag() { return tag; }

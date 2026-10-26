@@ -235,36 +235,38 @@ public FrontierWorldState(FrontierBootstrap bootstrap, Map<SubjectId, ActorLocat
         Objects.requireNonNull(unitGroups, "unit groups");
         Objects.requireNonNull(transportFleet, "transport fleet");
         Objects.requireNonNull(extractionSites, "extraction sites");
-        extractionSites.validate(bootstrap);
-        ExtractionWorkAuthority.validateReferences(extractionSites, actorExecutions);
-        ForestryWorkAuthority.validateReferences(forest, actorExecutions, humanPopulation);
-        TransportFleetReferences.validate(bootstrap, transportFleet, actorLocations, inventory, shipments);
-        GroupMemberActivityCapability.validateReferences(unitGroups, actorExecutions);
-        ShipmentExecutionCapability.validateReferences(shipments, actorExecutions);
-        ActorExecutionComposition.CAPABILITIES.validateKinds(actorExecutions);
-        PresenceActivityCapability.validateReferences(actorLocations, actorExecutions);
-        ScoutPatrolActivityCapability.validateReferences(bootstrap, hiveColony, strategicPlans, actorExecutions);
-        RoutePatrolExecutionAuthority.validateReferences(strategicPlans.routePatrols(), actorExecutions);
-        HiveAssemblyExecutionAuthority.validateReferences(hiveColony.mobilizations(), actorExecutions);
-        HiveReturnExecutionAuthority.validateReferences(hiveColony.mobilizations(), actorExecutions);
-        SettlementAssaultExecutionAuthority.validateReferences(strategicPlans.settlementAssaults(), actorExecutions);
-        EngineeringExecutionAuthority.validateReferences(routeConstructions, routeMaintenances, actorExecutions);
-        SettlementServiceExecutionAuthority.validateReferences(serviceWorks, actorExecutions);
-        MedicalExecutionAuthority.validateReferences(humanPopulation, actorExecutions);
-        ActorMovementStateSupport.validate(actorMovements, actorLocations, humanPopulation, inventory, actorExecutions, shipments, unitGroups, extractionSites, strategicPlans, forest);
-        DefenderEquipmentReturnVisitReferences.validate(strategicPlans, inventory, actorLocations, physicalIntents, actorExecutions);
-        ResidentMealExecutionAuthority.validate(humanPopulation, actorExecutions);
-        TransitActivityCapability.validateReferences(humanPopulation, actorExecutions);
-        HarvestActivityCapability.validateReferences(resourceSites, actorExecutions);
-        ProductionActivityCapability.validateReferences(productionJobs, actorExecutions);
-        if (!actorLocations.keySet().containsAll(actorExecutions.actors().keySet())) throw new IllegalArgumentException("execution names unknown actor");
         Objects.requireNonNull(productionStations, "installed-machine runtime");
         Objects.requireNonNull(forest, "forest");
-        forest.requireWithin(bootstrap.bounds());
-        if (!bootstrap.ruleset().forestry().enabled() && !forest.regions().isEmpty())
-            throw new IllegalArgumentException("forest history requires its explicit content profile");
         Objects.requireNonNull(navigationGeometry, "navigation geometry");
         if (!fullValidationDeferred()) {
+            // Cross-owner checks belong to the pre-WAL publication barrier. Unpublished
+            // previews must not repeatedly audit unchanged executions for a terrain fact.
+            extractionSites.validate(bootstrap);
+            ExtractionWorkAuthority.validateReferences(extractionSites, actorExecutions);
+            ForestryWorkAuthority.validateReferences(forest, actorExecutions, humanPopulation);
+            TransportFleetReferences.validate(bootstrap, transportFleet, actorLocations, inventory, shipments);
+            GroupMemberActivityCapability.validateReferences(unitGroups, actorExecutions);
+            ShipmentExecutionCapability.validateReferences(shipments, actorExecutions);
+            ActorExecutionComposition.CAPABILITIES.validateKinds(actorExecutions);
+            PresenceActivityCapability.validateReferences(actorLocations, actorExecutions);
+            ScoutPatrolActivityCapability.validateReferences(bootstrap, hiveColony, strategicPlans, actorExecutions);
+            RoutePatrolExecutionAuthority.validateReferences(strategicPlans.routePatrols(), actorExecutions);
+            HiveAssemblyExecutionAuthority.validateReferences(hiveColony.mobilizations(), actorExecutions);
+            HiveReturnExecutionAuthority.validateReferences(hiveColony.mobilizations(), actorExecutions);
+            SettlementAssaultExecutionAuthority.validateReferences(strategicPlans.settlementAssaults(), actorExecutions);
+            EngineeringExecutionAuthority.validateReferences(routeConstructions, routeMaintenances, actorExecutions);
+            SettlementServiceExecutionAuthority.validateReferences(serviceWorks, actorExecutions);
+            MedicalExecutionAuthority.validateReferences(humanPopulation, actorExecutions);
+            ActorMovementStateSupport.validate(actorMovements, actorLocations, humanPopulation, inventory, actorExecutions, shipments, unitGroups, extractionSites, strategicPlans, forest);
+            DefenderEquipmentReturnVisitReferences.validate(strategicPlans, inventory, actorLocations, physicalIntents, actorExecutions);
+            ResidentMealExecutionAuthority.validate(humanPopulation, actorExecutions);
+            TransitActivityCapability.validateReferences(humanPopulation, actorExecutions);
+            HarvestActivityCapability.validateReferences(resourceSites, actorExecutions);
+            ProductionActivityCapability.validateReferences(productionJobs, actorExecutions);
+            if (!actorLocations.keySet().containsAll(actorExecutions.actors().keySet())) throw new IllegalArgumentException("execution names unknown actor");
+            forest.requireWithin(bootstrap.bounds());
+            if (!bootstrap.ruleset().forestry().enabled() && !forest.regions().isEmpty())
+                throw new IllegalArgumentException("forest history requires its explicit content profile");
             navigationGeometry.requireWithin(bootstrap.bounds());
             productionStations.validate(inventory, bootstrap.ruleset().production(), bootstrap.ruleset().tools());
             ContainerPhysicalReservations.validate(inventory, resourceSites, productionJobs, shipments, extractionSites, forest, physicalIntents);

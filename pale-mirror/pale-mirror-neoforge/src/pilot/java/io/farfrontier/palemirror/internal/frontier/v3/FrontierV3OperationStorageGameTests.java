@@ -15,6 +15,37 @@ import java.util.*;
 @PrefixGameTestTemplate(false)
 public final class FrontierV3OperationStorageGameTests {
     private FrontierV3OperationStorageGameTests() { }
+    @GameTest(batch = "pm-frontier-v3-shared-storage", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
+    public static void ownerPreparationCanDrainOnlyBeforeItsNativeAttempt(GameTestHelper helper) {
+        var level = helper.getLevel(); var point = helper.absolutePos(new BlockPos(1, 1, 1));
+        level.setBlockAndUpdate(point, Blocks.CHEST.defaultBlockState());
+        var chest = (ChestBlockEntity) level.getBlockEntity(point); chest.setItem(0, new ItemStack(Items.STONE_HOE));
+        var port = FrontierV3OperationBlockEntityParticipant.current(chest);
+        var owner = new SubjectId("test:unused-equipment");
+        var preparation = new io.farfrontier.palemirror.frontier.v3.model.FieldEquipmentChanged(
+                new SubjectId("site:unused-equipment"), owner,
+                io.farfrontier.palemirror.frontier.v3.model.WorkToolAssignment.Stage.ACQUIRING,
+                io.farfrontier.palemirror.frontier.v3.model.FieldEquipmentChanged.Action.COLD_TRANSFER, Optional.empty());
+        var protocol = FrontierV3OperationReceipt.Protocol.FIELD_EQUIPMENT;
+        var unissued = FrontierV3MinecraftOperation.cancelUnusedPreparation(level, protocol, owner, preparation);
+        helper.assertTrue(unissued.isPresent() && unissued.orElseThrow().cancelledTicket().isEmpty(),
+                "a domain-only preparation has no issued physical action to replay or discard");
+        var ledger = FrontierV3OperationLedger.get(level);
+        var declaration = FrontierV3MinecraftOperation.declaration(protocol, owner, preparation, List.of(port));
+        var operation = ledger.prepare(declaration); ledger.persist(level);
+        var cancelled = FrontierV3MinecraftOperation.cancelUnusedPreparation(level, protocol, owner, preparation);
+        helper.assertTrue(cancelled.isPresent() && cancelled.orElseThrow().cancelledTicket().equals(Optional.of(operation.ticket()))
+                        && ledger.require(operation.ticket()).cancelled(), "an issued unused action retains its exact cancellation ticket");
+        var attemptedOwner = new SubjectId("test:attempted-equipment");
+        var attempted = ledger.prepare(FrontierV3MinecraftOperation.declaration(protocol, attemptedOwner, preparation, List.of(port)));
+        ledger.persist(level); helper.assertTrue(ledger.beginAttempt(attempted.ticket()), "consume the one physical attempt");
+        ledger.finishAttempt(attempted.ticket());
+        helper.assertTrue(FrontierV3MinecraftOperation.cancelUnusedPreparation(level, protocol, attemptedOwner, preparation).isEmpty(),
+                "matching original inventory is never evidence that a recovered/attempted effect did not happen");
+        helper.assertTrue(chest.getItem(0).is(Items.STONE_HOE) && !ledger.require(attempted.ticket()).cancelled(),
+                "negative recovery neither mutates inventory nor forgets an ambiguous operation");
+        helper.succeed();
+    }
     @GameTest(batch = "pm-frontier-v3-player-withdrawal", templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 40)
     public static void sealedCancellationNeverRunsTheNativeCallbackOrPretendsItWasApplied(GameTestHelper helper) {
         var level = helper.getLevel(); var point = helper.absolutePos(new BlockPos(1, 1, 1));

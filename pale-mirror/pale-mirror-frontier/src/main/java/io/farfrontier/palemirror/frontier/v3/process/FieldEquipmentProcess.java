@@ -14,6 +14,24 @@ public final class FieldEquipmentProcess {
                 || job.progress().hasPendingPhysicalWork()) throw new IllegalArgumentException("field equipment has a stale or competing work boundary");
         var current = state.actorExecutions().current(ActorActivityKind.FIELD_HARVEST).get(job.workerId());
         boolean retired = event.action() == FieldEquipmentChanged.Action.RETIRED_APPLIED || event.action() == FieldEquipmentChanged.Action.RETIRED_UNAPPLIED;
+        boolean aborted = event.action() == FieldEquipmentChanged.Action.ABORT_UNATTEMPTED;
+        if (aborted) {
+            var step = event.physical().orElseThrow();
+            var identity = step.observation().actuation();
+            if (!ActorBodyAuthority.retainsRetiredDeparture(state, identity.body()))
+                ActorBodyAuthority.require(state, identity.body());
+            state.actorExecutions().requireRetained(identity.execution());
+            if (!identity.body().actorId().equals(job.workerId())
+                    || identity.execution().activityKind() != ActorActivityKind.FIELD_HARVEST
+                    || !identity.execution().activityOwnerId().equals(job.id())
+                    || step.observation().scopeRevision() != job.storageRevision()
+                    || !job.equipment().pending().equals(event.physical()))
+                throw new IllegalArgumentException("unattempted equipment abort lost its exact preparation");
+            // No resource changes: the native bridge proves the common operation was
+            // never issued or positively cancelled before its one allowed attempt.
+            return state.withResourceSites(state.resourceSites().replace(site.withHarvestEquipment(job,
+                    job.equipment().cancelUnapplied())));
+        }
         if (retired) {
             var identity = event.physical().orElseThrow().observation().actuation();
             ActorBodyAuthority.requireRetiredDeath(state, identity.body()); state.actorExecutions().requireRetained(identity.execution());

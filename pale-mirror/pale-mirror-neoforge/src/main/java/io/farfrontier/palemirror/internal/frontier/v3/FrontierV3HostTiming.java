@@ -21,6 +21,7 @@ public final class FrontierV3HostTiming {
         var runtime = FrontierV3ServerLifecycle.runtimeFor(server);
         if (runtime == null) return;
         endHostTick(server);
+        runtime.beginEnvironmentalTurn((long) (io.farfrontier.palemirror.internal.world.PaleMirrorServerConfig.RUNTIME_BUDGET_MILLIS.get() * 1_000_000D));
         TICKS.put(server, FrontierExecutionMetrics.safelyBegin(runtime.executionMetrics(),
                 FrontierExecutionMetrics.Stage.HOST_TICK, "minecraft-complete-tick", "world"));
     }

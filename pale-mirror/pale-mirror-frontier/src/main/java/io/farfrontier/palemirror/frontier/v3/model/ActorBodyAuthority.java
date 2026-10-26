@@ -38,6 +38,8 @@ public final class ActorBodyAuthority {
     public static FrontierWorldState demand(FrontierWorldState state,
             io.farfrontier.palemirror.frontier.v3.api.SubjectId actor) {
         requireLiving(state, actor);
+        if (!retainsPhysicalCustody(state, actor) && ActorInventoryInteractionFences.pending(state, actor))
+            throw new IllegalArgumentException("new body incarnation must await the retained inventory interaction");
         var recovery = demand(state.fencedRecovery(), actor);
         return recovery == state.fencedRecovery() ? state : state.withChanges(
                 FrontierWorldStateUpdate.begin().fencedRecovery(recovery));
@@ -77,6 +79,8 @@ public final class ActorBodyAuthority {
     }
     public static FrontierWorldState prepare(FrontierWorldState state, ActorBodyId body) {
         requireLiving(state, body.actorId());
+        if (ActorInventoryInteractionFences.pending(state, body.actorId()))
+            throw new IllegalArgumentException("new body incarnation must await the retained inventory interaction");
         var id = ActorBodyId.recoveryBindingId(body.actorId());
         if (state.fencedRecovery().current().containsKey(id)
                 || body.physicalEpoch() != state.fencedRecovery().nextEpoch(id))

@@ -60,6 +60,22 @@ final class FrontierV3MinecraftOperation {
         ledger.persist(level);
         return Optional.of(ledger.require(operation.ticket()));
     }
+    /** A durable owner preparation without an operation entry could never have mutated
+     * Minecraft through this sole executor. Existing entries need a positive unused-attempt
+     * cancellation; matching preimages never authorize cancellation after an attempt. */
+    record UnusedPreparation(Optional<UUID> cancelledTicket) { }
+    static Optional<UnusedPreparation> cancelUnusedPreparation(ServerLevel level, FrontierV3OperationReceipt.Protocol protocol,
+            io.farfrontier.palemirror.frontier.v3.api.SubjectId owner,
+            io.farfrontier.palemirror.frontier.v3.api.FrontierPayload preparation) {
+        if (!level.getServer().isSameThread()) throw new IllegalStateException("native cancellation outside server thread");
+        var ledger = FrontierV3OperationLedger.get(level);
+        var operation = ledger.find(protocol, owner, FrontierV3OperationConfirmation.fingerprint(preparation));
+        if (operation.isEmpty()) return Optional.of(new UnusedPreparation(Optional.empty()));
+        var retained = operation.orElseThrow();
+        if (retained.cancelled()) return Optional.of(new UnusedPreparation(Optional.of(retained.ticket())));
+        return cancelUnattempted(level, retained.declaration())
+                .map(cancelled -> new UnusedPreparation(Optional.of(cancelled.ticket())));
+    }
     /** Historical APPLIED is not evidence that all independent native files
      * survived a crash. Resolve only the missing participants, without loading
      * chunks, recreating entities, replaying effects or inventing compensation. */

@@ -288,6 +288,8 @@ public record ResourceSiteHarvestJob(SubjectId id, SubjectId taskId, SubjectId s
         return new ResourceSiteHarvestJob(id, taskId, siteId, workerId, actorAccountId, depotAccountId, outputItemId,
                 outputSlot, intentId, progress, deliveredYieldQuantity, returningForBatch, batchSuccessorSlot,
                 lastConfirmedBatch, navigationBlock, harvestedYieldQuantity, target,
-                next.returnTarget().equals(equipment.returnTarget()) ? storageRevision : Math.addExact(storageRevision, 1L), next);
+                next.returnTarget().equals(equipment.returnTarget())
+                        && !(equipment.pending().isPresent() && next.pending().isEmpty() && next.stage() == equipment.stage())
+                        ? storageRevision : Math.addExact(storageRevision, 1L), next);
     }
 }

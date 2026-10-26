@@ -31,9 +31,12 @@ class ExtractionTerrainFactsTest {
             var sample = knowledge.at(position);
             if (sample.isPresent()) {
                 assertEquals(expected, sample.orElseThrow().block());
-                assertThrows(IllegalArgumentException.class, () -> new FieldDevelopmentCell(new SurfaceAnchor(position),
-                        sample.orElseThrow(), knowledge.at(position.offset(0, 1, 0)).orElseThrow()),
-                        "rock or coarse dirt cannot become a farmland declaration without earthworks");
+                if (expected.kind().equals("minecraft:stone"))
+                    assertThrows(IllegalArgumentException.class, () -> new FieldDevelopmentCell(new SurfaceAnchor(position),
+                            sample.orElseThrow(), knowledge.at(position.offset(0, 1, 0)).orElseThrow()));
+                else assertEquals(ResourceFieldCycle.Soil.fromBlock(expected.kind()), new FieldDevelopmentCell(
+                        new SurfaceAnchor(position), sample.orElseThrow(), knowledge.at(position.offset(0, 1, 0)).orElseThrow()).condition(),
+                        "cultivable coarse soil retains its real earthworks predecessor, not completed farmland");
             }
         }
         assertEquals(Set.of("minecraft:stone", "minecraft:coarse_dirt"), seen);
